@@ -190,7 +190,7 @@ ${strategy.strategies.join('\n')}
     const strategy = this.getFullStrategy(state);
     const strategyDesc = this.getStrategyDescription(state);
     
-    let prompt = basePrompt || `你是一位 AI 学习辅导老师。你的任务是帮助学生理解和解决问题。`;
+    let prompt = basePrompt || `你是一位问流 AI 学习辅导老师。你的任务是帮助学生理解和解决问题。`;
     
     prompt += `\n\n${strategyDesc}`;
     

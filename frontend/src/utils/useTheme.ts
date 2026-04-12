@@ -7,7 +7,7 @@ import { ref, watch, onMounted } from 'vue'
 
 export type Theme = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'ai-learning-theme'
+const STORAGE_KEY = 'wenflow-theme'
 
 // 全局状态，确保多个组件共享同一状态
 const currentTheme = ref<Theme>('system')

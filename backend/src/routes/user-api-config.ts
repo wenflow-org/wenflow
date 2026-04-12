@@ -14,7 +14,7 @@ router.use(authMiddleware);
 // 获取平台默认配置
 router.get('/platform-default', async (req, res) => {
   try {
-    const platformDefault = apiConfigService.getPlatformDefault();
+    const platformDefault = await apiConfigService.getPlatformDefault();
     res.json({ success: true, data: platformDefault });
   } catch (error: any) {
     res.status(500).json({

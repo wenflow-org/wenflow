@@ -1,7 +1,7 @@
-# AI Learning Platform 部署脚本 (PowerShell)
+# WenFlow 部署脚本 (PowerShell)
 # 适用于 Windows 环境
 
-Write-Host "🚀 开始部署 AI Learning Platform..." -ForegroundColor Green
+Write-Host "🚀 开始部署 WenFlow..." -ForegroundColor Green
 
 # 设置错误处理
 $ErrorActionPreference = "Stop"

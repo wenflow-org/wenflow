@@ -349,17 +349,17 @@ export const adminApiConfigApi = {
   },
 
   updateConfig: async (data: {
-    baseURL: string;
+    apiUrl: string;
     apiKey: string;
-    models: string | string[];
+    availableModels: string | string[];
     defaultModel: string;
     defaultReasoningModel: string;
-    defaultJudgeModel: string;
+    defaultEvaluationModel: string;
   }) => {
     return adminAxios.put('/admin/api-config', data);
   },
 
-  testConnection: async (data: { baseURL: string; apiKey: string }) => {
+  testConnection: async (data: { apiUrl: string; apiKey: string }) => {
     return adminAxios.post('/admin/api-config/test', data);
   }
 };

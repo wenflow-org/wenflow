@@ -1,7 +1,7 @@
 {
-  "name": "ai-learning-platform-frontend",
+  "name": "wenflow-frontend",
   "version": "0.1.0",
-  "description": "AI Learning Platform - Frontend",
+  "description": "WenFlow Frontend - 问流前端",
   "type": "module",
   "scripts": {
     "dev": "vite",

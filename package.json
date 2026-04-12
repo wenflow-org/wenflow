@@ -1,7 +1,7 @@
 {
-  "name": "ai-learning-platform",
+  "name": "wenflow",
   "version": "1.0.0",
-  "description": "> 基于AI驱动的自由学习平台 - 让学习真正高效、有趣、可及",
+  "description": "问流 / WenFlow - A learning system for navigating uncertainty",
   "main": "index.js",
   "directories": {
     "doc": "docs"

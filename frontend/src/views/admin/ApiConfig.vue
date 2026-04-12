@@ -22,7 +22,7 @@
 
         <el-form :model="form" label-width="160px" class="config-form">
           <el-form-item label="服务地址">
-            <el-input v-model="form.baseURL" placeholder="http://localhost:3000" />
+            <el-input v-model="form.apiUrl" placeholder="http://localhost:3000" />
           </el-form-item>
 
           <el-form-item label="API Key">
@@ -51,7 +51,7 @@
           </el-form-item>
 
           <el-form-item label="默认评估模型">
-            <el-input v-model="form.defaultJudgeModel" placeholder="deepseek-think" />
+            <el-input v-model="form.defaultEvaluationModel" placeholder="deepseek-think" />
           </el-form-item>
 
           <el-form-item>
@@ -88,7 +88,7 @@
         <div class="status-grid">
           <div class="status-item">
             <div class="status-label">服务地址</div>
-            <div class="status-value break-all">{{ form.baseURL || '未配置' }}</div>
+            <div class="status-value break-all">{{ form.apiUrl || '未配置' }}</div>
           </div>
           <div class="status-item">
             <div class="status-label">API Key</div>
@@ -96,7 +96,7 @@
           </div>
           <div class="status-item">
             <div class="status-label">模型数量</div>
-            <div class="status-value">{{ form.models.length }}</div>
+            <div class="status-value">{{ form.availableModels.length }}</div>
           </div>
           <div class="status-item">
             <div class="status-label">默认模型</div>
@@ -123,14 +123,14 @@ const modelsInput = ref('');
 const testResult = ref<{ connected: boolean; message: string } | null>(null);
 
 const form = reactive({
-  baseURL: '',
+  apiUrl: '',
   apiKey: '',
   apiKeyInput: '',
   apiKeyConfigured: false,
-  models: [] as string[],
+  availableModels: [] as string[],
   defaultModel: '',
   defaultReasoningModel: '',
-  defaultJudgeModel: ''
+  defaultEvaluationModel: ''
 });
 
 async function loadConfig() {
@@ -138,15 +138,15 @@ async function loadConfig() {
   try {
     const response: any = await adminApiConfigApi.getConfig();
     const data = response.data.data;
-    form.baseURL = data.baseURL || '';
+    form.apiUrl = data.apiUrl || '';
     form.apiKey = data.apiKey || '';
     form.apiKeyConfigured = !!data.apiKeyConfigured;
     form.apiKeyInput = '';
-    form.models = data.models || [];
+    form.availableModels = data.availableModels || [];
     form.defaultModel = data.defaultModel || '';
     form.defaultReasoningModel = data.defaultReasoningModel || '';
-    form.defaultJudgeModel = data.defaultJudgeModel || '';
-    modelsInput.value = form.models.join(', ');
+    form.defaultEvaluationModel = data.defaultEvaluationModel || '';
+    modelsInput.value = form.availableModels.join(', ');
   } catch (error: any) {
     ElMessage.error(error.message || '加载 API 配置失败');
   } finally {
@@ -179,12 +179,12 @@ async function saveConfig() {
   saving.value = true;
   try {
     await adminApiConfigApi.updateConfig({
-      baseURL: form.baseURL,
+      apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput,
-      models: modelsInput.value,
+      availableModels: modelsInput.value,
       defaultModel: form.defaultModel,
       defaultReasoningModel: form.defaultReasoningModel,
-      defaultJudgeModel: form.defaultJudgeModel
+      defaultEvaluationModel: form.defaultEvaluationModel
     });
     ElMessage.success('API 配置已保存');
     await loadConfig();
@@ -200,7 +200,7 @@ async function testConnection() {
   testResult.value = null;
   try {
     const response: any = await adminApiConfigApi.testConnection({
-      baseURL: form.baseURL,
+      apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput
     });
     testResult.value = {

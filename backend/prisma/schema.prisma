@@ -844,3 +844,17 @@ model users {
   user_mcp_configs       user_mcp_configs?
   user_skill_configs     user_skill_configs[]
 }
+
+model platform_api_configs {
+  id                String   @id @default("platform")
+  apiUrl            String?
+  apiKey            String?
+  availableModels   String?
+  defaultModel      String?
+  defaultReasoningModel String?
+  defaultEvaluationModel String?
+  connectionStatus  String   @default("unknown")
+  lastCheckedAt     DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now())
+}

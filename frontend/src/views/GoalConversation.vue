@@ -12,7 +12,7 @@
         <div class="header-left">
           <div class="brand" @click="navigateToHome">
             <span class="brand-icon">🎓</span>
-            <span class="brand-text">AI 学习平台</span>
+            <span class="brand-text">问流 WenFlow</span>
           </div>
           <div class="header-divider"></div>
           <div class="session-info">

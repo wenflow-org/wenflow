@@ -255,7 +255,7 @@ export async function progressAgentHandler(
     // 生成建议
     const recommendations = generateRecommendations(updatedMetrics, signals);
     
-    // 生成 AI 学习报告（仅 task_complete 时）
+    // 生成问流 AI 学习报告（仅 task_complete 时）
     let reasoning: string | undefined;
     let suggestion: string | undefined;
     

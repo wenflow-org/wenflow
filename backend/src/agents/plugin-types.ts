@@ -1,7 +1,7 @@
 /**
  * Agent 插件类型定义
  * 
- * 可插拔的 AI 学习平台 Agent 架构核心接口
+ * 可插拔的 WenFlow Agent 架构核心接口
  */
 
 // Agent 类型枚举

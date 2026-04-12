@@ -2,7 +2,7 @@
 
 set -e
 
-echo "🚀 开始部署 AI Learning Platform..."
+echo "🚀 开始部署 WenFlow..."
 
 # 颜色定义
 GREEN='\033[0;32m'

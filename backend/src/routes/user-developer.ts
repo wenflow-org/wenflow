@@ -56,7 +56,7 @@ router.get('/quickstart', async (req, res) => {
     'curl -X POST "http://localhost:3001/api/goal-conversation/start" \\',
     '  -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \\',
     '  -H "Content-Type: application/json" \\',
-    '  -d "{\"goal\":\"我想做一个可复用的 AI 学习助手\"}"',
+    '  -d "{\"goal\":\"我想做一个可复用的问流 AI 学习助手\"}"',
     '```',
     '',
     '> 当前版本说明：SDK、Webhook、Plugin Marketplace 处于规划中；Agent 由平台托管发布，用户侧仅支持选择与启停。'

@@ -6,7 +6,7 @@
         <div class="navbar-brand">
           <router-link to="/" class="brand-link">
             <span class="brand-logo">🎓</span>
-            <span class="brand-text">AI 学习平台</span>
+            <span class="brand-text">问流 WenFlow</span>
           </router-link>
         </div>
         <nav class="docs-nav">
@@ -78,9 +78,9 @@
         <div class="sidebar-section">
           <h3 class="sidebar-title">外部链接</h3>
           <ul class="sidebar-menu">
-            <li><a href="https://github.com/your-repo/ai-learning-platform/blob/main/docs/architecture" target="_blank">架构文档</a></li>
-            <li><a href="https://github.com/your-repo/ai-learning-platform/blob/main/docs/theory" target="_blank">教育理论</a></li>
-            <li><a href="https://github.com/your-repo/ai-learning-platform/blob/main/API.md" target="_blank">完整 API</a></li>
+            <li><a href="https://github.com/your-repo/wenflow/blob/main/docs/architecture" target="_blank">架构文档</a></li>
+            <li><a href="https://github.com/your-repo/wenflow/blob/main/docs/theory" target="_blank">教育理论</a></li>
+            <li><a href="https://github.com/your-repo/wenflow/blob/main/API.md" target="_blank">完整 API</a></li>
           </ul>
         </div>
       </aside>
@@ -133,8 +133,8 @@
               <button class="copy-btn" @click="copyCode('install')">复制</button>
             </div>
             <pre><code># 克隆项目
-git clone https://github.com/your-repo/ai-learning-platform.git
-cd ai-learning-platform
+git clone https://github.com/your-repo/wenflow.git
+cd wenflow
 
 # 安装后端依赖
 cd backend
@@ -672,7 +672,7 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
           <div class="tip-box">
             <span class="tip-icon">📖</span>
             <div class="tip-content">
-              <strong>完整 API 文档：</strong> 查看 <a href="https://github.com/your-repo/ai-learning-platform/blob/main/API.md" target="_blank">API.md</a> 获取更详细的 API 参考。
+              <strong>完整 API 文档：</strong> 查看 <a href="https://github.com/your-repo/wenflow/blob/main/API.md" target="_blank">API.md</a> 获取更详细的 API 参考。
             </div>
           </div>
         </section>
@@ -930,11 +930,11 @@ async function generateContent(prompt: string) {
         <!-- 页脚 -->
         <footer class="docs-footer">
           <div class="footer-content">
-            <p>© 2026 AI 学习平台 · 开发者文档</p>
+            <p>© 2026 问流 WenFlow · 开发者文档</p>
             <div class="footer-links">
               <router-link to="/">返回首页</router-link>
-              <a href="https://github.com/your-repo/ai-learning-platform/blob/main/docs/architecture" target="_blank">架构文档</a>
-              <a href="https://github.com/your-repo/ai-learning-platform/blob/main/API.md" target="_blank">完整 API</a>
+              <a href="https://github.com/your-repo/wenflow/blob/main/docs/architecture" target="_blank">架构文档</a>
+              <a href="https://github.com/your-repo/wenflow/blob/main/API.md" target="_blank">完整 API</a>
               <a href="https://github.com/your-repo" target="_blank">GitHub</a>
             </div>
           </div>

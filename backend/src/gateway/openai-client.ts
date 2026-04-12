@@ -686,22 +686,98 @@ function getClientCacheKey(config: Partial<OpenAIClientConfig> & { baseUrl: stri
 }
 
 /**
- * 获取默认客户端
+ * 获取平台 API 配置（从数据库读取）
+ */
+async function getPlatformAPIConfig(): Promise<{
+  baseUrl: string;
+  apiKey: string;
+  defaultModel: string;
+  defaultReasoningModel: string;
+}> {
+  try {
+    const platformConfig = await prisma.platform_api_configs.findUnique({
+      where: { id: 'platform' },
+    });
+
+    if (platformConfig && platformConfig.apiUrl && platformConfig.apiKey) {
+      return {
+        baseUrl: normalizeOpenAIBaseUrl(platformConfig.apiUrl),
+        apiKey: platformConfig.apiKey,
+        defaultModel: platformConfig.defaultModel || 'deepseek-chat',
+        defaultReasoningModel: platformConfig.defaultReasoningModel || platformConfig.defaultModel || 'deepseek-reasoner',
+      };
+    }
+  } catch (error) {
+    console.error('[OpenAIClient] 获取平台配置失败:', error);
+  }
+
+  // 回退到环境变量
+  return {
+    baseUrl: normalizeOpenAIBaseUrl(process.env.AI_API_URL || 'http://localhost:3000'),
+    apiKey: process.env.AI_API_KEY || '',
+    defaultModel: process.env.AI_MODEL || 'glm-4-flash',
+    defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
+  };
+}
+
+// 配置缓存时间戳（用于检测配置是否过期）
+let lastConfigCheckTime = 0;
+const CONFIG_CACHE_DURATION = 30_000; // 30秒缓存
+
+/**
+ * 获取默认客户端（异步版本，从数据库读取配置）
+ */
+export async function getOpenAIClientAsync(): Promise<OpenAIClient> {
+  const now = Date.now();
+  
+  // 如果客户端存在且配置缓存未过期，直接返回
+  if (defaultClient && now - lastConfigCheckTime < CONFIG_CACHE_DURATION) {
+    return defaultClient;
+  }
+
+  // 从数据库获取平台配置
+  const platformConfig = await getPlatformAPIConfig();
+  
+  const config: OpenAIClientConfig = {
+    baseUrl: platformConfig.baseUrl,
+    apiKey: platformConfig.apiKey,
+    defaultModel: platformConfig.defaultModel,
+    defaultReasoningModel: platformConfig.defaultReasoningModel,
+    fallbackModels: process.env.AI_FALLBACK_MODELS?.split(',').filter(Boolean) || [],
+  };
+
+  // 创建新客户端（或更新配置）
+  defaultClient = new OpenAIClient(config);
+  lastConfigCheckTime = now;
+  
+  return defaultClient;
+}
+
+/**
+ * 获取默认客户端（同步版本，使用环境变量）
+ * 注意：此版本不从数据库读取平台配置，仅作为后备方案
  */
 export function getOpenAIClient(): OpenAIClient {
   if (!defaultClient) {
-    // 从环境变量读取配置
+    // 从环境变量读取配置（后备方案）
     const config: OpenAIClientConfig = {
       baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
       apiKey: process.env.AI_API_KEY || '',
       defaultModel: process.env.AI_MODEL || 'glm-4-flash',
       defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
-      // 备用模型（从环境变量读取，逗号分隔）
       fallbackModels: process.env.AI_FALLBACK_MODELS?.split(',').filter(Boolean) || [],
     };
     defaultClient = new OpenAIClient(config);
   }
   return defaultClient;
+}
+
+/**
+ * 刷新客户端配置（强制从数据库重新读取）
+ */
+export async function refreshOpenAIClient(): Promise<OpenAIClient> {
+  lastConfigCheckTime = 0; // 清除缓存
+  return getOpenAIClientAsync();
 }
 
 /**
@@ -727,19 +803,19 @@ export function initOpenAIClient(config: Partial<OpenAIClientConfig> & { baseUrl
 }
 
 /**
- * 快速聊天完成
+ * 快速聊天完成（使用数据库配置）
  */
 export async function quickChat(
   messages: ChatMessage[],
   options?: Partial<ChatCompletionRequest>
 ): Promise<string> {
-  const client = getOpenAIClient();
+  const client = await getOpenAIClientAsync();
   const response = await client.chatCompletion({ messages, ...options });
   return response.choices[0]?.message.content || '';
 }
 
 /**
- * 系统提示 + 用户消息
+ * 系统提示 + 用户消息（使用数据库配置）
  */
 export async function chatWithSystem(
   systemPrompt: string,

@@ -1,7 +1,7 @@
 {
-  "name": "ai-learning-platform-backend",
+  "name": "wenflow-backend",
   "version": "0.1.0",
-  "description": "AI Learning Platform - Backend API",
+  "description": "WenFlow Backend - 问流后端 API",
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

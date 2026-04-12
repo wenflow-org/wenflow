@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="register-page">
     <el-card class="register-card">
       <template #header>
@@ -6,7 +6,7 @@
           <div class="header-top">
             <ThemeSwitcher />
           </div>
-          <h2>娉ㄥ唽</h2>
+          <h2>注册</h2>
         </div>
       </template>
 
@@ -17,35 +17,35 @@
         label-position="top"
         size="large"
       >
-        <el-form-item label="鐢ㄦ埛鍚? prop="name">
+        <el-form-item label="用户名" prop="name">
           <el-input
             v-model="registerForm.name"
-            placeholder="璇疯緭鍏ョ敤鎴峰悕"
+            placeholder="请输入用户名"
           />
         </el-form-item>
 
-        <el-form-item label="閭" prop="email">
+        <el-form-item label="邮箱" prop="email">
           <el-input
-            v-model="registerForm.name"
+            v-model="registerForm.email"
             type="text"
-            placeholder="璇疯緭鍏ラ偖绠?
+            placeholder="请输入邮箱"
           />
         </el-form-item>
 
-        <el-form-item label="瀵嗙爜" prop="password">
+        <el-form-item label="密码" prop="password">
           <el-input
             v-model="registerForm.password"
             type="password"
-            placeholder="璇疯緭鍏ュ瘑鐮?
+            placeholder="请输入密码"
             show-password
           />
         </el-form-item>
 
-        <el-form-item label="纭瀵嗙爜" prop="confirmPassword">
+        <el-form-item label="确认密码" prop="confirmPassword">
           <el-input
             v-model="registerForm.confirmPassword"
             type="password"
-            placeholder="璇峰啀娆¤緭鍏ュ瘑鐮?
+            placeholder="请再次输入密码"
             show-password
           />
         </el-form-item>
@@ -57,14 +57,14 @@
             :loading="loading"
             style="width: 100%"
           >
-            娉ㄥ唽
+            注册
           </el-button>
         </el-form-item>
 
         <div class="footer">
-          <span>宸叉湁璐﹀彿锛?/span>
+          <span>已有账号？</span>
           <el-link type="primary" @click="$router.push('/login')">
-            绔嬪嵆鐧诲綍
+            立即登录
           </el-link>
         </div>
       </el-form>
@@ -86,16 +86,16 @@ const loading = ref(false);
 
 const registerForm = reactive({
   name: '',
-  name: '',
+  email: '',
   password: '',
   confirmPassword: ''
 });
 
 const validatePass2 = (rule: any, value: any, callback: any) => {
   if (value === '') {
-    callback(new Error('璇峰啀娆¤緭鍏ュ瘑鐮?));
+    callback(new Error('请再次输入密码'));
   } else if (value !== registerForm.password) {
-    callback(new Error('涓ゆ杈撳叆瀵嗙爜涓嶄竴鑷?));
+    callback(new Error('两次输入密码不一致'));
   } else {
     callback();
   }
@@ -103,16 +103,16 @@ const validatePass2 = (rule: any, value: any, callback: any) => {
 
 const rules: FormRules = {
   name: [
-    { required: true, message: '璇疯緭鍏ョ敤鎴峰悕', trigger: 'blur' },
-    { min: 2, max: 20, message: '鐢ㄦ埛鍚嶉暱搴﹀湪 2 鍒?20 涓瓧绗?, trigger: 'blur' }
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 2, max: 20, message: '用户名长度在 2 到 20 个字符', trigger: 'blur' }
   ],
   email: [
-    { required: true, message: '璇疯緭鍏ラ偖绠?, trigger: 'blur' },
-    { type: 'email', message: '璇疯緭鍏ユ纭殑閭鏍煎紡', trigger: 'blur' }
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
   ],
   password: [
-    { required: true, message: '璇疯緭鍏ュ瘑鐮?, trigger: 'blur' },
-    { min: 6, message: '瀵嗙爜闀垮害涓嶈兘灏戜簬6浣?, trigger: 'blur' }
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
   ],
   confirmPassword: [
     { required: true, validator: validatePass2, trigger: 'blur' }
@@ -128,10 +128,10 @@ const handleRegister = async () => {
 
       try {
         await userStore.register(registerForm.name, registerForm.password);
-        ElMessage.success('娉ㄥ唽鎴愬姛');
+        ElMessage.success('注册成功');
         router.push('/dashboard');
       } catch (error: any) {
-        ElMessage.error(error.message || '娉ㄥ唽澶辫触锛岃绋嶅悗閲嶈瘯');
+        ElMessage.error(error.message || '注册失败，请稍后重试');
       } finally {
         loading.value = false;
       }

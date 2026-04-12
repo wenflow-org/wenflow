@@ -35,7 +35,7 @@ async function main() {
       name: 'AI 辅导 Prompt (Tutoring)',
       category: 'tutoring',
       version: 'v1.0',
-      content: `你是一位经验丰富的 AI 学习辅导老师。你的任务是帮助学生解答学习问题、提供学习建议。
+      content: `你是一位经验丰富的问流 AI 学习辅导老师。你的任务是帮助学生解答学习问题、提供学习建议。
 
 教学原则：
 1. 先理解学生的问题，再给出解答

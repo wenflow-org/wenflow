@@ -1,6 +1,8 @@
-# AI 学习平台
+# WenFlow
 
-> 当 AI 在学怎么像人一样思考，我们在教人怎么更会思考。
+A learning system for navigating uncertainty.
+
+> 问流，是一个面向不确定问题的学习系统。
 
 ---
 
@@ -177,7 +179,7 @@ npm run dev
 ## 项目结构
 
 ```
-ai-learning-platform/
+wenflow/
 ├── backend/
 │   ├── src/
 │   │   ├── agents/        # Agent 系统（15+ Agent）

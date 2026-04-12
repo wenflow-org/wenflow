@@ -216,7 +216,7 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-  document.title = `${to.meta.title || 'AI 学习平台'} - AI 学习平台`;
+  document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   
   const token = localStorage.getItem('token');
   const adminToken = localStorage.getItem('admin_token');

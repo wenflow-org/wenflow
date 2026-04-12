@@ -1,4 +1,4 @@
-# AI Learning Platform 部署指南
+# WenFlow 部署指南
 
 ## 📋 目录
 
@@ -41,8 +41,8 @@
 
 #### 1. 克隆项目
 ```powershell
-git clone https://github.com/your-org/ai-learning-platform.git
-cd ai-learning-platform
+git clone https://github.com/your-org/wenflow.git
+cd wenflow
 ```
 
 #### 2. 配置环境变量
@@ -64,8 +64,8 @@ notepad backend\.env.production
 
 #### 1. 克隆项目
 ```bash
-git clone https://github.com/your-org/ai-learning-platform.git
-cd ai-learning-platform
+git clone https://github.com/your-org/wenflow.git
+cd wenflow
 ```
 
 #### 2. 配置环境变量
@@ -171,7 +171,7 @@ NODE_ENV=production
 PORT=3001
 
 # 数据库配置
-DATABASE_URL="postgresql://ai_learning:password@localhost:5432/ai_learning_platform"
+DATABASE_URL="postgresql://wenflow:password@localhost:5432/wenflow"
 
 # JWT 配置（重要！）
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
@@ -189,7 +189,7 @@ CACHE_MAX_SIZE=1000
 
 # 日志配置
 LOG_LEVEL=info
-LOG_FILE_PATH=/var/log/ai-learning-platform/
+LOG_FILE_PATH=/var/log/wenflow/
 
 # 安全配置
 CORS_ORIGIN=https://your-domain.com
@@ -210,7 +210,7 @@ CONTENT_AGENT_MAX_ROUNDS=8
 VITE_API_BASE_URL=/api
 
 # 应用配置
-VITE_APP_TITLE=AI 学习平台
+VITE_APP_TITLE=问流 WenFlow
 VITE_APP_VERSION=3.0.0
 ```
 
@@ -220,10 +220,10 @@ VITE_APP_VERSION=3.0.0
 
 | 服务 | 容器名 | 端口 | 说明 |
 |------|--------|------|------|
-| postgres | ai-learning-db | 5432 | PostgreSQL 数据库 |
-| backend | ai-learning-backend | 3001 | Node.js 后端 API |
-| frontend | ai-learning-frontend | 5173 | Vue3 前端 |
-| nginx | ai-learning-nginx | 80/443 | Nginx 反向代理 |
+| postgres | wenflow-db | 5432 | PostgreSQL 数据库 |
+| backend | wenflow-backend | 3001 | Node.js 后端 API |
+| frontend | wenflow-frontend | 5173 | Vue3 前端 |
+| nginx | wenflow-nginx | 80/443 | Nginx 反向代理 |
 
 ### Nginx 配置
 
@@ -273,10 +273,10 @@ docker stats
 
 ```bash
 # 备份数据库
-docker compose exec postgres pg_dump -U ai_learning ai_learning_platform > backup_$(date +%Y%m%d).sql
+docker compose exec postgres pg_dump -U wenflow wenflow > backup_$(date +%Y%m%d).sql
 
 # 恢复数据库
-docker compose exec -T postgres psql -U ai_learning ai_learning_platform < backup_20260318.sql
+docker compose exec -T postgres psql -U wenflow wenflow < backup_20260318.sql
 ```
 
 ### 服务管理
@@ -371,7 +371,7 @@ docker compose ps postgres
 docker compose logs postgres
 
 # 3. 测试数据库连接
-docker compose exec postgres pg_isready -U ai_learning
+docker compose exec postgres pg_isready -U wenflow
 
 # 4. 重启数据库
 docker compose restart postgres
@@ -419,7 +419,7 @@ ports:
 docker compose exec backend npx prisma studio
 
 # 或直接连接 PostgreSQL
-docker compose exec postgres psql -U ai_learning ai_learning_platform
+docker compose exec postgres psql -U wenflow wenflow
 ```
 
 ### Q: 如何启用 HTTPS？

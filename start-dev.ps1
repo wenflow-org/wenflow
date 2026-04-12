@@ -1,4 +1,4 @@
-# One-click start script for AI Learning Platform
+# One-click start script for WenFlow
 
 param(
     [switch]$NoBrowser
@@ -47,7 +47,7 @@ function Stop-PortProcess {
     }
 }
 
-Write-Host "Starting AI Learning Platform..." -ForegroundColor Cyan
+Write-Host "Starting WenFlow..." -ForegroundColor Cyan
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $backendPath = Join-Path $scriptDir 'backend'

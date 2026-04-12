@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
-# AI Learning Platform - Backend Startup Script
+# WenFlow - Backend Startup Script
 # 用法: .\start-backend.ps1
 
-Write-Host "🚀 Starting AI Learning Platform Backend..." -ForegroundColor Green
+Write-Host "🚀 Starting WenFlow Backend..." -ForegroundColor Green
 
-$backendDir = "C:\Users\myadmin\.openclaw\workspace\ai-learning-platform\backend"
+$backendDir = "C:\Users\myadmin\.openclaw\workspace\wenflow\backend"
 Set-Location $backendDir
 
 # 检查端口占用

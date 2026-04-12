@@ -91,7 +91,7 @@ import userDeveloperRoutes from './routes/user-developer';
 // API路由
 app.get('/api', (req, res) => {
   res.json({
-    message: 'AI Learning Platform API - EduClaw Gateway',
+    message: 'WenFlow API - Gateway',
     version: '2.0.0',
     architecture: 'Agent-Driven + Dynamic Navigation',
     authentication: 'JWT Bearer Token',

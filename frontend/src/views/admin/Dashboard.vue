@@ -11,7 +11,7 @@
         <div class="header-left">
           <h1 class="header-title">
             <span class="title-icon">🎓</span>
-            AI 学习平台 · 管理平台
+            问流 WenFlow · 管理平台
           </h1>
 
           <el-menu

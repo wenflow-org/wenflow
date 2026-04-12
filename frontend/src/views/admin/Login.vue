@@ -13,7 +13,7 @@
         <div class="brand-content">
           <h1 class="brand-title">
             <span class="title-icon">🎓</span>
-            AI 学习平台 · 管理平台
+            问流 WenFlow · 管理平台
           </h1>
           <p class="brand-subtitle">Admin Dashboard</p>
           <div class="brand-features">
@@ -55,12 +55,12 @@
             class="login-form"
             @keyup.enter="handleLogin"
           >
-            <el-form-item prop="email">
+            <el-form-item prop="name">
               <el-input
-                v-model="loginForm.email"
-                placeholder="管理员邮箱"
+                v-model="loginForm.name"
+                placeholder="用户名或邮箱"
                 size="large"
-                prefix-icon="Message"
+                prefix-icon="User"
                 clearable
               />
             </el-form-item>
@@ -101,7 +101,7 @@
             <div class="login-tips">
               <p>默认管理员账号：</p>
               <ul>
-                <li>邮箱：<code>admin@example.com</code></li>
+                <li>用户名：<code>admin</code></li>
                 <li>密码：<code>admin123</code></li>
               </ul>
             </div>
@@ -131,15 +131,14 @@ const formRef = ref<FormInstance>();
 const loading = ref(false);
 
 const loginForm = reactive({
-  email: '',
+  name: '',
   password: '',
   remember: false,
 });
 
 const rules: FormRules = {
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' },
+  name: [
+    { required: true, message: '请输入用户名或邮箱', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },

@@ -20,7 +20,7 @@
         <div class="navbar-brand">
           <router-link to="/" class="brand-link">
             <span class="brand-logo">🎓</span>
-            <span class="brand-text">AI 学习平台</span>
+            <span class="brand-text">问流 WenFlow</span>
           </router-link>
         </div>
         
@@ -105,7 +105,7 @@
           </h1>
           
           <p class="hero-subtitle">
-            <strong>AI 学习平台帮你把模糊目标拆成可执行路径。</strong>
+            <strong>问流帮你把模糊目标拆成可执行路径。</strong>
             先想清要解决什么，再进入 AI 规划、对话学习和进度追踪，少走弯路。
           </p>
 
@@ -190,7 +190,7 @@
           </div>
 
           <div class="footer-bottom">
-            <p>© 2026 AI 学习平台 · 你的学习伙伴</p>
+            <p>© 2026 问流 WenFlow · 你的学习伙伴</p>
           </div>
         </div>
       </div>
