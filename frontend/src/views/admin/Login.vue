@@ -58,7 +58,7 @@
             <el-form-item prop="name">
               <el-input
                 v-model="loginForm.name"
-                placeholder="用户名或邮箱"
+                placeholder="用户名"
                 size="large"
                 prefix-icon="User"
                 clearable
@@ -138,7 +138,7 @@ const loginForm = reactive({
 
 const rules: FormRules = {
   name: [
-    { required: true, message: '请输入用户名或邮箱', trigger: 'blur' },
+    { required: true, message: '请输入用户名', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },

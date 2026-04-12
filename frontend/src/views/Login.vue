@@ -57,11 +57,11 @@
             class="login-form"
             @keyup.enter="handleLogin"
           >
-            <el-form-item label="用户名/邮箱" prop="name">
+            <el-form-item label="用户名" prop="name">
               <el-input
                 v-model="loginForm.name"
                 type="text"
-                placeholder="请输入用户名或邮箱"
+                placeholder="请输入用户名"
                 prefix-icon="User"
                 clearable
               />
@@ -158,7 +158,7 @@ const loginForm = reactive({
 const rules: FormRules = {
 
   name: [
-    { required: true, message: '请输入用户名或邮箱', trigger: 'blur' }
+    { required: true, message: '请输入用户名', trigger: 'blur' }
   ],
 
   password: [
@@ -208,7 +208,7 @@ const handleLogin = async () => {
 
         console.error('登录失败:', error);
 
-        ElMessage.error(error.message || '登录失败，请检查用户名/邮箱和密码');
+        ElMessage.error(error.message || '登录失败，请检查用户名和密码');
 
       } finally {
 
