@@ -8,19 +8,22 @@ const router = express.Router();
 
 // 管理员登录验证 Schema
 const loginSchema = z.object({
-  email: z.string().email('无效的邮箱格式'),
+  name: z.string().min(1, '用户名不能为空'),
   password: z.string().min(6, '密码长度至少 6 位'),
 });
 
 // 管理员登录
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
+    const { name, password } = loginSchema.parse(req.body);
 
-    // 查找管理员用户
+    // 查找管理员用户（支持用户名或邮箱登录）
     const admin = await prisma.users.findFirst({
       where: {
-        email,
+        OR: [
+          { name: name },
+          { email: name }
+        ],
         isAdmin: true,
       },
     });
@@ -52,7 +55,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const token = jwt.sign(
       {
         userId: admin.id,
-        email: admin.email,
+        name: admin.name,
         isAdmin: true,
       },
       process.env.JWT_SECRET || 'admin-secret-key',

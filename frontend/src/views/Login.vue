@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div class="login-page">
-    <!-- 背景装饰 -->
+    <!-- 鑳屾櫙瑁呴グ -->
     <div class="animated-bg">
       <div class="gradient-orb gradient-orb-1"></div>
       <div class="gradient-orb gradient-orb-2"></div>
@@ -8,44 +8,44 @@
     </div>
 
     <div class="login-container">
-      <!-- 左侧品牌区 -->
+      <!-- 宸︿晶鍝佺墝鍖?-->
       <div class="login-brand">
         <div class="brand-content">
           <h1 class="brand-title">
-            <span class="title-icon">🎓</span>
-            AI 学习平台
+            <span class="title-icon">馃帗</span>
+            AI 瀛︿範骞冲彴
           </h1>
           <p class="brand-subtitle">Your Personal AI Learning Companion</p>
           <div class="brand-features">
             <div class="feature-item">
-              <span class="feature-icon">📚</span>
-              <span>个性化学习路径规划</span>
+              <span class="feature-icon">馃摎</span>
+              <span>涓€у寲瀛︿範璺緞瑙勫垝</span>
             </div>
             <div class="feature-item">
-              <span class="feature-icon">🤖</span>
-              <span>AI 智能辅导</span>
+              <span class="feature-icon">馃</span>
+              <span>AI 鏅鸿兘杈呭</span>
             </div>
             <div class="feature-item">
-              <span class="feature-icon">📊</span>
-              <span>学习进度追踪</span>
+              <span class="feature-icon">馃搳</span>
+              <span>瀛︿範杩涘害杩借釜</span>
             </div>
             <div class="feature-item">
-              <span class="feature-icon">🏆</span>
-              <span>成就系统激励</span>
+              <span class="feature-icon">馃弳</span>
+              <span>鎴愬氨绯荤粺婵€鍔?/span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 右侧登录表单 -->
+      <!-- 鍙充晶鐧诲綍琛ㄥ崟 -->
       <div class="login-form-wrapper">
         <div class="login-card">
           <div class="login-header">
             <div class="header-top">
               <ThemeSwitcher />
             </div>
-            <h2 class="login-title">欢迎回来</h2>
-            <p class="login-subtitle">登录账号开始学习</p>
+            <h2 class="login-title">娆㈣繋鍥炴潵</h2>
+            <p class="login-subtitle">鐧诲綍璐﹀彿寮€濮嬪涔?/p>
           </div>
 
           <el-form
@@ -57,21 +57,21 @@
             class="login-form"
             @keyup.enter="handleLogin"
           >
-            <el-form-item label="邮箱" prop="email">
+            <el-form-item label="閭" prop="email">
               <el-input
-                v-model="loginForm.email"
-                type="email"
-                placeholder="请输入邮箱"
+                v-model="loginForm.name"
+                type="text"
+                placeholder="璇疯緭鍏ラ偖绠?
                 prefix-icon="Message"
                 clearable
               />
             </el-form-item>
 
-            <el-form-item label="密码" prop="password">
+            <el-form-item label="瀵嗙爜" prop="password">
               <el-input
                 v-model="loginForm.password"
                 type="password"
-                placeholder="请输入密码"
+                placeholder="璇疯緭鍏ュ瘑鐮?
                 prefix-icon="Lock"
                 show-password
               />
@@ -79,7 +79,7 @@
 
             <el-form-item>
               <el-checkbox v-model="loginForm.remember">
-                记住我
+                璁颁綇鎴?
               </el-checkbox>
             </el-form-item>
 
@@ -90,27 +90,27 @@
                 :loading="loading"
                 class="login-button"
               >
-                {{ loading ? '登录中...' : '登录' }}
+                {{ loading ? '鐧诲綍涓?..' : '鐧诲綍' }}
               </el-button>
             </el-form-item>
 
             <el-divider>
-              <span class="divider-text">或者</span>
+              <span class="divider-text">鎴栬€?/span>
             </el-divider>
 
             <div class="register-tips">
-              <span>还没有账号？</span>
+              <span>杩樻病鏈夎处鍙凤紵</span>
               <el-link type="primary" @click="handleGoRegister">
-                立即注册
+                绔嬪嵆娉ㄥ唽
               </el-link>
             </div>
           </el-form>
         </div>
 
-        <!-- 页脚链接 -->
+        <!-- 椤佃剼閾炬帴 -->
         <div class="login-footer">
           <el-link @click="$router.push('/')">
-            ← 返回首页
+            鈫?杩斿洖棣栭〉
           </el-link>
         </div>
       </div>
@@ -145,7 +145,7 @@ const loading = ref(false);
 
 const loginForm = reactive({
 
-  email: '',
+  name: '',
 
   password: '',
 
@@ -159,17 +159,17 @@ const rules: FormRules = {
 
   email: [
 
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { required: true, message: '璇疯緭鍏ラ偖绠?, trigger: 'blur' },
 
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+    { type: 'email', message: '璇疯緭鍏ユ纭殑閭鏍煎紡', trigger: 'blur' }
 
   ],
 
   password: [
 
-    { required: true, message: '请输入密码', trigger: 'blur' },
+    { required: true, message: '璇疯緭鍏ュ瘑鐮?, trigger: 'blur' },
 
-    { min: 6, message: '密码长度不能少于 6 位', trigger: 'blur' }
+    { min: 6, message: '瀵嗙爜闀垮害涓嶈兘灏戜簬 6 浣?, trigger: 'blur' }
 
   ]
 
@@ -193,13 +193,13 @@ const handleLogin = async () => {
 
       try {
 
-        await userStore.login(loginForm.email, loginForm.password);
+        await userStore.login(loginForm.name, loginForm.password);
 
-        ElMessage.success('登录成功');
+        ElMessage.success('鐧诲綍鎴愬姛');
 
         
 
-        // 如果选择了记住我，可以扩展功能
+        // 濡傛灉閫夋嫨浜嗚浣忔垜锛屽彲浠ユ墿灞曞姛鑳?
 
         if (loginForm.remember) {
 
@@ -213,9 +213,9 @@ const handleLogin = async () => {
 
       } catch (error: any) {
 
-        console.error('登录失败:', error);
+        console.error('鐧诲綍澶辫触:', error);
 
-        ElMessage.error(error.message || '登录失败，请检查邮箱和密码');
+        ElMessage.error(error.message || '鐧诲綍澶辫触锛岃妫€鏌ラ偖绠卞拰瀵嗙爜');
 
       } finally {
 
@@ -233,7 +233,7 @@ const handleGoRegister = async () => {
   try {
     const status = await authAPI.getRegistrationStatus();
     if (!status.registrationEnabled) {
-      ElMessage.warning('平台注册已关闭，暂不支持新用户注册');
+      ElMessage.warning('骞冲彴娉ㄥ唽宸插叧闂紝鏆備笉鏀寔鏂扮敤鎴锋敞鍐?);
       return;
     }
 
@@ -262,7 +262,7 @@ const handleGoRegister = async () => {
   background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-secondary-dark) 100%);
 }
 
-/* 动态背景 */
+/* 鍔ㄦ€佽儗鏅?*/
 .animated-bg {
   position: absolute;
   top: 0;
@@ -343,7 +343,7 @@ const handleGoRegister = async () => {
   background: var(--bg-surface);
 }
 
-/* 左侧品牌区 */
+/* 宸︿晶鍝佺墝鍖?*/
 .login-brand {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   padding: 3rem;
@@ -414,7 +414,7 @@ const handleGoRegister = async () => {
   font-size: 1.25rem;
 }
 
-/* 右侧表单区 */
+/* 鍙充晶琛ㄥ崟鍖?*/
 .login-form-wrapper {
   padding: 3rem;
   display: flex;
@@ -511,7 +511,7 @@ const handleGoRegister = async () => {
   text-align: center;
 }
 
-/* 响应式设计 */
+/* 鍝嶅簲寮忚璁?*/
 @media (max-width: 768px) {
   .login-container {
     grid-template-columns: 1fr;
@@ -530,7 +530,7 @@ const handleGoRegister = async () => {
   }
 }
 
-/* Element Plus 样式覆盖 */
+/* Element Plus 鏍峰紡瑕嗙洊 */
 :deep(.el-form-item__label) {
   font-weight: 600;
   color: var(--text-primary);
@@ -568,7 +568,7 @@ const handleGoRegister = async () => {
   font-weight: 600;
 }
 
-/* 夜间模式下的 Element Plus 覆盖 */
+/* 澶滈棿妯″紡涓嬬殑 Element Plus 瑕嗙洊 */
 [data-theme="dark"] :deep(.el-form-item__label) {
   color: var(--text-primary);
 }

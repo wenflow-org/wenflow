@@ -53,6 +53,9 @@ export async function initializeAdmin(): Promise<void> {
     });
 
     console.log(`✅ 初始管理员创建成功：${INIT_ADMIN_NAME}`);
+    console.log(`   用户名：${INIT_ADMIN_NAME}`);
+    console.log(`   密码：${INIT_ADMIN_PASSWORD}`);
+    console.log(`   邮箱：${INIT_ADMIN_NAME}@wenflow.local (自动生成)`);
   } catch (error: any) {
     console.error('❌ 创建初始管理员失败:', error.message);
   }

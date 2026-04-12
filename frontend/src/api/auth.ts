@@ -1,21 +1,19 @@
-// 认证API
+﻿// 璁よ瘉API
 import api from '../utils/api';
 
 export interface LoginData {
-  email: string;
+  name: string;
   password: string;
 }
 
 export interface RegisterData {
-  email: string;
+  name: string;
   password: string;
-  name?: string;
 }
 
 export interface AuthResponse {
   user: {
     id: string;
-    email: string;
     name: string;
   };
   token: string;
@@ -23,7 +21,7 @@ export interface AuthResponse {
 
 export const authAPI = {
 
-  // 登录
+  // 鐧诲綍
 
   async login(data: LoginData): Promise<AuthResponse> {
 
@@ -35,7 +33,7 @@ export const authAPI = {
 
 
 
-  // 注册
+  // 娉ㄥ唽
 
   async register(data: RegisterData): Promise<AuthResponse> {
 
@@ -45,7 +43,7 @@ export const authAPI = {
 
   },
 
-  // 注册状态
+  // 娉ㄥ唽鐘舵€?
   async getRegistrationStatus(): Promise<{ registrationEnabled: boolean }> {
     const response: any = await api.get('/auth/registration-status');
     return response?.data || { registrationEnabled: true };
@@ -53,7 +51,7 @@ export const authAPI = {
 
 
 
-  // 验证 token
+  // 楠岃瘉 token
 
   async verifyToken(token: string): Promise<any> {
 

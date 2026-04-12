@@ -5,19 +5,18 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 
 interface RegisterData {
-  email: string;
+  name: string;
   password: string;
-  name?: string;
 }
 
 interface LoginData {
-  email: string;
+  name: string;
   password: string;
 }
 
 interface JWTPayload {
   userId: string;
-  email: string;
+  name: string;
 }
 
 class AuthService {
@@ -27,38 +26,38 @@ class AuthService {
   // 注册
   async register(data: RegisterData) {
     try {
-      // 检查邮箱是否已存在
+      // 检查用户名是否已存在
       const existingUser = await prisma.users.findUnique({
-        where: { email: data.email }
+        where: { name: data.name }
       });
 
       if (existingUser) {
-        throw new Error('邮箱已被注册');
+        throw new Error('用户名已被使用');
       }
 
       // 加密密码
       const hashedPassword = await bcrypt.hash(data.password, 10);
 
       // 创建用户
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const user = await prisma.users.create({
         data: {
-          id: `user_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          email: data.email,
+          id: userId,
+          name: data.name,
+          email: `${data.name}@wenflow.local`,
           password: hashedPassword,
-          name: data.name || data.email.split('@')[0],
           updatedAt: new Date(),
         }
       });
 
       // 生成 JWT
-      const token = this.generateToken({ userId: user.id, email: user.email });
+      const token = this.generateToken({ userId: user.id, name: user.name });
 
-      logger.info(`新用户注册：${user.email}`);
+      logger.info(`新用户注册：${user.name}`);
 
       return {
         user: {
           id: user.id,
-          email: user.email,
           name: user.name,
         },
         token
@@ -72,20 +71,25 @@ class AuthService {
   // 登录
   async login(data: LoginData) {
     try {
-      // 查找用户
-      const user = await prisma.users.findUnique({
-        where: { email: data.email }
+      // 查找用户（支持用户名或邮箱登录）
+      const user = await prisma.users.findFirst({
+        where: {
+          OR: [
+            { name: data.name },
+            { email: data.name }
+          ]
+        }
       });
 
       if (!user) {
-        throw new Error('邮箱或密码错误');
+        throw new Error('用户名或密码错误');
       }
 
       // 验证密码
       const isValidPassword = await bcrypt.compare(data.password, user.password);
 
       if (!isValidPassword) {
-        throw new Error('邮箱或密码错误');
+        throw new Error('用户名或密码错误');
       }
 
       // 更新最后登录时间
@@ -95,9 +99,9 @@ class AuthService {
       });
 
       // 生成 JWT
-      const token = this.generateToken({ userId: user.id, email: user.email });
+      const token = this.generateToken({ userId: user.id, name: user.name });
 
-      logger.info(`用户登录：${user.email}`);
+      logger.info(`用户登录：${user.name}`);
 
       return {
         user: {
