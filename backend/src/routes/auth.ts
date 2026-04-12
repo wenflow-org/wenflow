@@ -1,4 +1,4 @@
-﻿// 璁よ瘉璺敱
+﻿// 认证路由
 import express from 'express';
 import { z } from 'zod';
 import authService from '../services/auth/auth.service';
@@ -6,7 +6,7 @@ import { getPlatformSettings } from '../services/platform-settings.service';
 
 const router = express.Router();
 
-// 娉ㄥ唽鐘舵€侊紙鍏紑锛?
+// 注册状态（公开）
 router.get('/registration-status', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
@@ -21,19 +21,18 @@ router.get('/registration-status', async (req, res, next) => {
   }
 });
 
-// 楠岃瘉schema
+// 验证 schema
 const registerSchema = z.object({
-  email: z.string().email('鏃犳晥鐨勯偖绠卞湴鍧€'),
-  password: z.string().min(6, '瀵嗙爜鑷冲皯6浣?),
-  name: z.string().optional()
+  name: z.string().min(2, '用户名至少 2 位'),
+  password: z.string().min(6, '密码至少 6 位'),
 });
 
 const loginSchema = z.object({
-  email: z.string().email('鏃犳晥鐨勯偖绠卞湴鍧€'),
-  password: z.string().min(1, '瀵嗙爜涓嶈兘涓虹┖')
+  name: z.string().min(1, '用户名不能为空'),
+  password: z.string().min(1, '密码不能为空')
 });
 
-// 娉ㄥ唽
+// 注册
 router.post('/register', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
@@ -41,16 +40,16 @@ router.post('/register', async (req, res, next) => {
       return res.status(403).json({
         success: false,
         error: {
-          message: '骞冲彴娉ㄥ唽宸插叧闂紝璇疯仈绯荤鐞嗗憳',
+          message: '平台注册已关闭，请联系管理员',
           status: 403
         }
       });
     }
 
-    // 楠岃瘉璇锋眰鏁版嵁
+    // 验证请求数据
     const data = registerSchema.parse(req.body) as { name: string; password: string };
 
-    // 璋冪敤鏈嶅姟
+    // 调用服务
     const result = await authService.register(data);
 
     res.status(201).json({
@@ -62,7 +61,7 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: {
-          message: '鏁版嵁楠岃瘉澶辫触',
+          message: '数据验证失败',
           details: error.errors
         }
       });
@@ -72,13 +71,13 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-// 鐧诲綍
+// 登录
 router.post('/login', async (req, res, next) => {
   try {
-    // 楠岃瘉璇锋眰鏁版嵁
+    // 验证请求数据
     const data = loginSchema.parse(req.body) as { name: string; password: string };
 
-    // 璋冪敤鏈嶅姟
+    // 调用服务
     const result = await authService.login(data);
 
     res.status(200).json({
@@ -90,7 +89,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: {
-          message: '鏁版嵁楠岃瘉澶辫触',
+          message: '数据验证失败',
           details: error.errors
         }
       });
@@ -100,7 +99,7 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-// 楠岃瘉Token (protected endpoint)
+// 验证 Token (protected endpoint)
 router.post('/verify', async (req, res, next) => {
   try {
     const { token } = req.body;
@@ -108,7 +107,7 @@ router.post('/verify', async (req, res, next) => {
     if (!token) {
       return res.status(400).json({
         success: false,
-        error: { message: 'Token涓嶈兘涓虹┖' }
+        error: { message: 'Token 不能为空' }
       });
     }
 
