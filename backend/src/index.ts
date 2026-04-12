@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import prisma from './config/database';
+import { initializeAdmin } from './services/auth/init-admin.service';
 
 // EduClaw Gateway
 import { createGateway } from './gateway';
@@ -298,6 +299,9 @@ async function startServer() {
     logger.info('Connecting to database...');
     await prisma.$connect();
     logger.info('✅ Database connected successfully');
+
+    // 初始化管理员账户
+    await initializeAdmin();
 
     // 初始化 EduClaw Gateway
     await initializeGateway();
