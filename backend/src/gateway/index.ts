@@ -11,7 +11,7 @@ import { AgentRegistry } from './registries/agent-registry';
 import { SkillRegistry } from './registries/skill-registry';
 import { SignalRegistry } from './registries/signal-registry';
 import { StrategyRegistry } from './registries/strategy-registry';
-import { OpenAIClient, initOpenAIClient, runWithContext } from './openai-client';
+import { OpenAIClient, getOpenAIClient, runWithContext } from './openai-client';
 import {
   AgentInput,
   AgentOutput,
@@ -79,7 +79,8 @@ export class EduClawGateway {
     this.skillRegistry = new SkillRegistry(prisma);
     this.signalRegistry = new SignalRegistry();
     this.strategyRegistry = new StrategyRegistry();
-    this.openaiClient = initOpenAIClient(this.config.ai);
+    // 使用已初始化的客户端（从数据库读取配置），而不是创建新客户端
+    this.openaiClient = getOpenAIClient();
 
     // 设置事件监听
     this.setupEventListeners();

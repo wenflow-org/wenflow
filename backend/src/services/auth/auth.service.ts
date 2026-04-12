@@ -26,8 +26,8 @@ class AuthService {
   // 注册
   async register(data: RegisterData) {
     try {
-      // 检查用户名是否已存在
-      const existingUser = await prisma.users.findUnique({
+      // 检查用户名是否已存在（使用 findFirst，因为 name 不是唯一字段）
+      const existingUser = await prisma.users.findFirst({
         where: { name: data.name }
       });
 
@@ -38,7 +38,7 @@ class AuthService {
       // 加密密码
       const hashedPassword = await bcrypt.hash(data.password, 10);
 
-      // 创建用户
+      // 创建用户（自动生成 email）
       const userId = `user_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const user = await prisma.users.create({
         data: {

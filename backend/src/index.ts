@@ -14,6 +14,7 @@ import { createDynamicAdjustmentService } from './services/dynamic-adjustment.se
 import { createAgentCollaborationService } from './services/agent-collaboration.service';
 import { userProfileAgent } from './agents/user-profile-agent';
 import { getEventBus } from './gateway/event-bus';
+import { initializeOpenAIClientFromDatabase } from './gateway/openai-client';
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
@@ -302,6 +303,9 @@ async function startServer() {
 
     // 初始化管理员账户
     await initializeAdmin();
+
+    // 从数据库初始化 OpenAI 客户端（使用平台配置）
+    await initializeOpenAIClientFromDatabase();
 
     // 初始化 EduClaw Gateway
     await initializeGateway();

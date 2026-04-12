@@ -24,14 +24,6 @@
           />
         </el-form-item>
 
-        <el-form-item label="邮箱" prop="email">
-          <el-input
-            v-model="registerForm.email"
-            type="text"
-            placeholder="请输入邮箱"
-          />
-        </el-form-item>
-
         <el-form-item label="密码" prop="password">
           <el-input
             v-model="registerForm.password"
@@ -86,7 +78,6 @@ const loading = ref(false);
 
 const registerForm = reactive({
   name: '',
-  email: '',
   password: '',
   confirmPassword: ''
 });
@@ -105,10 +96,6 @@ const rules: FormRules = {
   name: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 2, max: 20, message: '用户名长度在 2 到 20 个字符', trigger: 'blur' }
-  ],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },

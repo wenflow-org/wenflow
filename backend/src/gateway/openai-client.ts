@@ -350,8 +350,8 @@ export class OpenAIClient {
   }
 
 /**
-   * 带重试的执行请求
-   */
+    * 带重试的执行请求
+    */
   private async executeWithRetry(request: Partial<ChatCompletionRequest>): Promise<ChatCompletionResponse> {
     const providerConfig = await getUserProviderConfig(getRequestContext().userId);
     const activeBaseUrl = providerConfig?.baseUrl || this.config.baseUrl;
@@ -711,12 +711,12 @@ async function getPlatformAPIConfig(): Promise<{
     console.error('[OpenAIClient] 获取平台配置失败:', error);
   }
 
-  // 回退到环境变量
+  // 回退到环境变量（用于初始化或备用）
   return {
     baseUrl: normalizeOpenAIBaseUrl(process.env.AI_API_URL || 'http://localhost:3000'),
     apiKey: process.env.AI_API_KEY || '',
-    defaultModel: process.env.AI_MODEL || 'glm-4-flash',
-    defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
+    defaultModel: process.env.AI_MODEL || 'deepseek-chat',
+    defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-reasoner',
   };
 }
 
@@ -754,14 +754,16 @@ export async function getOpenAIClientAsync(): Promise<OpenAIClient> {
 }
 
 /**
- * 获取默认客户端（同步版本，使用环境变量）
- * 注意：此版本不从数据库读取平台配置，仅作为后备方案
+ * 获取默认客户端（同步版本）
+ * 注意：此方法返回已初始化的客户端，如果未初始化则使用环境变量配置
  */
 export function getOpenAIClient(): OpenAIClient {
   if (!defaultClient) {
-    // 从环境变量读取配置（后备方案）
+    // 如果客户端未初始化，使用环境变量配置作为临时方案
+    // 服务启动时应该调用 initializeOpenAIClientFromDatabase() 来从数据库读取配置
+    console.warn('[OpenAIClient] 客户端未初始化，使用环境变量配置。请在服务启动时调用 initializeOpenAIClientFromDatabase()');
     const config: OpenAIClientConfig = {
-      baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
+      baseUrl: normalizeOpenAIBaseUrl(process.env.AI_API_URL || 'http://localhost:3000'),
       apiKey: process.env.AI_API_KEY || '',
       defaultModel: process.env.AI_MODEL || 'glm-4-flash',
       defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
@@ -773,11 +775,112 @@ export function getOpenAIClient(): OpenAIClient {
 }
 
 /**
+ * 从数据库初始化 OpenAI 客户端
+ * 应在服务启动时调用
+ * 
+ * 流程：
+ * 1. 检查数据库是否有配置
+ * 2. 如果没有，从 .env 读取并写入数据库作为初始值
+ * 3. 从数据库读取配置创建客户端
+ */
+export async function initializeOpenAIClientFromDatabase(): Promise<OpenAIClient> {
+  console.log('[OpenAIClient] 正在初始化客户端...');
+  
+  try {
+    // 检查数据库是否有配置
+    const existingConfig = await prisma.platform_api_configs.findUnique({
+      where: { id: 'platform' },
+    });
+
+    if (!existingConfig || !existingConfig.apiKey) {
+      // 数据库没有配置，从 .env 读取作为初始值
+      const envApiUrl = process.env.AI_API_URL;
+      const envApiKey = process.env.AI_API_KEY;
+      const envModel = process.env.AI_MODEL;
+      const envReasoningModel = process.env.AI_MODEL_REASONING;
+
+      if (envApiUrl && envApiKey) {
+        // .env 有配置，写入数据库作为初始值
+        console.log('[OpenAIClient] 数据库无配置，从 .env 初始化...');
+        
+        await prisma.platform_api_configs.upsert({
+          where: { id: 'platform' },
+          update: {},
+          create: {
+            id: 'platform',
+            apiUrl: envApiUrl,
+            apiKey: envApiKey,
+            defaultModel: envModel || 'deepseek-chat',
+            defaultReasoningModel: envReasoningModel || 'deepseek-reasoner',
+            defaultEvaluationModel: envReasoningModel || 'deepseek-reasoner',
+            connectionStatus: 'pending',
+          },
+        });
+
+        console.log('[OpenAIClient] .env 配置已写入数据库:', {
+          apiUrl: envApiUrl,
+          hasApiKey: !!envApiKey,
+          defaultModel: envModel || 'deepseek-chat',
+        });
+      } else {
+        console.log('[OpenAIClient] .env 无有效配置，等待 Admin 后台配置');
+      }
+    } else {
+      console.log('[OpenAIClient] 数据库已有配置，使用数据库配置');
+    }
+
+    // 从数据库读取最终配置
+    const platformConfig = await getPlatformAPIConfig();
+
+    const config: OpenAIClientConfig = {
+      baseUrl: platformConfig.baseUrl,
+      apiKey: platformConfig.apiKey,
+      defaultModel: platformConfig.defaultModel,
+      defaultReasoningModel: platformConfig.defaultReasoningModel,
+      fallbackModels: process.env.AI_FALLBACK_MODELS?.split(',').filter(Boolean) || [],
+    };
+
+    defaultClient = new OpenAIClient(config);
+    lastConfigCheckTime = Date.now();
+
+    console.log('[OpenAIClient] 客户端初始化完成:', {
+      baseUrl: config.baseUrl,
+      hasApiKey: !!config.apiKey,
+      apiKeyPrefix: config.apiKey?.substring(0, 15),
+      defaultModel: config.defaultModel,
+    });
+
+    return defaultClient;
+  } catch (error) {
+    console.error('[OpenAIClient] 初始化失败:', error);
+    
+    // 回退到环境变量
+    const fallbackConfig: OpenAIClientConfig = {
+      baseUrl: normalizeOpenAIBaseUrl(process.env.AI_API_URL || 'http://localhost:3000'),
+      apiKey: process.env.AI_API_KEY || '',
+      defaultModel: process.env.AI_MODEL || 'glm-4-flash',
+      defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
+      fallbackModels: process.env.AI_FALLBACK_MODELS?.split(',').filter(Boolean) || [],
+    };
+
+    defaultClient = new OpenAIClient(fallbackConfig);
+    lastConfigCheckTime = Date.now();
+
+    console.log('[OpenAIClient] 使用环境变量回退配置:', {
+      baseUrl: fallbackConfig.baseUrl,
+      hasApiKey: !!fallbackConfig.apiKey,
+    });
+
+    return defaultClient;
+  }
+}
+
+/**
  * 刷新客户端配置（强制从数据库重新读取）
  */
 export async function refreshOpenAIClient(): Promise<OpenAIClient> {
   lastConfigCheckTime = 0; // 清除缓存
-  return getOpenAIClientAsync();
+  return initializeOpenAIClientFromDatabase();
 }
 
 /**
