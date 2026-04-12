@@ -1,0 +1,22 @@
+{
+  "name": "ai-learning-platform",
+  "version": "1.0.0",
+  "description": "> 基于AI驱动的自由学习平台 - 让学习真正高效、有趣、可及",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
+    "test:contentagent": "node backend/test-content-agent-browser.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "oh-my-opencode-windows-x64": "^3.12.3",
+    "playwright": "^1.58.2"
+  }
+}

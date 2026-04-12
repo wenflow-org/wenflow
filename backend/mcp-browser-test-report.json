@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-03-18T03:09:09.497Z",
+  "status": "partial",
+  "steps": [
+    {
+      "step": 1,
+      "name": "访问首页",
+      "status": "success",
+      "time": 1468
+    },
+    {
+      "step": 3,
+      "name": "用户注册",
+      "status": "success",
+      "time": 6061
+    },
+    {
+      "step": 4,
+      "name": "用户登录",
+      "status": "success"
+    },
+    {
+      "step": 5,
+      "name": "进入目标对话",
+      "status": "success"
+    }
+  ],
+  "metrics": {
+    "pageLoadTime": 1468,
+    "registrationTime": 6061,
+    "loginTime": 6090,
+    "goalConversationTime": 0,
+    "pathGenerationTime": 0,
+    "taskLoadTime": 0,
+    "dialogueResponseTime": [],
+    "totalTestTime": 0,
+    "screenshots": [
+      "mcp-test-01-homepage.jpg",
+      "mcp-test-03-register-filled.jpg",
+      "mcp-test-04-after-login.jpg",
+      "mcp-test-05-goal-conversation-error.jpg",
+      "mcp-test-error-state.jpg"
+    ]
+  },
+  "issues": [
+    {
+      "step": 6,
+      "error": "未找到任何输入框"
+    },
+    {
+      "step": "critical",
+      "error": "locator.waitFor: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea, input[type=\"text\"]').first() to be visible\u001b[22m\n"
+    }
+  ],
+  "screenshots": [
+    "mcp-test-01-homepage.jpg",
+    "mcp-test-03-register-filled.jpg",
+    "mcp-test-04-after-login.jpg",
+    "mcp-test-05-goal-conversation-error.jpg",
+    "mcp-test-error-state.jpg"
+  ],
+  "totalTime": 41.083
+}

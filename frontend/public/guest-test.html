@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>游客模式功能测试</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      border-radius: 10px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 10px;
+    }
+    h2 {
+      color: #667eea;
+      margin-top: 30px;
+    }
+    .test-section {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    button.danger {
+      background: #e74c3c;
+    }
+    button.danger:hover {
+      background: #c0392b;
+    }
+    button.success {
+      background: #27ae60;
+    }
+    button.success:hover {
+      background: #229954;
+    }
+    .result {
+      background: #2c3e50;
+      color: #ecf0f1;
+      padding: 15px;
+      border-radius: 5px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      margin: 15px 0;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .success {
+      color: #27ae60;
+      font-weight: bold;
+    }
+    .error {
+      color: #e74c3c;
+      font-weight: bold;
+    }
+    .info {
+      color: #3498db;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      margin: 5px;
+    }
+    .status-badge.active {
+      background: #27ae60;
+      color: white;
+    }
+    .status-badge.inactive {
+      background: #95a5a6;
+      color: white;
+    }
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 15px 0;
+    }
+    .data-card {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .data-card h3 {
+      margin: 0 0 10px 0;
+      color: #667eea;
+      font-size: 16px;
+    }
+    .data-card .value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 游客模式功能测试</h1>
+    
+    <div class="test-section">
+      <h2>1. 游客 ID 生成测试</h2>
+      <button onclick="testGenerateGuestId()">生成游客 ID</button>
+      <button onclick="testGetOrCreateGuestId()">获取或创建</button>
+      <button onclick="checkGuestMode()">检查游客模式</button>
+      <div id="guestIdResult" class="result">点击按钮运行测试...</div>
+    </div>
+
+    <div class="test-section">
+      <h2>2. 数据存储测试</h2>
+      <button class="success" onclick="testSaveConversation()">保存对话</button>
+      <button class="success" onclick="testSaveLearningPath()">保存学习路径</button>
+      <button class="success" onclick="testSaveTaskProgress()">保存任务进度</button>
+      <div id="storageResult" class="result">点击按钮保存数据...</div>
+    </div>
+
+    <div class="test-section">
+      <h2>3. 数据读取测试</h2>
+      <button onclick="testReadConversations()">读取对话</button>
+      <button onclick="testReadLearningPaths()">读取学习路径</button>
+      <button onclick="testReadTaskProgress()">读取任务进度</button>
+      <button onclick="testGetStats()">获取统计</button>
+      <div id="readResult" class="result">点击按钮读取数据...</div>
+    </div>
+
+    <div class="test-section">
+      <h2>4. 统计数据</h2>
+      <div class="data-grid" id="statsGrid">
+        <div class="data-card">
+          <h3>游客 ID</h3>
+          <div class="value" id="statGuestId">-</div>
+        </div>
+        <div class="data-card">
+          <h3>对话数量</h3>
+          <div class="value" id="statConversations">0</div>
+        </div>
+        <div class="data-card">
+          <h3>学习路径</h3>
+          <div class="value" id="statPaths">0</div>
+        </div>
+        <div class="data-card">
+          <h3>完成任务</h3>
+          <div class="value" id="statTasks">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>5. 数据管理</h2>
+      <button class="danger" onclick="clearAllGuestData()">清理所有游客数据</button>
+      <button onclick="refreshStats()">刷新统计</button>
+      <div id="manageResult" class="result">点击按钮管理数据...</div>
+    </div>
+
+    <div class="test-section">
+      <h2>使用说明</h2>
+      <ol>
+        <li>依次运行各个测试，验证功能是否正常</li>
+        <li>检查浏览器控制台查看详细日志</li>
+        <li>刷新页面可以验证数据持久化</li>
+        <li>清理数据后会清除所有游客相关信息</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    // 游客 ID 生成函数
+    function generateGuestId() {
+      const randomStr = Math.random().toString(36).substring(2, 15);
+      const timestamp = Date.now();
+      return `guest_${randomStr}_${timestamp}`;
+    }
+
+    // 获取或创建游客 ID
+    function getOrCreateGuestId() {
+      const stored = localStorage.getItem('guest_id');
+      if (stored) return stored;
+      
+      const newId = generateGuestId();
+      localStorage.setItem('guest_id', newId);
+      return newId;
+    }
+
+    // 检查是否为游客模式
+    function isGuestMode() {
+      return !!localStorage.getItem('guest_id');
+    }
+
+    // 保存游客数据
+    function saveGuestData(key, data) {
+      const guestId = getOrCreateGuestId();
+      localStorage.setItem(`guest_${key}`, JSON.stringify(data));
+      localStorage.setItem('guest_last_active', new Date().toISOString());
+    }
+
+    // 获取游客数据
+    function getGuestData(key) {
+      const data = localStorage.getItem(`guest_${key}`);
+      return data ? JSON.parse(data) : null;
+    }
+
+    // 清理游客数据
+    function clearGuestData() {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('guest_'));
+      keys.forEach(k => localStorage.removeItem(k));
+    }
+
+    // 获取统计数据
+    function getStats() {
+      const conversations = getGuestData('conversations') || [];
+      const paths = getGuestData('paths') || [];
+      const tasks = getGuestData('tasks') || [];
+      
+      return {
+        guestId: localStorage.getItem('guest_id'),
+        conversationsCount: conversations.length,
+        pathsCount: paths.length,
+        tasksCompleted: tasks.filter(t => t.completed).length,
+        tasksTotal: tasks.length,
+        lastActive: localStorage.getItem('guest_last_active')
+      };
+    }
+
+    // 更新统计显示
+    function updateStats() {
+      const stats = getStats();
+      document.getElementById('statGuestId').textContent = stats.guestId ? stats.guestId.substring(0, 30) + '...' : '无';
+      document.getElementById('statConversations').textContent = stats.conversationsCount;
+      document.getElementById('statPaths').textContent = stats.pathsCount;
+      document.getElementById('statTasks').textContent = `${stats.tasksCompleted}/${stats.tasksTotal}`;
+    }
+
+    // 测试生成游客 ID
+    function testGenerateGuestId() {
+      const resultDiv = document.getElementById('guestIdResult');
+      try {
+        localStorage.removeItem('guest_id');
+        const newId = generateGuestId();
+        const isValid = /^guest_[a-z0-9]+_\d+$/.test(newId);
+        
+        resultDiv.innerHTML = `
+          <span class="info">生成的游客 ID:</span><br>
+          <code>${newId}</code><br><br>
+          <span class="info">格式检查:</span> 
+          <span class="${isValid ? 'success' : 'error'}">${isValid ? '✅ 通过' : '❌ 失败'}</span>
+        `;
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试获取或创建游客 ID
+    function testGetOrCreateGuestId() {
+      const resultDiv = document.getElementById('guestIdResult');
+      try {
+        const id = getOrCreateGuestId();
+        const isStored = localStorage.getItem('guest_id') === id;
+        
+        resultDiv.innerHTML = `
+          <span class="info">游客 ID:</span><br>
+          <code>${id}</code><br><br>
+          <span class="info">存储检查:</span> 
+          <span class="${isStored ? 'success' : 'error'}">${isStored ? '✅ 已存储到 localStorage' : '❌ 未存储'}</span><br>
+          <span class="info">游客模式:</span> 
+          <span class="success">${isGuestMode() ? '✅ 是' : '❌ 否'}</span>
+        `;
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 检查游客模式
+    function checkGuestMode() {
+      const resultDiv = document.getElementById('guestIdResult');
+      const isGuest = isGuestMode();
+      const guestId = localStorage.getItem('guest_id');
+      
+      resultDiv.innerHTML = `
+        <span class="info">游客模式状态:</span> 
+        <span class="${isGuest ? 'success' : 'error'}">${isGuest ? '✅ 是' : '❌ 否'}</span><br>
+        ${guestId ? `<span class="info">游客 ID:</span><br><code>${guestId}</code>` : ''}
+      `;
+    }
+
+    // 测试保存对话
+    function testSaveConversation() {
+      const resultDiv = document.getElementById('storageResult');
+      try {
+        const conversations = [
+          {
+            id: 'session_' + Date.now(),
+            messages: [
+              { role: 'user', content: '你好，我想学习 Python' },
+              { role: 'assistant', content: '你好！很高兴帮助你学习 Python。让我们开始吧！' }
+            ],
+            timestamp: new Date().toISOString()
+          }
+        ];
+        
+        saveGuestData('conversations', conversations);
+        
+        resultDiv.innerHTML = `
+          <span class="success">✅ 对话已保存</span><br>
+          <span class="info">会话 ID:</span> <code>${conversations[0].id}</code><br>
+          <span class="info">消息数量:</span> ${conversations[0].messages.length}
+        `;
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试保存学习路径
+    function testSaveLearningPath() {
+      const resultDiv = document.getElementById('storageResult');
+      try {
+        const paths = [
+          {
+            id: 'path_' + Date.now(),
+            title: 'Python 入门教程',
+            description: '从零开始学习 Python 编程',
+            weeks: 4,
+            savedAt: new Date().toISOString()
+          }
+        ];
+        
+        saveGuestData('paths', paths);
+        
+        resultDiv.innerHTML = `
+          <span class="success">✅ 学习路径已保存</span><br>
+          <span class="info">路径 ID:</span> <code>${paths[0].id}</code><br>
+          <span class="info">标题:</span> ${paths[0].title}
+        `;
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试保存任务进度
+    function testSaveTaskProgress() {
+      const resultDiv = document.getElementById('storageResult');
+      try {
+        const tasks = [
+          { 
+            id: 'task_001', 
+            title: '安装 Python 环境',
+            completed: true, 
+            completedAt: new Date().toISOString() 
+          },
+          { 
+            id: 'task_002', 
+            title: '学习变量和数据类型',
+            completed: false, 
+            completedAt: null 
+          }
+        ];
+        
+        saveGuestData('tasks', tasks);
+        
+        resultDiv.innerHTML = `
+          <span class="success">✅ 任务进度已保存</span><br>
+          <span class="info">任务总数:</span> ${tasks.length}<br>
+          <span class="info">已完成:</span> ${tasks.filter(t => t.completed).length}
+        `;
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试读取对话
+    function testReadConversations() {
+      const resultDiv = document.getElementById('readResult');
+      try {
+        const conversations = getGuestData('conversations');
+        
+        if (!conversations || conversations.length === 0) {
+          resultDiv.innerHTML = '<span class="info">暂无对话数据</span>';
+          return;
+        }
+        
+        let html = '<span class="success">✅ 读取成功</span><br>';
+        html += `<span class="info">对话数量:</span> ${conversations.length}<br><br>`;
+        
+        conversations.forEach((conv, index) => {
+          html += `<strong>对话 ${index + 1}:</strong><br>`;
+          html += `<code>ID: ${conv.id}</code><br>`;
+          html += `<span class="info">消息数:</span> ${conv.messages.length}<br>`;
+          html += `<span class="info">时间:</span> ${new Date(conv.timestamp).toLocaleString()}<br><br>`;
+        });
+        
+        resultDiv.innerHTML = html;
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试读取学习路径
+    function testReadLearningPaths() {
+      const resultDiv = document.getElementById('readResult');
+      try {
+        const paths = getGuestData('paths');
+        
+        if (!paths || paths.length === 0) {
+          resultDiv.innerHTML = '<span class="info">暂无学习路径数据</span>';
+          return;
+        }
+        
+        let html = '<span class="success">✅ 读取成功</span><br>';
+        html += `<span class="info">路径数量:</span> ${paths.length}<br><br>`;
+        
+        paths.forEach((path, index) => {
+          html += `<strong>路径 ${index + 1}:</strong><br>`;
+          html += `<span class="info">标题:</span> ${path.title}<br>`;
+          html += `<span class="info">描述:</span> ${path.description || '无'}<br>`;
+          html += `<span class="info">保存时间:</span> ${new Date(path.savedAt).toLocaleString()}<br><br>`;
+        });
+        
+        resultDiv.innerHTML = html;
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试读取任务进度
+    function testReadTaskProgress() {
+      const resultDiv = document.getElementById('readResult');
+      try {
+        const tasks = getGuestData('tasks');
+        
+        if (!tasks || tasks.length === 0) {
+          resultDiv.innerHTML = '<span class="info">暂无任务数据</span>';
+          return;
+        }
+        
+        let html = '<span class="success">✅ 读取成功</span><br>';
+        html += `<span class="info">任务总数:</span> ${tasks.length}<br>`;
+        html += `<span class="info">已完成:</span> ${tasks.filter(t => t.completed).length}<br><br>`;
+        
+        tasks.forEach((task, index) => {
+          const status = task.completed ? '<span class="success">✅ 已完成</span>' : '<span class="info">⏳ 未完成</span>';
+          html += `<strong>任务 ${index + 1}:</strong> ${task.title || task.id}<br>`;
+          html += `${status}<br>`;
+          if (task.completedAt) {
+            html += `<span class="info">完成时间:</span> ${new Date(task.completedAt).toLocaleString()}<br>`;
+          }
+          html += '<br>';
+        });
+        
+        resultDiv.innerHTML = html;
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 测试获取统计
+    function testGetStats() {
+      const resultDiv = document.getElementById('readResult');
+      try {
+        const stats = getStats();
+        
+        let html = '<span class="success">✅ 统计数据</span><br><br>';
+        html += `<span class="info">游客 ID:</span> <code>${stats.guestId || '无'}</code><br>`;
+        html += `<span class="info">对话数量:</span> ${stats.conversationsCount}<br>`;
+        html += `<span class="info">学习路径:</span> ${stats.pathsCount}<br>`;
+        html += `<span class="info">完成任务:</span> ${stats.tasksCompleted}/${stats.tasksTotal}<br>`;
+        html += `<span class="info">最后活跃:</span> ${stats.lastActive ? new Date(stats.lastActive).toLocaleString() : '无'}<br>`;
+        
+        resultDiv.innerHTML = html;
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 清理所有游客数据
+    function clearAllGuestData() {
+      const resultDiv = document.getElementById('manageResult');
+      if (!confirm('确定要清理所有游客数据吗？此操作不可恢复！')) {
+        return;
+      }
+      
+      try {
+        clearGuestData();
+        
+        resultDiv.innerHTML = '<span class="success">✅ 已清理所有游客数据</span>';
+        updateStats();
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">❌ 错误：${error.message}</span>`;
+      }
+    }
+
+    // 刷新统计
+    function refreshStats() {
+      updateStats();
+      const resultDiv = document.getElementById('manageResult');
+      resultDiv.innerHTML = '<span class="success">✅ 统计已刷新</span>';
+    }
+
+    // 页面加载时更新统计
+    window.onload = function() {
+      updateStats();
+      console.log('游客模式测试页面已加载');
+      console.log('当前游客 ID:', localStorage.getItem('guest_id'));
+    };
+  </script>
+</body>
+</html>

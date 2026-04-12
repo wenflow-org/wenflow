@@ -1,0 +1,77 @@
+[
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "timestamp": "2026-03-21T09:19:45.675Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "timestamp": "2026-03-21T09:19:46.101Z"
+  },
+  {
+    "type": "error",
+    "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "timestamp": "2026-03-21T09:19:46.118Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "timestamp": "2026-03-21T09:19:49.786Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "timestamp": "2026-03-21T09:19:50.091Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "timestamp": "2026-03-21T09:19:54.076Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "timestamp": "2026-03-21T09:19:54.381Z"
+  },
+  {
+    "type": "error",
+    "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "timestamp": "2026-03-21T09:19:58.624Z"
+  },
+  {
+    "type": "error",
+    "text": "登录失败: {message: 请求失败, status: 500, details: undefined}",
+    "timestamp": "2026-03-21T09:19:58.624Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "timestamp": "2026-03-21T09:20:07.400Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "timestamp": "2026-03-21T09:20:07.731Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "timestamp": "2026-03-21T09:20:14.567Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "timestamp": "2026-03-21T09:20:14.900Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "timestamp": "2026-03-21T09:21:01.335Z"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "timestamp": "2026-03-21T09:21:01.998Z"
+  }
+]

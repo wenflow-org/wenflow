@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-03-18T03:15:53.276Z",
+  "status": "success",
+  "totalTime": "216.6s",
+  "conversationRounds": 5,
+  "learningRounds": 2,
+  "pathId": null,
+  "screenshots": [
+    "mcp-v2-01-home.jpg",
+    "mcp-v2-02-register-filled.jpg",
+    "mcp-v2-03-after-register.jpg",
+    "mcp-v2-04-goal-conversation.jpg",
+    "mcp-v2-06-round1-error.jpg",
+    "mcp-v2-06-round2-error.jpg",
+    "mcp-v2-06-round3-error.jpg",
+    "mcp-v2-06-round4-error.jpg",
+    "mcp-v2-06-round5-error.jpg",
+    "mcp-v2-07-conversation-complete.jpg",
+    "mcp-v2-08-path-generated.jpg",
+    "mcp-v2-10-dialogue1-response.jpg",
+    "mcp-v2-10-dialogue2-response.jpg"
+  ],
+  "issues": [
+    {
+      "round": 1,
+      "error": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first()\u001b[22m\n"
+    },
+    {
+      "round": 2,
+      "error": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first()\u001b[22m\n"
+    },
+    {
+      "round": 3,
+      "error": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first()\u001b[22m\n"
+    },
+    {
+      "round": 4,
+      "error": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first()\u001b[22m\n"
+    },
+    {
+      "round": 5,
+      "error": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first()\u001b[22m\n"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-03-18T03:20:31.801Z",
+  "status": "success",
+  "totalTime": "95.4s",
+  "conversationRounds": 5,
+  "learningRounds": 2,
+  "pathId": null,
+  "isLoggedIn": false,
+  "screenshots": [
+    "mcp-v3-01-home.jpg",
+    "mcp-v3-02-register-filled.jpg",
+    "mcp-v3-03-after-register.jpg",
+    "mcp-v3-03-login.jpg",
+    "mcp-v3-04-goal-conversation.jpg",
+    "mcp-v3-06-round1-error.jpg",
+    "mcp-v3-06-round2-error.jpg",
+    "mcp-v3-06-round3-error.jpg",
+    "mcp-v3-06-round4-error.jpg",
+    "mcp-v3-06-round5-error.jpg",
+    "mcp-v3-07-conversation-complete.jpg",
+    "mcp-v3-08-path-generated.jpg",
+    "mcp-v3-10-dialogue1.jpg",
+    "mcp-v3-10-dialogue2.jpg"
+  ],
+  "issues": [
+    {
+      "step": "login",
+      "error": "登录后被重定向"
+    },
+    {
+      "round": 1,
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first() to be visible\u001b[22m\n"
+    },
+    {
+      "round": 2,
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first() to be visible\u001b[22m\n"
+    },
+    {
+      "round": 3,
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first() to be visible\u001b[22m\n"
+    },
+    {
+      "round": 4,
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first() to be visible\u001b[22m\n"
+    },
+    {
+      "round": 5,
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('textarea').first() to be visible\u001b[22m\n"
+    }
+  ]
+}

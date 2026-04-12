@@ -1,0 +1,47 @@
+{
+  "goal-conversation-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "path-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "content-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "content-agent-v3": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "content-agent-v5": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "ai-teaching-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "tutor-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "progress-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
+  "user-profile-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  }
+}

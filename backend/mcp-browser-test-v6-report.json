@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-03-18T04:20:54.419Z",
+  "totalTime": "39.6秒",
+  "testResults": {
+    "login": {
+      "status": "✅ 成功",
+      "details": "用户已登录状态"
+    },
+    "dashboard": {
+      "status": "⚠️ 警告",
+      "details": "Dashboard 统计信息未找到"
+    },
+    "goalConversation": {
+      "status": "✅ 成功",
+      "details": "完成 5 轮对话"
+    },
+    "navigation": {
+      "status": "⚠️ 警告",
+      "details": "未显示完成提示"
+    },
+    "pathsList": {
+      "status": "⚠️ 警告",
+      "details": "路径列表未显示"
+    },
+    "pathDetail": {
+      "status": "⚠️ 警告",
+      "details": "未找到路径详情"
+    },
+    "taskLearningEntry": {
+      "status": "⚠️ 警告",
+      "details": "未找到任务"
+    },
+    "contentAgentDialogue": {
+      "status": "❌ 失败",
+      "details": ""
+    }
+  },
+  "summary": {
+    "total": 8,
+    "passed": 2,
+    "failed": 1,
+    "warnings": 5
+  },
+  "screenshots": [
+    "mcp-fix-01-homepage.jpg",
+    "mcp-fix-02-logged-in.jpg",
+    "mcp-fix-03-dashboard.jpg",
+    "mcp-fix-04-goal-conversation.jpg",
+    "mcp-fix-05-conversation-complete.jpg",
+    "mcp-fix-06-navigation.jpg",
+    "mcp-fix-07-paths-list.jpg",
+    "mcp-fix-08-path-detail.jpg",
+    "mcp-fix-09-task-learning.jpg",
+    "mcp-fix-10-response.jpg"
+  ]
+}

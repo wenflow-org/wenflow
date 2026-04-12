@@ -1,0 +1,21 @@
+{
+  "agent": "agent1",
+  "name": "正式平台注册登录测试",
+  "status": "失败",
+  "steps": [
+    {
+      "name": "访问首页",
+      "status": "成功",
+      "time": 3735
+    }
+  ],
+  "screenshots": [
+    "mcp-agent1-01-homepage.jpg"
+  ],
+  "timings": {
+    "homepage": 3735
+  },
+  "errors": [
+    "未找到注册按钮"
+  ]
+}

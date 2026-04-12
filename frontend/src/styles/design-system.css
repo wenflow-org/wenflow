@@ -1,0 +1,479 @@
+/* ========================================
+   AI学习平台 - 统一视觉设计系统
+   配色方案：温润学习风
+   
+   设计原则：
+   1. 护眼优先 - 长时间学习友好
+   2. 专注导向 - 清晰内容层次
+   3. 正向激励 - 亮色强调成就
+   4. 专业可信 - 教育/科技感
+   5. 暗色模式支持
+   ======================================== */
+
+:root {
+  /* ==========================================
+     核心色彩系统
+     ========================================== */
+  
+  /* 主色系 - 温润蓝 */
+  --color-primary: #4A6FA5;
+  --color-primary-light: #6B9AC4;
+  --color-primary-lighter: #8DB6D7;
+  --color-primary-dark: #3A5A8A;
+  --color-primary-darker: #2D4770;
+  
+  /* 辅色系 - 柔和青 */
+  --color-secondary: #6B9AC4;
+  --color-secondary-light: #8DB6D7;
+  --color-secondary-dark: #4A7DA8;
+  
+  /* 强调色系 - 琥珀橙（成就/激励） */
+  --color-accent: #F4A261;
+  --color-accent-light: #F7BA8A;
+  --color-accent-dark: #E08B3A;
+  
+  /* 警示色系 - 珊瑚红（重要提醒） */
+  --color-danger: #E76F51;
+  --color-danger-light: #F09A85;
+  --color-danger-dark: #C94E33;
+  
+  /* ==========================================
+     中性色系（亮色模式）
+     ========================================== */
+  --neutral-50: #FFFFFF;
+  --neutral-100: #F8F9FA;
+  --neutral-200: #E9ECEF;
+  --neutral-300: #DEE2E6;
+  --neutral-400: #CED4DA;
+  --neutral-500: #ADB5BD;
+  --neutral-600: #6C757D;
+  --neutral-700: #5F6B7C;
+  --neutral-800: #495057;
+  --neutral-900: #2C3E50;
+  --neutral-950: #1A252F;
+  
+  /* ==========================================
+     语义化状态色
+     ========================================== */
+  
+  /* 成功/完成 */
+  --color-success: #2ECC71;
+  --color-success-light: #58D68D;
+  --color-success-dark: #27AE60;
+  --color-success-bg: rgba(46, 204, 113, 0.1);
+  --color-success-border: rgba(46, 204, 113, 0.2);
+  
+  /* 进行中 */
+  --color-progress: #3498DB;
+  --color-progress-light: #5DADE2;
+  --color-progress-dark: #2980B9;
+  --color-progress-bg: rgba(52, 152, 219, 0.1);
+  --color-progress-border: rgba(52, 152, 219, 0.2);
+  
+  /* 待开始/禁用 */
+  --color-pending: #95A5A6;
+  --color-pending-light: #B2BFC0;
+  --color-pending-dark: #7F8C8D;
+  --color-pending-bg: rgba(149, 165, 166, 0.1);
+  --color-pending-border: rgba(149, 165, 166, 0.2);
+  
+  /* 疲劳预警（LSB < 0） */
+  --color-warning: #E74C3C;
+  --color-warning-light: #F1948A;
+  --color-warning-dark: #C0392B;
+  --color-warning-bg: rgba(231, 76, 60, 0.1);
+  --color-warning-border: rgba(231, 76, 60, 0.2);
+  
+  /* 高效状态（LSB ≥ 4） */
+  --color-efficient: #F39C12;
+  --color-efficient-light: #F5B041;
+  --color-efficient-dark: #D68910;
+  --color-efficient-bg: rgba(243, 156, 18, 0.1);
+  --color-efficient-border: rgba(243, 156, 18, 0.2);
+  
+  /* ==========================================
+     ZPD技能等级徽章色系
+     ========================================== */
+  
+  /* Novice (新手) - 灰色系 */
+  --color-novice-start: #95A5A6;
+  --color-novice-end: #7F8C8D;
+  --shadow-novice: rgba(149, 165, 166, 0.3);
+  --shadow-novice-dark: rgba(149, 165, 166, 0.5);
+  
+  /* Beginner (高级初学者) - 蓝色系 */
+  --color-beginner-start: #3498DB;
+  --color-beginner-end: #2980B9;
+  --shadow-beginner: rgba(52, 152, 219, 0.3);
+  --shadow-beginner-dark: rgba(52, 152, 219, 0.5);
+  
+  /* Competent (胜任) - 绿色系 */
+  --color-competent-start: #2ECC71;
+  --color-competent-end: #27AE60;
+  --shadow-competent: rgba(46, 204, 113, 0.3);
+  --shadow-competent-dark: rgba(46, 204, 113, 0.5);
+  
+  /* Proficient (精通) - 橙色系 */
+  --color-proficient-start: #F4A261;
+  --color-proficient-end: #E08B3A;
+  --shadow-proficient: rgba(244, 162, 97, 0.3);
+  --shadow-proficient-dark: rgba(244, 162, 97, 0.5);
+  
+  /* Expert (专家) - 紫色系 */
+  --color-expert-start: #9B59B6;
+  --color-expert-end: #8E44AD;
+  --shadow-expert: rgba(155, 89, 182, 0.3);
+  --shadow-expert-dark: rgba(155, 89, 182, 0.5);
+  
+  /* ==========================================
+     亮色模式变量
+     ========================================== */
+  
+  /* 背景 */
+  --bg-body: var(--neutral-100);
+  --bg-surface: var(--neutral-50);
+  --bg-elevated: var(--neutral-50);
+  --bg-muted: var(--neutral-200);
+  --bg-subtle: var(--neutral-100);
+  --bg-hover: var(--neutral-200);
+  --bg-active: var(--neutral-300);
+  
+  /* 文字 */
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-700);
+  --text-muted: var(--neutral-600);
+  --text-disabled: var(--neutral-500);
+  --text-inverse: var(--neutral-50);
+  --text-on-primary: #FFFFFF;
+  --text-on-success: #1A252F;
+  --text-on-warning: #1A252F;
+  --text-on-danger: #FFFFFF;
+  --text-on-success-light: #1A252F;
+  --text-on-warning-light: #1A252F;
+  --text-on-info-light: #1A252F;
+  --text-on-danger-light: #1A252F;
+  
+  /* 边框 */
+  --border-default: var(--neutral-200);
+  --border-light: var(--neutral-300);
+  --border-dark: var(--neutral-400);
+  --border-focus: var(--color-primary);
+  
+  /* 阴影 */
+  --shadow-xs: 0 1px 2px rgba(44, 62, 80, 0.05);
+  --shadow-sm: 0 2px 4px rgba(44, 62, 80, 0.06);
+  --shadow-md: 0 4px 8px rgba(44, 62, 80, 0.08);
+  --shadow-lg: 0 8px 16px rgba(44, 62, 80, 0.1);
+  --shadow-xl: 0 16px 32px rgba(44, 62, 80, 0.12);
+  --shadow-2xl: 0 24px 48px rgba(44, 62, 80, 0.15);
+  
+  /* ==========================================
+     排版系统
+     ========================================== */
+  
+  /* 字体族 */
+  --font-sans: 'Inter', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 
+               'Microsoft YaHei', '微软雅黑', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  
+  /* 字号 */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 1.875rem;   /* 30px */
+  --text-4xl: 2.25rem;    /* 36px */
+  --text-5xl: 3rem;       /* 48px */
+  
+  /* 行高 */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose: 2;
+  
+  /* 字重 */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  
+  /* ==========================================
+     间距系统
+     ========================================== */
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;   /* 4px */
+  --spacing-2: 0.5rem;    /* 8px */
+  --spacing-3: 0.75rem;   /* 12px */
+  --spacing-4: 1rem;      /* 16px */
+  --spacing-5: 1.25rem;   /* 20px */
+  --spacing-6: 1.5rem;    /* 24px */
+  --spacing-8: 2rem;      /* 32px */
+  --spacing-10: 2.5rem;   /* 40px */
+  --spacing-12: 3rem;     /* 48px */
+  --spacing-16: 4rem;     /* 64px */
+  --spacing-20: 5rem;     /* 80px */
+  
+  /* ==========================================
+     圆角系统
+     ========================================== */
+  --radius-none: 0;
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.5rem;    /* 8px */
+  --radius-lg: 0.75rem;   /* 12px */
+  --radius-xl: 1rem;      /* 16px */
+  --radius-2xl: 1.5rem;   /* 24px */
+  --radius-full: 9999px;
+  
+  /* ==========================================
+     过渡动画
+     ========================================== */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+  --transition-bounce: 300ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  
+  /* ==========================================
+     层级系统
+     ========================================== */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-toast: 800;
+}
+
+/* ==========================================
+   暗色模式
+   ========================================== */
+
+[data-theme="dark"],
+.dark {
+  /* 主色系调整 - 暗色模式下降低饱和度 */
+  --color-primary: #6B9AC4;
+  --color-primary-light: #8DB6D7;
+  --color-primary-lighter: #AFCDE8;
+  --color-primary-dark: #4A7DA8;
+  --color-primary-darker: #3A5A8A;
+  
+  /* 辅色系 */
+  --color-secondary: #8DB6D7;
+  --color-secondary-light: #AFCDE8;
+  --color-secondary-dark: #6B9AC4;
+  
+  /* 强调色 - 暗色模式下稍亮 */
+  --color-accent: #F7BA8A;
+  --color-accent-light: #FAD5B8;
+  --color-accent-dark: #F4A261;
+  
+  /* 警示色 */
+  --color-danger: #F09A85;
+  --color-danger-light: #F5BEB0;
+  --color-danger-dark: #E76F51;
+  
+  /* 中性色系反转 */
+  --neutral-50: #1A252F;
+  --neutral-100: #1E2D3A;
+  --neutral-200: #2A3D4D;
+  --neutral-300: #3A4F61;
+  --neutral-400: #4A6173;
+  --neutral-500: #6B8294;
+  --neutral-600: #8BA3B5;
+  --neutral-700: #AFC5D3;
+  --neutral-800: #D4E0E8;
+  --neutral-900: #EDF2F6;
+  --neutral-950: #FFFFFF;
+  
+  /* 暗色模式背景 */
+  --bg-body: #0F1820;
+  --bg-surface: var(--neutral-50);
+  --bg-elevated: var(--neutral-100);
+  --bg-muted: var(--neutral-200);
+  --bg-subtle: var(--neutral-100);
+  --bg-hover: var(--neutral-300);
+  --bg-active: var(--neutral-400);
+  
+  /* 暗色模式文字 */
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-700);
+  --text-muted: var(--neutral-600);
+  --text-disabled: var(--neutral-500);
+  --text-inverse: var(--neutral-950);
+  --text-on-primary: #0F1820;
+  --text-on-success: #0F1820;
+  --text-on-warning: #0F1820;
+  --text-on-danger: #0F1820;
+  --text-on-success-light: #EDF2F6;
+  --text-on-warning-light: #EDF2F6;
+  --text-on-info-light: #EDF2F6;
+  --text-on-danger-light: #EDF2F6;
+  
+  /* 暗色模式边框 */
+  --border-default: var(--neutral-300);
+  --border-light: var(--neutral-200);
+  --border-dark: var(--neutral-400);
+  --border-focus: var(--color-primary-light);
+  
+  /* 暗色模式阴影 */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.4);
+  --shadow-2xl: 0 24px 48px rgba(0, 0, 0, 0.45);
+  
+  /* 状态色透明度调整 */
+  --color-success-bg: rgba(46, 204, 113, 0.15);
+  --color-success-border: rgba(46, 204, 113, 0.3);
+  --color-progress-bg: rgba(52, 152, 219, 0.15);
+  --color-progress-border: rgba(52, 152, 219, 0.3);
+  --color-pending-bg: rgba(149, 165, 166, 0.15);
+  --color-pending-border: rgba(149, 165, 166, 0.3);
+  --color-warning-bg: rgba(231, 76, 60, 0.15);
+  --color-warning-border: rgba(231, 76, 60, 0.3);
+  --color-efficient-bg: rgba(243, 156, 18, 0.15);
+  --color-efficient-border: rgba(243, 156, 18, 0.3);
+}
+
+/* ==========================================
+   全局基础样式
+   ========================================== */
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  background: var(--bg-body);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-normal), 
+              color var(--transition-normal);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* ==========================================
+   滚动条样式
+   ========================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-muted);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--neutral-400);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-500);
+}
+
+/* ==========================================
+   选择文本样式
+   ========================================== */
+
+::selection {
+  background: var(--color-primary);
+  color: var(--text-inverse);
+}
+
+/* ==========================================
+   链接样式
+   ========================================== */
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ==========================================
+   代码样式
+   ========================================== */
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+code {
+  background: var(--bg-muted);
+  color: var(--color-danger-dark);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-4);
+  overflow-x: auto;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+/* ==========================================
+   工具类
+   ========================================== */
+
+/* 文本颜色 */
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+.text-success { color: var(--color-success); }
+.text-progress { color: var(--color-progress); }
+.text-warning { color: var(--color-warning); }
+.text-accent { color: var(--color-accent); }
+
+/* 背景色 */
+.bg-body { background: var(--bg-body); }
+.bg-surface { background: var(--bg-surface); }
+.bg-muted { background: var(--bg-muted); }
+
+/* 圆角 */
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-full { border-radius: var(--radius-full); }
+
+/* 阴影 */
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+
+/* 过渡 */
+.transition { transition: all var(--transition-normal); }
+.transition-fast { transition: all var(--transition-fast); }
+.transition-slow { transition: all var(--transition-slow); }

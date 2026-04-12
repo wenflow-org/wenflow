@@ -1,0 +1,132 @@
+{
+  "timestamp": "2026-03-21T09:18:32.266Z",
+  "totalTests": 5,
+  "passedTests": 0,
+  "partialTests": 1,
+  "failedTests": 4,
+  "agents": [
+    {
+      "agent": "agent1",
+      "name": "正式平台注册登录测试",
+      "status": "失败",
+      "steps": [
+        {
+          "name": "访问首页",
+          "status": "成功",
+          "time": 3735
+        }
+      ],
+      "screenshots": [
+        "mcp-agent1-01-homepage.jpg"
+      ],
+      "timings": {
+        "homepage": 3735
+      },
+      "errors": [
+        "未找到注册按钮"
+      ]
+    },
+    {
+      "agent": "agent2",
+      "name": "正式平台目标对话测试",
+      "status": "部分成功",
+      "steps": [
+        {
+          "name": "访问首页",
+          "status": "成功",
+          "time": 3094
+        },
+        {
+          "name": "进入目标对话页面",
+          "status": "成功",
+          "time": 5232
+        },
+        {
+          "name": "学习路径生成",
+          "status": "警告",
+          "time": 3216
+        }
+      ],
+      "screenshots": [
+        "mcp-agent2-01-homepage.jpg",
+        "mcp-agent2-03-goal-conversation.jpg",
+        "mcp-agent2-06-conversation-complete.jpg"
+      ],
+      "conversationRounds": 0,
+      "aiResponseTimes": [],
+      "errors": [],
+      "timings": {
+        "homepage": 3094,
+        "goalPage": 5232
+      },
+      "totalTime": 14907,
+      "avgAiResponseTime": null
+    },
+    {
+      "agent": "agent3",
+      "name": "正式平台学习页面测试",
+      "status": "失败",
+      "steps": [
+        {
+          "name": "访问首页",
+          "status": "成功",
+          "time": 2461
+        },
+        {
+          "name": "学习路径列表",
+          "status": "成功",
+          "time": 4677
+        },
+        {
+          "name": "选择学习路径",
+          "status": "失败",
+          "error": "未找到学习路径"
+        }
+      ],
+      "screenshots": [
+        "mcp-agent3-01-homepage.jpg",
+        "mcp-agent3-02-paths-list.jpg"
+      ],
+      "errors": [
+        "未找到学习路径"
+      ],
+      "timings": {
+        "homepage": 2461,
+        "pathsList": 4677
+      }
+    },
+    {
+      "agent": "agent4",
+      "name": "Admin 登录和仪表板测试",
+      "status": "失败",
+      "steps": [
+        {
+          "name": "Admin 登录页面",
+          "status": "成功",
+          "time": 2026
+        }
+      ],
+      "screenshots": [
+        "mcp-agent4-01-login-page.jpg"
+      ],
+      "dashboardStats": {},
+      "errors": [
+        "page.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#email')\u001b[22m\n"
+      ],
+      "timings": {
+        "loginPage": 2026
+      }
+    },
+    {
+      "agent": "agent5",
+      "name": "Admin 用户和内容管理测试",
+      "status": "失败",
+      "steps": [],
+      "screenshots": [],
+      "pagesTested": [],
+      "errors": [
+        "page.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#email')\u001b[22m\n"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,202 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment variables
+.env
+.env.local
+.env.production
+!.env.example
+!.env.production.example
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma
+backend/prisma/migrations/*_*/
+!backend/prisma/migrations/migration_lock.toml
+!backend/prisma/migrations/**/migration.sql
+
+# SSL Certificates
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+!nginx/ssl/.gitkeep
+
+# Backups
+*.sql
+backups/
+backup_*.sql
+
+# Uploads
+uploads/
+var/uploads/
+
+# Build artifacts
+*.tgz
+.npm
+.eslintcache
+
+# Docker
+.docker/
+
+# Test coverage
+coverage/
+*.lcov
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Test screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+!docs/**/*.png
+!docs/**/*.jpg
+!frontend/public/**/*
+
+# Test files
+test-*.txt
+test-output.txt
+test-log.txt
+test-*.json
+response*.json
+test-reports/
+dialogue_test_output.txt
+path-test-results.json
+
+# Temporary test scripts
+backend/query-*.js
+backend/test-*.js
+backend/test-*.ts
+backend/*-test.ts
+backend/mcp-agent*.test.ts
+backend/user*.test.ts
+backend/scripts/query-*.ts
+backend/scripts/test-*.ts
+backend/scripts/test-*.js
+backend/scripts/add-milestones-*.js
+backend/scripts/regenerate-*.js
+backend/scripts/transfer-*.js
+backend/scripts/create-ai-office-*.js
+backend/scripts/check-path-*.js
+backend/scripts/check-test-*.js
+backend/scripts/manual-*.ts
+backend/scripts/verify-*.js
+backend/scripts/generate-path-*.js
+backend/scripts/save-path-*.js
+scripts/test*.js
+scripts/test*.ps1
+
+# Root test scripts
+test-*.ps1
+test-*.sh
+test-*.py
+tests/
+
+# Playwright test artifacts
+backend/playwright-report/
+backend/test-results/
+frontend/test-results/
+playwright-test-results.json
+
+# MCP test reports
+backend/mcp-*-report.json
+backend/MCP_*_REPORT.md
+backend/MCP_*_REPORT.json
+backend/backend/
+
+# Temporary Python scripts
+backend/check_*.py
+backend/fix_*.py
+backend/debug-*.py
+backend/test-*.py
+*.py
+!backend/prisma/**/*.py
+
+# AI assistant configs
+.iflow/
+.clawhub/
+.learnings/
+.openclaw/
+
+# Test/Fix reports (keep important ones)
+*_TEST_REPORT.md
+*_FIX_REPORT.md
+*_BROWSER_TEST_REPORT.md
+*_INTEGRATION_REPORT.md
+*_LSS_INTEGRATION_REPORT.md
+*_E2E_TEST_REPORT.md
+*_PARALLEL_TEST_REPORT.md
+*_STRATEGY_REPORT.md
+*_MIDDLEWARE_REPORT.md
+*_REFACTOR_REPORT.md
+*_MONITOR_REPORT.md
+*_VERIFICATION.md
+AGENT_MONITORING_DOCS.md
+CONTENTAGENT_V3_REPORT.md
+!MVP_REPORT.md
+!CHANGELOG.md
+
+# TSC error logs
+tsc-*.txt
+backend/tsc-*.txt
+
+# Frontend test scripts
+frontend/*.mjs
+frontend/test-*.mjs
+frontend/debug-*.mjs
+frontend/check-*.mjs
+frontend/browser-*.mjs
+
+# User-specific test files
+backend/user*.test.ts
+backend/user*.json
+backend/mcp-user*.ts
+backend/*-report.json
+
+# Root test scripts
+test-*.js
+test-*.ts
+tests/
+
+# Misc temp files
+admin-users-page.html
+homepage-redesign-proposal.md
+response*.json
+test_request.json
+build-request*.js
+create-admin.js
+test-conversation.js
+test_*.mjs
+test-*.ts
+test_dialogue.py
+
+nul

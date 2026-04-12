@@ -1,0 +1,1538 @@
+<template>
+  <div class="goal-conversation-container">
+    <!-- 顶部导航栏 -->
+    <header class="conversation-header" :class="{ 'scrolled': headerScrolled }">
+      <div class="header-container">
+        <div class="header-left">
+          <div class="brand" @click="$router.push('/dashboard')">
+            <span class="brand-icon">🎓</span>
+            <span class="brand-text">AI 学习平台</span>
+          </div>
+          <div class="header-divider"></div>
+          <div class="session-info">
+            <span class="session-badge" :class="stageBadgeClass">{{ stageLabel }}</span>
+            <span class="session-title">学习目标对话</span>
+          </div>
+        </div>
+        
+        <nav class="header-nav">
+          <router-link to="/dashboard" class="nav-item">
+            <el-icon><HomeFilled /></el-icon>
+            <span>首页</span>
+          </router-link>
+          <router-link to="/goal-conversation" class="nav-item active">
+            <el-icon><EditPen /></el-icon>
+            <span>AI 规划</span>
+          </router-link>
+          <router-link to="/learning-paths" class="nav-item">
+            <el-icon><FolderOpened /></el-icon>
+            <span>学习路径</span>
+          </router-link>
+          <router-link to="/learning-state" class="nav-item">
+            <el-icon><TrendCharts /></el-icon>
+            <span>学习状态</span>
+          </router-link>
+          <router-link to="/achievements" class="nav-item">
+            <el-icon><Trophy /></el-icon>
+            <span>成就</span>
+          </router-link>
+          <router-link to="/ai-tutor" class="nav-item nav-item-highlight">
+            <el-icon><ChatDotSquare /></el-icon>
+            <span>AI 辅导</span>
+          </router-link>
+        </nav>
+
+        <div class="header-right">
+          <ThemeSwitcher />
+          <el-dropdown class="user-dropdown">
+            <div class="user-avatar">
+              <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
+              <div v-else class="avatar-placeholder">
+                {{ userStore.user?.name?.charAt(0) || 'U' }}
+              </div>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="$router.push('/profile')">
+                  <el-icon><User /></el-icon>
+                  个人中心
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <el-icon><Switch /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
+    </header>
+
+    <!-- 问题理解面板 -->
+    <transition name="slide-down">
+      <div class="understanding-panel" v-if="showUnderstandingPanel">
+        <div class="panel-header">
+          <div class="header-icon-wrapper">
+            <span class="header-icon">🎯</span>
+          </div>
+          <div class="header-content">
+            <h3 class="panel-title">问题理解中</h3>
+            <p class="panel-subtitle">AI 正在分析你的学习目标</p>
+          </div>
+          <div class="confidence-wrapper">
+            <div class="confidence-label">理解度</div>
+            <div class="confidence-bar-wrapper">
+              <div class="confidence-bar">
+                <div class="confidence-fill" :style="{ width: (confidence * 100) + '%' }" :class="confidenceClass"></div>
+              </div>
+              <span class="confidence-value">{{ Math.round(confidence * 100) }}%</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="panel-content">
+          <div class="understanding-grid">
+            <div class="understanding-card" v-if="understanding.surface_goal">
+              <div class="card-icon">📚</div>
+              <div class="card-content">
+                <span class="card-label">你想学</span>
+                <span class="card-value surface">{{ understanding.surface_goal }}</span>
+              </div>
+            </div>
+            <div class="understanding-card" v-if="understanding.real_problem">
+              <div class="card-icon">🎯</div>
+              <div class="card-content">
+                <span class="card-label">真正问题</span>
+                <span class="card-value real">{{ understanding.real_problem }}</span>
+              </div>
+            </div>
+            <div class="understanding-card" v-if="understanding.motivation">
+              <div class="card-icon">💡</div>
+              <div class="card-content">
+                <span class="card-label">学习动机</span>
+                <span class="card-value">{{ understanding.motivation }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="understanding-tags" v-if="understanding.background?.constraints?.length">
+            <span class="tag" v-for="c in understanding.background.constraints" :key="c">{{ c }}</span>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 聊天主区域 -->
+    <div class="chat-main" ref="chatMain">
+      <div class="chat-content" ref="chatContent">
+        <!-- 消息列表 -->
+        <div v-for="msg in sortedMessages" :key="msg.id" class="message-group" :class="msg.role">
+          <div class="message-wrapper" :class="msg.role">
+            <!-- AI 头像 -->
+            <div v-if="msg.role === 'ai'" class="avatar ai-avatar">
+              <div class="avatar-icon">🤖</div>
+            </div>
+            
+            <div class="message-body">
+              <div class="message-header" :class="{ 'user-header': msg.role === 'user' }">
+                <span class="sender-name">{{ msg.role === 'ai' ? 'AI 规划师' : '你' }}</span>
+                <span class="message-time">{{ formatTime(msg.time) }}</span>
+              </div>
+              <div class="message-bubble" :class="msg.role === 'ai' ? 'ai-bubble' : 'user-bubble'" v-html="msg.role === 'ai' ? formatMessage(msg.content) : msg.content"></div>
+              <!-- 重试按钮 -->
+              <div v-if="msg.role === 'ai' && isFailedMessage(msg.content)" class="retry-section">
+                <el-button size="small" @click="retryLastMessage" :loading="loading" class="retry-btn">
+                  <el-icon><RefreshRight /></el-icon>
+                  <span>重试</span>
+                </el-button>
+              </div>
+            </div>
+            
+            <!-- 用户头像 -->
+            <div v-if="msg.role === 'user'" class="avatar user-avatar">
+              <div class="avatar-icon">👤</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 加载中 -->
+        <div v-if="loading" class="message-group ai">
+          <div class="message-wrapper ai">
+            <div class="avatar ai-avatar">
+              <div class="avatar-icon">🤖</div>
+            </div>
+            <div class="message-body">
+              <div class="typing-indicator">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部输入区 -->
+    <div class="input-section" v-if="isCompleted">
+      <div class="completion-banner">
+        <div class="completion-icon-wrapper">
+          <span class="completion-icon">✨</span>
+        </div>
+        <h3 class="completion-title">问题理解完成！</h3>
+        <p class="completion-subtitle">AI 已经理解你的学习目标，接下来可以查看推荐的学习路径</p>
+        <div class="completion-summary" v-if="understanding.real_problem">
+          <span class="summary-label">🎯 真正要解决的问题：</span>
+          <span class="summary-value">{{ understanding.real_problem }}</span>
+        </div>
+        <el-button type="primary" size="large" @click="$router.push('/learning-paths')" class="cta-btn">
+          <span>查看学习路径</span>
+          <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+        </el-button>
+      </div>
+    </div>
+    
+    <div class="input-section" v-else>
+      <div class="input-wrapper glass-card">
+        <!-- 方案确认提示 -->
+        <transition name="fade">
+          <div v-if="showProposalHint" class="proposal-hint">
+            <span class="hint-icon">📋</span>
+            <span class="hint-text">请确认上面的方案方向是否合适，或提出你的调整建议</span>
+          </div>
+        </transition>
+
+        <!-- 快捷建议 -->
+        <transition name="slide-up">
+          <div v-if="showSuggestions" class="suggestions-section">
+            <div class="suggestions-label">
+              <span class="label-icon">💬</span>
+              你可以这样开始：
+            </div>
+            <div class="suggestions-chips">
+              <div 
+                v-for="suggestion in suggestions" 
+                :key="suggestion.text"
+                class="suggestion-chip"
+                :class="suggestion.type"
+                @click="setInput(suggestion.text)"
+              >
+                <span class="chip-icon">{{ suggestion.icon }}</span>
+                <span class="chip-text">{{ suggestion.text }}</span>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- 输入框 -->
+        <div class="input-row">
+          <div class="input-container">
+            <textarea 
+              ref="inputField"
+              v-model="userInput"
+              @keydown.enter.exact.prevent="sendMessage"
+              @keydown.enter.shift.exact="inputNewLine"
+              placeholder="告诉我你想学什么，或者想解决什么问题..."
+              :disabled="loading"
+              rows="1"
+              @input="autoResize"
+            ></textarea>
+            <div class="input-actions">
+              <el-button 
+                @click="sendMessage" 
+                :disabled="loading || !userInput.trim()"
+                circle
+                class="send-btn"
+              >
+                <el-icon v-if="loading"><Loading /></el-icon>
+                <el-icon v-else><Promotion /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 快速测试模式 -->
+        <transition name="slide-up">
+          <div v-if="showQuickTest" class="quick-test-section">
+            <div class="quick-test-label">
+              <span class="label-icon">🚀</span>
+              快速测试模式
+            </div>
+            <div class="quick-test-chips">
+              <el-button 
+                v-for="test in quickTestCases" 
+                :key="test.id"
+                size="small"
+                @click="runQuickTest(test)"
+                :loading="quickTestLoading === test.id"
+                class="quick-test-btn"
+              >
+                {{ test.name }}
+              </el-button>
+            </div>
+          </div>
+        </transition>
+
+        <div class="input-hint">
+          <span class="hint-icon">💡</span>
+          <span>{{ inputHint }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import api from '../utils/api';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ArrowRight, Loading, Promotion, RefreshRight, HomeFilled, EditPen, FolderOpened, TrendCharts, Trophy, ChatDotSquare, User, Switch } from '@element-plus/icons-vue';
+import { useUserStore } from '../stores/user';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import MarkdownIt from 'markdown-it';
+
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  breaks: true
+});
+
+const headerScrolled = ref(false);
+
+const router = useRouter();
+const userStore = useUserStore();
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+    userStore.logout();
+    ElMessage.success('已退出登录');
+    router.push('/login');
+  } catch {
+    // 用户取消
+  }
+};
+const chatContent = ref<HTMLElement | null>(null);
+const inputField = ref<HTMLTextAreaElement | null>(null);
+const userInput = ref('');
+const loading = ref(false);
+const conversationId = ref('');
+const currentStage = ref('understanding');
+const isCompleted = ref(false);
+const confidence = ref(0);
+const lastUserMessage = ref(''); // 保存最后的用户消息，用于重试
+const quickTestLoading = ref(''); // 快速测试中
+
+// 快速测试案例
+const quickTestCases = [
+  { 
+    id: 'python-excel', 
+    name: 'Python 自动化 Excel',
+    data: {
+      goal: 'Python 自动化 Excel 报表',
+      level: 'beginner',
+      timePerDay: '30 分钟',
+      learningStyle: 'project-based'
+    }
+  },
+  { 
+    id: 'bec-exam', 
+    name: 'BEC 商务英语',
+    data: {
+      goal: 'BEC 商务英语高级考试',
+      level: 'intermediate',
+      timePerDay: '1 小时',
+      learningStyle: 'mixed'
+    }
+  },
+  { 
+    id: 'germany-trip', 
+    name: '德国出差英语',
+    data: {
+      goal: '德国出差半年商务英语和跨文化沟通',
+      level: 'intermediate',
+      timePerDay: '1.5 小时',
+      learningStyle: 'project-based'
+    }
+  }
+];
+
+// 问题理解状态
+const understanding = ref<{
+  surface_goal?: string;
+  real_problem?: string;
+  motivation?: string;
+  urgency?: string;
+  background?: {
+    current_level?: string;
+    available_time?: string;
+    constraints?: string[];
+    strengths?: string[];
+  };
+}>({});
+
+interface Message {
+  id: string;
+  role: 'ai' | 'user';
+  content: string;
+  time: Date;
+}
+
+const aiMessages = ref<Message[]>([]);
+const userMessages = ref<Message[]>([]);
+
+// 合并并按时间排序的消息列表
+const sortedMessages = computed(() => {
+  const allMessages = [...aiMessages.value, ...userMessages.value];
+  return allMessages.sort((a, b) => {
+    const timeA = a.time instanceof Date ? a.time.getTime() : new Date(a.time).getTime();
+    const timeB = b.time instanceof Date ? b.time : new Date(b.time).getTime();
+    return timeA - timeB;
+  });
+});
+
+// 阶段配置
+const stages = {
+  understanding: { label: '理解问题中', color: 'info' },
+  proposing: { label: '方案确认中', color: 'warning' },
+  ready: { label: '理解完成', color: 'success' },
+  completed: { label: '已生成路径', color: 'success' }
+};
+
+// 快捷建议
+const suggestions = [
+  { text: '我想学 Python', icon: '🐍', type: 'tech' },
+  { text: '我想通过英语六级', icon: '📚', type: 'exam' },
+  { text: '我想做自媒体副业', icon: '📱', type: 'career' },
+  { text: '我想提升商业思维', icon: '💡', type: 'soft' },
+  { text: '我想转行做数据分析', icon: '📊', type: 'transition' },
+  { text: '我想帮孩子提高数学', icon: '🎓', type: 'student' }
+];
+
+// 计算属性
+const stageLabel = computed(() => stages[currentStage.value]?.label || '交流中');
+const stageBadgeClass = computed(() => `stage-${stages[currentStage.value]?.color || 'info'}`);
+
+const confidenceClass = computed(() => {
+  if (confidence.value >= 0.7) return 'high';
+  if (confidence.value >= 0.4) return 'medium';
+  return 'low';
+});
+
+const showSuggestions = computed(() => {
+  return currentStage.value === 'understanding' && aiMessages.value.length <= 1 && !isCompleted.value;
+});
+
+const showQuickTest = computed(() => {
+  return !isCompleted.value && !conversationId.value && !loading.value;
+});
+
+const showUnderstandingPanel = computed(() => {
+  return !isCompleted.value && 
+         (understanding.value.surface_goal || understanding.value.real_problem);
+});
+
+const showProposalHint = computed(() => {
+  return currentStage.value === 'proposing';
+});
+
+const inputHint = computed(() => {
+  if (currentStage.value === 'proposing') return '确认方案方向，或提出调整建议';
+  if (!understanding.value.surface_goal) return '描述你想学什么，或想解决什么问题';
+  if (!understanding.value.real_problem) return 'AI 正在理解你的真实需求...';
+  return '分享更多细节，帮助 AI 更好地规划';
+});
+
+// 方法
+const formatMessage = (text: string) => md.render(text);
+
+const formatTime = (date: Date) => {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const isFailedMessage = (content: string) => {
+  const failKeywords = ['走神了', '抱歉', '出错了', '失败了', '请稍后', '网络错误'];
+  return failKeywords.some(keyword => content.includes(keyword));
+};
+
+const retryLastMessage = async () => {
+  if (!lastUserMessage.value || loading.value) return;
+  
+  if (aiMessages.value.length > 0) {
+    aiMessages.value.pop();
+  }
+  
+  await sendMessageInternal(lastUserMessage.value);
+};
+
+const setInput = (text: string) => {
+  userInput.value = text;
+  nextTick(() => inputField.value?.focus());
+  autoResize();
+};
+
+const autoResize = () => {
+  const textarea = inputField.value;
+  if (textarea) {
+    textarea.style.height = 'auto';
+    const scrollHeight = textarea.scrollHeight;
+    const maxHeight = 120;
+    textarea.style.height = Math.min(scrollHeight, maxHeight) + 'px';
+  }
+};
+
+const inputNewLine = () => {
+  userInput.value += '\n';
+  nextTick(() => autoResize());
+};
+
+const scrollToBottom = async () => {
+  await nextTick();
+  if (chatContent.value) {
+    chatContent.value.scrollTop = chatContent.value.scrollHeight;
+  }
+};
+
+const runQuickTest = async (testCase: any) => {
+  quickTestLoading.value = testCase.id;
+  loading.value = true;
+  
+  try {
+    const response: any = await api.post('/goal-conversation/quick-generate', testCase.data);
+    if (response.success) {
+      const data = response.data;
+      
+      isCompleted.value = true;
+      understanding.value = data.understanding || {
+        real_problem: testCase.data.goal
+      };
+      currentStage.value = 'completed';
+      confidence.value = 0.9;
+      
+      ElMessage.success('学习路径生成成功！');
+      
+      if (data.learningPath?.id) {
+        router.push(`/learning-path/${data.learningPath.id}`);
+      } else {
+        router.push('/learning-paths');
+      }
+    }
+  } catch (error: any) {
+    console.error('快速测试失败:', error);
+    ElMessage.error(error.message || '生成失败，请重试');
+  } finally {
+    loading.value = false;
+    quickTestLoading.value = '';
+  }
+};
+
+const startConversation = async (goal: string) => {
+  loading.value = true;
+  try {
+    const response: any = await api.post('/goal-conversation/start', { goal });
+    if (response.success) {
+      const data = response.data;
+      conversationId.value = data.conversationId;
+      currentStage.value = data.stage;
+      confidence.value = data.confidence || 0;
+      
+      if (data.understanding) {
+        understanding.value = data.understanding;
+      }
+      
+      aiMessages.value.push({
+        id: Date.now().toString(),
+        role: 'ai',
+        content: data.message,
+        time: new Date()
+      });
+      
+      scrollToBottom();
+    }
+  } catch (error: any) {
+    console.error('开始对话失败:', error);
+    ElMessage.error(error.message || '开始对话失败，请稍后重试');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const sendMessage = async () => {
+  if (!userInput.value.trim() || loading.value) return;
+
+  const content = userInput.value.trim();
+  userInput.value = '';
+  autoResize();
+
+  lastUserMessage.value = content;
+
+  userMessages.value.push({
+    id: Date.now().toString(),
+    role: 'user',
+    content,
+    time: new Date()
+  });
+  scrollToBottom();
+
+  if (!conversationId.value) {
+    await startConversation(content);
+    return;
+  }
+
+  await sendMessageInternal(content);
+};
+
+const sendMessageInternal = async (content: string) => {
+  loading.value = true;
+  try {
+    const response: any = await api.post(`/goal-conversation/${conversationId.value}/reply`, {
+      reply: content
+    });
+
+    if (response.success) {
+      const data = response.data;
+      currentStage.value = data.stage;
+      confidence.value = data.confidence || confidence.value;
+      isCompleted.value = data.isCompleted;
+
+      if (data.understanding) {
+        understanding.value = { ...understanding.value, ...data.understanding };
+      }
+
+      aiMessages.value.push({
+        id: Date.now().toString(),
+        role: 'ai',
+        content: data.message,
+        time: new Date()
+      });
+
+      if (data.isCompleted) {
+        ElMessage.success('问题理解完成，学习路径已生成！');
+      }
+      
+      scrollToBottom();
+    }
+  } catch (error: any) {
+    console.error('回复失败:', error);
+    ElMessage.error(error.message || '回复失败，请稍后重试');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleScroll = () => {
+  headerScrolled.value = window.scrollY > 20;
+};
+
+onMounted(() => {
+  aiMessages.value.push({
+    id: 'welcome',
+    role: 'ai',
+    content: '你好！👋 我是你的学习规划师小智。\n\n**告诉我你想学什么，我来帮你找到真正要解决的问题。**\n\n💡 小提示：与其说"我想学 Python"，不如告诉我你想用 Python 做什么？',
+    time: new Date()
+  });
+  
+  window.addEventListener('scroll', handleScroll);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll);
+});
+</script>
+
+<style scoped>
+.goal-conversation-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-body);
+  position: relative;
+}
+
+.conversation-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-light);
+  transition: all 0.3s ease;
+}
+
+.conversation-header.scrolled {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  gap: 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.brand:hover {
+  transform: scale(1.02);
+}
+
+.brand-icon {
+  font-size: 28px;
+}
+
+.brand-text {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-light);
+}
+
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.session-badge.stage-info { 
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); 
+  color: #1976d2;
+}
+.session-badge.stage-warning { 
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); 
+  color: #f57c00;
+}
+.session-badge.stage-success { 
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); 
+  color: #388e3c;
+}
+
+.session-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.nav-item .el-icon {
+  font-size: 16px;
+}
+
+.nav-item-highlight {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+}
+
+.nav-item-highlight:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-dropdown {
+  cursor: pointer;
+}
+
+.user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-avatar img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--color-primary);
+}
+
+.avatar-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px solid var(--color-primary);
+}
+
+.understanding-panel {
+  margin: 16px 24px;
+  padding: 20px;
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-light);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.header-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-icon {
+  font-size: 24px;
+}
+
+.header-content {
+  flex: 1;
+  margin: 0 16px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.panel-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+}
+
+.confidence-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.confidence-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.confidence-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confidence-bar {
+  width: 100px;
+  height: 6px;
+  background: var(--bg-disabled);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  transition: width 0.5s ease, background 0.3s ease;
+  border-radius: 3px;
+}
+
+.confidence-fill.high {
+  background: linear-gradient(90deg, #4caf50 0%, #8bc34a 100%);
+}
+
+.confidence-fill.medium {
+  background: linear-gradient(90deg, #ff9800 0%, #ffc107 100%);
+}
+
+.confidence-fill.low {
+  background: linear-gradient(90deg, #f44336 0%, #ff5722 100%);
+}
+
+.confidence-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 35px;
+  text-align: right;
+}
+
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.understanding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.understanding-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.understanding-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.card-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.card-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.card-value.surface {
+  color: var(--color-primary);
+}
+
+.card-value.real {
+  color: #f57c00;
+  font-weight: 600;
+}
+
+.understanding-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  padding: 4px 10px;
+  background: var(--bg-tag);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.chat-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px;
+}
+
+.chat-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 0;
+}
+
+.message-group {
+  margin-bottom: 20px;
+}
+
+.message-wrapper {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.message-wrapper.user {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  flex-shrink: 0;
+}
+
+.avatar-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-light);
+}
+
+.ai-avatar .avatar-icon {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: transparent;
+}
+
+.user-avatar .avatar-icon {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  border-color: transparent;
+}
+
+.message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 600px;
+}
+
+.message-wrapper.user .message-body {
+  align-items: flex-end;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sender-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.message-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.message-bubble {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.ai-bubble {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--border-light);
+}
+
+.user-bubble {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble :deep(p) {
+  margin: 0;
+}
+
+.message-bubble :deep(p + p) {
+  margin-top: 8px;
+}
+
+.message-bubble :deep(ul), .message-bubble :deep(ol) {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.message-bubble :deep(code) {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+}
+
+.user-bubble :deep(code) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.message-bubble :deep(pre) {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.message-bubble :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.retry-section {
+  margin-top: 8px;
+}
+
+.retry-btn {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  border-bottom-left-radius: 4px;
+  width: fit-content;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: typing 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+.input-section {
+  padding: 16px 24px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-light);
+}
+
+.input-section[v-if="isCompleted"] {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.completion-banner {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 40px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 20px;
+  text-align: center;
+  color: #fff;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+}
+
+.completion-icon-wrapper {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.completion-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.completion-subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0 0 24px 0;
+}
+
+.completion-summary {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.summary-label {
+  display: block;
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.summary-value {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cta-btn {
+  background: #fff;
+  color: #667eea;
+  border: none;
+  padding: 14px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.input-wrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.proposal-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(245, 124, 0, 0.2);
+}
+
+.hint-icon {
+  font-size: 16px;
+}
+
+.hint-text {
+  font-size: 13px;
+  color: #f57c00;
+  font-weight: 500;
+}
+
+.suggestions-section {
+  margin-bottom: 12px;
+}
+
+.suggestions-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.label-icon {
+  font-size: 14px;
+}
+
+.suggestions-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.suggestion-chip:hover {
+  background: var(--bg-surface);
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.suggestion-chip.tech .chip-icon { font-size: 16px; }
+.suggestion-chip.exam .chip-icon { font-size: 16px; }
+.suggestion-chip.career .chip-icon { font-size: 16px; }
+.suggestion-chip.soft .chip-icon { font-size: 16px; }
+.suggestion-chip.transition .chip-icon { font-size: 16px; }
+.suggestion-chip.student .chip-icon { font-size: 16px; }
+
+.input-row {
+  margin-bottom: 12px;
+}
+
+.input-container {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 12px 16px;
+  background: var(--bg-body);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  resize: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+textarea:disabled {
+  background: var(--bg-disabled);
+  cursor: not-allowed;
+}
+
+.input-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.send-btn {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-test-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.quick-test-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.quick-test-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-test-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-test-btn:hover {
+  background: var(--bg-surface);
+  border-color: var(--color-primary);
+}
+
+.input-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hint-icon {
+  font-size: 14px;
+}
+
+/* ========== 动画 ========== */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* ========== 响应式设计 ========== */
+@media (max-width: 768px) {
+  .header-container {
+    padding: 12px 16px;
+  }
+  
+  .header-nav {
+    display: none;
+  }
+  
+  .understanding-panel {
+    margin: 16px;
+  }
+  
+  .chat-main {
+    padding: 0 16px;
+  }
+  
+  .input-section {
+    padding: 16px;
+  }
+  
+  .completion-banner {
+    padding: 24px 16px;
+  }
+}
+</style>

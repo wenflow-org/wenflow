@@ -1,0 +1,846 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ab_test {
+  id             String           @id
+  name           String
+  description    String?
+  testType       String
+  variants       String
+  trafficSplit   String
+  status         String           @default("draft")
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  ab_test_result ab_test_result[]
+
+  @@index([testType])
+  @@index([status])
+}
+
+model ab_test_result {
+  id             String   @id
+  testId         String
+  userId         String
+  sessionId      String
+  taskId         String
+  variantId      String
+  completionTime Int?
+  successRate    Float?
+  averageScore   Float?
+  engagement     Float?
+  frustration    Float?
+  satisfaction   Float?
+  preTestScore   Float?
+  postTestScore  Float?
+  learningGain   Float?
+  createdAt      DateTime @default(now())
+  ab_test        ab_test  @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([variantId])
+  @@index([testId])
+}
+
+model achievements {
+  id          String    @id
+  userId      String
+  type        String?
+  title       String
+  description String?
+  iconUrl     String?
+  current     Int?
+  target      Int?
+  completed   Boolean   @default(false)
+  xpReward    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  unlockedAt  DateTime?
+  earnedAt    DateTime?
+  users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model agent_call_logs {
+  id          String   @id
+  agentId     String
+  userId      String
+  sourceEntry String   @default("platform")
+  traceId     String?
+  callerAgent String?
+  userRole    String   @default("user")
+  input       String?
+  output      String?
+  success     Boolean  @default(false)
+  durationMs  Int      @default(0)
+  tokensUsed  Int?
+  error       String?
+  errorCode   String?
+  calledAt    DateTime @default(now())
+  metadata    String?
+
+  @@index([agentId])
+  @@index([userId])
+  @@index([sourceEntry])
+  @@index([traceId])
+  @@index([success])
+  @@index([calledAt])
+  @@index([agentId, calledAt])
+}
+
+model agent_execution_logs {
+  id         String   @id
+  instanceId String
+  agentName  String
+  action     String
+  status     String
+  input      String?
+  output     String?
+  error      String?
+  durationMs Int
+  timestamp  DateTime @default(now())
+
+  @@index([instanceId])
+  @@index([agentName])
+  @@index([timestamp])
+}
+
+model agent_instances {
+  id            String    @id
+  name          String
+  status        String    @default("idle")
+  agentType     String    @default("official")
+  currentTaskId String?
+  taskType      String?
+  avgDurationMs Int       @default(0)
+  totalCalls    Int       @default(0)
+  successCalls  Int       @default(0)
+  errorCalls    Int       @default(0)
+  cpuUsage      Float?
+  memoryUsage   Float?
+  lastHeartbeat DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+}
+
+model agent_lab_configs {
+  id           String   @id
+  agentName    String   @unique
+  model        String?
+  temperature  Float?
+  maxTokens    Int?
+  baseURL      String?
+  apiKey       String?
+  systemPrompt String?
+  extraConfig  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+model agent_logs {
+  id         String   @id
+  agentName  String
+  action     String
+  status     String
+  input      String?
+  output     String?
+  error      String?
+  durationMs Int
+  timestamp  DateTime @default(now())
+
+  @@index([agentName])
+  @@index([timestamp])
+}
+
+model agent_prompts {
+  id           String    @id
+  agentId      String
+  version      Int
+  name         String
+  description  String?
+  systemPrompt String
+  temperature  Float?
+  maxTokens    Int?
+  model        String?
+  status       String    @default("draft")
+  createdBy    String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now())
+  metadata     String?
+  useCount     Int       @default(0)
+  avgLatency   Float?
+  successRate  Float?
+  publishedAt  DateTime?
+
+  @@unique([agentId, version])
+  @@index([status])
+  @@index([agentId])
+}
+
+model agent_registrations {
+  id           String   @id
+  name         String   @unique
+  type         String
+  category     String?
+  description  String?
+  version      String   @default("1.0.0")
+  config       String?
+  inputSchema  String?
+  outputSchema String?
+  capabilities String?
+  subscribes   String?
+  publishes    String?
+  callCount    Int      @default(0)
+  successRate  Float    @default(1.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+  endpoint     String?
+}
+
+model arena_agent_logs {
+  id               String         @id
+  sessionId        String
+  agentName        String
+  agentType        String
+  status           String
+  startTime        DateTime
+  endTime          DateTime?
+  durationMs       Int?
+  input            String?
+  output           String?
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  error            String?
+  metadata         String?
+  createdAt        DateTime       @default(now())
+  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([startTime])
+  @@index([status])
+  @@index([agentName])
+  @@index([sessionId])
+}
+
+model arena_dialogues {
+  id               String         @id
+  sessionId        String         @unique
+  messages         String
+  messageCount     Int
+  userMessageCount Int
+  aiMessageCount   Int
+  generationTimeMs Int?
+  agentName        String?
+  timestamp        DateTime       @default(now())
+  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model arena_evaluations {
+  id               String         @id
+  sessionId        String         @unique
+  overallScore     Int
+  personaScore     Int?
+  dialogueScore    Int?
+  extractionScore  Int?
+  proposalScore    Int?
+  pathScore        Int?
+  report           String?
+  suggestions      String?
+  generationTimeMs Int?
+  agentName        String?
+  timestamp        DateTime       @default(now())
+  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model arena_extractions {
+  id                String         @id
+  sessionId         String         @unique
+  content           String?
+  surfaceGoal       String?
+  realProblem       String?
+  level             String?
+  timePerDay        String?
+  totalWeeks        String?
+  motivation        String?
+  urgency           String?
+  completenessScore Int?
+  missingFields     String?
+  followUpQuestions String?
+  generationTimeMs  Int?
+  agentName         String?
+  timestamp         DateTime       @default(now())
+  arena_sessions    arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model arena_generations {
+  id               String         @id
+  sessionId        String         @unique
+  proposalContent  String?
+  pathContent      String?
+  totalWeeks       Int?
+  totalTasks       Int?
+  generationTimeMs Int?
+  agentName        String?
+  timestamp        DateTime       @default(now())
+  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model arena_optimizations {
+  id                  String         @id
+  sessionId           String         @unique
+  suggestions         String?
+  optimizedPrompts    String?
+  expectedImprovement String?
+  generationTimeMs    Int?
+  agentName           String?
+  timestamp           DateTime       @default(now())
+  arena_sessions      arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model arena_personas {
+  id               String         @id
+  sessionId        String         @unique
+  content          String?
+  surfaceGoal      String?
+  realProblem      String?
+  level            String?
+  timePerDay       String?
+  totalWeeks       String?
+  motivation       String?
+  urgency          String?
+  generationTimeMs Int?
+  agentName        String?
+  timestamp        DateTime       @default(now())
+  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model arena_sessions {
+  id                  String               @id
+  name                String
+  description         String?
+  scenario            String               @default("default")
+  config              String?
+  status              String               @default("active")
+  agentCount          Int                  @default(0)
+  currentRound        Int                  @default(0)
+  totalRounds         Int?
+  startedAt           DateTime             @default(now())
+  completedAt         DateTime?
+  createdById         String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now())
+  arena_agent_logs    arena_agent_logs[]
+  arena_dialogues     arena_dialogues?
+  arena_evaluations   arena_evaluations?
+  arena_extractions   arena_extractions?
+  arena_generations   arena_generations?
+  arena_optimizations arena_optimizations?
+  arena_personas      arena_personas?
+}
+
+model content_feedback {
+  id             String   @id
+  userId         String
+  sessionId      String
+  subtaskId      String?
+  agentId        String   @default("content-agent-v3")
+  rating         Int
+  helpfulness    Int?
+  clarity        Int?
+  difficulty     Int?
+  comment        String?
+  suggestions    String?
+  confusionPoint String?
+  strategy       String?
+  uiType         String?
+  roundNumber    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime
+  users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model debug_learning_paths {
+  id              String           @id
+  snapshotId      String
+  userId          String
+  goal            String
+  path            String?
+  version         Int              @default(1)
+  isActive        Boolean          @default(false)
+  totalWeeks      Int?
+  totalTasks      Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now())
+  proposalId      String?
+  debug_proposals debug_proposals? @relation(fields: [proposalId], references: [id])
+  debug_snapshots debug_snapshots  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model debug_proposals {
+  id                   String                 @id
+  snapshotId           String
+  userId               String
+  goal                 String
+  proposal             String?
+  version              Int                    @default(1)
+  isActive             Boolean                @default(false)
+  status               String                 @default("pending")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @default(now())
+  debug_learning_paths debug_learning_paths[]
+  debug_snapshots      debug_snapshots        @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model debug_requirements {
+  id              String          @id
+  snapshotId      String
+  userId          String
+  requirement     String
+  version         Int             @default(1)
+  isActive        Boolean         @default(false)
+  realProblem     String?
+  status          String          @default("pending")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now())
+  debug_snapshots debug_snapshots @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model debug_snapshots {
+  id                   String                 @id
+  userId               String
+  name                 String                 @default("未命名快照")
+  description          String?
+  sourceConversationId String?
+  rawMessages          String?
+  snapshot             String?
+  tags                 String?
+  createdAt            DateTime               @default(now())
+  debug_learning_paths debug_learning_paths[]
+  debug_proposals      debug_proposals[]
+  debug_requirements   debug_requirements[]
+}
+
+model dialogue_sessions {
+  id                String   @id
+  userId            String
+  taskId            String
+  pathId            String
+  status            String   @default("active")
+  round             Int      @default(0)
+  history           String
+  content           String
+  evaluation_params String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime
+  users             users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model goal_conversations {
+  id             String    @id
+  userId         String
+  status         String    @default("active")
+  stage          String    @default("initial")
+  description    String?
+  messages       String
+  collectedData  String?
+  completedAt    DateTime?
+  learningPathId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now())
+  users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model interactive_sessions {
+  id                 String         @id
+  userId             String
+  taskId             String
+  pathId             String
+  stage              String
+  activationQuestion String?
+  segments           String         @default("[]")
+  userResponses      String         @default("[]")
+  understandingScore Float?
+  understandingLevel String?
+  skippedActivation  Boolean        @default(false)
+  completedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime
+  learning_paths     learning_paths @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  subtasks           subtasks       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  users              users          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([stage])
+  @@index([taskId])
+  @@index([userId])
+}
+
+model learningContents {
+  id          String   @id
+  subtaskId   String
+  contentType String   @default("lesson")
+  content     String
+  summary     String?
+  keyPoints   String?
+  resources   String?
+  exercises   String?
+  generatedBy String?
+  generatedAt DateTime @default(now())
+  version     Int      @default(1)
+  subtasks    subtasks @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+
+  @@index([contentType])
+  @@index([subtaskId])
+}
+
+model learning_goals {
+  id          String   @id
+  userId      String
+  title       String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+  users       users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model learning_metrics {
+  id           String   @id
+  userId       String
+  pathId       String?
+  taskId       String?
+  metricType   String
+  value        Float
+  lss          Float?   @default(0)
+  ktl          Float?   @default(0)
+  lf           Float?   @default(0)
+  lsb          Float?   @default(0)
+  depth_score  Float?   @default(0)
+  metadata     String?
+  recordedAt   DateTime @default(now())
+  calculatedAt DateTime @default(now())
+  ktlCurrent   Float?   @default(0)
+  lfCurrent    Float?   @default(0)
+  lsbCurrent   Float?   @default(0)
+  lssCurrent   Float?   @default(0)
+  lssHistory   String?
+  dki          Float?   @default(0)
+  mki          Float?   @default(0)
+  ski          Float?   @default(0)
+  users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model learning_paths {
+  id                   String                 @id
+  userId               String
+  title                String
+  name                 String?
+  description          String?
+  subject              String?
+  status               String                 @default("active")
+  difficulty           String                 @default("beginner")
+  estimatedHours       Float?
+  totalMilestones      Int                    @default(0)
+  completedMilestones  Int                    @default(0)
+  aiGenerated          Boolean                @default(false)
+  aiPromptTemplate     String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  deadline             DateTime?
+  deadlineText         String?
+  interactive_sessions interactive_sessions[]
+  users                users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones           milestones[]
+
+  @@index([status])
+  @@index([userId])
+}
+
+model learning_sessions {
+  id        String    @id
+  userId    String
+  goalId    String?
+  taskId    String?
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+  duration  Int?
+  status    String    @default("active")
+  messages  String?
+  state     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model milestones {
+  id             String         @id
+  learningPathId String
+  stageNumber    Int
+  title          String
+  description    String?
+  goal           String?
+  estimatedHours Float?
+  status         String         @default("locked")
+  unlockedAt     DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  order          Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  learning_paths learning_paths @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  subtasks       subtasks[]
+
+  @@unique([learningPathId, stageNumber])
+  @@index([status])
+  @@index([learningPathId])
+}
+
+model path_decompositions {
+  id              String   @id
+  userId          String
+  goal            String
+  stages          String
+  milestones      String
+  subtasks        String
+  aiAnalysis      String?
+  feasibility     String?
+  difficulty      String?
+  recommendations String?
+  createdAt       DateTime @default(now())
+  users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model platform_stats {
+  id             String   @id
+  date           DateTime @default(now())
+  totalUsers     Int      @default(0)
+  activeUsers    Int      @default(0)
+  totalPaths     Int      @default(0)
+  activePaths    Int      @default(0)
+  totalTasks     Int      @default(0)
+  completedTasks Int      @default(0)
+  metadata       String?
+}
+
+model skill_registrations {
+  id           String   @id
+  name         String   @unique
+  version      String   @default("1.0.0")
+  category     String?
+  description  String?
+  inputSchema  String?
+  outputSchema String?
+  endpoint     String?
+  callCount    Int      @default(0)
+  successRate  Float    @default(1.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+}
+
+model student_baselines {
+  id                       String    @id
+  userId                   String    @unique
+  totalXp                  Int       @default(0)
+  totalTime                Int       @default(0)
+  totalTasks               Int       @default(0)
+  completedTasks           Int       @default(0)
+  avgRating                Float     @default(0)
+  streakDays               Int       @default(0)
+  lastActive               DateTime?
+  responseTimeEma          Float     @default(10.0)
+  responseTimeEmVar        Float     @default(1.0)
+  messageLengthEma         Float     @default(50.0)
+  messageLengthEmVar       Float     @default(100.0)
+  interactionIntervalEma   Float     @default(5.0)
+  interactionIntervalEmVar Float     @default(1.0)
+  aiScoreEma               Float     @default(0.5)
+  aiScoreEmVar             Float     @default(0.01)
+  updateCount              Int       @default(0)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @default(now())
+  users                    users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model subtasks {
+  id                   String                 @id
+  milestoneId          String
+  userId               String
+  title                String
+  description          String?
+  taskType             String                 @default("practice")
+  estimatedMinutes     Int                    @default(30)
+  acceptanceCriteria   String?
+  order                Int                    @default(0)
+  status               String                 @default("todo")
+  completedAt          DateTime?
+  rating               Int?
+  feedback             String?
+  cognitiveLoad        String                 @default("medium")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  usersId              String?
+  annotationConfidence Float?
+  cognitiveLevel       String?
+  coreConcept          String?
+  displayLabel         String?
+  knowledgeType        String?
+  learningObjectives   String?
+  transferable         Boolean?               @default(false)
+  interactive_sessions interactive_sessions[]
+  learningContents     learningContents[]
+  milestones           milestones             @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  users                users?                 @relation(fields: [usersId], references: [id])
+
+  @@index([cognitiveLevel])
+  @@index([knowledgeType])
+  @@index([milestoneId])
+  @@index([userId])
+  @@index([status])
+}
+
+model system_announcements {
+  id        String    @id
+  title     String
+  content   String
+  priority  String    @default("normal")
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+}
+
+model user_agent_configs {
+  id               String   @id
+  userId           String
+  agentName        String
+  enabled          Boolean  @default(true)
+  sourceType       String
+  codeRepositoryId String?
+  model            String?
+  temperature      Float?
+  maxTokens        Int?
+  systemPrompt     String?
+  customCode       String?
+  version          String   @default("1.0.0")
+  stats            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  users            users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentName])
+}
+
+model user_api_configs {
+  id              String   @id
+  userId          String   @unique
+  endpoint        String?  // 用户自定义端点
+  apiKey          String?  // 用户自定义 API Key
+  chatModel       String?  // 对话模型名称
+  reasoningModel  String?  // 推理模型名称
+  enabled         Boolean  @default(false)  // 是否启用用户配置
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+  users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model user_code_repositories {
+  id           String   @id
+  userId       String
+  name         String
+  type         String
+  code         String
+  version      String   @default("1.0.0")
+  status       String   @default("active")
+  description  String?
+  inputSchema  String?
+  outputSchema String?
+  metadata     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+  users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([userId, type])
+}
+
+model user_mcp_configs {
+  id              String   @id
+  userId          String   @unique
+  servers         String
+  tools           String
+  routingStrategy String   @default("priority")
+  fallbackEnabled Boolean  @default(true)
+  healthCheck     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model user_skill_configs {
+  id               String   @id
+  userId           String
+  skillName        String
+  enabled          Boolean  @default(true)
+  sourceType       String
+  codeRepositoryId String?
+  parameters       String?
+  customCode       String?
+  endpoint         String?
+  stats            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  users            users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillName])
+}
+
+model users {
+  id                     String                   @id
+  email                  String                   @unique
+  name                   String
+  password               String
+  role                   String                   @default("user")
+  currentLevel           String                   @default("beginner")
+  xp                     Int                      @default(0)
+  isAdmin                Boolean                  @default(false)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  lastLoginAt            DateTime?
+  achievements           achievements[]
+  content_feedback       content_feedback[]
+  dialogue_sessions      dialogue_sessions[]
+  goal_conversations     goal_conversations[]
+  interactive_sessions   interactive_sessions[]
+  learning_goals         learning_goals[]
+  learning_metrics       learning_metrics[]
+  learning_paths         learning_paths[]
+  learning_sessions      learning_sessions[]
+  path_decompositions    path_decompositions[]
+  student_baselines      student_baselines?
+  subtasks               subtasks[]
+  user_agent_configs     user_agent_configs[]
+  user_api_configs       user_api_configs?
+  user_code_repositories user_code_repositories[]
+  user_mcp_configs       user_mcp_configs?
+  user_skill_configs     user_skill_configs[]
+}

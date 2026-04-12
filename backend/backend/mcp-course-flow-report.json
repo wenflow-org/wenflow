@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-03-20T12:24:12.477Z",
+  "totalTime": "158.3秒",
+  "test": "完整课程学习流程",
+  "steps": {
+    "login": "✅ 成功",
+    "goalConversation": "✅ 成功（5 轮）",
+    "pathGeneration": "✅ 成功",
+    "pathDetail": "✅ 成功",
+    "taskLearning": "✅ 成功",
+    "dialogueCompletion": "✅ 成功",
+    "aiFeedback": "✅ 成功"
+  },
+  "stats": {
+    "uiType": "input",
+    "questionLength": 5
+  },
+  "screenshots": [
+    "course-01-login.jpg",
+    "course-02-goal-conversation.jpg",
+    "course-03-conversation-complete.jpg",
+    "course-04-path-detail.jpg",
+    "course-05-task-learning.jpg",
+    "course-06-response-submitted.jpg",
+    "course-07-feedback.jpg"
+  ],
+  "conclusion": "课程学习流程测试完成！"
+}

@@ -1,0 +1,740 @@
+/* ========================================
+   AI学习平台 - 学习组件样式
+   基于设计系统的组件扩展
+   ======================================== */
+
+/* ==========================================
+   学习指标卡片（LSS/KTL/LF/LSB）
+   ========================================== */
+
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-6);
+  text-align: center;
+  transition: transform var(--transition-normal), 
+              box-shadow var(--transition-normal);
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.metric-card__icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--spacing-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-2xl);
+}
+
+/* LSS - 学习压力评分 */
+.metric-card--lss .metric-card__icon {
+  background: var(--color-progress-bg);
+  color: var(--color-progress);
+}
+
+/* KTL - 知识掌握度 */
+.metric-card--ktl .metric-card__icon {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+/* LF - 学习疲劳度 */
+.metric-card--lf .metric-card__icon {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+/* LSB - 学习状态值 */
+.metric-card--lsb .metric-card__icon {
+  background: var(--color-efficient-bg);
+  color: var(--color-efficient);
+}
+
+.metric-card--lsb.negative .metric-card__icon {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.metric-card__label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+  margin-bottom: var(--spacing-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-card__value {
+  font-size: var(--text-4xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: var(--spacing-2);
+  font-feature-settings: 'tnum';
+}
+
+.metric-card__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-full);
+}
+
+.metric-card__delta--up {
+  background: var(--color-success-bg);
+  color: var(--color-success-dark);
+}
+
+.metric-card__delta--down {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-dark);
+}
+
+.metric-card__delta--neutral {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+/* ==========================================
+   学习路径卡片
+   ========================================== */
+
+.learning-path-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+  cursor: pointer;
+}
+
+.learning-path-card:hover {
+  border-color: var(--color-primary-light);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
+}
+
+.learning-path-card__header {
+  position: relative;
+  height: 120px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.learning-path-card__icon {
+  font-size: 48px;
+  color: var(--text-inverse);
+  opacity: 0.9;
+}
+
+.learning-path-card__difficulty {
+  position: absolute;
+  top: var(--spacing-3);
+  right: var(--spacing-3);
+  padding: var(--spacing-1) var(--spacing-3);
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-inverse);
+}
+
+.learning-path-card__body {
+  padding: var(--spacing-5);
+}
+
+.learning-path-card__title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-2);
+}
+
+.learning-path-card__description {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--spacing-4);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.learning-path-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding-top: var(--spacing-4);
+  border-top: 1px solid var(--border-light);
+}
+
+.learning-path-card__meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* ==========================================
+   任务卡片
+   ========================================== */
+
+.task-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  transition: all var(--transition-normal);
+}
+
+.task-card:hover {
+  border-color: var(--color-primary-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.task-card--completed {
+  opacity: 0.7;
+  background: var(--bg-muted);
+}
+
+.task-card--completed .task-card__title {
+  text-decoration: line-through;
+}
+
+.task-card--current {
+  border-color: var(--color-primary);
+  border-width: 2px;
+  box-shadow: var(--shadow-sm);
+}
+
+.task-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
+}
+
+.task-card__checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.task-card__checkbox:hover {
+  border-color: var(--color-primary);
+}
+
+.task-card--completed .task-card__checkbox {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--text-inverse);
+}
+
+.task-card__content {
+  flex: 1;
+}
+
+.task-card__title {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-1);
+}
+
+.task-card__description {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.task-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--spacing-3);
+  padding-top: var(--spacing-3);
+  border-top: 1px solid var(--border-light);
+}
+
+.task-card__duration {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.task-card__xp {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  background: var(--color-accent-bg, rgba(244, 162, 97, 0.1));
+  color: var(--color-accent-dark);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-full);
+}
+
+/* ==========================================
+   成就徽章
+   ========================================== */
+
+.achievement-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  transition: all var(--transition-normal);
+}
+
+.achievement-badge:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-lg);
+}
+
+.achievement-badge--locked {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.achievement-badge__icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  margin-bottom: var(--spacing-2);
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: var(--text-inverse);
+}
+
+.achievement-badge__name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: var(--spacing-1);
+}
+
+.achievement-badge__xp {
+  font-size: var(--text-xs);
+  color: var(--color-accent-dark);
+  font-weight: var(--font-medium);
+}
+
+.achievement-badge__locked-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: inherit;
+}
+
+/* ==========================================
+   进度条
+   ========================================== */
+
+.progress-bar {
+  height: 8px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+
+.progress-bar__fill--success {
+  background: linear-gradient(90deg, var(--color-success) 0%, var(--color-success-light) 100%);
+}
+
+.progress-bar__fill--warning {
+  background: linear-gradient(90deg, var(--color-warning) 0%, var(--color-warning-light) 100%);
+}
+
+.progress-bar__fill--accent {
+  background: linear-gradient(90deg, var(--color-accent) 0%, var(--color-accent-light) 100%);
+}
+
+/* 圆形进度 */
+.progress-circle {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.progress-circle__ring {
+  transform: rotate(-90deg);
+}
+
+.progress-circle__bg {
+  fill: none;
+  stroke: var(--bg-muted);
+  stroke-width: 8;
+}
+
+.progress-circle__fill {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--transition-slow);
+}
+
+.progress-circle__text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-circle__value {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+}
+
+.progress-circle__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* ==========================================
+   学习状态指示器
+   ========================================== */
+
+.state-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+
+.state-indicator--efficient {
+  background: var(--color-efficient-bg);
+  color: var(--color-efficient-dark);
+}
+
+.state-indicator--balanced {
+  background: var(--color-success-bg);
+  color: var(--color-success-dark);
+}
+
+.state-indicator--fatigued {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-dark);
+}
+
+.state-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  animation: pulse 2s infinite;
+}
+
+.state-indicator--efficient .state-indicator__dot {
+  background: var(--color-efficient);
+}
+
+.state-indicator--balanced .state-indicator__dot {
+  background: var(--color-success);
+}
+
+.state-indicator--fatigued .state-indicator__dot {
+  background: var(--color-warning);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ==========================================
+   日历热力图
+   ========================================== */
+
+.calendar-heatmap {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.calendar-heatmap__cell {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+  transition: all var(--transition-fast);
+}
+
+.calendar-heatmap__cell:hover {
+  transform: scale(1.2);
+}
+
+.calendar-heatmap__cell--level-1 {
+  background: var(--color-primary-lighter);
+}
+
+.calendar-heatmap__cell--level-2 {
+  background: var(--color-primary-light);
+}
+
+.calendar-heatmap__cell--level-3 {
+  background: var(--color-primary);
+}
+
+.calendar-heatmap__cell--level-4 {
+  background: var(--color-primary-dark);
+}
+
+/* ==========================================
+   AI对话气泡
+   ========================================== */
+
+.chat-bubble {
+  max-width: 80%;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-xl);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.chat-bubble--user {
+  margin-left: auto;
+  background: var(--color-primary);
+  color: var(--text-inverse);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.chat-bubble--ai {
+  margin-right: auto;
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.chat-bubble__time {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--spacing-1);
+}
+
+.chat-bubble--user .chat-bubble__time {
+  color: rgba(255, 255, 255, 0.7);
+  text-align: right;
+}
+
+/* ==========================================
+   状态标签
+   ========================================== */
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.status-tag--completed {
+  background: var(--color-success-bg);
+  color: var(--color-success-dark);
+  border: 1px solid var(--color-success-border);
+}
+
+.status-tag--in-progress {
+  background: var(--color-progress-bg);
+  color: var(--color-progress-dark);
+  border: 1px solid var(--color-progress-border);
+}
+
+.status-tag--pending {
+  background: var(--color-pending-bg);
+  color: var(--color-pending-dark);
+  border: 1px solid var(--color-pending-border);
+}
+
+.status-tag--warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-dark);
+  border: 1px solid var(--color-warning-border);
+}
+
+/* ==========================================
+   ZPD技能等级徽章
+   ========================================== */
+
+.zpd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  transition: background var(--transition-base), box-shadow var(--transition-base);
+}
+
+.zpd-badge--novice {
+  background: linear-gradient(135deg, var(--color-novice-start) 0%, var(--color-novice-end) 100%);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px var(--shadow-novice);
+}
+
+.zpd-badge--beginner {
+  background: linear-gradient(135deg, var(--color-beginner-start) 0%, var(--color-beginner-end) 100%);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px var(--shadow-beginner);
+}
+
+.zpd-badge--competent {
+  background: linear-gradient(135deg, var(--color-competent-start) 0%, var(--color-competent-end) 100%);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px var(--shadow-competent);
+}
+
+.zpd-badge--proficient {
+  background: linear-gradient(135deg, var(--color-proficient-start) 0%, var(--color-proficient-end) 100%);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px var(--shadow-proficient);
+}
+
+.zpd-badge--expert {
+  background: linear-gradient(135deg, var(--color-expert-start) 0%, var(--color-expert-end) 100%);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px var(--shadow-expert);
+}
+
+/* 暗色主题下的ZPD徽章 */
+[data-theme="dark"] .zpd-badge--novice {
+  background: linear-gradient(135deg, var(--color-novice-start) 0%, var(--color-novice-end) 100%);
+  box-shadow: 0 2px 12px var(--shadow-novice-dark);
+}
+
+[data-theme="dark"] .zpd-badge--beginner {
+  background: linear-gradient(135deg, var(--color-beginner-start) 0%, var(--color-beginner-end) 100%);
+  box-shadow: 0 2px 12px var(--shadow-beginner-dark);
+}
+
+[data-theme="dark"] .zpd-badge--competent {
+  background: linear-gradient(135deg, var(--color-competent-start) 0%, var(--color-competent-end) 100%);
+  box-shadow: 0 2px 12px var(--shadow-competent-dark);
+}
+
+[data-theme="dark"] .zpd-badge--proficient {
+  background: linear-gradient(135deg, var(--color-proficient-start) 0%, var(--color-proficient-end) 100%);
+  box-shadow: 0 2px 12px var(--shadow-proficient-dark);
+}
+
+[data-theme="dark"] .zpd-badge--expert {
+  background: linear-gradient(135deg, var(--color-expert-start) 0%, var(--color-expert-end) 100%);
+  box-shadow: 0 2px 12px var(--shadow-expert-dark);
+}
+
+/* ==========================================
+   空状态
+   ========================================== */
+
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-12) var(--spacing-6);
+}
+
+.empty-state__icon {
+  font-size: 64px;
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-4);
+  opacity: 0.5;
+}
+
+.empty-state__title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-2);
+}
+
+.empty-state__description {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  max-width: 320px;
+  margin: 0 auto var(--spacing-6);
+}
+
+/* ==========================================
+   加载状态
+   ========================================== */
+
+.loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--bg-muted);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

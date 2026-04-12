@@ -1,0 +1,120 @@
+{
+  "$schema": "./mcp-schema.json",
+  "version": "1.0.0",
+  "description": "AI学习平台 MCP 配置",
+  "servers": [
+    {
+      "id": "openai",
+      "name": "OpenAI API",
+      "type": "openai",
+      "endpoint": "${OPENAI_API_URL:-https://api.openai.com/v1}",
+      "apiKey": "${OPENAI_API_KEY}",
+      "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+      "defaultModel": "gpt-4",
+      "priority": 1,
+      "enabled": true,
+      "config": {
+        "temperature": 0.7,
+        "maxTokens": 4000,
+        "timeout": 60000
+      }
+    },
+    {
+      "id": "newapi",
+      "name": "NewAPI 本地服务",
+      "type": "openai-compatible",
+      "endpoint": "${AI_API_URL:-http://localhost:3000/v1}",
+      "apiKey": "${AI_API_KEY}",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "defaultModel": "deepseek-chat",
+      "priority": 2,
+      "enabled": true,
+      "config": {
+        "temperature": 0.7,
+        "maxTokens": 6000,
+        "timeout": 120000
+      }
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic Claude",
+      "type": "anthropic",
+      "endpoint": "${ANTHROPIC_API_URL:-https://api.anthropic.com}",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "models": ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
+      "defaultModel": "claude-3-sonnet",
+      "priority": 3,
+      "enabled": false,
+      "config": {
+        "temperature": 0.7,
+        "maxTokens": 4000,
+        "timeout": 60000
+      }
+    }
+  ],
+  "tools": [
+    {
+      "id": "code-interpreter",
+      "name": "代码解释器",
+      "description": "执行 Python 代码",
+      "type": "code",
+      "endpoint": "local",
+      "enabled": true
+    },
+    {
+      "id": "web-search",
+      "name": "网页搜索",
+      "description": "搜索互联网内容",
+      "type": "search",
+      "endpoint": "${SEARCH_API_URL}",
+      "apiKey": "${SEARCH_API_KEY}",
+      "enabled": false
+    },
+    {
+      "id": "file-reader",
+      "name": "文件读取",
+      "description": "读取本地文件",
+      "type": "filesystem",
+      "endpoint": "local",
+      "config": {
+        "allowedPaths": ["./uploads", "./data"],
+        "maxFileSize": 10485760
+      },
+      "enabled": true
+    }
+  ],
+  "agents": {
+    "path-agent": {
+      "mcpServer": "newapi",
+      "model": "deepseek-chat",
+      "maxTokens": 4000,
+      "temperature": 0.5
+    },
+    "content-agent": {
+      "mcpServer": "newapi",
+      "model": "deepseek-chat",
+      "maxTokens": 4000,
+      "temperature": 0.7
+    },
+    "tutor-agent": {
+      "mcpServer": "newapi",
+      "model": "deepseek-chat",
+      "maxTokens": 2000,
+      "temperature": 0.6
+    },
+    "planner-agent": {
+      "mcpServer": "newapi",
+      "model": "deepseek-reasoner",
+      "maxTokens": 6000,
+      "temperature": 0.3
+    }
+  },
+  "routing": {
+    "strategy": "priority",
+    "fallback": true,
+    "healthCheck": {
+      "enabled": true,
+      "interval": 30000
+    }
+  }
+}

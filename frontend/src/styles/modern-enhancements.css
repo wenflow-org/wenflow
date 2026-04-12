@@ -1,0 +1,1195 @@
+/* ========================================
+   AI 学习平台 - 现代化设计系统增强包 v2.0
+   参考：Coursera, edX, Udemy, Khan Academy
+   
+   新增特性：
+   1. 现代渐变系统
+   2. 玻璃态效果
+   3. 高级动效
+   4. 卡片设计增强
+   5. 数据可视化优化
+   6. 响应式增强
+   ======================================== */
+
+/* ==========================================
+   现代化渐变系统
+   ========================================== */
+
+:root {
+  /* 主色渐变 */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-primary-light: linear-gradient(135deg, #a8b5d9 0%, #c49fd9 100%);
+  --gradient-primary-dark: linear-gradient(135deg, #4c5a95 0%, #5a3a7a 100%);
+  
+  /* 成功渐变 */
+  --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  
+  /* 警告渐变 */
+  --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  
+  /* 成就渐变 */
+  --gradient-achievement: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+  
+  /* 学习渐变 */
+  --gradient-learning: linear-gradient(135deg, #5ee7df 0%, #b490ca 100%);
+  
+  /* 科技渐变 */
+  --gradient-tech: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  
+  /* 温暖渐变 */
+  --gradient-warm: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+  
+  /* 冷静渐变 */
+  --gradient-calm: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+  
+  /* 能量渐变 */
+  --gradient-energy: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  
+  /* 深夜渐变 */
+  --gradient-midnight: linear-gradient(135deg, #232526 0%, #414345 100%);
+  
+  /* 极光渐变 */
+  --gradient-aurora: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+  
+  /* 日落渐变 */
+  --gradient-sunset: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  
+  /* 海洋渐变 */
+  --gradient-ocean: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+  
+  /* 森林渐变 */
+  --gradient-forest: linear-gradient(135deg, #134e5e 0%, #71b280 100%);
+}
+
+/* ==========================================
+   玻璃态效果（Glassmorphism）
+   ========================================== */
+
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .glass {
+  background: rgba(26, 37, 47, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .glass-strong {
+  background: rgba(26, 37, 47, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ==========================================
+   现代化卡片设计
+   ========================================== */
+
+.modern-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-2xl);
+  padding: var(--spacing-6);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
+  transform: scaleX(0);
+  transition: transform var(--transition-normal);
+}
+
+.modern-card:hover {
+  box-shadow: var(--shadow-xl);
+  transform: translateY(-4px);
+  border-color: var(--color-primary-light);
+}
+
+.modern-card:hover::before {
+  transform: scaleX(1);
+}
+
+.modern-card--gradient {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.modern-card--gradient .modern-card__title,
+.modern-card--gradient .modern-card__text {
+  color: white;
+}
+
+.modern-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-4);
+}
+
+.modern-card__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2xl);
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.modern-card__title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-2);
+}
+
+.modern-card__text {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.modern-card__footer {
+  margin-top: var(--spacing-4);
+  padding-top: var(--spacing-4);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ==========================================
+   高级动效
+   ========================================== */
+
+/* 淡入动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 缩放淡入 */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 滑动淡入 */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 弹跳动画 */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* 摇摆动画 */
+@keyframes swing {
+  20% {
+    transform: rotate3d(0, 0, 1, 15deg);
+  }
+  40% {
+    transform: rotate3d(0, 0, 1, -10deg);
+  }
+  60% {
+    transform: rotate3d(0, 0, 1, 5deg);
+  }
+  80% {
+    transform: rotate3d(0, 0, 1, -5deg);
+  }
+  100% {
+    transform: rotate3d(0, 0, 1, 0deg);
+  }
+}
+
+/* 脉冲发光 */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(74, 111, 165, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(74, 111, 165, 0.6);
+  }
+}
+
+/* 旋转加载 */
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 波浪动画 */
+@keyframes wave {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-25%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* 浮动动画 */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* 应用动画类 */
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 0.5s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.6s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.6s ease-out;
+}
+
+.animate-bounce {
+  animation: bounce 1s ease-in-out infinite;
+}
+
+.animate-swing {
+  animation: swing 1s ease-in-out;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+.animate-rotate {
+  animation: rotate 1s linear infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ==========================================
+   现代化按钮系统
+   ========================================== */
+
+.btn-modern {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-6);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-xl);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-modern::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.btn-modern:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.btn-modern--primary {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-modern--primary:hover {
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-modern--success {
+  background: var(--gradient-success);
+  color: white;
+  box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
+}
+
+.btn-modern--success:hover {
+  box-shadow: 0 6px 20px rgba(17, 153, 142, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-modern--warning {
+  background: var(--gradient-warning);
+  color: white;
+  box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+}
+
+.btn-modern--warning:hover {
+  box-shadow: 0 6px 20px rgba(245, 87, 108, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-modern--achievement {
+  background: var(--gradient-achievement);
+  color: white;
+  box-shadow: 0 4px 15px rgba(246, 211, 101, 0.4);
+}
+
+.btn-modern--achievement:hover {
+  box-shadow: 0 6px 20px rgba(246, 211, 101, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-modern--outline {
+  background: transparent;
+  border: 2px solid var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-modern--outline:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.btn-modern--ghost {
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.btn-modern--ghost:hover {
+  background: var(--bg-muted);
+}
+
+.btn-modern--lg {
+  padding: var(--spacing-4) var(--spacing-8);
+  font-size: var(--text-base);
+}
+
+.btn-modern--sm {
+  padding: var(--spacing-2) var(--spacing-4);
+  font-size: var(--text-xs);
+}
+
+/* ==========================================
+   数据可视化增强
+   ========================================== */
+
+/* 现代化进度条 */
+.progress-modern {
+  height: 12px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-modern__fill {
+  height: 100%;
+  background: var(--gradient-primary);
+  border-radius: var(--radius-full);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.progress-modern__fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.progress-modern__fill--success {
+  background: var(--gradient-success);
+}
+
+.progress-modern__fill--warning {
+  background: var(--gradient-warning);
+}
+
+.progress-modern__fill--achievement {
+  background: var(--gradient-achievement);
+}
+
+/* 环形进度条增强 */
+.progress-ring {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.progress-ring__svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.progress-ring__bg {
+  fill: none;
+  stroke: var(--bg-muted);
+  stroke-width: 8;
+}
+
+.progress-ring__fill {
+  fill: none;
+  stroke: url(#gradient);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s ease-out;
+}
+
+.progress-ring__content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring__value {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.progress-ring__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--spacing-1);
+}
+
+/* ==========================================
+   统计数据卡片
+   ========================================== */
+
+.stat-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-5);
+  border: 1px solid var(--border-default);
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle,
+    rgba(102, 126, 234, 0.1) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  border-color: var(--color-primary-light);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-3);
+}
+
+.stat-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xl);
+}
+
+.stat-card__icon--primary {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.stat-card__icon--success {
+  background: var(--gradient-success);
+  color: white;
+}
+
+.stat-card__icon--warning {
+  background: var(--gradient-warning);
+  color: white;
+}
+
+.stat-card__icon--achievement {
+  background: var(--gradient-achievement);
+  color: white;
+}
+
+.stat-card__value {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: var(--spacing-1);
+}
+
+.stat-card__label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+.stat-card__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  margin-top: var(--spacing-2);
+}
+
+.stat-card__delta--up {
+  background: var(--color-success-bg);
+  color: var(--color-success-dark);
+}
+
+.stat-card__delta--down {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-dark);
+}
+
+/* ==========================================
+   用户头像增强
+   ========================================== */
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 2px solid var(--border-light);
+  transition: border-color var(--transition-fast);
+}
+
+.avatar:hover {
+  border-color: var(--color-primary);
+}
+
+.avatar--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.avatar--lg {
+  width: 56px;
+  height: 56px;
+}
+
+.avatar--xl {
+  width: 80px;
+  height: 80px;
+}
+
+.avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-primary);
+  color: white;
+  font-weight: var(--font-medium);
+  font-size: var(--text-lg);
+}
+
+/* ==========================================
+   徽章系统增强
+   ========================================== */
+
+.badge-modern {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.badge-modern--primary {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.badge-modern--success {
+  background: var(--gradient-success);
+  color: white;
+}
+
+.badge-modern--warning {
+  background: var(--gradient-warning);
+  color: white;
+}
+
+.badge-modern--achievement {
+  background: var(--gradient-achievement);
+  color: white;
+}
+
+.badge-modern--outline {
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  background: transparent;
+}
+
+/* 脉冲徽章 */
+.badge-pulse {
+  position: relative;
+}
+
+.badge-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: inherit;
+  animation: pulse-ring 2s infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* ==========================================
+   通知/提示框增强
+   ========================================== */
+
+.toast-modern {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-4) var(--spacing-5);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  min-width: 320px;
+  max-width: 480px;
+  animation: slideInRight 0.4s ease-out;
+}
+
+.toast-modern__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.toast-modern__icon--success {
+  background: var(--gradient-success);
+  color: white;
+}
+
+.toast-modern__icon--warning {
+  background: var(--gradient-warning);
+  color: white;
+}
+
+.toast-modern__icon--error {
+  background: var(--gradient-warning);
+  color: white;
+}
+
+.toast-modern__content {
+  flex: 1;
+}
+
+.toast-modern__title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-1);
+}
+
+.toast-modern__message {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.toast-modern__close {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.toast-modern__close:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+/* ==========================================
+   分割线增强
+   ========================================== */
+
+.divider-modern {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border-default),
+    transparent
+  );
+  margin: var(--spacing-6) 0;
+}
+
+.divider-modern--vertical {
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--border-default),
+    transparent
+  );
+  margin: 0 var(--spacing-4);
+}
+
+/* ==========================================
+   工具提示增强
+   ========================================== */
+
+.tooltip-modern {
+  position: relative;
+}
+
+.tooltip-modern::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: var(--spacing-2) var(--spacing-3);
+  background: var(--neutral-900);
+  color: white;
+  font-size: var(--text-xs);
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-tooltip);
+}
+
+.tooltip-modern:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+/* ==========================================
+   输入框增强
+   ========================================== */
+
+.input-modern {
+  width: 100%;
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: var(--text-base);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+}
+
+.input-modern::placeholder {
+  color: var(--text-muted);
+}
+
+.input-modern:hover {
+  border-color: var(--border-dark);
+}
+
+.input-modern:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(74, 111, 165, 0.1);
+}
+
+.input-modern--error {
+  border-color: var(--color-danger);
+}
+
+.input-modern--error:focus {
+  box-shadow: 0 0 0 4px rgba(231, 111, 81, 0.1);
+}
+
+.input-modern--success {
+  border-color: var(--color-success);
+}
+
+.input-modern--success:focus {
+  box-shadow: 0 0 0 4px rgba(46, 204, 113, 0.1);
+}
+
+/* ==========================================
+   暗色模式适配
+   ========================================== */
+
+[data-theme="dark"] .modern-card {
+  background: var(--neutral-100);
+}
+
+[data-theme="dark"] .stat-card {
+  background: var(--neutral-100);
+}
+
+[data-theme="dark"] .glass {
+  background: rgba(26, 37, 47, 0.7);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .input-modern {
+  background: var(--neutral-100);
+  border-color: var(--neutral-300);
+}
+
+[data-theme="dark"] .input-modern:hover {
+  border-color: var(--neutral-400);
+}
+
+[data-theme="dark"] .input-modern:focus {
+  border-color: var(--color-primary-light);
+  box-shadow: 0 0 0 4px rgba(107, 154, 196, 0.15);
+}
+
+/* ==========================================
+   夜间模式渐变系统覆盖
+   ========================================== */
+
+[data-theme="dark"] {
+  /* 主色渐变 - 夜间模式降低饱和度，提高亮度 */
+  --gradient-primary: linear-gradient(135deg, #a8b5d9 0%, #c49fd9 100%);
+  --gradient-primary-light: linear-gradient(135deg, #d4dbe8 0%, #e0c9e8 100%);
+  --gradient-primary-dark: linear-gradient(135deg, #7a8ab0 0%, #8a6a90 100%);
+  
+  /* 成功渐变 */
+  --gradient-success: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+  
+  /* 警告渐变 */
+  --gradient-warning: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+  
+  /* 成就渐变 */
+  --gradient-achievement: linear-gradient(135deg, #fda085 0%, #f6d365 100%);
+  
+  /* 学习渐变 */
+  --gradient-learning: linear-gradient(135deg, #b490ca 0%, #5ee7df 100%);
+  
+  /* 科技渐变 */
+  --gradient-tech: linear-gradient(135deg, #c49fd9 0%, #a8b5d9 100%);
+  
+  /* 温暖渐变 */
+  --gradient-warm: linear-gradient(135deg, #fecfef 0%, #ff9a9e 100%);
+  
+  /* 冷静渐变 */
+  --gradient-calm: linear-gradient(135deg, #c2e9fb 0%, #a1c4fd 100%);
+  
+  /* 能量渐变 */
+  --gradient-energy: linear-gradient(135deg, #fcb69f 0%, #ffecd2 100%);
+  
+  /* 深夜渐变 */
+  --gradient-midnight: linear-gradient(135deg, #414345 0%, #232526 100%);
+  
+  /* 极光渐变 */
+  --gradient-aurora: linear-gradient(135deg, #0072ff 0%, #00c6ff 100%);
+  
+  /* 日落渐变 */
+  --gradient-sunset: linear-gradient(135deg, #fee140 0%, #fa709a 100%);
+  
+  /* 海洋渐变 */
+  --gradient-ocean: linear-gradient(135deg, #6dd5ed 0%, #2193b0 100%);
+  
+  /* 森林渐变 */
+  --gradient-forest: linear-gradient(135deg, #71b280 0%, #134e5e 100%);
+}
+
+/* ==========================================
+   夜间模式组件覆盖
+   ========================================== */
+
+/* Tooltip夜间模式 - 使用深色背景 */
+[data-theme="dark"] .tooltip-modern::after {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+/* 按钮夜间模式阴影调整 */
+[data-theme="dark"] .btn-modern--primary {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .btn-modern--primary:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .btn-modern--success {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .btn-modern--success:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .btn-modern--warning {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .btn-modern--warning:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .btn-modern--achievement {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .btn-modern--achievement:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Badge夜间模式 */
+[data-theme="dark"] .badge-modern {
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .badge-modern--primary {
+  background: rgba(107, 154, 196, 0.15);
+  color: var(--color-primary-light);
+  border-color: rgba(107, 154, 196, 0.3);
+}
+
+[data-theme="dark"] .badge-modern--success {
+  background: rgba(46, 204, 113, 0.15);
+  color: var(--color-success-light);
+  border-color: rgba(46, 204, 113, 0.3);
+}
+
+[data-theme="dark"] .badge-modern--warning {
+  background: rgba(231, 111, 81, 0.15);
+  color: var(--color-danger-light);
+  border-color: rgba(231, 111, 81, 0.3);
+}
+
+[data-theme="dark"] .badge-modern--achievement {
+  background: rgba(243, 156, 18, 0.15);
+  color: var(--color-efficient-light);
+  border-color: rgba(243, 156, 18, 0.3);
+}
+
+/* Toast夜间模式 */
+[data-theme="dark"] .toast-modern {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .toast-modern--success {
+  background: rgba(46, 204, 113, 0.15);
+  border-color: rgba(46, 204, 113, 0.3);
+}
+
+[data-theme="dark"] .toast-modern--error {
+  background: rgba(231, 111, 81, 0.15);
+  border-color: rgba(231, 111, 81, 0.3);
+}
+
+[data-theme="dark"] .toast-modern--warning {
+  background: rgba(243, 156, 18, 0.15);
+  border-color: rgba(243, 156, 18, 0.3);
+}
+
+[data-theme="dark"] .toast-modern--info {
+  background: rgba(52, 152, 219, 0.15);
+  border-color: rgba(52, 152, 219, 0.3);
+}
+
+/* Progress夜间模式 */
+[data-theme="dark"] .progress-modern {
+  background: var(--bg-muted);
+}
+
+[data-theme="dark"] .progress-modern__bar--primary {
+  background: linear-gradient(90deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+}
+
+[data-theme="dark"] .progress-modern__bar--success {
+  background: linear-gradient(90deg, var(--color-success-light) 0%, var(--color-success) 100%);
+}
+
+[data-theme="dark"] .progress-modern__bar--warning {
+  background: linear-gradient(90deg, var(--color-efficient-light) 0%, var(--color-efficient) 100%);
+}
+
+/* Divider夜间模式 */
+[data-theme="dark"] .divider-modern {
+  background: var(--border-default);
+}
+
+/* Avatar占位符夜间模式 */
+[data-theme="dark"] .avatar__placeholder {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-secondary-dark) 100%);
+}
+
+/* Glow动画夜间模式 */
+[data-theme="dark"] .btn-glow {
+  animation: glow-dark 3s ease-in-out infinite;
+}
+
+@keyframes glow-dark {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+}

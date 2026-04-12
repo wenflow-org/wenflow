@@ -1,0 +1,160 @@
+{
+  "testId": "mcp-agent1-1774083143281",
+  "testName": "MCP 浏览器测试代理 1 - 用户注册和登录流程",
+  "startTime": "2026-03-21T08:52:23.281Z",
+  "endTime": "2026-03-21T08:52:56.761Z",
+  "totalDuration": 33478,
+  "status": "success",
+  "steps": [
+    {
+      "stepIndex": 1,
+      "name": "访问首页",
+      "status": "success",
+      "details": {
+        "url": "http://localhost:5173/",
+        "title": "首页 - AI 学习平台",
+        "loadTime": 4530
+      },
+      "duration": 4530,
+      "timestamp": "2026-03-21T08:52:35.562Z"
+    },
+    {
+      "stepIndex": 2,
+      "name": "点击注册按钮",
+      "status": "success",
+      "details": {
+        "url": "http://localhost:5173/register",
+        "hasRegisterBtn": true
+      },
+      "duration": 2940,
+      "timestamp": "2026-03-21T08:52:38.627Z"
+    },
+    {
+      "stepIndex": 3,
+      "name": "填写注册表单",
+      "status": "success",
+      "details": {
+        "email": "agent1_test_1774083143281@test.com",
+        "name": "Agent1 Test User 1774083143281",
+        "hasPasswordConfirm": false,
+        "inputCount": 4
+      },
+      "duration": 1722,
+      "timestamp": "2026-03-21T08:52:40.457Z"
+    },
+    {
+      "stepIndex": 4,
+      "name": "提交注册",
+      "status": "success",
+      "details": {
+        "url": "http://localhost:5173/register",
+        "isSuccess": false,
+        "hasSuccessMessage": false
+      },
+      "duration": 5441,
+      "timestamp": "2026-03-21T08:52:45.996Z"
+    },
+    {
+      "stepIndex": 5,
+      "name": "访问登录页面",
+      "status": "success",
+      "details": {
+        "url": "http://localhost:5173/login"
+      },
+      "duration": 3149,
+      "timestamp": "2026-03-21T08:52:49.229Z"
+    },
+    {
+      "stepIndex": 6,
+      "name": "填写登录表单",
+      "status": "success",
+      "details": {
+        "email": "agent1_test_1774083143281@test.com"
+      },
+      "duration": 1664,
+      "timestamp": "2026-03-21T08:52:50.975Z"
+    },
+    {
+      "stepIndex": 7,
+      "name": "提交登录",
+      "status": "success",
+      "details": {
+        "url": "http://localhost:5173/login"
+      },
+      "duration": 5578,
+      "timestamp": "2026-03-21T08:52:56.645Z"
+    },
+    {
+      "stepIndex": 8,
+      "name": "验证登录成功",
+      "status": "success",
+      "details": {
+        "url": "http://localhost:5173/login",
+        "isDashboard": false,
+        "hasUserInfo": false,
+        "hasLogout": false
+      },
+      "duration": 23,
+      "timestamp": "2026-03-21T08:52:56.761Z"
+    }
+  ],
+  "screenshots": [
+    {
+      "step": 1,
+      "name": "homepage",
+      "filename": "mcp-agent1-01-homepage.jpg",
+      "path": "backend\\mcp-agent1-01-homepage.jpg",
+      "timestamp": "2026-03-21T08:52:35.559Z"
+    },
+    {
+      "step": 2,
+      "name": "register-page",
+      "filename": "mcp-agent1-02-register-page.jpg",
+      "path": "backend\\mcp-agent1-02-register-page.jpg",
+      "timestamp": "2026-03-21T08:52:38.627Z"
+    },
+    {
+      "step": 3,
+      "name": "register-form-filled",
+      "filename": "mcp-agent1-03-register-form-filled.jpg",
+      "path": "backend\\mcp-agent1-03-register-form-filled.jpg",
+      "timestamp": "2026-03-21T08:52:40.457Z"
+    },
+    {
+      "step": 4,
+      "name": "register-submitted",
+      "filename": "mcp-agent1-04-register-submitted.jpg",
+      "path": "backend\\mcp-agent1-04-register-submitted.jpg",
+      "timestamp": "2026-03-21T08:52:45.968Z"
+    },
+    {
+      "step": 5,
+      "name": "login-page",
+      "filename": "mcp-agent1-05-login-page.jpg",
+      "path": "backend\\mcp-agent1-05-login-page.jpg",
+      "timestamp": "2026-03-21T08:52:49.229Z"
+    },
+    {
+      "step": 6,
+      "name": "login-form-filled",
+      "filename": "mcp-agent1-06-login-form-filled.jpg",
+      "path": "backend\\mcp-agent1-06-login-form-filled.jpg",
+      "timestamp": "2026-03-21T08:52:50.975Z"
+    },
+    {
+      "step": 7,
+      "name": "login-submitted",
+      "filename": "mcp-agent1-07-login-submitted.jpg",
+      "path": "backend\\mcp-agent1-07-login-submitted.jpg",
+      "timestamp": "2026-03-21T08:52:56.645Z"
+    },
+    {
+      "step": 8,
+      "name": "login-success",
+      "filename": "mcp-agent1-08-login-success.jpg",
+      "path": "backend\\mcp-agent1-08-login-success.jpg",
+      "timestamp": "2026-03-21T08:52:56.761Z"
+    }
+  ],
+  "errors": []
+}

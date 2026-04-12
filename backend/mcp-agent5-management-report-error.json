@@ -1,0 +1,20 @@
+{
+  "testName": "Admin Management Testing",
+  "startTime": "2026-03-21T09:14:06.353Z",
+  "steps": [
+    {
+      "step": 1,
+      "name": "访问 Admin 登录页面",
+      "status": "成功",
+      "loadTime": 3595,
+      "timestamp": "2026-03-21T09:14:19.282Z"
+    }
+  ],
+  "screenshots": [
+    "mcp-agent5-management-01-login-page.jpg"
+  ],
+  "issues": [
+    "测试异常：page.$eval: TypeError: els.map is not a function\n    at eval (eval at evaluate (:290:30), <anonymous>:2:11)\n    at UtilityScript.evaluate (<anonymous>:292:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+  ],
+  "summary": {}
+}
