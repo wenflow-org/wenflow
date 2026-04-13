@@ -6,6 +6,8 @@
 
 🌐 **官网**: https://wenflow.org
 
+> 仅作 Demo 演示，不提供正式服务。
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
