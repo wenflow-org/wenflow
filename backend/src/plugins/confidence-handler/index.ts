@@ -11,7 +11,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../../agents/plugin-types';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { getEventBus, LearningEvent } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
@@ -194,9 +194,10 @@ export const confidenceHandler: AgentPlugin = {
     skillName: string,
     skillContext: Record<string, any>
   ): Promise<ConfidenceHandlerResult> {
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: 'confidence-handler' };
 
-    const messages: ChatMessage[] = [
+    const messages = [
       {
         role: 'system' as const,
         content: this.config!.systemPrompt!
@@ -218,12 +219,7 @@ ${JSON.stringify(skillContext, null, 2)}
       }
     ];
 
-    const response = await client.chatCompletion({
-      messages,
-      temperature: this.config!.temperature,
-      max_tokens: this.config!.maxTokens,
-      model: this.config!.model
-    });
+    const response = await gateway.execute({ messages }, caller, {});
 
     const content = response.choices[0]?.message.content || '';
 

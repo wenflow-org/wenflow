@@ -637,18 +637,7 @@ async continueConversation(conversationId: string, userReply: string, userId: st
       const history = data.messages || [];
       const previousUnderstanding = data.understanding || {};
 
-      // 构建对话历史消息
-      const chatMessages: Array<{role: 'user' | 'assistant', content: string}> = [];
       const recentHistory = history.slice(-20);
-      for (const msg of recentHistory) {
-        chatMessages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        });
-      }
-
-      // 添加当前用户输入
-      chatMessages.push({ role: 'user', content: userInput });
 
       // 从数据库获取 Prompt 配置（用于记录版本信息）
       const { config: promptConfig } = await this.getSystemPromptConfig();
@@ -666,21 +655,6 @@ async continueConversation(conversationId: string, userReply: string, userId: st
         previousStage: data.stage || conversation.stage
       });
 
-      // 计算延迟
-      const duration = Date.now() - startTime;
-
-      // 记录业务层调用日志
-      await agentConfigService.recordAgentCall({
-        agentId: 'goal-conversation-agent',
-        userId: userId || 'anonymous',
-        promptVersion: config?.version || 0,
-        duration: duration,
-        tokensUsed: 0,
-        success: true,
-        input: { messages: chatMessages.length, lastMessage: userInput.substring(0, 200) },
-        output: { responseLength: aiResponse.userVisible.length, stage: aiResponse.internal.stage }
-      });
-
       logger.info('AI响应', {
         stage: aiResponse.internal.stage,
         confidence: aiResponse.internal.confidence,
@@ -691,20 +665,6 @@ async continueConversation(conversationId: string, userReply: string, userId: st
       return aiResponse;
 
     } catch (error: any) {
-      // 计算延迟（失败情况）
-      const duration = Date.now() - startTime;
-
-      // 记录失败的 Agent 调用日志
-      await agentConfigService.recordAgentCall({
-        agentId: 'goal-conversation-agent',
-        userId: userId || 'anonymous',
-        promptVersion: config?.version || 0,
-        duration: duration,
-        tokensUsed: 0,
-        success: false,
-        error: error.message || 'Unknown error'
-      });
-
       logger.error('AI调用失败:', error);
       // 降级回复（新格式）
       return {

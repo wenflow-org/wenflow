@@ -128,7 +128,7 @@
                 </div>
 
                 <!-- 超时卡片（前端判定） -->
-                <div v-if="path.status === 'generating' && isPathTimeout(path)" class="path-card glass-card timeout-card">
+                <div v-else-if="path.status === 'generating' && isPathTimeout(path)" class="path-card glass-card timeout-card">
                   <div class="timeout-content">
                     <div class="timeout-icon">⏱️</div>
                     <h3 class="timeout-title">生成超时</h3>
@@ -464,12 +464,20 @@ const retryPathGeneration = async (path: any) => {
 
   retryingPathId.value = path.id;
   try {
-    // 更新状态为 generating
     await request.patch(`/learning/paths/${path.id}/retry`);
+    
+    const index = paths.value.findIndex(p => p.id === path.id);
+    if (index !== -1) {
+      paths.value[index] = {
+        ...paths.value[index],
+        status: 'generating',
+        createdAt: new Date().toISOString()
+      };
+    }
+    notifiedTimeoutIds.delete(path.id);
     
     ElMessage.success('正在重新生成学习路径...');
     
-    // 启动轮询
     if (!pollingTimer) {
       startPolling();
     }
@@ -1169,6 +1177,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 280px;
+  height: 100%;
   border: 1px solid rgba(239, 68, 68, 0.35);
   background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(249, 115, 22, 0.06) 100%);
 }
@@ -1177,6 +1187,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 280px;
+  height: 100%;
   border: 1px solid rgba(251, 191, 36, 0.35);
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.06) 100%);
 }

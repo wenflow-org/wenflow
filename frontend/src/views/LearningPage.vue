@@ -197,7 +197,7 @@
 
         <PeerNotification
           :visible="peerNotificationVisible"
-          @click="peerChatWindowVisible = true; peerNotificationVisible = false;"
+          @click="openPeerChatFromNotification"
           @close="peerNotificationVisible = false"
         />
 
@@ -311,6 +311,7 @@ const completionDurationSeconds = ref(0);
 const peerNotificationVisible = ref(false);
 const peerChatWindowVisible = ref(false);
 const peerChatMessages = ref<Array<{ role: string; content: string; timestamp: string }>>([]);
+const peerInitializing = ref(false);
 
 const elapsedTime = ref(0);
 const activeTime = ref(0);
@@ -576,6 +577,44 @@ const handlePeerChatSend = async (text: string) => {
   } catch (error: any) {
     ElMessage.error(error.message || '同伴消息发送失败');
     peerChatMessages.value.pop();
+  }
+};
+
+const openPeerChatFromNotification = async () => {
+  peerChatWindowVisible.value = true;
+  peerNotificationVisible.value = false;
+
+  if (peerInitializing.value || !sessionInfo.value.sessionId) {
+    return;
+  }
+
+  const hasPeerMessage = peerChatMessages.value.some(msg => msg.role === 'peer');
+  if (hasPeerMessage) {
+    return;
+  }
+
+  const latestUserMessage = [...messages.value]
+    .reverse()
+    .find(msg => msg.role === 'user' && msg.content?.trim())?.content;
+
+  if (!latestUserMessage) {
+    return;
+  }
+
+  peerInitializing.value = true;
+  try {
+    const result = await aiTeachingAPI.sendPeerMessage(sessionInfo.value.sessionId, latestUserMessage);
+    if (result.peerResponse?.trim()) {
+      peerChatMessages.value.push({
+        role: 'peer',
+        content: result.peerResponse,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '拉取同伴消息失败');
+  } finally {
+    peerInitializing.value = false;
   }
 };
 

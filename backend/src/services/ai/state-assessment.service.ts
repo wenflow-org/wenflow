@@ -9,11 +9,9 @@
  * 并结合 EMA 数值指标进行综合判断
  */
 
-import { getOpenAISDKForCurrentUser } from '../../gateway/openai-client';
+import { getAPIGateway } from '../../gateway/api-gateway';
 import { ZScoreResult, AnomalyDetectionResult } from '../student-baseline.service';
 
-const AI_API_URL = process.env.AI_API_URL || 'http://localhost:3000';
-const AI_API_KEY = process.env.AI_API_KEY || '';
 const AI_MODEL = process.env.AI_MODEL || 'deepseek-chat';
 
 /**
@@ -108,26 +106,31 @@ ${conversationHistory.map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.cont
 `;
 
     try {
-      const aiClient = await getOpenAISDKForCurrentUser({
-        baseUrl: AI_API_URL,
-        apiKey: AI_API_KEY
-      });
-
-      const response = await aiClient.chat.completions.create({
-        model: AI_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的教育 AI 评估专家。你擅长通过分析学生的对话来判断其认知状态。请只返回 JSON 格式，不要其他内容。'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 500
-      });
+      const gateway = getAPIGateway();
+      const response = await gateway.execute(
+        {
+          model: AI_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的教育 AI 评估专家。你擅长通过分析学生的对话来判断其认知状态。请只返回 JSON 格式，不要其他内容。'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 500
+        },
+        {
+          agentId: 'state-assessment-agent',
+          action: 'assessCognitiveState'
+        },
+        {
+          requestPath: '/services/ai/state-assessment/assess-cognitive-state'
+        }
+      );
 
       const content = response.choices[0].message.content || '{}';
       
@@ -226,26 +229,31 @@ ${conversationHistory.slice(-6).map(m => `${m.role === 'user' ? '学生' : 'AI'}
 `;
 
     try {
-      const aiClient = await getOpenAISDKForCurrentUser({
-        baseUrl: AI_API_URL,
-        apiKey: AI_API_KEY
-      });
-
-      const response = await aiClient.chat.completions.create({
-        model: AI_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的学习状态评估 AI。你综合 AI 语义理解和数值指标，给出最终的学生状态评估。请只返回 JSON 格式。'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 600
-      });
+      const gateway = getAPIGateway();
+      const response = await gateway.execute(
+        {
+          model: AI_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的学习状态评估 AI。你综合 AI 语义理解和数值指标，给出最终的学生状态评估。请只返回 JSON 格式。'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 600
+        },
+        {
+          agentId: 'state-assessment-agent',
+          action: 'integrateAIandEMA'
+        },
+        {
+          requestPath: '/services/ai/state-assessment/integrate-ai-and-ema'
+        }
+      );
 
       const content = response.choices[0].message.content || '{}';
       

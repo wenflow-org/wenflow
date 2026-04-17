@@ -35,7 +35,7 @@ export interface MessageResult {
   knowledgePoints: KnowledgePointStatus[];
   isCompletion: boolean;
   peerTriggered: boolean;
-  peerMessage?: string;
+  peerMessage?: string | null;
 }
 
 export interface PeerMessageResult {

@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
-import goalConversationService from '../services/learning/goal-conversation.service';
+import requirementOrchestrator from '../orchestrators/requirement.orchestrator';
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
     }
 
-    const result = await goalConversationService.startConversation(userId, goal.trim());
+    const result = await requirementOrchestrator.start(userId, goal.trim());
     return res.json({ success: true, ...result });
   } catch (error: any) {
     logger.error('开始对话失败:', error);
@@ -40,7 +40,7 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       return res.status(400).json({ success: false, error: '回复内容不能为空' });
     }
 
-    const result = await goalConversationService.continueConversation(conversationId, reply.trim(), userId);
+    const result = await requirementOrchestrator.step(conversationId, reply.trim(), userId);
     return res.json({ success: true, ...result });
   } catch (error: any) {
     logger.error('继续对话失败:', error);
@@ -59,7 +59,7 @@ router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, 
       return res.status(401).json({ success: false, error: '用户未认证' });
     }
 
-    const result = await goalConversationService.regeneratePath(conversationId, userId, adjustments?.trim() || undefined);
+    const result = await requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined);
     return res.json({ success: true, ...result });
   } catch (error: any) {
     logger.error('重新生成路径失败:', error);
@@ -77,7 +77,7 @@ router.delete('/:conversationId', authMiddleware, async (req: Request, res: Resp
       return res.status(401).json({ success: false, error: '用户未认证' });
     }
 
-    await goalConversationService.deleteConversation(conversationId, userId);
+    await requirementOrchestrator.reset(conversationId, userId);
     return res.json({ success: true, message: '对话已重置' });
   } catch (error: any) {
     logger.error('重置对话失败:', error);
@@ -95,7 +95,7 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
       return res.status(401).json({ success: false, error: '用户未认证' });
     }
 
-    const conversation = await goalConversationService.getConversation(conversationId, userId);
+    const conversation = await requirementOrchestrator.getConversation(conversationId, userId);
     return res.json({ success: true, data: conversation });
   } catch (error: any) {
     logger.error('获取对话会话失败:', error);
@@ -117,7 +117,7 @@ router.post('/quick-generate', authMiddleware, async (req: Request, res: Respons
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
     }
 
-    const result = await goalConversationService.quickGeneratePath(userId, {
+    const result = await requirementOrchestrator.quickGenerate(userId, {
       goal: goal.trim(),
       level,
       timePerDay,

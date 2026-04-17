@@ -10,11 +10,10 @@ import { initializeAdmin } from './services/auth/init-admin.service';
 import { createGateway } from './gateway';
 import { registerOfficialAgents, registerAllPlugins } from './agents';
 import { allSkillDefinitions, skillHandlers } from './skills';
-import { createDynamicAdjustmentService } from './services/dynamic-adjustment.service';
+
 import { createAgentCollaborationService } from './services/agent-collaboration.service';
 import { userProfileAgent } from './agents/user-profile-agent';
 import { getEventBus } from './gateway/event-bus';
-import { initializeOpenAIClientFromDatabase } from './gateway/openai-client';
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
@@ -74,18 +73,20 @@ import skillsRoutes from './routes/skills';
 import pluginRoutes from './routes/plugins';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
+import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import abTestingRoutes from './routes/ab-testing';
-import interactiveLearningRoutes from './routes/interactive-learning';
+
 // 用户自定义路由
 import userCodeRepoRoutes from './routes/user-code-repo';
 import userAgentsRoutes from './routes/user-agents';
 import userSkillsRoutes from './routes/user-skills';
 import userApiConfigRoutes from './routes/user-api-config';
+import userAgentModelConfigsRoutes from './routes/user-agent-model-configs';
 import userMcpRoutes from './routes/user-mcp';
 import userDeveloperRoutes from './routes/user-developer';
 
@@ -108,7 +109,6 @@ app.get('/api', (req, res) => {
       achievements: '/api/achievements',
       reports: '/api/reports',
       metrics: '/api/metrics',
-      ai: '/api/ai',
       agents: '/api/agents',
       skills: '/api/skills',
       feedback: '/api/feedback',
@@ -121,10 +121,10 @@ app.get('/api', (req, res) => {
         developer: '/api/user/developer'
       }
     },
-    agents: {
+agents: {
       'path-agent': '学习路径规划',
-      'content-agent': '内容生成',
-      'tutor-agent': 'AI辅导',
+      'content-agent-v3': '内容生成',
+      'ai-teaching-agent': 'AI授课编排',
       'progress-agent': '进度追踪'
     },
     skills: [
@@ -162,8 +162,9 @@ app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('platform
 // 注意：具体路由必须在通用路由之前注册！
 app.use('/api/auth', authRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
-app.use('/api/admin/api-config', authMiddleware, adminApiConfigRoutes);  // 平台 API 管理
-app.use('/api/admin/users', authMiddleware, adminUsersRoutes);  // 具体路由 - 必须在 /api/admin 之前
+app.use('/api/admin/api-config', authMiddleware, adminApiConfigRoutes);
+app.use('/api/admin/agent-model-configs', authMiddleware, adminAgentModelConfigsRoutes);
+app.use('/api/admin/users', authMiddleware, adminUsersRoutes);
 app.use('/api/admin/goal-conversations', authMiddleware, adminGoalConversationsRoutes);  // 具体路由
 app.use('/api/admin', authMiddleware, adminPlatformRoutes);  // 通用路由 - 必须在最后
 app.use('/api/users', authMiddleware, userRoutes);
@@ -173,13 +174,14 @@ app.use('/api/plugins', authMiddleware, pluginRoutes);
 app.use('/api/ai-teaching', authMiddleware, aiTeachingRoutes);
 app.use('/api/feedback', authMiddleware, feedbackRoutes);
 app.use('/api/ab-testing', authMiddleware, abTestingRoutes);
-app.use('/api/learning/interactive', authMiddleware, acpContextMiddleware('platform'), interactiveLearningRoutes);
+
 
 // 用户自定义路由
 app.use('/api/user/code-repo', authMiddleware, userCodeRepoRoutes);
 app.use('/api/user/agents', authMiddleware, userAgentsRoutes);
 app.use('/api/user/skills', authMiddleware, userSkillsRoutes);
 app.use('/api/user/api-config', authMiddleware, userApiConfigRoutes);
+app.use('/api/user/agent-model-configs', authMiddleware, userAgentModelConfigsRoutes);
 app.use('/api/user/mcp', authMiddleware, userMcpRoutes);
 app.use('/api/user/developer', authMiddleware, userDeveloperRoutes);
 
@@ -250,26 +252,6 @@ async function initializeGateway() {
 }
 
 /**
- * 初始化动态调整服务
- */
-async function initializeDynamicAdjustment() {
-  logger.info('Initializing Dynamic Adjustment Service...');
-  
-  const service = createDynamicAdjustmentService(prisma, {
-    enabled: true,
-    checkInterval: 60000,
-    minSignalsForAdjustment: 1,
-    cooldownBetweenAdjustments: 300000
-  });
-  
-  service.start();
-  
-  logger.info('✅ Dynamic Adjustment Service started');
-  
-  return service;
-}
-
-/**
  * 初始化 Agent 协作服务
  */
 async function initializeAgentCollaboration() {
@@ -304,14 +286,8 @@ async function startServer() {
     // 初始化管理员账户
     await initializeAdmin();
 
-    // 从数据库初始化 OpenAI 客户端（使用平台配置）
-    await initializeOpenAIClientFromDatabase();
-
-    // 初始化 EduClaw Gateway
+// 初始化 EduClaw Gateway
     await initializeGateway();
-    
-    // 初始化动态调整服务
-    await initializeDynamicAdjustment();
     
     // 初始化 Agent 协作服务
     await initializeAgentCollaboration();

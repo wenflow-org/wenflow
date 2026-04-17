@@ -1,9 +1,12 @@
 import prisma from '../../config/database';
 import { v4 as uuidv4 } from 'uuid';
 
-import { ChatMessage, getOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../protocol';
+
+type MessageRole = 'user' | 'assistant' | 'system';
+interface ChatMessage { role: MessageRole; content: string }
 
 const AGENT_ID = 'session-evaluation-agent';
 
@@ -163,12 +166,11 @@ JSON 模板：
   "reasoning": "一句简短的证据化说明"
 }`;
 
-      const client = getOpenAIClient();
-      const response = await client.chatCompletion({
-        messages: [{ role: 'system', content: systemPrompt } as ChatMessage],
-        temperature: 0.2,
-        max_tokens: 500,
-      });
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = { agentId: 'session-evaluation-agent' };
+      const response = await gateway.execute({
+        messages: [{ role: 'system', content: systemPrompt }]
+      }, caller, { userId: 'system' });
 
       const content = response.choices[0]?.message.content || '{}';
       const parsed = this.parseContent(content);

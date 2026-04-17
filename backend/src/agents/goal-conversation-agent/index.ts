@@ -630,7 +630,8 @@ async function callAIWithRetry(
       model: options.model,
       agentId: 'goal-conversation-agent',
       userId,
-      action: 'chat'
+      action: 'goal-conversation:dialogue',
+      sanitizeUserVisible: false
     });
 
     lastContent = response.content;

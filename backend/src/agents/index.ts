@@ -34,46 +34,12 @@ export { registerAllPlugins, getAllPlugins } from './plugins';
 // Path Agent
 export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from './path-agent';
 
-// Content Agent (原版)
-export { contentAgentDefinition, contentAgentHandler as contentAgentHandlerFn } from './content-agent';
-export { adjustContentDifficulty } from './content-agent-v5';
-
 // Content Agent v3.0 (状态感知对话型)
 export { 
   contentAgentV3Definition, 
   registerContentAgentV3,
   ContentAgentV3 
 } from './content-agent-v3';
-
-// Content Agent v5.0 (新版 - 授课型)
-export { 
-  contentAgentDefinition as contentAgentV5Definition, 
-  contentAgentHandler as contentAgentV5HandlerFn,
-  adjustContentDifficulty as adjustContentDifficultyV5
-} from './content-agent-v5';
-
-// Tutor Core (AI 授课核心)
-export {
-  tutorAgentDefinition as tutorCoreDefinition,
-  tutorAgentHandler as tutorCoreHandlerFn,
-  clearSessionState,
-  getSessionState
-} from './tutor-core';
-
-// Tutor Core 学习状态和策略
-export {
-  createInitialLearningState,
-  generateStateSnapshot,
-  selectStrategy
-} from './tutor-core/protocol';
-
-// Tutor Agent (原版)
-export {
-  tutorAgentDefinition,
-  tutorAgentHandler as tutorAgentHandlerFn,
-  reviewCode,
-  explainError
-} from './tutor-agent';
 
 // Progress Agent
 export {
@@ -132,11 +98,7 @@ export {
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from './path-agent';
-import { contentAgentDefinition, contentAgentHandler as contentAgentHandlerFn } from './content-agent';
 import { contentAgentV3Definition, ContentAgentV3 } from './content-agent-v3';
-import { contentAgentDefinition as contentAgentV5Definition, contentAgentHandler as contentAgentV5HandlerFn } from './content-agent-v5';
-import { tutorAgentDefinition as tutorCoreDefinition, tutorAgentHandler as tutorCoreHandlerFn } from './tutor-core';
-import { tutorAgentDefinition, tutorAgentHandler as tutorAgentHandlerFn } from './tutor-agent';
 import { progressAgentDefinition, progressAgentHandler as progressAgentHandlerFn } from './progress-agent';
 import { userProfileAgentDefinition, userProfileAgentHandler as userProfileAgentHandlerFn } from './user-profile-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from './goal-conversation-agent';
@@ -146,11 +108,7 @@ import { sessionEvaluationAgentDefinition, sessionEvaluationAgentHandler } from 
 
 export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
-  contentAgentDefinition,
   contentAgentV3Definition,
-  contentAgentV5Definition,
-  tutorCoreDefinition,
-  tutorAgentDefinition,
   progressAgentDefinition,
   userProfileAgentDefinition,
   goalConversationAgentDefinition,
@@ -159,17 +117,12 @@ export const allAgentDefinitions: AgentDefinition[] = [
   sessionEvaluationAgentDefinition
 ];
 
-// Agent ID 映射
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
   'path-agent': pathAgentHandlerFn,
-  'content-agent': contentAgentHandlerFn,
   'content-agent-v3': async (input: any, context: any) => {
     const agent = new ContentAgentV3();
     return await (agent as any).execute(input);
   },
-  'content-agent-v5': contentAgentV5HandlerFn,
-  'tutor-agent': tutorAgentHandlerFn,
-  'tutor-core': tutorCoreHandlerFn,
   'progress-agent': progressAgentHandlerFn,
   'user-profile-agent': userProfileAgentHandlerFn,
   'goal-conversation-agent': goalConversationAgentHandler,

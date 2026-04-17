@@ -11,7 +11,8 @@ import { AgentRegistry } from './registries/agent-registry';
 import { SkillRegistry } from './registries/skill-registry';
 import { SignalRegistry } from './registries/signal-registry';
 import { StrategyRegistry } from './registries/strategy-registry';
-import { OpenAIClient, getOpenAIClient, runWithContext } from './openai-client';
+import { getAPIGateway } from './api-gateway';
+import { runWithContext } from './api-gateway/context';
 import {
   AgentInput,
   AgentOutput,
@@ -58,7 +59,6 @@ export class EduClawGateway {
   private skillRegistry: SkillRegistry;
   private signalRegistry: SignalRegistry;
   private strategyRegistry: StrategyRegistry;
-  private openaiClient: OpenAIClient;
   private config: GatewayConfig;
 
   constructor(prisma: PrismaClient, config: Partial<GatewayConfig> = {}) {
@@ -79,8 +79,6 @@ export class EduClawGateway {
     this.skillRegistry = new SkillRegistry(prisma);
     this.signalRegistry = new SignalRegistry();
     this.strategyRegistry = new StrategyRegistry();
-    // 使用已初始化的客户端（从数据库读取配置），而不是创建新客户端
-    this.openaiClient = getOpenAIClient();
 
     // 设置事件监听
     this.setupEventListeners();
@@ -381,20 +379,23 @@ export class EduClawGateway {
   // ============ AI 相关方法 ============
 
   /**
-   * 获取 OpenAI 客户端
+   * AI 聊天（通过 APIGateway）
    */
-  getAIClient(): OpenAIClient {
-    return this.openaiClient;
-  }
-
-  /**
-   * AI 聊天
-   */
-  async chat(messages: any[], options?: any): Promise<string> {
-    const response = await this.openaiClient.chatCompletion({
-      messages,
-      ...options
-    });
+  async chat(messages: any[], options?: { temperature?: number; maxTokens?: number; agentId?: string; userId?: string }): Promise<string> {
+    const gateway = getAPIGateway();
+    const caller = {
+      agentId: options?.agentId || 'gateway',
+      userId: options?.userId
+    };
+    const response = await gateway.execute(
+      { messages, temperature: options?.temperature, max_tokens: options?.maxTokens },
+      caller,
+      {
+        userId: options?.userId,
+        callerAgent: options?.agentId || 'gateway',
+        requestPath: '/gateway/chat'
+      }
+    );
     return response.choices[0]?.message.content || '';
   }
 
@@ -446,4 +447,4 @@ export { AgentRegistry } from './registries/agent-registry';
 export { SkillRegistry } from './registries/skill-registry';
 export { SignalRegistry } from './registries/signal-registry';
 export { StrategyRegistry } from './registries/strategy-registry';
-export { OpenAIClient } from './openai-client';
+export { getAPIGateway, APIGateway } from './api-gateway';

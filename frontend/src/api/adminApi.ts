@@ -1,27 +1,27 @@
-﻿// Admin 绠＄悊 API
+﻿// Admin 管理 API
 import axios from 'axios';
 import { adminArenaApi } from './adminArenaApi';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 /**
- * 鑾峰彇璁よ瘉 Token
+ * 获取认证 Token
  */
 function getAuthToken(): string | null {
   return localStorage.getItem('admin_token');
 }
 
 /**
- * 鍒涘缓 axios 瀹炰緥
+ * 创建 axios 实例
  */
 const adminAxios = axios.create({
   baseURL: API_BASE,
-  timeout: 240000, // 4鍒嗛挓瓒呮椂
+  timeout: 240000, // 4分钟超时
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 璇锋眰鎷︽埅鍣?- 娣诲姞 Token
+// 请求拦截器 - 添加 Token
 adminAxios.interceptors.request.use(
   (config) => {
     const token = getAuthToken();
@@ -35,29 +35,29 @@ adminAxios.interceptors.request.use(
   }
 );
 
-// 瀵煎嚭 axios 瀹炰緥渚涘叾浠栨ā鍧椾娇鐢?
+// 导出 axios 实例供其他模块使用
 export { adminAxios };
 
 /**
- * 璁よ瘉 API
+ * 认证 API
  */
 export const adminAuthApi = {
   /**
-   * 绠＄悊鍛樼櫥褰?
+   * 管理员登录
    */
   login: async (data: { name: string; password: string; remember?: boolean }) => {
     return adminAxios.post('/admin-auth/login', data);
   },
 
   /**
-   * 鑾峰彇褰撳墠绠＄悊鍛樹俊鎭?
+   * 获取当前管理员信息
    */
   getMe: async () => {
     return adminAxios.get('/admin-auth/me');
   },
 
   /**
-   * 鐧诲嚭
+   * 登出
    */
   logout: () => {
     localStorage.removeItem('admin_token');
@@ -66,25 +66,25 @@ export const adminAuthApi = {
 };
 
 /**
- * 骞冲彴缁熻 API
+ * 平台统计 API
  */
 export const adminDashboardApi = {
   /**
-   * 鑾峰彇骞冲彴缁熻鏁版嵁
+   * 获取平台统计数据
    */
   getStats: async () => {
     return adminAxios.get('/admin/overview/stats');
   },
 
   /**
-   * 鑾峰彇娲诲姩鏃ュ織
+   * 获取活动日志
    */
   getActivity: async (limit?: number) => {
     return adminAxios.get('/admin/activity', { params: { limit } });
   },
 
   /**
-   * 鑾峰彇鐢ㄦ埛鍒楄〃锛堝吋瀹规棫鐗堬級
+   * 获取用户列表（兼容旧版）
    */
   users: async (params?: any) => {
     return adminAxios.get('/admin/users', { params });
@@ -92,7 +92,7 @@ export const adminDashboardApi = {
 };
 
 /**
- * 骞冲彴寮€鍏宠缃?API
+ * 平台开关设置 API
  */
 export const adminPlatformSettingsApi = {
   getRegistrationSetting: async () => {
@@ -105,25 +105,25 @@ export const adminPlatformSettingsApi = {
 };
 
 /**
- * 鐢ㄦ埛绠＄悊 API
+ * 用户管理 API
  */
 export const adminUsersApi = {
   /**
-   * 鑾峰彇鐢ㄦ埛鍒楄〃
+   * 获取用户列表
    */
   getUsers: async (params?: { page?: number; limit?: number; search?: string }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
   /**
-   * 鑾峰彇鐢ㄦ埛鍒楄〃锛堝吋瀹规棫鐗堬級
+   * 获取用户列表（兼容旧版）
    */
   users: async (params?: { page?: number; limit?: number; search?: string }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
   /**
-   * 鑾峰彇鐢ㄦ埛璇︽儏
+   * 获取用户详情
    */
   getUser: async (userId: string) => {
     return adminAxios.get(`/admin/users/${userId}`);
@@ -164,7 +164,7 @@ export const adminUsersApi = {
   },
 
   /**
-   * 鏇存柊鐢ㄦ埛瑙掕壊
+   * 更新用户角色
    */
   updateUserRole: async (userId: string, role: 'user' | 'admin') => {
     return adminAxios.patch(`/admin/users/${userId}/role`, { role });
@@ -172,46 +172,46 @@ export const adminUsersApi = {
 };
 
 /**
- * 鐩爣瀵硅瘽绠＄悊 API
+ * 目标对话管理 API
  */
 export const adminConversationsApi = {
   /**
-   * 鑾峰彇瀵硅瘽鍒楄〃
+   * 获取对话列表
    */
   getConversations: async (params?: { page?: number; limit?: number; status?: string; userId?: string }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
 
   /**
-   * 鑾峰彇瀵硅瘽鍒楄〃锛堝吋瀹规棫鐗堬級
+   * 获取对话列表（兼容旧版）
    */
   list: async (params?: { page?: number; limit?: number; status?: string; userId?: string }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
 
   /**
-   * 鑾峰彇瀵硅瘽璇︽儏
+   * 获取对话详情
    */
   getConversation: async (conversationId: string) => {
     return adminAxios.get(`/admin/goal-conversations/${conversationId}`);
   },
 
   /**
-   * 鑾峰彇瀵硅瘽璇︽儏锛堝吋瀹规棫鐗堬級
+   * 获取对话详情（兼容旧版）
    */
   detail: async (conversationId: string) => {
     return adminAxios.get(`/admin/goal-conversations/${conversationId}`);
   },
 
   /**
-   * 閲嶆柊鐢熸垚瀛︿範璺緞
+   * 重新生成学习路径
    */
   generatePath: async (conversationId: string) => {
     return adminAxios.post(`/admin/goal-conversations/${conversationId}/regenerate-path`);
   },
 
   /**
-   * 鍒犻櫎瀵硅瘽
+   * 删除对话
    */
   deleteConversation: async (conversationId: string) => {
     return adminAxios.delete(`/admin/goal-conversations/${conversationId}`);
@@ -219,121 +219,217 @@ export const adminConversationsApi = {
 };
 
 /**
- * Agent 绠＄悊 API
+ * Agent 管理 API
  */
+export interface AdminRegistryAgent {
+  agentId: string;
+  name: string;
+  type: string;
+  role?: string;
+  lifecycleStatus: 'draft' | 'staging' | 'published';
+  status: 'healthy' | 'warning' | 'error' | 'idle';
+  callCount: number;
+  successRate: number;
+  avgDuration: number;
+  lastActivity: string | null;
+  version: string;
+}
+
+export interface AdminRegistryResponse {
+  data: {
+    summary: {
+      total: number;
+      active24h: number;
+      neverCalled: number;
+      unhealthy: number;
+    };
+    agents: AdminRegistryAgent[];
+  };
+}
+
+export interface OrchestratorRelationItem {
+  orchestratorId: string;
+  group: string;
+  members: Array<{
+    agentId: string;
+    name: string;
+    role: 'agent' | 'orchestrator';
+  }>;
+}
+
+export interface ManifestDiagnosticsData {
+  summary: {
+    manifestTotal: number;
+    registrationTotal: number;
+    modelConfigTotal: number;
+    calledAgentTotal: number;
+    catalogTotal: number;
+    driftCount: number;
+  };
+  drift: {
+    missingRegistrations: string[];
+    unknownRegistrations: string[];
+    aliasRegistrations: Array<{ id: string; canonicalId: string }>;
+    unknownModelConfigs: string[];
+    aliasModelConfigs: Array<{ id: string; canonicalId: string }>;
+    unknownLogAgents: string[];
+    aliasLogAgents: Array<{ id: string; canonicalId: string; calls: number }>;
+    catalogOnly: string[];
+  };
+  samples: {
+    registrations: Array<{
+      id: string;
+      name: string;
+      type: string;
+      updatedAt: string;
+    }>;
+    modelConfigs: Array<{
+      agentId: string;
+      enabled: boolean;
+      updatedAt: string;
+    }>;
+    calledAgents: Array<{
+      agentId: string;
+      _count: { _all: number };
+    }>;
+  };
+}
+
 export const adminAgentsApi = {
   /**
-   * 鑾峰彇 Agent 鍒楄〃
+   * 获取 Agent 列表
    */
   getAgents: async () => {
     return adminAxios.get('/admin/agents');
   },
 
   /**
-   * 鑾峰彇 Agent 鐘舵€?
+   * 获取 Agent 状态
    */
   status: async () => {
     return adminAxios.get('/admin/agents/status');
   },
 
   /**
-   * 鑾峰彇 Agent 鏃ュ織
+   * 获取 Agent 日志
    */
-  getLogs: async (params?: { page?: number; limit?: number; agentName?: string }) => {
+  getLogs: async (params?: {
+    page?: number;
+    limit?: number;
+    agentName?: string;
+    agentId?: string;
+    traceId?: string;
+    sessionId?: string;
+    status?: 'success' | 'error' | 'timeout';
+    keyword?: string;
+    timeRange?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'week' | 'month' | 'all';
+  }) => {
     return adminAxios.get('/admin/agents/logs', { params });
+  },
+
+  getRegistry: async () => {
+    return adminAxios.get<AdminRegistryResponse>('/admin/agents/registry');
+  },
+
+  getOrchestratorRelations: async () => {
+    return adminAxios.get<{ data: { orchestrators: OrchestratorRelationItem[] } }>('/admin/orchestrators/relations');
+  },
+
+  getManifestDiagnostics: async () => {
+    return adminAxios.get<{ data: ManifestDiagnosticsData }>('/admin/manifest/diagnostics');
   },
 };
 
 /**
- * Agent Lab API - Agent 閰嶇疆鍜屾祴璇?
+ * Agent Lab API - Agent 配置和测试
  */
 export const adminAgentLabApi = {
   /**
-   * 鑾峰彇鎵€鏈?Agent 閰嶇疆锛圓rena + Platform锛?
+   * 获取所有 Agent 配置（Arena + Platform）
    */
   getAgents: async () => {
     return adminAxios.get('/admin/agent-lab/agents');
   },
 
   /**
-   * 鑾峰彇鍗曚釜 Agent 閰嶇疆
+   * 获取单个 Agent 配置
    */
   getAgent: async (name: string) => {
     return adminAxios.get(`/admin/agent-lab/agents/${name}`);
   },
 
   /**
-   * 娴嬭瘯 Agent
+   * 测试 Agent
    */
   testAgent: async (name: string, data: { input: any; context?: any }) => {
     return adminAxios.post(`/admin/agent-lab/agents/${name}/test`, data);
   },
 
   /**
-   * 鏇存柊 Agent 鐨?System Prompt
+   * 更新 Agent 的 System Prompt
    */
   updatePrompt: async (name: string, data: { prompt: string }) => {
     return adminAxios.put(`/admin/agent-lab/agents/${name}/prompt`, data);
   },
 
   /**
-   * 鑾峰彇 API 閰嶇疆
+   * 获取 API 配置
    */
   getApiConfig: async () => {
     return adminAxios.get('/admin/agent-lab/api-config');
   },
 
   /**
-   * 鏇存柊 API 閰嶇疆
+   * 更新 API 配置
    */
   updateApiConfig: async (data: any) => {
     return adminAxios.put('/admin/agent-lab/api-config', data);
   },
 
   /**
-   * 娴嬭瘯 API 杩炴帴
+   * 测试 API 连接
    */
   testApiConnection: async (data: { baseURL: string; apiKey: string }) => {
     return adminAxios.post('/admin/agent-lab/api-config/test', data);
   },
 
   /**
-   * 鑾峰彇鎻掍欢閰嶇疆
+   * 获取插件配置
    */
   getPluginConfig: async () => {
     return adminAxios.get('/admin/agent-lab/plugin-config');
   },
 
   /**
-   * 鏇存柊鎻掍欢閰嶇疆
+   * 更新插件配置
    */
   updatePluginConfig: async (data: any) => {
     return adminAxios.put('/admin/agent-lab/plugin-config', data);
   },
 
   /**
-   * 淇濆瓨 Agent 鐙珛閰嶇疆
+   * 保存 Agent 独立配置
    */
   saveAgentConfig: async (name: string, data: any) => {
     return adminAxios.put(`/admin/agent-lab/agents/${name}/config`, data);
   },
 
   /**
-   * 鍒犻櫎 Agent 鐙珛閰嶇疆
+   * 删除 Agent 独立配置
    */
   deleteAgentConfig: async (name: string) => {
     return adminAxios.delete(`/admin/agent-lab/agents/${name}/config`);
   },
 
   /**
-   * 鑾峰彇 Agent 鍙戝竷鐩綍锛堥潰鍚戠敤鎴峰彲閫夋睜锛?
+   * 获取 Agent 发布目录（面向用户可选池）
    */
   getAgentCatalog: async () => {
     return adminAxios.get('/admin/agent-lab/agent-catalog');
   },
 
   /**
-   * 鏇存柊 Agent 鍙戝竷鐘舵€?
+   * 更新 Agent 发布状态
    */
   updateAgentCatalogStatus: async (agentId: string, status: 'draft' | 'staging' | 'published') => {
     return adminAxios.put(`/admin/agent-lab/agent-catalog/${agentId}/status`, { status });
@@ -341,7 +437,7 @@ export const adminAgentLabApi = {
 };
 
 /**
- * 骞冲彴 API 绠＄悊
+ * 平台 API 管理
  */
 export const adminApiConfigApi = {
   getConfig: async () => {
@@ -365,32 +461,32 @@ export const adminApiConfigApi = {
 };
 
 /**
- * Agent Prompt 绠＄悊 API - 鐗堟湰绠＄悊
+ * Agent Prompt 管理 API - 版本管理
  */
 export const adminAgentPromptsApi = {
   /**
-   * 鑾峰彇 Prompt 鐗堟湰鍒楄〃
+   * 获取 Prompt 版本列表
    */
   getPromptVersions: async (params?: { agentId?: string; status?: string }) => {
     return adminAxios.get('/admin/agent-prompts', { params });
   },
 
   /**
-   * 鑾峰彇 Agent 娲昏穬 Prompt
+   * 获取 Agent 活跃 Prompt
    */
   getActivePrompt: async (agentId: string) => {
     return adminAxios.get(`/admin/agent-prompts/${agentId}/active`);
   },
 
   /**
-   * 鑾峰彇 Prompt 璇︽儏
+   * 获取 Prompt 详情
    */
   getPromptDetail: async (id: string) => {
     return adminAxios.get(`/admin/agent-prompts/detail/${id}`);
   },
 
   /**
-   * 鍒涘缓鏂?Prompt 鐗堟湰
+   * 创建新 Prompt 版本
    */
   createPrompt: async (data: {
     agentId: string;
@@ -404,21 +500,21 @@ export const adminAgentPromptsApi = {
   },
 
   /**
-   * 鍙戝竷 Prompt 鐗堟湰
+   * 发布 Prompt 版本
    */
   publishPrompt: async (id: string) => {
     return adminAxios.put(`/admin/agent-prompts/${id}/publish`);
   },
 
   /**
-   * 鏇存柊 Prompt 鑽夌
+   * 更新 Prompt 草稿
    */
   updatePrompt: async (id: string, data: any) => {
     return adminAxios.put(`/admin/agent-prompts/${id}`, data);
   },
 
   /**
-   * 鍒犻櫎 Prompt 鑽夌
+   * 删除 Prompt 草稿
    */
   deletePrompt: async (id: string) => {
     return adminAxios.delete(`/admin/agent-prompts/${id}`);
@@ -426,28 +522,28 @@ export const adminAgentPromptsApi = {
 };
 
 /**
- * 璋冭瘯娌欑洅 API - 瀹屾暣娴佹按绾胯皟璇?
- * A: 鍘熷瀵硅瘽 -> A1: 闇€姹傛敹闆?-> B1: 鏂规鐢熸垚 -> C: 璺緞鐢熸垚
+ * 调试沙箱 API - 完整流水线调试
+ * A: 原始对话 -> A1: 需求收集 -> B1: 方案生成 -> C: 路径生成
  */
 export const adminDebugSandboxApi = {
-  // ========== 蹇収绠＄悊 ==========
+  // ========== 快照管理 ==========
   
   /**
-   * 鑾峰彇蹇収鍒楄〃
+   * 获取快照列表
    */
   getSnapshots: async (params?: { page?: number; limit?: number }) => {
     return adminAxios.get('/admin/debug/snapshots', { params });
   },
 
   /**
-   * 鑾峰彇蹇収璇︽儏锛堝畬鏁存祦姘寸嚎鏁版嵁锛?
+   * 获取快照详情（完整流水线数据）
    */
   getSnapshot: async (id: string) => {
     return adminAxios.get(`/admin/debug/snapshots/${id}`);
   },
 
   /**
-   * 鍒涘缓蹇収锛堜繚瀛樺師濮嬪璇濓級
+   * 创建快照（保存原始对话）
    */
   createSnapshot: async (data: {
     name: string;
@@ -460,23 +556,23 @@ export const adminDebugSandboxApi = {
   },
 
   /**
-   * 鏇存柊蹇収
+   * 更新快照
    */
   updateSnapshot: async (id: string, data: any) => {
     return adminAxios.put(`/admin/debug/snapshots/${id}`, data);
   },
 
   /**
-   * 鍒犻櫎蹇収
+   * 删除快照
    */
   deleteSnapshot: async (id: string) => {
     return adminAxios.delete(`/admin/debug/snapshots/${id}`);
   },
 
-  // ========== 闇€姹傛敹闆嗭紙A 鈫?A1锛?=========
+  // ========== 需求收集（A -> A1）=========
 
   /**
-   * 閲嶆柊杩愯闇€姹傛敹闆?
+   * 重新运行需求收集
    */
   regenerateRequirement: async (snapshotId: string, params?: {
     promptTemplate?: string;
@@ -487,16 +583,16 @@ export const adminDebugSandboxApi = {
   },
 
   /**
-   * 婵€娲婚渶姹傜増鏈?
+   * 激活需求版本
    */
   activateRequirement: async (requirementId: string) => {
     return adminAxios.patch(`/admin/debug/requirements/${requirementId}/activate`);
   },
 
-  // ========== 鏂规鐢熸垚锛圓1 鈫?B1锛?=========
+  // ========== 方案生成（A1 -> B1）=========
 
   /**
-   * 閲嶆柊鐢熸垚鏂规
+   * 重新生成方案
    */
   regenerateProposal: async (requirementId: string, params?: {
     weeks?: number;
@@ -508,16 +604,16 @@ export const adminDebugSandboxApi = {
   },
 
   /**
-   * 婵€娲绘柟妗?
+   * 激活方案
    */
   activateProposal: async (proposalId: string) => {
     return adminAxios.patch(`/admin/debug/proposals/${proposalId}/activate`);
   },
 
-  // ========== 璺緞鐢熸垚锛圔1 鈫?C锛?=========
+  // ========== 路径生成（B1 -> C）=========
 
   /**
-   * 閲嶆柊鐢熸垚璺緞
+   * 重新生成路径
    */
   regeneratePath: async (proposalId: string, params?: {
     taskGranularity?: string;
@@ -527,30 +623,30 @@ export const adminDebugSandboxApi = {
   },
 
   /**
-   * 婵€娲昏矾寰?
+   * 激活路径
    */
   activatePath: async (pathId: string) => {
     return adminAxios.patch(`/admin/debug/learning-paths/${pathId}/activate`);
   },
 
-  // ========== 杈呭姪鍔熻兘 ==========
+  // ========== 辅助功能 ==========
 
   /**
-   * 鑾峰彇鏈€杩戝璇濆垪琛?
+   * 获取最近对话列表
    */
   getRecentConversations: async () => {
     return adminAxios.get('/admin/debug/recent-conversations');
   },
 
   /**
-   * 鎵归噺娓呯悊
+   * 批量清理
    */
   cleanup: async (keepRecent: number) => {
     return adminAxios.delete('/admin/debug/cleanup', { data: { keepRecent } });
   },
 
   /**
-   * 閲嶆柊鐢熸垚鏂规杞粨
+   * 重新生成方案轮廓
    */
   regenerateOutline: async (snapshotId: string, params?: {
     promptTemplate?: string;
@@ -559,13 +655,13 @@ export const adminDebugSandboxApi = {
     return adminAxios.post(`/admin/debug/snapshots/${snapshotId}/regenerate-outline`, params);
   },
 
-  // ========== 瀛︾敓鐘舵€佽拷韪?==========
+  // ========== 学生状态追踪 ==========
 
     
 
     /**
 
-     * 鑾峰彇瀛︾敓鐘舵€佸熀绾?
+     * 获取学生状态基线
 
      */
 
@@ -579,7 +675,7 @@ export const adminDebugSandboxApi = {
 
     /**
 
-     * 鑾峰彇瀛︿範浼氳瘽鐘舵€?
+     * 获取学习会话状态
 
      */
 
@@ -592,56 +688,56 @@ export const adminDebugSandboxApi = {
   };
 
   /**
-   * Skills 绠＄悊 API
+   * Skills 管理 API
    */
   export const adminSkillsApi = {
     /**
-     * 鑾峰彇鎵€鏈?Skill 鍒楄〃
+     * 获取所有 Skill 列表
      */
     getSkills: async () => {
       return adminAxios.get('/admin/skills');
     },
 
     /**
-     * 鎸夊垎绫荤粺璁?
+     * 按分类统计
      */
     getCategories: async () => {
       return adminAxios.get('/admin/skills/categories');
     },
 
     /**
-     * 鑾峰彇 Skill 璇︽儏
+     * 获取 Skill 详情
      */
     getSkillDetail: async (name: string) => {
       return adminAxios.get(`/admin/skills/${name}`);
     },
 
     /**
-     * 鑾峰彇 Skill 鏁版嵁搴撶粺璁?
+     * 获取 Skill 数据库统计
      */
     getSkillDbStats: async (name: string) => {
       return adminAxios.get(`/admin/skills/${name}/db-stats`);
     },
 
     /**
-     * 娴嬭瘯鎵ц Skill
+     * 测试执行 Skill
      */
     testSkill: async (name: string, input: any) => {
       return adminAxios.post(`/admin/skills/${name}/test`, input);
     },
 
     /**
-     * 鑾峰彇浣跨敤瓒嬪娍
+     * 获取使用趋势
      */
     getUsageTrends: async () => {
       return adminAxios.get('/admin/skills/usage/trends');
     },
   };
 
-  // ========== 缁熶竴瀵煎嚭 ==========
+  // ========== 统一导出 ==========
   
   /**
-   * 缁熶竴瀵煎嚭瀵硅薄锛堝吋瀹规棫鐗堜唬鐮侊級
+   * 统一导出对象（兼容旧版代码）
    */
 export const adminApi = {
   // Dashboard

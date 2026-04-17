@@ -79,7 +79,6 @@ function getAgentCapabilities(name: string): string[] {
     'EvaluateAgent': ['quality-assessment', 'scoring'],
     'OptimizeAgent': ['optimization', 'recommendation'],
     'ContentAgent': ['content-generation', 'exercise-creation'],
-    'TutorAgent': ['tutoring', 'qa', 'guidance'],
     'ProgressAgent': ['progress-tracking', 'signal-detection']
   };
   return capabilities[name] || [];
@@ -87,12 +86,10 @@ function getAgentCapabilities(name: string): string[] {
 
 const platformNameToCatalogId: Record<string, string> = {
   PathAgent: 'path-agent',
-  ContentAgent: 'content-agent',
-  TutorAgent: 'tutor-agent',
+  ContentAgent: 'content-agent-v3',
   ProgressAgent: 'progress-agent',
   GoalConversationAgent: 'goal-conversation-agent',
   'content-agent-v3': 'content-agent-v3',
-  'content-agent-v5': 'content-agent-v5',
   'ai-teaching-agent': 'ai-teaching-agent',
   'user-profile-agent': 'user-profile-agent'
 };
@@ -376,18 +373,18 @@ router.post('/agents/:name/test', async (req, res) => {
  * GET /api/admin/agent-lab/api-config
  * 获取 API 配置
  */
-router.get('/api-config', (req, res) => {
-  const config = apiConfigService.getConfig();
+router.get('/api-config', async (req, res) => {
+  const config = await apiConfigService.getConfig();
   res.json({
     success: true,
     data: {
-      baseURL: config.baseURL,
+      apiUrl: config.apiUrl,
       apiKey: config.apiKey ? '***已配置***' : '未配置',
       apiKeyRaw: config.apiKey,
-      models: config.models,
+      availableModels: config.availableModels,
       defaultModel: config.defaultModel,
       defaultReasoningModel: config.defaultReasoningModel,
-      defaultJudgeModel: config.defaultJudgeModel
+      defaultEvaluationModel: config.defaultEvaluationModel
     }
   });
 });
@@ -460,27 +457,27 @@ router.put('/plugin-config', (req, res) => {
  * PUT /api/admin/agent-lab/api-config
  * 更新 API 配置
  */
-router.put('/api-config', (req, res) => {
-  const { baseURL, apiKey, models, defaultModel, defaultReasoningModel, defaultJudgeModel } = req.body;
+router.put('/api-config', async (req, res) => {
+  const { apiUrl, apiKey, availableModels, defaultModel, defaultReasoningModel, defaultEvaluationModel } = req.body;
   
-  const updatedConfig = apiConfigService.updateConfig({
-    baseURL,
+  const updatedConfig = await apiConfigService.updateConfig({
+    apiUrl,
     apiKey,
-    models: models ? models.split(',').map((m: string) => m.trim()) : undefined,
+    availableModels: availableModels ? availableModels.split(',').map((m: string) => m.trim()) : undefined,
     defaultModel,
     defaultReasoningModel,
-    defaultJudgeModel
+    defaultEvaluationModel
   });
   
   res.json({
     success: true,
     data: {
-      baseURL: updatedConfig.baseURL,
+      apiUrl: updatedConfig.apiUrl,
       apiKey: updatedConfig.apiKey ? '***已配置***' : '未配置',
-      models: updatedConfig.models,
+      availableModels: updatedConfig.availableModels,
       defaultModel: updatedConfig.defaultModel,
       defaultReasoningModel: updatedConfig.defaultReasoningModel,
-      defaultJudgeModel: updatedConfig.defaultJudgeModel
+      defaultEvaluationModel: updatedConfig.defaultEvaluationModel
     }
   });
 });

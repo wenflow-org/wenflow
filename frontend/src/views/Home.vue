@@ -29,7 +29,7 @@
           <a href="#einstein" class="nav-link" :class="{ 'nav-link-active': activeSection === 'einstein' }">理念</a>
           <a href="#problem-creator" class="nav-link" :class="{ 'nav-link-active': activeSection === 'problem-creator' }">问题意识</a>
           <a href="#capabilities" class="nav-link" :class="{ 'nav-link-active': activeSection === 'capabilities' }">核心能力</a>
-          <router-link to="/docs" class="nav-link">文档</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" class="nav-link" target="_blank">GitHub</a>
         </nav>
 
         <!-- 桌面操作区 -->
@@ -68,7 +68,7 @@
         <a href="#einstein" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': activeSection === 'einstein' }" @click="closeMobileNav">理念</a>
         <a href="#problem-creator" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': activeSection === 'problem-creator' }" @click="closeMobileNav">问题意识</a>
         <a href="#capabilities" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': activeSection === 'capabilities' }" @click="closeMobileNav">核心能力</a>
-        <router-link to="/docs" class="mobile-nav-link" @click="closeMobileNav">文档</router-link>
+        <a href="https://github.com/wenflow-org/wenflow" class="mobile-nav-link" target="_blank" @click="closeMobileNav">GitHub</a>
         <div class="mobile-nav-actions">
           <template v-if="isLoggedIn">
             <router-link to="/goal-conversation" class="btn btn-primary" @click="closeMobileNav">
@@ -186,7 +186,7 @@
             <a href="#einstein">理念</a>
             <a href="#problem-creator">问题意识</a>
             <a href="#capabilities">核心能力</a>
-            <router-link to="/docs">文档</router-link>
+            <a href="https://github.com/wenflow-org/wenflow" target="_blank">GitHub</a>
           </div>
 
           <div class="footer-bottom">

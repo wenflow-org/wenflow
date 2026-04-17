@@ -139,7 +139,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'label-generator': labelGeneratorFn
 };
 
-import { runWithContext, setRequestContext } from '../gateway/openai-client';
+import { setRequestContext } from '../gateway/api-gateway/context';
 
 /**
  * 执行 Skill

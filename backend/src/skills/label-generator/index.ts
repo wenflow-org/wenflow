@@ -12,7 +12,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 export const labelGeneratorDefinition: SkillDefinition = {
   name: 'label-generator',
@@ -171,8 +171,9 @@ ${domain ? `【领域】${domain}` : ''}
       { role: 'user', content: contextPrompt }
     ];
     
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({ messages, temperature: 0.4 });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'label-generator' };
+    const response = await gateway.execute({ messages }, caller, {});
     const content = response.choices[0]?.message.content || '';
     
     const result = parseLabelResult(content, knowledgeType, cognitiveLevel);

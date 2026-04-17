@@ -10,7 +10,7 @@
  */
 
 import { AgentPlugin, AgentType, AgentContext, AgentOutput } from '../plugin-types';
-import aiService from '../../services/ai/ai.service';
+import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 
 // 字段映射配置接口
@@ -138,17 +138,18 @@ export const dataMappingAgent: AgentPlugin = {
       // 构建映射Prompt
       const mappingPrompt = this.buildMappingPromptInternal(sourceData, targetSchema);
 
-      // 调用AI进行智能映射
-      const response = await aiService.chat([
-        { role: 'system', content: this.config!.systemPrompt! },
-        { role: 'user', content: mappingPrompt }
-      ], { 
-        temperature: this.config!.temperature, 
-        maxTokens: this.config!.maxTokens 
-      });
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = { agentId: 'data-mapping' };
 
-      // 解析AI返回的映射结果
-      const mappingResult = this.parseMappingResponse(response.content);
+      const messages = [
+        { role: 'system' as const, content: this.config!.systemPrompt! },
+        { role: 'user' as const, content: mappingPrompt }
+      ];
+
+      const response = await gateway.execute({ messages }, caller, { userId: context?.userId });
+
+      const responseContent = response.choices[0]?.message.content || '{}';
+      const mappingResult = this.parseMappingResponse(responseContent);
 
       if (mappingResult) {
         return {

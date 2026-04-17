@@ -571,8 +571,8 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
               <span class="agent-version">v3.0</span>
             </div>
             <div class="agent-type-card">
-              <h4>🎓 tutor-agent</h4>
-              <p>AI 辅导 Agent</p>
+              <h4>🎓 ai-teaching-agent</h4>
+              <p>AI 授课编排 Agent</p>
               <span class="agent-version">v2.0</span>
             </div>
             <div class="agent-type-card">
@@ -785,7 +785,7 @@ POST /api/admin/arena/sessions
 {
   "name": "Content Agent 对比测试",
   "description": "测试 v3 和 v5 版本的内容生成质量",
-  "agents": ["content-agent-v3", "content-agent-v5"],
+  "agents": ["content-agent-v3"],
   "testCases": [
     {
       "input": "生成 Python 入门教程",
@@ -923,7 +923,7 @@ async function generateContent(prompt: string) {
           <ul class="simple-list">
             <li><code>backend/src/agents/path-agent/</code> - 路径生成 Agent</li>
             <li><code>backend/src/agents/content-agent-v3/</code> - 内容生成 Agent v3</li>
-            <li><code>backend/src/agents/tutor-agent/</code> - AI 辅导 Agent</li>
+            <li><code>backend/src/services/ai-teaching/</code> - AI 授课编排</li>
           </ul>
         </section>
 

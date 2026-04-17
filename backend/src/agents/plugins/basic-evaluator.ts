@@ -9,7 +9,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../plugin-types';
-import { getOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 
 /**
  * 基础质量评估插件
@@ -99,7 +99,8 @@ export const basicEvaluator: AgentPlugin = {
   },
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: 'basic-evaluator' };
     const startTime = Date.now();
 
     try {
@@ -117,12 +118,7 @@ export const basicEvaluator: AgentPlugin = {
         }
       ];
 
-      const response = await client.chatCompletion({
-        messages,
-        temperature: this.config!.temperature,
-        max_tokens: this.config!.maxTokens,
-        model: this.config!.model
-      });
+      const response = await gateway.execute({ messages }, caller);
 
       const content = response.choices[0]?.message.content || '{}';
 

@@ -10,6 +10,7 @@
 import { Router } from 'express';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingOrchestrator';
 import learningStateService from '../services/learning/learning-state.service';
+import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
@@ -322,6 +323,65 @@ router.post('/analyze-cognitive', async (req: any, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '分析失败',
+    });
+  }
+});
+
+/**
+ * 任务详情辅导（替代旧 /api/ai/zpd-tutor）
+ * POST /api/ai-teaching/tutor-assist
+ */
+router.post('/tutor-assist', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+
+    const { question, taskId, taskDescription, taskContext } = req.body || {};
+    if (!question || !taskId || !taskDescription) {
+      return res.status(400).json({
+        success: false,
+        error: '缺少必要参数：question, taskId, taskDescription'
+      });
+    }
+
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { xp: true }
+    });
+
+    const completedTasksCount = await prisma.subtasks.count({
+      where: {
+        userId,
+        status: 'completed'
+      }
+    });
+
+    const result = await aiService.zpdTutoring({
+      question,
+      taskDescription,
+      userXP: user?.xp || 0,
+      completedTasks: completedTasksCount || 0,
+      taskContext,
+      userId
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        answer: result.answer,
+        hintLevel: result.hintLevel
+      }
+    });
+  } catch (error: any) {
+    logger.error('[ai-teaching] tutor-assist failed', {
+      userId: req.user?.userId,
+      message: error?.message || String(error)
+    });
+    return res.status(500).json({
+      success: false,
+      error: error.message || '辅导失败'
     });
   }
 });

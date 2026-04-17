@@ -10,7 +10,7 @@ import {
   QuizGenerationOutput,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 /**
  * 测验生成 Skill 定义
@@ -153,11 +153,9 @@ ${content.substring(0, 3000)}${content.length > 3000 ? '...' : ''}
     ];
     
     // 调用 AI
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({ 
-      messages,
-      temperature: 0.7
-    });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'quiz-generation' };
+    const response = await gateway.execute({ messages }, caller, {});
     const generatedContent = response.choices[0]?.message.content || '';
     
     // 解析生成的题目

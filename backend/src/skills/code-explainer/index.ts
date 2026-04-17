@@ -8,7 +8,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 /**
  * Code Explainer Skill 定义
@@ -185,12 +185,9 @@ export async function codeExplainer(
     ];
     
     // 调用 AI
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({ 
-      messages,
-      temperature: 0.5,
-      max_tokens: 2048
-    });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'code-explainer' };
+    const response = await gateway.execute({ messages }, caller, {});
     
     const explanation = response.choices[0]?.message.content || '';
     

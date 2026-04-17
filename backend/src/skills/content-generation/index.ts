@@ -10,7 +10,7 @@ import {
   ContentGenerationOutput,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 /**
  * 内容生成 Skill 定义
@@ -210,8 +210,9 @@ export async function contentGeneration(
     ];
     
     // 调用 AI
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({ messages });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'content-generation' };
+    const response = await gateway.execute({ messages }, caller, {});
     const content = response.choices[0]?.message.content || '';
     
     // 解析内容结构

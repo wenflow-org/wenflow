@@ -133,9 +133,7 @@ class ArenaService {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ], { 
-        temperature: PERSONA_AGENT_CONFIG.temperature, 
-        maxTokens: PERSONA_AGENT_CONFIG.maxTokens,
-        agentId: 'persona-agent',
+        agentId: 'arena-service',
         userId: 'arena-system'
       });
 
@@ -501,9 +499,7 @@ class ArenaService {
         { role: 'system', content: EXTRACT_AGENT_SYSTEM_PROMPT },
         { role: 'user', content: `请从以下对话中提取学习需求（思维启发式模式）：\n\n${JSON.stringify(context, null, 2)}` }
       ], { 
-        temperature: EXTRACT_AGENT_CONFIG.temperature, 
-        maxTokens: EXTRACT_AGENT_CONFIG.maxTokens,
-        agentId: 'extract-agent',
+        agentId: 'arena-service',
         userId: 'arena-system'
       });
 
@@ -639,9 +635,7 @@ ${JSON.stringify(enrichedRequirement, null, 2)}
         { role: 'system', content: GENERATE_AGENT_CONFIG.systemPrompt },
         { role: 'user', content: userPrompt }
       ], { 
-        temperature: GENERATE_AGENT_CONFIG.temperature, 
-        maxTokens: GENERATE_AGENT_CONFIG.maxTokens,
-        agentId: 'generate-agent',
+        agentId: 'arena-service',
         userId: 'arena-system'
       });
 
@@ -798,9 +792,7 @@ ${JSON.stringify(pathContent, null, 2)}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: '请评判质量' }
       ], { 
-        temperature: 0.3, 
-        maxTokens: 2000,
-        agentId: 'evaluate-agent',
+        agentId: 'arena-service',
         userId: 'arena-system'
       });
 
@@ -902,9 +894,7 @@ ${JSON.stringify(pathContent, null, 2)}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: '请生成优化方案' }
       ], { 
-        temperature: 0.5, 
-        maxTokens: 2500,
-        agentId: 'optimize-agent',
+        agentId: 'arena-service',
         userId: 'arena-system'
       });
 

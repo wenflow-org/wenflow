@@ -69,7 +69,6 @@ ${conversationSummary}
       const response = await aiService.chat([
         { role: 'system', content: assessmentPrompt }
       ], {
-        temperature: 0.3, // 降低温度，使评估更稳定
         agentId: 'state-assessment',
         userId: 'system',
         action: 'assessCognitiveDepth'
@@ -128,7 +127,6 @@ ${conversationSummary}
       const response = await aiService.chat([
         { role: 'system', content: assessmentPrompt }
       ], {
-        temperature: 0.3,
         agentId: 'state-assessment',
         userId: 'system',
         action: 'assessStressLevel'
@@ -186,7 +184,6 @@ ${conversationSummary}
       const response = await aiService.chat([
         { role: 'system', content: assessmentPrompt }
       ], {
-        temperature: 0.3,
         agentId: 'state-assessment',
         userId: 'system',
         action: 'assessEngagement'

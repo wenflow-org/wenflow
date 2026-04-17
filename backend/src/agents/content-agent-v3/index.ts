@@ -13,7 +13,7 @@
 
 import { BaseAgent } from '../../core/agent/BaseAgent';
 import { IAgentInput, IAgentOutput, IAgentCapabilities } from '../../core/agent/ILearningAgent';
-import { getOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { agentConfigService, PromptConfig } from '../../services/agentConfig.service';
 import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
@@ -544,17 +544,15 @@ ${styleInstruction}
 请生成一个问题（100-200 字）：`;
 
         try {
-          const config = await this.getPromptConfig();
-          const client = getOpenAIClient();
-          const response = await client.chatCompletion({
-            model: config.model || process.env.AI_MODEL || 'deepseek-chat',
+          const gateway = getAPIGateway();
+          const caller: CallerInfo = { agentId: 'content-agent-v3' };
+          const userId = (this as any)._currentUserId;
+          const response = await gateway.execute({
             messages: [
               { role: 'system', content: this.systemPrompt },
               { role: 'user', content: userPrompt }
-            ],
-            temperature: config.temperature || 0.7,
-            max_tokens: config.maxTokens || 500
-          });
+            ]
+          }, caller, { userId });
           
           return response.choices[0]?.message?.content || `让我们一起思考：${objective}的核心是什么？`;
         } catch (error) {
@@ -576,17 +574,15 @@ ${styleInstruction}
 请以 JSON 数组格式返回，例如：["选项 A", "选项 B", "选项 C", "选项 D"]`;
 
         try {
-          const config = await this.getPromptConfig();
-          const client = getOpenAIClient();
-          const response = await client.chatCompletion({
-            model: config.model || process.env.AI_MODEL || 'deepseek-chat',
+          const gateway = getAPIGateway();
+          const caller: CallerInfo = { agentId: 'content-agent-v3' };
+          const userId = (this as any)._currentUserId;
+          const response = await gateway.execute({
             messages: [
               { role: 'system', content: '你是一个专业的题目设计师' },
               { role: 'user', content: optionsPrompt }
-            ],
-            temperature: 0.6,
-            max_tokens: 300
-          });
+            ]
+          }, caller, { userId });
           
           const content = response.choices[0]?.message?.content || '';
           
@@ -669,20 +665,18 @@ ${styleInstruction}
    */
   private async getPromptConfig(): Promise<PromptConfig | null> {
     try {
-      // 使用 Prompt 缓存
       const prompt = await promptCache.getCachedPrompt('content-agent-v3');
       
       if (prompt) {
         return {
           systemPrompt: prompt.systemPrompt,
-          temperature: prompt.temperature,
-          maxTokens: prompt.maxTokens,
-          model: prompt.model || process.env.AI_MODEL || 'deepseek-chat',
-          version: 1  // 默认版本号
+          temperature: 0.7,
+          maxTokens: 2000,
+          model: 'default',
+          version: 1
         };
       }
       
-      // 缓存未命中，从数据库加载
       const dbPrompt = await agentConfigService.getActivePrompt('content-agent-v3');
       return dbPrompt;
     } catch (error) {
@@ -1116,6 +1110,8 @@ ${styleInstruction}
   protected async execute(input: IAgentInput): Promise<IAgentOutput> {
     const startTime = Date.now();
     const typedInput = input as ContentAgentV3Input;
+    
+    (this as any)._currentUserId = (typedInput.studentState as any)?.userId;
     
     try {
       // 1. 生成缓存键

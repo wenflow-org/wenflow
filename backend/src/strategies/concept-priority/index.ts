@@ -7,7 +7,7 @@
 
 import { AdjustmentStrategy, PathAdjustment, AdjustmentReason } from '../../agents/path-agent/adjustment';
 import { LearningSignal, AgentContext, MilestoneOutput, SubtaskOutput } from '../../agents/protocol';
-import { getOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 
 interface ConceptPriorityContext {
@@ -214,7 +214,8 @@ async function upgradeTasksWithLLM(
   signal: LearningSignal,
   context: AgentContext
 ): Promise<TaskUpgradeResult> {
-  const client = getOpenAIClient();
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { agentId: 'concept-priority' };
 
   const systemPrompt = `你是学习路径优化专家，负责将实践性任务升级为概念性任务。
 
@@ -264,14 +265,12 @@ ${priorityContext.goalType}
 请输出升级后的任务列表。`;
 
   try {
-    const response = await client.chatCompletion({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.5,
-      max_tokens: 2000
-    });
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      { role: 'user' as const, content: userPrompt }
+    ];
+
+    const response = await gateway.execute({ messages }, caller, {});
 
     const content = response.choices[0]?.message.content || '';
 

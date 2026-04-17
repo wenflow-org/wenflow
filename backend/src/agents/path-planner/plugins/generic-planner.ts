@@ -9,7 +9,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../../plugin-types';
-import { getOpenAIClient } from '../../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../../gateway/api-gateway';
 
 /**
  * 通用路径规划插件
@@ -79,7 +79,8 @@ export const genericPlanner: AgentPlugin = {
   },
   
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: 'generic-planner' };
     const startTime = Date.now();
     
     try {
@@ -97,12 +98,7 @@ export const genericPlanner: AgentPlugin = {
         }
       ];
       
-      const response = await client.chatCompletion({
-        messages,
-        temperature: this.config!.temperature,
-        max_tokens: this.config!.maxTokens,
-        model: this.config!.model
-      });
+      const response = await gateway.execute({ messages }, caller);
       
       const content = response.choices[0]?.message.content || '{}';
       

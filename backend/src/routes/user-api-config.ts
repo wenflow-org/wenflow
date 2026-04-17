@@ -4,7 +4,7 @@ import prisma from '../config/database';
 import { authMiddleware } from '../middleware/auth.middleware';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
-import { clearUserProviderCache } from '../gateway/openai-client';
+import { getAPIGateway } from '../gateway/api-gateway';
 import apiConfigService from '../services/apiConfig.service';
 
 const router = express.Router();
@@ -108,7 +108,7 @@ router.put('/', async (req, res, next) => {
       });
     }
     
-    clearUserProviderCache(userId);
+    getAPIGateway().invalidateCache(userId);
     
     res.json({ 
       success: true, 
@@ -137,7 +137,7 @@ router.delete('/', async (req, res, next) => {
         data: { enabled: false, updatedAt: new Date() }
       });
       
-      clearUserProviderCache(userId);
+      getAPIGateway().invalidateCache(userId);
     }
     
     res.json({ success: true, message: '已禁用用户配置，将使用平台默认' });

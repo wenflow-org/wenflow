@@ -15,13 +15,13 @@ import learningStateService, {
   DialogueAnalysis,
 } from '../learning/learning-state.service';
 import CognitiveAnalysisAgent, { CognitiveAnalysisResult } from '../../agents/standard/CognitiveAnalysisAgent';
-import { peerAgent } from '../../agents/peer-agent';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import prisma from '../../config/database';
 import { summaryAgent, type SummaryOutput } from '../../agents/summary-agent';
 import { sessionEvaluationAgent } from '../../agents/session-evaluation-agent';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
+const AI_TEACHING_AGENT_ID = 'ai-teaching-agent';
 
 export interface KnowledgePointStatus {
   name: string;
@@ -399,14 +399,18 @@ export class AITeachingOrchestrator {
 6. 控制在 200 字以内`;
 
     try {
-      const client = getOpenAIClient();
-      const response = await client.chatCompletion({
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = { agentId: AI_TEACHING_AGENT_ID };
+      const response = await gateway.execute({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `学科：${session.subject}\n主题：${session.topic}\n请生成开场白。` },
         ],
-        temperature: 0.8,
-        max_tokens: 500,
+      }, caller, {
+        userId: session.userId,
+        sessionId: session.sessionId,
+        callerAgent: AI_TEACHING_AGENT_ID,
+        requestPath: '/ai-teaching/sessions/welcome'
       });
 
       return response.choices[0]?.message.content || this.getDefaultWelcome(session);
@@ -517,37 +521,9 @@ export class AITeachingOrchestrator {
     });
 
     // 判断是否需要触发伴学
-    let peerMessage: string | undefined;
     let triggerPeer = this.shouldTriggerPeer(analysis, session.consecutiveErrors, session, message);
     if (triggerPeer) {
-      const strategy = this.selectPeerStrategy(analysis, session.consecutiveErrors);
-      const tutorContext = session.messages.filter(m => m.role === 'assistant').slice(-5).map(m => ({ role: m.role, content: m.content }));
-      
-      try {
-        const peerResult = await peerAgent.discuss({
-          topic: session.topic,
-          strategy,
-          studentMessage: message,
-          tutorContext,
-          cognitiveLevel: analysis.cognitiveLevel,
-          understanding: analysis.understanding,
-        });
-
-        peerMessage = peerResult.message;
-
-        // 插入同伴消息
-        session.messages.push({
-          role: 'peer' as any,
-          content: peerMessage,
-          timestamp: new Date(),
-        });
-
-        logger.info(`[AITeaching] 触发伴学：sessionId=${sessionId}, strategy=${strategy}`);
-      } catch (error: any) {
-        logger.error(`[AITeaching] 同伴消息生成失败：${error.message}`);
-        // 同伴消息生成失败，不触发伴学
-        triggerPeer = false;
-      }
+      logger.info(`[AITeaching] 触发伴学通知：sessionId=${sessionId}`);
     }
 
     const lssInput: LSSInputs = {
@@ -589,7 +565,7 @@ export class AITeachingOrchestrator {
       isCompletion,
       currentState,
       peerTriggered: triggerPeer,
-      peerMessage: peerMessage,
+      peerMessage: undefined,
     };
   }
 
@@ -663,16 +639,18 @@ ${knowledgePointRules}
       }));
 
     try {
-      const client = getOpenAIClient();
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = { agentId: AI_TEACHING_AGENT_ID };
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
         ...historyMessages,
       ];
 
-      const response = await client.chatCompletion({
-        messages,
-        temperature: 0.4,
-        max_tokens: 8000,
+      const response = await gateway.execute({ messages }, caller, {
+        userId: session.userId,
+        sessionId: session.sessionId,
+        callerAgent: AI_TEACHING_AGENT_ID,
+        requestPath: '/ai-teaching/sessions/messages'
       });
 
       const rawContent = response.choices[0]?.message.content || '';
@@ -1497,16 +1475,18 @@ ${knowledgePointRules}
 当前学习主题是：${session.subject} - ${session.topic}
 ${contextSection}`;
 
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: AI_TEACHING_AGENT_ID };
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       ...peerHistory.slice(-10).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     ];
 
-    const response = await client.chatCompletion({
-      messages,
-      temperature: 0.8,
-      max_tokens: 500,
+    const response = await gateway.execute({ messages }, caller, {
+      userId: session.userId,
+      sessionId: session.sessionId,
+      callerAgent: AI_TEACHING_AGENT_ID,
+      requestPath: '/ai-teaching/sessions/peer/messages'
     });
 
     const peerResponse = response.choices[0]?.message.content || '';

@@ -9,45 +9,6 @@
       <p class="page-subtitle">实时监控 Agent 运行状态，查看执行日志</p>
     </div>
 
-    <!-- Agent 状态卡片 -->
-    <el-row :gutter="20" class="agent-cards" v-if="agents.length > 0">
-      <el-col :span="6" v-for="agent in agents" :key="agent.name">
-        <el-card class="agent-card" :class="`agent-card--${agent.status}`" shadow="hover">
-          <div class="agent-header">
-            <div class="agent-icon">{{ getAgentIcon(agent.name) }}</div>
-            <el-tag :type="getStatusType(agent.status)" size="large">
-              {{ getStatusText(agent.status) }}
-            </el-tag>
-          </div>
-          <div class="agent-info">
-            <h3 class="agent-name">{{ getAgentDisplayName(agent.name) }}</h3>
-            <div class="agent-stats">
-              <div class="stat-item">
-                <div class="stat-label">成功率</div>
-                <div class="stat-value" :class="getSuccessRateClass(agent.successRate)">
-                  {{ agent.successRate }}%
-                </div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">平均耗时</div>
-                <div class="stat-value">{{ agent.avgDuration }}ms</div>
-              </div>
-            </div>
-            <div class="agent-calls">
-              <span class="calls-label">总调用:</span>
-              <span class="calls-value">{{ agent.totalCalls }}</span>
-              <span class="calls-success">✓ {{ agent.successCalls }}</span>
-              <span class="calls-error">✗ {{ agent.errorCalls }}</span>
-            </div>
-            <div class="agent-last-activity">
-              <el-icon><Clock /></el-icon>
-              <span>最后活跃：{{ formatTime(agent.lastActivity) }}</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
     <!-- 统计信息 -->
     <div class="stats-bar" v-if="pagination.total > 0">
       <div class="stat-item">
@@ -95,6 +56,36 @@
               :value="agent.value"
             />
           </el-select>
+        </div>
+
+        <div class="filter-item">
+          <label>Agent ID</label>
+          <el-input
+            v-model="filters.agentId"
+            placeholder="如 content-agent-v3"
+            clearable
+            class="filter-input"
+          />
+        </div>
+
+        <div class="filter-item">
+          <label>Trace ID</label>
+          <el-input
+            v-model="filters.traceId"
+            placeholder="链路追踪 ID"
+            clearable
+            class="filter-input"
+          />
+        </div>
+
+        <div class="filter-item">
+          <label>Session ID</label>
+          <el-input
+            v-model="filters.sessionId"
+            placeholder="学习会话 ID"
+            clearable
+            class="filter-input"
+          />
         </div>
 
         <div class="filter-item">
@@ -212,6 +203,14 @@
             <span class="preview-label">错误:</span>
             <span class="preview-content">{{ log.error }}</span>
           </div>
+          <div class="preview-row" v-if="log.traceId">
+            <span class="preview-label">Trace:</span>
+            <span class="preview-content">{{ log.traceId }}</span>
+          </div>
+          <div class="preview-row" v-if="log.sessionId">
+            <span class="preview-label">Session:</span>
+            <span class="preview-content">{{ log.sessionId }}</span>
+          </div>
         </div>
 
         <div class="log-actions">
@@ -279,6 +278,14 @@
               <label>耗时:</label>
               <span>{{ formatDuration(selectedLog.durationMs) }}</span>
             </div>
+            <div class="detail-item" v-if="selectedLog.traceId">
+              <label>Trace ID:</label>
+              <span>{{ selectedLog.traceId }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.sessionId">
+              <label>Session ID:</label>
+              <span>{{ selectedLog.sessionId }}</span>
+            </div>
           </div>
         </div>
 
@@ -339,19 +346,22 @@ import {
   View,
   DocumentCopy,
   Download,
-  Timer,
-  Clock
+  Timer
 } from '@element-plus/icons-vue';
-import request from '../../utils/request';
+import { useRoute } from 'vue-router';
+import { adminAxios } from '@/api/adminApi';
 
 interface Log {
   id: string;
   agentName: string;
+  agentId?: string;
   action: string;
   status: 'success' | 'error' | 'timeout';
   input?: string;
   output?: string;
   error?: string;
+  traceId?: string;
+  sessionId?: string;
   durationMs: number;
   createdAt: string;
 }
@@ -365,7 +375,6 @@ interface Pagination {
 // 状态
 const loading = ref(false);
 const logs = ref<Log[]>([]);
-const agents = ref<any[]>([]);
 const pagination = reactive<Pagination>({
   total: 0,
   page: 1,
@@ -381,6 +390,9 @@ const stats = reactive({
 // 筛选器
 const filters = reactive({
   agentName: '',
+  agentId: '',
+  traceId: '',
+  sessionId: '',
   status: '',
   timeRange: 'today',
   keyword: ''
@@ -391,6 +403,7 @@ const agentOptions = ref<Array<{ label: string; value: string }>>([
   { label: '需求收集', value: 'RequirementCollection' },
   { label: '路径规划', value: 'PathPlanning' },
   { label: '教学执行', value: 'Teaching' },
+  { label: '教学编排', value: 'TeachingOrchestration' },
   { label: '伴学介入', value: 'LearningCompanion' },
   { label: '会话评估', value: 'SessionEvaluation' },
   { label: '课后总结', value: 'Summary' }
@@ -404,6 +417,7 @@ let refreshTimer: NodeJS.Timeout | null = null;
 // 详情弹窗
 const detailVisible = ref(false);
 const selectedLog = ref<Log | null>(null);
+const route = useRoute();
 
 // 加载日志
 const loadLogs = async () => {
@@ -415,18 +429,31 @@ const loadLogs = async () => {
     };
 
     if (filters.agentName) params.agentName = filters.agentName;
+    if (filters.agentId) params.agentId = filters.agentId;
+    if (filters.traceId) params.traceId = filters.traceId;
+    if (filters.sessionId) params.sessionId = filters.sessionId;
     if (filters.status) params.status = filters.status;
     if (filters.timeRange) params.timeRange = filters.timeRange;
     if (filters.keyword) params.keyword = filters.keyword;
 
-    const response: any = await request.get('/admin/agents/logs', { params });
+    const response: any = await adminAxios.get('/admin/agents/logs', { params });
 
     if (response.data.success) {
       logs.value = response.data.data.logs;
       pagination.total = response.data.data.pagination.total;
 
-      // 计算统计
-      calculateStats();
+      const serverStats = response.data.data.stats;
+      if (serverStats) {
+        stats.total = serverStats.total || 0;
+        stats.success = serverStats.success || 0;
+        stats.error = serverStats.error || 0;
+        stats.timeout = serverStats.timeout || 0;
+      } else {
+        stats.total = pagination.total;
+        stats.success = logs.value.filter(l => l.status === 'success').length;
+        stats.error = logs.value.filter(l => l.status === 'error').length;
+        stats.timeout = logs.value.filter(l => l.status === 'timeout').length;
+      }
     }
   } catch (error) {
     console.error('加载日志失败:', error);
@@ -436,82 +463,19 @@ const loadLogs = async () => {
   }
 };
 
-// 计算统计
-const calculateStats = () => {
-  stats.total = pagination.total;
-  stats.success = logs.value.filter(l => l.status === 'success').length;
-  stats.error = logs.value.filter(l => l.status === 'error').length;
-  stats.timeout = logs.value.filter(l => l.status === 'timeout').length;
-};
-
-// 加载 Agent 状态
-const loadAgentStatus = async () => {
-  try {
-    const response: any = await request.get('/admin/agents/status');
-    if (response.data.success) {
-      agents.value = response.data.data.agents;
-    }
-  } catch (error) {
-    console.error('加载 Agent 状态失败:', error);
-  }
-};
-
-// Agent 辅助函数
-const getAgentIcon = (name: string) => {
-  const icons: Record<string, string> = {
-    RequirementCollection: '🎯',
-    PathPlanning: '🧭',
-    Teaching: '🎓',
-    LearningCompanion: '🤝',
-    SessionEvaluation: '🧪',
-    Summary: '📝',
-  };
-  return icons[name] || '🤖';
-};
-
 const getAgentDisplayName = (name: string) => {
   const map: Record<string, string> = {
     RequirementCollection: '需求收集',
     PathPlanning: '路径规划',
     Teaching: '教学执行',
+    TeachingOrchestration: '教学编排',
+    'ai-teaching': '教学编排',
+    'ai-teaching-agent': '教学编排',
     LearningCompanion: '伴学介入',
     SessionEvaluation: '会话评估',
     Summary: '课后总结'
   };
   return map[name] || name;
-};
-
-const getStatusType = (status: string) => {
-  const types: Record<string, any> = {
-    success: 'success',
-    error: 'danger',
-    idle: 'info',
-    running: 'warning',
-  };
-  return types[status] || 'info';
-};
-
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    success: '成功',
-    error: '失败',
-    idle: '空闲',
-    running: '运行中',
-  };
-  return texts[status] || status;
-};
-
-const getSuccessRateClass = (rate: string | number) => {
-  const num = Number(rate);
-  if (num >= 95) return 'rate-excellent';
-  if (num >= 80) return 'rate-good';
-  return 'rate-poor';
-};
-
-const formatTime = (date: any) => {
-  if (!date) return '从未';
-  const d = new Date(date);
-  return d.toLocaleString('zh-CN');
 };
 
 // 设置筛选
@@ -529,6 +493,9 @@ const handleSearch = () => {
 // 重置
 const handleReset = () => {
   filters.agentName = '';
+  filters.agentId = '';
+  filters.traceId = '';
+  filters.sessionId = '';
   filters.status = '';
   filters.timeRange = 'today';
   filters.keyword = '';
@@ -670,6 +637,9 @@ const getAgentTagType = (agentName: string) => {
     RequirementCollection: 'success',
     PathPlanning: 'primary',
     Teaching: 'warning',
+    TeachingOrchestration: 'warning',
+    'ai-teaching': 'warning',
+    'ai-teaching-agent': 'warning',
     LearningCompanion: 'info',
     SessionEvaluation: 'primary',
     Summary: 'success'
@@ -682,7 +652,6 @@ watch(autoRefresh, (value) => {
   if (value) {
     refreshTimer = setInterval(() => {
       loadLogs();
-      loadAgentStatus();
     }, refreshInterval.value * 1000);
   } else {
     if (refreshTimer) {
@@ -693,7 +662,14 @@ watch(autoRefresh, (value) => {
 });
 
 onMounted(() => {
-  loadAgentStatus();
+  const queryAgentName = String(route.query.agentName || '');
+  const queryAgentId = String(route.query.agentId || '');
+  if (queryAgentName) {
+    filters.agentName = queryAgentName;
+  }
+  if (queryAgentId) {
+    filters.agentId = queryAgentId;
+  }
   loadLogs();
 });
 
@@ -957,6 +933,10 @@ onUnmounted(() => {
 
 .filter-select {
   width: 160px;
+}
+
+.filter-input {
+  width: 180px;
 }
 
 .search-item {

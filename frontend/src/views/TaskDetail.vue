@@ -846,7 +846,7 @@ const handleSendQuestion = async () => {
   aiLoading.value = true;
 
   try {
-    const response = await api.post<{ success: boolean; data: { answer: string; hintLevel: string } }>('/ai/zpd-tutor', {
+    const response = await api.post<{ success: boolean; data: { answer: string; hintLevel: string } }>('/ai-teaching/tutor-assist', {
       question,
       taskId: task.value.id,
       taskDescription: task.value.description,
@@ -905,20 +905,6 @@ const getKnowledgeTypeColor = (type: string) => {
     metacognitive: 'var(--color-danger)'
   };
   return colors[type] || 'var(--color-pending)';
-};
-
-const getCognitiveLevelColor = (level: string) => {
-  const colors: Record<string, string> = {
-    remember: 'var(--color-pending)',
-    understand: 'var(--color-muted)',
-    apply: 'var(--color-success)',
-    analyze: 'var(--color-efficient)',
-    evaluate: 'var(--color-danger)',
-    create: 'var(--color-primary)'
-  };
-  return colors[level] || 'var(--color-pending)';
-};
-  return colors[type] || '#909399';
 };
 
 // 认知层级映射

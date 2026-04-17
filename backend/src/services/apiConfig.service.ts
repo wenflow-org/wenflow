@@ -11,9 +11,15 @@ export interface APIConfig {
   defaultModel: string;
   defaultReasoningModel: string;
   defaultEvaluationModel: string;
+  defaultTemperature?: number;
+  defaultMaxTokens?: number;
+  reasoningEndpoint?: string;
+  lightEndpoint?: string;
+  chatModels?: string[];
+  reasoningModels?: string[];
+  lightModels?: string[];
 }
 
-// 默认配置（从环境变量获取）
 const defaultConfig: APIConfig = {
   apiUrl: process.env.AI_API_URL || '',
   apiKey: process.env.AI_API_KEY || '',
@@ -21,6 +27,13 @@ const defaultConfig: APIConfig = {
   defaultModel: process.env.AI_MODEL || 'deepseek-chat',
   defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-reasoner',
   defaultEvaluationModel: process.env.AI_MODEL_REASONING || 'deepseek-reasoner',
+  defaultTemperature: 0.7,
+  defaultMaxTokens: 2048,
+  reasoningEndpoint: undefined,
+  lightEndpoint: undefined,
+  chatModels: [],
+  reasoningModels: [],
+  lightModels: [],
 };
 
 class APIConfigService {
@@ -43,10 +56,16 @@ class APIConfigService {
           defaultModel: dbConfig.defaultModel || defaultConfig.defaultModel,
           defaultReasoningModel: dbConfig.defaultReasoningModel || defaultConfig.defaultReasoningModel,
           defaultEvaluationModel: dbConfig.defaultEvaluationModel || defaultConfig.defaultEvaluationModel,
+          defaultTemperature: dbConfig.defaultTemperature ?? defaultConfig.defaultTemperature,
+          defaultMaxTokens: dbConfig.defaultMaxTokens ?? defaultConfig.defaultMaxTokens,
+          reasoningEndpoint: dbConfig.reasoningEndpoint || undefined,
+          lightEndpoint: dbConfig.lightEndpoint || undefined,
+          chatModels: dbConfig.chatModels ? JSON.parse(dbConfig.chatModels) : [],
+          reasoningModels: dbConfig.reasoningModels ? JSON.parse(dbConfig.reasoningModels) : [],
+          lightModels: dbConfig.lightModels ? JSON.parse(dbConfig.lightModels) : [],
         };
       }
 
-      // 如果数据库中没有配置，返回默认配置
       return defaultConfig;
     } catch (error) {
       logger.error('获取 API 配置失败:', error);
@@ -74,6 +93,13 @@ class APIConfigService {
           defaultModel: mergedConfig.defaultModel,
           defaultReasoningModel: mergedConfig.defaultReasoningModel,
           defaultEvaluationModel: mergedConfig.defaultEvaluationModel,
+          defaultTemperature: mergedConfig.defaultTemperature,
+          defaultMaxTokens: mergedConfig.defaultMaxTokens,
+          reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
+          lightEndpoint: mergedConfig.lightEndpoint || null,
+          chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
+          reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
+          lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
           updatedAt: new Date(),
         },
         create: {
@@ -84,6 +110,13 @@ class APIConfigService {
           defaultModel: mergedConfig.defaultModel,
           defaultReasoningModel: mergedConfig.defaultReasoningModel,
           defaultEvaluationModel: mergedConfig.defaultEvaluationModel,
+          defaultTemperature: mergedConfig.defaultTemperature,
+          defaultMaxTokens: mergedConfig.defaultMaxTokens,
+          reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
+          lightEndpoint: mergedConfig.lightEndpoint || null,
+          chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
+          reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
+          lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
         },
       });
 
@@ -224,7 +257,7 @@ class APIConfigService {
   /**
    * 获取平台默认配置（不暴露完整 apiKey）
    */
-  async getPlatformDefault(): {
+  async getPlatformDefault(): Promise<{
     endpoint: string;
     apiKeyStatus: string;
     chatModel: string;
@@ -232,7 +265,7 @@ class APIConfigService {
     evaluationModel: string;
     availableModels: string[];
     connectionStatus: string;
-  } {
+  }> {
     const config = await this.getConfig();
     const dbConfig = await prisma.platform_api_configs.findUnique({
       where: { id: 'platform' },

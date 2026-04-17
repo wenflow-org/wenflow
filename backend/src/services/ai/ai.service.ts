@@ -3,18 +3,13 @@ import { logger } from '../../utils/logger';
 import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
 import { StudentStateAssessment } from './state-assessment.service';
 import prisma from '../../config/database';
-import type { ChatCompletionResponse } from '../../gateway/openai-client';
-import { setRequestContext, getRequestContext, runWithContext, getOpenAIClient, getOpenAISDKForCurrentUser } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 
 // AI 配置 - 主模型
-const AI_API_URL = process.env.AI_API_URL || 'http://localhost:3000';
-const AI_API_KEY = process.env.AI_API_KEY || '';
 const AI_MODEL = process.env.AI_MODEL || 'glm-4-flash';
 const AI_MODEL_REASONING = process.env.AI_MODEL_REASONING || 'deepseek-think';
 
-// AI 配置 - 课程设计模型 (Grok)
-const COURSE_DESIGN_API_URL = process.env.COURSE_DESIGN_API_URL || AI_API_URL;
-const COURSE_DESIGN_API_KEY = process.env.COURSE_DESIGN_API_KEY || AI_API_KEY;
+// AI 配置 - 课程设计模型
 const COURSE_DESIGN_MODEL = process.env.COURSE_DESIGN_MODEL || 'grok-4.1-fast';
 
 // 系统提示词定义
@@ -270,12 +265,6 @@ export const SYSTEM_PROMPTS = {
 - 考虑用户的实际水平，避免过于简单或过于困难`
 };
 
-// 课程设计专用客户端（使用官方 OpenAI SDK 单例缓存）
-const getCourseDesignClient = () => getOpenAISDKForCurrentUser({
-  baseUrl: COURSE_DESIGN_API_URL,
-  apiKey: COURSE_DESIGN_API_KEY,
-});
-
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -341,54 +330,33 @@ class AIService {
     let result: any = null;
     let error: any = null;
 
-    // 设置请求上下文（用于日志记录）
-    if (options?.agentId && options?.userId) {
-      setRequestContext({
-        agentId: options.agentId,
-        userId: options.userId,
-        action: options.action
-      });
-    }
-
     try {
-      const model = options?.model || AI_MODEL;
       logger.info('AI 请求发送', { 
         messageCount: messages.length,
-        model,
         agentId: options?.agentId,
         userId: options?.userId,
         action: options?.action,
         messagesPreview: JSON.stringify(messages).substring(0, 500)
       });
 
-      // 使用 OpenAIClient，它会自动记录日志
-      const client = getOpenAIClient();
-      
-      // 获取现有上下文（保留 ACP 中间件设置的值）
-      const existingContext = getRequestContext();
-      
-      // 生成 traceId（如果不存在）
-      const generateTraceId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // 设置请求上下文用于日志记录（合并现有上下文）
-      const context = {
-        userId: options?.userId || existingContext.userId,
-        agentId: options?.agentId || existingContext.agentId,
-        action: options?.action || existingContext.action,
-        // 保留 ACP 字段
-        sourceEntry: existingContext.sourceEntry || 'platform',
-        traceId: existingContext.traceId || generateTraceId(), // 如果没有 traceId，生成一个
-        callerAgent: existingContext.callerAgent,
-        userRole: existingContext.userRole || 'user'
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = {
+        agentId: options?.agentId,
+        userId: options?.userId,
+        action: options?.action,
       };
       
-      const response = await runWithContext(context, () => client.chatCompletion({
-        model: model,
-        messages: messages,
-        temperature: options?.temperature || 0.7,
-        max_tokens: options?.maxTokens || 2000,
-        timeout: options?.timeout,
-      }));
+      const response = await gateway.execute(
+        {
+          messages,
+          model: options?.model,
+          temperature: options?.temperature,
+          max_tokens: options?.maxTokens
+        },
+        caller,
+        { requestPath: '/services/ai/chat' }
+      );
+
 
       logger.info('AI 响应原始数据', { response: JSON.stringify(response, null, 2).substring(0, 1000) });
 
@@ -506,11 +474,8 @@ class AIService {
         const startTime = Date.now();
         const response = await this.chat([
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: '请开始执行任务。' } // 默认触发词，也可以变量化
-        ], { 
-          model,
-          temperature: data.config?.temperature || 0.7
-        });
+          { role: 'user', content: '请开始执行任务。' }
+        ]);
         const duration = Date.now() - startTime;
 
         // 3. 调用 AI 裁判打分 (Judge)
@@ -580,10 +545,7 @@ ${prompt}
 AI Output:
 ${output}`
         }
-      ], {
-        model: judgeModel,
-        temperature: 0.1 // 裁判需要客观稳定，降温
-      });
+      ]);
 
       // 尝试解析 JSON（支持多种格式）
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
@@ -678,18 +640,10 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
     let response: any = null;
 
     try {
-      // 根据参数选择模型
-      const model = useReasoning ? AI_MODEL_REASONING : AI_MODEL;
-      
       response = await this.chat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ], { 
-        temperature: 0.7,
-        model: model,
-        maxTokens: 16000,  // deepseek-think 模型需要更多 token 空间（思维链输出）
-        timeout: 180000,   // 180 秒超时（推理模型响应较慢）
-        // Agent 调用标记 - 统一通过 PathAgent
         agentId: 'path-agent',
         userId: userId,
         action: 'analyzeLearningGoal'
@@ -779,18 +733,6 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
   ` : '';
 
     try {
-      const temperature = studentState ? (studentState.stress > 0.7 ? 0.5 : 0.8) : 0.8;
-      
-      // 记录 temperature 调整
-      if (studentState) {
-        logger.info('AI Tutor 调整 temperature', {
-          userId: context?.userId,
-          stress: studentState.stress,
-          temperature,
-          reason: studentState.stress > 0.7 ? '高压力降低随机性' : '正常状态'
-        });
-      }
-
       const response = await this.chat([
         { role: 'system', content: strategyPrompt || SYSTEM_PROMPTS.TUTORING },
         {
@@ -799,7 +741,6 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
   ${contextInfo}`
         }
       ], {
-        temperature,
         agentId: 'ai-tutor',
         userId: context?.userId,
         action: 'tutoring'
@@ -857,9 +798,7 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
       const response = await this.chat([
         { role: 'system', content: systemPrompt }
       ], {
-        temperature: 0.8,
-        // Agent 调用标记 - 统一通过 TutorAgent
-        agentId: 'tutor-agent',
+        agentId: 'ai-teaching-agent',
         userId: params.userId,
         action: 'zpdTutoring'
       });
@@ -929,10 +868,7 @@ ${context ? `上下文：
       const response = await this.chat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
-      ], {
-        temperature: 0.7,
-        model: AI_MODEL_REASONING // 使用推理模型保证任务设计质量
-      });
+      ]);
 
       // 解析 JSON
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
@@ -962,10 +898,7 @@ ${context ? `上下文：
       const response = await this.chat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
-      ], {
-        temperature: 0.7, // 需要一定的创造性来提出建议
-        model: AI_MODEL_REASONING // 使用推理模型进行深度诊断
-      });
+      ]);
 
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -1030,16 +963,27 @@ ${params.previousWeeks.map(w => `Week ${w.weekNumber}: ${w.title} (${w.completed
         model: COURSE_DESIGN_MODEL
       });
 
-      // 使用课程设计专用客户端（单例缓存）
-      const response = await (await getCourseDesignClient()).chat.completions.create({
-        model: COURSE_DESIGN_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,  // 阶段化课程设计需要更多 token 空间
-      });
+      const gateway = getAPIGateway();
+      const response = await gateway.execute(
+        {
+          model: COURSE_DESIGN_MODEL,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000
+        },
+        {
+          agentId: 'course-design',
+          userId: params.userId,
+          action: 'designWeekCourses'
+        },
+        {
+          userId: params.userId,
+          requestPath: '/services/ai/design-week-courses'
+        }
+      );
 
 // 记录 Agent 调用日志（课程设计）
       try {

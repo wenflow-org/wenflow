@@ -282,7 +282,7 @@ async function migratePrompts() {
       model: process.env.AI_MODEL || 'deepseek-chat',
     },
     {
-      agentId: 'content-agent',
+      agentId: 'content-agent-v3',
       name: 'v1.0-初始版本',
       description: 'ContentAgent 的系统提示词 - 学习内容生成',
       systemPrompt: CONTENT_AGENT_PROMPT,

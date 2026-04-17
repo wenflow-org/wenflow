@@ -38,7 +38,22 @@
 
             <el-menu-item index="/admin/execution-logs">
               <el-icon><Cpu /></el-icon>
-              <span>Agent 监控</span>
+              <span>执行日志</span>
+            </el-menu-item>
+
+            <el-menu-item index="/admin/orchestrators">
+              <el-icon><Connection /></el-icon>
+              <span>编排器视图</span>
+            </el-menu-item>
+
+            <el-menu-item index="/admin/agent-registry">
+              <el-icon><Grid /></el-icon>
+              <span>Agent 注册</span>
+            </el-menu-item>
+
+            <el-menu-item index="/admin/manifest-diagnostics">
+              <el-icon><WarningFilled /></el-icon>
+              <span>架构诊断</span>
             </el-menu-item>
           </el-menu>
         </div>
@@ -81,6 +96,9 @@ import {
   DataAnalysis,
   User,
   Cpu,
+  Connection,
+  Grid,
+  WarningFilled,
   Setting,
   ArrowDown,
   SwitchButton,

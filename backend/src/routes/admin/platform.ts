@@ -2,9 +2,47 @@ import express, { Request, Response } from 'express';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { getPlatformSettings, updatePlatformSettings } from '../../services/platform-settings.service';
+import { getAgentCatalog, isOfficialAgent } from '../../services/agent-catalog.service';
+import {
+  getAgentManifest,
+  getCanonicalAgentId,
+  getMonitoringGroupMappings,
+  getOrchestratorRelations,
+  isManifestOrchestrator,
+  listAgentManifest
+} from '../../services/agent-manifest.service';
 
 const router = express.Router();
 router.use(authMiddleware);
+
+const AGENT_NAME_TO_IDS: Record<string, string[]> = getMonitoringGroupMappings();
+
+const MONITORED_AGENT_ORDER = [
+  'RequirementCollection',
+  'PathPlanning',
+  'Teaching',
+  'TeachingOrchestration',
+  'LearningCompanion',
+  'SessionEvaluation',
+  'Summary'
+];
+
+const AGENT_ID_TO_NAME = Object.entries(AGENT_NAME_TO_IDS).reduce((acc, [name, ids]) => {
+  for (const id of ids) {
+    acc[id] = name;
+  }
+  return acc;
+}, {} as Record<string, string>);
+
+const ORCHESTRATOR_RELATIONS = getOrchestratorRelations();
+
+const inferRuntimeRole = (agentId: string, type?: string | null) => {
+  const typeText = String(type || '').toLowerCase();
+  if (typeText.includes('orchestrator')) return 'orchestrator';
+  if (isManifestOrchestrator(agentId)) return 'orchestrator';
+  if (agentId.endsWith('-orchestrator')) return 'orchestrator';
+  return 'agent';
+};
 
 const ensureAdmin = async (userId?: string) => {
   if (!userId) return false;
@@ -70,6 +108,148 @@ router.put('/settings/registration', async (req: Request, res: Response) => {
 });
 
 /**
+ * Agent Manifest 一致性诊断
+ * GET /api/admin/manifest/diagnostics
+ */
+router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '需要管理员权限' }
+      });
+    }
+
+    const manifest = listAgentManifest();
+    const canonicalManifestIds = new Set(
+      manifest.filter(item => item.kind !== 'alias').map(item => item.id)
+    );
+
+    const infrastructureIds = new Set([
+      'api-gateway',
+      'gateway',
+      'system-call',
+      'arena-service',
+      'ai-service'
+    ]);
+
+    const [registrations, modelConfigs, logGroups, catalog] = await Promise.all([
+      prisma.agent_registrations.findMany({
+        orderBy: { id: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          updatedAt: true
+        }
+      }),
+      prisma.agent_model_configs.findMany({
+        orderBy: { agentId: 'asc' },
+        select: {
+          agentId: true,
+          enabled: true,
+          updatedAt: true
+        }
+      }),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId'],
+        _count: { _all: true }
+      }),
+      getAgentCatalog()
+    ]);
+
+    const registrationIds = registrations.map(item => item.id);
+    const modelConfigIds = modelConfigs.map(item => item.agentId);
+    const calledAgentIds = logGroups.map(item => item.agentId);
+    const catalogIds = Object.keys(catalog || {});
+
+    const missingRegistrations = Array.from(canonicalManifestIds).filter(
+      id => !registrationIds.includes(id)
+    );
+
+    const unknownRegistrations = registrationIds.filter(id => {
+      const canonicalId = getCanonicalAgentId(id);
+      return !canonicalManifestIds.has(canonicalId);
+    });
+
+    const aliasRegistrations = registrationIds
+      .map(id => ({ id, canonicalId: getCanonicalAgentId(id) }))
+      .filter(item => item.id !== item.canonicalId && canonicalManifestIds.has(item.canonicalId));
+
+    const unknownModelConfigs = modelConfigIds.filter(id => {
+      const canonicalId = getCanonicalAgentId(id);
+      return !canonicalManifestIds.has(canonicalId);
+    });
+
+    const aliasModelConfigs = modelConfigIds
+      .map(id => ({ id, canonicalId: getCanonicalAgentId(id) }))
+      .filter(item => item.id !== item.canonicalId && canonicalManifestIds.has(item.canonicalId));
+
+    const unknownLogAgents = calledAgentIds.filter(id => {
+      if (infrastructureIds.has(id)) {
+        return false;
+      }
+      const canonicalId = getCanonicalAgentId(id);
+      return !canonicalManifestIds.has(canonicalId);
+    });
+
+    const aliasLogAgents = logGroups
+      .map(item => ({
+        id: item.agentId,
+        canonicalId: getCanonicalAgentId(item.agentId),
+        calls: item._count._all
+      }))
+      .filter(item => item.id !== item.canonicalId && canonicalManifestIds.has(item.canonicalId));
+
+    const catalogOnly = catalogIds.filter(id => !canonicalManifestIds.has(id));
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          manifestTotal: canonicalManifestIds.size,
+          registrationTotal: registrations.length,
+          modelConfigTotal: modelConfigs.length,
+          calledAgentTotal: calledAgentIds.length,
+          catalogTotal: catalogIds.length,
+          driftCount:
+            missingRegistrations.length +
+            unknownRegistrations.length +
+            unknownModelConfigs.length +
+            unknownLogAgents.length +
+            catalogOnly.length
+        },
+        drift: {
+          missingRegistrations,
+          unknownRegistrations,
+          aliasRegistrations,
+          unknownModelConfigs,
+          aliasModelConfigs,
+          unknownLogAgents,
+          aliasLogAgents,
+          catalogOnly
+        },
+        samples: {
+          registrations,
+          modelConfigs,
+          calledAgents: logGroups
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('获取 manifest 诊断失败:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取 manifest 诊断失败',
+        status: 500
+      }
+    });
+  }
+});
+
+/**
  * 获取平台概览数据
  * GET /api/admin/overview/stats
  */
@@ -85,6 +265,24 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
     // 获取昨日统计
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
+    const last24HoursStart = new Date(Date.now() - 24 * 3600000);
+
+    const timeoutErrorSignals = [
+      'timeout',
+      'timed out',
+      'etimedout',
+      'deadline exceeded',
+      'request timeout',
+      'socket hang up'
+    ];
+
+    const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
+      const errorCode = String(log.errorCode || '').toLowerCase();
+      const errorMessage = String(log.error || '').toLowerCase();
+      return timeoutErrorSignals.some(signal =>
+        errorCode.includes(signal) || errorMessage.includes(signal)
+      );
+    };
 
     // 并行查询所有统计数据
     const [
@@ -98,7 +296,12 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       totalConversations,
       activeConversations,
       totalAgentLogs,
-      platformStats
+      platformStats,
+      agentCallsToday,
+      agentSuccessToday,
+      agentTimeoutToday,
+      activeAgents24h,
+      recentAgentLogs24h
     ] = await Promise.all([
       // 总用户数
       prisma.users.count(),
@@ -177,6 +380,67 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         take: 7,
         orderBy: { date: 'desc' },
       }),
+
+      // 今日 Agent 调用数
+      prisma.agent_call_logs.count({
+        where: {
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
+      }),
+
+      // 今日 Agent 成功调用
+      prisma.agent_call_logs.count({
+        where: {
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+          success: true,
+        },
+      }),
+
+      // 今日超时调用（按 error/errorCode 关键字识别）
+      prisma.agent_call_logs.count({
+        where: {
+          calledAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+          success: false,
+          OR: [
+            { errorCode: { contains: 'TIMEOUT' } },
+            { error: { contains: 'timeout' } },
+            { error: { contains: 'timed out' } },
+            { error: { contains: 'etimedout' } },
+            { error: { contains: 'deadline exceeded' } },
+            { error: { contains: 'request timeout' } }
+          ]
+        }
+      }),
+
+      // 最近 24h 活跃 Agent 数
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId'],
+        where: {
+          calledAt: { gte: new Date(Date.now() - 24 * 3600000) }
+        }
+      }),
+
+      // 最近 24h 调用趋势
+      prisma.agent_call_logs.findMany({
+        where: {
+          calledAt: { gte: last24HoursStart }
+        },
+        select: {
+          calledAt: true,
+          success: true,
+          errorCode: true,
+          error: true
+        }
+      })
     ]);
 
     // 计算活跃用户数
@@ -195,6 +459,50 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
     const agentSuccessRate = agentStats.total > 0 
       ? agentStats.success / agentStats.total 
       : 1.0;
+
+    const agentTodaySuccessRate = agentCallsToday > 0
+      ? (agentSuccessToday / agentCallsToday)
+      : 1.0;
+
+    const hourKeys: string[] = [];
+    const hourlyTrendMap: Record<string, { total: number; error: number; timeout: number }> = {};
+
+    for (let i = 23; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setMinutes(0, 0, 0);
+      d.setHours(d.getHours() - i);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+      hourKeys.push(key);
+      hourlyTrendMap[key] = { total: 0, error: 0, timeout: 0 };
+    }
+
+    for (const log of recentAgentLogs24h) {
+      const d = new Date(log.calledAt);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${d.getHours()}`;
+      if (!hourlyTrendMap[key]) continue;
+
+      hourlyTrendMap[key].total += 1;
+      if (!log.success) {
+        if (isTimeoutLog(log)) {
+          hourlyTrendMap[key].timeout += 1;
+        } else {
+          hourlyTrendMap[key].error += 1;
+        }
+      }
+    }
+
+    const hourlyTrend = hourKeys.map(key => {
+      const [year, month, day, hour] = key.split('-').map(Number);
+      const d = new Date(year, month - 1, day, hour);
+      const point = hourlyTrendMap[key];
+      return {
+        time: d.toISOString(),
+        label: `${String(hour).padStart(2, '0')}:00`,
+        total: point.total,
+        error: point.error,
+        timeout: point.timeout
+      };
+    });
 
     res.json({
       success: true,
@@ -219,6 +527,12 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         agents: {
           totalCalls: agentStats.total,
           successRate: (agentSuccessRate * 100).toFixed(1),
+          failedCalls: agentStats.error,
+          activeAgents24h: activeAgents24h.length,
+          todayCalls: agentCallsToday,
+          todaySuccessRate: (agentTodaySuccessRate * 100).toFixed(1),
+          todayTimeouts: agentTimeoutToday,
+          last24h: hourlyTrend,
         },
         platformStats,
       },
@@ -236,38 +550,191 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
 });
 
 /**
+ * 获取 Agent 注册列表
+ * GET /api/admin/agents/registry
+ */
+router.get('/agents/registry', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '需要管理员权限' }
+      });
+    }
+
+    const [catalog, registrations, callGroups, successGroups] = await Promise.all([
+      getAgentCatalog(),
+      prisma.agent_registrations.findMany({
+        orderBy: { updatedAt: 'desc' }
+      }),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId'],
+        _count: { _all: true },
+        _avg: { durationMs: true },
+        _max: { calledAt: true }
+      }),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId', 'success'],
+        _count: { _all: true }
+      })
+    ]);
+
+    const callMap = new Map<string, { total: number; avgDuration: number; lastActivity: Date | null }>();
+    for (const group of callGroups) {
+      callMap.set(group.agentId, {
+        total: group._count._all,
+        avgDuration: Math.round(group._avg.durationMs || 0),
+        lastActivity: group._max.calledAt || null
+      });
+    }
+
+    const successMap = new Map<string, { success: number; failed: number }>();
+    for (const group of successGroups) {
+      const current = successMap.get(group.agentId) || { success: 0, failed: 0 };
+      if (group.success) {
+        current.success += group._count._all;
+      } else {
+        current.failed += group._count._all;
+      }
+      successMap.set(group.agentId, current);
+    }
+
+    const manifestEntries = listAgentManifest().filter(item => item.kind !== 'alias');
+    const registrationMap = new Map(registrations.map(item => [item.id, item]));
+    const allAgentIds = Array.from(new Set([
+      ...registrations.map(item => item.id),
+      ...manifestEntries.map(item => item.id)
+    ]));
+
+    const agents = allAgentIds.map(agentId => {
+      const registration = registrationMap.get(agentId);
+      const manifest = manifestEntries.find(item => item.id === agentId);
+      const callStats = callMap.get(agentId);
+      const successStats = successMap.get(agentId) || { success: 0, failed: 0 };
+      const totalCalls = callStats?.total ?? registration?.callCount ?? 0;
+      const successRate = totalCalls > 0
+        ? Number(((successStats.success / totalCalls) * 100).toFixed(1))
+        : Number((((registration?.successRate ?? 1)) * 100).toFixed(1));
+
+      const lifecycleStatus = catalog[agentId]?.status || (isOfficialAgent(agentId) ? 'published' : 'draft');
+
+      return {
+        agentId,
+        name: registration?.name || manifest?.name || agentId,
+        type: registration?.type || manifest?.category || 'custom',
+        role: inferRuntimeRole(agentId, registration?.type),
+        category: registration?.category || manifest?.category,
+        description: registration?.description || manifest?.description,
+        version: registration?.version || '1.0.0',
+        endpoint: registration?.endpoint,
+        lifecycleStatus,
+        isOfficial: isOfficialAgent(agentId),
+        callCount: totalCalls,
+        successRate,
+        avgDuration: callStats?.avgDuration || 0,
+        lastActivity: callStats?.lastActivity || null,
+        status: totalCalls === 0 ? 'idle' : (successRate >= 90 ? 'healthy' : (successRate >= 75 ? 'warning' : 'error')),
+        updatedAt: registration?.updatedAt
+      };
+    }).sort((a, b) => a.agentId.localeCompare(b.agentId));
+
+    const summary = {
+      total: agents.length,
+      active24h: agents.filter(item => item.lastActivity && (Date.now() - new Date(item.lastActivity).getTime()) <= 24 * 3600000).length,
+      neverCalled: agents.filter(item => item.callCount === 0).length,
+      unhealthy: agents.filter(item => item.callCount > 0 && item.successRate < 75).length
+    };
+
+    res.json({
+      success: true,
+      data: {
+        summary,
+        agents
+      }
+    });
+  } catch (error: any) {
+    console.error('获取 Agent 注册列表失败:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取 Agent 注册列表失败',
+        status: 500
+      }
+    });
+  }
+});
+
+/**
+ * 获取编排器与成员 Agent 关系
+ * GET /api/admin/orchestrators/relations
+ */
+router.get('/orchestrators/relations', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '需要管理员权限' }
+      });
+    }
+
+    const allMemberIds = Array.from(new Set(Object.values(AGENT_NAME_TO_IDS).flat().map(getCanonicalAgentId)));
+    const registrations = await prisma.agent_registrations.findMany({
+      where: { id: { in: allMemberIds } },
+      select: { id: true, name: true, type: true }
+    });
+
+    const registrationMap = new Map(registrations.map(item => [item.id, item]));
+
+    const manifestMap = new Map(listAgentManifest().map(item => [item.id, item]));
+
+    const orchestrators = ORCHESTRATOR_RELATIONS.map((relation) => {
+      const orchestratorId = relation.orchestratorId;
+      const group = relation.group;
+      const memberAgentIds = relation.members || [];
+      const members = memberAgentIds.map((agentId) => {
+        const canonicalId = getCanonicalAgentId(agentId);
+        const registration = registrationMap.get(canonicalId);
+        const manifestEntry = manifestMap.get(canonicalId);
+        return {
+          agentId: canonicalId,
+          name: registration?.name || manifestEntry?.name || canonicalId,
+          role: inferRuntimeRole(agentId, registration?.type)
+        };
+      });
+
+      return {
+        orchestratorId,
+        group,
+        members
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        orchestrators
+      }
+    });
+  } catch (error: any) {
+    console.error('获取编排器关系失败:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取编排器关系失败',
+        status: 500
+      }
+    });
+  }
+});
+
+/**
  * 获取 Agent 运行状态
  * GET /api/admin/agents/status
  */
 router.get('/agents/status', async (req: Request, res: Response) => {
   try {
-    const monitoredAgentOrder = [
-      'RequirementCollection',
-      'PathPlanning',
-      'Teaching',
-      'LearningCompanion',
-      'SessionEvaluation',
-      'Summary'
-    ];
-
-    // Agent ID 到流程阶段的映射
-    const agentIdToName: Record<string, string> = {
-      'goal-conversation': 'RequirementCollection',
-      'goal-conversation-agent': 'RequirementCollection',
-      'path-agent': 'PathPlanning',
-      'generic-planner': 'PathPlanning',
-      'content-agent': 'Teaching',
-      'content-agent-v3': 'Teaching',
-      'content-agent-v5': 'Teaching',
-      'tutor-agent': 'Teaching',
-      'tutor-core': 'Teaching',
-      'basic-generator': 'Teaching',
-      'basic-extractor': 'Teaching',
-      'peer-agent': 'LearningCompanion',
-      'session-evaluation-agent': 'SessionEvaluation',
-      'summary-agent': 'Summary'
-    };
-
     // 获取所有有记录的 Agent ID
     const agentIdsWithLogs = await prisma.agent_call_logs.groupBy({
       by: ['agentId'],
@@ -280,6 +747,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
         { name: 'RequirementCollection', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'PathPlanning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'Teaching', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
+        { name: 'TeachingOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearningCompanion', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'SessionEvaluation', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'Summary', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
@@ -292,8 +760,8 @@ router.get('/agents/status', async (req: Request, res: Response) => {
 
     const rawStatuses = await Promise.all(
       agentIdsWithLogs.map(async ({ agentId }) => {
-        const agentName = agentIdToName[agentId];
-        if (!agentName || !monitoredAgentOrder.includes(agentName)) {
+        const agentName = AGENT_ID_TO_NAME[agentId];
+        if (!agentName || !MONITORED_AGENT_ORDER.includes(agentName)) {
           return null;
         }
         
@@ -378,7 +846,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
       });
     }
 
-    const agentStatuses = monitoredAgentOrder.map(name => {
+    const agentStatuses = MONITORED_AGENT_ORDER.map(name => {
       const data = merged.get(name);
       if (!data) {
         return {
@@ -432,42 +900,83 @@ router.get('/agents/status', async (req: Request, res: Response) => {
  */
 router.get('/agents/logs', async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 20, agentName, status, keyword, timeRange } = req.query;
+    const {
+      page = 1,
+      limit = 20,
+      agentName,
+      agentId,
+      traceId,
+      sessionId,
+      status,
+      keyword,
+      timeRange
+    } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
+    const timeoutErrorSignals = [
+      'timeout',
+      'timed out',
+      'etimedout',
+      'deadline exceeded',
+      'request timeout',
+      'socket hang up'
+    ];
+
+    const buildTimeoutCondition = () => ({
+      OR: [
+        { errorCode: { contains: 'TIMEOUT' } },
+        ...timeoutErrorSignals.map(signal => ({ error: { contains: signal } }))
+      ]
+    });
+
     // Agent Name 到 Agent ID 的映射（反向查找）
-    const nameToAgentIds: Record<string, string[]> = {
-      RequirementCollection: ['goal-conversation', 'goal-conversation-agent'],
-      PathPlanning: ['path-agent', 'generic-planner'],
-      Teaching: ['content-agent', 'content-agent-v3', 'content-agent-v5', 'tutor-agent', 'tutor-core', 'basic-generator', 'basic-extractor'],
-      LearningCompanion: ['peer-agent'],
-      SessionEvaluation: ['session-evaluation-agent'],
-      Summary: ['summary-agent']
+    const monitoredAgentIds = Array.from(new Set(Object.values(AGENT_NAME_TO_IDS).flat()));
+
+    const where: any = {
+      agentId: { in: monitoredAgentIds },
+      AND: [] as any[]
     };
 
-    const monitoredAgentIds = Array.from(new Set(Object.values(nameToAgentIds).flat()));
-
-    // Agent ID 到 Agent Name 的反向映射
-    const agentIdToName: Record<string, string> = {};
-    for (const [name, ids] of Object.entries(nameToAgentIds)) {
-      for (const id of ids) {
-        agentIdToName[id] = name;
-      }
-    }
-
-    const where: any = {};
-    where.agentId = { in: monitoredAgentIds };
-
     if (agentName) {
-      const agentIds = nameToAgentIds[agentName as string];
+      const agentIds = AGENT_NAME_TO_IDS[agentName as string];
       if (agentIds) {
         where.agentId = { in: agentIds };
       } else {
         where.agentId = agentName;
       }
     }
+
+    if (agentId) {
+      const requestedAgentId = String(agentId);
+      const canonicalAgentId = getCanonicalAgentId(requestedAgentId);
+      const manifestEntry = getAgentManifest(canonicalAgentId);
+      const candidateIds = Array.from(new Set([
+        canonicalAgentId,
+        ...(manifestEntry?.aliases || [])
+      ]));
+
+      where.agentId = candidateIds.length === 1
+        ? candidateIds[0]
+        : { in: candidateIds };
+    }
+
+    if (traceId) {
+      where.AND.push({ traceId: { contains: String(traceId) } });
+    }
+
+    if (sessionId) {
+      where.AND.push({ metadata: { contains: String(sessionId) } });
+    }
     if (status) {
-      where.success = status === 'success';
+      if (status === 'success') {
+        where.AND.push({ success: true });
+      } else if (status === 'error') {
+        where.AND.push({ success: false });
+        where.AND.push({ NOT: buildTimeoutCondition() });
+      } else if (status === 'timeout') {
+        where.AND.push({ success: false });
+        where.AND.push(buildTimeoutCondition());
+      }
     }
 
     // 时间范围筛选
@@ -503,14 +1012,42 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     // 关键词搜索（搜索 input, output, error 字段）
     if (keyword) {
       const searchTerm = String(keyword);
-      where.OR = [
-        { input: { contains: searchTerm } },
-        { output: { contains: searchTerm } },
-        { error: { contains: searchTerm } },
-      ];
+      where.AND.push({
+        OR: [
+          { input: { contains: searchTerm } },
+          { output: { contains: searchTerm } },
+          { error: { contains: searchTerm } },
+        ]
+      });
     }
 
-    const [logs, total] = await Promise.all([
+    if (!where.AND.length) {
+      delete where.AND;
+    }
+
+    const buildStatusLabel = (log: { success: boolean; errorCode: string | null; error: string | null }) => {
+      if (log.success) return 'success';
+
+      const errorCode = String(log.errorCode || '').toLowerCase();
+      const errorMessage = String(log.error || '').toLowerCase();
+      const isTimeout = timeoutErrorSignals.some(signal =>
+        errorCode.includes(signal) || errorMessage.includes(signal)
+      );
+
+      return isTimeout ? 'timeout' : 'error';
+    };
+
+    const extractSessionIdFromMetadata = (metadata: string | null) => {
+      if (!metadata) return null;
+      try {
+        const parsed = JSON.parse(metadata);
+        return parsed?.requestContext?.sessionId || parsed?.sessionId || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const [logs, total, successCount, timeoutCount, errorCount] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where,
         skip,
@@ -518,18 +1055,46 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
       }),
       prisma.agent_call_logs.count({ where }),
+      prisma.agent_call_logs.count({
+        where: {
+          ...where,
+          success: true
+        }
+      }),
+      prisma.agent_call_logs.count({
+        where: {
+          ...where,
+          success: false,
+          AND: [
+            ...(where.AND || []),
+            buildTimeoutCondition()
+          ]
+        }
+      }),
+      prisma.agent_call_logs.count({
+        where: {
+          ...where,
+          success: false,
+          AND: [
+            ...(where.AND || []),
+            { NOT: buildTimeoutCondition() }
+          ]
+        }
+      }),
     ]);
 
     // 转换日志格式以兼容前端
     const formattedLogs = logs.map(log => ({
       id: log.id,
-      agentName: agentIdToName[log.agentId] || log.agentId,
+      agentName: AGENT_ID_TO_NAME[log.agentId] || log.agentId,
       agentId: log.agentId,
       action: 'invoke',
-      status: log.success ? 'success' : 'error',
+      status: buildStatusLabel(log),
       input: log.input,
       output: log.output,
       error: log.error,
+      traceId: log.traceId,
+      sessionId: extractSessionIdFromMetadata(log.metadata),
       durationMs: log.durationMs,
       createdAt: log.calledAt,
       metadata: log.metadata,
@@ -539,6 +1104,12 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       success: true,
       data: {
         logs: formattedLogs,
+        stats: {
+          total,
+          success: successCount,
+          timeout: timeoutCount,
+          error: errorCount
+        },
         pagination: {
           total,
           page: Number(page),

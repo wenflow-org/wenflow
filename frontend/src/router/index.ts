@@ -110,6 +110,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '开发者接入', requiresAuth: true }
   },
   {
+    path: '/user/agent-model-settings',
+    name: 'UserAgentModelSettings',
+    component: () => import('@/views/user/AgentModelSettings.vue'),
+    meta: { title: '模型偏好设置', requiresAuth: true }
+  },
+  {
     path: '/goal-conversation',
     name: 'GoalConversation',
     component: () => import('@/views/GoalConversation.vue'),
@@ -161,7 +167,13 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'agents',
-        redirect: '/admin/execution-logs'
+        redirect: '/admin/agent-registry'
+      },
+      {
+        path: 'agent-registry',
+        name: 'AdminAgentRegistry',
+        component: () => import('@/views/admin/AgentRegistry.vue'),
+        meta: { title: 'Agent 注册管理', requiresAdminAuth: true }
       },
       {
         path: 'conversations',
@@ -172,6 +184,18 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminExecutionLogs',
         component: () => import('@/views/admin/ExecutionLogs.vue'),
         meta: { title: 'Agent 执行日志', requiresAdminAuth: true }
+      },
+      {
+        path: 'orchestrators',
+        name: 'AdminOrchestrators',
+        component: () => import('@/views/admin/Orchestrators.vue'),
+        meta: { title: '编排器视图', requiresAdminAuth: true }
+      },
+      {
+        path: 'manifest-diagnostics',
+        name: 'AdminManifestDiagnostics',
+        component: () => import('@/views/admin/ManifestDiagnostics.vue'),
+        meta: { title: '架构诊断', requiresAdminAuth: true }
       },
 
       {
@@ -205,6 +229,12 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'agent-lab',
         redirect: '/admin/dashboard'
+      },
+      {
+        path: 'agent-model-configs',
+        name: 'AdminAgentModelConfigs',
+        component: () => import('@/views/admin/AgentModelConfig.vue'),
+        meta: { title: 'Agent 模型配置', requiresAdminAuth: true }
       }
     ]
   }

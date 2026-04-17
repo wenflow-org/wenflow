@@ -7,7 +7,7 @@ import achievementService from '../achievements/achievement.service';
 import { updateLearningMetrics } from '../metrics/LearningMetricService';
 import { progressAgentHandler } from '../../agents/progress-agent';
 import type { AgentInput, AgentContext } from '../../agents/protocol';
-import { runWithContext } from '../../gateway/openai-client';
+import { runWithContext } from '../../gateway/api-gateway/context';
 
 // Anderson 框架 Skills
 import { executeSkill } from '../../skills';

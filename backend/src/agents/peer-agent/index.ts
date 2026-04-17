@@ -5,9 +5,12 @@
 
 import prisma from '../../config/database';
 import { v4 as uuidv4 } from 'uuid';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../protocol';
+
+type MessageRole = 'user' | 'assistant' | 'system';
+interface ChatMessage { role: MessageRole; content: string }
 
 const AGENT_ID = 'peer-agent';
 
@@ -106,10 +109,7 @@ export class PeerAgent {
   };
 
   private readonly config = {
-    temperature: 0.8,
-    maxTokens: 500,
     timeout: 30000,
-    model: 'deepseek-chat',
   };
 
   async discuss(input: PeerDiscussionInput): Promise<PeerDiscussionOutput> {
@@ -146,16 +146,14 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
 
       const userPrompt = `请生成一段同伴讨论消息：${contextSection}${studentMessageSection}`;
 
-      const client = getOpenAIClient();
-      const response = await client.chatCompletion({
-        model: this.config.model || 'deepseek-chat',
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = { agentId: 'peer-agent' };
+      const response = await gateway.execute({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
-        ],
-        temperature: this.config.temperature,
-        max_tokens: this.config.maxTokens,
-      });
+        ]
+      }, caller, { userId: 'system' });
 
       const message = response.choices[0]?.message?.content || '';
 

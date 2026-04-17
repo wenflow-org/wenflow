@@ -815,46 +815,86 @@ model user_skill_configs {
 }
 
 model users {
-  id                     String                   @id
-  email                  String                   @unique
-  name                   String
-  password               String
-  role                   String                   @default("user")
-  currentLevel           String                   @default("beginner")
-  xp                     Int                      @default(0)
-  isAdmin                Boolean                  @default(false)
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime
-  lastLoginAt            DateTime?
-  achievements           achievements[]
-  content_feedback       content_feedback[]
-  dialogue_sessions      dialogue_sessions[]
-  goal_conversations     goal_conversations[]
-  interactive_sessions   interactive_sessions[]
-  learning_goals         learning_goals[]
-  learning_metrics       learning_metrics[]
-  learning_paths         learning_paths[]
-  learning_sessions      learning_sessions[]
-  path_decompositions    path_decompositions[]
-  student_baselines      student_baselines?
-  subtasks               subtasks[]
-  user_agent_configs     user_agent_configs[]
-  user_api_configs       user_api_configs?
-  user_code_repositories user_code_repositories[]
-  user_mcp_configs       user_mcp_configs?
-  user_skill_configs     user_skill_configs[]
+  id                       String                    @id
+  email                    String                    @unique
+  name                     String
+  password                 String
+  role                     String                    @default("user")
+  currentLevel             String                    @default("beginner")
+  xp                       Int                       @default(0)
+  isAdmin                  Boolean                   @default(false)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime
+  lastLoginAt              DateTime?
+  achievements             achievements[]
+  content_feedback         content_feedback[]
+  dialogue_sessions        dialogue_sessions[]
+  goal_conversations       goal_conversations[]
+  interactive_sessions     interactive_sessions[]
+  learning_goals           learning_goals[]
+  learning_metrics         learning_metrics[]
+  learning_paths           learning_paths[]
+  learning_sessions        learning_sessions[]
+  path_decompositions      path_decompositions[]
+  student_baselines        student_baselines?
+  subtasks                 subtasks[]
+  user_agent_configs       user_agent_configs[]
+  user_api_configs         user_api_configs?
+  user_code_repositories   user_code_repositories[]
+  user_mcp_configs         user_mcp_configs?
+  user_skill_configs       user_skill_configs[]
+  agentModelConfigs        user_agent_model_configs[]
 }
 
 model platform_api_configs {
-  id                String   @id @default("platform")
-  apiUrl            String?
-  apiKey            String?
-  availableModels   String?
-  defaultModel      String?
-  defaultReasoningModel String?
-  defaultEvaluationModel String?
-  connectionStatus  String   @default("unknown")
-  lastCheckedAt     DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @default(now())
+  id                      String    @id @default("platform")
+  apiUrl                  String?
+  apiKey                  String?
+  availableModels         String?
+  defaultModel            String?
+  defaultReasoningModel   String?
+  defaultEvaluationModel  String?
+  connectionStatus        String    @default("unknown")
+  lastCheckedAt           DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now())
+  defaultTemperature      Float     @default(0.7)
+  defaultMaxTokens        Int       @default(2000)
+  reasoningEndpoint       String?
+  lightEndpoint           String?
+  chatModels              String?
+  reasoningModels         String?
+  lightModels             String?
+}
+
+model agent_model_configs {
+  id          String    @id @default(cuid())
+  agentId     String    @unique
+  tier        String    @default("chat")
+  model       String?
+  endpoint    String?
+  apiKey      String?
+  temperature Float     @default(0.7)
+  maxTokens   Int       @default(2000)
+  priority    Int       @default(0)
+  enabled     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model user_agent_model_configs {
+  id          String    @id @default(cuid())
+  userId      String
+  agentId     String
+  model       String?
+  endpoint    String?
+  apiKey      String?
+  temperature Float?
+  maxTokens   Int?
+  enabled     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentId])
 }

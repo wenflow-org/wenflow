@@ -25,7 +25,7 @@
           <el-select v-model="filters.agentId" placeholder="全部" clearable>
             <el-option label="Path Agent" value="path-agent" />
             <el-option label="Content Agent" value="content-agent" />
-            <el-option label="Tutor Agent" value="tutor-agent" />
+            <el-option label="AI Teaching Agent" value="ai-teaching-agent" />
             <el-option label="Progress Agent" value="progress-agent" />
           </el-select>
         </el-form-item>
@@ -530,13 +530,10 @@ const formatAgentId = (logOrAgentId: any) => {
   // 友好显示映射
   const agentNames: Record<string, string> = {
     'path-agent': '学习路径规划',
-    'content-agent': '内容生成',
     'content-agent-v3': '对话式内容',
-    'content-agent-v5': '授课内容生成',
     'goal-conversation-agent': '目标对话',
     'ai-teaching-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
-    'tutor-agent': 'AI 辅导',
     'progress-agent': '进度追踪',
     'user-profile-agent': '用户画像',
     'course-design': '课程设计',
@@ -582,7 +579,6 @@ const getCapabilityType = (agentId: string) => {
     'content-agent-v5': 'teaching',
     'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
-    'tutor-agent': 'tutoring',
     'progress-agent': 'tracking',
     'user-profile-agent': 'profile',
     'unknown': 'system',

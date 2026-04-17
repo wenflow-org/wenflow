@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import apiConfigService from '../../services/apiConfig.service';
-import { refreshOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway } from '../../gateway/api-gateway';
 
 const router = Router();
 
@@ -19,6 +19,13 @@ router.get('/', async (req, res) => {
         defaultModel: config.defaultModel,
         defaultReasoningModel: config.defaultReasoningModel,
         defaultEvaluationModel: config.defaultEvaluationModel,
+        defaultTemperature: config.defaultTemperature ?? 0.7,
+        defaultMaxTokens: config.defaultMaxTokens ?? 2048,
+        reasoningEndpoint: config.reasoningEndpoint,
+        lightEndpoint: config.lightEndpoint,
+        chatModels: config.chatModels || [],
+        reasoningModels: config.reasoningModels || [],
+        lightModels: config.lightModels || [],
         connectionStatus: platformDefault.connectionStatus
       }
     });
@@ -32,7 +39,21 @@ router.get('/', async (req, res) => {
 
 router.put('/', async (req, res) => {
   try {
-    const { apiUrl, apiKey, availableModels, defaultModel, defaultReasoningModel, defaultEvaluationModel } = req.body;
+    const { 
+      apiUrl, 
+      apiKey, 
+      availableModels, 
+      defaultModel, 
+      defaultReasoningModel, 
+      defaultEvaluationModel,
+      defaultTemperature,
+      defaultMaxTokens,
+      reasoningEndpoint,
+      lightEndpoint,
+      chatModels,
+      reasoningModels,
+      lightModels
+    } = req.body;
 
     const currentConfig = await apiConfigService.getConfig();
     const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim().length > 0
@@ -51,11 +72,17 @@ router.put('/', async (req, res) => {
       availableModels: modelsArray,
       defaultModel,
       defaultReasoningModel,
-      defaultEvaluationModel
+      defaultEvaluationModel,
+      defaultTemperature: defaultTemperature ?? currentConfig.defaultTemperature,
+      defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
+      reasoningEndpoint,
+      lightEndpoint,
+      chatModels: chatModels || currentConfig.chatModels,
+      reasoningModels: reasoningModels || currentConfig.reasoningModels,
+      lightModels: lightModels || currentConfig.lightModels
     });
 
-    // 刷新 OpenAI 客户端，使新配置立即生效
-    await refreshOpenAIClient();
+    getAPIGateway().invalidateCache();
 
     res.json({
       success: true,
@@ -66,7 +93,14 @@ router.put('/', async (req, res) => {
         availableModels: updatedConfig.availableModels,
         defaultModel: updatedConfig.defaultModel,
         defaultReasoningModel: updatedConfig.defaultReasoningModel,
-        defaultEvaluationModel: updatedConfig.defaultEvaluationModel
+        defaultEvaluationModel: updatedConfig.defaultEvaluationModel,
+        defaultTemperature: updatedConfig.defaultTemperature,
+        defaultMaxTokens: updatedConfig.defaultMaxTokens,
+        reasoningEndpoint: updatedConfig.reasoningEndpoint,
+        lightEndpoint: updatedConfig.lightEndpoint,
+        chatModels: updatedConfig.chatModels,
+        reasoningModels: updatedConfig.reasoningModels,
+        lightModels: updatedConfig.lightModels
       },
       message: '配置已保存并生效'
     });
@@ -110,7 +144,7 @@ router.post('/test', async (req, res) => {
 router.post('/reset', async (req, res) => {
   try {
     await apiConfigService.resetConfig();
-    await refreshOpenAIClient();
+    getAPIGateway().invalidateCache();
     
     res.json({
       success: true,

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { RequestContext, requestContextStorage } from '../gateway/openai-client';
+import { RequestContext, requestContextStorage } from '../gateway/api-gateway/context';
 
 /**
  * ACP (Agent Call Protocol) 上下文中间件

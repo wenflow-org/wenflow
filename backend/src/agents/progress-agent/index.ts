@@ -14,8 +14,11 @@ import {
 } from '../protocol';
 import { EventBus, getEventBus, LearningEvent } from '../../gateway/event-bus';
 import { PrismaClient } from '@prisma/client';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../../services/learning/cognitive-engagement.service';
+
+type MessageRole = 'user' | 'assistant' | 'system';
+interface ChatMessage { role: MessageRole; content: string }
 
 /**
  * Progress Agent 定义
@@ -102,13 +105,15 @@ const THRESHOLDS = {
 async function generateLearningReport(
   metrics: ProgressMetrics,
   signals: LearningSignal[],
-  taskData: { taskTitle?: string; timeSpent?: number; difficulty?: number }
+  taskData: { taskTitle?: string; timeSpent?: number; difficulty?: number },
+  userId?: string
 ): Promise<{ reasoning: string; suggestion: string }> {
   const fallbackReasoning = '基于当前学习数据，你正在稳步推进学习进度。继续保持当前的学习节奏。';
   const fallbackSuggestion = '建议继续保持当前的学习节奏，遇到困难时及时回顾之前的知识点。';
 
   try {
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: 'progress-agent' };
     
     const signalDescriptions = signals.map(s => {
       const typeMap: Record<string, string> = {
@@ -166,11 +171,7 @@ ${signalDescriptions || '无明显信号'}
       }
     ];
 
-    const response = await client.chatCompletion({
-      messages,
-      temperature: 0.7,
-      max_tokens: 300
-    });
+    const response = await gateway.execute({ messages }, caller, { userId });
 
     const content = response.choices[0]?.message?.content || '';
     
@@ -264,7 +265,7 @@ export async function progressAgentHandler(
         taskTitle: data.taskTitle,
         timeSpent: data.timeSpent,
         difficulty: data.subjectiveDifficulty
-      });
+      }, userId);
       reasoning = report.reasoning;
       suggestion = report.suggestion;
     }

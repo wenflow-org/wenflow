@@ -13,7 +13,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 export const batchAndersonLabelerDefinition: SkillDefinition = {
   name: 'batch-anderson-labeler',
@@ -173,14 +173,9 @@ ${tasksJson}
       { role: 'user', content: contextPrompt }
     ];
     
-    const client = getOpenAIClient();
-    console.log('[BatchAndersonLabeler] 调用 LLM...');
-    
-    const response = await client.chatCompletion({ 
-      messages, 
-      temperature: 0.3,
-      max_tokens: 4000
-    });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'batch-anderson-labeler' };
+    const response = await gateway.execute({ messages }, caller, {});
     
     console.log('[BatchAndersonLabeler] 响应结构:', JSON.stringify({
       id: response.id,

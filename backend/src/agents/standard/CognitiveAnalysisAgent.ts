@@ -6,8 +6,11 @@
 
 import { BaseAgent } from '../../core/agent/BaseAgent';
 import { IAgentInput, IAgentOutput, IAgentCapabilities, IAgentContext } from '../../core/agent/ILearningAgent';
-import { getOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
+
+type MessageRole = 'user' | 'assistant' | 'system';
+interface ChatMessage { role: MessageRole; content: string }
 
 export enum CognitiveLevel {
   REMEMBER = 'remember',      // 记忆 - 识别、回忆
@@ -87,10 +90,7 @@ export class CognitiveAnalysisAgent extends BaseAgent {
 
   constructor() {
     super({
-      temperature: 0.5,
-      maxTokens: 2000,
       timeout: 30000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
     });
 
     this.systemPrompt = `你是一位学习认知分析专家。你的任务是分析学生的学习对话，评估其认知层级和理解状态。
@@ -139,16 +139,14 @@ export class CognitiveAnalysisAgent extends BaseAgent {
     const analysisPrompt = this.buildAnalysisPrompt(prompt, dialogueContext);
 
     try {
-      const client = getOpenAIClient();
-      const response = await client.chatCompletion({
-        model: process.env.AI_MODEL || 'deepseek-chat',
+      const gateway = getAPIGateway();
+      const caller: CallerInfo = { agentId: 'cognitive-analysis-agent' };
+      const response = await gateway.execute({
         messages: [
           { role: 'system', content: this.systemPrompt },
           { role: 'user', content: analysisPrompt },
-        ],
-        temperature: this.config.temperature,
-        max_tokens: this.config.maxTokens,
-      });
+        ]
+      }, caller, { userId: dialogueContext?.userId });
 
       const content = response.choices[0]?.message?.content || '';
 

@@ -5,7 +5,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
 import arenaService from '../../services/arena/arena.service';
 import goalConversationService from '../../services/learning/goal-conversation.service';
-import { setRequestContext, runWithContext } from '../../gateway/openai-client';
+import { runWithContext } from '../../gateway/api-gateway/context';
 
 const router = express.Router();
 

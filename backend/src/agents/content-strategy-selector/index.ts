@@ -65,7 +65,7 @@ export interface StrategyConfig {
 const STRATEGY_CONFIGS: StrategyConfig[] = [
   {
     strategy: 'interactive',
-    agentId: 'content-agent-interactive',
+    agentId: 'content-agent-v3',
     description: '高认知负荷的概念学习，需要分段讲解+思考停顿',
     conditions: {
       cognitiveLoad: ['high'],

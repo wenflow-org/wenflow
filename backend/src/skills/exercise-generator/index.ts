@@ -8,7 +8,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 /**
  * Exercise Generator Skill 定义
@@ -205,15 +205,13 @@ export async function exerciseGenerator(
 
     const userPrompt = buildUnifiedPrompt(topic, questionTypes, questionCount, learningObjectives, difficulty, userLevel, context);
     
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({ 
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ], 
-      temperature: 0.6,
-      max_tokens: 4000  // 生成多道练习题和详细解析需要更多空间
-    });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'exercise-generator' };
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
+    const response = await gateway.execute({ messages }, caller, {});
     
     const content = response.choices[0]?.message.content || '';
     

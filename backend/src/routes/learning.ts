@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 import { ContentAgentIntegration } from '../agents/coordinator/content-agent-integration';
 import { learningSessionService } from '../services/learning/learning-session.service';
 import { dialogueLearningService } from '../services/learning/dialogue-learning.service';
+import pathOrchestrator from '../orchestrators/path.orchestrator';
 
 const router = express.Router();
 
@@ -178,7 +179,7 @@ router.post('/paths/create', async (req, res, next) => {
       }
     }
     
-    learningService.generateLearningPath({
+    pathOrchestrator.runAsync({
       userId,
       description: data.description,
       subject: data.subject,
@@ -186,18 +187,20 @@ router.post('/paths/create', async (req, res, next) => {
       deadlineText: data.deadlineText,
       existingPathId: placeholderPath.id,
       userProfile: data.userProfile
-    }).then(async (result) => {
-      logger.info(`学习路径生成完成: ${placeholderPath.id}`);
-    }).catch(async (error) => {
-      logger.error(`学习路径生成失败: ${placeholderPath.id}`, error);
-      // 标记为失败
-      await prisma.learning_paths.update({
-        where: { id: placeholderPath.id },
-        data: {
-          status: 'failed',
-          updatedAt: new Date()
-        }
-      });
+    }, {
+      onSuccess: () => {
+        logger.info(`学习路径生成完成: ${placeholderPath.id}`);
+      },
+      onError: async (error) => {
+        logger.error(`学习路径生成失败: ${placeholderPath.id}`, error);
+        await prisma.learning_paths.update({
+          where: { id: placeholderPath.id },
+          data: {
+            status: 'failed',
+            updatedAt: new Date()
+          }
+        });
+      }
     });
 
 // 3. 立即返回占位课程 ID
@@ -222,7 +225,7 @@ router.post('/paths/generate', async (req, res, next) => {
     const userId = req.user.userId;
     const data = generatePathSchema.parse(req.body);
 
-const result = await learningService.generateLearningPath({
+const result = await pathOrchestrator.generate({
       userId,
       description: data.description,
       subject: data.subject,
@@ -338,7 +341,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
     });
 
     // 异步重新生成路径
-    learningService.generateLearningPath({
+    pathOrchestrator.runAsync({
       userId,
       description: path.description,
       subject: path.subject,
@@ -346,8 +349,10 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       deadlineText: path.deadlineText || undefined,
       existingPathId: pathId,
       userProfile: {}
-    }).catch((error) => {
-      logger.error(`重试生成路径失败：${pathId}`, error);
+    }, {
+      onError: (error) => {
+        logger.error(`重试生成路径失败：${pathId}`, error);
+      }
     });
 
     res.json({

@@ -14,7 +14,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 export const goalTypeIdentifierDefinition: SkillDefinition = {
   name: 'goal-type-identifier',
@@ -169,8 +169,9 @@ ${domain ? `领域：${domain}` : ''}
       { role: 'user', content: userPrompt }
     ];
     
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({ messages, temperature: 0.3 });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'goal-type-identifier' };
+    const response = await gateway.execute({ messages }, caller, {});
     const content = response.choices[0]?.message.content || '';
     
     const result = parseGoalTypeResult(content);

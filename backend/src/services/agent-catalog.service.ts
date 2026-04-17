@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { getOfficialAgentDefinitionsForUsers } from './agent-manifest.service';
 
 export type AgentLifecycleStatus = 'draft' | 'staging' | 'published';
 
@@ -18,17 +19,7 @@ interface AgentCatalogRecord {
 
 type AgentCatalog = Record<string, AgentCatalogRecord>;
 
-export const OFFICIAL_AGENT_DEFINITIONS: AgentDefinition[] = [
-  { id: 'goal-conversation-agent', name: '目标对话 Agent', description: '收集学习目标与上下文', category: 'learning' },
-  { id: 'path-agent', name: '学习路径规划 Agent', description: '规划学习路径', category: 'learning' },
-  { id: 'content-agent', name: '内容生成 Agent', description: '生成学习内容', category: 'content' },
-  { id: 'content-agent-v3', name: '对话式内容 Agent', description: '对话式内容生成', category: 'content' },
-  { id: 'content-agent-v5', name: '授课内容生成 Agent', description: '授课型内容生成', category: 'content' },
-  { id: 'ai-teaching-agent', name: 'AI 授课 Agent', description: 'AI 互动授课', category: 'teaching' },
-  { id: 'tutor-agent', name: 'AI 辅导 Agent', description: '个性化辅导', category: 'tutoring' },
-  { id: 'progress-agent', name: '进度追踪 Agent', description: '追踪学习进度', category: 'tracking' },
-  { id: 'user-profile-agent', name: '用户画像 Agent', description: '分析用户特征', category: 'analysis' }
-];
+export const OFFICIAL_AGENT_DEFINITIONS: AgentDefinition[] = getOfficialAgentDefinitionsForUsers();
 
 const catalogPath = path.join(__dirname, '../../config/agent-catalog.json');
 

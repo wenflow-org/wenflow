@@ -17,11 +17,16 @@ import {
   MilestoneOutput,
   SubtaskOutput
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
+
+type MessageRole = 'user' | 'assistant' | 'system';
+type ChatMessage = { role: MessageRole; content: string };
 import { EventBus, getEventBus } from '../../gateway/event-bus';
 import { textStructureAnalyzer } from '../../skills/text-structure-analyzer';
 import { timeEstimator } from '../../skills/time-estimator';
 import { logger } from '../../utils/logger';
+
+const PATH_AGENT_MAX_TOKENS = 6000;
 
 interface PathOutput {
   id?: string;
@@ -188,14 +193,13 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   context: string;
   confidence: number;
 }> {
-  const client = getOpenAIClient();
-  
-  // 优先使用结构化数据（如果有）
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { agentId: 'path-agent' };
+   
   const structuredData = input.structuredData as any;
   const confirmedProposal = input.confirmedProposal as any;
   const conversationHistory = input.conversationHistory as any[] || [];
   
-  // 如果提供了结构化数据，直接使用
   if (structuredData) {
     logger.info('使用结构化数据', {
       learner: structuredData.learner,
@@ -203,7 +207,6 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       context: structuredData.learning_context
     });
     
-    // 识别场景类型
     let scenario = 'standard';
     if (structuredData.learner?.identity === '帮他人') {
       scenario = 'proxy_learning';
@@ -259,9 +262,17 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     { role: 'user', content: `用户目标：${input.goal}
 ${input.currentLevel ? `当前水平：${input.currentLevel}` : ''}
 ${input.timePerDay ? `每天可用时间：${input.timePerDay}` : ''}` }
-  ];
-
-  const response = await client.chatCompletion({ messages, temperature: 0.3 });
+];
+ 
+  const userId = context?.userId || input?.metadata?.userId;
+  const response = await gateway.execute(
+    {
+      messages,
+      max_tokens: PATH_AGENT_MAX_TOKENS
+    },
+    caller,
+    { userId }
+  );
   const content = response.choices[0]?.message.content || '';
   
   try {
@@ -294,9 +305,9 @@ async function generatePath(
     conversationHistory?: any[];
   }
 ): Promise<PathOutput> {
-  const client = getOpenAIClient();
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { agentId: 'path-agent' };
   
-  // 从 analysis 中提取新增字段
   const confirmedProposal = analysis.confirmedProposal;
   const conversationHistory = analysis.conversationHistory;
   
@@ -377,13 +388,17 @@ ${conversationHistory.map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 4. 案例、数据、练习内容都必须与"${analysis.context || input.goal}"强相关` }
   ];
 
-  const response = await client.chatCompletion({ 
-    messages, 
-    temperature: 0.5,
-    max_tokens: 4000
-  });
+const userId = context?.userId || input?.metadata?.userId;
+  const response = await gateway.execute(
+    {
+      messages,
+      max_tokens: PATH_AGENT_MAX_TOKENS
+    },
+    caller,
+    { userId }
+  );
   const content = response.choices[0]?.message.content || '';
-  
+   
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -415,8 +430,9 @@ export async function replanPath(
   if (!currentPath) return currentPath;
   
   const eventBus = getEventBus();
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { agentId: 'path-agent' };
   
-  // 根据信号类型调整路径
   let adjustment = '';
   
   switch (signal.type) {
@@ -439,8 +455,6 @@ export async function replanPath(
       return currentPath;
   }
   
-  const client = getOpenAIClient();
-  
   const systemPrompt = `你是一位动态学习路径规划专家。
 根据用户的实时学习状态，调整里程碑式学习路径。
 调整要求：${adjustment}
@@ -456,11 +470,15 @@ ${JSON.stringify(currentPath, null, 2)}
   ];
 
   try {
-    const response = await client.chatCompletion({ 
-      messages, 
-      temperature: 0.3,
-      max_tokens: 4000
-    });
+    const userId = context?.userId;
+    const response = await gateway.execute(
+      {
+        messages,
+        max_tokens: PATH_AGENT_MAX_TOKENS
+      },
+      caller,
+      { userId }
+    );
     const content = response.choices[0]?.message.content || '';
     
     const jsonMatch = content.match(/\{[\s\S]*\}/);

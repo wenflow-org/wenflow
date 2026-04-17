@@ -81,6 +81,12 @@
           <div class="stat-trend">
             <span class="trend-positive">{{ stats.agents?.successRate || 100 }}%</span>
             <span class="trend-label">成功率</span>
+            <span class="trend-text">{{ stats.agents?.todayCalls || 0 }}</span>
+            <span class="trend-label">今日调用</span>
+          </div>
+          <div class="stat-subline">
+            <span>24h 活跃 Agent：{{ stats.agents?.activeAgents24h || 0 }}</span>
+            <span>今日超时：{{ stats.agents?.todayTimeouts || 0 }}</span>
           </div>
         </div>
       </el-card>
@@ -88,7 +94,7 @@
 
     <!-- Agent 运行状态 -->
     <div class="section">
-      <h3 class="section-title">🤖 Agent 运行状态</h3>
+      <h3 class="section-title">🤖 Agent / 编排器 运行状态</h3>
       <el-table :data="agentStatuses" stripe style="min-width: 100%">
         <el-table-column prop="name" label="Agent" min-width="140">
           <template #default="{ row }">
@@ -96,7 +102,7 @@
               <el-tag :type="getAgentTagType(row.status)" size="small">
                 {{ row.status }}
               </el-tag>
-              <span class="agent-name-text">{{ row.name }}</span>
+              <span class="agent-name-text">{{ getAgentDisplayName(row.name) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -129,6 +135,26 @@
       </el-table>
     </div>
 
+    <div class="section">
+      <h3 class="section-title">📈 最近 24 小时异常趋势</h3>
+      <div class="trend-panel" v-if="trendPoints.length > 0">
+        <div class="trend-row trend-row--head">
+          <span class="trend-time">时间</span>
+          <span class="trend-bars-label">调用 / 异常</span>
+          <span class="trend-values">数量</span>
+        </div>
+        <div class="trend-row" v-for="point in trendPoints" :key="point.time">
+          <span class="trend-time">{{ point.label }}</span>
+          <div class="trend-bars">
+            <div class="trend-bar trend-bar--calls" :style="{ width: `${(point.total / maxCalls) * 100}%` }"></div>
+            <div class="trend-bar trend-bar--issues" :style="{ width: `${((point.error + point.timeout) / maxIssues) * 100}%` }"></div>
+          </div>
+          <span class="trend-values">{{ point.total }} / {{ point.error + point.timeout }}</span>
+        </div>
+      </div>
+      <el-empty v-else description="暂无 24 小时趋势数据" />
+    </div>
+
     <!-- 最近活动 -->
     <div class="section">
       <h3 class="section-title">📝 最近活动</h3>
@@ -151,13 +177,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi';
 import { ElMessage } from 'element-plus';
 
 const stats = ref<any>({});
 const agentStatuses = ref<any[]>([]);
 const recentActivities = ref<any[]>([]);
+
+const trendPoints = computed(() => {
+  const points = stats.value?.agents?.last24h || [];
+  return points.slice(-12);
+});
+
+const maxCalls = computed(() => {
+  const max = trendPoints.value.reduce((acc: number, item: any) => Math.max(acc, item.total || 0), 0);
+  return max > 0 ? max : 1;
+});
+
+const maxIssues = computed(() => {
+  const max = trendPoints.value.reduce(
+    (acc: number, item: any) => Math.max(acc, (item.error || 0) + (item.timeout || 0)),
+    0
+  );
+  return max > 0 ? max : 1;
+});
 
 const loadOverview = async () => {
   try {
@@ -244,6 +288,20 @@ const getAgentTagType = (status: string) => {
     default:
       return 'info';
   }
+};
+
+const getAgentDisplayName = (name: string) => {
+  const map: Record<string, string> = {
+    RequirementCollection: '需求收集',
+    PathPlanning: '路径规划',
+    Teaching: '教学执行',
+    TeachingOrchestration: '教学编排',
+    LearningCompanion: '伴学介入',
+    SessionEvaluation: '会话评估',
+    Summary: '课后总结'
+  };
+
+  return map[name] || name;
 };
 
 const formatTime = (time: any) => {
@@ -341,8 +399,18 @@ onMounted(() => {
 .stat-trend {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-size: 0.875rem;
+}
+
+.stat-subline {
+  margin-top: 0.25rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .trend-positive {
@@ -384,6 +452,64 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 1rem;
+}
+
+.trend-panel {
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0.75rem 1rem;
+}
+
+.trend-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 90px;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed var(--border-default);
+}
+
+.trend-row:last-child {
+  border-bottom: none;
+}
+
+.trend-row--head {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-bottom-style: solid;
+}
+
+.trend-time {
+  font-family: monospace;
+  color: var(--text-primary);
+}
+
+.trend-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.trend-bar {
+  height: 7px;
+  border-radius: 999px;
+  min-width: 2px;
+}
+
+.trend-bar--calls {
+  background: color-mix(in srgb, var(--color-primary) 72%, white 28%);
+}
+
+.trend-bar--issues {
+  background: color-mix(in srgb, var(--color-danger) 72%, white 28%);
+}
+
+.trend-bars-label,
+.trend-values {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
 .agent-name {

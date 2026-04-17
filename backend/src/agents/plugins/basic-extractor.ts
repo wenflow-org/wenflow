@@ -9,7 +9,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../plugin-types';
-import { getOpenAIClient } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import axios from 'axios';
 
 /**
@@ -89,7 +89,8 @@ export const basicExtractor: AgentPlugin = {
   },
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: 'basic-extractor' };
     const startTime = Date.now();
 
     try {
@@ -128,12 +129,7 @@ export const basicExtractor: AgentPlugin = {
         }
       ];
 
-      const response = await client.chatCompletion({
-        messages,
-        temperature: this.config!.temperature,
-        max_tokens: this.config!.maxTokens,
-        model: this.config!.model
-      });
+      const response = await gateway.execute({ messages }, caller);
 
       const responseContent = response.choices[0]?.message.content || '{}';
 

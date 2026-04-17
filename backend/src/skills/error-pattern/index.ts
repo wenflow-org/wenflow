@@ -8,7 +8,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 /**
  * Error Pattern Skill 定义
@@ -165,7 +165,8 @@ async function generateCombinedErrorContent(
   userLevel: string,
   errorType: string
 ): Promise<{ commonErrors: ErrorPatternOutput['commonErrors']; debuggingSteps: string[] }> {
-  const client = getOpenAIClient();
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { skillId: 'error-pattern' };
   
   const errorTypeInstruction = {
     syntax: '请重点讲解语法错误。',
@@ -193,11 +194,7 @@ ${errorTypeInstruction}
     { role: 'user', content: prompt }
   ];
   
-  const response = await client.chatCompletion({ 
-    messages, 
-    temperature: 0.5,
-    max_tokens: 4000  // 详细错误模式分析和修复建议需要更多空间
-  });
+  const response = await gateway.execute({ messages }, caller, {});
   
   const content = response.choices[0]?.message.content || '';
   
@@ -384,7 +381,8 @@ async function diagnoseCode(
   topic: string,
   userLevel: string
 ): Promise<ErrorPatternOutput['diagnosis']> {
-  const client = getOpenAIClient();
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { skillId: 'error-pattern' };
   
   const prompt = `请诊断以下${language}代码中的错误：
 
@@ -406,11 +404,7 @@ async function diagnoseCode(
     { role: 'user', content: prompt }
   ];
   
-  const response = await client.chatCompletion({ 
-    messages, 
-    temperature: 0.3,
-    max_tokens: 1500  // 详细代码诊断需要更多空间
-  });
+  const response = await gateway.execute({ messages }, caller, {});
   
   const content = response.choices[0]?.message.content || '';
   

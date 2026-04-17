@@ -9,7 +9,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../../plugin-types';
-import { getOpenAIClient } from '../../../gateway/openai-client';
+import { getAPIGateway, CallerInfo } from '../../../gateway/api-gateway';
 
 /**
  * 基础内容生成插件
@@ -75,7 +75,8 @@ export const basicGenerator: AgentPlugin = {
   },
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
-    const client = getOpenAIClient();
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { agentId: 'basic-generator' };
     const startTime = Date.now();
 
     try {
@@ -104,17 +105,7 @@ export const basicGenerator: AgentPlugin = {
 
       
 
-            const response = await client.chatCompletion({
-
-              messages,
-
-              temperature: this.config!.temperature,
-
-              max_tokens: this.config!.maxTokens,
-
-              model: this.config!.model
-
-            });
+            const response = await gateway.execute({ messages }, caller);
 
       
 

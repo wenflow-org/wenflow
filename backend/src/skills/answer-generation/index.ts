@@ -10,7 +10,7 @@ import {
   AnswerGenerationOutput,
   SkillExecutionResult
 } from '../protocol';
-import { getOpenAIClient, ChatMessage } from '../../gateway/openai-client';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 
 /**
  * 答案生成 Skill 定义
@@ -203,12 +203,9 @@ ${STYLE_PROMPTS[style] || STYLE_PROMPTS.guided}
     });
     
     // 调用 AI
-    const client = getOpenAIClient();
-    const response = await client.chatCompletion({
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.7
-    });
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'answer-generation' };
+    const response = await gateway.execute({ messages }, caller, {});
     
     const answer = response.choices[0]?.message.content || '';
     

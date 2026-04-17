@@ -31,7 +31,7 @@ const WARMUP_CONFIG = {
   preloadAchievements: true,
   
   // 预加载的 Agent 配置
-  agentIds: ['content-agent-v3', 'tutor-agent', 'path-agent', 'goal-agent']
+  agentIds: ['content-agent-v3', 'ai-teaching-agent', 'path-agent', 'goal-agent']
 };
 
 /**
