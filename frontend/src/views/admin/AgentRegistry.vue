@@ -1,7 +1,10 @@
 <template>
   <div class="agent-registry-page">
     <div class="page-header">
-      <h2 class="page-title">🧩 Agent 注册管理</h2>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><Grid /></el-icon>
+        Agent 注册管理
+      </h2>
       <p class="page-subtitle">查看已注册 Agent 的状态、调用和版本信息</p>
     </div>
 
@@ -71,18 +74,124 @@
         <template #default="{ row }">{{ formatTime(row.lastActivity) }}</template>
       </el-table-column>
       <el-table-column prop="version" label="版本" width="90" align="center" />
+      <el-table-column label="操作" width="120" fixed="right">
+        <template #default="{ row }">
+          <el-button type="primary" link @click="openDesign(row)">查看设计</el-button>
+        </template>
+      </el-table-column>
     </el-table>
+
+    <el-drawer
+      v-model="designDrawerVisible"
+      :title="`Agent 设计详情 · ${currentDesign?.agentId || ''}`"
+      size="58%"
+      destroy-on-close
+    >
+      <div v-loading="designLoading" class="design-drawer">
+        <template v-if="currentDesign">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="名称">{{ currentDesign.basic.name }}</el-descriptions-item>
+            <el-descriptions-item label="版本">{{ currentDesign.basic.version }}</el-descriptions-item>
+            <el-descriptions-item label="类型">{{ currentDesign.basic.type }}</el-descriptions-item>
+            <el-descriptions-item label="分类">{{ currentDesign.basic.category }}</el-descriptions-item>
+            <el-descriptions-item label="角色">{{ currentDesign.runtime.role }}</el-descriptions-item>
+            <el-descriptions-item label="运行类型">{{ currentDesign.runtime.kind }}</el-descriptions-item>
+            <el-descriptions-item label="启用状态">
+              <el-tag :type="currentDesign.runtime.runtimeEnabled ? 'success' : 'info'" size="small">
+                {{ currentDesign.runtime.runtimeEnabled ? 'enabled' : 'disabled' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="输出协议">
+              <el-tag :type="currentDesign.runtime.ioContractVersion === 'agent-output-v1' ? 'success' : 'warning'" size="small">
+                {{ currentDesign.runtime.ioContractVersion }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="监控分组">{{ currentDesign.runtime.monitoringGroup || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="别名">{{ currentDesign.runtime.aliases.join(', ') || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="描述" :span="2">{{ currentDesign.basic.description || '-' }}</el-descriptions-item>
+          </el-descriptions>
+
+          <div class="chip-section">
+            <div class="chip-row">
+              <span class="chip-label">capabilities</span>
+              <el-tag v-for="item in currentDesign.definition.capabilities" :key="`cap-${item}`" size="small" effect="plain">{{ item }}</el-tag>
+              <span v-if="!currentDesign.definition.capabilities.length" class="empty">-</span>
+            </div>
+            <div class="chip-row">
+              <span class="chip-label">subscribes</span>
+              <el-tag v-for="item in currentDesign.definition.subscribes" :key="`sub-${item}`" size="small" effect="plain">{{ item }}</el-tag>
+              <span v-if="!currentDesign.definition.subscribes.length" class="empty">-</span>
+            </div>
+            <div class="chip-row">
+              <span class="chip-label">publishes</span>
+              <el-tag v-for="item in currentDesign.definition.publishes" :key="`pub-${item}`" size="small" effect="plain">{{ item }}</el-tag>
+              <span v-if="!currentDesign.definition.publishes.length" class="empty">-</span>
+            </div>
+          </div>
+
+          <el-tabs class="design-tabs">
+            <el-tab-pane label="Input Schema">
+              <el-table :data="inputSchemaRows" border size="small" empty-text="无 input schema">
+                <el-table-column prop="path" label="字段路径" min-width="240" />
+                <el-table-column prop="type" label="类型" width="120" />
+                <el-table-column prop="required" label="必填" width="90" />
+                <el-table-column prop="description" label="说明" min-width="220" />
+              </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="Output Schema">
+              <el-table :data="outputSchemaRows" border size="small" empty-text="无 output schema">
+                <el-table-column prop="path" label="字段路径" min-width="240" />
+                <el-table-column prop="type" label="类型" width="120" />
+                <el-table-column prop="required" label="必填" width="90" />
+                <el-table-column prop="description" label="说明" min-width="220" />
+              </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="Recent Samples">
+              <div class="sample-block">
+                <h4>agent_call_logs</h4>
+                <el-collapse>
+                  <el-collapse-item
+                    v-for="item in currentDesign.samples.agentCallLogs"
+                    :key="`call-${item.id}`"
+                    :title="`${formatTime(item.calledAt)} · ${item.success ? 'success' : 'error'} · ${item.durationMs || 0}ms`"
+                  >
+                    <pre class="sample-json">{{ prettyJson({ input: item.input, output: item.output, error: item.error }) }}</pre>
+                  </el-collapse-item>
+                </el-collapse>
+              </div>
+
+              <div class="sample-block">
+                <h4>arena_agent_logs</h4>
+                <el-collapse>
+                  <el-collapse-item
+                    v-for="item in currentDesign.samples.arenaAgentLogs"
+                    :key="`arena-${item.id}`"
+                    :title="`${formatTime(item.calledAt)} · ${item.success ? 'success' : 'error'} · ${item.durationMs || 0}ms`"
+                  >
+                    <pre class="sample-json">{{ prettyJson({ input: item.input, output: item.output, error: item.error }) }}</pre>
+                  </el-collapse-item>
+                </el-collapse>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </template>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { adminAgentsApi, type AdminRegistryAgent } from '@/api/adminApi';
+import { Grid } from '@element-plus/icons-vue';
+import { adminAgentsApi, type AdminRegistryAgent, type AgentDesignDetail } from '@/api/adminApi';
 
 const loading = ref(false);
 const summary = ref<{ total: number; active24h: number; neverCalled: number; unhealthy: number } | null>(null);
 const agents = ref<AdminRegistryAgent[]>([]);
+const designDrawerVisible = ref(false);
+const designLoading = ref(false);
+const currentDesign = ref<AgentDesignDetail | null>(null);
 const keyword = ref('');
 const lifecycle = ref('');
 const health = ref('');
@@ -114,6 +223,67 @@ const loadRegistry = async () => {
     ElMessage.error('加载 Agent 注册列表失败');
   } finally {
     loading.value = false;
+  }
+};
+
+interface SchemaRow {
+  path: string;
+  type: string;
+  required: 'yes' | 'no';
+  description: string;
+}
+
+const toSchemaRows = (schema: any): SchemaRow[] => {
+  if (!schema || typeof schema !== 'object') return [];
+  const rows: SchemaRow[] = [];
+
+  const walk = (node: any, path: string, requiredList: string[] = []) => {
+    if (!node || typeof node !== 'object') return;
+    const props = node.properties || {};
+    const currentRequired = Array.isArray(node.required) ? node.required : requiredList;
+
+    for (const key of Object.keys(props)) {
+      const child = props[key] || {};
+      const childPath = path ? `${path}.${key}` : key;
+      rows.push({
+        path: childPath,
+        type: child.type || (child.properties ? 'object' : 'any'),
+        required: currentRequired.includes(key) ? 'yes' : 'no',
+        description: child.description || ''
+      });
+
+      if (child.type === 'object' && child.properties) {
+        walk(child, childPath, Array.isArray(child.required) ? child.required : []);
+      }
+      if (child.type === 'array' && child.items && child.items.properties) {
+        walk({ properties: child.items.properties, required: child.items.required || [] }, `${childPath}[]`);
+      }
+    }
+  };
+
+  walk(schema, '');
+  return rows;
+};
+
+const inputSchemaRows = computed(() => toSchemaRows(currentDesign.value?.definition.inputSchema));
+const outputSchemaRows = computed(() => toSchemaRows(currentDesign.value?.definition.outputSchema));
+
+const prettyJson = (value: any) => {
+  if (value === null || value === undefined) return '-';
+  return JSON.stringify(value, null, 2);
+};
+
+const openDesign = async (agent: AdminRegistryAgent) => {
+  designDrawerVisible.value = true;
+  designLoading.value = true;
+  try {
+    const response: any = await adminAgentsApi.getAgentDesign(agent.agentId);
+    currentDesign.value = response.data.data;
+  } catch (error) {
+    console.error('加载 Agent 设计失败:', error);
+    ElMessage.error('加载 Agent 设计失败');
+  } finally {
+    designLoading.value = false;
   }
 };
 
@@ -172,6 +342,13 @@ onMounted(loadRegistry);
 .page-title {
   margin: 0;
   color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .page-subtitle {
@@ -226,5 +403,58 @@ onMounted(loadRegistry);
 
 .rate-bad {
   color: var(--color-danger);
+}
+
+.design-drawer {
+  padding-right: 0.4rem;
+}
+
+.chip-section {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.chip-label {
+  min-width: 92px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.design-tabs {
+  margin-top: 1rem;
+}
+
+.sample-block {
+  margin-bottom: 1rem;
+}
+
+.sample-block h4 {
+  margin: 0 0 0.55rem;
+  color: var(--text-primary);
+}
+
+.sample-json {
+  background: var(--bg-secondary);
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

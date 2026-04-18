@@ -78,7 +78,7 @@ router.post('/sessions', async (req: any, res) => {
       },
     });
   } catch (error: any) {
-    console.error('开始授课会话失败:', error);
+    logger.error('开始授课会话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '开始会话失败',
@@ -98,6 +98,15 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     }
 
     const { sessionId } = req.params;
+    
+    // 验证会话所有权
+    if (!sessionId.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '无权访问此会话' }
+      });
+    }
+
     const { message, lssInputs } = req.body;
 
     if (!message) {
@@ -140,7 +149,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
       },
     });
   } catch (error: any) {
-    console.error('处理消息失败:', error);
+    logger.error('处理消息失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '处理消息失败',
@@ -160,6 +169,15 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
     }
 
     const { sessionId } = req.params;
+    
+    // 验证会话所有权
+    if (!sessionId.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '无权访问此会话' }
+      });
+    }
+    
     const result = await aiTeachingOrchestrator.endSession(sessionId);
 
     res.json({
@@ -167,7 +185,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
       data: result,
     });
   } catch (error: any) {
-    console.error('结束会话失败:', error);
+    logger.error('结束会话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '结束会话失败',
@@ -210,7 +228,7 @@ router.get('/state', async (req: any, res) => {
       },
     });
   } catch (error: any) {
-    console.error('获取学习状态失败:', error);
+    logger.error('获取学习状态失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取状态失败',
@@ -243,7 +261,7 @@ router.get('/trends', async (req: any, res) => {
       })),
     });
   } catch (error: any) {
-    console.error('获取趋势失败:', error);
+    logger.error('获取趋势失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取趋势失败',
@@ -263,6 +281,15 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
     }
 
     const { sessionId } = req.params;
+    
+    // 验证会话所有权
+    if (!sessionId.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '无权访问此会话' }
+      });
+    }
+
     const { message } = req.body;
 
     if (!message) {
@@ -284,7 +311,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
       },
     });
   } catch (error: any) {
-    console.error('处理学习伙伴消息失败:', error);
+    logger.error('处理学习伙伴消息失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '处理消息失败',
@@ -319,7 +346,7 @@ router.post('/analyze-cognitive', async (req: any, res) => {
       data: analysis,
     });
   } catch (error: any) {
-    console.error('认知分析失败:', error);
+    logger.error('认知分析失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '分析失败',
@@ -427,7 +454,7 @@ router.get('/sessions/active', async (req: any, res) => {
       })),
     });
   } catch (error: any) {
-    console.error('获取活跃会话失败:', error);
+    logger.error('获取活跃会话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取会话失败',
@@ -453,7 +480,7 @@ router.get('/sessions/history', async (req: any, res) => {
       data: sessions,
     });
   } catch (error: any) {
-    console.error('获取历史会话失败:', error);
+    logger.error('获取历史会话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取历史会话失败',
@@ -473,6 +500,15 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
     }
 
     const { sessionId } = req.params;
+    
+    // 验证会话所有权
+    if (!sessionId.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '无权访问此会话' }
+      });
+    }
+    
     const session = await aiTeachingOrchestrator.getSessionDetail(sessionId, userId);
 
     if (!session) {
@@ -484,7 +520,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
       data: session,
     });
   } catch (error: any) {
-    console.error('获取会话详情失败:', error);
+    logger.error('获取会话详情失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取会话详情失败',
@@ -515,7 +551,7 @@ router.get('/tasks/:taskId/evaluation/latest', async (req: any, res) => {
       data: evaluation,
     });
   } catch (error: any) {
-    console.error('获取任务评估失败:', error);
+    logger.error('获取任务评估失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取任务评估失败',

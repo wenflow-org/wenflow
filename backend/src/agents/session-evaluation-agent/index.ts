@@ -332,6 +332,16 @@ export async function sessionEvaluationAgentHandler(input: any, context: any): P
     
     return {
       success: true,
+      userVisible: result.evaluation.reasoning,
+      internal: {
+        evaluation: result.evaluation,
+        source: result.source,
+      },
+      renderHints: {
+        component: 'session-evaluation',
+        metrics: ['sessionLss', 'sessionKtl', 'sessionLf', 'confidence']
+      },
+      schemaVersion: 'agent-output-v1',
       output: result.evaluation
     };
   } catch (error: any) {

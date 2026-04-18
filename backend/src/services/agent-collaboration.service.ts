@@ -15,6 +15,7 @@ import {
 } from '../agents/protocol';
 import { pathAdjustmentEngine, PathAdjustment } from '../agents/path-agent/adjustment';
 import { userProfileAgent } from '../agents/user-profile-agent';
+import { normalizeAgentOutput } from '../agents/output-normalizer';
 import prisma from '../config/database';
 
 export interface AgentCollaborationConfig {
@@ -84,14 +85,17 @@ export class AgentCollaborationService {
       lessonData
     });
     
-    if (progressResult.success && progressResult.progress?.signal) {
+    const normalizedProgress = normalizeAgentOutput('progress-agent', progressResult);
+    const progressPayload = normalizedProgress.internal?.progress || progressResult.progress;
+
+    if (normalizedProgress.success && progressPayload?.signal) {
       await this.eventBus.emit({
         type: 'learning:signal:detected',
         source: 'agent-collaboration',
         userId,
         data: {
-          signal: progressResult.progress.signal,
-          metrics: progressResult.progress.metrics,
+          signal: progressPayload.signal,
+          metrics: progressPayload.metrics,
           lessonId: lessonData.lessonId
         }
       });

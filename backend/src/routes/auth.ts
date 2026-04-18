@@ -1,8 +1,9 @@
-﻿// 认证路由
+// 认证路由
 import express from 'express';
 import { z } from 'zod';
 import authService from '../services/auth/auth.service';
 import { getPlatformSettings } from '../services/platform-settings.service';
+import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
 
 const router = express.Router();
 
@@ -24,7 +25,10 @@ router.get('/registration-status', async (req, res, next) => {
 // 验证 schema
 const registerSchema = z.object({
   name: z.string().min(2, '用户名至少 2 位'),
-  password: z.string().min(6, '密码至少 6 位'),
+  password: z.string()
+    .min(8, '密码至少 8 位')
+    .regex(/[a-zA-Z]/, '密码必须包含字母')
+    .regex(/[0-9]/, '密码必须包含数字'),
 });
 
 const loginSchema = z.object({
@@ -72,13 +76,16 @@ router.post('/register', async (req, res, next) => {
 });
 
 // 登录
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
   try {
     // 验证请求数据
     const data = loginSchema.parse(req.body) as { name: string; password: string };
+    const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
 
     // 调用服务
     const result = await authService.login(data);
+    
+    recordLoginAttempt(data.name, clientIP.toString(), true);
 
     res.status(200).json({
       success: true,
@@ -94,6 +101,9 @@ router.post('/login', async (req, res, next) => {
         }
       });
     }
+    
+    const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    recordLoginAttempt(req.body.name, clientIP.toString(), false);
 
     next(error);
   }

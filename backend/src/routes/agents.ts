@@ -9,8 +9,18 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { getGateway } from '../gateway';
 import { agentHandlers, allAgentDefinitions } from '../agents';
 import { AgentExecutionRequest, AgentContext } from '../agents/protocol';
+import { normalizeAgentOutput } from '../agents/output-normalizer';
 
 const router = Router();
+
+function parseJsonSafe(raw?: string | null): any | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 获取所有 Agent 列表
@@ -125,14 +135,24 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
     
     // 执行 Agent
     result = await gateway.executeAgent(executionRequest);
+    const normalizedOutput = result?.output
+      ? normalizeAgentOutput(agentId, result.output)
+      : null;
     
     // 准备响应
     const response = {
       success: result.success,
-      data: result.output || result.error,
+      data: normalizedOutput || result.error,
       metadata: {
         duration: result.duration,
-        tokensUsed: result.tokensUsed
+        tokensUsed: result.tokensUsed,
+        outputSchema: normalizedOutput
+          ? {
+              schemaVersion: normalizedOutput.schemaVersion,
+              hasUserVisible: !!normalizedOutput.userVisible,
+              internalKeys: Object.keys(normalizedOutput.internal || {})
+            }
+          : null
       }
     };
     
@@ -159,6 +179,9 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
     // 持久化 Agent 调用日志
     try {
       const durationMs = Date.now() - startTime;
+      const normalizedOutputForLog = result?.output
+        ? normalizeAgentOutput(agentId, result.output)
+        : null;
       
       await prisma.agent_call_logs.create({
         data: {
@@ -166,7 +189,7 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
           agentId,
           userId,
           input: input ? JSON.stringify(input) : null,
-          output: result?.output ? JSON.stringify(result.output) : null,
+          output: normalizedOutputForLog ? JSON.stringify(normalizedOutputForLog) : null,
           success: result?.success ?? false,
           durationMs,
           tokensUsed: result?.tokensUsed,
@@ -175,7 +198,24 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
           calledAt: new Date(),
           metadata: JSON.stringify({
             requestContext: context,
-            responseMetadata: result ? { duration: result.duration } : null
+            responseMetadata: result
+              ? {
+                  duration: result.duration,
+                  outputSchema: result.output
+                    ? {
+                        schemaVersion: normalizedOutputForLog?.schemaVersion || 'agent-output-v1',
+                        hasUserVisible: !!normalizedOutputForLog?.userVisible,
+                        hasInternal: !!normalizedOutputForLog?.internal,
+                        legacyFieldsPresent: {
+                          goalConversation: !!(result.output as any).goalConversation,
+                          path: !!(result.output as any).path,
+                          progress: !!(result.output as any).progress,
+                          output: !!(result.output as any).output
+                        }
+                      }
+                    : null
+                }
+              : null
           })
         }
       });
@@ -257,14 +297,27 @@ router.get('/:agentId/history', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      data: logs.map(log => ({
-        id: log.id,
-        userId: log.userId,
-        success: log.success,
-        durationMs: log.durationMs,
-        tokensUsed: log.tokensUsed,
-        calledAt: log.calledAt
-      }))
+      data: logs.map(log => {
+        const rawOutput = parseJsonSafe(log.output);
+        const normalizedOutput = rawOutput ? normalizeAgentOutput(log.agentId, rawOutput) : null;
+
+        return {
+          id: log.id,
+          userId: log.userId,
+          success: log.success,
+          durationMs: log.durationMs,
+          tokensUsed: log.tokensUsed,
+          calledAt: log.calledAt,
+          output: normalizedOutput
+            ? {
+                schemaVersion: normalizedOutput.schemaVersion,
+                userVisible: normalizedOutput.userVisible,
+                internal: normalizedOutput.internal,
+                renderHints: normalizedOutput.renderHints
+              }
+            : null
+        };
+      })
     });
   } catch (error) {
     res.status(500).json({

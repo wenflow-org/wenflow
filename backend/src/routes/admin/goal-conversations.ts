@@ -2,12 +2,13 @@
 import express from 'express';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import { adminMiddleware } from '../../middleware/admin.middleware';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
+import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
-// 应用认证中间件
-router.use(authMiddleware);
+router.use(authMiddleware, adminMiddleware);
 
 /**
  * 获取所有目标对话列表（分页）
@@ -66,7 +67,7 @@ router.get('/', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('获取目标对话列表失败:', error);
+    logger.error('获取目标对话列表失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取对话列表失败'
@@ -107,7 +108,7 @@ router.get('/:id', async (req: any, res) => {
       data: conversation
     });
   } catch (error: any) {
-    console.error('获取对话详情失败:', error);
+    logger.error('获取对话详情失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取对话详情失败'
@@ -142,7 +143,7 @@ router.patch('/:id', async (req: any, res) => {
       data: conversation
     });
   } catch (error: any) {
-    console.error('更新对话失败:', error);
+    logger.error('更新对话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '更新对话失败'
@@ -167,7 +168,7 @@ router.delete('/:id', async (req: any, res) => {
       message: '对话已删除'
     });
   } catch (error: any) {
-    console.error('删除对话失败:', error);
+    logger.error('删除对话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '删除对话失败'
@@ -218,7 +219,7 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('重新生成学习路径失败:', error);
+    logger.error('重新生成学习路径失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '重新生成学习路径失败'
@@ -283,7 +284,7 @@ router.get('/stats/overview', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('获取统计信息失败:', error);
+    logger.error('获取统计信息失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '获取统计信息失败'

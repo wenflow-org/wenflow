@@ -8,6 +8,7 @@ import { updateLearningMetrics } from '../metrics/LearningMetricService';
 import { progressAgentHandler } from '../../agents/progress-agent';
 import type { AgentInput, AgentContext } from '../../agents/protocol';
 import { runWithContext } from '../../gateway/api-gateway/context';
+import { normalizeAgentOutput } from '../../agents/output-normalizer';
 
 // Anderson 框架 Skills
 import { executeSkill } from '../../skills';
@@ -238,8 +239,11 @@ const agentInput = {
           action: 'generateLearningPath'
         }, () => pathAgentHandler(agentInput, agentContext));
         
-        if (agentResult.success && agentResult.path) {
-          const path = agentResult.path;
+        const normalizedPathResult = normalizeAgentOutput('path-agent', agentResult);
+        const pathPayload = normalizedPathResult.internal?.path || agentResult.path;
+
+        if (normalizedPathResult.success && pathPayload) {
+          const path = pathPayload;
           analysis = {
             pathName: path.name,
             subject: path.subject || '综合',
@@ -264,7 +268,10 @@ const agentInput = {
           };
           logger.info('PathAgent 调用成功', { userId: data.userId, pathId: path.id });
         } else {
-          throw new Error(agentResult.error || 'PATH_AGENT_FAILED');
+          const agentErrorMessage = typeof normalizedPathResult.error === 'string'
+            ? normalizedPathResult.error
+            : normalizedPathResult.error?.message;
+          throw new Error(agentErrorMessage || 'PATH_AGENT_FAILED');
         }
       } catch (agentError: any) {
         logger.error('PathAgent 调用失败，终止生成', {
@@ -871,12 +878,14 @@ const learningPath = await prisma.learning_paths.findUnique({
         };
 
         const result = await progressAgentHandler(agentInput, agentContext);
-        
-        if (result.success && result.progress) {
+        const normalizedProgressResult = normalizeAgentOutput('progress-agent', result);
+        const progressPayload = normalizedProgressResult.internal?.progress || result.progress;
+
+        if (normalizedProgressResult.success && progressPayload) {
           learningReport = {
-            reasoning: result.progress.metrics.reasoning,
-            suggestion: result.progress.metrics.suggestion,
-            recommendations: result.progress.recommendations
+            reasoning: progressPayload.metrics?.reasoning,
+            suggestion: progressPayload.metrics?.suggestion,
+            recommendations: progressPayload.recommendations
           };
         }
       } catch (error) {

@@ -521,7 +521,7 @@ export class AITeachingOrchestrator {
     });
 
     // 判断是否需要触发伴学
-    let triggerPeer = this.shouldTriggerPeer(analysis, session.consecutiveErrors, session, message);
+    const triggerPeer = this.shouldTriggerPeer(analysis, session.consecutiveErrors, session, message);
     if (triggerPeer) {
       logger.info(`[AITeaching] 触发伴学通知：sessionId=${sessionId}`);
     }

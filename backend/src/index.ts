@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import { logger } from './utils/logger';
 import prisma from './config/database';
 import { initializeAdmin } from './services/auth/init-admin.service';
@@ -18,15 +19,72 @@ import { getEventBus } from './gateway/event-bus';
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
+import { adminAccessRestrictMiddleware } from './middleware/admin-access-restrict.middleware';
+import { csrfMiddleware } from './middleware/csrf.middleware';
 
 // 加载环境变量
 dotenv.config();
 
+// 强制安全配置检查
+const requiredEnvVars = ['JWT_SECRET'];
+
+requiredEnvVars.forEach(envVar => {
+  if (!process.env[envVar]) {
+    console.error(`❌ 缺少必要的环境变量: ${envVar}`);
+    console.error('请在 .env 文件中配置该变量');
+    process.exit(1);
+  }
+});
+
+// JWT_SECRET 安全性检查
+if (process.env.JWT_SECRET === 'your-secret-key-change-in-production' ||
+    process.env.JWT_SECRET?.length < 32) {
+  console.error('❌ JWT_SECRET 不安全：');
+  console.error('  - 请勿使用默认值');
+  console.error('  - 密钥长度至少32位');
+  console.error('  - 建议使用随机生成：openssl rand -base64 32');
+  process.exit(1);
+}
+
+console.log('✅ 安全配置检查通过');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// 全局 API 限流
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: {
+    success: false,
+    error: { message: '请求过于频繁，请稍后重试' }
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // 中间件
-app.use(helmet());
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", 'data:', 'https:'],
+    connectSrc: ["'self'", process.env.AI_API_URL || ''],
+    fontSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    frameSrc: ["'none'"],
+  },
+}));
+
+// 额外安全头
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // CORS 安全配置
 const corsOptions = {
@@ -42,6 +100,12 @@ app.use(cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 应用全局限流到 API 路由
+app.use('/api/', globalLimiter);
+
+// 应用 CSRF 保护
+app.use('/api/', csrfMiddleware);
 
 // 确保 API 响应使用 UTF-8 编码
 app.use((req, res, next) => {
@@ -161,6 +225,7 @@ app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('platform
 // 其他路由（保持原有认证）
 // 注意：具体路由必须在通用路由之前注册！
 app.use('/api/auth', authRoutes);
+app.use('/api/admin-auth/login', adminAccessRestrictMiddleware, adminAuthRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
 app.use('/api/admin/api-config', authMiddleware, adminApiConfigRoutes);
 app.use('/api/admin/agent-model-configs', authMiddleware, adminAgentModelConfigsRoutes);
@@ -187,11 +252,21 @@ app.use('/api/user/developer', authMiddleware, userDeveloperRoutes);
 
 // 错误处理中间件
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Error:', err);
+  logger.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    status: err.status
+  });
+  
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   res.status(err.status || 500).json({
+    success: false,
     error: {
-      message: err.message || 'Internal Server Error',
-      status: err.status || 500
+      message: isProduction ? '服务器错误，请稍后重试' : (err.message || 'Internal Server Error'),
+      code: err.code || 'INTERNAL_ERROR',
+      status: err.status || 500,
+      ...(isProduction ? {} : { stack: err.stack })
     }
   });
 });

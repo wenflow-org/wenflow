@@ -1,4 +1,4 @@
-﻿// Admin 管理 API
+// Admin 管理 API
 import axios from 'axios';
 import { adminArenaApi } from './adminArenaApi';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
@@ -247,6 +247,54 @@ export interface AdminRegistryResponse {
   };
 }
 
+export interface AgentDesignDetail {
+  agentId: string;
+  requestedAgentId: string;
+  basic: {
+    name: string;
+    version: string;
+    type: string;
+    category: string;
+    description: string;
+  };
+  runtime: {
+    role: 'agent' | 'orchestrator';
+    kind: 'agent' | 'orchestrator' | 'alias';
+    runtimeEnabled: boolean;
+    userVisible: boolean;
+    monitoringGroup: string | null;
+    ioContractVersion: 'legacy' | 'agent-output-v1';
+    aliases: string[];
+  };
+  definition: {
+    capabilities: string[];
+    subscribes: string[];
+    publishes: string[];
+    inputSchema: any;
+    outputSchema: any;
+  };
+  samples: {
+    agentCallLogs: Array<{
+      id: string;
+      calledAt: string;
+      success: boolean;
+      durationMs: number;
+      error: string | null;
+      input: any;
+      output: any;
+    }>;
+    arenaAgentLogs: Array<{
+      id: string;
+      calledAt: string;
+      success: boolean;
+      durationMs: number;
+      error: string | null;
+      input: any;
+      output: any;
+    }>;
+  };
+}
+
 export interface OrchestratorRelationItem {
   orchestratorId: string;
   group: string;
@@ -265,6 +313,24 @@ export interface ManifestDiagnosticsData {
     calledAgentTotal: number;
     catalogTotal: number;
     driftCount: number;
+    outputContractSampleSize?: number;
+    arenaOutputContractSampleSize?: number;
+  };
+  outputContracts?: {
+    agentCallLogs: {
+      sampleSize: number;
+      v1: number;
+      legacy: number;
+      mixed: number;
+      unknown: number;
+    };
+    arenaAgentLogs: {
+      sampleSize: number;
+      v1: number;
+      legacy: number;
+      mixed: number;
+      unknown: number;
+    };
   };
   drift: {
     missingRegistrations: string[];
@@ -329,6 +395,10 @@ export const adminAgentsApi = {
 
   getRegistry: async () => {
     return adminAxios.get<AdminRegistryResponse>('/admin/agents/registry');
+  },
+
+  getAgentDesign: async (agentId: string) => {
+    return adminAxios.get<{ data: AgentDesignDetail }>(`/admin/agents/design/${encodeURIComponent(agentId)}`);
   },
 
   getOrchestratorRelations: async () => {

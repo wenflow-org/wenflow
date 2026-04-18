@@ -245,6 +245,17 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
     
     return {
       success: true,
+      userVisible: result.message,
+      internal: {
+        strategy: result.strategy,
+        followUpQuestions: result.followUpQuestions,
+        output: result
+      },
+      renderHints: {
+        component: 'peer-message',
+        followUpQuestions: result.followUpQuestions || []
+      },
+      schemaVersion: 'agent-output-v1',
       output: result
     };
   } catch (error: any) {

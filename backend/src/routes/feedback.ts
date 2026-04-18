@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { feedbackCollectionService } from '../services/feedback/feedback-collection.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
+import prisma from '../config/database';
 
 const router = Router();
 
@@ -12,6 +13,16 @@ interface AuthRequest extends Request {
     isAdmin?: boolean;
   };
 }
+
+// 从数据库实时验证管理员权限
+const ensureAdminFromDB = async (userId?: string): Promise<boolean> => {
+  if (!userId) return false;
+  const user = await prisma.users.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true }
+  });
+  return !!user?.isAdmin;
+};
 
 // 提交反馈
 router.post('/submit', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -118,8 +129,9 @@ router.get('/my-feedback', authMiddleware, async (req: AuthRequest, res: Respons
 router.get('/task/:taskId/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
   const { taskId } = req.params;
   
-  // 检查管理员权限
-  if (!req.user?.isAdmin) {
+  // 从数据库实时验证管理员权限
+  const isAdmin = await ensureAdminFromDB(req.user?.userId);
+  if (!isAdmin) {
     return res.status(403).json({
       error: '需要管理员权限'
     });
@@ -142,8 +154,9 @@ router.get('/task/:taskId/stats', authMiddleware, async (req: AuthRequest, res: 
 
 // 获取策略反馈统计（管理员）
 router.get('/strategy/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 检查管理员权限
-  if (!req.user?.isAdmin) {
+  // 从数据库实时验证管理员权限
+  const isAdmin = await ensureAdminFromDB(req.user?.userId);
+  if (!isAdmin) {
     return res.status(403).json({
       error: '需要管理员权限'
     });
@@ -166,8 +179,9 @@ router.get('/strategy/stats', authMiddleware, async (req: AuthRequest, res: Resp
 
 // 获取 UI 类型反馈统计（管理员）
 router.get('/uitype/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 检查管理员权限
-  if (!req.user?.isAdmin) {
+  // 从数据库实时验证管理员权限
+  const isAdmin = await ensureAdminFromDB(req.user?.userId);
+  if (!isAdmin) {
     return res.status(403).json({
       error: '需要管理员权限'
     });
@@ -190,8 +204,9 @@ router.get('/uitype/stats', authMiddleware, async (req: AuthRequest, res: Respon
 
 // 获取低分反馈（管理员）
 router.get('/low-ratings', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 检查管理员权限
-  if (!req.user?.isAdmin) {
+  // 从数据库实时验证管理员权限
+  const isAdmin = await ensureAdminFromDB(req.user?.userId);
+  if (!isAdmin) {
     return res.status(403).json({
       error: '需要管理员权限'
     });
@@ -222,8 +237,9 @@ router.get('/low-ratings', authMiddleware, async (req: AuthRequest, res: Respons
 
 // 获取反馈趋势（管理员）
 router.get('/trend', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 检查管理员权限
-  if (!req.user?.isAdmin) {
+  // 从数据库实时验证管理员权限
+  const isAdmin = await ensureAdminFromDB(req.user?.userId);
+  if (!isAdmin) {
     return res.status(403).json({
       error: '需要管理员权限'
     });
@@ -248,8 +264,9 @@ router.get('/trend', authMiddleware, async (req: AuthRequest, res: Response) => 
 
 // 获取时间段反馈统计（管理员）
 router.get('/time-range/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 检查管理员权限
-  if (!req.user?.isAdmin) {
+  // 从数据库实时验证管理员权限
+  const isAdmin = await ensureAdminFromDB(req.user?.userId);
+  if (!isAdmin) {
     return res.status(403).json({
       error: '需要管理员权限'
     });

@@ -20,8 +20,14 @@ interface JWTPayload {
 }
 
 class AuthService {
-  private JWT_SECRET = process.env.JWT_SECRET || 'default-secret';
+  private JWT_SECRET = process.env.JWT_SECRET;
   private JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+  constructor() {
+    if (!this.JWT_SECRET) {
+      throw new Error('JWT_SECRET 未配置，请检查环境变量');
+    }
+  }
 
   // 注册
   async register(data: RegisterData) {

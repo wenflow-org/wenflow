@@ -1,13 +1,26 @@
 <template>
   <div class="agent-model-config">
-    <h2>Agent 模型配置</h2>
-    
-    <div class="action-bar">
-      <el-button type="primary" @click="initializeDefaults">初始化默认配置</el-button>
-      <el-button @click="refresh">刷新</el-button>
+    <div class="page-header">
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><Cpu /></el-icon>
+        Agent 模型配置
+      </h2>
+      <p class="page-subtitle">统一管理 Agent 的模型层级、温度和 token 配额</p>
     </div>
-    
-    <el-table :data="configs" v-loading="loading">
+
+    <div class="action-bar">
+      <el-button type="primary" @click="initializeDefaults">
+        <el-icon><Setting /></el-icon>
+        初始化默认配置
+      </el-button>
+      <el-button @click="refresh">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
+    </div>
+
+    <div class="table-shell">
+      <el-table :data="configs" v-loading="loading" stripe>
       <el-table-column prop="agentId" label="Agent ID" width="200" />
       <el-table-column prop="tier" label="模型层级" width="100">
         <template #default="{ row }">
@@ -33,8 +46,9 @@
         </template>
       </el-table-column>
     </el-table>
-    
-    <el-dialog v-model="editDialogVisible" title="编辑配置">
+    </div>
+
+    <el-dialog v-model="editDialogVisible" title="编辑配置" width="560px" destroy-on-close>
       <el-form :model="editForm">
         <el-form-item label="Agent ID">
           <el-input v-model="editForm.agentId" disabled />
@@ -60,6 +74,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
+import { Cpu, Setting, Refresh } from '@element-plus/icons-vue';
 import { adminAxios } from '@/api/adminApi';
 
 interface AgentModelConfig {
@@ -144,9 +159,47 @@ onMounted(() => fetchConfigs());
 
 <style scoped>
 .agent-model-config {
-  padding: 20px;
+  padding: 1.25rem;
 }
+
+.page-header {
+  margin-bottom: 1rem;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
+}
+
+.page-subtitle {
+  margin: 0.4rem 0 0;
+  color: var(--text-secondary);
+}
+
 .action-bar {
-  margin-bottom: 20px;
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.table-shell {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+@media (max-width: 768px) {
+  .agent-model-config {
+    padding: 1rem;
+  }
 }
 </style>

@@ -3,11 +3,19 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import prisma from '../../config/database';
 import { z } from 'zod';
+import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
-// 环境变量
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET 环境变量未配置');
+  }
+  return secret;
+};
+
+const JWT_SECRET = getJwtSecret();
 const ADMIN_PORT = process.env.ADMIN_PORT || '3002';
 
 // 验证 Schema
@@ -110,7 +118,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    console.error('管理员登录失败:', error);
+    logger.error('管理员登录失败:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -174,7 +182,7 @@ router.get('/me', async (req: Request, res: Response) => {
       data: user,
     });
   } catch (error: any) {
-    console.error('获取管理员信息失败:', error);
+    logger.error('获取管理员信息失败:', error);
     res.status(401).json({
       success: false,
       error: {

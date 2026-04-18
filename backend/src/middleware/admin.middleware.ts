@@ -10,7 +10,15 @@ interface JwtPayload {
 
 // 注意：Request.user类型已在auth.middleware.ts中定义
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret';
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET 环境变量未配置');
+  }
+  return secret;
+};
+
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Admin 认证中间件 - 验证 JWT Token 并检查 admin 权限

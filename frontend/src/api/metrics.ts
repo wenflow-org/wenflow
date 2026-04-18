@@ -1,21 +1,21 @@
-// ѧϰָ��API
+// 学习指标API
 import api from '../utils/api';
 
 export interface LearningMetrics {
-  lssCurrent: number;           // ѧϰѹ������ (0-100)
-  ktlCurrent: number;           // ֪ʶѵ������ (0-100)
-  lfCurrent: number;            // ѧϰƣ�Ͷ� (0-100)
-  lsbCurrent: number;           // ѧϰ״̬ƽ��ֵ (-100 to 100)
-  advice?: string[];            // ѧϰ״̬����
+  lssCurrent: number;
+  ktlCurrent: number;
+  lfCurrent: number;
+  lsbCurrent: number;
+  advice?: string[];
 }
 
 export interface CurrentState {
-  lss: number;                  // ѧϰѹ�� (0-100)
-  ktl: number;                  // ֪ʶѵ������/Fitness (0-100)
-  lf: number;                   // ѧϰƣ�Ͷ�/Fatigue (0-100)
-  lsb: number;                  // ѧϰ״̬ƽ��ֵ (-100 to 100)
+  lss: number;
+  ktl: number;
+  lf: number;
+  lsb: number;
   updatedAt?: string;
-  advice?: string[];            // ѧϰ״̬����
+  advice?: string[];
   suggestion?: {
     level?: string;
     message?: string;
@@ -87,4 +87,3 @@ export const metricsAPI = {
     }
   }
 };
-

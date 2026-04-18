@@ -52,9 +52,29 @@ export interface AgentInput {
 export interface AgentOutput {
   // 执行状态
   success: boolean;
+
+  // 用户可见输出（统一协议）
+  userVisible?: string;
+
+  // 内部结构化输出（统一协议）
+  internal?: Record<string, any>;
+
+  // 渲染提示（统一协议）
+  renderHints?: {
+    component?: string;
+    quickReplies?: Array<{ text: string; icon?: string }>;
+    [key: string]: any;
+  };
+
+  // 协议版本
+  schemaVersion?: string;
   
   // 错误信息（可选）
-  error?: string;
+  error?: string | {
+    code: string;
+    message: string;
+    details?: any;
+  };
   
   // 学习路径输出（path-agent）
   path?: {

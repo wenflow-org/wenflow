@@ -1,7 +1,10 @@
 <template>
   <div class="debug-sandbox">
     <div class="page-header">
-      <h2 class="page-title">🧪 调试沙盒</h2>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><Setting /></el-icon>
+        调试沙盒
+      </h2>
       <p class="page-subtitle">快速测试和优化学习路径生成效果</p>
     </div>
 
@@ -65,7 +68,7 @@
             description="请先在目标对话页面创建一些对话，或者选择手动输入方式创建快照"
             type="info"
             :closable="false"
-            style="margin-top: 0.5rem"
+            class="conversation-alert"
           />
         </div>
 
@@ -236,7 +239,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Plus, Delete, Refresh, Document, Collection } from '@element-plus/icons-vue';
+import { Plus, Delete, Refresh, Document, Collection, Setting } from '@element-plus/icons-vue';
 import { adminDebugSandboxApi } from '@/api/adminApi';
 
 const router = useRouter();
@@ -453,6 +456,13 @@ onMounted(() => {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 0.5rem 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .page-subtitle {
@@ -516,6 +526,10 @@ onMounted(() => {
 
 .full-width {
   width: 100%;
+}
+
+.conversation-alert {
+  margin-top: 0.5rem;
 }
 
 .conversation-option {
@@ -620,12 +634,12 @@ onMounted(() => {
 }
 
 .info-item .label {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 
 .info-item .value {
-  color: #1e293b;
+  color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 500;
 }
@@ -644,7 +658,7 @@ onMounted(() => {
 
 .created-time {
   margin-left: auto;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -658,7 +672,7 @@ onMounted(() => {
 }
 
 .cleanup-content .tip {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 

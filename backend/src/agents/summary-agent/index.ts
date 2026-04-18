@@ -417,6 +417,16 @@ export async function summaryAgentHandler(input: any, context: any): Promise<any
     
     return {
       success: true,
+      userVisible: result.summary.topicSummary,
+      internal: {
+        summary: result.summary,
+        source: result.source,
+      },
+      renderHints: {
+        component: 'session-summary',
+        sections: ['topicSummary', 'knowledgeSummary', 'practiceAdvice', 'learningEvaluation']
+      },
+      schemaVersion: 'agent-output-v1',
       output: result.summary
     };
   } catch (error: any) {

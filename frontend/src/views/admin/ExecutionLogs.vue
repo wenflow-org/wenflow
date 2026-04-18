@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h2 class="page-title">
-        <span class="title-icon">🤖</span>
+        <el-icon class="title-icon"><Cpu /></el-icon>
         Agent 监控与日志
       </h2>
       <p class="page-subtitle">实时监控 Agent 运行状态，查看执行日志</p>
@@ -346,7 +346,8 @@ import {
   View,
   DocumentCopy,
   Download,
-  Timer
+  Timer,
+  Cpu
 } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
 import { adminAxios } from '@/api/adminApi';

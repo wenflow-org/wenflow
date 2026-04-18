@@ -11,6 +11,7 @@ import {
   isManifestOrchestrator,
   listAgentManifest
 } from '../../services/agent-manifest.service';
+import { getGateway } from '../../gateway';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -51,6 +52,52 @@ const ensureAdmin = async (userId?: string) => {
     select: { isAdmin: true }
   });
   return !!operator?.isAdmin;
+};
+
+type OutputContractBucket = 'v1' | 'legacy' | 'mixed' | 'unknown';
+
+const LEGACY_OUTPUT_KEYS = ['goalConversation', 'path', 'progress', 'output'];
+
+const parseOutputPayload = (raw: string | null): any | null => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const classifyOutputContract = (payload: any): OutputContractBucket => {
+  if (!payload || typeof payload !== 'object') {
+    return 'unknown';
+  }
+
+  const hasLegacy = LEGACY_OUTPUT_KEYS.some((key) => payload[key] !== undefined);
+  const hasV1 =
+    payload.schemaVersion === 'agent-output-v1' ||
+    (typeof payload.userVisible === 'string' && payload.internal && typeof payload.internal === 'object');
+
+  if (hasV1 && hasLegacy) return 'mixed';
+  if (hasV1) return 'v1';
+  if (hasLegacy) return 'legacy';
+  return 'unknown';
+};
+
+const summarizeOutputContracts = (rows: Array<{ output: string | null }>) => {
+  const summary = {
+    sampleSize: rows.length,
+    v1: 0,
+    legacy: 0,
+    mixed: 0,
+    unknown: 0
+  };
+
+  for (const row of rows) {
+    const bucket = classifyOutputContract(parseOutputPayload(row.output));
+    summary[bucket] += 1;
+  }
+
+  return summary;
 };
 
 router.get('/settings/registration', async (req: Request, res: Response) => {
@@ -134,7 +181,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
       'ai-service'
     ]);
 
-    const [registrations, modelConfigs, logGroups, catalog] = await Promise.all([
+    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples, arenaOutputSamples] = await Promise.all([
       prisma.agent_registrations.findMany({
         orderBy: { id: 'asc' },
         select: {
@@ -156,8 +203,23 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
         by: ['agentId'],
         _count: { _all: true }
       }),
-      getAgentCatalog()
+      getAgentCatalog(),
+      prisma.agent_call_logs.findMany({
+        where: { output: { not: null } },
+        orderBy: { calledAt: 'desc' },
+        take: 500,
+        select: { output: true }
+      }),
+      prisma.arena_agent_logs.findMany({
+        where: { output: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: { output: true }
+      })
     ]);
+
+    const agentCallContractCounts = summarizeOutputContracts(agentCallOutputSamples);
+    const arenaContractCounts = summarizeOutputContracts(arenaOutputSamples);
 
     const registrationIds = registrations.map(item => item.id);
     const modelConfigIds = modelConfigs.map(item => item.agentId);
@@ -213,12 +275,18 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           modelConfigTotal: modelConfigs.length,
           calledAgentTotal: calledAgentIds.length,
           catalogTotal: catalogIds.length,
+          outputContractSampleSize: agentCallContractCounts.sampleSize,
+          arenaOutputContractSampleSize: arenaContractCounts.sampleSize,
           driftCount:
             missingRegistrations.length +
             unknownRegistrations.length +
             unknownModelConfigs.length +
             unknownLogAgents.length +
             catalogOnly.length
+        },
+        outputContracts: {
+          agentCallLogs: agentCallContractCounts,
+          arenaAgentLogs: arenaContractCounts
         },
         drift: {
           missingRegistrations,
@@ -659,6 +727,127 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
       success: false,
       error: {
         message: '获取 Agent 注册列表失败',
+        status: 500
+      }
+    });
+  }
+});
+
+/**
+ * 获取 Agent 设计详情（输入/输出 Schema + 运行契约）
+ * GET /api/admin/agents/design/:agentId
+ */
+router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '需要管理员权限' }
+      });
+    }
+
+    const requestedAgentId = String(req.params.agentId || '').trim();
+    const canonicalAgentId = getCanonicalAgentId(requestedAgentId);
+
+    const gateway = getGateway();
+    const registration = gateway.getAgent(canonicalAgentId);
+    const manifest = getAgentManifest(canonicalAgentId);
+
+    if (!registration && !manifest) {
+      return res.status(404).json({
+        success: false,
+        error: { message: `Agent ${requestedAgentId} 不存在`, status: 404 }
+      });
+    }
+
+    const [callSamples, arenaSamples] = await Promise.all([
+      prisma.agent_call_logs.findMany({
+        where: { agentId: canonicalAgentId },
+        orderBy: { calledAt: 'desc' },
+        take: 3,
+        select: {
+          id: true,
+          input: true,
+          output: true,
+          success: true,
+          calledAt: true,
+          durationMs: true,
+          error: true
+        }
+      }),
+      prisma.arena_agent_logs.findMany({
+        where: { agentName: canonicalAgentId },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: {
+          id: true,
+          input: true,
+          output: true,
+          status: true,
+          createdAt: true,
+          durationMs: true,
+          error: true
+        }
+      })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        agentId: canonicalAgentId,
+        requestedAgentId,
+        basic: {
+          name: registration?.definition.name || manifest?.name || canonicalAgentId,
+          version: registration?.definition.version || '1.0.0',
+          type: registration?.definition.type || manifest?.category || 'custom',
+          category: registration?.definition.category || manifest?.category || 'custom',
+          description: registration?.definition.description || manifest?.description || ''
+        },
+        runtime: {
+          role: inferRuntimeRole(canonicalAgentId, registration?.definition.type),
+          kind: manifest?.kind || 'agent',
+          runtimeEnabled: manifest?.runtimeEnabled ?? true,
+          userVisible: manifest?.userVisible ?? false,
+          monitoringGroup: manifest?.monitoringGroup || null,
+          ioContractVersion: manifest?.ioContractVersion || 'legacy',
+          aliases: manifest?.aliases || []
+        },
+        definition: {
+          capabilities: registration?.definition.capabilities || [],
+          subscribes: registration?.definition.subscribes || [],
+          publishes: registration?.definition.publishes || [],
+          inputSchema: registration?.definition.inputSchema || null,
+          outputSchema: registration?.definition.outputSchema || null
+        },
+        samples: {
+          agentCallLogs: callSamples.map((item) => ({
+            id: item.id,
+            calledAt: item.calledAt,
+            success: item.success,
+            durationMs: item.durationMs,
+            error: item.error,
+            input: parseOutputPayload(item.input),
+            output: parseOutputPayload(item.output)
+          })),
+          arenaAgentLogs: arenaSamples.map((item) => ({
+            id: item.id,
+            calledAt: item.createdAt,
+            success: item.status === 'success',
+            durationMs: item.durationMs,
+            error: item.error,
+            input: parseOutputPayload(item.input),
+            output: parseOutputPayload(item.output)
+          }))
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('获取 Agent 设计详情失败:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取 Agent 设计详情失败',
         status: 500
       }
     });

@@ -56,12 +56,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '学习中', requiresAuth: true }
   },
   {
-    path: '/dialogue-learn/:taskId',
-    name: 'DialogueLearningPage',
-    component: () => import('@/views/DialogueLearningPage.vue'),
-    meta: { title: '对话式学习', requiresAuth: true }
-  },
-  {
     path: '/demo/question-cards',
     name: 'QuestionCardDemo',
     component: () => import('@/views/QuestionCardDemo.vue'),

@@ -1,7 +1,10 @@
 <template>
   <div class="admin-conversations">
     <div class="page-header">
-      <h2 class="page-title">💬 目标对话管理</h2>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><ChatDotRound /></el-icon>
+        目标对话管理
+      </h2>
       <p class="page-subtitle">查看和管理用户的目标对话记录</p>
     </div>
 
@@ -11,7 +14,7 @@
         <el-select
           v-model="filterForm.userId"
           placeholder="选择用户"
-          style="width: 250px"
+          class="filter-user-select"
           filterable
           clearable
           @change="loadConversations"
@@ -27,7 +30,7 @@
         <el-select
           v-model="filterForm.status"
           placeholder="对话状态"
-          style="width: 150px; margin-left: 1rem"
+          class="filter-status-select"
           clearable
           @change="loadConversations"
         >
@@ -42,7 +45,7 @@
           range-separator="至"
           start-placeholder="开始日期"
           end-placeholder="结束日期"
-          style="margin-left: 1rem"
+          class="filter-date-picker"
           @change="loadConversations"
         />
       </div>
@@ -65,7 +68,7 @@
             v-loading="loading"
             :data="conversations"
             stripe
-            style="min-width: 100%"
+            class="conversation-table"
             @row-click="handleRowClick"
           >
             <el-table-column prop="id" label="ID" min-width="120" show-overflow-tooltip />
@@ -161,20 +164,20 @@
           <el-descriptions-item label="创建时间">{{ formatTime(selectedConversation.createdAt) }}</el-descriptions-item>
           <el-descriptions-item label="更新时间">{{ formatTime(selectedConversation.updatedAt) }}</el-descriptions-item>
           <el-descriptions-item label="学习路径" :span="2">
-            <div v-if="selectedConversation.learningPaths && selectedConversation.learningPaths.length > 0" style="display: flex; flex-direction: column; gap: 0.5rem;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div v-if="selectedConversation.learningPaths && selectedConversation.learningPaths.length > 0" class="learning-paths-wrap">
+              <div class="learning-paths-header">
                 <span>已生成 {{ selectedConversation.learningPaths.length }} 个路径版本</span>
                 <el-button type="success" size="small" @click="regeneratePath(selectedConversation)" :loading="regenerating[selectedConversation.id]">
                   <el-icon><Refresh /></el-icon>
                   生成新版本
                 </el-button>
               </div>
-              <div style="margin-top: 0.5rem;">
+              <div class="learning-paths-tags">
                 <el-tag 
                   v-for="path in selectedConversation.learningPaths" 
                   :key="path.id"
                   size="small"
-                  style="margin-right: 0.5rem; margin-bottom: 0.25rem;"
+                  class="path-tag"
                   :type="path.generationVersion === selectedConversation.learningPaths.length ? 'success' : 'info'"
                 >
                   v{{ path.generationVersion }}: {{ path.name }}
@@ -223,7 +226,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
 import { adminConversationsApi, adminDashboardApi } from '@/api/adminApi';
-import { Search, Refresh, Plus } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, ChatDotRound } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 const loading = ref(false);
@@ -451,13 +454,20 @@ onMounted(() => {
 .page-title {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--text-primary);
   margin: 0 0 0.5rem 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .page-subtitle {
   font-size: 1rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -468,14 +478,28 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: #f8fafc;
+  background: var(--bg-elevated);
   border-radius: 8px;
+  border: 1px solid var(--border-light);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.filter-user-select {
+  width: 250px;
+}
+
+.filter-status-select {
+  width: 150px;
+}
+
+.filter-date-picker {
+  margin-left: 1rem;
 }
 
 .toolbar-right {
@@ -489,6 +513,10 @@ onMounted(() => {
   border-radius: 8px;
   width: 100%;
   -webkit-overflow-scrolling: touch;
+}
+
+.conversation-table {
+  min-width: 100%;
 }
 
 .table-container :deep(.el-table) {
@@ -530,8 +558,9 @@ onMounted(() => {
 .detail-section {
   margin: 1rem 0;
   padding: 1rem;
-  background: #f8fafc;
+  background: var(--bg-elevated);
   border-radius: 4px;
+  border: 1px solid var(--border-light);
 }
 
 .json-display {
@@ -541,10 +570,10 @@ onMounted(() => {
   font-size: 12px;
   max-height: 400px;
   overflow-y: auto;
-  background: #f6f8fa;
+  background: var(--bg-muted);
   padding: 1rem;
   border-radius: 4px;
-  border: 1px solid #e1e4e8;
+  border: 1px solid var(--border-light);
 }
 
 .messages-container {
@@ -559,15 +588,16 @@ onMounted(() => {
   gap: 1rem;
   padding: 1rem;
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
 }
 
 .message.user {
-  background: #eff6ff;
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-elevated) 90%);
 }
 
 .message.assistant {
-  background: #f0fdf4;
+  background: color-mix(in srgb, var(--color-success) 10%, var(--bg-elevated) 90%);
 }
 
 .message-avatar {
@@ -582,12 +612,57 @@ onMounted(() => {
 .message-role {
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 .message-text {
-  color: #334155;
+  color: var(--text-secondary);
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.learning-paths-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.learning-paths-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.learning-paths-tags {
+  margin-top: 0.5rem;
+}
+
+.path-tag {
+  margin-right: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .filter-user-select,
+  .filter-status-select {
+    width: 100%;
+  }
+
+  .filter-date-picker {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .learning-paths-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

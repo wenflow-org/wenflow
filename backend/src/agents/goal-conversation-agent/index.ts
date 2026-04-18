@@ -717,6 +717,13 @@ export async function goalConversationAgentHandler(
 
     return {
       success: true,
+      userVisible: result.userVisible,
+      internal: result.internal,
+      renderHints: {
+        component: 'goal-conversation',
+        quickReplies: result.internal.quickReplies || []
+      },
+      schemaVersion: 'agent-output-v1',
       goalConversation: result,
       metadata: {
         agentId: 'goal-conversation-agent',
@@ -744,6 +751,7 @@ export async function goalConversationAgentHandler(
     return {
       success: false,
       error: error.message || 'Unknown error',
+      userVisible: '抱歉，我刚才走神了，能再说一遍吗？',
       goalConversation: {
         userVisible: '抱歉，我刚才走神了，能再说一遍吗？',
         internal: {
@@ -755,6 +763,14 @@ export async function goalConversationAgentHandler(
           quickReplies: undefined
         }
       },
+      internal: {
+        understanding: input.metadata?.previousUnderstanding || {},
+        confidence: 0,
+        stage: 'understanding',
+        nextQuestions: [],
+        collected: {}
+      },
+      schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'goal-conversation-agent',
         agentName: '目标对话Agent',
@@ -790,7 +806,8 @@ export async function runGoalConversationAgent(params: {
   );
 
   if (!result.goalConversation) {
-    throw new Error(result.error || 'Goal conversation agent failed');
+    const errorMessage = typeof result.error === 'string' ? result.error : result.error?.message;
+    throw new Error(errorMessage || 'Goal conversation agent failed');
   }
 
   return result.goalConversation;

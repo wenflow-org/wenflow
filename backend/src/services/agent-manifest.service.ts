@@ -24,6 +24,7 @@ export interface AgentManifestEntry {
     temperature: number;
     maxTokens: number;
   };
+  ioContractVersion?: 'legacy' | 'agent-output-v1';
 }
 
 const AGENT_MANIFEST: AgentManifestEntry[] = [
@@ -36,7 +37,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: true,
     monitoringGroup: 'RequirementCollection',
-    aliases: ['goal-conversation']
+    aliases: ['goal-conversation'],
+    ioContractVersion: 'agent-output-v1'
   },
   {
     id: 'path-agent',
@@ -47,6 +49,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: true,
     monitoringGroup: 'PathPlanning',
+    ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.5,
       maxTokens: 6000
@@ -58,9 +61,10 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     description: '对话式内容生成',
     category: 'content',
     kind: 'agent',
-    runtimeEnabled: true,
-    userVisible: true,
+    runtimeEnabled: false,
+    userVisible: false,
     monitoringGroup: 'Teaching',
+    ioContractVersion: 'legacy',
     defaultModelConfig: {
       temperature: 0.7,
       maxTokens: 1000
@@ -74,6 +78,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
+    ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.7,
       maxTokens: 300
@@ -86,7 +91,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     category: 'analysis',
     kind: 'agent',
     runtimeEnabled: true,
-    userVisible: true
+    userVisible: true,
+    ioContractVersion: 'agent-output-v1'
   },
   {
     id: 'peer-agent',
@@ -97,6 +103,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'LearningCompanion',
+    ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.8,
       maxTokens: 500
@@ -111,6 +118,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Summary',
+    ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.3,
       maxTokens: 1500
@@ -125,6 +133,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'SessionEvaluation',
+    ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.2,
       maxTokens: 500

@@ -871,12 +871,12 @@ onMounted(() => {
 }
 
 .path-item.active {
-  background: #dcfce7;
+  background: color-mix(in srgb, var(--color-success) 16%, var(--bg-elevated) 84%);
 }
 
 .path-version {
-  background: #64748b;
-  color: white;
+  background: var(--text-secondary);
+  color: var(--bg-elevated);
   padding: 0.125rem 0.375rem;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -884,7 +884,7 @@ onMounted(() => {
 }
 
 .path-info {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.85rem;
   flex: 1;
 }
@@ -897,13 +897,14 @@ onMounted(() => {
 
 /* 详情对话框 */
 .detail-content {
-  background: #f8fafc;
+  background: var(--bg-elevated);
   padding: 1rem;
   border-radius: 6px;
   font-size: 0.85rem;
   line-height: 1.5;
   overflow: auto;
   max-height: 400px;
+  border: 1px solid var(--border-light);
 }
 
 .loading-container {

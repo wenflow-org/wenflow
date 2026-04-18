@@ -6,15 +6,21 @@ import learningService from '../services/learning/learning.service';
 import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
-import { ContentAgentIntegration } from '../agents/coordinator/content-agent-integration';
 import { learningSessionService } from '../services/learning/learning-session.service';
-import { dialogueLearningService } from '../services/learning/dialogue-learning.service';
 import pathOrchestrator from '../orchestrators/path.orchestrator';
+import { getAgentManifest } from '../services/agent-manifest.service';
 
 const router = express.Router();
 
 // 所有学习路由都需要认证
 router.use(authMiddleware);
+
+const CONTENT_AGENT_OFFLINE_MESSAGE = 'content-agent-v3 已下线，请使用 ai-teaching 学习模式';
+
+const isContentAgentV3Enabled = () => {
+  const manifest = getAgentManifest('content-agent-v3');
+  return !!manifest?.runtimeEnabled;
+};
 
 // 创建学习目标schema
 const createGoalSchema = z.object({
@@ -739,6 +745,13 @@ router.post('/paths/:pathId/generate-all-tasks', async (req, res, next) => {
 // 开始任务学习（使用 ContentAgent v3.0）
 router.post('/tasks/:taskId/start', async (req, res, next) => {
   try {
+    if (!isContentAgentV3Enabled()) {
+      return res.status(503).json({
+        success: false,
+        error: { message: CONTENT_AGENT_OFFLINE_MESSAGE }
+      });
+    }
+
     const userId = req.user.userId;
     const { taskId } = req.params;
     const { pathId } = req.query as { pathId?: string };
@@ -767,9 +780,6 @@ router.post('/tasks/:taskId/start', async (req, res, next) => {
 
     // 2. 创建学习会话
     const session = await learningSessionService.createSession(userId);
-
-    // 3. 初始化 ContentAgent 集成
-    const integration = new ContentAgentIntegration();
 
     // 4. 获取任务信息并生成第一轮内容
     const taskInfo = {
@@ -801,6 +811,13 @@ router.post('/tasks/:taskId/start', async (req, res, next) => {
 // 提交学生回答并获取下一轮内容
 router.post('/tasks/:taskId/respond', async (req, res, next) => {
   try {
+    if (!isContentAgentV3Enabled()) {
+      return res.status(503).json({
+        success: false,
+        error: { message: CONTENT_AGENT_OFFLINE_MESSAGE }
+      });
+    }
+
     const userId = req.user.userId;
     const { taskId } = req.params;
     const { sessionId, response, conversationHistory = [] } = req.body;
@@ -871,7 +888,6 @@ router.post('/tasks/:taskId/respond', async (req, res, next) => {
     const studentState = await learningStateService.getCurrentState(userId);
 
     // 5. 调用 ContentAgent 生成下一轮内容
-    const integration = new ContentAgentIntegration();
     const contentAgent = await import('../agents/content-agent-v3');
     const agent = new contentAgent.ContentAgentV3();
 
@@ -1054,140 +1070,6 @@ router.post('/tasks/:taskId/complete-dialogue', async (req, res, next) => {
     });
   } catch (error: any) {
     logger.error('[Learning API] 完成任务学习失败:', error.message);
-    next(error);
-  }
-});
-
-// ==================== 对话学习 API (ContentAgent v3.0) ====================
-
-// 开始对话学习任务
-router.post('/dialogue/start', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { taskId, pathId } = req.body;
-
-    if (!taskId || !pathId) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '缺少 taskId 或 pathId' }
-      });
-    }
-
-    logger.info('[Learning API] 开始对话学习', { userId, taskId, pathId });
-
-    const result = await dialogueLearningService.startDialogueTask({
-      userId,
-      taskId,
-      pathId
-    });
-
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 开始对话学习失败:', error.message);
-    next(error);
-  }
-});
-
-// 提交学生回答
-router.post('/dialogue/:sessionId/submit', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { sessionId } = req.params;
-    const { response, selectedOption } = req.body;
-
-    if (!response) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '缺少学生回答' }
-      });
-    }
-
-    logger.info('[Learning API] 提交学生回答', {
-      userId,
-      sessionId,
-      responseLength: response.length
-    });
-
-    const result = await dialogueLearningService.submitResponse({
-      sessionId,
-      userId,
-      response,
-      selectedOption
-    });
-
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 提交学生回答失败:', error.message);
-    next(error);
-  }
-});
-
-// 获取提示
-router.post('/dialogue/:sessionId/hint', async (req, res, next) => {
-  try {
-    const { sessionId } = req.params;
-
-    logger.info('[Learning API] 获取提示', { sessionId });
-
-    const result = await dialogueLearningService.getHint(sessionId);
-
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 获取提示失败:', error.message);
-    next(error);
-  }
-});
-
-// 跳过任务
-router.post('/dialogue/:sessionId/skip', async (req, res, next) => {
-  try {
-    const { sessionId } = req.params;
-
-    logger.info('[Learning API] 跳过任务', { sessionId });
-
-    const result = await dialogueLearningService.skipTask(sessionId);
-
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 跳过任务失败:', error.message);
-    next(error);
-  }
-});
-
-// 获取对话状态
-router.get('/dialogue/:sessionId/state', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { sessionId } = req.params;
-
-    logger.info('[Learning API] 获取对话状态', { userId, sessionId });
-
-    const result = await dialogueLearningService.getDialogueState(sessionId);
-
-    // 验证权限
-    if (result.userId !== userId) {
-      // 注：这里需要额外查询 userId，简化处理
-      // 实际应该检查会话的所有者
-    }
-
-    res.json({
-      success: true,
-      data: result
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 获取对话状态失败:', error.message);
     next(error);
   }
 });

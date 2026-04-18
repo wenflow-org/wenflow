@@ -272,6 +272,7 @@ export async function progressAgentHandler(
 
     return {
       success: true,
+      userVisible: reasoning || suggestion || '学习进度已更新',
       progress: {
         signal: signals[0] || { type: 'struggling' as const, intensity: 0, timestamp: new Date().toISOString() },
         metrics: {
@@ -281,6 +282,22 @@ export async function progressAgentHandler(
         },
         recommendations
       },
+      internal: {
+        progress: {
+          signal: signals[0] || { type: 'struggling' as const, intensity: 0, timestamp: new Date().toISOString() },
+          metrics: {
+            ...updatedMetrics,
+            reasoning,
+            suggestion
+          },
+          recommendations
+        }
+      },
+      renderHints: {
+        component: 'progress-report',
+        recommendationCount: recommendations.length
+      },
+      schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'progress-agent',
         agentName: '进度追踪Agent',
@@ -292,6 +309,7 @@ export async function progressAgentHandler(
   } catch (error) {
     return {
       success: false,
+      userVisible: '进度分析失败，请稍后重试',
       error: error instanceof Error ? error.message : 'Unknown error',
       metadata: {
         agentId: 'progress-agent',

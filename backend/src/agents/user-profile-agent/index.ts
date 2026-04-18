@@ -109,6 +109,14 @@ class UserProfileAgent {
       
       return {
         success: true,
+        userVisible: action === 'get-personalization'
+          ? '已生成个性化学习建议'
+          : (action === 'update' ? '用户画像已更新' : '用户画像已获取'),
+        internal: {
+          action,
+          result
+        },
+        schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'user-profile-agent',
           agentName: '用户画像Agent',

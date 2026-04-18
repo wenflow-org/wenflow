@@ -99,11 +99,7 @@
             </el-divider>
 
             <div class="login-tips">
-              <p>默认管理员账号：</p>
-              <ul>
-                <li>用户名：<code>admin</code></li>
-                <li>密码：<code>admin123</code></li>
-              </ul>
+              <p>提示：首次登录请联系系统管理员获取账号</p>
             </div>
           </el-form>
         </div>

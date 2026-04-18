@@ -5,6 +5,8 @@
     "lib": ["ES2020"],
     "outDir": "./dist",
     "rootDir": "./src",
+    // TODO: 后续迭代逐步启用严格模式修复现有类型问题
+    // 当前关闭以保持项目正常运行
     "strict": false,
     "strictNullChecks": false,
     "noImplicitAny": false,

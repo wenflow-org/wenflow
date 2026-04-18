@@ -3,7 +3,10 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">🎭 多智能体演练场</h2>
+        <h2 class="page-title">
+          <el-icon class="page-title-icon"><Connection /></el-icon>
+          多智能体演练场
+        </h2>
         <p class="page-subtitle">AI Agents 自动化测试与优化平台</p>
       </div>
       <div class="header-actions">
@@ -46,7 +49,7 @@
     <el-card class="sessions-card" shadow="hover">
       <template #header>
         <div class="card-header">
-          <span class="card-title">📋 演练记录</span>
+          <span class="card-title">演练记录</span>
           <el-radio-group v-model="filterStatus" size="small">
             <el-radio-button label="">全部</el-radio-button>
             <el-radio-button label="running">运行中</el-radio-button>
@@ -179,7 +182,7 @@
         description="请提供用户画像列表，系统将自动为每个画像创建演练并运行完整流程"
         type="info"
         :closable="false"
-        style="margin-bottom: 1rem"
+        class="batch-alert"
       />
       <el-form :model="batchForm" label-width="100px">
         <el-form-item label="画像列表">
@@ -205,7 +208,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Plus, DocumentCopy, Refresh, ChatDotRound, Timer, Delete } from '@element-plus/icons-vue';
+import { Plus, DocumentCopy, Refresh, ChatDotRound, Timer, Delete, Connection } from '@element-plus/icons-vue';
 import { adminArenaApi } from '@/api/adminApi';
 
 const router = useRouter();
@@ -431,9 +434,9 @@ const getStatusText = (status: string) => {
 
 // 评分颜色
 const getScoreColor = (percentage: number) => {
-  if (percentage >= 80) return '#67c23a';
-  if (percentage >= 60) return '#e6a23c';
-  return '#f56c6c';
+  if (percentage >= 80) return 'var(--color-success)';
+  if (percentage >= 60) return 'var(--color-warning)';
+  return 'var(--color-danger)';
 };
 
 // 格式化时间
@@ -470,13 +473,20 @@ onMounted(() => {
 .page-title {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--text-primary);
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .page-subtitle {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -501,20 +511,20 @@ onMounted(() => {
 .stat-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--color-primary);
 }
 
 .stat-value.success {
-  color: #10b981;
+  color: var(--color-success);
 }
 
 .stat-value.danger {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .stat-label {
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin-top: 0.25rem;
 }
 
@@ -542,15 +552,15 @@ onMounted(() => {
 
 .session-item {
   padding: 1.25rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-light);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .session-item:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .session-header {
@@ -575,25 +585,29 @@ onMounted(() => {
 .session-name {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .persona-preview {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
 }
 
 .persona-preview .label {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .meta-info {
   display: flex;
   gap: 1rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+.batch-alert {
+  margin-bottom: 1rem;
 }
 
 .meta-item {
@@ -616,6 +630,29 @@ onMounted(() => {
 
 .loading-container {
   padding: 2rem 0;
+}
+
+@media (max-width: 980px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 

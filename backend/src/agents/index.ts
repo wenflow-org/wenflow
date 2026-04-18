@@ -105,6 +105,7 @@ import { goalConversationAgentDefinition, goalConversationAgentHandler } from '.
 import { peerAgentDefinition, peerAgentHandler } from './peer-agent';
 import { summaryAgentDefinition, summaryAgentHandler } from './summary-agent';
 import { sessionEvaluationAgentDefinition, sessionEvaluationAgentHandler } from './session-evaluation-agent';
+import { getAgentManifest } from '../services/agent-manifest.service';
 
 export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
@@ -138,6 +139,12 @@ export async function registerOfficialAgents(gateway: {
   registerAgent: (definition: AgentDefinition, handler: any) => Promise<string>
 }): Promise<void> {
   for (const definition of allAgentDefinitions) {
+    const manifest = getAgentManifest(definition.id);
+    if (manifest && !manifest.runtimeEnabled) {
+      console.log(`[Agents] Skipped (disabled): ${definition.name}`);
+      continue;
+    }
+
     const handler = agentHandlers[definition.id];
     if (handler) {
       await gateway.registerAgent(definition, handler);

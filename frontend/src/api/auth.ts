@@ -1,4 +1,4 @@
-﻿// 璁よ瘉API
+// 认证API
 import api from '../utils/api';
 
 export interface LoginData {

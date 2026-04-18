@@ -1,4 +1,4 @@
-﻿// 鐢ㄦ埛鐘舵€佺鐞?
+// 用户状态管理
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { userAPI, type UserProfile, type UpdateProfileData } from '../api/user';
@@ -29,7 +29,7 @@ export const useUserStore = defineStore('user', () => {
 
       return response;
     } catch (err: any) {
-      error.value = err.message || '鐧诲綍澶辫触';
+      error.value = err.message || '登录失败';
       throw err;
     } finally {
       loading.value = false;
@@ -51,7 +51,7 @@ export const useUserStore = defineStore('user', () => {
 
       return response;
     } catch (err: any) {
-      error.value = err.message || '娉ㄥ唽澶辫触';
+      error.value = err.message || '注册失败';
       throw err;
     } finally {
       loading.value = false;
@@ -69,7 +69,7 @@ export const useUserStore = defineStore('user', () => {
       user.value = profile;
       localStorage.setItem('user', JSON.stringify(profile));
     } catch (err: any) {
-      error.value = err.message || '鑾峰彇鐢ㄦ埛淇℃伅澶辫触';
+      error.value = err.message || '获取用户信息失败';
       if (err.status === 401) {
         logout();
       }
@@ -88,7 +88,7 @@ export const useUserStore = defineStore('user', () => {
       localStorage.setItem('user', JSON.stringify(updated));
       return updated;
     } catch (err: any) {
-      error.value = err.message || '鏇存柊澶辫触';
+      error.value = err.message || '更新失败';
       throw err;
     } finally {
       loading.value = false;

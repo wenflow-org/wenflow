@@ -3,8 +3,19 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
 import { z } from 'zod';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
+
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET 环境变量未配置');
+  }
+  return secret;
+};
+
+const JWT_SECRET = getJwtSecret();
 
 // 管理员登录验证 Schema
 const loginSchema = z.object({
@@ -58,7 +69,7 @@ router.post('/login', async (req: Request, res: Response) => {
         name: admin.name,
         isAdmin: true,
       },
-      process.env.JWT_SECRET || 'admin-secret-key',
+      JWT_SECRET,
       {
         expiresIn: '7d',
       }
@@ -86,7 +97,7 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    console.error('管理员登录失败:', error);
+    logger.error('管理员登录失败:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -112,7 +123,7 @@ router.get('/me', async (req: Request, res: Response) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'admin-secret-key');
+    const decoded: any = jwt.verify(token, JWT_SECRET);
 
     if (!decoded.isAdmin) {
       return res.status(403).json({
@@ -163,7 +174,7 @@ router.get('/me', async (req: Request, res: Response) => {
       });
     }
 
-    console.error('获取管理员信息失败:', error);
+    logger.error('获取管理员信息失败:', error);
     res.status(500).json({
       success: false,
       error: {

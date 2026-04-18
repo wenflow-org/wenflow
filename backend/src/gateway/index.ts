@@ -22,6 +22,7 @@ import {
   LearningSignal
 } from '../agents/protocol';
 import { LearningEvent } from './event-bus';
+import { normalizeAgentOutput } from '../agents/output-normalizer';
 
 // Gateway 配置
 export interface GatewayConfig {
@@ -192,7 +193,7 @@ export class EduClawGateway {
       const TIMEOUT_MS = 5 * 60 * 1000; // 5分钟超时（Content Agent 需要多个 AI 调用）
       
       // 设置请求上下文，使所有 AI 调用自动记录到 AgentCallLog
-      const output = await Promise.race([
+      const rawOutput = await Promise.race([
         runWithContext({
           userId: request.context.userId,
           agentId: request.agentId,
@@ -205,6 +206,7 @@ export class EduClawGateway {
         })
       ]);
       
+      const output = normalizeAgentOutput(request.agentId, rawOutput);
       const duration = Date.now() - startTime;
 
       // 更新统计

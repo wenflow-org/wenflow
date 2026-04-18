@@ -381,10 +381,6 @@ const welcomeSubtitle = computed(() => {
   }
 });
 
-onMounted(async () => {
-  await fetchStats();
-});
-
 async function fetchStats() {
   loading.value = true;
   try {
@@ -424,7 +420,8 @@ const handleLogout = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchStats();
   window.addEventListener('scroll', handleScroll);
 });
 

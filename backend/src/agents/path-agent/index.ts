@@ -159,7 +159,17 @@ export async function pathAgentHandler(
 
     return {
       success: true,
+      userVisible: `学习路径已生成：${path.name}`,
       path,
+      internal: {
+        path,
+        totalMilestones: path.milestones?.length || 0,
+      },
+      renderHints: {
+        component: 'learning-path',
+        totalMilestones: path.milestones?.length || 0,
+      },
+      schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'path-agent',
         agentName: '学习路径规划Agent',
@@ -171,7 +181,9 @@ export async function pathAgentHandler(
   } catch (error) {
     return {
       success: false,
+      userVisible: '学习路径生成失败，请稍后重试',
       error: error instanceof Error ? error.message : 'Unknown error',
+      schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'path-agent',
         agentName: '学习路径规划Agent',

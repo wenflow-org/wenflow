@@ -1,7 +1,10 @@
 <template>
   <div class="manifest-diagnostics-page" v-loading="loading">
     <div class="page-header">
-      <h2 class="page-title">🧪 架构一致性诊断</h2>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><WarningFilled /></el-icon>
+        架构一致性诊断
+      </h2>
       <p class="page-subtitle">检查 Manifest 与注册表、模型配置、日志、目录之间的漂移</p>
     </div>
 
@@ -55,6 +58,43 @@
 
       <el-card class="panel-card" shadow="never">
         <template #header>
+          <div class="card-header">输出协议健康度</div>
+        </template>
+
+        <el-table :data="outputContractRows" size="small" empty-text="暂无输出协议样本" stripe>
+          <el-table-column prop="source" label="来源" min-width="160" />
+          <el-table-column prop="sampleSize" label="样本数" width="90" />
+          <el-table-column label="v1" width="130">
+            <template #default="scope">
+              <el-tag size="small" type="success">{{ scope.row.v1 }} ({{ formatRatio(scope.row.v1, scope.row.sampleSize) }})</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="legacy" width="130">
+            <template #default="scope">
+              <el-tag size="small" :type="scope.row.legacy > 0 ? 'warning' : 'success'">
+                {{ scope.row.legacy }} ({{ formatRatio(scope.row.legacy, scope.row.sampleSize) }})
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="mixed" width="130">
+            <template #default="scope">
+              <el-tag size="small" :type="scope.row.mixed > 0 ? 'warning' : 'success'">
+                {{ scope.row.mixed }} ({{ formatRatio(scope.row.mixed, scope.row.sampleSize) }})
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="unknown" width="130">
+            <template #default="scope">
+              <el-tag size="small" :type="scope.row.unknown > 0 ? 'danger' : 'success'">
+                {{ scope.row.unknown }} ({{ formatRatio(scope.row.unknown, scope.row.sampleSize) }})
+              </el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-card class="panel-card" shadow="never">
+        <template #header>
           <div class="card-header">Alias 漂移</div>
         </template>
 
@@ -98,6 +138,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
+import { WarningFilled } from '@element-plus/icons-vue';
 import { adminAgentsApi, type ManifestDiagnosticsData } from '@/api/adminApi';
 
 const loading = ref(false);
@@ -112,9 +153,30 @@ const summaryItems = computed(() => {
     { label: '模型配置条目', value: s.modelConfigTotal },
     { label: '日志 Agent 数', value: s.calledAgentTotal },
     { label: '目录条目', value: s.catalogTotal },
+    { label: '日志输出样本', value: s.outputContractSampleSize ?? 0 },
+    { label: 'Arena 输出样本', value: s.arenaOutputContractSampleSize ?? 0 },
     { label: '漂移总数', value: s.driftCount }
   ];
 });
+
+const outputContractRows = computed(() => {
+  if (!diagnostics.value?.outputContracts) return [];
+  return [
+    {
+      source: 'agent_call_logs',
+      ...diagnostics.value.outputContracts.agentCallLogs
+    },
+    {
+      source: 'arena_agent_logs',
+      ...diagnostics.value.outputContracts.arenaAgentLogs
+    }
+  ];
+});
+
+const formatRatio = (value: number, total: number) => {
+  if (!total) return '0%';
+  return `${((value / total) * 100).toFixed(1)}%`;
+};
 
 const driftItems = computed(() => {
   if (!diagnostics.value) return [];
@@ -170,6 +232,13 @@ onMounted(loadData);
 .page-title {
   margin: 0;
   color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .page-subtitle {

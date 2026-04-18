@@ -1,7 +1,10 @@
 <template>
   <div class="admin-overview">
     <div class="page-header">
-      <h2 class="page-title">📊 平台概览</h2>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><DataAnalysis /></el-icon>
+        平台概览
+      </h2>
       <p class="page-subtitle">实时监控平台运行状态和关键指标</p>
     </div>
 
@@ -94,8 +97,11 @@
 
     <!-- Agent 运行状态 -->
     <div class="section">
-      <h3 class="section-title">🤖 Agent / 编排器 运行状态</h3>
-      <el-table :data="agentStatuses" stripe style="min-width: 100%">
+      <h3 class="section-title">
+        <el-icon><Cpu /></el-icon>
+        Agent / 编排器 运行状态
+      </h3>
+      <el-table :data="agentStatuses" stripe class="agent-status-table">
         <el-table-column prop="name" label="Agent" min-width="140">
           <template #default="{ row }">
             <div class="agent-name">
@@ -119,12 +125,12 @@
         <el-table-column prop="totalCalls" label="总调用" width="80" align="center" />
         <el-table-column prop="successCalls" label="成功" width="80" align="center">
           <template #default="{ row }">
-            <span style="color: var(--el-color-success)">{{ row.successCalls }}</span>
+            <span class="success-count">{{ row.successCalls }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="errorCalls" label="失败" width="80" align="center">
           <template #default="{ row }">
-            <span style="color: var(--el-color-danger)">{{ row.errorCalls }}</span>
+            <span class="error-count">{{ row.errorCalls }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="lastActivity" label="最后活跃" width="140">
@@ -136,7 +142,10 @@
     </div>
 
     <div class="section">
-      <h3 class="section-title">📈 最近 24 小时异常趋势</h3>
+      <h3 class="section-title">
+        <el-icon><TrendCharts /></el-icon>
+        最近 24 小时异常趋势
+      </h3>
       <div class="trend-panel" v-if="trendPoints.length > 0">
         <div class="trend-row trend-row--head">
           <span class="trend-time">时间</span>
@@ -180,6 +189,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi';
 import { ElMessage } from 'element-plus';
+import { DataAnalysis, Cpu, TrendCharts } from '@element-plus/icons-vue';
 
 const stats = ref<any>({});
 const agentStatuses = ref<any[]>([]);
@@ -340,6 +350,13 @@ onMounted(() => {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 0.5rem 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .page-subtitle {
@@ -452,6 +469,21 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.agent-status-table {
+  min-width: 100%;
+}
+
+.success-count {
+  color: var(--color-success);
+}
+
+.error-count {
+  color: var(--color-danger);
 }
 
 .trend-panel {

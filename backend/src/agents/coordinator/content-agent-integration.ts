@@ -22,6 +22,7 @@ import { learningStateService, LearningStateMetrics } from '../../services/learn
 import { studentBaselineService } from '../../services/student-baseline.service';
 import { learningSessionService } from '../../services/learning/learning-session.service';
 import { createEventBus, EventBus } from '../../gateway/event-bus';
+import { normalizeAgentOutput } from '../output-normalizer';
 
 // ==================== 类型定义 ====================
 
@@ -525,11 +526,14 @@ export class ContentAgentIntegration {
         }
       );
       
-      if (progressResult.success) {
+      const normalizedProgress = normalizeAgentOutput('progress-agent', progressResult);
+      const progressPayload = normalizedProgress.internal?.progress || progressResult.progress;
+
+      if (normalizedProgress.success) {
         logger.info('[ContentAgentIntegration] 进度更新完成', {
           userId,
           taskId,
-          progress: progressResult.progress
+          progress: progressPayload
         });
         
         // 发布事件
@@ -639,12 +643,19 @@ export class ContentAgentIntegration {
           sessionId: actualSessionId
         } as any);
         
-        const contentOutput = contentResult as unknown as ContentAgentOutput;
+        const normalizedContent = normalizeAgentOutput('content-agent-v3', contentResult);
+        const contentOutput = (normalizedContent.internal?.output || contentResult) as unknown as ContentAgentOutput;
+        const questionText = contentOutput.content?.question || normalizedContent.userVisible || '';
+
+        if (!contentOutput.evaluationParams) {
+          throw new Error('CONTENT_AGENT_OUTPUT_INVALID: missing evaluationParams');
+        }
         
         logger.info('[ContentAgentIntegration] 第' + (dialogueState.currentRound + 1) + '轮内容生成', {
-          strategy: contentOutput.internal.strategy,
-          stage: contentOutput.internal.conversationStage,
-          uiType: contentOutput.content.uiType
+          strategy: contentOutput.internal?.strategy,
+          stage: contentOutput.internal?.conversationStage,
+          uiType: contentOutput.content?.uiType,
+          schemaVersion: normalizedContent.schemaVersion || 'legacy'
         });
         
         // 4.2 这里应该将内容返回给前端，等待学生回答
@@ -664,7 +675,7 @@ export class ContentAgentIntegration {
           actualSessionId,
           {
             role: 'assistant',
-            content: contentOutput.content.question,
+            content: questionText,
             timestamp: new Date().toISOString()
           },
           userId
