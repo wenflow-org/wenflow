@@ -90,11 +90,18 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 ### 一键启动（开发环境）
 
 ```bash
-# Windows
-start-dev.bat
-
-# 或 PowerShell
+# PowerShell
 ./start-dev.ps1
+```
+
+### 首次环境配置（推荐）
+
+```bash
+# 交互式初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
+npm run env:setup
+
+# 仅快速打开 backend/.env 手动编辑
+npm run env:edit
 ```
 
 ### 手动启动

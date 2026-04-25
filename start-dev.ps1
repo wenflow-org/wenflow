@@ -1,7 +1,9 @@
 # One-click start script for WenFlow
 
 param(
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$Setup,
+    [switch]$EditEnv
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,11 +49,34 @@ function Stop-PortProcess {
     }
 }
 
+function Get-EnvValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$Key
+    )
+
+    if (-not (Test-Path $Path)) {
+        return ''
+    }
+
+    $escapedKey = [Regex]::Escape($Key)
+    $line = Get-Content -Path $Path | Where-Object { $_ -match "^\s*$escapedKey\s*=" } | Select-Object -First 1
+    if (-not $line) {
+        return ''
+    }
+
+    return (($line -replace "^\s*$escapedKey\s*=", '').Trim())
+}
+
 Write-Host "Starting WenFlow..." -ForegroundColor Cyan
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $backendPath = Join-Path $scriptDir 'backend'
 $frontendPath = Join-Path $scriptDir 'frontend'
+$backendEnvPath = Join-Path $backendPath '.env'
+$setupScriptPath = Join-Path $scriptDir 'setup-env.ps1'
 
 if (-not (Test-Path $backendPath)) {
     Write-Host "Backend directory not found: $backendPath" -ForegroundColor Red
@@ -61,6 +86,43 @@ if (-not (Test-Path $backendPath)) {
 if (-not (Test-Path $frontendPath)) {
     Write-Host "Frontend directory not found: $frontendPath" -ForegroundColor Red
     exit 1
+}
+
+if ($EditEnv) {
+    if (-not (Test-Path $setupScriptPath)) {
+        Write-Host "setup-env.ps1 not found: $setupScriptPath" -ForegroundColor Red
+        exit 1
+    }
+
+    & $setupScriptPath -EditOnly
+    exit $LASTEXITCODE
+}
+
+if ($Setup) {
+    if (-not (Test-Path $setupScriptPath)) {
+        Write-Host "setup-env.ps1 not found: $setupScriptPath" -ForegroundColor Red
+        exit 1
+    }
+
+    & $setupScriptPath
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+
+$jwtSecret = Get-EnvValue -Path $backendEnvPath -Key 'JWT_SECRET'
+$needsEnvSetup = (-not (Test-Path $backendEnvPath)) -or [string]::IsNullOrWhiteSpace($jwtSecret) -or $jwtSecret.Length -lt 32
+if ($needsEnvSetup) {
+    if (-not (Test-Path $setupScriptPath)) {
+        Write-Host "Missing backend/.env and setup helper not found: $setupScriptPath" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Backend env is missing required values, launching setup..." -ForegroundColor Yellow
+    & $setupScriptPath
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 }
 
 if (-not (Test-Path (Join-Path $backendPath 'node_modules'))) {
