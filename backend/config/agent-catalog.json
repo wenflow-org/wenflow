@@ -24,6 +24,11 @@
     "updatedAt": "2026-04-11T00:00:00.000Z",
     "updatedBy": "system"
   },
+  "session-wrapup-agent": {
+    "status": "published",
+    "updatedAt": "2026-04-11T00:00:00.000Z",
+    "updatedBy": "system"
+  },
   "learner-model-agent": {
     "status": "published",
     "updatedAt": "2026-04-11T00:00:00.000Z",

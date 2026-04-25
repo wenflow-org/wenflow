@@ -569,8 +569,8 @@ model teaching_sessions {
   messages       String?
   knowledgeState String?
   teachingState  String?
-  summary        String?
-  evaluation     String?
+  wrapup         String?
+  advisory       String?
   startTime      DateTime @default(now())
   endTime        DateTime?
   duration       Int?

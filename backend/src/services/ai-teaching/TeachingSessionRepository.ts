@@ -27,8 +27,8 @@ export interface TeachingSessionRecord {
   messages: TeachingSessionMessage[];
   knowledgeState: TeachingKnowledgePointState[];
   teachingState: Record<string, any> | null;
-  summary: Record<string, any> | null;
-  evaluation: Record<string, any> | null;
+  wrapup: Record<string, any> | null;
+  advisory: Record<string, any> | null;
   startTime: Date;
   endTime: Date | null;
   duration: number | null;
@@ -75,8 +75,8 @@ function mapRecord(record: any): TeachingSessionRecord {
     messages: parseJsonSafe(record.messages, []),
     knowledgeState: parseJsonSafe(record.knowledgeState, []),
     teachingState: parseJsonSafe(record.teachingState, null),
-    summary: parseJsonSafe(record.summary, null),
-    evaluation: parseJsonSafe(record.evaluation, null),
+    wrapup: parseJsonSafe(record.wrapup, null),
+    advisory: parseJsonSafe(record.advisory, null),
     startTime: record.startTime,
     endTime: record.endTime,
     duration: record.duration,
@@ -176,8 +176,8 @@ class TeachingSessionRepository {
       messages: TeachingSessionMessage[];
       knowledgeState: TeachingKnowledgePointState[];
       teachingState?: Record<string, any> | null;
-      summary?: Record<string, any> | null;
-      evaluation?: Record<string, any> | null;
+      wrapup?: Record<string, any> | null;
+      advisory?: Record<string, any> | null;
       duration?: number | null;
     }
   ): Promise<void> {
@@ -190,8 +190,8 @@ class TeachingSessionRepository {
         messages: JSON.stringify(payload.messages),
         knowledgeState: JSON.stringify(payload.knowledgeState),
         teachingState: payload.teachingState ? JSON.stringify(payload.teachingState) : null,
-        summary: payload.summary ? JSON.stringify(payload.summary) : null,
-        evaluation: payload.evaluation ? JSON.stringify(payload.evaluation) : null,
+        wrapup: payload.wrapup ? JSON.stringify(payload.wrapup) : null,
+        advisory: payload.advisory ? JSON.stringify(payload.advisory) : null,
         updatedAt: new Date(),
       }
     });

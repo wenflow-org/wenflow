@@ -406,8 +406,7 @@ const agentOptions = ref<Array<{ label: string; value: string }>>([
   { label: '教学执行', value: 'Teaching' },
   { label: '教学编排', value: 'TeachingOrchestration' },
   { label: '伴学介入', value: 'LearningCompanion' },
-  { label: '会话评估', value: 'SessionEvaluation' },
-  { label: '课后总结', value: 'Summary' }
+  { label: '课后产出', value: 'SessionWrapup' }
 ]);
 
 // 自动刷新
@@ -473,8 +472,7 @@ const getAgentDisplayName = (name: string) => {
     'ai-teaching': '教学编排',
     'ai-teaching-agent': '教学编排',
     LearningCompanion: '伴学介入',
-    SessionEvaluation: '会话评估',
-    Summary: '课后总结'
+    SessionWrapup: '课后产出'
   };
   return map[name] || name;
 };

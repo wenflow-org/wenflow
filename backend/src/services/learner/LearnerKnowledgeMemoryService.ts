@@ -117,8 +117,7 @@ export class LearnerKnowledgeMemoryService {
         taskId: true,
         milestoneId: true,
         knowledgeState: true,
-        evaluation: true,
-        summary: true,
+        wrapup: true,
         endTime: true,
         updatedAt: true,
       },
@@ -171,8 +170,9 @@ export class LearnerKnowledgeMemoryService {
         session.knowledgeState,
         []
       );
-      const summary = parseJsonSafe<any>(session.summary, null);
-      const evaluation = parseJsonSafe<any>(session.evaluation, null);
+      const wrapup = parseJsonSafe<any>(session.wrapup, null);
+      const summaryPayload = wrapup?.summary || null;
+      const evaluationPayload = wrapup?.evaluation || null;
       const happenedAt = (session.endTime || session.updatedAt).toISOString();
 
       for (const point of knowledgeState) {
@@ -209,8 +209,8 @@ export class LearnerKnowledgeMemoryService {
         });
       }
 
-      if (Array.isArray(summary?.knowledgeItems)) {
-        for (const item of summary.knowledgeItems) {
+      if (Array.isArray(summaryPayload?.knowledgeItems)) {
+        for (const item of summaryPayload.knowledgeItems) {
           const conceptKey = normalizeConceptKey(item?.name);
           if (!conceptKey) continue;
           const score = typeof item.progress === 'number' ? clamp(item.progress / 100, 0, 1) : 0.5;
@@ -235,20 +235,20 @@ export class LearnerKnowledgeMemoryService {
           type: 'summary',
           taskId: session.taskId,
           sessionId: session.id,
-          conceptKeys: summary.knowledgeItems.map((item: any) => item?.name).filter(Boolean),
-          signal: summary.knowledgeItems.some((item: any) => item?.status === 'mastered') ? 'mastery' : 'incomplete',
+          conceptKeys: summaryPayload.knowledgeItems.map((item: any) => item?.name).filter(Boolean),
+          signal: summaryPayload.knowledgeItems.some((item: any) => item?.status === 'mastered') ? 'mastery' : 'incomplete',
           happenedAt,
         });
       }
 
-      if (evaluation) {
+      if (evaluationPayload) {
         recentEvidence.push({
           type: 'evaluation',
           taskId: session.taskId,
           sessionId: session.id,
           conceptKeys: knowledgeState.map((item) => item.name).filter(Boolean),
-          signal: evaluation.sessionLf >= 6 ? 'fatigue' : evaluation.sessionKtl >= 6 ? 'mastery' : evaluation.sessionLss >= 6 ? 'struggle' : 'incomplete',
-          score: typeof evaluation.sessionKtl === 'number' ? clamp(evaluation.sessionKtl / 10, 0, 1) : undefined,
+          signal: evaluationPayload.sessionLf >= 6 ? 'fatigue' : evaluationPayload.sessionKtl >= 6 ? 'mastery' : evaluationPayload.sessionLss >= 6 ? 'struggle' : 'incomplete',
+          score: typeof evaluationPayload.sessionKtl === 'number' ? clamp(evaluationPayload.sessionKtl / 10, 0, 1) : undefined,
           happenedAt,
         });
       }

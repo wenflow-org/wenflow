@@ -36,6 +36,11 @@
               <span>学习者模型</span>
             </el-menu-item>
 
+            <el-menu-item index="/admin/teaching-sessions">
+              <el-icon><Reading /></el-icon>
+              <span>教学会话调试</span>
+            </el-menu-item>
+
             <el-menu-item index="/admin/api-config">
               <el-icon><Setting /></el-icon>
               <span>API 管理</span>

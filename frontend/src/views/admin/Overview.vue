@@ -91,6 +91,11 @@
             <span>24h 活跃 Agent：{{ stats.agents?.activeAgents24h || 0 }}</span>
             <span>今日超时：{{ stats.agents?.todayTimeouts || 0 }}</span>
           </div>
+          <div v-if="stats.agents?.wrapup?.sampleSize" class="wrapup-subline">
+            <span>Wrapup 样本：{{ stats.agents.wrapup.sampleSize }}</span>
+            <span>总结(model/fallback)：{{ stats.agents.wrapup.summaryModel || 0 }}/{{ stats.agents.wrapup.summaryFallback || 0 }}</span>
+            <span>评估(model/ai-fallback/failed)：{{ stats.agents.wrapup.evaluationModel || 0 }}/{{ stats.agents.wrapup.evaluationAiFallback || 0 }}/{{ stats.agents.wrapup.evaluationFailed || 0 }}</span>
+          </div>
         </div>
       </el-card>
     </div>
@@ -307,8 +312,7 @@ const getAgentDisplayName = (name: string) => {
     Teaching: '教学执行',
     TeachingOrchestration: '教学编排',
     LearningCompanion: '伴学介入',
-    SessionEvaluation: '会话评估',
-    Summary: '课后总结'
+    SessionWrapup: '课后产出'
   };
 
   return map[name] || name;
@@ -426,6 +430,14 @@ onMounted(() => {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.wrapup-subline {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
   color: var(--text-muted);
   font-size: 0.75rem;
 }

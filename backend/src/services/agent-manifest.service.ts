@@ -6,8 +6,7 @@ export type MonitoringGroupName =
   | 'Teaching'
   | 'TeachingOrchestration'
   | 'LearningCompanion'
-  | 'SessionEvaluation'
-  | 'Summary';
+  | 'SessionWrapup';
 
 export interface AgentManifestEntry {
   id: string;
@@ -118,33 +117,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     }
   },
   {
-    id: 'summary-agent',
-    name: '总结 Agent',
-    description: '课后总结生成',
+    id: 'session-wrapup-agent',
+    name: '课后产出 Agent',
+    description: '统一生成课后总结与评估',
     category: 'evaluation',
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Summary',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: {
-      temperature: 0.3,
-      maxTokens: 1800
-    }
-  },
-  {
-    id: 'session-evaluation-agent',
-    name: '会话评估 Agent',
-    description: '学习会话质量评估',
-    category: 'evaluation',
-    kind: 'agent',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'SessionEvaluation',
+    monitoringGroup: 'SessionWrapup',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.2,
-      maxTokens: 1000
+      maxTokens: 2200
     }
   },
   {
@@ -179,7 +163,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     monitoringGroup: 'TeachingOrchestration',
     aliases: ['ai-teaching'],
-    orchestratorMembers: ['ai-teaching-agent', 'teaching-turn-agent', 'peer-agent', 'summary-agent', 'session-evaluation-agent']
+    orchestratorMembers: ['ai-teaching-agent', 'teaching-turn-agent', 'peer-agent', 'session-wrapup-agent']
   }
 ];
 

@@ -579,10 +579,13 @@ class LearningService {
         duration: true,
         startTime: true,
         endTime: true,
+        wrapup: true,
       },
     });
 
     const actualMinutesMap = new Map<string, number>();
+    const latestSessionAtMap = new Map<string, string>();
+    const latestWrapupStatusMap = new Map<string, string | null>();
     sessions.forEach((session) => {
       if (!session.taskId) return;
 
@@ -590,6 +593,18 @@ class LearningService {
       if (minutes <= 0) return;
 
       actualMinutesMap.set(session.taskId, (actualMinutesMap.get(session.taskId) || 0) + minutes);
+
+      const sessionAt = (session.endTime || session.startTime)?.toISOString?.() || null;
+      const previousAt = latestSessionAtMap.get(session.taskId);
+      if (sessionAt && (!previousAt || new Date(sessionAt).getTime() > new Date(previousAt).getTime())) {
+        latestSessionAtMap.set(session.taskId, sessionAt);
+        try {
+          const wrapup = session.wrapup ? JSON.parse(session.wrapup) : null;
+          latestWrapupStatusMap.set(session.taskId, wrapup?.status || null);
+        } catch {
+          latestWrapupStatusMap.set(session.taskId, null);
+        }
+      }
     });
 
     return {
@@ -599,9 +614,48 @@ class LearningService {
         subtasks: (milestone.subtasks || []).map((task: any) => ({
           ...task,
           actualMinutes: actualMinutesMap.get(task.id) ?? null,
+          hasTeachingWrapup: latestSessionAtMap.has(task.id),
+          latestTeachingSessionAt: latestSessionAtMap.get(task.id) ?? null,
+          latestWrapupStatus: latestWrapupStatusMap.get(task.id) ?? null,
         })),
       })),
     };
+  }
+
+  async markTaskInProgress(taskId: string, userId: string) {
+    const subtask = await prisma.subtasks.findUnique({
+      where: { id: taskId },
+      include: {
+        milestones: {
+          include: {
+            learning_paths: {
+              select: {
+                userId: true,
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!subtask) {
+      throw new Error('任务不存在');
+    }
+
+    const pathOwner = subtask.milestones?.learning_paths?.userId;
+    if (pathOwner && pathOwner !== userId) {
+      throw new Error('无权访问此任务');
+    }
+
+    if (subtask.status === 'todo') {
+      await prisma.subtasks.update({
+        where: { id: taskId },
+        data: {
+          status: 'in_progress',
+          updatedAt: new Date(),
+        }
+      });
+    }
   }
 
   // 创建学习目标
@@ -1413,8 +1467,33 @@ const learningPath = await prisma.learning_paths.findUnique({
             learningBlockedReason: null
           };
 
+      const latestTeachingSession = await prisma.teaching_sessions.findFirst({
+        where: {
+          taskId,
+          ...(userId ? { userId } : {}),
+          wrapup: { not: null },
+        },
+        orderBy: { startTime: 'desc' },
+        select: {
+          startTime: true,
+          wrapup: true,
+        }
+      });
+
+      let latestWrapupStatus: string | null = null;
+      if (latestTeachingSession?.wrapup) {
+        try {
+          latestWrapupStatus = JSON.parse(latestTeachingSession.wrapup)?.status || null;
+        } catch {
+          latestWrapupStatus = null;
+        }
+      }
+
       return {
         ...subtask,
+        hasTeachingWrapup: !!latestTeachingSession,
+        latestTeachingSessionAt: latestTeachingSession?.startTime?.toISOString?.() || null,
+        latestWrapupStatus,
         week: subtask.milestones,
         milestone: subtask.milestones,
         learningPath: learningPath
@@ -1832,7 +1911,22 @@ const learningPath = await prisma.learning_paths.findUnique({
       const inProgressSubtasks = subtasks.filter(t => t.status === 'in_progress');
       const todoSubtasks = subtasks.filter(t => t.status === 'todo');
 
-      const totalMinutes = subtasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
+      const totalEstimatedMinutes = subtasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
+      const sessions = await prisma.teaching_sessions.findMany({
+        where: { userId },
+        select: {
+          duration: true,
+          startTime: true,
+          endTime: true,
+        },
+      });
+      const totalMinutes = sessions.reduce((sum, session) => sum + this.normalizeSessionDurationMinutes(session), 0);
+      const activeLearningDays = new Set(
+        sessions.map((session) => session.startTime.toISOString().split('T')[0])
+      ).size;
+      const avgDailyMinutes = activeLearningDays > 0
+        ? Number((totalMinutes / activeLearningDays).toFixed(1))
+        : 0;
 
       // 获取学习状态指标
       const currentState = await stateTrackingService.getCurrentState(userId);
@@ -1864,6 +1958,9 @@ const learningPath = await prisma.learning_paths.findUnique({
         time: {
           totalMinutes,
           totalCompleted: totalMinutes,
+          totalEstimated: totalEstimatedMinutes,
+          activeLearningDays,
+          avgDailyMinutes,
           progress: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
           completionRate: subtasks.length > 0 ? (completedSubtasks.length / subtasks.length * 100).toFixed(1) : '0'
         },

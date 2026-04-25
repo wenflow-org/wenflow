@@ -399,11 +399,36 @@
                   :total-count="msg.totalCount || 0"
                   :duration="formatTime(activeTime)"
                   :message-count="messages.length"
-                  :summary="{
-                    topicSummary: msg.content || '本节课已完成。',
-                    knowledgeSummary: `已完成 ${msg.masteredCount || 0}/${msg.totalCount || 0} 个知识点。`,
-                    practiceAdvice: msg.practiceAdvice || '建议复盘本节课核心知识点。',
-                    learningEvaluation: '本次测试课已完成，可继续进入下一主题。'
+                  :wrapup="{
+                    status: 'summary-only',
+                    sources: { summary: 'fallback', evaluation: 'failed' },
+                    summary: {
+                      topicSummary: msg.content || '本节课已完成。',
+                      knowledgeSummary: `已完成 ${msg.masteredCount || 0}/${msg.totalCount || 0} 个知识点。`,
+                      practiceAdvice: msg.practiceAdvice || '建议复盘本节课核心知识点。',
+                      learningEvaluation: '本次测试课已完成，可继续进入下一主题。',
+                      knowledgeItems: [],
+                      keyTakeaways: [],
+                      actionPlan: [],
+                      evaluationHighlights: { strengths: [], improvements: [] },
+                      metricInterpretation: {
+                        session: '本次测试课已完成。',
+                        longTerm: '长期指标需要结合正式学习记录观察。'
+                      },
+                      summaryVersion: 'v2'
+                    },
+                    evaluation: null,
+                    progress: { newlyMastered: [], movedToReview: [], stillLearning: [], unchangedMastered: [] },
+                    evidence: {
+                      turnCount: 0,
+                      avgUnderstanding: null,
+                      avgEngagement: null,
+                      dominantCognitiveLevel: null,
+                      lastCognitiveLevel: null,
+                      topConfusionPoints: [],
+                      emotionalSignals: { positive: 0, neutral: 0, frustrated: 0, confused: 0 },
+                      completionCandidateSeen: false
+                    }
                   }"
                   @action="handleCompletionAction"
                 />
@@ -844,7 +869,9 @@ async function startSession() {
 
     messages.value.push({
       role: 'assistant',
-      content: session.welcomeMessage || `欢迎来到 **${session.subject}** 课堂！\n\n今天我们学习的主题是：**${session.topic}**\n\n请随时提问或回答我的问题，我会根据你的学习状态调整教学方式。`,
+      content: session.opening?.message
+        ? `${session.opening.message}\n\n${session.opening.question}`
+        : session.welcomeMessage || `欢迎来到 **${session.subject}** 课堂！\n\n今天我们学习的主题是：**${session.topic}**\n\n请随时提问或回答我的问题，我会根据你的学习状态调整教学方式。`,
       timestamp: new Date().toISOString()
     });
 
@@ -1083,15 +1110,15 @@ const endSession = async () => {
       timestamp: new Date().toISOString()
     });
 
-    if (result.evaluation) {
+    if (result.wrapup?.evaluation) {
       lastSessionEvaluation.value = {
-        lss: result.evaluation.lss || 0,
-        ktl: result.evaluation.ktl || 0,
-        lf: result.evaluation.lf || 0,
-        lsb: result.evaluation.lsb || 0,
-        messageCount: result.evaluation.messageCount || messages.value.length,
-        avgUnderstanding: result.evaluation.avgUnderstanding || 0,
-        duration: result.evaluation.duration || activeTime.value,
+        lss: result.wrapup.stateUpdate?.lss || 0,
+        ktl: result.wrapup.stateUpdate?.ktl || 0,
+        lf: result.wrapup.stateUpdate?.lf || 0,
+        lsb: result.wrapup.stateUpdate?.lsb || 0,
+        messageCount: result.wrapup.evaluation.messageCount || messages.value.length,
+        avgUnderstanding: result.wrapup.evaluation.avgUnderstanding || 0,
+        duration: result.wrapup.evaluation.duration || activeTime.value,
       };
       showEvaluationDialog.value = true;
     }

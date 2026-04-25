@@ -303,14 +303,25 @@ const completionRate = computed(() => {
   return Math.round((stats.value.tasks.completed / total) * 100);
 });
 
+const formatHours = (minutes: number) => {
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
+};
+
 const avgDailyHours = computed(() => {
-  if (!stats.value) return 0;
-  const hours = Math.floor((stats.value.time.totalCompleted || stats.value.time.totalMinutes || 0) / 60);
-  return (hours / 30).toFixed(1);
+  if (!stats.value) return '0';
+  const avgDailyMinutes = stats.value.time.avgDailyMinutes;
+  if (typeof avgDailyMinutes === 'number' && avgDailyMinutes > 0) {
+    return formatHours(avgDailyMinutes);
+  }
+  const totalMinutes = stats.value.time.totalCompleted || stats.value.time.totalMinutes || 0;
+  const activeDays = stats.value.time.activeLearningDays || 0;
+  if (totalMinutes <= 0 || activeDays <= 0) return '0';
+  return formatHours(totalMinutes / activeDays);
 });
 
 const totalLearningMinutes = computed(() => stats.value?.time.totalCompleted || stats.value?.time.totalMinutes || 0);
-const totalLearningHours = computed(() => Math.floor(totalLearningMinutes.value / 60));
+const totalLearningHours = computed(() => formatHours(totalLearningMinutes.value));
 const pathCount = computed(() => stats.value?.paths?.total || 0);
 const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.value?.subtasks?.completed || 0);
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);

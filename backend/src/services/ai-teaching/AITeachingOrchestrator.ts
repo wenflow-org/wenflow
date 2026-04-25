@@ -1,8 +1,8 @@
 import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
-import { summaryAgent, type SummaryOutput } from '../../agents/summary-agent';
-import { sessionEvaluationAgent } from '../../agents/session-evaluation-agent';
+import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../agents/session-wrapup-agent';
+import { sessionWrapupAgent, toWrapupArtifact } from '../../agents/session-wrapup-agent';
 import { teachingTurnAgentHandler, type TeachingTurnInput, type TeachingTurnOutput } from '../../agents/teaching-turn-agent';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { getEventBus } from '../../gateway/event-bus';
@@ -18,6 +18,9 @@ import { knowledgeStateService } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { teachingContextCompressionService } from './TeachingContextCompressionService';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
+import learningService from '../learning/learning.service';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'ai-teaching-agent';
@@ -31,6 +34,13 @@ export interface KnowledgePointStatus {
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
+}
+
+export interface TeachingOpening {
+  message: string;
+  question: string;
+  quickReplies: Array<{ text: string }>;
+  mode: 'self-assess' | 'predict' | 'example-first';
 }
 
 function buildSessionId(userId: string) {
@@ -59,6 +69,119 @@ function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]): Knowle
   }));
 }
 
+function parseSessionArtifacts(teachingState: Record<string, any> | null | undefined) {
+  return teachingState?.sessionArtifacts || {};
+}
+
+function computeKnowledgeDelta(
+  initialPoints: TeachingKnowledgePointState[],
+  finalPoints: TeachingKnowledgePointState[]
+) {
+  const initialMap = new Map(initialPoints.map((point) => [point.name, point]));
+  const finalMap = new Map(finalPoints.map((point) => [point.name, point]));
+  const names = Array.from(new Set([...initialMap.keys(), ...finalMap.keys()]));
+
+  const newlyMastered: string[] = [];
+  const movedToReview: string[] = [];
+  const stillLearning: string[] = [];
+  const unchangedMastered: string[] = [];
+
+  for (const name of names) {
+    const before = initialMap.get(name);
+    const after = finalMap.get(name);
+    if (!after) continue;
+
+    if (after.status === 'mastered') {
+      if (!before || before.status !== 'mastered') {
+        newlyMastered.push(name);
+      } else {
+        unchangedMastered.push(name);
+      }
+      continue;
+    }
+
+    if (after.status === 'review' && before?.status !== 'review') {
+      movedToReview.push(name);
+      continue;
+    }
+
+    if (after.status === 'learning' || after.status === 'pending') {
+      stillLearning.push(name);
+    }
+  }
+
+  return {
+    newlyMastered,
+    movedToReview,
+    stillLearning,
+    unchangedMastered,
+  };
+}
+
+function computeSessionEvidence(session: TeachingSessionRecord) {
+  const analyzedMessages = session.messages.filter((message) => !!message.analysis);
+  const avg = (values: number[]) => values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const understandingScores = analyzedMessages
+    .map((message) => Number(message.analysis?.understanding))
+    .filter((value) => Number.isFinite(value));
+  const engagementScores = analyzedMessages
+    .map((message) => Number(message.analysis?.engagement))
+    .filter((value) => Number.isFinite(value));
+
+  const confusionCounter = new Map<string, number>();
+  const cognitiveCounter = new Map<string, number>();
+  const emotionalSignals = {
+    positive: 0,
+    neutral: 0,
+    frustrated: 0,
+    confused: 0,
+  };
+
+  for (const message of analyzedMessages) {
+    const confusionPoints = Array.isArray(message.analysis?.confusionPoints)
+      ? message.analysis?.confusionPoints
+      : [];
+    for (const point of confusionPoints) {
+      if (!point || typeof point !== 'string') continue;
+      confusionCounter.set(point, (confusionCounter.get(point) || 0) + 1);
+    }
+
+    const level = typeof message.analysis?.cognitiveLevel === 'string'
+      ? message.analysis.cognitiveLevel
+      : null;
+    if (level) {
+      cognitiveCounter.set(level, (cognitiveCounter.get(level) || 0) + 1);
+    }
+
+    const emotion = typeof message.analysis?.emotionalState === 'string'
+      ? message.analysis.emotionalState
+      : null;
+    if (emotion === 'positive' || emotion === 'neutral' || emotion === 'frustrated' || emotion === 'confused') {
+      emotionalSignals[emotion] += 1;
+    }
+  }
+
+  const dominantCognitiveLevel = Array.from(cognitiveCounter.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const lastCognitiveLevel = [...analyzedMessages].reverse().find((message) => !!message.analysis?.cognitiveLevel)?.analysis?.cognitiveLevel || null;
+  const topConfusionPoints = Array.from(confusionCounter.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([label]) => label);
+  const completionCandidateSeen = !!session.messages.find((message) => message.analysis?.completionCandidate === true)
+    || !!(session.teachingState as any)?.completionCandidate;
+
+  return {
+    turnCount: session.messages.filter((message) => message.role === 'user').length,
+    avgUnderstanding: avg(understandingScores),
+    avgEngagement: avg(engagementScores),
+    dominantCognitiveLevel,
+    lastCognitiveLevel,
+    topConfusionPoints,
+    emotionalSignals,
+    completionCandidateSeen,
+  };
+}
+
 function buildTeachingTurnInput(
   session: TeachingSessionRecord,
   context: TeachingScenarioContext
@@ -79,6 +202,7 @@ function buildTeachingTurnInput(
       currentStageNumber: context.teachingProjection.pathContext.currentStageNumber,
       currentTaskOrder: context.teachingProjection.pathContext.currentTaskOrder,
       totalTasksInMilestone: context.teachingProjection.pathContext.totalTasksInMilestone,
+      taskKnowledgeScope: context.taskKnowledgeScope,
       contextCompression: compression.compressed ? {
         enabled: true,
         estimatedTokens: compression.estimatedTokens,
@@ -98,6 +222,51 @@ function buildTeachingTurnInput(
       mode: session.mode as TeachingMode,
     }
   };
+}
+
+function normalizeConcept(value: string | null | undefined): string | null {
+  if (!value || typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  return normalized || null;
+}
+
+function buildTaskKnowledgeCandidates(context: TeachingScenarioContext, currentPoint: string | null): string[] {
+  return Array.from(new Set([
+    ...context.taskKnowledgeScope.primaryConcepts,
+    ...context.taskKnowledgeScope.prerequisiteConcepts,
+    currentPoint,
+  ].map((item) => normalizeConcept(item)).filter(Boolean) as string[]));
+}
+
+function isTaskScopedKnowledgePoint(name: string, candidates: string[]): boolean {
+  const normalized = normalizeConcept(name);
+  if (!normalized) return false;
+  return candidates.some((candidate) => {
+    const lowerName = normalized.toLowerCase();
+    const lowerCandidate = candidate.toLowerCase();
+    return lowerName === lowerCandidate || lowerName.includes(lowerCandidate) || lowerCandidate.includes(lowerName);
+  });
+}
+
+function filterTaskScopedKnowledgePoints(
+  context: TeachingScenarioContext,
+  output: TeachingTurnOutput,
+  existingPoints: TeachingKnowledgePointState[]
+) {
+  const candidates = buildTaskKnowledgeCandidates(context, output.knowledge.currentPoint);
+  const filteredOutputPoints = output.knowledge.points.filter((point) => isTaskScopedKnowledgePoint(point.name, candidates));
+  const filteredExistingPoints = existingPoints.filter((point) => isTaskScopedKnowledgePoint(point.name, candidates));
+
+  return {
+    ...output,
+    knowledge: {
+      ...output.knowledge,
+      currentPoint: isTaskScopedKnowledgePoint(output.knowledge.currentPoint || '', candidates)
+        ? output.knowledge.currentPoint
+        : filteredOutputPoints[0]?.name || filteredExistingPoints[0]?.name || null,
+      points: filteredOutputPoints.slice(0, 5),
+    }
+  } as TeachingTurnOutput;
 }
 
 function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
@@ -120,12 +289,14 @@ export class AITeachingOrchestrator {
     topic: string;
     startTime: Date;
     welcomeMessage: string;
+    opening: TeachingOpening;
   }> {
     const previousSession = await teachingSessionRepository.getActiveByTask(input.userId, input.taskId);
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, previousSession);
 
     const sessionId = buildSessionId(input.userId);
-    const welcomeMessage = await this.generateWelcomeMessage(context);
+    const opening = await this.generateOpening(context);
+    const welcomeMessage = `${opening.message}\n\n${opening.question}`;
 
     const session = await teachingSessionRepository.create({
       id: sessionId,
@@ -142,12 +313,19 @@ export class AITeachingOrchestrator {
           role: 'assistant',
           content: welcomeMessage,
           timestamp: new Date().toISOString(),
+          analysis: {
+            openingMode: opening.mode,
+            quickReplies: opening.quickReplies,
+          }
         }
       ],
       knowledgeState: context.previousSession?.knowledgePoints || [],
-      teachingState: context.learningState ? {
-        ...context.learningState,
-      } : null,
+      teachingState: {
+        ...(context.learningState || {}),
+        sessionArtifacts: {
+          initialKnowledgeState: context.previousSession?.knowledgePoints || [],
+        },
+      },
     });
 
     logger.info('[AITeaching] 新教学会话已创建', {
@@ -162,17 +340,43 @@ export class AITeachingOrchestrator {
       topic: session.topic,
       startTime: session.startTime,
       welcomeMessage,
+      opening,
     };
   }
 
-  private async generateWelcomeMessage(context: TeachingScenarioContext): Promise<string> {
+  private async generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { agentId: AI_TEACHING_AGENT_ID };
+    const openingMode: TeachingOpening['mode'] = context.taskType === 'project'
+      || context.taskType === 'practice'
+      || context.teachingProjection.stableProfile.confidenceLevel === 'anxious'
+      ? 'example-first'
+      : context.teachingProjection.liveState.recentTrend === 'improving'
+        && context.teachingProjection.liveState.recommendedPacing !== 'slow'
+        ? 'predict'
+        : 'self-assess';
     const response = await gateway.execute({
       messages: [
         {
           role: 'system',
-          content: '你是一位经验丰富的 AI 教师。请用 120 字以内生成课堂开场白，说明本节学习主题和目标，语气自然友好，可使用 Markdown。'
+          content: `你是一位经验丰富的 AI 教师。请为本节课生成一个“开场交互块”，输出严格 JSON。
+
+格式：
+{
+  "message": "1-2 句开场定位，不要像通知",
+  "question": "一句低门槛互动问题",
+  "quickReplies": [{"text":"选项1"}, {"text":"选项2"}, {"text":"选项3"}]
+}
+
+要求：
+1. 只输出 JSON
+2. 开场要有互动感，不要只是宣布上课
+3. question 必须容易回答，适合学生立即回应
+4. quickReplies 提供 2-3 个短选项，适合一键点击
+5. 结合任务类型、当前阶段、学习者信心与节奏来决定 opening 风格
+6. 如果 mode = example-first，优先从一个小例子或具体切入口打开
+7. 如果 mode = predict，优先让学生先猜或先判断
+8. 如果 mode = self-assess，优先让学生快速自评当前熟悉度或难点`
         },
         {
           role: 'user',
@@ -180,13 +384,62 @@ export class AITeachingOrchestrator {
             subject: context.subject,
             topic: context.topic,
             taskTitle: context.taskTitle,
+            taskDescription: context.taskDescription,
+            taskType: context.taskType,
             pathSummary: context.pathContext.pathSummary,
+            currentMilestoneTitle: context.teachingProjection.pathContext.currentMilestoneTitle,
+            learner: {
+              preferredStyle: context.teachingProjection.stableProfile.preferredStyle,
+              confidenceLevel: context.teachingProjection.stableProfile.confidenceLevel,
+              recentTrend: context.teachingProjection.liveState.recentTrend,
+              recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
+              fragile: context.teachingProjection.relevantKnowledge.fragile.slice(0, 3),
+              struggling: context.teachingProjection.relevantKnowledge.struggling.slice(0, 3),
+            },
+            openingMode,
           })
         }
       ]
     }, caller, { userId: context.userId });
 
-    return response.choices[0]?.message.content || `欢迎来到 **${context.subject}** 学习。本节我们聚焦 **${context.topic}**，一起把这个任务真正学明白。`;
+    try {
+      const content = response.choices[0]?.message.content || '{}';
+      const parsed = JSON.parse(content);
+      const quickReplies = Array.isArray(parsed?.quickReplies)
+        ? parsed.quickReplies
+            .map((item: any) => typeof item?.text === 'string' ? { text: item.text.trim() } : null)
+            .filter((item: any) => item && item.text)
+            .slice(0, 3)
+        : [];
+
+      if (typeof parsed?.message === 'string' && typeof parsed?.question === 'string' && quickReplies.length > 0) {
+        return {
+          message: parsed.message.trim(),
+          question: parsed.question.trim(),
+          quickReplies,
+          mode: openingMode,
+        };
+      }
+    } catch {
+      // ignore and use fallback
+    }
+
+    const fallbackQuickReplies = openingMode === 'predict'
+      ? [{ text: '我先猜一下' }, { text: '先给我一个例子' }, { text: '我会一点' }]
+      : openingMode === 'example-first'
+        ? [{ text: '先给我一个最小例子' }, { text: '一步步带我做' }, { text: '我想先自己试试' }]
+        : [{ text: '我完全不会' }, { text: '我知道一点' }, { text: '直接开始吧' }];
+
+    return {
+      message: `这节我们聚焦 **${context.topic}**，我会结合你当前的学习状态，用尽量顺手的方式带你进入这个任务。`,
+      question: openingMode === 'predict'
+        ? '开始前，你想先猜一下这题/这个概念会怎么走，还是先看一个例子？'
+        : openingMode === 'example-first'
+          ? '开始前，你更希望我先给一个最小例子，还是一步一步带你拆开？'
+          : '开始前，你觉得自己对这块是完全陌生、知道一点，还是已经做过类似内容？',
+      quickReplies: fallbackQuickReplies,
+      mode: openingMode,
+    };
   }
 
   async processStudentMessage(
@@ -228,8 +481,12 @@ export class AITeachingOrchestrator {
       throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
     }
 
-    const teachingOutput = extractTeachingOutput(turnResult);
-    const mergedKnowledge = knowledgeStateService.merge(session.knowledgeState, teachingOutput.knowledge.points);
+    const rawTeachingOutput = extractTeachingOutput(turnResult);
+    const teachingOutput = filterTaskScopedKnowledgePoints(context, rawTeachingOutput, session.knowledgeState);
+    const mergedKnowledge = knowledgeStateService.merge(
+      session.knowledgeState.filter((point) => isTaskScopedKnowledgePoint(point.name, buildTaskKnowledgeCandidates(context, teachingOutput.knowledge.currentPoint))),
+      teachingOutput.knowledge.points
+    );
     const peerTriggered = peerTriggerService.shouldTrigger(session, teachingOutput, message);
     const assistantMessage: TeachingSessionMessage = {
       role: 'assistant',
@@ -255,6 +512,7 @@ export class AITeachingOrchestrator {
       strategies: teachingOutput.pedagogy.strategies,
       completionCandidate: teachingOutput.control.isCompletionCandidate,
       peerTriggered,
+      sessionArtifacts: parseSessionArtifacts(session.teachingState),
     };
 
     await teachingSessionRepository.updateTurnState(sessionId, {
@@ -262,6 +520,8 @@ export class AITeachingOrchestrator {
       knowledgeState: mergedKnowledge,
       teachingState,
     });
+
+    await learningService.markTaskInProgress(session.taskId, session.userId);
 
     return {
       analysis: teachingOutput.analysis,
@@ -277,25 +537,13 @@ export class AITeachingOrchestrator {
   }
 
   async endSession(sessionId: string): Promise<{
-    summary: SummaryOutput;
-    summarySource: 'model' | 'fallback';
-    finalState: LearningStateMetrics | null;
-    duration: number;
-    evaluation?: {
-      lss: number;
-      ktl: number;
-      lf: number;
-      lsb: number;
-      sessionLss: number;
-      sessionKtl: number;
-      sessionLf: number;
-      confidence: number;
-      evaluationSource: 'model' | 'fallback';
-      messageCount: number;
-      avgUnderstanding: number;
-      avgCognitiveLevel: string;
+    wrapup: SessionWrapupArtifact & {
+      stateUpdate: LearningStateMetrics | null;
       duration: number;
+      summarySource: 'model' | 'fallback';
+      evaluationSource: 'model' | 'ai-fallback' | 'failed';
     };
+    advisory: ReplanAdvisory;
   }> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session) {
@@ -303,12 +551,20 @@ export class AITeachingOrchestrator {
     }
 
     const durationMinutes = Math.max(1, Math.round((Date.now() - session.startTime.getTime()) / 60000));
+    const sessionArtifacts = parseSessionArtifacts(session.teachingState);
+    const initialKnowledgeState = Array.isArray(sessionArtifacts.initialKnowledgeState)
+      ? sessionArtifacts.initialKnowledgeState
+      : [];
+    const knowledgeDelta = computeKnowledgeDelta(initialKnowledgeState, session.knowledgeState);
+    const sessionEvidence = computeSessionEvidence(session);
+    const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
 
-    const evaluationResult = await sessionEvaluationAgent.evaluate({
+    const wrapupResult = await sessionWrapupAgent.generate({
       messages: session.messages.map((message) => ({
         role: message.role,
         content: message.content,
         timestamp: new Date(message.timestamp),
+        analysis: message.analysis,
       })),
       knowledgePoints: session.knowledgeState,
       sessionInfo: {
@@ -317,51 +573,87 @@ export class AITeachingOrchestrator {
         durationMinutes,
         userMessageCount: session.messages.filter((message) => message.role === 'user').length,
         assistantMessageCount: session.messages.filter((message) => message.role === 'assistant').length,
-      }
-    });
-
-    const finalState = await learningStateService.calculateAndUpdateFromSessionScore(session.userId, {
-      sessionLss: evaluationResult.evaluation.sessionLss,
-      durationMinutes,
-      confidence: evaluationResult.evaluation.confidence,
-    });
-
-    const summaryResult = await summaryAgent.generate({
-      messages: session.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-        timestamp: new Date(message.timestamp),
-      })),
-      knowledgePoints: session.knowledgeState,
-      learningState: finalState ? {
-        lss: finalState.lss,
-        ktl: finalState.ktl,
-        lf: finalState.lf,
-        lsb: finalState.lsb,
+        taskType: session.taskType,
+        taskTitle: context.taskTitle,
+        taskDescription: context.taskDescription,
+        pathTitle: context.pathContext.pathTitle || null,
+        pathSummary: context.pathContext.pathSummary || null,
+      },
+      learningState: context.learningState ? {
+        ...context.learningState,
+        recentTrend: context.teachingProjection.liveState.recentTrend,
+        recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
       } : undefined,
+      knowledgeContext: {
+        initialPoints: initialKnowledgeState,
+        delta: knowledgeDelta,
+      },
+      sessionEvidence,
+    });
+
+    const wrapupArtifact = toWrapupArtifact(wrapupResult, {
+      messages: session.messages,
+      knowledgePoints: session.knowledgeState,
       sessionInfo: {
         subject: session.subject,
         topic: session.topic,
-        duration: durationMinutes,
-        messageCount: session.messages.filter((message) => message.role === 'user').length,
-      }
+        durationMinutes,
+        userMessageCount: session.messages.filter((message) => message.role === 'user').length,
+        assistantMessageCount: session.messages.filter((message) => message.role === 'assistant').length,
+        taskType: session.taskType,
+        taskTitle: context.taskTitle,
+        taskDescription: context.taskDescription,
+        pathTitle: context.pathContext.pathTitle || null,
+        pathSummary: context.pathContext.pathSummary || null,
+      },
+      learningState: context.learningState ? {
+        ...context.learningState,
+        recentTrend: context.teachingProjection.liveState.recentTrend,
+        recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
+      } : undefined,
+      knowledgeContext: {
+        initialPoints: initialKnowledgeState,
+        delta: knowledgeDelta,
+      },
+      sessionEvidence,
     });
+
+    const evaluationResult = wrapupResult.evaluation
+      ? {
+          source: wrapupResult.evaluationSource,
+          evaluation: wrapupResult.evaluation,
+        }
+      : null;
+
+    const finalState = evaluationResult
+      ? await learningStateService.calculateAndUpdateFromSessionScore(session.userId, {
+          sessionLss: evaluationResult.evaluation.sessionLss,
+          durationMinutes,
+          confidence: evaluationResult.evaluation.confidence,
+        })
+      : null;
 
     const lastAnalyzedMessage = [...session.messages].reverse().find((message) => !!message.analysis);
 
     const persistedEvaluation = {
-      ...evaluationResult.evaluation,
-      lss: finalState.lss,
-      ktl: finalState.ktl,
-      lf: finalState.lf,
-      lsb: finalState.lsb,
-      evaluationSource: evaluationResult.source,
+      ...(evaluationResult ? evaluationResult.evaluation : {}),
+      lss: finalState?.lss ?? 0,
+      ktl: finalState?.ktl ?? 0,
+      lf: finalState?.lf ?? 0,
+      lsb: finalState?.lsb ?? 0,
+      evaluationSource: (evaluationResult?.source || 'failed') as 'model' | 'ai-fallback' | 'failed',
       messageCount: session.messages.filter((message) => message.role === 'user').length,
-      avgUnderstanding: session.messages
-        .filter((message) => message.analysis)
-        .reduce((sum, message, _index, array) => sum + (message.analysis?.understanding || 0), 0) / Math.max(1, session.messages.filter((message) => message.analysis).length),
+      avgUnderstanding: sessionEvidence.avgUnderstanding ?? 0,
       avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',
       duration: durationMinutes,
+    };
+
+    const persistedWrapup = {
+      ...wrapupArtifact,
+      duration: durationMinutes,
+      stateUpdate: finalState,
+      summarySource: wrapupResult.summarySource,
+      evaluationSource: wrapupResult.evaluationSource,
     };
 
     await teachingSessionRepository.complete(sessionId, {
@@ -369,18 +661,53 @@ export class AITeachingOrchestrator {
       knowledgeState: session.knowledgeState,
       teachingState: finalState ? {
         ...finalState,
-      } : null,
-      summary: summaryResult.summary,
-      evaluation: persistedEvaluation,
+        sessionArtifacts,
+      } : {
+        sessionArtifacts,
+      },
+      wrapup: persistedWrapup,
+      advisory: null,
       duration: durationMinutes,
     });
 
-    void learnerSnapshotRefreshService.refresh({
+    const learnerSnapshot = await learnerSnapshotRefreshService.refresh({
       userId: session.userId,
       pathId: session.learningPathId || undefined,
       milestoneId: session.milestoneId || undefined,
       taskId: session.taskId,
       scope: 'teaching',
+    });
+    const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
+    const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
+    const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
+    const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
+    const advisory = replanAdvisoryService.build({
+      wrapup: persistedWrapup,
+      learnerReplanProjection,
+      nextMilestone: nextMilestone ? {
+        milestoneId: nextMilestone.milestoneId,
+        title: nextMilestone.title,
+        goal: nextMilestone.goal,
+        totalTasks: nextMilestone.totalTasks,
+      } : null,
+    });
+
+    const finalWrapup = {
+      ...persistedWrapup,
+      learner: {
+        recentTrend: learnerSnapshot.dynamicState.recentTrend,
+        fatigueRisk: learnerSnapshot.dynamicState.fatigueRisk,
+        recommendedPacing: learnerSnapshot.dynamicState.recommendedPacing,
+      },
+    };
+
+    await prisma.teaching_sessions.update({
+      where: { id: sessionId },
+      data: {
+        wrapup: JSON.stringify(finalWrapup),
+        advisory: JSON.stringify(advisory),
+        updatedAt: new Date(),
+      }
     });
 
     void getEventBus().emit({
@@ -388,21 +715,20 @@ export class AITeachingOrchestrator {
       source: AI_TEACHING_AGENT_ID,
       userId: session.userId,
       sessionId: session.id,
-      data: {
-        lessonId: session.id,
-        sessionId: session.id,
-        taskId: session.taskId,
-        pathId: session.learningPathId,
-        performance: persistedEvaluation,
-      },
-    });
+        data: {
+          lessonId: session.id,
+          sessionId: session.id,
+          taskId: session.taskId,
+          pathId: session.learningPathId,
+          performance: evaluationResult ? persistedEvaluation : null,
+          wrapup: finalWrapup,
+          advisory,
+        },
+      });
 
     return {
-      summary: summaryResult.summary,
-      summarySource: summaryResult.source,
-      finalState,
-      duration: durationMinutes,
-      evaluation: persistedEvaluation,
+      wrapup: finalWrapup,
+      advisory,
     };
   }
 
@@ -443,6 +769,8 @@ export class AITeachingOrchestrator {
     messages: Array<{ role: string; content: string; timestamp: string; analysis?: any }>;
     state: any;
     knowledgePoints?: any[];
+    wrapup?: any | null;
+    advisory?: ReplanAdvisory | null;
   } | null> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.userId !== userId) {
@@ -461,6 +789,8 @@ export class AITeachingOrchestrator {
       messages: session.messages,
       state: session.teachingState || {},
       knowledgePoints: session.knowledgeState,
+      wrapup: session.wrapup,
+      advisory: (session.advisory as ReplanAdvisory | null) || null,
     };
   }
 
@@ -473,16 +803,15 @@ export class AITeachingOrchestrator {
     duration: number;
     messageCount: number;
     knowledgePoints: any[];
-    summary: SummaryOutput;
-    summarySource?: 'model' | 'fallback';
-    evaluation: any;
+    wrapup: any;
+    advisory?: ReplanAdvisory | null;
   } | null> {
     const sessions = await teachingSessionRepository.listByUser(userId);
     const target = sessions
-      .filter((session) => session.taskId === taskId && session.status === 'completed' && session.summary && session.evaluation)
+      .filter((session) => session.taskId === taskId && session.status === 'completed' && session.wrapup)
       .sort((a, b) => (b.endTime?.getTime() || 0) - (a.endTime?.getTime() || 0))[0];
 
-    if (!target || !target.summary || !target.evaluation) {
+    if (!target || !target.wrapup) {
       return null;
     }
 
@@ -495,9 +824,8 @@ export class AITeachingOrchestrator {
       duration: target.duration || 0,
       messageCount: target.messages.filter((message) => message.role === 'user').length,
       knowledgePoints: target.knowledgeState,
-      summary: target.summary as SummaryOutput,
-      summarySource: 'model',
-      evaluation: target.evaluation,
+      wrapup: target.wrapup,
+      advisory: (target.advisory as ReplanAdvisory | null) || null,
     };
   }
 

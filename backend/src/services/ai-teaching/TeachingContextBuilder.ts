@@ -15,6 +15,10 @@ export interface TeachingScenarioContext {
   taskTitle: string;
   taskDescription: string;
   taskType: 'reading' | 'practice' | 'project' | 'quiz';
+  taskKnowledgeScope: {
+    primaryConcepts: string[];
+    prerequisiteConcepts: string[];
+  };
   canStartLearning: boolean;
   learningBlockedReason: string | null;
   learnerSnapshot: LearnerSnapshot;
@@ -53,6 +57,32 @@ function parsePathSummary(raw: string | null | undefined): string | null {
   return typeof summary === 'string' && summary.trim() ? summary.trim() : null;
 }
 
+function normalizeConcept(value: string | null | undefined): string | null {
+  if (!value || typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  return normalized || null;
+}
+
+function dedupeConcepts(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => normalizeConcept(value)).filter(Boolean) as string[]));
+}
+
+function parseLearningObjectives(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return dedupeConcepts(parsed.map((item) => String(item)));
+    }
+    if (typeof parsed === 'string') {
+      return dedupeConcepts([parsed]);
+    }
+  } catch {
+    return dedupeConcepts([raw]);
+  }
+  return [];
+}
+
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
@@ -88,6 +118,15 @@ export async function buildTeachingScenarioContext(
   });
   const learnerSnapshot = learnerResult.snapshot;
   const teachingProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
+  const primaryConcepts = dedupeConcepts([
+    (task as any).coreConcept,
+    (task as any).displayLabel,
+    ...parseLearningObjectives((task as any).learningObjectives),
+  ]);
+  const prerequisiteConcepts = (learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps || [])
+    .map((item) => item.label)
+    .filter((label) => primaryConcepts.some((concept) => label.includes(concept) || concept.includes(label)))
+    .slice(0, 2);
 
   const canStartLearning = previousSession?.status === 'active'
     ? true
@@ -103,6 +142,10 @@ export async function buildTeachingScenarioContext(
     taskTitle: task.title,
     taskDescription: task.description || '',
     taskType: (task.taskType as 'reading' | 'practice' | 'project' | 'quiz') || 'practice',
+    taskKnowledgeScope: {
+      primaryConcepts,
+      prerequisiteConcepts,
+    },
     canStartLearning,
     learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习。',
     learnerSnapshot,

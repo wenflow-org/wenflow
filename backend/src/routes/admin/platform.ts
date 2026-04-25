@@ -24,8 +24,7 @@ const MONITORED_AGENT_ORDER = [
   'Teaching',
   'TeachingOrchestration',
   'LearningCompanion',
-  'SessionEvaluation',
-  'Summary'
+  'SessionWrapup'
 ];
 
 const AGENT_ID_TO_NAME = Object.entries(AGENT_NAME_TO_IDS).reduce((acc, [name, ids]) => {
@@ -369,7 +368,8 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       agentSuccessToday,
       agentTimeoutToday,
       activeAgents24h,
-      recentAgentLogs24h
+      recentAgentLogs24h,
+      wrapupLogs
     ] = await Promise.all([
       // 总用户数
       prisma.users.count(),
@@ -508,8 +508,41 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           errorCode: true,
           error: true
         }
+      }),
+
+      prisma.agent_call_logs.findMany({
+        where: { agentId: 'session-wrapup-agent' },
+        orderBy: { calledAt: 'desc' },
+        take: 200,
+        select: { output: true }
       })
     ]);
+
+    const wrapupSourceStats = {
+      sampleSize: 0,
+      summaryModel: 0,
+      summaryFallback: 0,
+      evaluationModel: 0,
+      evaluationAiFallback: 0,
+      evaluationFailed: 0,
+    };
+
+    for (const log of wrapupLogs) {
+      if (!log.output) continue;
+      try {
+        const parsed = JSON.parse(log.output);
+        const summarySource = parsed?.sources?.summary || parsed?.summarySource;
+        const evaluationSource = parsed?.sources?.evaluation || parsed?.evaluationSource;
+        wrapupSourceStats.sampleSize += 1;
+        if (summarySource === 'model') wrapupSourceStats.summaryModel += 1;
+        if (summarySource === 'fallback') wrapupSourceStats.summaryFallback += 1;
+        if (evaluationSource === 'model') wrapupSourceStats.evaluationModel += 1;
+        if (evaluationSource === 'ai-fallback') wrapupSourceStats.evaluationAiFallback += 1;
+        if (evaluationSource === 'failed') wrapupSourceStats.evaluationFailed += 1;
+      } catch {
+        continue;
+      }
+    }
 
     // 计算活跃用户数
     const activeUsersCount = activeUsersToday.length;
@@ -601,6 +634,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
           todaySuccessRate: (agentTodaySuccessRate * 100).toFixed(1),
           todayTimeouts: agentTimeoutToday,
           last24h: hourlyTrend,
+          wrapup: wrapupSourceStats,
         },
         platformStats,
       },
@@ -938,8 +972,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
         { name: 'Teaching', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'TeachingOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearningCompanion', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'SessionEvaluation', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'Summary', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
+        { name: 'SessionWrapup', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
       ];
       return res.json({
         success: true,
@@ -1537,6 +1570,88 @@ router.get('/activity', async (req: Request, res: Response) => {
       success: false,
       error: {
         message: '获取活动日志失败',
+        status: 500
+      }
+    });
+  }
+});
+
+/**
+ * GET /api/admin/teaching-sessions
+ * 教学会话调试视图：聚焦 wrapup / advisory
+ */
+router.get('/teaching-sessions', async (req: Request, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 20));
+    const userId = (req.query.userId as string) || undefined;
+    const status = (req.query.status as string) || undefined;
+    const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
+
+    const where: any = {
+      ...(userId ? { userId } : {}),
+      ...(status ? { status } : {}),
+      ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
+    };
+
+    const [total, sessions] = await Promise.all([
+      prisma.teaching_sessions.count({ where }),
+      prisma.teaching_sessions.findMany({
+        where,
+        orderBy: { startTime: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          users: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      })
+    ]);
+
+    const items = sessions.map((session) => {
+      const wrapup = session.wrapup ? JSON.parse(session.wrapup) : null;
+      const advisory = session.advisory ? JSON.parse(session.advisory) : null;
+      const messages = session.messages ? JSON.parse(session.messages) : [];
+      const knowledgePoints = session.knowledgeState ? JSON.parse(session.knowledgeState) : [];
+
+      return {
+        id: session.id,
+        userId: session.userId,
+        userName: session.users?.name || null,
+        email: session.users?.email || null,
+        taskId: session.taskId,
+        learningPathId: session.learningPathId,
+        milestoneId: session.milestoneId,
+        subject: session.subject,
+        topic: session.topic,
+        taskType: session.taskType,
+        status: session.status,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        duration: session.duration,
+        messageCount: Array.isArray(messages) ? messages.filter((m: any) => m?.role === 'user').length : 0,
+        knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
+        wrapup,
+        advisory,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        page,
+        limit,
+        total,
+        items,
+      }
+    });
+  } catch (error: any) {
+    console.error('获取教学会话调试数据失败:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取教学会话调试数据失败',
         status: 500
       }
     });

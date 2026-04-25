@@ -121,7 +121,17 @@
                   <div class="message-meta">
                     <span class="message-time">{{ formatDateTime(msg.timestamp) }}</span>
                   </div>
-                  <div v-if="msg.strategies && msg.strategies.length" class="message-strategies">
+                  <div v-if="msg.quickReplies && msg.quickReplies.length && !msg.quickRepliesUsed && index === 0" class="quick-replies">
+                    <div
+                      v-for="reply in msg.quickReplies"
+                      :key="reply.text"
+                      class="quick-reply-card"
+                      @click="useOpeningQuickReply(reply.text, index)"
+                    >
+                      <span class="reply-text">{{ reply.text }}</span>
+                    </div>
+                  </div>
+                  <div v-if="showStrategyHints && msg.strategies && msg.strategies.length" class="message-strategies">
                     <el-tag
                       v-for="s in msg.strategies"
                       :key="s"
@@ -242,14 +252,10 @@
         :total-count="knowledgePoints.length"
         :duration="formatTime(completionDurationSeconds || activeTime)"
         :message-count="messages.length"
-        :evaluation="sessionEvaluation"
-        :summary="sessionSummary || {
-          topicSummary: '本节课完成了相关主题的学习。',
-          knowledgeSummary: '知识点已学习完成。',
-          practiceAdvice: '建议继续巩固学习。',
-          learningEvaluation: '学习表现良好。'
-        }"
+        :wrapup="sessionWrapup"
+        :advisory="sessionAdvisory"
         @action="handleCompletionAction"
+        @advisory-action="handleWrapupAdvisoryAction"
       />
     </el-dialog>
   </div>
@@ -265,8 +271,9 @@ import {
   Refresh, CopyDocument
 } from '@element-plus/icons-vue';
 import { aiTeachingAPI } from '@/api/aiTeaching';
-import type { KnowledgePointStatus } from '@/api/aiTeaching';
+import type { KnowledgePointStatus, ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 import api from '../utils/api';
+import { learningAPI } from '@/api/learning';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import KnowledgePointCard from '@/components/KnowledgePointCard.vue';
 import KnowledgePointList from '@/components/KnowledgePointList.vue';
@@ -295,6 +302,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  quickReplies?: Array<{ text: string }>;
+  quickRepliesUsed?: boolean;
   analysis?: {
     cognitiveLevel: string;
     levelScore: number;
@@ -327,34 +336,57 @@ const activeTime = ref(0);
 let timerInterval: number | null = null;
 let lastActivityTime = ref(Date.now());
 
-const lastSessionEvaluation = ref<{
-  lss: number;
-  ktl: number;
-  lf: number;
-  lsb: number;
-  messageCount: number;
-  avgUnderstanding: number;
-  duration: number;
-} | null>(null);
-
 const showEvaluationDialog = ref(false);
 const endingSession = ref(false);
-const sessionEvaluation = ref({
-  lss: 0,
-  ktl: 0,
-  lf: 0,
-  lsb: 0,
-  messageCount: 0,
-  avgUnderstanding: 0,
-  duration: 0
+const sessionWrapup = ref<WrapupArtifact>({
+  status: 'summary-only',
+  sources: {
+    summary: 'fallback',
+    evaluation: 'failed',
+  },
+  summary: {
+    topicSummary: '本节课完成了相关主题的学习。',
+    knowledgeSummary: '知识点已学习完成。',
+    practiceAdvice: '建议继续巩固学习。',
+    learningEvaluation: '学习表现良好。',
+    knowledgeItems: [],
+    keyTakeaways: [],
+    actionPlan: [],
+    evaluationHighlights: {
+      strengths: [],
+      improvements: [],
+    },
+    metricInterpretation: {
+      session: '本节表现反映本次课堂的即时投入和产出。',
+      longTerm: '长期状态来自历史累计，不等于单节课程成绩。',
+    },
+    summaryVersion: 'v2',
+  },
+  evaluation: null,
+  progress: {
+    newlyMastered: [],
+    movedToReview: [],
+    stillLearning: [],
+    unchangedMastered: [],
+  },
+  evidence: {
+    turnCount: 0,
+    avgUnderstanding: null,
+    avgEngagement: null,
+    dominantCognitiveLevel: null,
+    lastCognitiveLevel: null,
+    topConfusionPoints: [],
+    emotionalSignals: {
+      positive: 0,
+      neutral: 0,
+      frustrated: 0,
+      confused: 0,
+    },
+    completionCandidateSeen: false,
+  },
 });
-
-const sessionSummary = ref<{
-  topicSummary: string;
-  knowledgeSummary: string;
-  practiceAdvice: string;
-  learningEvaluation: string;
-} | null>(null);
+const sessionAdvisory = ref<ReplanAdvisory | null>(null);
+const showStrategyHints = false;
 
 const allKnowledgePointsMastered = computed(() => {
   return knowledgePoints.value.length > 0
@@ -440,8 +472,7 @@ const startSession = async () => {
     messages.value = [];
     knowledgePoints.value = [];
     peerChatMessages.value = [];
-    lastSessionEvaluation.value = null;
-    sessionSummary.value = null;
+    sessionAdvisory.value = null;
     showCompletionPrompt.value = false;
     completionDurationSeconds.value = 0;
     peerNotificationVisible.value = false;
@@ -451,8 +482,12 @@ const startSession = async () => {
     
     messages.value.push({
       role: 'assistant',
-      content: session.welcomeMessage,
-      timestamp: new Date().toISOString()
+      content: session.opening?.message
+        ? `${session.opening.message}\n\n${session.opening.question}`
+        : session.welcomeMessage,
+      timestamp: new Date().toISOString(),
+      quickReplies: session.opening?.quickReplies || [],
+      quickRepliesUsed: false,
     });
     
     startTimer();
@@ -558,6 +593,14 @@ const handleKnowledgeAction = async (action: 'mastered' | 'need-more') => {
   sendMessage();
 };
 
+const useOpeningQuickReply = async (text: string, messageIndex: number) => {
+  const msg = messages.value[messageIndex];
+  if (!msg || aiLoading.value) return;
+  msg.quickRepliesUsed = true;
+  userInput.value = text;
+  await sendMessage();
+};
+
 const handlePeerChatSend = async (text: string) => {
   if (!sessionInfo.value.sessionId) return;
   
@@ -618,7 +661,27 @@ const openPeerChatFromNotification = async () => {
   }
 };
 
-const handleCompletionAction = (action: 'end') => {
+const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
+  if (action === 'continue-task') {
+    showEvaluationDialog.value = false;
+    ElMessage.success('已保留当前任务进度，你可以稍后继续学习');
+    return;
+  }
+
+  if (action === 'complete-task') {
+    try {
+      const actualMinutes = Math.ceil(activeTime.value / 60);
+      await api.post(`/learning/tasks/${taskId.value}/complete`, {
+        actualMinutes
+      });
+      ElMessage.success('已将本任务标记为完成');
+      closeEvaluationAndReturn();
+    } catch (error: any) {
+      ElMessage.error(error.message || '标记任务完成失败');
+    }
+    return;
+  }
+
   if (action === 'end') {
     closeEvaluationAndReturn();
   }
@@ -691,45 +754,21 @@ const endSession = async (options?: {
       timestamp: new Date().toISOString()
     });
     
-    if (result.summary) {
-      sessionSummary.value = result.summary;
-    }
+    sessionWrapup.value = result.wrapup;
+    sessionAdvisory.value = result.advisory;
 
-    const evaluationDurationMinutes = result.evaluation?.duration ?? result.duration;
+    const evaluationDurationMinutes = result.wrapup?.duration;
     completionDurationSeconds.value = typeof evaluationDurationMinutes === 'number'
       ? evaluationDurationMinutes * 60
       : activeTime.value;
 
-    if (result.evaluation) {
-      lastSessionEvaluation.value = {
-        lss: result.evaluation.lss || 0,
-        ktl: result.evaluation.ktl || 0,
-        lf: result.evaluation.lf || 0,
-        lsb: result.evaluation.lsb || 0,
-        messageCount: result.evaluation.messageCount || messages.value.length,
-        avgUnderstanding: result.evaluation.avgUnderstanding || 0,
-        duration: result.evaluation.duration || activeTime.value,
-      };
-      
-      sessionEvaluation.value = {
-        lss: result.evaluation.lss || 0,
-        ktl: result.evaluation.ktl || 0,
-        lf: result.evaluation.lf || 0,
-        lsb: result.evaluation.lsb || 0,
-        messageCount: result.evaluation.messageCount || messages.value.length,
-        avgUnderstanding: result.evaluation.avgUnderstanding || 0,
-        duration: result.evaluation.duration || activeTime.value,
-      };
+    if (!result.wrapup?.evaluation) {
+      ElMessage.warning('课程总结已生成，但课后评估未通过 AI 校验。');
     }
 
     if (!options?.skipEvaluationDialog) {
       showEvaluationDialog.value = true;
     }
-    
-    const actualMinutes = Math.ceil(activeTime.value / 60);
-    await api.post(`/learning/tasks/${taskId.value}/complete`, {
-      actualMinutes
-    });
     
     if (options?.redirectAfterEnd) {
       closeEvaluationAndReturn();
@@ -753,6 +792,64 @@ const closeEvaluationAndReturn = () => {
     router.push(`/learning-path/${task.value.learningPath.id}`);
   } else {
     router.push('/dashboard');
+  }
+};
+
+const handleWrapupAdvisoryAction = async (action: string) => {
+  if (!sessionAdvisory.value?.shouldSuggest) return;
+
+  if (action === 'keep' || action === 'later' || action === 'preview') {
+    if (action === 'keep') ElMessage.success('已保留当前学习计划');
+    if (action === 'later') ElMessage.info('已保留建议，你可以稍后再决定');
+    return;
+  }
+
+  if (!task.value?.learningPath?.id) {
+    ElMessage.warning('当前任务缺少学习路径信息，暂无法调整下一阶段');
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      '这会基于当前学习证据创建一个新的路径版本，保留原路径不变。是否继续？',
+      '调整下一阶段',
+      {
+        confirmButtonText: '确认调整',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+
+    const reasonMap: Record<string, string> = {
+      reinforce: '根据课后建议，为下一阶段补强关键薄弱点',
+      resequence: '根据课后建议，调整下一阶段顺序以降低理解风险',
+      accelerate: '根据课后建议，压缩下一阶段以加快推进',
+      slow_down: '根据课后建议，放慢下一阶段节奏',
+    };
+
+    const result = await api.post(`/learning/paths/${task.value.learningPath.id}/replan`, {
+      triggerSource: 'ai-teaching',
+      mode: 'new_version',
+      reason: reasonMap[action] || '根据课后建议调整下一阶段',
+      evidence: {
+        advisoryAction: action,
+        advisory: sessionAdvisory.value,
+        wrapup: sessionWrapup.value,
+        taskId: taskId.value,
+        taskTitle: task.value?.title,
+      }
+    });
+
+    const payload = result.data || result;
+    const newPathId = payload?.result?.newPathId || payload?.data?.result?.newPathId;
+    ElMessage.success('已创建新的学习路径版本');
+    if (newPathId) {
+      router.push(`/learning-path/${newPathId}`);
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '调整下一阶段失败');
+    }
   }
 };
 
@@ -861,18 +958,7 @@ const resumeSession = async (sessionId: string) => {
     knowledgePoints.value = Array.isArray(detail.knowledgePoints) ? detail.knowledgePoints : [];
     showCompletionPrompt.value = false;
     completionDurationSeconds.value = 0;
-    
-    if (detail.state) {
-      lastSessionEvaluation.value = {
-        lss: detail.state.lss || 0,
-        ktl: detail.state.ktl || 0,
-        lf: detail.state.lf || 0,
-        lsb: detail.state.lsb || 0,
-        messageCount: detail.messages.length,
-        avgUnderstanding: 0.5,
-        duration: detail.duration || 0
-      };
-    }
+    sessionAdvisory.value = null;
     
     sessionActive.value = true;
     sessionInitializing.value = false;
@@ -1354,6 +1440,32 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
+}
+
+.quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.quick-reply-card {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--border-default) 72%);
+  background: color-mix(in srgb, var(--color-primary-light) 18%, var(--bg-elevated) 82%);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.quick-reply-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--border-default) 45%);
+  background: color-mix(in srgb, var(--color-primary-light) 28%, var(--bg-elevated) 72%);
 }
 
 .message-actions {

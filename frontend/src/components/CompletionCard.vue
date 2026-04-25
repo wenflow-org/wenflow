@@ -6,9 +6,27 @@
     </div>
 
     <div class="completion-body">
+      <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
+        <h4 class="section-title"><el-icon><MagicStick /></el-icon>{{ advisory.ui.title }}</h4>
+        <p class="section-content">{{ advisory.ui.body }}</p>
+        <p class="section-hint">确认后系统会创建一个新的路径版本，只调整后续安排，不会改动你已完成的内容。</p>
+        <div class="advisory-options">
+          <el-button
+            v-for="option in advisory.ui.options"
+            :key="option.key"
+            size="small"
+            :type="option.key === 'reinforce' || option.key === 'accelerate' || option.key === 'resequence' ? 'primary' : 'default'"
+            plain
+            @click="emit('advisory-action', option.key)"
+          >
+            {{ option.label }}
+          </el-button>
+        </div>
+      </div>
+
       <div class="completion-summary">
         <div class="summary-item"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
-        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ masteredCount }}/{{ totalCount }} 已掌握</span></div>
+        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ masteredCount }}/{{ totalCount }} 已学会</span></div>
         <div class="summary-item"><span class="summary-label">用时</span><span class="summary-value">{{ duration }}</span></div>
         <div class="summary-item"><span class="summary-label">消息数</span><span class="summary-value">{{ messageCount }} 条</span></div>
       </div>
@@ -16,6 +34,19 @@
       <div class="completion-section">
         <h4 class="section-title"><el-icon><Document /></el-icon>主题总结</h4>
         <p class="section-content">{{ summary.topicSummary }}</p>
+      </div>
+
+      <div v-if="progressHighlights.length" class="completion-section">
+        <h4 class="section-title"><el-icon><Opportunity /></el-icon>本节进展</h4>
+        <ul class="knowledge-list">
+          <li v-for="item in progressHighlights" :key="item.title" class="knowledge-item">
+            <div class="knowledge-head">
+              <span class="knowledge-name">{{ item.title }}</span>
+              <el-tag size="small" :type="item.type">{{ item.label }}</el-tag>
+            </div>
+            <p class="knowledge-evidence">{{ item.text }}</p>
+          </li>
+        </ul>
       </div>
 
       <div v-if="evaluation" class="completion-section">
@@ -78,15 +109,18 @@
     </div>
 
     <div class="completion-actions">
-      <el-button type="primary" @click="emit('action', 'end')"><el-icon><VideoPause /></el-icon>返回学习路径</el-button>
+      <el-button @click="emit('action', 'continue-task')">继续这个任务</el-button>
+      <el-button @click="emit('action', 'end')"><el-icon><VideoPause /></el-icon>返回学习路径</el-button>
+      <el-button type="primary" @click="emit('action', 'complete-task')">标记本任务已完成</el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { CircleCheckFilled, VideoPause, Compass, Document, Collection, TrendCharts, DataAnalysis } from '@element-plus/icons-vue';
+import { CircleCheckFilled, VideoPause, Compass, Document, Collection, TrendCharts, DataAnalysis, MagicStick, Opportunity } from '@element-plus/icons-vue';
 import MarkdownRenderer from './MarkdownRenderer.vue';
+import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 
 const props = defineProps<{
   topic: string;
@@ -94,22 +128,27 @@ const props = defineProps<{
   totalCount: number;
   duration: string;
   messageCount: number;
-  summary: any;
-  evaluation?: any;
+  wrapup: WrapupArtifact;
+  advisory?: ReplanAdvisory | null;
 }>();
 
-const emit = defineEmits<{ action: [action: 'end'] }>();
+const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
+
+const summary = computed(() => props.wrapup.summary);
+const evaluation = computed(() => props.wrapup.evaluation);
+const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
+const advisory = computed(() => props.advisory || null);
 
 const toFixed = (v: number | undefined) => Number(v || 0).toFixed(1);
 const getSimpleLevel = (v: number, h: number, m: number) => (v >= h ? { level: '高', tone: 'good' } : v >= m ? { level: '中', tone: 'normal' } : { level: '低', tone: 'warn' });
 const getStress = (v: number) => (v >= 70 ? { level: '高', tone: 'warn' } : v >= 40 ? { level: '中', tone: 'normal' } : { level: '低', tone: 'good' });
-const getBalance = (v: number) => (v >= 0 ? { level: '平衡', tone: 'good' } : v >= -10 ? { level: '轻微失衡', tone: 'normal' } : { level: '失衡', tone: 'warn' });
+const getBalance = (v: number) => (v >= 1 ? { level: '平衡', tone: 'good' } : v >= -2 ? { level: '轻微失衡', tone: 'normal' } : { level: '失衡', tone: 'warn' });
 
 const sessionMetricCards = computed(() => {
-  if (!props.evaluation) return [];
-  const k = Number(props.evaluation.sessionKtl ?? props.evaluation.ktl);
-  const s = Number(props.evaluation.sessionLss ?? props.evaluation.lss);
-  const f = Number(props.evaluation.sessionLf ?? props.evaluation.lf);
+  if (!evaluation.value) return [];
+  const k = Number(evaluation.value.sessionKtl ?? evaluation.value.ktl);
+  const s = Number(evaluation.value.sessionLss ?? evaluation.value.lss);
+  const f = Number(evaluation.value.sessionLf ?? evaluation.value.lf);
   const kl = getSimpleLevel(k, 7, 4);
   const sl = getStress(s * 10);
   const fl = getStress(f * 10);
@@ -121,12 +160,12 @@ const sessionMetricCards = computed(() => {
 });
 
 const longTermMetricCards = computed(() => {
-  if (!props.evaluation) return [];
-  const { ktl, lsb, lf, lss } = props.evaluation;
-  const kl = getSimpleLevel(Number(ktl || 0), 60, 30);
+  if (!stateUpdate.value) return [];
+  const { ktl, lsb, lf, lss } = stateUpdate.value;
+  const kl = getSimpleLevel(Number(ktl || 0), 7, 4);
   const bl = getBalance(Number(lsb || 0));
-  const fl = getStress(Number(lf || 0));
-  const sl = getStress(Number(lss || 0));
+  const fl = getStress(Number(lf || 0) * 10);
+  const sl = getStress(Number(lss || 0) * 10);
   return [
     { key: 'ktl', label: 'KTL 知识掌握', value: toFixed(ktl), level: kl.level, tone: kl.tone, desc: '长期累计学习收益，反映稳定掌握趋势。' },
     { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
@@ -135,19 +174,58 @@ const longTermMetricCards = computed(() => {
   ];
 });
 
-const knowledgeItems = computed(() => props.summary?.knowledgeItems || []);
-const keyTakeaways = computed(() => props.summary?.keyTakeaways || []);
-const actionPlan = computed(() => props.summary?.actionPlan || []);
-const evaluationHighlights = computed(() => props.summary?.evaluationHighlights || null);
-const sessionInterpretation = computed(() => props.summary?.metricInterpretation?.session || '本节表现反映本次课堂的即时投入和产出。');
-const longTermInterpretation = computed(() => props.summary?.metricInterpretation?.longTerm || '长期状态来自历史累计，不等于单节课程成绩。');
+const sanitizeKnowledgeEvidence = (text: string) => text
+  .replace(/newlyMastered/gi, '本节新收获')
+  .replace(/unchangedMastered/gi, '已学会')
+  .replace(/mastered/gi, '已学会')
+  .replace(/avgUnderstanding/gi, '课堂理解度')
+  .replace(/\bstatus\b/gi, '当前表现');
+
+const knowledgeItems = computed(() => (summary.value?.knowledgeItems || []).map((item) => ({
+  ...item,
+  evidence: sanitizeKnowledgeEvidence(item.evidence),
+})));
+const keyTakeaways = computed(() => summary.value?.keyTakeaways || []);
+const actionPlan = computed(() => summary.value?.actionPlan || []);
+const evaluationHighlights = computed(() => summary.value?.evaluationHighlights || null);
+const sessionInterpretation = computed(() => summary.value?.metricInterpretation?.session || '本节表现反映本次课堂的即时投入和产出。');
+const longTermInterpretation = computed(() => summary.value?.metricInterpretation?.longTerm || '长期状态来自历史累计，不等于单节课程成绩。');
+
+const progressHighlights = computed(() => {
+  const result: Array<{ title: string; label: string; text: string; type: string }> = [];
+  if (props.wrapup.progress.newlyMastered.length > 0) {
+    result.push({
+      title: '本节新收获',
+      label: '进步',
+      text: props.wrapup.progress.newlyMastered.join('、'),
+      type: 'success',
+    });
+  }
+  if (props.wrapup.progress.movedToReview.length > 0) {
+    result.push({
+      title: '需要回看',
+      label: '提醒',
+      text: props.wrapup.progress.movedToReview.join('、'),
+      type: 'danger',
+    });
+  }
+  if (props.wrapup.progress.stillLearning.length > 0) {
+    result.push({
+      title: '仍在推进中',
+      label: '继续巩固',
+      text: props.wrapup.progress.stillLearning.join('、'),
+      type: 'warning',
+    });
+  }
+  return result;
+});
 
 const formatSentenceList = (items: string[] = []) => items.map((i) => i.replace(/[；;。]+$/g, '').trim()).filter(Boolean).join('；');
 const formattedStrengths = computed(() => (evaluationHighlights.value ? formatSentenceList(evaluationHighlights.value.strengths) : ''));
 const formattedImprovements = computed(() => (evaluationHighlights.value ? formatSentenceList(evaluationHighlights.value.improvements) : ''));
 
 const getKnowledgeTagType = (s: string) => (s === 'mastered' ? 'success' : s === 'learning' ? 'warning' : s === 'review' ? 'danger' : 'info');
-const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已掌握' : s === 'learning' ? '学习中' : s === 'review' ? '需复习' : '待学习');
+const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' : s === 'learning' ? '继续练习' : s === 'review' ? '建议回看' : '尚未展开');
 </script>
 
 <style scoped>
@@ -159,9 +237,14 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已掌握' :
 .summary-label { font-size: 11px; color: #78909c; }
 .summary-value { font-size: 13px; font-weight: 600; color: #2e7d32; }
 .completion-section { margin-bottom: 16px; padding: 12px; background-color: rgba(255, 255, 255, 0.75); border-radius: 8px; }
+.advisory-section { border: 1px solid #dfe7d6; }
+.advisory-section--high { border-color: #efc9b2; background: rgba(255, 247, 245, 0.92); }
+.advisory-section--medium { border-color: #ecd9a6; background: rgba(255, 251, 240, 0.92); }
+.advisory-section--low { border-color: #b7ddb6; background: rgba(244, 252, 244, 0.92); }
 .section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #1b5e20; }
 .section-hint { margin: 0 0 10px; font-size: 12px; color: #607d8b; }
 .section-content { margin: 0; font-size: 13px; line-height: 1.7; color: #37474f; }
+.advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metrics-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric-card { padding: 10px; border-radius: 8px; border: 1px solid #d8e6d4; background: #fff; }

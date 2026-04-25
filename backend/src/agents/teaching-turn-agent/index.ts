@@ -14,6 +14,10 @@ export interface TeachingTurnInput {
     taskTitle: string;
     taskDescription: string;
     taskType: string;
+    taskKnowledgeScope?: {
+      primaryConcepts: string[];
+      prerequisiteConcepts: string[];
+    };
     pathTitle?: string;
     pathSummary?: string | null;
     currentMilestoneTitle?: string;
@@ -190,7 +194,11 @@ const TEACHING_TURN_SYSTEM_PROMPT = `你是一位结构化教学回合生成器�
 3. points 必须输出完整数组；没有时输出 []
 4. progress 用 0-100 的整数
 5. 当前主题之外不展开无关内容
-6. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与 knowledge 更新`;
+6. knowledge.points 是“当前任务知识看板”，不是整条路径知识快照
+7. 如果输入提供了 scenario.taskKnowledgeScope，knowledge.points 只能优先从 primaryConcepts 中选；prerequisiteConcepts 只有在本轮被明确复习或解释时才允许出现
+8. 不要把 learner.projection.relevantKnowledge 中的全局 mastered/fragile/struggling 直接抄到 knowledge.points
+9. knowledge.points 最多输出 5 个，优先保留当前任务直接相关内容
+10. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与知识解释，但不要扩大 knowledge.points 的任务范围`;
 
 function extractJsonObject(content: string): Record<string, any> | null {
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);

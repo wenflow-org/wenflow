@@ -50,6 +50,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         topic: session.topic,
         startTime: session.startTime,
         welcomeMessage: session.welcomeMessage,
+        opening: session.opening,
       },
     });
   } catch (error: any) {

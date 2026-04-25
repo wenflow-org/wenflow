@@ -6,6 +6,12 @@ export interface TeachingSession {
   topic: string;
   startTime: string;
   welcomeMessage: string;
+  opening?: {
+    message: string;
+    question: string;
+    quickReplies: Array<{ text: string }>;
+    mode: 'self-assess' | 'predict' | 'example-first';
+  };
 }
 
 export interface KnowledgePointStatus {
@@ -81,6 +87,8 @@ export interface SessionDetail {
   messages: Array<{ role: string; content: string; timestamp: string }>;
   state: any;
   knowledgePoints?: KnowledgePointStatus[];
+  wrapup?: WrapupArtifact | null;
+  advisory?: ReplanAdvisory | null;
 }
 
 export interface SessionEvaluation {
@@ -92,11 +100,79 @@ export interface SessionEvaluation {
   sessionKtl?: number;
   sessionLf?: number;
   confidence?: number;
-  evaluationSource?: 'model';
+  evaluationSource?: 'model' | 'ai-fallback' | 'failed';
   messageCount: number;
   avgUnderstanding: number;
   avgCognitiveLevel?: string;
   duration: number;
+}
+
+export interface WrapupProgressDelta {
+  newlyMastered: string[];
+  movedToReview: string[];
+  stillLearning: string[];
+  unchangedMastered: string[];
+}
+
+export interface WrapupEvidence {
+  turnCount: number;
+  avgUnderstanding: number | null;
+  avgEngagement: number | null;
+  dominantCognitiveLevel: string | null;
+  lastCognitiveLevel: string | null;
+  topConfusionPoints: string[];
+  emotionalSignals: {
+    positive: number;
+    neutral: number;
+    frustrated: number;
+    confused: number;
+  };
+  completionCandidateSeen: boolean;
+}
+
+export interface WrapupArtifact {
+  status: 'complete' | 'summary-only';
+  sources: {
+    summary: 'model' | 'fallback';
+    evaluation: 'model' | 'ai-fallback' | 'failed';
+  };
+  summary: SessionSummary;
+  evaluation: (SessionEvaluation & {
+    sessionLss?: number;
+    sessionKtl?: number;
+    sessionLf?: number;
+    confidence?: number;
+    reasoning?: string;
+  }) | null;
+  progress: WrapupProgressDelta;
+  evidence: WrapupEvidence;
+  stateUpdate?: {
+    lss: number;
+    ktl: number;
+    lf: number;
+    lsb: number;
+  } | null;
+  duration?: number;
+  summarySource?: 'model' | 'fallback';
+  evaluationSource?: 'model' | 'ai-fallback' | 'failed';
+}
+
+export interface ReplanAdvisory {
+  shouldSuggest: boolean;
+  priority: 'none' | 'low' | 'medium' | 'high';
+  recommendation: 'keep' | 'reinforce' | 'slow_down' | 'resequence' | 'accelerate';
+  scope: 'none' | 'next_milestone' | 'downstream_path';
+  rationale: string;
+  reasonCodes: string[];
+  ui: {
+    title: string;
+    body: string;
+    options: Array<{
+      key: string;
+      label: string;
+      description: string;
+    }>;
+  };
 }
 
 export interface SessionSummary {
@@ -132,11 +208,8 @@ export interface TaskEvaluationDetail {
   duration: number;
   messageCount: number;
   knowledgePoints: KnowledgePointStatus[];
-  summary: SessionSummary;
-  summarySource?: 'model' | 'fallback';
-  evaluation: SessionEvaluation & {
-    evaluationSource?: 'model';
-  };
+  wrapup: WrapupArtifact;
+  advisory?: ReplanAdvisory | null;
 }
 
 export const aiTeachingAPI = {
@@ -156,10 +229,8 @@ export const aiTeachingAPI = {
   },
 
   async endSession(sessionId: string): Promise<{
-    evaluation?: SessionEvaluation;
-    summary?: SessionSummary;
-    summarySource?: 'model' | 'fallback';
-    duration?: number;
+    wrapup: WrapupArtifact;
+    advisory: ReplanAdvisory;
   }> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/end`);
     return result.data || result;

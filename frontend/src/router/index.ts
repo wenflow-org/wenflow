@@ -166,6 +166,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '学习者模型详情', requiresAdminAuth: true }
       },
       {
+        path: 'teaching-sessions',
+        name: 'AdminTeachingSessions',
+        component: () => import('@/views/admin/TeachingSessions.vue'),
+        meta: { title: '教学会话调试', requiresAdminAuth: true }
+      },
+      {
         path: 'api-config',
         name: 'AdminApiConfig',
         component: () => import('@/views/admin/ApiConfig.vue'),

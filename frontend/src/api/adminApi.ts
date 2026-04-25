@@ -252,6 +252,18 @@ export const adminLearnerModelsApi = {
   }
 };
 
+export const adminTeachingSessionsApi = {
+  list: async (params?: {
+    page?: number;
+    limit?: number;
+    userId?: string;
+    status?: string;
+    onlyWithAdvisory?: boolean;
+  }) => {
+    return adminAxios.get('/admin/teaching-sessions', { params });
+  }
+};
+
 /**
  * Agent 管理 API
  */

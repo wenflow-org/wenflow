@@ -276,25 +276,39 @@
                             </div>
                           </div>
                         <p class="task-desc">{{ task.description }}</p>
-                        <div class="task-footer">
-                          <div class="task-time">
-                            <el-icon><Clock /></el-icon>
-                            <span>预计 {{ task.estimatedMinutes }} 分钟</span>
-                            <span v-if="task.status === 'completed'" class="actual-time">
-                              | 实际 {{ formatActualMinutes(task.actualMinutes) }} 分钟
-                            </span>
-                          </div>
+                          <div class="task-footer">
+                            <div class="task-time">
+                              <el-icon><Clock /></el-icon>
+                              <span>预计 {{ task.estimatedMinutes }} 分钟</span>
+                              <span v-if="task.actualMinutes !== null && task.actualMinutes !== undefined" class="actual-time">
+                                | {{ task.status === 'completed' ? '实际' : '已学习' }} {{ formatActualMinutes(task.actualMinutes) }} 分钟
+                              </span>
+                            </div>
                           <div v-if="task.status === 'completed'" class="completed-actions">
                             <button class="task-btn btn-completed" disabled>
                               <el-icon><Check /></el-icon>
                               已完成
                             </button>
-                            <button class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
+                            <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
                               <el-icon><DataAnalysis /></el-icon>
                               查看当堂评估
                             </button>
                           </div>
-                           <button v-else
+                          <div v-else-if="task.status === 'in_progress'" class="completed-actions">
+                            <button
+                              class="task-btn btn-start"
+                              :disabled="!canStartLearning"
+                              @click.stop="startTask(task)"
+                            >
+                              {{ canStartLearning ? '继续学习' : '等待标注完成' }}
+                              <el-icon><ArrowRight /></el-icon>
+                            </button>
+                            <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
+                              <el-icon><DataAnalysis /></el-icon>
+                              查看最近一节评估
+                            </button>
+                          </div>
+                          <button v-else
                             class="task-btn btn-start"
                             :disabled="!canStartLearning"
                             @click.stop="startTask(task)"
@@ -335,8 +349,8 @@
           :total-count="selectedTaskEvaluation.knowledgePoints.length"
           :duration="formatSessionDuration(selectedTaskEvaluation.duration)"
           :message-count="selectedTaskEvaluation.messageCount"
-          :evaluation="selectedTaskEvaluation.evaluation"
-          :summary="selectedTaskEvaluation.summary"
+          :wrapup="selectedTaskEvaluation.wrapup"
+          :advisory="selectedTaskEvaluation.advisory"
           @action="closeEvaluationDialog"
         />
       </div>

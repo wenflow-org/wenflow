@@ -79,6 +79,9 @@ export interface Task {
   completionRate?: number;
   estimatedMinutes?: number;
   actualMinutes?: number;
+  hasTeachingWrapup?: boolean;
+  latestTeachingSessionAt?: string | null;
+  latestWrapupStatus?: 'complete' | 'summary-only' | null;
   learningPath?: {
     id: string;
     name: string;
@@ -116,6 +119,8 @@ export interface LearningStats {
     totalMinutes?: number;
     totalEstimated: number;
     totalCompleted: number;
+    activeLearningDays?: number;
+    avgDailyMinutes?: number;
     progress: number;
     completionRate?: string;
   };

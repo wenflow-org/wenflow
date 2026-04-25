@@ -61,6 +61,12 @@ export {
   teachingTurnAgentHandler,
 } from './teaching-turn-agent';
 
+export {
+  sessionWrapupAgentDefinition,
+  sessionWrapupAgent,
+  sessionWrapupAgentHandler,
+} from './session-wrapup-agent';
+
 // Path Adjustment
 export {
   pathAdjustmentEngine,
@@ -101,8 +107,7 @@ import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAg
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from './goal-conversation-agent';
 import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from './teaching-turn-agent';
 import { peerAgentDefinition, peerAgentHandler } from './peer-agent';
-import { summaryAgentDefinition, summaryAgentHandler } from './summary-agent';
-import { sessionEvaluationAgentDefinition, sessionEvaluationAgentHandler } from './session-evaluation-agent';
+import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from './session-wrapup-agent';
 import { getAgentManifest } from '../services/agent-manifest.service';
 
 export const allAgentDefinitions: AgentDefinition[] = [
@@ -112,8 +117,7 @@ export const allAgentDefinitions: AgentDefinition[] = [
   goalConversationAgentDefinition,
   teachingTurnAgentDefinition,
   peerAgentDefinition,
-  summaryAgentDefinition,
-  sessionEvaluationAgentDefinition
+  sessionWrapupAgentDefinition
 ];
 
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
@@ -123,8 +127,7 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
   'goal-conversation-agent': goalConversationAgentHandler,
   'teaching-turn-agent': teachingTurnAgentHandler,
   'peer-agent': peerAgentHandler,
-  'summary-agent': summaryAgentHandler,
-  'session-evaluation-agent': sessionEvaluationAgentHandler
+  'session-wrapup-agent': sessionWrapupAgentHandler
 };
 
 /**
