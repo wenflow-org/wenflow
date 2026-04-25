@@ -50,28 +50,23 @@ export class StudentBaselineService {
    * 获取或创建学生基线
    */
   async getOrCreateBaseline(userId: string): Promise<StudentBaselineData> {
-    let baseline = await prisma.student_baselines.findUnique({
-      where: { userId }
+    const baseline = await prisma.student_baselines.upsert({
+      where: { userId },
+      update: {},
+      create: {
+        id: userId,
+        userId,
+        responseTimeEma: 10.0,
+        responseTimeEmVar: 1.0,
+        messageLengthEma: 50.0,
+        messageLengthEmVar: 100.0,
+        interactionIntervalEma: 5.0,
+        interactionIntervalEmVar: 1.0,
+        aiScoreEma: 0.5,
+        aiScoreEmVar: 0.01,
+        updateCount: 0
+      }
     });
-    
-    if (!baseline) {
-      // 创建默认基线
-      baseline = await prisma.student_baselines.create({
-        data: {
-          id: userId,
-          userId,
-          responseTimeEma: 10.0,
-          responseTimeEmVar: 1.0,
-          messageLengthEma: 50.0,
-          messageLengthEmVar: 100.0,
-          interactionIntervalEma: 5.0,
-          interactionIntervalEmVar: 1.0,
-          aiScoreEma: 0.5,
-          aiScoreEmVar: 0.01,
-          updateCount: 0
-        }
-      });
-    }
     
     return {
       responseTime: {

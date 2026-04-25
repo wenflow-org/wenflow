@@ -28,10 +28,12 @@
           <el-input
             v-model="registerForm.password"
             type="password"
-            placeholder="请输入密码"
+            placeholder="至少 8 位，需包含字母和数字"
             show-password
           />
         </el-form-item>
+
+        <div class="password-hint">密码至少 8 位，且必须同时包含字母和数字。</div>
 
         <el-form-item label="确认密码" prop="confirmPassword">
           <el-input
@@ -92,14 +94,33 @@ const validatePass2 = (rule: any, value: any, callback: any) => {
   }
 };
 
+const validatePassword = (rule: any, value: string, callback: any) => {
+  if (!value) {
+    callback(new Error('请输入密码'));
+    return;
+  }
+  if (value.length < 8) {
+    callback(new Error('密码长度不能少于 8 位'));
+    return;
+  }
+  if (!/[a-zA-Z]/.test(value)) {
+    callback(new Error('密码必须包含字母'));
+    return;
+  }
+  if (!/[0-9]/.test(value)) {
+    callback(new Error('密码必须包含数字'));
+    return;
+  }
+  callback();
+};
+
 const rules: FormRules = {
   name: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 2, max: 20, message: '用户名长度在 2 到 20 个字符', trigger: 'blur' }
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+    { required: true, validator: validatePassword, trigger: 'blur' }
   ],
   confirmPassword: [
     { required: true, validator: validatePass2, trigger: 'blur' }
@@ -145,6 +166,12 @@ const handleRegister = async () => {
 .register-card {
   width: 100%;
   max-width: 400px;
+}
+
+.password-hint {
+  margin: -4px 0 14px;
+  font-size: 12px;
+  color: var(--text-secondary, #606266);
 }
 
 .card-header {

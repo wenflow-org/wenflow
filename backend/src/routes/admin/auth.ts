@@ -21,7 +21,7 @@ const ADMIN_PORT = process.env.ADMIN_PORT || '3002';
 // 验证 Schema
 const loginSchema = z.object({
   email: z.string().email('无效的邮箱格式'),
-  password: z.string().min(6, '密码至少 6 位'),
+  password: z.string().min(1, '密码不能为空'),
   remember: z.boolean().optional(),
 });
 

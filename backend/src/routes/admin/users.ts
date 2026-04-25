@@ -12,6 +12,13 @@ router.use(authMiddleware);
 
 const SALT_ROUNDS = 10;
 
+function validatePasswordRule(password: string): string | null {
+  if (password.length < 8) return '密码至少 8 位';
+  if (!/[a-zA-Z]/.test(password)) return '密码必须包含字母';
+  if (!/[0-9]/.test(password)) return '密码必须包含数字';
+  return null;
+}
+
 const ensureAdmin = async (userId: string) => {
   const operator = await prisma.users.findUnique({
     where: { id: userId },
@@ -167,6 +174,14 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    const passwordError = validatePasswordRule(String(password));
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        error: { message: passwordError }
+      });
+    }
+
     const existing = await prisma.users.findUnique({ where: { email } });
     if (existing) {
       return res.status(409).json({
@@ -261,6 +276,13 @@ router.patch('/:id', async (req, res, next) => {
     };
 
     if (password) {
+      const passwordError = validatePasswordRule(String(password));
+      if (passwordError) {
+        return res.status(400).json({
+          success: false,
+          error: { message: passwordError }
+        });
+      }
       data.password = await bcrypt.hash(String(password), SALT_ROUNDS);
     }
 

@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import { learnerModelAgent } from '../../agents/learner-model-agent';
+import { personalizationEngine } from '../../agents/learner-model-agent/personalization';
 import type {
   LearnerDynamicState,
   LearnerKnowledgeMemory,
@@ -45,9 +46,8 @@ function deriveSessionQuality(ktl: number, lf: number): 'strong' | 'mixed' | 'we
 
 export class LearnerSnapshotService {
   async getSnapshot(input: LearnerSnapshotScopeInput): Promise<LearnerSnapshot> {
-    const [{ profile, confidence }, personalization, knowledgeMemory, latestConversation, latestMetrics, latestSession, latestCompletedTask] = await Promise.all([
+    const [{ profile, confidence }, knowledgeMemory, latestConversation, latestMetrics, latestSession, latestCompletedTask] = await Promise.all([
       learnerModelAgent.getProfile(input.userId),
-      learnerModelAgent.getPersonalization(input.userId),
       learnerKnowledgeMemoryService.build({
         userId: input.userId,
         learningPathId: input.learningPathId,
@@ -75,6 +75,12 @@ export class LearnerSnapshotService {
         select: { completedAt: true },
       }),
     ]);
+
+    const personalization = {
+      config: personalizationEngine.generateConfig(profile),
+      promptEnhancement: personalizationEngine.generatePromptEnhancement(profile),
+      contentHints: personalizationEngine.generateContentHints(profile),
+    };
 
     const metrics = profile.learning;
     const dynamicState: LearnerDynamicState = {

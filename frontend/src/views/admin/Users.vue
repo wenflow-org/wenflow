@@ -137,7 +137,7 @@
           <el-input v-model="createForm.email" placeholder="请输入邮箱" />
         </el-form-item>
         <el-form-item label="密码" required>
-          <el-input v-model="createForm.password" type="password" show-password placeholder="至少 6 位" />
+          <el-input v-model="createForm.password" type="password" show-password placeholder="至少 8 位，需包含字母和数字" />
         </el-form-item>
         <el-form-item label="管理员">
           <el-switch v-model="createForm.isAdmin" />
@@ -170,7 +170,7 @@
           <el-switch v-model="editForm.isAdmin" />
         </el-form-item>
         <el-form-item label="重置密码">
-          <el-input v-model="editForm.password" type="password" show-password placeholder="留空表示不修改" />
+          <el-input v-model="editForm.password" type="password" show-password placeholder="留空表示不修改；如填写需满足 8 位+字母+数字" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -212,6 +212,13 @@ const editForm = reactive({
   isAdmin: false,
   password: ''
 });
+
+const getPasswordRuleError = (password: string) => {
+  if (password.length < 8) return '密码至少 8 位';
+  if (!/[a-zA-Z]/.test(password)) return '密码必须包含字母';
+  if (!/[0-9]/.test(password)) return '密码必须包含数字';
+  return '';
+};
 
 const filterForm = reactive({
   search: '',
@@ -326,6 +333,12 @@ const handleCreateUser = async () => {
     return;
   }
 
+  const createPasswordError = getPasswordRuleError(createForm.password);
+  if (createPasswordError) {
+    ElMessage.warning(createPasswordError);
+    return;
+  }
+
   creating.value = true;
   try {
     await adminUsersApi.createUser({
@@ -419,6 +432,14 @@ const handleUpdateUser = async () => {
   if (!editForm.id || !editForm.name || !editForm.email) {
     ElMessage.warning('请填写完整信息');
     return;
+  }
+
+  if (editForm.password) {
+    const passwordError = getPasswordRuleError(editForm.password);
+    if (passwordError) {
+      ElMessage.warning(passwordError);
+      return;
+    }
   }
 
   updating.value = true;

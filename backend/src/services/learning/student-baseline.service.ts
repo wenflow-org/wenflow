@@ -71,7 +71,7 @@ class StudentBaselineService {
       
       // 如果没有基线，使用初始值
       if (!baseline) {
-        baseline = {
+        const initialBaseline = {
           responseTimeMean: metrics.responseTime,
           responseTimeVar: 1,
           messageLengthMean: metrics.messageLength,
@@ -80,20 +80,30 @@ class StudentBaselineService {
           intervalVar: 1
         }
         
-        // 创建新基线记录
-        await prisma.student_baselines.create({
-          data: {
+        const savedBaseline = await prisma.student_baselines.upsert({
+          where: { userId },
+          update: {},
+          create: {
             id: userId,
             userId,
-            responseTimeEma: baseline.responseTimeMean,
-            responseTimeEmVar: baseline.responseTimeVar,
-            messageLengthEma: baseline.messageLengthMean,
-            messageLengthEmVar: baseline.messageLengthVar,
-            interactionIntervalEma: baseline.intervalMean,
-            interactionIntervalEmVar: baseline.intervalVar,
+            responseTimeEma: initialBaseline.responseTimeMean,
+            responseTimeEmVar: initialBaseline.responseTimeVar,
+            messageLengthEma: initialBaseline.messageLengthMean,
+            messageLengthEmVar: initialBaseline.messageLengthVar,
+            interactionIntervalEma: initialBaseline.intervalMean,
+            interactionIntervalEmVar: initialBaseline.intervalVar,
             updatedAt: new Date()
           }
         })
+
+        baseline = {
+          responseTimeMean: savedBaseline.responseTimeEma,
+          responseTimeVar: savedBaseline.responseTimeEmVar,
+          messageLengthMean: savedBaseline.messageLengthEma,
+          messageLengthVar: savedBaseline.messageLengthEmVar,
+          intervalMean: savedBaseline.interactionIntervalEma,
+          intervalVar: savedBaseline.interactionIntervalEmVar
+        }
         
         logger.info('创建新的学生基线', { userId })
       } else {
