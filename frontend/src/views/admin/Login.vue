@@ -12,7 +12,7 @@
       <div class="login-brand">
         <div class="brand-content">
           <h1 class="brand-title">
-            <img src="/docs/logo/横版logo.png" alt="WenFlow Logo" class="title-icon-img" />
+            <img src="/logo.png" alt="WenFlow Logo" class="title-icon-img" />
             问流 WenFlow · 管理平台
           </h1>
           <p class="brand-subtitle">Admin Dashboard</p>

@@ -12,7 +12,7 @@
       <div class="login-brand">
         <div class="brand-content">
           <h1 class="brand-title">
-            <img src="/docs/logo/横版logo.png" alt="WenFlow Logo" class="title-icon-img" />
+            <img src="/logo.png" alt="WenFlow Logo" class="title-icon-img" />
             问流 WenFlow
           </h1>
           <p class="brand-subtitle">Your Personal AI Learning Companion</p>

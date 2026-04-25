@@ -10,7 +10,7 @@
       <div class="header-container">
         <div class="header-left">
           <h1 class="header-title">
-            <img src="/docs/logo/横版logo.png" alt="WenFlow Logo" class="title-icon-img" />
+            <img src="/logo.png" alt="WenFlow Logo" class="title-icon-img" />
             问流 WenFlow · 管理平台
           </h1>
 

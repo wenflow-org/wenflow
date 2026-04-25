@@ -19,7 +19,7 @@
       <div class="container navbar-container">
         <div class="navbar-brand">
           <router-link to="/" class="brand-link">
-            <img src="/docs/logo/横版logo.png" alt="WenFlow Logo" class="brand-logo-img" />
+            <img src="/logo.png" alt="WenFlow Logo" class="brand-logo-img" />
             <span class="brand-text">问流 WenFlow</span>
           </router-link>
         </div>

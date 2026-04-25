@@ -118,6 +118,52 @@ if ([string]::IsNullOrWhiteSpace($currentJwtSecret) -or $currentJwtSecret.Length
     Set-EnvValue -Path $envPath -Key 'JWT_SECRET' -Value $currentJwtSecret
 }
 
+$defaultLocalFrontendUrl = 'http://localhost:5173'
+$defaultLocalCorsOrigin = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
+$useDomainConfig = $false
+$domainModeInput = Read-Host 'Need domain configuration? (y/N)'
+if (-not [string]::IsNullOrWhiteSpace($domainModeInput) -and $domainModeInput.Trim().ToLower() -in @('y', 'yes')) {
+    $useDomainConfig = $true
+}
+
+$frontendUrlCurrent = Get-EnvValue -Path $envPath -Key 'FRONTEND_URL'
+if ([string]::IsNullOrWhiteSpace($frontendUrlCurrent)) {
+    $frontendUrlCurrent = $defaultLocalFrontendUrl
+}
+
+$corsOriginCurrent = Get-EnvValue -Path $envPath -Key 'CORS_ORIGIN'
+if ([string]::IsNullOrWhiteSpace($corsOriginCurrent)) {
+    $corsOriginCurrent = $defaultLocalCorsOrigin
+}
+
+if ($useDomainConfig) {
+    $domainInput = Read-Host "Primary domain URL (Enter for localhost, example: https://your-domain.com)"
+    if ([string]::IsNullOrWhiteSpace($domainInput)) {
+        $frontendUrlCurrent = $defaultLocalFrontendUrl
+        $corsOriginCurrent = $defaultLocalCorsOrigin
+    } else {
+        $domainValue = $domainInput.Trim()
+        $frontendUrlCurrent = $domainValue
+        $corsOriginCurrent = "$domainValue,$defaultLocalCorsOrigin"
+    }
+
+    $frontendUrlInput = Read-Host "FRONTEND_URL [$frontendUrlCurrent]"
+    if (-not [string]::IsNullOrWhiteSpace($frontendUrlInput)) {
+        $frontendUrlCurrent = $frontendUrlInput.Trim()
+    }
+
+    $corsOriginInput = Read-Host "CORS_ORIGIN [$corsOriginCurrent]"
+    if (-not [string]::IsNullOrWhiteSpace($corsOriginInput)) {
+        $corsOriginCurrent = $corsOriginInput.Trim()
+    }
+} else {
+    $frontendUrlCurrent = $defaultLocalFrontendUrl
+    $corsOriginCurrent = $defaultLocalCorsOrigin
+}
+
+Set-EnvValue -Path $envPath -Key 'FRONTEND_URL' -Value $frontendUrlCurrent
+Set-EnvValue -Path $envPath -Key 'CORS_ORIGIN' -Value $corsOriginCurrent
+
 $apiUrlCurrent = Get-EnvValue -Path $envPath -Key 'AI_API_URL'
 if ([string]::IsNullOrWhiteSpace($apiUrlCurrent)) {
     $apiUrlCurrent = 'https://api.deepseek.com'
@@ -178,4 +224,6 @@ Write-Host 'Environment ready.' -ForegroundColor Green
 Write-Host "  File: $envPath" -ForegroundColor DarkGray
 Write-Host "  JWT_SECRET: $(if ($jwtMasked) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
 Write-Host "  AI_API_KEY: $(if ($apiKeyMasked) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
+Write-Host "  FRONTEND_URL: $frontendUrlCurrent" -ForegroundColor DarkGray
+Write-Host "  CORS_ORIGIN: $corsOriginCurrent" -ForegroundColor DarkGray
 Write-Host 'You can run ./start-dev.ps1 to start services.' -ForegroundColor Cyan
