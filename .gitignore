@@ -40,12 +40,6 @@ backend/prisma/migrations/*_*/
 !backend/prisma/migrations/migration_lock.toml
 !backend/prisma/migrations/**/migration.sql
 
-# SSL Certificates
-nginx/ssl/*.pem
-nginx/ssl/*.key
-nginx/ssl/*.crt
-!nginx/ssl/.gitkeep
-
 # Backups
 *.sql
 backups/
