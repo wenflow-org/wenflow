@@ -49,6 +49,32 @@ function Stop-PortProcess {
     }
 }
 
+function Ensure-NpmDependencies {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectName
+    )
+
+    $nodeModulesPath = Join-Path $ProjectPath 'node_modules'
+    if (Test-Path $nodeModulesPath) {
+        return
+    }
+
+    Write-Host "$ProjectName dependencies missing, running npm install..." -ForegroundColor Yellow
+    Push-Location $ProjectPath
+    try {
+        npm install
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "npm install failed in $ProjectName" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 function Get-EnvValue {
     param(
         [Parameter(Mandatory = $true)]
@@ -125,15 +151,8 @@ if ($needsEnvSetup) {
     }
 }
 
-if (-not (Test-Path (Join-Path $backendPath 'node_modules'))) {
-    Write-Host "backend/node_modules missing, run npm install in backend first" -ForegroundColor Red
-    exit 1
-}
-
-if (-not (Test-Path (Join-Path $frontendPath 'node_modules'))) {
-    Write-Host "frontend/node_modules missing, run npm install in frontend first" -ForegroundColor Red
-    exit 1
-}
+Ensure-NpmDependencies -ProjectPath $backendPath -ProjectName 'Backend'
+Ensure-NpmDependencies -ProjectPath $frontendPath -ProjectName 'Frontend'
 
 Write-Host "Checking ports (3001, 5173)..." -ForegroundColor Yellow
 Stop-PortProcess -Port 3001

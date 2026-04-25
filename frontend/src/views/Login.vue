@@ -12,7 +12,7 @@
       <div class="login-brand">
         <div class="brand-content">
           <h1 class="brand-title">
-            <span class="title-icon">🎓</span>
+            <img src="/docs/logo/横版logo.png" alt="WenFlow Logo" class="title-icon-img" />
             问流 WenFlow
           </h1>
           <p class="brand-subtitle">Your Personal AI Learning Companion</p>
@@ -380,6 +380,12 @@ const handleGoRegister = async () => {
 
 .title-icon {
   font-size: 2.5rem;
+}
+
+.title-icon-img {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
 }
 
 .brand-subtitle {

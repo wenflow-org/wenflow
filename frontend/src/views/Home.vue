@@ -19,7 +19,7 @@
       <div class="container navbar-container">
         <div class="navbar-brand">
           <router-link to="/" class="brand-link">
-            <span class="brand-logo">🎓</span>
+            <img src="/docs/logo/横版logo.png" alt="WenFlow Logo" class="brand-logo-img" />
             <span class="brand-text">问流 WenFlow</span>
           </router-link>
         </div>
@@ -537,6 +537,12 @@ onUnmounted(() => {
 
 .brand-logo {
   font-size: 1.75rem;
+}
+
+.brand-logo-img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
 }
 
 .navbar-nav {
