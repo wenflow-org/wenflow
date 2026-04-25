@@ -3,7 +3,8 @@
 param(
     [switch]$NoBrowser,
     [switch]$Setup,
-    [switch]$EditEnv
+    [switch]$EditEnv,
+    [switch]$SkipPrisma
 )
 
 $ErrorActionPreference = 'Stop'
@@ -130,7 +131,7 @@ if ($Setup) {
         exit 1
     }
 
-    & $setupScriptPath
+    & $setupScriptPath -NoPause
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
@@ -145,14 +146,45 @@ if ($needsEnvSetup) {
     }
 
     Write-Host "Backend env is missing required values, launching setup..." -ForegroundColor Yellow
-    & $setupScriptPath
+    & $setupScriptPath -NoPause
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
 }
 
+function Ensure-PrismaReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackendPath
+    )
+
+    Write-Host "Preparing database schema (Prisma)..." -ForegroundColor Yellow
+    Push-Location $BackendPath
+    try {
+        npx prisma generate
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "prisma generate failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
+        npx prisma db push
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "prisma db push failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 Ensure-NpmDependencies -ProjectPath $backendPath -ProjectName 'Backend'
 Ensure-NpmDependencies -ProjectPath $frontendPath -ProjectName 'Frontend'
+
+if (-not $SkipPrisma) {
+    Ensure-PrismaReady -BackendPath $backendPath
+} else {
+    Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
+}
 
 Write-Host "Checking ports (3001, 5173)..." -ForegroundColor Yellow
 Stop-PortProcess -Port 3001

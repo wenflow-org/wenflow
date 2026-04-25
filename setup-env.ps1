@@ -1,7 +1,8 @@
 # WenFlow environment setup helper
 
 param(
-    [switch]$EditOnly
+    [switch]$EditOnly,
+    [switch]$NoPause
 )
 
 $ErrorActionPreference = 'Stop'
@@ -227,3 +228,13 @@ Write-Host "  AI_API_KEY: $(if ($apiKeyMasked) { 'configured' } else { 'missing'
 Write-Host "  FRONTEND_URL: $frontendUrlCurrent" -ForegroundColor DarkGray
 Write-Host "  CORS_ORIGIN: $corsOriginCurrent" -ForegroundColor DarkGray
 Write-Host 'You can run ./start-dev.ps1 to start services.' -ForegroundColor Cyan
+
+if (-not $NoPause) {
+    Write-Host ''
+    Write-Host 'Initial setup complete. Press any key to exit...' -ForegroundColor Green
+    try {
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    } catch {
+        Read-Host 'Press Enter to exit'
+    }
+}
