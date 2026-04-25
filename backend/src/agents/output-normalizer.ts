@@ -46,7 +46,20 @@ export function normalizeAgentOutput(agentId: string, raw: any): AgentOutput {
     return {
       ...base,
       userVisible: base.userVisible || `学习路径已生成：${raw.path?.name || '未命名路径'}`,
-      internal: base.internal || { path: raw.path },
+      internal: base.internal || {
+        core: {
+          stage: 'completed',
+          confidence: base.metadata?.confidence || 0.8,
+          isCompleted: true
+        },
+        ext: {
+          path: {
+            path: raw.path,
+            totalMilestones: raw.path?.milestones?.length || raw.path?.totalMilestones || 0
+          }
+        },
+        path: raw.path
+      },
       renderHints: {
         component: 'learning-path'
       }
@@ -66,17 +79,23 @@ export function normalizeAgentOutput(agentId: string, raw: any): AgentOutput {
     };
   }
 
-  if (raw?.profile) {
+  if (raw?.profile || raw?.learner) {
+    const learnerPayload = raw?.learner || {
+      profile: raw.profile,
+      changes: raw.changes,
+      personalization: raw.personalization,
+      config: raw.config,
+      promptEnhancement: raw.promptEnhancement,
+      contentHints: raw.contentHints
+    };
     return {
       ...base,
-      userVisible: base.userVisible || '用户画像已更新',
+      userVisible: base.userVisible || '学习者模型已更新',
       internal: base.internal || {
-        profile: raw.profile,
-        changes: raw.changes,
-        personalization: raw.personalization,
-        config: raw.config,
-        promptEnhancement: raw.promptEnhancement,
-        contentHints: raw.contentHints
+        ext: {
+          learner: learnerPayload
+        },
+        learner: learnerPayload
       }
     };
   }

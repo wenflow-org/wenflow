@@ -116,16 +116,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '目标规划', requiresAuth: true }
   },
   {
-    path: '/class-test',
-    name: 'ClassTest',
-    component: () => import('@/views/ClassTest.vue'),
-    meta: { title: 'AI 授课测试', requiresAuth: true }
-  },
-  {
     path: '/docs',
     name: 'DeveloperDocs',
     component: () => import('@/views/DeveloperDocs.vue'),
     meta: { title: '开发者文档' }
+  },
+  {
+    path: '/design-lab',
+    name: 'DesignLab',
+    component: () => import('@/views/DesignLab.vue'),
+    meta: { title: '设计实验室' }
   },
   // 管理平台路由
   {
@@ -152,6 +152,18 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminUsers',
         component: () => import('@/views/admin/Users.vue'),
         meta: { title: '用户管理', requiresAdminAuth: true }
+      },
+      {
+        path: 'learner-models',
+        name: 'AdminLearnerModels',
+        component: () => import('@/views/admin/LearnerModels.vue'),
+        meta: { title: '学习者模型', requiresAdminAuth: true }
+      },
+      {
+        path: 'learner-models/:userId',
+        name: 'AdminLearnerModelDetail',
+        component: () => import('@/views/admin/LearnerModelDetail.vue'),
+        meta: { title: '学习者模型详情', requiresAdminAuth: true }
       },
       {
         path: 'api-config',
@@ -229,6 +241,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminAgentModelConfigs',
         component: () => import('@/views/admin/AgentModelConfig.vue'),
         meta: { title: 'Agent 模型配置', requiresAdminAuth: true }
+      },
+      {
+        path: 'class-test',
+        name: 'AdminClassTest',
+        component: () => import('@/views/ClassTest.vue'),
+        meta: { title: 'AI 授课测试', requiresAdminAuth: true }
       }
     ]
   }

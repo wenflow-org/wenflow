@@ -1,12 +1,12 @@
 /**
- * 用户画像聚合器
+ * 学习者模型聚合器
  * 
- * 从多个数据源整合用户画像信息
+ * 从多个数据源整合学习者画像与学习状态信息
  */
 
 import prisma from '../../config/database';
 import {
-  UnifiedUserProfile,
+  LearnerModelProfile,
   CognitiveProfile,
   BehavioralBaseline,
   LearningState,
@@ -101,7 +101,7 @@ export class ProfileAggregator {
       history
     });
     
-    const profile: UnifiedUserProfile = {
+  const profile: LearnerModelProfile = {
       userId,
       lastUpdated: new Date().toISOString(),
       cognitive,
@@ -208,7 +208,7 @@ export class ProfileAggregator {
   
   private async fetchSessionData(userId: string): Promise<InteractionHistory | null> {
     try {
-      const sessions = await prisma.learning_sessions.findMany({
+      const sessions = await prisma.teaching_sessions.findMany({
         where: { userId },
         orderBy: { startTime: 'desc' },
         take: 50
@@ -306,7 +306,7 @@ export class ProfileAggregator {
     return data;
   }
   
-  private calculateDerivedInsights(profile: Partial<UnifiedUserProfile>): UnifiedUserProfile['derivedInsights'] {
+  private calculateDerivedInsights(profile: Partial<LearnerModelProfile>): LearnerModelProfile['derivedInsights'] {
     const learningVelocity = this.calculateLearningVelocity(profile);
     const optimalSessionLength = this.calculateOptimalSessionLength(profile);
     const recommendedDifficulty = this.recommendDifficulty(profile);
@@ -324,7 +324,7 @@ export class ProfileAggregator {
     };
   }
   
-  private calculateLearningVelocity(profile: Partial<UnifiedUserProfile>): number {
+  private calculateLearningVelocity(profile: Partial<LearnerModelProfile>): number {
     if (!profile.learning) return 0.5;
     
     const { ktl = 0, recentProgress = 'stable' } = profile.learning;
@@ -334,7 +334,7 @@ export class ProfileAggregator {
     return Math.min(1, (ktl / 50) * progressMultiplier);
   }
   
-  private calculateOptimalSessionLength(profile: Partial<UnifiedUserProfile>): number {
+  private calculateOptimalSessionLength(profile: Partial<LearnerModelProfile>): number {
     if (profile.preferences?.sessionLength === 'short') return 20;
     if (profile.preferences?.sessionLength === 'long') return 60;
     if (profile.behavioral?.avgInteractionInterval) {
@@ -343,7 +343,7 @@ export class ProfileAggregator {
     return 30;
   }
   
-  private recommendDifficulty(profile: Partial<UnifiedUserProfile>): 'easy' | 'medium' | 'hard' {
+  private recommendDifficulty(profile: Partial<LearnerModelProfile>): 'easy' | 'medium' | 'hard' {
     if (!profile.learning || !profile.cognitive) return 'medium';
     
     const { ktl = 0, lf = 0 } = profile.learning;
@@ -354,7 +354,7 @@ export class ProfileAggregator {
     return 'medium';
   }
   
-  private suggestApproach(profile: Partial<UnifiedUserProfile>): string {
+  private suggestApproach(profile: Partial<LearnerModelProfile>): string {
     const parts: string[] = [];
     
     if (profile.cognitive?.thinkingStyle === 'visual') {
@@ -376,7 +376,7 @@ export class ProfileAggregator {
     return parts.join('；') || '采用平衡的学习方式';
   }
   
-  private identifyRiskFactors(profile: Partial<UnifiedUserProfile>): string[] {
+  private identifyRiskFactors(profile: Partial<LearnerModelProfile>): string[] {
     const risks: string[] = [];
     
     if (profile.learning?.lf && profile.learning.lf > 70) {
@@ -395,7 +395,7 @@ export class ProfileAggregator {
     return risks;
   }
   
-  private identifyStrengths(profile: Partial<UnifiedUserProfile>): string[] {
+  private identifyStrengths(profile: Partial<LearnerModelProfile>): string[] {
     const strengths: string[] = [];
     
     if (profile.cognitive?.metacognitionLevel === 'high') {
@@ -447,7 +447,7 @@ export class ProfileAggregator {
     return 'medium';
   }
   
-  private calculateConfidence(profile: UnifiedUserProfile): number {
+  private calculateConfidence(profile: LearnerModelProfile): number {
     let score = 0;
     let count = 0;
     

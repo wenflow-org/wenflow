@@ -5,10 +5,52 @@ import requirementOrchestrator from '../orchestrators/requirement.orchestrator';
 
 const router = express.Router();
 
+function envelopeGoalConversation(result: any, fallbackConversationId?: string) {
+  const internal = result?.internal || {};
+  const core = internal?.core || {};
+  const goalExt = internal?.ext?.goalConversation || {};
+
+  return {
+    userVisible: result?.userVisible || '',
+    internal: {
+      core: {
+        conversationId: core.conversationId || fallbackConversationId || null,
+        stage: core.stage || 'understanding',
+        confidence: typeof core.confidence === 'number' ? core.confidence : 0,
+        isCompleted: !!core.isCompleted,
+        learningPath: core.learningPath || null
+      },
+      ext: {
+        goalConversation: {
+          understanding: goalExt.understanding || {},
+          nextQuestions: Array.isArray(goalExt.nextQuestions) ? goalExt.nextQuestions : [],
+          quickReplies: Array.isArray(goalExt.quickReplies) ? goalExt.quickReplies : [],
+          structuredData: goalExt.structuredData,
+          confirmedProposal: goalExt.confirmedProposal,
+          confidenceScores: goalExt.confidenceScores,
+          collected: goalExt.collected || {}
+        }
+      }
+    },
+    renderHints: {
+      quickReplies: Array.isArray(goalExt.quickReplies) ? goalExt.quickReplies : []
+    },
+    schemaVersion: 'agent-output-v1',
+    meta: {
+      source: 'goal-conversation',
+      timestamp: new Date().toISOString()
+    }
+  };
+}
+
+function getInputText(body: any): string {
+  return String(body?.input?.text || '').trim();
+}
+
 router.post('/start', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const { goal } = req.body;
+    const goal = getInputText(req.body);
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
@@ -18,8 +60,11 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
     }
 
-    const result = await requirementOrchestrator.start(userId, goal.trim());
-    return res.json({ success: true, ...result });
+    const result = await requirementOrchestrator.start(userId, goal);
+    return res.json({
+      success: true,
+      data: envelopeGoalConversation(result)
+    });
   } catch (error: any) {
     logger.error('开始对话失败:', error);
     return res.status(500).json({ success: false, error: error.message || '开始对话失败' });
@@ -30,7 +75,7 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
   try {
     const userId = req.user?.userId;
     const { conversationId } = req.params;
-    const { reply } = req.body;
+    const reply = getInputText(req.body);
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
@@ -40,8 +85,11 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       return res.status(400).json({ success: false, error: '回复内容不能为空' });
     }
 
-    const result = await requirementOrchestrator.step(conversationId, reply.trim(), userId);
-    return res.json({ success: true, ...result });
+    const result = await requirementOrchestrator.step(conversationId, reply, userId);
+    return res.json({
+      success: true,
+      data: envelopeGoalConversation(result, conversationId)
+    });
   } catch (error: any) {
     logger.error('继续对话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
@@ -60,7 +108,10 @@ router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, 
     }
 
     const result = await requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined);
-    return res.json({ success: true, ...result });
+    return res.json({
+      success: true,
+      data: envelopeGoalConversation(result, conversationId)
+    });
   } catch (error: any) {
     logger.error('重新生成路径失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
@@ -96,7 +147,34 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
     }
 
     const conversation = await requirementOrchestrator.getConversation(conversationId, userId);
-    return res.json({ success: true, data: conversation });
+    return res.json({
+      success: true,
+      data: {
+        userVisible: '会话详情获取成功',
+        internal: {
+          core: {
+            conversationId,
+            stage: conversation.stage,
+            confidence: conversation.confidence,
+            isCompleted: conversation.status === 'completed'
+          },
+          ext: {
+            goalConversation: {
+              understanding: conversation.understanding || {},
+              nextQuestions: conversation.collected?.questions_to_ask || [],
+              quickReplies: [],
+              collected: conversation.collected || {}
+            }
+          }
+        },
+        renderHints: {},
+        schemaVersion: 'agent-output-v1',
+        meta: {
+          source: 'goal-conversation',
+          timestamp: new Date().toISOString()
+        }
+      }
+    });
   } catch (error: any) {
     logger.error('获取对话会话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;
@@ -107,24 +185,28 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
 router.post('/quick-generate', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const { goal, level = 'beginner', timePerDay = '1 小时', learningStyle = 'mixed' } = req.body;
+    const goal = getInputText(req.body);
+    const { level = 'beginner', timePerDay = '1 小时', learningStyle = 'mixed' } = req.body;
 
     if (!userId) {
       return res.status(401).json({ success: false, error: '用户未认证' });
     }
 
-    if (!goal || goal.trim().length === 0) {
+    if (!goal || goal.length === 0) {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
     }
 
     const result = await requirementOrchestrator.quickGenerate(userId, {
-      goal: goal.trim(),
+      goal,
       level,
       timePerDay,
       learningStyle
     });
 
-    return res.json({ success: true, ...result });
+    return res.json({
+      success: true,
+      data: envelopeGoalConversation(result)
+    });
   } catch (error: any) {
     logger.error('快速生成失败:', error);
     return res.status(500).json({ success: false, error: error.message || '快速生成失败' });

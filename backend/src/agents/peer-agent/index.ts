@@ -247,6 +247,18 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
       success: true,
       userVisible: result.message,
       internal: {
+        core: {
+          stage: 'discussion-completed',
+          confidence: 0.8,
+          isCompleted: true,
+        },
+        ext: {
+          peer: {
+            message: result.message,
+            strategy: result.strategy,
+            followUpQuestions: result.followUpQuestions || [],
+          }
+        },
         strategy: result.strategy,
         followUpQuestions: result.followUpQuestions,
         output: result
@@ -256,6 +268,13 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
         followUpQuestions: result.followUpQuestions || []
       },
       schemaVersion: 'agent-output-v1',
+      metadata: {
+        agentId: AGENT_ID,
+        agentName: '伴学 Agent',
+        agentType: 'teaching',
+        confidence: 0.8,
+        generatedAt: new Date().toISOString(),
+      },
       output: result
     };
   } catch (error: any) {
@@ -266,9 +285,18 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
     
     return {
       success: false,
+      userVisible: '同伴回复生成失败，请稍后重试。',
       error: {
         code: 'PEER_AGENT_FAILED',
         message: error?.message || 'PeerAgent execution failed'
+      },
+      schemaVersion: 'agent-output-v1',
+      metadata: {
+        agentId: AGENT_ID,
+        agentName: '伴学 Agent',
+        agentType: 'teaching',
+        confidence: 0,
+        generatedAt: new Date().toISOString(),
       }
     };
   } finally {

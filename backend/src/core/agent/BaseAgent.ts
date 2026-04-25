@@ -14,7 +14,7 @@ import aiService from '../../services/ai/ai.service';
 import { logger } from '../../utils/logger';
 
 // 默认配置常量
-const DEFAULT_AI_MODEL = process.env.AI_MODEL || 'deepseek-chat';
+const DEFAULT_AI_MODEL = process.env.AI_MODEL || '';
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2000;
 
@@ -144,7 +144,7 @@ export abstract class BaseAgent implements ILearningAgent {
     const response = await aiService.chat(
       messages as any,
       {
-        model: options?.model || this.config.model,
+        model: options?.model || this.config.model || undefined,
         temperature: options?.temperature ?? this.config.temperature,
         maxTokens: options?.maxTokens ?? this.config.maxTokens,
       }

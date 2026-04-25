@@ -93,7 +93,7 @@ export const basicEvaluator: AgentPlugin = {
 2. 肯定优点，指出不足
 3. 提供具体的改进方向
 4. 给出下一步学习建议`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2
   },

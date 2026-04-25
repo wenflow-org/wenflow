@@ -785,7 +785,7 @@ POST /api/admin/arena/sessions
 {
   "name": "Content Agent 对比测试",
   "description": "测试 v3 和 v5 版本的内容生成质量",
-  "agents": ["content-agent-v3"],
+  "agents": ["ai-teaching-agent"],
   "testCases": [
     {
       "input": "生成 Python 入门教程",
@@ -922,7 +922,6 @@ async function generateContent(prompt: string) {
           <p>参考现有标准化 Agent 获取灵感：</p>
           <ul class="simple-list">
             <li><code>backend/src/agents/path-agent/</code> - 路径生成 Agent</li>
-            <li><code>backend/src/agents/content-agent-v3/</code> - 内容生成 Agent v3</li>
             <li><code>backend/src/services/ai-teaching/</code> - AI 授课编排</li>
           </ul>
         </section>

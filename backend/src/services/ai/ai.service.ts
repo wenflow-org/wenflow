@@ -6,8 +6,8 @@ import prisma from '../../config/database';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 
 // AI 配置 - 主模型
-const AI_MODEL = process.env.AI_MODEL || 'glm-4-flash';
-const AI_MODEL_REASONING = process.env.AI_MODEL_REASONING || 'deepseek-think';
+const AI_MODEL = process.env.AI_MODEL;
+const AI_MODEL_REASONING = process.env.AI_MODEL_REASONING;
 
 // AI 配置 - 课程设计模型
 const COURSE_DESIGN_MODEL = process.env.COURSE_DESIGN_MODEL || 'grok-4.1-fast';
@@ -475,7 +475,9 @@ class AIService {
         const response = await this.chat([
           { role: 'system', content: systemPrompt },
           { role: 'user', content: '请开始执行任务。' }
-        ]);
+        ], {
+          model
+        });
         const duration = Date.now() - startTime;
 
         // 3. 调用 AI 裁判打分 (Judge)
@@ -511,7 +513,7 @@ class AIService {
   }
 
   // 公共方法：AI 裁判打分
-  async judgeResult(prompt: string, output: string, judgeModel: string, customJudgePrompt?: string) {
+  async judgeResult(prompt: string, output: string, judgeModel?: string, customJudgePrompt?: string) {
     const judgeSystemPrompt = customJudgePrompt || `你是一个严格的 AI 内容质量评估专家。
 请根据用户的 System Prompt 和 AI 的 Output，对输出质量进行打分（0-100 分）。
 
@@ -545,7 +547,9 @@ ${prompt}
 AI Output:
 ${output}`
         }
-      ]);
+      ], {
+        model: judgeModel
+      });
 
       // 尝试解析 JSON（支持多种格式）
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
@@ -687,18 +691,7 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
       studentState?: StudentStateAssessment;  // 学生当前状态（可选，如果提供则直接使用）
     }
   ) {
-    // 获取学生状态（如果提供了 sessionId 但没有提供 state）
     let studentState = context?.studentState;
-    
-    if (context?.sessionId && !studentState) {
-      try {
-        const { learningSessionService } = await import('../learning/learning-session.service');
-        const session = await learningSessionService.getSession(context.sessionId);
-        studentState = (session?.state as StudentStateAssessment) || undefined;
-      } catch (error: any) {
-        logger.error('获取学生状态失败:', error.message);
-      }
-    }
 
     // 根据学生状态生成辅导策略
     let strategyPrompt = '';

@@ -27,6 +27,7 @@ export interface ResolvedRoute {
   model: string;
   temperature: number;
   maxTokens: number;
+  timeoutMs?: number;
   source: RouteSource;
 }
 

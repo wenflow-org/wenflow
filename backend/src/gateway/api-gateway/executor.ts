@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
+import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 
 class APIExecutionError extends Error {
   readonly retryable: boolean;
@@ -27,9 +28,28 @@ class APIExecutionError extends Error {
 }
 
 export class APIExecutor {
-  private readonly timeout = 60000;
+  private readonly defaultTimeoutMs = getDefaultAIRequestTimeoutMs();
   private readonly maxRetries = 3;
   private readonly retryDelay = 1000;
+
+  private isQuotaOrBalanceError(status: number, body: string): boolean {
+    const normalized = body.toLowerCase();
+    if (status === 429) {
+      return normalized.includes('quota')
+        || normalized.includes('exceeded today')
+        || normalized.includes('try again tomorrow')
+        || normalized.includes('rate limit');
+    }
+
+    if (status === 402 || status === 403) {
+      return normalized.includes('insufficient balance')
+        || normalized.includes('account balance')
+        || normalized.includes('余额')
+        || normalized.includes('quota');
+    }
+
+    return false;
+  }
 
   async execute(
     route: ResolvedRoute,
@@ -87,7 +107,8 @@ export class APIExecutor {
 
   private async executeRequest(route: ResolvedRoute, request: ChatRequest): Promise<{ response: ChatResponse; statusCode: number }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutMs = route.timeoutMs ?? this.defaultTimeoutMs;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const requestUrl = this.resolveChatCompletionsUrl(route.endpoint);
 
     try {
@@ -114,13 +135,16 @@ export class APIExecutor {
       const responseText = await response.text();
 
       if (!response.ok) {
+        const nonRetryableQuotaOrBalance = this.isQuotaOrBalanceError(response.status, responseText);
         throw new APIExecutionError(
           `API request failed with status ${response.status}: ${this.truncate(responseText, 500)}`,
           {
             statusCode: response.status,
             requestUrl,
             contentType,
-            retryable: response.status >= 500 || response.status === 429 || response.status === 408
+            retryable: nonRetryableQuotaOrBalance
+              ? false
+              : (response.status >= 500 || response.status === 429 || response.status === 408)
           }
         );
       }
@@ -160,7 +184,7 @@ export class APIExecutor {
       clearTimeout(timeoutId);
       
       if ((error as Error).name === 'AbortError') {
-        throw new APIExecutionError('API request timed out', {
+        throw new APIExecutionError(`API request timed out after ${timeoutMs}ms`, {
           retryable: true,
           requestUrl
         });

@@ -200,7 +200,7 @@ class ReportService {
     startDate: Date,
     endDate: Date
   ) {
-    const sessions = await prisma.learning_sessions.findMany({
+    const sessions = await prisma.teaching_sessions.findMany({
       where: {
         userId,
         startTime: { gte: startDate, lte: endDate },
@@ -361,7 +361,7 @@ class ReportService {
     }
 
     // 统计每日会话数和时间
-    const sessions = await prisma.learning_sessions.findMany({
+    const sessions = await prisma.teaching_sessions.findMany({
       where: {
         userId,
         startTime: { gte: startDate, lte: endDate },

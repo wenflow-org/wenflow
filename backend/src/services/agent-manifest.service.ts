@@ -38,7 +38,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     monitoringGroup: 'RequirementCollection',
     aliases: ['goal-conversation'],
-    ioContractVersion: 'agent-output-v1'
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: {
+      temperature: 0.7,
+      maxTokens: 1800
+    }
   },
   {
     id: 'path-agent',
@@ -51,23 +55,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'PathPlanning',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
-      temperature: 0.5,
-      maxTokens: 6000
-    }
-  },
-  {
-    id: 'content-agent-v3',
-    name: '对话式内容 Agent',
-    description: '对话式内容生成',
-    category: 'content',
-    kind: 'agent',
-    runtimeEnabled: false,
-    userVisible: false,
-    monitoringGroup: 'Teaching',
-    ioContractVersion: 'legacy',
-    defaultModelConfig: {
-      temperature: 0.7,
-      maxTokens: 1000
+      temperature: 0.4,
+      maxTokens: 10000
     }
   },
   {
@@ -80,19 +69,23 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
-      temperature: 0.7,
-      maxTokens: 300
+      temperature: 0.4,
+      maxTokens: 600
     }
   },
   {
-    id: 'user-profile-agent',
-    name: '用户画像 Agent',
-    description: '分析用户特征',
+    id: 'learner-model-agent',
+    name: '学习者模型 Agent',
+    description: '聚合学习者画像、状态与知识记忆',
     category: 'analysis',
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
-    ioContractVersion: 'agent-output-v1'
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: {
+      temperature: 0.3,
+      maxTokens: 1000
+    }
   },
   {
     id: 'peer-agent',
@@ -106,7 +99,22 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.8,
-      maxTokens: 500
+      maxTokens: 1000
+    }
+  },
+  {
+    id: 'teaching-turn-agent',
+    name: '教学回合 Agent',
+    description: '生成课堂单轮教学回复与结构化教学状态',
+    category: 'teaching',
+    kind: 'agent',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Teaching',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: {
+      temperature: 0.5,
+      maxTokens: 2200
     }
   },
   {
@@ -121,7 +129,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.3,
-      maxTokens: 1500
+      maxTokens: 1800
     }
   },
   {
@@ -136,7 +144,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.2,
-      maxTokens: 500
+      maxTokens: 1000
     }
   },
   {
@@ -171,7 +179,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     monitoringGroup: 'TeachingOrchestration',
     aliases: ['ai-teaching'],
-    orchestratorMembers: ['ai-teaching-agent']
+    orchestratorMembers: ['ai-teaching-agent', 'teaching-turn-agent', 'peer-agent', 'summary-agent', 'session-evaluation-agent']
   }
 ];
 
@@ -250,6 +258,7 @@ export function getDefaultAgentModelConfigs() {
     .filter(item => item.defaultModelConfig)
     .map(item => ({
       agentId: item.id,
+      tier: 'chat',
       temperature: item.defaultModelConfig!.temperature,
       maxTokens: item.defaultModelConfig!.maxTokens
     }));

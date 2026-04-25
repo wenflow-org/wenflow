@@ -65,7 +65,7 @@ export interface StrategyConfig {
 const STRATEGY_CONFIGS: StrategyConfig[] = [
   {
     strategy: 'interactive',
-    agentId: 'content-agent-v3',
+    agentId: 'ai-teaching-agent',
     description: '高认知负荷的概念学习，需要分段讲解+思考停顿',
     conditions: {
       cognitiveLoad: ['high'],
@@ -74,7 +74,7 @@ const STRATEGY_CONFIGS: StrategyConfig[] = [
   },
   {
     strategy: 'light-interactive',
-    agentId: 'content-agent-v3',
+    agentId: 'ai-teaching-agent',
     description: '中等难度内容，在关键节点提问即可',
     conditions: {
       cognitiveLoad: ['medium'],
@@ -83,7 +83,7 @@ const STRATEGY_CONFIGS: StrategyConfig[] = [
   },
   {
     strategy: 'light-interactive',
-    agentId: 'content-agent-v3',
+    agentId: 'ai-teaching-agent',
     description: '案例本身有吸引力，只需关键节点互动',
     conditions: {
       cognitiveLoad: ['high', 'medium'],
@@ -92,7 +92,7 @@ const STRATEGY_CONFIGS: StrategyConfig[] = [
   },
   {
     strategy: 'traditional',
-    agentId: 'content-agent-v3',
+    agentId: 'ai-teaching-agent',
     description: '用户已经在输出，不需要额外对话',
     conditions: {
       cognitiveLoad: ['low', 'medium', 'high'],
@@ -111,7 +111,7 @@ const STRATEGY_CONFIGS: StrategyConfig[] = [
 export class ContentStrategySelector {
   private defaultStrategy: StrategyConfig = {
     strategy: 'traditional',
-    agentId: 'content-agent-v3',
+    agentId: 'ai-teaching-agent',
     description: '低认知负荷或知识型内容，快速传递信息',
     conditions: {
       cognitiveLoad: ['low'],

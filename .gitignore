@@ -200,3 +200,6 @@ test-*.ts
 test_dialogue.py
 
 nul
+
+# Local architecture docs (do not track)
+doc/

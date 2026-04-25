@@ -75,7 +75,7 @@ router.get('/', async (req, res, next) => {
           _count: {
             select: {
               learning_paths: true,
-              learning_sessions: true
+              teaching_sessions: true
             }
           }
         },

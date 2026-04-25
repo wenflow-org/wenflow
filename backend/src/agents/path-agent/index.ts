@@ -18,6 +18,7 @@ import {
   SubtaskOutput
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 type ChatMessage = { role: MessageRole; content: string };
@@ -26,11 +27,54 @@ import { textStructureAnalyzer } from '../../skills/text-structure-analyzer';
 import { timeEstimator } from '../../skills/time-estimator';
 import { logger } from '../../utils/logger';
 
-const PATH_AGENT_MAX_TOKENS = 6000;
+const PATH_AGENT_MAX_TOKENS = 10000;
+
+const DEFAULT_PATH_GENERATION_PROMPT = `你是一位专业的课程设计师，负责创建里程碑式的学习路径。
+
+请创建一个包含里程碑的学习路径，每个里程碑代表一个关键学习阶段。
+
+里程碑设计原则：
+1. 每个里程碑是一个独立的学习目标，可以独立评估完成度
+2. 里程碑之间有递进关系，前一个里程碑是后一个的基础
+3. 每个里程碑包含多个子任务，子任务类型要多样化
+4. 支持超长目标时，建议总里程碑在6-10个之间；普通目标保持3-6个里程碑
+5. 每个里程碑建议4-8个子任务，避免单阶段任务过少或过多
+6. 每个子任务 estimatedMinutes 建议在30-120之间，需结合用户可用时间
+7. 如输入有 totalWeeks，整体规划不要超过 totalWeeks；若 totalWeeks > 52，则按52周规划
+8. 如果提供了"具体应用场景"，所有里程碑标题、任务标题、任务描述、案例都必须紧密围绕该场景，不可使用泛泛的通用示例
+9. 路径名称必须直接反映用户的原始学习目标和具体应用场景，不可使用通用模板名称
+
+请以JSON格式输出学习路径：
+{
+  "name": "路径名称",
+  "summary": "用1-2句话概括这条路径适合谁、解决什么问题、能帮助用户启动到什么程度",
+  "totalMilestones": 3,
+  "estimatedHours": 12,
+  "estimatedWeeks": 12,
+  "milestones": [
+    {
+      "stageNumber": 1,
+      "title": "里程碑标题",
+      "description": "里程碑描述",
+      "goal": "里程碑学习目标",
+      "estimatedHours": 4,
+      "subtasks": [
+        {
+          "title": "子任务标题",
+          "type": "reading|practice|project|quiz",
+          "estimatedMinutes": 60,
+          "description": "任务描述",
+          "acceptanceCriteria": "完成标准"
+        }
+      ]
+    }
+  ]
+}`;
 
 interface PathOutput {
   id?: string;
   name: string;
+  summary?: string;
   subject: string;
   totalMilestones: number;
   estimatedHours?: number;
@@ -113,6 +157,7 @@ export const pathAgentDefinition: AgentDefinition = {
         type: 'object',
         properties: {
           name: { type: 'string' },
+          summary: { type: 'string' },
           totalMilestones: { type: 'number' },
           estimatedHours: { type: 'number' },
           milestones: { type: 'array' }
@@ -162,6 +207,17 @@ export async function pathAgentHandler(
       userVisible: `学习路径已生成：${path.name}`,
       path,
       internal: {
+        core: {
+          stage: 'completed',
+          confidence: goalAnalysis.confidence,
+          isCompleted: true
+        },
+        ext: {
+          path: {
+            path,
+            totalMilestones: path.milestones?.length || 0
+          }
+        },
         path,
         totalMilestones: path.milestones?.length || 0,
       },
@@ -182,7 +238,10 @@ export async function pathAgentHandler(
     return {
       success: false,
       userVisible: '学习路径生成失败，请稍后重试',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: {
+        code: 'PATH_AGENT_FAILED',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'path-agent',
@@ -204,6 +263,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   focus: string[];
   context: string;
   confidence: number;
+  replan?: any;
 }> {
   const gateway = getAPIGateway();
   const caller: CallerInfo = { agentId: 'path-agent' };
@@ -211,6 +271,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   const structuredData = input.structuredData as any;
   const confirmedProposal = input.confirmedProposal as any;
   const conversationHistory = input.conversationHistory as any[] || [];
+  const replan = input.metadata?.replan as any;
   
   if (structuredData) {
     logger.info('使用结构化数据', {
@@ -241,7 +302,9 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       // @ts-ignore
       confirmedProposal,
       // @ts-ignore
-      conversationHistory
+      conversationHistory,
+      // @ts-ignore
+      replan
     };
   }
   
@@ -315,54 +378,21 @@ async function generatePath(
     structuredData?: any;
     confirmedProposal?: any;
     conversationHistory?: any[];
+    replan?: any;
   }
 ): Promise<PathOutput> {
   const gateway = getAPIGateway();
   const caller: CallerInfo = { agentId: 'path-agent' };
+  const promptConfig = await agentConfigService.getActivePrompt('path-agent');
   
   const confirmedProposal = analysis.confirmedProposal;
   const conversationHistory = analysis.conversationHistory;
+  const replan = analysis.replan;
+  const confirmedStages = Array.isArray(confirmedProposal?.key_stages)
+    ? confirmedProposal.key_stages.filter(Boolean)
+    : [];
   
-  const systemPrompt = `你是一位专业的课程设计师，负责创建里程碑式的学习路径。
-
-请创建一个包含里程碑的学习路径，每个里程碑代表一个关键学习阶段。
-
-里程碑设计原则：
-1. 每个里程碑是一个独立的学习目标，可以独立评估完成度
-2. 里程碑之间有递进关系，前一个里程碑是后一个的基础
-3. 每个里程碑包含多个子任务，子任务类型要多样化
-4. 支持超长目标时，建议总里程碑在6-10个之间；普通目标保持3-6个里程碑
-5. 每个里程碑建议4-8个子任务，避免单阶段任务过少或过多
-6. 每个子任务 estimatedMinutes 建议在30-120之间，需结合用户可用时间
-7. 如输入有 totalWeeks，整体规划不要超过 totalWeeks；若 totalWeeks > 52，则按52周规划
-8. 如果提供了"具体应用场景"，所有里程碑标题、任务标题、任务描述、案例都必须紧密围绕该场景，不可使用泛泛的通用示例
-9. 路径名称必须直接反映用户的原始学习目标和具体应用场景，不可使用通用模板名称
-
-请以JSON格式输出学习路径：
-{
-  "name": "路径名称",
-  "totalMilestones": 3,
-  "estimatedHours": 12,
-  "estimatedWeeks": 12,
-  "milestones": [
-    {
-      "stageNumber": 1,
-      "title": "里程碑标题",
-      "description": "里程碑描述",
-      "goal": "里程碑学习目标",
-      "estimatedHours": 4,
-      "subtasks": [
-        {
-          "title": "子任务标题",
-          "type": "reading|practice|project|quiz",
-          "estimatedMinutes": 60,
-          "description": "任务描述",
-          "acceptanceCriteria": "完成标准"
-        }
-      ]
-    }
-  ]
-}`;
+  const systemPrompt = promptConfig?.systemPrompt || DEFAULT_PATH_GENERATION_PROMPT;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -376,7 +406,7 @@ ${input.metadata?.totalWeeks ? `总学习周期（周）：${input.metadata.tota
 
 ${confirmedProposal ? `用户确认的方案轮廓：
 - 学习方向：${confirmedProposal.learning_direction}
-- 关键阶段：${confirmedProposal.key_stages.join('、')}
+- 关键阶段：${confirmedStages.join('、')}
 - 学习方式：${confirmedProposal.learning_style}
 
 【重要】请基于用户确认的方案轮廓设计路径阶段，保持方向一致。` : ''}
@@ -386,6 +416,23 @@ ${conversationHistory && conversationHistory.length > 0 ? `
 ${conversationHistory.map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 
 【重要】如果对某些信息不确定（如学习者身份），请查看对话历史验证。` : ''}
+
+${replan ? `
+【路径重调模式】
+- 重调模式：${replan.mode || 'new_version'}
+- 触发来源：${replan.triggerSource || 'unknown'}
+- 源路径 ID：${replan.sourcePathId || 'unknown'}
+- 冻结已完成任务：${Array.isArray(replan.freezeCompletedTaskIds) && replan.freezeCompletedTaskIds.length > 0 ? replan.freezeCompletedTaskIds.join('、') : '无'}
+
+【学习者重调投影】
+${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
+
+【重调要求】
+1. 这是对现有学习路径的新版本重调，不是从零忽略已有学习历史重新规划。
+2. 必须显式参考学习者已稳定掌握、掌握不稳、持续吃力和前置缺口信息。
+3. 不要围绕已稳定掌握内容重复铺设大量基础阶段。
+4. 对掌握不稳和前置缺口内容，应通过补桥接阶段、补充任务、降低阶段跳跃度来处理。
+5. 如果已完成任务被冻结，请把它们视为既有学习历史，不要在新版本里简单复制同名任务来伪装重调。` : ''}
 
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称中必须包含"${analysis.context || input.goal}"或高度相关的关键词，不得使用通用模板名称
@@ -404,7 +451,8 @@ const userId = context?.userId || input?.metadata?.userId;
   const response = await gateway.execute(
     {
       messages,
-      max_tokens: PATH_AGENT_MAX_TOKENS
+      max_tokens: promptConfig?.maxTokens || PATH_AGENT_MAX_TOKENS,
+      temperature: promptConfig?.temperature
     },
     caller,
     { userId }
@@ -418,6 +466,7 @@ const userId = context?.userId || input?.metadata?.userId;
       return {
         id: `path_${Date.now()}`,
         name: pathData.name,
+        summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
         subject: analysis.subject,
         totalMilestones: pathData.totalMilestones,
         estimatedHours: pathData.estimatedHours,

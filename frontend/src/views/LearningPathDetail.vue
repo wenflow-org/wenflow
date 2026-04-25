@@ -73,7 +73,7 @@
         </div>
 
         <!-- 加载状态 -->
-        <div v-if="loading" class="loading-state">
+        <div v-if="loading && !path" class="loading-state">
           <el-empty description="加载中...">
             <el-icon class="loading-icon"><Loading /></el-icon>
           </el-empty>
@@ -86,7 +86,7 @@
               <div class="card-header">
                 <div class="header-main">
                   <h1 class="path-title">{{ path.name }}</h1>
-                  <p class="path-description">{{ path.description }}</p>
+                  <p class="path-description">{{ path.summary || path.description }}</p>
                 </div>
                 <div class="progress-ring-wrapper">
                   <div class="progress-ring" :style="{ '--progress': completionRate }">
@@ -123,7 +123,7 @@
                   </div>
                   <div class="meta-info">
                     <span class="meta-value">{{ path.subject }}</span>
-                    <span class="meta-label">学科</span>
+                    <span class="meta-label">方向</span>
                   </div>
                 </div>
                 <div class="meta-item">
@@ -135,6 +135,35 @@
                     <span class="meta-label">/ {{ totalTasks }} 任务</span>
                   </div>
                 </div>
+              </div>
+
+              <div v-if="path.replanLineage?.sourcePathId" class="replan-lineage-banner">
+                <strong>重调版本</strong>
+                <span>
+                  源路径：{{ path.replanLineage.sourcePathId }}
+                  <template v-if="path.replanLineage.replanMode"> · 模式：{{ path.replanLineage.replanMode }}</template>
+                  <template v-if="path.replanLineage.triggerSource"> · 来源：{{ path.replanLineage.triggerSource }}</template>
+                </span>
+              </div>
+
+              <div
+                v-if="showEnrichmentBanner"
+                class="enrichment-banner"
+                :class="`enrichment-banner-${enrichmentStatus || 'unknown'}`"
+              >
+                <div class="enrichment-banner-copy">
+                  <strong>{{ enrichmentBannerTitle }}</strong>
+                  <span>{{ enrichmentBannerMessage }}</span>
+                </div>
+                <el-button
+                  v-if="enrichmentStatus === 'failed'"
+                  type="primary"
+                  size="small"
+                  :loading="retryingEnrichment"
+                  @click="retryEnrichment"
+                >
+                  继续完善
+                </el-button>
               </div>
             </div>
           </section>
@@ -176,6 +205,12 @@
 
                   <!-- 学习目标 -->
                   <div
+                    v-if="enrichmentStatus !== 'succeeded'"
+                    class="week-pending-note"
+                  >
+                    {{ enrichmentPendingHint }}
+                  </div>
+                  <div
                     v-if="week.learningObjectives && week.learningObjectives.length > 0"
                     class="learning-objectives"
                   >
@@ -197,7 +232,10 @@
                       v-for="task in (week.subtasks || week.tasks || [])"
                       :key="task.id"
                       class="task-card"
-                      :class="{ 'task-completed': task.status === 'completed' }"
+                      :class="{
+                        'task-completed': task.status === 'completed',
+                        'task-locked': !canStartLearning && task.status !== 'completed'
+                      }"
                       @click="openTaskDetail(task)"
                     >
                       <div class="task-status-icon">
@@ -256,11 +294,12 @@
                               查看当堂评估
                             </button>
                           </div>
-                          <button v-else
+                           <button v-else
                             class="task-btn btn-start"
+                            :disabled="!canStartLearning"
                             @click.stop="startTask(task)"
                           >
-                            开始学习
+                            {{ canStartLearning ? '开始学习' : '等待标注完成' }}
                             <el-icon><ArrowRight /></el-icon>
                           </button>
                         </div>
@@ -333,6 +372,7 @@ import CompletionCard from '../components/CompletionCard.vue';
 import api from '../utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import type { TaskEvaluationDetail } from '@/api/aiTeaching';
+import { learningAPI } from '@/api/learning';
 
 const route = useRoute();
 const router = useRouter();
@@ -346,6 +386,9 @@ const activeWeeks = ref<number[]>([1]);
 const evaluationDialogVisible = ref(false);
 const evaluationLoading = ref(false);
 const selectedTaskEvaluation = ref<TaskEvaluationDetail | null>(null);
+const retryingEnrichment = ref(false);
+let enrichmentPollingTimer: number | null = null;
+let enrichmentPollingInFlight = false;
 
 // 计算属性
 const totalTasks = computed(() => {
@@ -368,6 +411,40 @@ const completionRate = computed(() => {
   return Math.round((completedTasks.value / totalTasks.value) * 100);
 });
 
+const generationStatus = computed(() => path.value?.generationStatus || null);
+const enrichmentStatus = computed(() => generationStatus.value?.enrichment || null);
+const canStartLearning = computed(() => path.value?.canStartLearning !== false);
+const showEnrichmentBanner = computed(() => path.value?.status === 'active' && enrichmentStatus.value && enrichmentStatus.value !== 'succeeded');
+const enrichmentBannerTitle = computed(() => {
+  if (enrichmentStatus.value === 'processing' || enrichmentStatus.value === 'pending') {
+    return '学习内容准备中';
+  }
+
+  if (enrichmentStatus.value === 'failed') {
+    return '学习内容继续完善中';
+  }
+
+  return '学习内容状态未知';
+});
+const enrichmentBannerMessage = computed(() => {
+  if (enrichmentStatus.value === 'processing' || enrichmentStatus.value === 'pending') {
+    return '路径已经生成，系统正在后台准备学习内容。完成前暂不能开始学习，你可以先离开当前页面，稍后再回来查看。';
+  }
+
+  if (enrichmentStatus.value === 'failed') {
+    return path.value?.learningBlockedReason || '系统正在继续完善学习内容。你也可以现在手动继续完善，无需停留在当前页面。';
+  }
+
+  return path.value?.learningBlockedReason || '学习内容状态暂不可用，请稍后刷新页面。';
+});
+const enrichmentPendingHint = computed(() => {
+  if (enrichmentStatus.value === 'failed') {
+    return '这一阶段的学习内容还没准备完整，请稍后再回来开始学习。';
+  }
+
+  return '这一阶段的学习内容仍在准备中，完成后就可以开始学习。';
+});
+
 const handleLogout = async () => {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -388,7 +465,9 @@ const handleScroll = () => {
 };
 
 const loadPathData = async () => {
-  loading.value = true;
+  if (!path.value) {
+    loading.value = true;
+  }
   try {
     const response = await api.get(`/learning/paths/${pathId}`);
     path.value = response.data;
@@ -414,6 +493,12 @@ const loadPathData = async () => {
         }
       });
     }
+
+    if (path.value?.generationStatus?.enrichment === 'processing' || path.value?.generationStatus?.enrichment === 'pending') {
+      startEnrichmentPolling();
+    } else {
+      stopEnrichmentPolling();
+    }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.error?.message || '加载路径详情失败');
   } finally {
@@ -432,12 +517,64 @@ const toggleWeek = (week: any) => {
 };
 
 const openTaskDetail = (task: any) => {
+  if (!canStartLearning.value && task.status !== 'completed') {
+    ElMessage.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
+    return;
+  }
+
   router.push(`/learn/${task.id}`);
 };
 
 // 点击"开始学习"按钮
 const startTask = (task: any) => {
+  if (!canStartLearning.value) {
+    ElMessage.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
+    return;
+  }
+
   router.push(`/learn/${task.id}`);
+};
+
+const retryEnrichment = async () => {
+  if (!path.value?.id) return;
+
+  retryingEnrichment.value = true;
+  try {
+    await learningAPI.retryPathEnrichment(path.value.id);
+    ElMessage.success('已在后台继续完善学习内容，无需停留当前页面。');
+    await loadPathData();
+  } catch (error: any) {
+    ElMessage.error(error.message || '继续完善学习内容失败');
+  } finally {
+    retryingEnrichment.value = false;
+  }
+};
+
+const startEnrichmentPolling = () => {
+  if (enrichmentPollingTimer) return;
+
+  enrichmentPollingTimer = window.setInterval(async () => {
+    if (enrichmentPollingInFlight) return;
+
+    if (enrichmentStatus.value === 'processing' || enrichmentStatus.value === 'pending') {
+      enrichmentPollingInFlight = true;
+      try {
+        await loadPathData();
+      } finally {
+        enrichmentPollingInFlight = false;
+      }
+      return;
+    }
+
+    stopEnrichmentPolling();
+  }, 3000);
+};
+
+const stopEnrichmentPolling = () => {
+  if (enrichmentPollingTimer) {
+    clearInterval(enrichmentPollingTimer);
+    enrichmentPollingTimer = null;
+  }
 };
 
 const formatSessionDuration = (minutes: number) => {
@@ -579,6 +716,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopEnrichmentPolling();
   window.removeEventListener('scroll', handleScroll);
 });
 </script>
@@ -905,6 +1043,45 @@ onUnmounted(() => {
   border-top: 1px solid var(--border-light);
 }
 
+.enrichment-banner {
+  margin-top: 1rem;
+  border-radius: var(--radius-xl);
+  padding: 0.875rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.enrichment-banner-processing,
+.enrichment-banner-pending {
+  background: rgba(64, 158, 255, 0.08);
+  border: 1px solid rgba(64, 158, 255, 0.22);
+}
+
+.enrichment-banner-failed {
+  background: rgba(245, 108, 108, 0.08);
+  border: 1px solid rgba(245, 108, 108, 0.22);
+}
+
+.enrichment-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.enrichment-banner-copy strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.enrichment-banner-copy span {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 @media (max-width: 768px) {
   .path-meta {
     grid-template-columns: repeat(2, 1fr);
@@ -1088,6 +1265,17 @@ onUnmounted(() => {
   font-size: 0.9375rem;
 }
 
+.week-pending-note {
+  margin: 1rem 0;
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(64, 158, 255, 0.06);
+  border: 1px dashed rgba(64, 158, 255, 0.26);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 /* 学习目标 */
 .learning-objectives {
   background: var(--color-primary-lighter);
@@ -1155,6 +1343,10 @@ onUnmounted(() => {
   border-color: rgba(103, 194, 58, 0.3);
 }
 
+.task-card.task-locked {
+  opacity: 0.82;
+}
+
 .task-status-icon {
   width: 40px;
   height: 40px;
@@ -1171,6 +1363,12 @@ onUnmounted(() => {
 .task-card.task-completed .task-status-icon {
   background: rgba(103, 194, 58, 0.14);
   color: #2f8f4f;
+}
+
+.task-card.task-locked:not(.task-completed):hover {
+  border-color: var(--border-light);
+  box-shadow: none;
+  transform: none;
 }
 
 .status-dot {
@@ -1271,6 +1469,13 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 
+.btn-start:disabled {
+  background: linear-gradient(135deg, #c8ceda 0%, #b2b9c6 100%);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .btn-completed {
   background: var(--color-success-bg);
   border: 1px solid var(--color-success-border);
@@ -1300,6 +1505,26 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 1.5rem;
+}
+
+.replan-lineage-banner {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-primary-light) 14%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, var(--border-default));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.replan-lineage-banner strong {
+  font-size: 13px;
+}
+
+.replan-lineage-banner span {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .btn {

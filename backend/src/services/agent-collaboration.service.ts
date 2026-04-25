@@ -14,7 +14,7 @@ import {
   PathAdjustmentRequest
 } from '../agents/protocol';
 import { pathAdjustmentEngine, PathAdjustment } from '../agents/path-agent/adjustment';
-import { userProfileAgent } from '../agents/user-profile-agent';
+import { learnerModelAgent } from '../agents/learner-model-agent';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
 import prisma from '../config/database';
 
@@ -296,7 +296,7 @@ export class AgentCollaborationService {
     if (!userId) return;
     
     try {
-      const result = await userProfileAgent.getPersonalization(userId);
+      const result = await learnerModelAgent.getPersonalization(userId);
       
       await this.eventBus.emit({
         type: 'personalization:ready',
@@ -441,7 +441,7 @@ export class AgentCollaborationService {
     targetAgent: string,
     context: string
   ): Promise<any> {
-    const result = await userProfileAgent.getPersonalization(userId);
+    const result = await learnerModelAgent.getPersonalization(userId);
     return result;
   }
   

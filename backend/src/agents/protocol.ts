@@ -86,7 +86,7 @@ export interface AgentOutput {
     milestones: MilestoneOutput[];
   };
   
-  // 内容输出（content-agent-v3）
+  // 内容输出（legacy content agent）
   content?: {
     taskId?: string;
     explanation: string;

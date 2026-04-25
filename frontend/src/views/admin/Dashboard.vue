@@ -31,6 +31,11 @@
               <span>用户管理</span>
             </el-menu-item>
 
+            <el-menu-item index="/admin/learner-models">
+              <el-icon><Reading /></el-icon>
+              <span>学习者模型</span>
+            </el-menu-item>
+
             <el-menu-item index="/admin/api-config">
               <el-icon><Setting /></el-icon>
               <span>API 管理</span>
@@ -49,6 +54,11 @@
             <el-menu-item index="/admin/agent-registry">
               <el-icon><Grid /></el-icon>
               <span>Agent 注册</span>
+            </el-menu-item>
+
+            <el-menu-item index="/admin/agent-model-configs">
+              <el-icon><Cpu /></el-icon>
+              <span>Agent 模型配置</span>
             </el-menu-item>
 
             <el-menu-item index="/admin/manifest-diagnostics">
@@ -95,6 +105,7 @@ import { ElMessage } from 'element-plus';
 import {
   DataAnalysis,
   User,
+  Reading,
   Cpu,
   Connection,
   Grid,

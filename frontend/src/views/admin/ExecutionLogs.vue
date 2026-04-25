@@ -62,7 +62,7 @@
           <label>Agent ID</label>
           <el-input
             v-model="filters.agentId"
-            placeholder="如 content-agent-v3"
+            placeholder="如 ai-teaching-agent"
             clearable
             class="filter-input"
           />

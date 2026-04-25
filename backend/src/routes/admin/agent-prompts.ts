@@ -170,6 +170,14 @@ router.post('/', async (req: Request, res: Response) => {
 
     const newVersion = (latestVersion?.version || 0) + 1;
 
+    const resolvedModel = (model || process.env.AI_MODEL || '').trim();
+    if (!resolvedModel) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'model 未配置，请在管理员配置默认模型或请求中传入 model' },
+      });
+    }
+
     // 创建新版本
     const prompt = await prisma.agent_prompts.create({
       data: {
@@ -181,7 +189,7 @@ router.post('/', async (req: Request, res: Response) => {
         systemPrompt,
         temperature: temperature ?? 0.7,
         maxTokens: maxTokens ?? 2000,
-        model: model || process.env.AI_MODEL || 'deepseek-chat',
+        model: resolvedModel,
         status: 'DRAFT',
         createdBy: req.body.createdBy || 'admin',
       },

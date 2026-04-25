@@ -69,7 +69,7 @@ export const basicGenerator: AgentPlugin = {
 【严禁】
 - 不要输出 duration、estimatedTime 等时间相关字段
 - 只输出教学内容，不要输出时间估算`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 120000,
     retries: 2
   },

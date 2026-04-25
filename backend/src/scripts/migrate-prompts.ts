@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
+const DEFAULT_MODEL = (process.env.AI_MODEL || '').trim();
 
 // GoalConversationService 的 DEFAULT_SYSTEM_PROMPT
 const GOAL_CONVERSATION_PROMPT = `你是学习规划顾问"小智"。
@@ -190,32 +191,6 @@ const PATH_AGENT_PROMPT = `你是一个专业的学习规划AI助手。你的任
   "recommendations": ["建议1"]
 }`;
 
-// ContentAgent 的 systemPrompt
-const CONTENT_AGENT_PROMPT = `你是学习内容生成专家。
-
-【任务】
-根据学习任务主题，生成完整的教学内容。
-
-【输出格式】
-{
-  "explanation": "详细的教学讲解内容（Markdown格式）",
-  "codeExamples": ["代码示例1", "代码示例2"],
-  "exercises": [
-    {
-      "question": "练习题问题",
-      "hint": "提示信息",
-      "type": "coding"
-    }
-  ],
-  "keyPoints": ["关键知识点1", "关键知识点2"]
-}
-
-【内容要求】
-1. 讲解内容循序渐进
-2. 提供清晰、可运行的代码示例
-3. 练习题多样化
-4. 使用通俗易懂的语言`;
-
 // TutorAgent 的 systemPrompts (按级别)
 const TUTOR_AGENT_PROMPTS = {
   novice: `你是 AI 辅导老师。学生是初学者。
@@ -260,6 +235,10 @@ interface PromptToMigrate {
 }
 
 async function migratePrompts() {
+  if (!DEFAULT_MODEL) {
+    throw new Error('AI_MODEL is required for prompt migration');
+  }
+
   logger.info('开始迁移 Agent Prompts...');
 
   const promptsToMigrate: PromptToMigrate[] = [
@@ -270,7 +249,7 @@ async function migratePrompts() {
       systemPrompt: GOAL_CONVERSATION_PROMPT,
       temperature: 0.7,
       maxTokens: 4000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
     {
       agentId: 'path-agent',
@@ -279,16 +258,7 @@ async function migratePrompts() {
       systemPrompt: PATH_AGENT_PROMPT,
       temperature: 0.5,
       maxTokens: 6000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
-    },
-    {
-      agentId: 'content-agent-v3',
-      name: 'v1.0-初始版本',
-      description: 'ContentAgent 的系统提示词 - 学习内容生成',
-      systemPrompt: CONTENT_AGENT_PROMPT,
-      temperature: 0.7,
-      maxTokens: 6000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
     {
       agentId: 'tutor-agent-novice',
@@ -297,7 +267,7 @@ async function migratePrompts() {
       systemPrompt: TUTOR_AGENT_PROMPTS.novice,
       temperature: 0.6,
       maxTokens: 2000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
     {
       agentId: 'tutor-agent-advanced-beginner',
@@ -306,7 +276,7 @@ async function migratePrompts() {
       systemPrompt: TUTOR_AGENT_PROMPTS.advanced_beginner,
       temperature: 0.6,
       maxTokens: 2000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
     {
       agentId: 'tutor-agent-competent',
@@ -315,7 +285,7 @@ async function migratePrompts() {
       systemPrompt: TUTOR_AGENT_PROMPTS.competent,
       temperature: 0.6,
       maxTokens: 2000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
     {
       agentId: 'tutor-agent-proficient',
@@ -324,7 +294,7 @@ async function migratePrompts() {
       systemPrompt: TUTOR_AGENT_PROMPTS.proficient,
       temperature: 0.6,
       maxTokens: 2000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
     {
       agentId: 'tutor-agent-expert',
@@ -333,7 +303,7 @@ async function migratePrompts() {
       systemPrompt: TUTOR_AGENT_PROMPTS.expert,
       temperature: 0.6,
       maxTokens: 2000,
-      model: process.env.AI_MODEL || 'deepseek-chat',
+      model: DEFAULT_MODEL,
     },
   ];
 

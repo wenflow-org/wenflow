@@ -82,7 +82,7 @@ export const basicExtractor: AgentPlugin = {
 - 如果输入不是有效的URL或内容，返回适当的错误信息
 - 对于无法访问的内容，说明原因
 - estimatedReadTime 以分钟为单位`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2,
     maxContentLength: 50000

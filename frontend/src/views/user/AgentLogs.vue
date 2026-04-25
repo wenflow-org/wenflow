@@ -27,6 +27,7 @@
             <el-option label="Content Agent" value="content-agent" />
             <el-option label="AI Teaching Agent" value="ai-teaching-agent" />
             <el-option label="Progress Agent" value="progress-agent" />
+            <el-option label="Learner Model Agent" value="learner-model-agent" />
           </el-select>
         </el-form-item>
         <el-form-item label="能力类型">
@@ -36,7 +37,7 @@
             <el-option label="授课内容" value="teaching" />
             <el-option label="辅导答疑" value="tutoring" />
             <el-option label="进度追踪" value="tracking" />
-            <el-option label="用户画像" value="profile" />
+            <el-option label="学习者模型" value="profile" />
             <el-option label="系统调用" value="system" />
           </el-select>
         </el-form-item>
@@ -530,12 +531,11 @@ const formatAgentId = (logOrAgentId: any) => {
   // 友好显示映射
   const agentNames: Record<string, string> = {
     'path-agent': '学习路径规划',
-    'content-agent-v3': '对话式内容',
     'goal-conversation-agent': '目标对话',
     'ai-teaching-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
     'progress-agent': '进度追踪',
-    'user-profile-agent': '用户画像',
+    'learner-model-agent': '学习者模型',
     'course-design': '课程设计',
     'system-call': '平台底层调用'
   };
@@ -574,13 +574,12 @@ const getLogSourceType = (log: any) => {
 const getCapabilityType = (agentId: string) => {
   const mapping: Record<string, string> = {
     'goal-conversation-agent': 'goal',
-    'content-agent-v3': 'goal',
     'path-agent': 'path',
     'content-agent-v5': 'teaching',
     'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
     'progress-agent': 'tracking',
-    'user-profile-agent': 'profile',
+    'learner-model-agent': 'profile',
     'unknown': 'system',
     'system-call': 'system'
   };
@@ -595,7 +594,7 @@ const getCapabilityTypeLabel = (agentId: string) => {
     teaching: '授课内容',
     tutoring: '辅导答疑',
     tracking: '进度追踪',
-    profile: '用户画像',
+    profile: '学习者模型',
     system: '平台底层调用'
   };
 

@@ -102,6 +102,8 @@ export interface GoalTypeOutput {
   reasoning: string;
 }
 
+const GOAL_TYPE_IDENTIFIER_MAX_TOKENS = 3000;
+
 const GOAL_TYPE_SYSTEM_PROMPT = `你是学习目标分析专家，负责分析用户的学习目标类型并给出知识分布建议。
 
 【目标类型定义】
@@ -171,7 +173,10 @@ ${domain ? `领域：${domain}` : ''}
     
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'goal-type-identifier' };
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({
+      messages,
+      max_tokens: GOAL_TYPE_IDENTIFIER_MAX_TOKENS
+    }, caller, {});
     const content = response.choices[0]?.message.content || '';
     
     const result = parseGoalTypeResult(content);

@@ -65,6 +65,15 @@
       <p>正在初始化授课会话...</p>
     </div>
 
+    <div v-else-if="task && task.learningPath?.canStartLearning === false" class="session-paused blocked-state">
+      <el-icon :size="48" color="#e6a23c"><WarningFilled /></el-icon>
+      <h2>等待学习内容准备完成</h2>
+      <p>{{ task.learningPath?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习。' }}</p>
+      <el-button type="primary" @click="goBack">
+        返回路径详情
+      </el-button>
+    </div>
+
     <div v-if="sessionPaused" class="session-paused">
       <el-icon :size="48" color="#e6a23c"><VideoPause /></el-icon>
       <h2>授课已暂停</h2>
@@ -403,7 +412,7 @@ const loadTaskData = async () => {
       }
     }
   } catch (error: any) {
-    ElMessage.error('加载任务失败');
+    ElMessage.error(error.message || '加载任务失败');
     console.error(error);
   } finally {
     pageLoading.value = false;
@@ -416,22 +425,13 @@ const startSession = async () => {
   sessionInitializing.value = true;
   
   try {
-    const subject = task.value.learningPath?.subject || '综合';
-    const topic = task.value.title;
-    const difficulty = 5;
-    
-    const session = await aiTeachingAPI.startSession(
-      subject,
-      topic,
-      difficulty,
-      task.value.id
-    );
+    const session = await aiTeachingAPI.startSession(task.value.id);
     
     sessionInfo.value = {
       sessionId: session.sessionId,
       subject: session.subject,
       topic: session.topic,
-      difficulty
+      difficulty: 5
     };
     
     sessionActive.value = true;
@@ -904,7 +904,7 @@ const checkActiveSession = async (): Promise<boolean> => {
 
 onMounted(async () => {
   await loadTaskData();
-  if (task.value) {
+  if (task.value && task.value.learningPath?.canStartLearning !== false) {
     const resumed = await checkActiveSession();
     if (!resumed) {
       startSession();

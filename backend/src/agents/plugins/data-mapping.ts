@@ -115,7 +115,7 @@ export const dataMappingAgent: AgentPlugin = {
 - 只返回JSON格式
 - 包含所有要求的字段
 - 不要添加额外的解释或注释`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2
   },

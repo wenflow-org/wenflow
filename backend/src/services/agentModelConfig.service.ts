@@ -62,7 +62,7 @@ class AgentModelConfigService {
         const existing = await this.get(config.agentId);
         if (!existing) {
           await this.upsert(config.agentId, {
-            tier: 'chat',
+            tier: (config as any).tier || 'chat',
             temperature: config.temperature,
             maxTokens: config.maxTokens,
             enabled: true

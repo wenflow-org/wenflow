@@ -385,9 +385,9 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       }),
       
       // 今日活跃用户（有学习会话）
-      prisma.learning_sessions.findMany({
+      prisma.teaching_sessions.findMany({
         where: {
-          createdAt: {
+          startTime: {
             gte: today,
             lt: tomorrow,
           },
@@ -1236,6 +1236,37 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       }
     };
 
+    const extractPathPhaseInfo = (metadata: string | null) => {
+      if (!metadata) {
+        return {
+          phase: null,
+          phaseStatus: null,
+          pathId: null,
+          sourceConversationId: null,
+          triggerSource: null
+        };
+      }
+
+      try {
+        const parsed = JSON.parse(metadata);
+        return {
+          phase: parsed?.phase || null,
+          phaseStatus: parsed?.status || null,
+          pathId: parsed?.pathId || null,
+          sourceConversationId: parsed?.sourceConversationId || null,
+          triggerSource: parsed?.triggerSource || null
+        };
+      } catch {
+        return {
+          phase: null,
+          phaseStatus: null,
+          pathId: null,
+          sourceConversationId: null,
+          triggerSource: null
+        };
+      }
+    };
+
     const [logs, total, successCount, timeoutCount, errorCount] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where,
@@ -1273,21 +1304,29 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     ]);
 
     // 转换日志格式以兼容前端
-    const formattedLogs = logs.map(log => ({
-      id: log.id,
-      agentName: AGENT_ID_TO_NAME[log.agentId] || log.agentId,
-      agentId: log.agentId,
-      action: 'invoke',
-      status: buildStatusLabel(log),
-      input: log.input,
-      output: log.output,
-      error: log.error,
-      traceId: log.traceId,
-      sessionId: extractSessionIdFromMetadata(log.metadata),
-      durationMs: log.durationMs,
-      createdAt: log.calledAt,
-      metadata: log.metadata,
-    }));
+    const formattedLogs = logs.map(log => {
+      const phaseInfo = extractPathPhaseInfo(log.metadata);
+      return {
+        id: log.id,
+        agentName: AGENT_ID_TO_NAME[log.agentId] || log.agentId,
+        agentId: log.agentId,
+        action: 'invoke',
+        status: buildStatusLabel(log),
+        input: log.input,
+        output: log.output,
+        error: log.error,
+        traceId: log.traceId,
+        sessionId: extractSessionIdFromMetadata(log.metadata),
+        durationMs: log.durationMs,
+        createdAt: log.calledAt,
+        metadata: log.metadata,
+        phase: phaseInfo.phase,
+        phaseStatus: phaseInfo.phaseStatus,
+        pathId: phaseInfo.pathId,
+        sourceConversationId: phaseInfo.sourceConversationId,
+        triggerSource: phaseInfo.triggerSource,
+      };
+    });
 
     res.json({
       success: true,
@@ -1450,7 +1489,7 @@ router.get('/activity', async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 50;
 
     // 最近的学习会话
-    const recentSessions = await prisma.learning_sessions.findMany({
+    const recentSessions = await prisma.teaching_sessions.findMany({
       take: limit,
       orderBy: { startTime: 'desc' },
       include: {
@@ -1531,45 +1570,6 @@ router.get('/student-state', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { message: '获取学生状态基线失败' }
-    });
-  }
-});
-
-/**
- * 获取学习会话状态
- * GET /platform/session-state/:sessionId
- */
-router.get('/session-state/:sessionId', async (req: Request, res: Response) => {
-  try {
-    const sessionId = req.params.sessionId;
-    
-    const { learningSessionService } = await import('../../services/learning/learning-session.service');
-    const session = await learningSessionService.getSession(sessionId);
-    
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '会话不存在' }
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        session: {
-          id: session.id,
-          createdAt: session.createdAt,
-          updatedAt: session.updatedAt,
-          messageCount: session.messages.length
-        },
-        state: session.state
-      }
-    });
-  } catch (error: any) {
-    console.error('获取会话状态失败:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: '获取会话状态失败' }
     });
   }
 });

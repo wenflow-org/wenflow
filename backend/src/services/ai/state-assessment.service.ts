@@ -12,8 +12,6 @@
 import { getAPIGateway } from '../../gateway/api-gateway';
 import { ZScoreResult, AnomalyDetectionResult } from '../student-baseline.service';
 
-const AI_MODEL = process.env.AI_MODEL || 'deepseek-chat';
-
 /**
  * 消息接口
  */
@@ -109,7 +107,6 @@ ${conversationHistory.map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.cont
       const gateway = getAPIGateway();
       const response = await gateway.execute(
         {
-          model: AI_MODEL,
           messages: [
             {
               role: 'system',
@@ -232,7 +229,6 @@ ${conversationHistory.slice(-6).map(m => `${m.role === 'user' ? '学生' : 'AI'}
       const gateway = getAPIGateway();
       const response = await gateway.execute(
         {
-          model: AI_MODEL,
           messages: [
             {
               role: 'system',

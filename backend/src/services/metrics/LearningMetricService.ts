@@ -113,12 +113,12 @@ export function calculateKTL(
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const sessions = await prisma.learning_sessions.findMany({
+      const sessions = await prisma.teaching_sessions.findMany({
         where: {
           userId,
-          createdAt: { gte: sevenDaysAgo },
+          startTime: { gte: sevenDaysAgo },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { startTime: 'desc' },
       });
 
       if (sessions.length === 0) {
@@ -178,12 +178,12 @@ export function calculateLF(userId: string): Promise<number> {
       // 获取过去7天的学习数据
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const sessions = await prisma.learning_sessions.findMany({
+      const sessions = await prisma.teaching_sessions.findMany({
         where: {
           userId,
-          createdAt: { gte: sevenDaysAgo },
+          startTime: { gte: sevenDaysAgo },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { startTime: 'desc' },
       });
 
       if (sessions.length === 0) {
@@ -195,7 +195,7 @@ export function calculateLF(userId: string): Promise<number> {
       const dailyLearning = new Map<string, number>();
 
       sessions.forEach((session) => {
-        const date = session.createdAt.toISOString().split('T')[0];
+        const date = session.startTime.toISOString().split('T')[0];
         const duration = session.duration || 0;
         dailyLearning.set(date, (dailyLearning.get(date) || 0) + duration);
       });

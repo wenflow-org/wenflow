@@ -14,15 +14,22 @@ export interface QuickReply {
 }
 
 export interface GoalConversationInternal {
-  understanding: any;
-  confidence: number;
-  stage: 'understanding' | 'proposing' | 'ready';
-  nextQuestions: string[];
-  quickReplies?: QuickReply[];
-  collected: any;
-  structuredData?: any;
-  confirmedProposal?: any;
-  confidence_scores?: any;
+  core: {
+    stage: 'understanding' | 'proposing' | 'ready' | 'completed';
+    confidence: number;
+    isCompleted: boolean;
+  };
+  ext: {
+    goalConversation: {
+      understanding: any;
+      nextQuestions: string[];
+      quickReplies?: QuickReply[];
+      collected: any;
+      structuredData?: any;
+      confirmedProposal?: any;
+      confidenceScores?: any;
+    };
+  };
 }
 
 export interface GoalConversationAgentResult {
@@ -36,90 +43,110 @@ interface StageControlOptions {
   previousConfidence?: number;
 }
 
+interface StructuredParseResult {
+  parsedJson: any | null;
+  dialogueText: string;
+  parseMode: 'json-marker' | 'code-fence' | 'raw-json' | 'none';
+}
+
 const DEFAULT_SYSTEM_PROMPT = `你是学习规划顾问"小智"。
 
-你的职责不是直接给解决方案，而是通过自然对话帮助用户理清真正想学什么，并收集生成学习路径所需的信息。
+你的任务是通过自然对话澄清学习需求，不直接提供业务咨询方案。
 
-关键原则：
-1. 用户说“我要学 X”，X 往往不是最终要解决的问题，要帮助用户穿透表象。
-2. 每次只问 1-2 个关键问题，不要像审问。
-3. 当用户已经说出具体场景时，直接确认，不重复追问。
-4. 在给出学习路径之前，先给出方向轮廓让用户确认。
-5. 你的身份是学习规划顾问，不是咨询师，不直接告诉用户业务怎么做。
+主体规则（关键）：
+- 默认始终面向提问者本人进行规划。
+- 即使用户提到“孩子/团队/他人”，也要转化为“提问者本人需要学习和执行什么”，不要把方案主体切换为第三方。
+- 你的问题与建议必须可由提问者直接执行。
 
-对话阶段：
-- understanding: 还在收集和澄清信息
-- proposing: 已有方向轮廓，等待用户确认
-- ready: 用户确认，可以生成详细学习路径
+阶段说明：
+- understanding：继续澄清问题与场景
+- proposing：给出方向轮廓并请求确认
+- ready：用户已确认，可进入生成学习路径
 
-输出规则：
-1. 第一部分只输出给用户看的自然对话内容，不要输出“第一段”“第二段”等标签。
-2. 第二部分必须在最后输出一个 fenced json 代码块。
-3. 如果进入 proposing 阶段，必须给出简短确认方案，不要继续探索。
-4. 如果用户明确说“确认”“就这样”“好的，生成学习路径”等，必须进入 ready。
-5. 给选项时优先通过 quick_replies 字段提供 2-4 个简短选项。
+行为规则：
+1. 每次最多问 1 个核心问题，避免连续追问。
+2. proposing 只给方向/阶段轮廓/学习方式，不给详细周计划。
+3. ready 只做确认，不展开完整学习路径正文。
+4. 不编造用户没有提供的信息。
+5. 所有规划默认针对提问者本人，不输出第三方作为主要学习执行者的计划。
 
-必须输出：
+阶段推进门槛（通用，必须满足）：
+- 在进入 proposing 前，必须收齐以下 6 项关键信息：
+  1) surface_goal（表面目标，保留用户原话）
+  2) real_problem（真实问题，使用“场景+阻碍+影响”的具体句）
+  3) current_baseline（当前基础，且至少包含 1 条行为证据）
+  4) available_resources（可投入资源，至少包含 time_horizon）
+  5) constraints_and_boundaries（约束与边界：不可接受结果、硬约束、禁区）
+  6) success_criteria（成功标准：时间窗+可观察结果+验收条件）
+- 若任一项缺失、模糊或仅占位，state.stage 必须保持 understanding。
+- 每轮只问 1 个问题，并优先追问当前最大信息缺口。
 
-自然对话内容
+时间处理规则（通用）：
+- time_horizon 只作简短参考，允许："半天"、"1天"、"2天"、"3-7天"、"1-2周"、"1个月+"、"未明确"。
+- 后续规划必须是阶段制（stage-based），不要生成按周/月展开的任务表。
 
+输出规则（严格）：
+1. 只输出一个 json fenced code block，不要输出额外说明文本。
+2. JSON 顶层字段只能是：
+   - reply: string
+   - state: { stage: "understanding"|"proposing"|"ready", confidence: number, done?: boolean }
+   - goalConversation: {
+       understanding: object,
+       nextQuestions: string[],
+       quickReplies: string[] | Array<{ text: string, icon?: string }>,
+       structuredData?: object,
+       confirmedProposal?: object,
+       confidenceScores?: object
+     }
+   - hints: { quickReplies?: Array<{ text: string, icon?: string }> }
+3. 禁止输出平台字段：success/schemaVersion/metadata/internal/renderHints/error/output。
+
+参考模板：
 \`\`\`json
 {
-  "understanding": {
-    "surface_goal": "用户表面说的目标",
-    "real_problem": "真正要解决的问题",
-    "motivation": "学习动机",
-    "urgency": "高/中/低",
-    "pain_points": "当前最头疼的问题",
-    "background": {
-      "current_level": "当前水平",
-      "available_time": "可用时间",
-      "expected_time": "期望见效时间",
-      "constraints": ["约束"],
-      "strengths": ["优势"],
-      "deadline": "2026-12-31",
-      "deadline_text": "原始时间表达"
+  "reply": "我先确认一个关键点：你最常处理的是哪类 Excel 报表？",
+  "state": {
+    "stage": "understanding",
+    "confidence": 0.3,
+    "done": false
+  },
+  "goalConversation": {
+    "understanding": {
+      "surface_goal": "用 Python 自动化处理 Excel 报表",
+      "real_problem": "每天处理报表耗时，需要自动化",
+      "current_baseline": {
+        "level": "",
+        "evidence": ""
+      },
+      "available_resources": {
+        "time_horizon": "",
+        "time_budget": ""
+      },
+      "constraints_and_boundaries": [],
+      "success_criteria": {
+        "time_window": "",
+        "observable_result": "",
+        "acceptance_check": ""
+      },
+      "motivation": "提高效率",
+      "urgency": "中",
+      "pain_points": "重复操作耗时",
+      "background": {
+        "current_level": "",
+        "available_time": "",
+        "expected_time": "",
+        "constraints": [],
+        "strengths": []
+      }
     },
-    "learning_style": {
-      "preferred_format": "视频/阅读/动手/混合",
-      "theory_vs_practice": "理论优先/实践优先/平衡",
-      "study_rhythm": "集中突击/分散细水长流"
-    }
+    "nextQuestions": ["你最头疼的 Excel 操作是什么？"],
+    "quickReplies": ["公式计算", "数据清洗", "图表汇总"]
   },
-  "stage": "understanding/proposing/ready",
-  "confidence": 0.5,
-  "next_questions": ["还想确认的问题"],
-  "quick_replies": ["选项1", "选项2"],
-  "structuredData": {
-    "learner": {
-      "identity": "本人",
-      "relationship": null,
-      "skill_level": "beginner"
-    },
-    "end_user": null,
-    "learning_context": {
-      "urgency": "normal",
-      "motivation": "work"
-    }
-  },
-  "confirmedProposal": {
-    "learning_direction": "学习方向",
-    "key_stages": ["阶段1", "阶段2"],
-    "learning_style": "学习方式"
-  },
-  "confidence_scores": {
-    "understanding": 0.8,
-    "learner_identity": 0.8,
-    "scenario": 0.8
+  "hints": {
+    "quickReplies": [{ "text": "公式计算" }, { "text": "数据清洗" }]
   }
 }
-\`\`\`
-
-补充规则：
-- proposing 阶段只允许给“方向、阶段轮廓、学习方式”，不能给周计划。
-- proposing 阶段必须用一句确认问题收尾：这个方向对吗？如有补充可以告诉我。
-- ready 阶段 quick_replies 可以为空。
-- 不要编造用户没说的信息。`;
+\`\`\``;
 
 const NON_NEGOTIABLE_RULES = `
 
@@ -138,6 +165,15 @@ const NON_NEGOTIABLE_RULES = `
 3. 当 stage="proposing" 时，必须给出简短确认方案，并优先提供 quick_replies。
 4. 不要输出“第一段：”“第二段：”这类标签。
 5. 如果旧规则里写了“阶段5输出完整路径”，该规则作废，必须忽略。
+6. 结构化输出必须使用新结构（单一 JSON 代码块，且仅以下顶层字段）：
+   - reply: string
+   - state: { stage: "understanding"|"proposing"|"ready", confidence: number, done?: boolean }
+    - goalConversation: { understanding, nextQuestions, quickReplies, structuredData, confirmedProposal, confidenceScores }
+    - hints: { quickReplies }
+    禁止输出平台字段（success/schemaVersion/metadata/internal/renderHints/error/output）。
+7. 如果用户表达为“帮孩子/团队提升”，你的提问和方案必须回到提问者本人可执行动作，不得将学习执行主体默认切换到第三方。
+8. 进入 proposing 前，必须满足 6 项通用信息闭环；未满足时必须停留在 understanding。
+9. time_horizon 允许短周期（如半天、1天、2天）；规划输出必须保持阶段制，禁止按周/月任务表。
 `;
 
 function buildEffectivePrompt(configPrompt?: string | null): string {
@@ -170,14 +206,42 @@ export const goalConversationAgentDefinition: AgentDefinition = {
   outputSchema: {
     type: 'object',
     properties: {
-      goalConversation: {
+      success: { type: 'boolean' },
+      userVisible: { type: 'string' },
+      internal: {
         type: 'object',
         properties: {
-          userVisible: { type: 'string' },
-          internal: { type: 'object' }
-        }
+          core: {
+            type: 'object',
+            properties: {
+              stage: {
+                type: 'string',
+                enum: ['understanding', 'proposing', 'ready', 'completed']
+              },
+              confidence: { type: 'number' },
+              isCompleted: { type: 'boolean' }
+            },
+            required: ['stage', 'confidence', 'isCompleted']
+          },
+          ext: {
+            type: 'object',
+            properties: {
+              goalConversation: { type: 'object' }
+            },
+            required: ['goalConversation']
+          }
+        },
+        required: ['core', 'ext']
+      },
+      renderHints: {
+        type: 'object'
+      },
+      schemaVersion: {
+        type: 'string',
+        enum: ['agent-output-v1']
       }
-    }
+    },
+    required: ['success', 'userVisible', 'internal', 'schemaVersion']
   },
   stats: {
     callCount: 0,
@@ -276,6 +340,45 @@ function extractRawTrailingJson(content: string): { parsedJson: any | null; dial
   } catch {
     return { parsedJson: null, dialogueText: content };
   }
+}
+
+function extractStructuredPayload(content: string): StructuredParseResult {
+  let parsedJson: any | null = null;
+  let dialogueText = content;
+
+  ({ parsedJson, dialogueText } = extractJsonFromJsonMarker(content));
+  if (parsedJson) {
+    return { parsedJson, dialogueText, parseMode: 'json-marker' };
+  }
+
+  ({ parsedJson, dialogueText } = extractJsonFromCodeFence(content));
+  if (parsedJson) {
+    return { parsedJson, dialogueText, parseMode: 'code-fence' };
+  }
+
+  ({ parsedJson, dialogueText } = extractRawTrailingJson(content));
+  if (parsedJson) {
+    return { parsedJson, dialogueText, parseMode: 'raw-json' };
+  }
+
+  return { parsedJson: null, dialogueText: content, parseMode: 'none' };
+}
+
+function hasValidStructuredPayload(content: string): boolean {
+  const { parsedJson } = extractStructuredPayload(content);
+  if (!parsedJson || typeof parsedJson !== 'object') {
+    return false;
+  }
+
+  const stage = parsedJson.stage || parsedJson.state?.stage;
+  const confidence = parsedJson.confidence ?? parsedJson.state?.confidence;
+  const hasReply = typeof parsedJson.reply === 'string';
+  const hasGoalConversation = !!parsedJson.goalConversation && typeof parsedJson.goalConversation === 'object';
+
+  const validStage = ['understanding', 'proposing', 'ready'].includes(stage);
+  const validConfidence = typeof confidence === 'number' && Number.isFinite(confidence);
+
+  return validStage && validConfidence && hasReply && hasGoalConversation;
 }
 
 function normalizeDialogueText(text: string): string {
@@ -507,12 +610,8 @@ function parseGoalConversationResponse(
   previousUnderstanding?: any,
   stageControlOptions?: StageControlOptions
 ): GoalConversationAgentResult {
-  let parsedJson: any | null = null;
-  let dialogueText = content;
-
-  ({ parsedJson, dialogueText } = extractJsonFromJsonMarker(content));
-  if (!parsedJson) ({ parsedJson, dialogueText } = extractJsonFromCodeFence(content));
-  if (!parsedJson) ({ parsedJson, dialogueText } = extractRawTrailingJson(content));
+  const { parsedJson, dialogueText: extractedDialogueText } = extractStructuredPayload(content);
+  let dialogueText = extractedDialogueText;
 
   let stage: 'understanding' | 'proposing' | 'ready' = 'understanding';
   let quickReplies: QuickReply[] = [];
@@ -523,16 +622,29 @@ function parseGoalConversationResponse(
   let understanding = { ...(previousUnderstanding || {}) };
 
   if (parsedJson) {
-    understanding = mergeUnderstanding(previousUnderstanding, parsedJson);
+    const normalizedPayload = parsedJson.goalConversation || {};
+    understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
     const validStages = ['understanding', 'proposing', 'ready'];
-    stage = validStages.includes(parsedJson.stage) ? parsedJson.stage : 'understanding';
-    nextQuestions = Array.isArray(parsedJson.next_questions) ? parsedJson.next_questions : [];
-    if (Array.isArray(parsedJson.quick_replies)) {
-      quickReplies = parsedJson.quick_replies.map((text: string) => ({ text }));
+    const stageFromPayload = parsedJson.stage || parsedJson.state?.stage;
+    stage = validStages.includes(stageFromPayload) ? stageFromPayload : 'understanding';
+
+    const payloadNextQuestions = normalizedPayload.nextQuestions;
+    nextQuestions = Array.isArray(payloadNextQuestions) ? payloadNextQuestions : [];
+
+    const payloadQuickReplies = normalizedPayload.quickReplies || parsedJson.hints?.quickReplies;
+    if (Array.isArray(payloadQuickReplies)) {
+      quickReplies = payloadQuickReplies.map((item: string | QuickReply) => (
+        typeof item === 'string' ? { text: item } : { text: item.text, icon: item.icon }
+      )).filter((item: QuickReply) => item.text && item.text.trim().length > 0);
     }
-    structuredData = parsedJson.structuredData;
-    confirmedProposal = parsedJson.confirmedProposal;
-    confidenceScores = parsedJson.confidence_scores;
+
+    structuredData = normalizedPayload.structuredData;
+    confirmedProposal = normalizedPayload.confirmedProposal;
+    confidenceScores = normalizedPayload.confidenceScores;
+
+    if (!understanding || Object.keys(understanding).length === 0) {
+      understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
+    }
   } else {
     if (content.includes('【确认方案】')) {
       stage = 'proposing';
@@ -562,8 +674,8 @@ function parseGoalConversationResponse(
   }
 
   // 直接使用 AI 返回的 confidence
-  let confidence = typeof parsedJson?.confidence === 'number'
-    ? parsedJson.confidence
+  let confidence = typeof (parsedJson?.confidence ?? parsedJson?.state?.confidence) === 'number'
+    ? (parsedJson?.confidence ?? parsedJson?.state?.confidence)
     : 0.2;
 
   const stageControl = normalizeStageAndConfidence(stage, confidence, stageControlOptions);
@@ -573,6 +685,9 @@ function parseGoalConversationResponse(
   understanding = sanitizeUnderstanding(understanding);
 
   dialogueText = normalizeDialogueText(dialogueText);
+  if (parsedJson?.reply) {
+    dialogueText = normalizeDialogueText(String(parsedJson.reply));
+  }
   if (!dialogueText && parsedJson) {
     dialogueText = stage === 'proposing' ? buildConfirmationBlock(parsedJson) : '我来帮你分析一下...';
   }
@@ -597,21 +712,24 @@ function parseGoalConversationResponse(
   return {
     userVisible: dialogueText,
     internal: {
-      understanding,
-      confidence,
-      stage,
-      nextQuestions,
-      quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-      collected: buildCollected(understanding, parsedJson),
-      structuredData,
-      confirmedProposal,
-      confidence_scores: confidenceScores
+      core: {
+        stage,
+        confidence,
+        isCompleted: stage === 'ready'
+      },
+      ext: {
+        goalConversation: {
+          understanding,
+          nextQuestions,
+          quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
+          collected: buildCollected(understanding, parsedJson),
+          structuredData,
+          confirmedProposal,
+          confidenceScores
+        }
+      }
     }
   };
-}
-
-function isResponseComplete(content: string): boolean {
-  return content.includes('###END###') || content.includes('```json') || content.includes('JSON:');
 }
 
 async function callAIWithRetry(
@@ -636,14 +754,16 @@ async function callAIWithRetry(
 
     lastContent = response.content;
 
-    if (isResponseComplete(response.content)) {
+    if (hasValidStructuredPayload(response.content)) {
       return { content: response.content, retryCount: attempt };
     }
 
     retryCount = attempt + 1;
+    const parseInfo = extractStructuredPayload(response.content);
     logger.warn('GoalConversationAgent 输出不完整，准备重试', {
       attempt: attempt + 1,
       maxRetries,
+      parseMode: parseInfo.parseMode,
       contentPreview: response.content.substring(0, 200)
     });
 
@@ -659,7 +779,7 @@ async function callAIWithRetry(
 export async function goalConversationAgentHandler(
   input: AgentInput,
   context: AgentContext
-): Promise<AgentOutput & { goalConversation?: GoalConversationAgentResult }> {
+): Promise<AgentOutput> {
   const startTime = Date.now();
   const userId = context.userId;
 
@@ -707,8 +827,8 @@ export async function goalConversationAgentHandler(
       input: { messages: chatMessages.length, lastMessage: input.goal.substring(0, 200) },
       output: {
         responseLength: result.userVisible.length,
-        stage: result.internal.stage,
-        quickReplies: result.internal.quickReplies?.length || 0,
+        stage: result.internal.core.stage,
+        quickReplies: result.internal.ext.goalConversation.quickReplies?.length || 0,
         retryCount
       }
     });
@@ -721,15 +841,14 @@ export async function goalConversationAgentHandler(
       internal: result.internal,
       renderHints: {
         component: 'goal-conversation',
-        quickReplies: result.internal.quickReplies || []
+        quickReplies: result.internal.ext.goalConversation.quickReplies || []
       },
       schemaVersion: 'agent-output-v1',
-      goalConversation: result,
       metadata: {
         agentId: 'goal-conversation-agent',
         agentName: '目标对话Agent',
         agentType: 'custom',
-        confidence: result.internal.confidence,
+        confidence: result.internal.core.confidence,
         generatedAt: new Date().toISOString()
       }
     };
@@ -752,23 +871,19 @@ export async function goalConversationAgentHandler(
       success: false,
       error: error.message || 'Unknown error',
       userVisible: '抱歉，我刚才走神了，能再说一遍吗？',
-      goalConversation: {
-        userVisible: '抱歉，我刚才走神了，能再说一遍吗？',
-        internal: {
-          understanding: input.metadata?.previousUnderstanding || {},
-          confidence: 0,
-          stage: 'understanding',
-          nextQuestions: [],
-          collected: {},
-          quickReplies: undefined
-        }
-      },
       internal: {
-        understanding: input.metadata?.previousUnderstanding || {},
-        confidence: 0,
-        stage: 'understanding',
-        nextQuestions: [],
-        collected: {}
+        core: {
+          stage: 'understanding',
+          confidence: 0,
+          isCompleted: false
+        },
+        ext: {
+          goalConversation: {
+            understanding: input.metadata?.previousUnderstanding || {},
+            nextQuestions: [],
+            collected: {}
+          }
+        }
       },
       schemaVersion: 'agent-output-v1',
       metadata: {
@@ -805,10 +920,13 @@ export async function runGoalConversationAgent(params: {
     } as AgentContext
   );
 
-  if (!result.goalConversation) {
+  if (!result.success || !result.internal) {
     const errorMessage = typeof result.error === 'string' ? result.error : result.error?.message;
     throw new Error(errorMessage || 'Goal conversation agent failed');
   }
 
-  return result.goalConversation;
+  return {
+    userVisible: result.userVisible || '',
+    internal: result.internal as GoalConversationInternal
+  };
 }

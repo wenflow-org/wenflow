@@ -140,8 +140,8 @@ export interface TaskEvaluationDetail {
 }
 
 export const aiTeachingAPI = {
-  async startSession(subject: string, topic: string, difficulty = 5, taskId?: string): Promise<TeachingSession> {
-    const result = await api.post('/ai-teaching/sessions', { subject, topic, difficulty, taskId });
+  async startSession(taskId: string): Promise<TeachingSession> {
+    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, {});
     return result.data || result;
   },
 

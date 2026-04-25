@@ -190,7 +190,7 @@ export class QueryCacheService {
     return this.cachedQuery(
       `session:${sessionId}`,
       async () => {
-        const session = await prisma.learning_sessions.findUnique({
+        const session = await prisma.teaching_sessions.findUnique({
           where: { id: sessionId }
         });
         return session;

@@ -94,6 +94,8 @@ export interface LabelGeneratorOutput {
   color: string;
 }
 
+const LABEL_GENERATOR_MAX_TOKENS = 2000;
+
 const LABEL_TEMPLATE_SYSTEM_PROMPT = `你是教育标签设计师，负责将学术框架转化为用户友好的白话标签。
 
 【知识类型 -> 白话】
@@ -173,7 +175,10 @@ ${domain ? `【领域】${domain}` : ''}
     
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'label-generator' };
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({
+      messages,
+      max_tokens: LABEL_GENERATOR_MAX_TOKENS
+    }, caller, {});
     const content = response.choices[0]?.message.content || '';
     
     const result = parseLabelResult(content, knowledgeType, cognitiveLevel);

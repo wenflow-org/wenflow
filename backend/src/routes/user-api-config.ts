@@ -161,10 +161,18 @@ router.post('/test', async (req, res, next) => {
     const normalizedEndpoint = endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
     
     try {
+      const resolvedModel = (model || process.env.AI_MODEL || '').trim();
+      if (!resolvedModel) {
+        return res.status(400).json({
+          success: false,
+          error: { message: '未提供 model，且系统未配置 AI_MODEL' }
+        });
+      }
+
       const response = await axios.post(
         `${normalizedEndpoint}/v1/chat/completions`,
         {
-          model: model || 'deepseek-chat',
+          model: resolvedModel,
           messages: [{ role: 'user', content: 'Hello' }],
           max_tokens: 10
         },

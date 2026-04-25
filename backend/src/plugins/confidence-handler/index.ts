@@ -64,7 +64,7 @@ export const confidenceHandler: AgentPlugin = {
 - 如果缺少关键信息且可以通过提问获得 → 请求澄清
 - 如果信息模糊但可以做出安全假设 → 使用保守默认值
 - 保守默认值应该是最安全、最保守的选项`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 30000,
     retries: 2
   },

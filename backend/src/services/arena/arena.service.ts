@@ -403,7 +403,7 @@ class ArenaService {
             previousUnderstanding: arenaUnderstanding
           });
 
-          arenaUnderstanding = systemOutput.internal?.understanding || arenaUnderstanding;
+          arenaUnderstanding = systemOutput.internal?.ext?.goalConversation?.understanding || arenaUnderstanding;
 
           // 只传递 userVisible 给 UserAgent，内部数据不暴露
           currentSystemMessage = systemOutput.userVisible;

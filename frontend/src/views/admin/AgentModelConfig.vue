@@ -34,6 +34,13 @@
       </el-table-column>
       <el-table-column prop="temperature" label="温度" width="80" />
       <el-table-column prop="maxTokens" label="Max Tokens" width="100" />
+      <el-table-column label="请求超时" width="120">
+        <template #default="{ row }">
+          <el-tag :type="row.requestTimeoutSource === 'agent-override' ? 'warning' : 'info'">
+            {{ formatTimeout(row.requestTimeoutMs) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="enabled" label="启用" width="80">
         <template #default="{ row }">
           <el-switch v-model="row.enabled" @change="updateConfig(row)" />
@@ -53,11 +60,25 @@
         <el-form-item label="Agent ID">
           <el-input v-model="editForm.agentId" disabled />
         </el-form-item>
+        <el-form-item label="模型层级">
+          <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%">
+            <el-option label="chat" value="chat" />
+            <el-option label="reasoning" value="reasoning" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="温度">
           <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input />
         </el-form-item>
         <el-form-item label="Max Tokens">
-          <el-input-number v-model="editForm.maxTokens" :min="100" :max="8000" />
+          <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" />
+        </el-form-item>
+        <el-form-item label="请求超时">
+          <div class="readonly-field">
+            <span>{{ formatTimeout(editForm.requestTimeoutMs) }}</span>
+            <el-tag size="small" :type="editForm.requestTimeoutSource === 'agent-override' ? 'warning' : 'info'">
+              {{ editForm.requestTimeoutSource === 'agent-override' ? 'Agent 特例' : '默认值' }}
+            </el-tag>
+          </div>
         </el-form-item>
         <el-form-item label="模型">
           <el-input v-model="editForm.model" placeholder="留空使用平台默认" />
@@ -84,6 +105,8 @@ interface AgentModelConfig {
   temperature?: number;
   maxTokens?: number;
   enabled: boolean;
+  requestTimeoutMs?: number;
+  requestTimeoutSource?: 'default' | 'agent-override';
 }
 
 const configs = ref<AgentModelConfig[]>([]);
@@ -106,6 +129,19 @@ const fetchConfigs = async () => {
   loading.value = false;
 };
 
+const formatTimeout = (timeoutMs?: number) => {
+  if (!timeoutMs || Number.isNaN(Number(timeoutMs))) return '--';
+  return `${Math.round(Number(timeoutMs) / 1000)}s`;
+};
+
+const toEditablePayload = (config: AgentModelConfig) => ({
+  tier: config.tier,
+  model: config.model,
+  temperature: config.temperature,
+  maxTokens: config.maxTokens,
+  enabled: config.enabled,
+});
+
 const initializeDefaults = async () => {
   try {
     await adminAxios.post('/admin/agent-model-configs/initialize');
@@ -118,7 +154,7 @@ const initializeDefaults = async () => {
 
 const updateConfig = async (row: AgentModelConfig) => {
   try {
-    await adminAxios.put(`/admin/agent-model-configs/${row.agentId}`, row);
+    await adminAxios.put(`/admin/agent-model-configs/${row.agentId}`, toEditablePayload(row));
     ElMessage.success('状态已更新');
   } catch (error) {
     ElMessage.error('更新失败');
@@ -133,7 +169,7 @@ const editConfig = (row: AgentModelConfig) => {
 
 const saveConfig = async () => {
   try {
-    await adminAxios.put(`/admin/agent-model-configs/${editForm.value.agentId}`, editForm.value);
+    await adminAxios.put(`/admin/agent-model-configs/${editForm.value.agentId}`, toEditablePayload(editForm.value));
     ElMessage.success('配置已更新');
     editDialogVisible.value = false;
     fetchConfigs();
@@ -195,6 +231,12 @@ onMounted(() => fetchConfigs());
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg-elevated);
+}
+
+.readonly-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 @media (max-width: 768px) {

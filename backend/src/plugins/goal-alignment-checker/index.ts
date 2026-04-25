@@ -97,7 +97,7 @@ export const goalAlignmentChecker: AgentPlugin = {
 - 每个维度 0-100 分
 - 总分 = (知识分布 + 认知递进 + 目标关联) / 3
 - 低于 70 分需要调整`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2
   },

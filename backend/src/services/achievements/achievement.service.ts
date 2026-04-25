@@ -222,7 +222,7 @@ if (!exists) {
 
       // 计算连续学习天数（简化版，实际可能需要更复杂的逻辑）
       // 注意：endTime是必需字段，无需过滤null值
-      const sessions = await prisma.learning_sessions.findMany({
+      const sessions = await prisma.teaching_sessions.findMany({
         where: {
           userId
         },

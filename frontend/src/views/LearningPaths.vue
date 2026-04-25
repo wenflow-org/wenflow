@@ -74,7 +74,7 @@
         <transition name="slide-down">
           <el-alert
             v-if="showGeneratingAlert"
-            title="学习路径正在生成中，通常 10-60 秒完成，请稍候"
+            title="学习路径正在生成中，通常 1-3 分钟完成，请稍候"
             type="info"
             :closable="true"
             show-icon
@@ -150,14 +150,24 @@
                     <div class="failed-icon">⚠️</div>
                     <h3 class="failed-title">学习路径生成失败</h3>
                     <p class="failed-desc">{{ path.description || '模型输出异常或服务不可用' }}</p>
-                    <el-button
-                      type="primary"
-                      size="small"
-                      :loading="retryingPathId === path.id"
-                      @click="retryPathGeneration(path)"
-                    >
-                      重试生成
-                    </el-button>
+                    <div class="failed-actions">
+                      <el-button
+                        type="primary"
+                        size="small"
+                        :loading="retryingPathId === path.id"
+                        @click="retryPathGeneration(path)"
+                      >
+                        重试生成
+                      </el-button>
+                      <el-button
+                        type="danger"
+                        plain
+                        size="small"
+                        @click="confirmDelete(path)"
+                      >
+                        删除路径
+                      </el-button>
+                    </div>
                   </div>
                 </div>
                 
@@ -166,9 +176,29 @@
                   <div class="path-card-header">
                     <div class="path-info-main">
                       <h3 class="path-name">{{ path.name || path.title }}</h3>
-                      <el-tag size="small" effect="light" class="path-tag">
-                        {{ path.totalMilestones || path.milestones?.length || path.weeks?.length || 0 }} 阶段
-                      </el-tag>
+                      <div class="path-tags">
+                        <el-tag size="small" effect="light" class="path-tag">
+                          {{ path.totalMilestones || path.milestones?.length || path.weeks?.length || 0 }} 阶段
+                        </el-tag>
+                        <el-tag
+                          v-if="getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending'"
+                          size="small"
+                          type="info"
+                          effect="plain"
+                          class="path-tag"
+                        >
+                          准备中
+                        </el-tag>
+                        <el-tag
+                          v-else-if="getEnrichmentStatus(path) === 'failed'"
+                          size="small"
+                          type="warning"
+                          effect="plain"
+                          class="path-tag"
+                        >
+                          继续完善中
+                        </el-tag>
+                      </div>
                     </div>
                     <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, path)" @click.stop>
                       <button class="more-btn" @click.stop>
@@ -176,6 +206,10 @@
                       </button>
                       <template #dropdown>
                         <el-dropdown-menu>
+                          <el-dropdown-item command="regenerate">
+                            <el-icon><Loading /></el-icon>
+                            <span>重新生成路径</span>
+                          </el-dropdown-item>
                           <el-dropdown-item command="delete" class="delete-item">
                             <el-icon><Delete /></el-icon>
                             <span>删除路径</span>
@@ -186,7 +220,12 @@
                   </div>
 
                   <div class="path-card-body">
-                    <p class="path-description">{{ path.description || '暂无描述' }}</p>
+                    <p class="path-description">{{ path.summary || path.description || '暂无描述' }}</p>
+
+                    <div v-if="path.replanLineage?.sourcePathId" class="path-replan-lineage">
+                      <el-icon><Refresh /></el-icon>
+                      <span>来自重调版本</span>
+                    </div>
 
                     <div class="path-stats">
                       <div class="stat-item">
@@ -212,7 +251,7 @@
 
                   <div class="path-card-footer">
                     <button class="start-btn">
-                      <span>开始学习</span>
+                      <span>查看详情</span>
                       <el-icon><ArrowRight /></el-icon>
                     </button>
                   </div>
@@ -264,6 +303,35 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="showRegenerateDialog"
+      title="重新生成学习路径"
+      width="460px"
+      :close-on-click-modal="false"
+      class="delete-dialog"
+    >
+      <el-alert
+        title="将覆盖当前路径"
+        type="info"
+        :closable="false"
+        show-icon
+        class="delete-alert"
+      >
+        将基于当前目标重新生成该学习路径。已完成任务和学习记录不会被删除，但路径结构可能变化。
+      </el-alert>
+
+      <p class="delete-confirm-text">
+        您确定要重新生成学习路径 <strong class="delete-path-name">{{ pathToRegenerate?.name || pathToRegenerate?.title }}</strong> 吗？
+      </p>
+
+      <template #footer>
+        <el-button @click="showRegenerateDialog = false">取消</el-button>
+        <el-button type="primary" @click="regeneratePath" :loading="regenerating">
+          确认重新生成
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -284,11 +352,13 @@ import {
   Switch,
   Trophy,
   ArrowRight,
-  Loading
+  Loading,
+  Refresh
 } from '@element-plus/icons-vue';
 import request from '../utils/request';
 import { useUserStore } from '../stores/user';
 import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import { learningAPI } from '../api/learning';
 
 const router = useRouter();
 const route = useRoute();
@@ -300,11 +370,14 @@ const paths = ref<any[]>([]);
 const deleting = ref(false);
 const showDeleteDialog = ref(false);
 const pathToDelete = ref<any>(null);
+const regenerating = ref(false);
+const showRegenerateDialog = ref(false);
+const pathToRegenerate = ref<any>(null);
 const retryingPathId = ref<string | null>(null);
 const showGeneratingAlert = ref(false);
 
-// 超时时间：2分钟（120秒）
-const GENERATION_TIMEOUT_SECONDS = 180; // 3 分钟
+// 前端提示超时阈值：4 分钟
+const GENERATION_TIMEOUT_SECONDS = 240;
 
 // 已提示超时的路径 ID（避免重复提示）
 const notifiedTimeoutIds = new Set<string>();
@@ -323,6 +396,13 @@ const generatingPaths = computed(() =>
   paths.value.filter((p: any) => p.status === 'generating')
 );
 
+const enrichingPaths = computed(() =>
+  paths.value.filter((p: any) => {
+    const enrichmentStatus = p?.generationStatus?.enrichment;
+    return p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing');
+  })
+);
+
 // 超时的路径（前端判定，不影响数据库）
 const timeoutPaths = computed(() =>
   generatingPaths.value.filter((p: any) => isPathTimeout(p))
@@ -330,7 +410,7 @@ const timeoutPaths = computed(() =>
 
 // 检查是否有正在生成的路径
 const checkGeneratingPath = () => {
-  return generatingPaths.value.length > 0;
+  return generatingPaths.value.length > 0 || enrichingPaths.value.length > 0;
 };
 
 // 清除生成中状态（已不需要，保留兼容）
@@ -343,14 +423,14 @@ let pollingTimer: number | null = null;
 const startPolling = () => {
   if (pollingTimer) return;
   pollingTimer = window.setInterval(async () => {
-    if (generatingPaths.value.length > 0) {
+    if (generatingPaths.value.length > 0 || enrichingPaths.value.length > 0) {
       // 检查超时（只提示一次）
-      timeoutPaths.value.forEach((timeoutPath: any) => {
-        if (!notifiedTimeoutIds.has(timeoutPath.id)) {
-          ElMessage.warning('学习路径生成超时，请重试');
+        timeoutPaths.value.forEach((timeoutPath: any) => {
+          if (!notifiedTimeoutIds.has(timeoutPath.id)) {
+          ElMessage.warning('学习路径生成时间较长，请稍候或重试');
           notifiedTimeoutIds.add(timeoutPath.id);
-        }
-      });
+          }
+        });
       
       try {
         const response = await request.get('/learning/paths');
@@ -372,8 +452,12 @@ const startPolling = () => {
         
         paths.value = newPaths;
         
-        // 如果没有生成中的路径了，停止轮询
-        if (!newPaths.some((p: any) => p.status === 'generating')) {
+        // 如果没有生成中的路径或准备中的路径了，停止轮询
+        if (!newPaths.some((p: any) => {
+          const enrichmentStatus = p?.generationStatus?.enrichment;
+          return p.status === 'generating'
+            || (p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing'));
+        })) {
           stopPolling();
         }
       } catch (error) {
@@ -423,9 +507,18 @@ const loadPaths = async () => {
 };
 
 const handleCommand = (command: string, path: any) => {
-  if (command === 'delete') {
+  if (command === 'regenerate') {
+    confirmRegenerate(path);
+  } else if (command === 'delete') {
     confirmDelete(path);
   }
+};
+
+const getEnrichmentStatus = (path: any) => path?.generationStatus?.enrichment || null;
+
+const confirmRegenerate = (path: any) => {
+  pathToRegenerate.value = path;
+  showRegenerateDialog.value = true;
 };
 
 const confirmDelete = (path: any) => {
@@ -448,6 +541,39 @@ const deletePath = async () => {
     ElMessage.error(error.response?.data?.error?.message || '删除学习路径失败');
   } finally {
     deleting.value = false;
+  }
+};
+
+const regeneratePath = async () => {
+  if (!pathToRegenerate.value) return;
+
+  regenerating.value = true;
+  try {
+    await learningAPI.regeneratePath(pathToRegenerate.value.id);
+
+    const index = paths.value.findIndex(p => p.id === pathToRegenerate.value.id);
+    if (index !== -1) {
+      paths.value[index] = {
+        ...paths.value[index],
+        status: 'generating',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    notifiedTimeoutIds.delete(pathToRegenerate.value.id);
+    showRegenerateDialog.value = false;
+    ElMessage.success('正在重新生成学习路径...');
+
+    if (!pollingTimer) {
+      startPolling();
+    }
+  } catch (error: any) {
+    console.error('重新生成学习路径失败:', error);
+    ElMessage.error(error.response?.data?.error?.message || '重新生成学习路径失败');
+  } finally {
+    regenerating.value = false;
+    pathToRegenerate.value = null;
   }
 };
 
@@ -503,8 +629,8 @@ onMounted(() => {
   }
 
   loadPaths().then(() => {
-    // 如果有正在生成的路径，启动轮询
-    if (generatingPaths.value.length > 0) {
+    // 如果有正在生成或准备中的路径，启动轮询
+    if (generatingPaths.value.length > 0 || enrichingPaths.value.length > 0) {
       startPolling();
     }
   });
@@ -563,6 +689,13 @@ onUnmounted(() => {
   bottom: -200px;
   left: -100px;
   animation-delay: -10s;
+}
+
+.failed-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 @keyframes float {
@@ -924,6 +1057,12 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+.path-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .more-btn {
   width: 36px;
   height: 36px;
@@ -963,6 +1102,17 @@ onUnmounted(() => {
   min-height: 3em;
   word-break: break-word;
   overflow-wrap: break-word;
+}
+
+.path-replan-lineage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary-light) 16%, transparent);
+  color: var(--color-primary);
+  font-size: 12px;
 }
 
 .path-stats {

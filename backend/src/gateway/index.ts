@@ -42,8 +42,8 @@ const DEFAULT_CONFIG: GatewayConfig = {
   ai: {
     baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
     apiKey: process.env.AI_API_KEY || '',
-    defaultModel: process.env.AI_MODEL || 'glm-4-flash',
-    defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
+    defaultModel: process.env.AI_MODEL || '',
+    defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
   },
   eventBus: {
     persistEvents: true,

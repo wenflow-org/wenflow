@@ -125,7 +125,7 @@ router.get('/me/sessions', async (req, res, next) => {
       }
     }
 
-    const sessions = await prisma.learning_sessions.findMany({
+    const sessions = await prisma.teaching_sessions.findMany({
       where,
       orderBy: { startTime: 'desc' },
       take: limit
@@ -150,9 +150,9 @@ router.get('/me/sessions', async (req, res, next) => {
       const task = session.taskId ? taskMap.get(session.taskId) : null;
       let parsedState: any = null;
 
-      if (session.state) {
+      if (session.teachingState) {
         try {
-          parsedState = JSON.parse(session.state);
+          parsedState = JSON.parse(session.teachingState);
         } catch {
           parsedState = null;
         }

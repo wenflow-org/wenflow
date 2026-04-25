@@ -19,6 +19,7 @@ export interface LearningPath {
   name: string;
   title?: string;
   description: string;
+  summary?: string;
   subject?: string;
   deadline?: string;
   deadlineText?: string;
@@ -30,6 +31,24 @@ export interface LearningPath {
   milestones?: Stage[];
   createdAt: string;
   updatedAt: string;
+  generationStatus?: {
+    core?: 'pending' | 'processing' | 'succeeded' | 'failed';
+    enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
+    lastError?: string | null;
+    sourceConversationId?: string | null;
+    triggerSource?: string | null;
+    updatedAt?: string | null;
+    enrichmentRetryCount?: number;
+    lastEnrichmentRetryAt?: string | null;
+  } | null;
+  canStartLearning?: boolean;
+  learningBlockedReason?: string | null;
+  replanLineage?: {
+    sourcePathId?: string | null;
+    replanMode?: string | null;
+    triggerSource?: string | null;
+    reason?: string | null;
+  } | null;
 }
 
 export interface Week {
@@ -60,6 +79,14 @@ export interface Task {
   completionRate?: number;
   estimatedMinutes?: number;
   actualMinutes?: number;
+  learningPath?: {
+    id: string;
+    name: string;
+    subject?: string;
+    canStartLearning?: boolean;
+    learningBlockedReason?: string | null;
+    generationStatus?: LearningPath['generationStatus'];
+  };
 }
 
 export interface LearningStats {
@@ -141,6 +168,17 @@ export const learningAPI = {
   // 获取学习路径详情
   async getPathDetail(id: string): Promise<LearningPath> {
     const response = await api.get(`/learning/paths/${id}`);
+    return response.data;
+  },
+
+  // 重新生成学习路径
+  async regeneratePath(pathId: string): Promise<{ message?: string }> {
+    const response = await api.post(`/learning/paths/${pathId}/regenerate`);
+    return response.data;
+  },
+
+  async retryPathEnrichment(pathId: string): Promise<{ message?: string }> {
+    const response = await api.post(`/learning/paths/${pathId}/retry-enrichment`);
     return response.data;
   },
 

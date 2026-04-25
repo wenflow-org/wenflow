@@ -113,35 +113,15 @@
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="✏️ 手动输入" name="manual">
-            <el-form :model="sessionForm" label-width="100px" class="setup-form">
-              <el-form-item label="学科">
-                <el-input
-                  v-model="sessionForm.subject"
-                  placeholder="例如：Python 编程、数学、英语"
-                  clearable
-                />
-              </el-form-item>
-
-              <el-form-item label="主题">
-                <el-input
-                  v-model="sessionForm.topic"
-                  placeholder="例如：函数基础、二次方程、语法时态"
-                  clearable
-                />
-              </el-form-item>
-
-              <el-form-item label="难度">
-                <el-slider
-                  v-model="sessionForm.difficulty"
-                  :min="1"
-                  :max="10"
-                  :step="1"
-                  show-stops
-                  :marks="{ 1: '入门', 5: '中等', 10: '困难' }"
-                />
-              </el-form-item>
-            </el-form>
+          <el-tab-pane label="ℹ️ 说明" name="manual">
+            <el-alert
+              title="手动输入模式已下线"
+              type="info"
+              :closable="false"
+              show-icon
+            >
+              当前内部测试台已与正式教学链路保持一致，只支持从学习路径中选择任务后启动授课。
+            </el-alert>
           </el-tab-pane>
         </el-tabs>
 
@@ -672,9 +652,6 @@ const selectedTask = computed<Task | undefined>(() => {
 });
 
 const canStart = computed(() => {
-  if (setupMode.value === 'manual') {
-    return !!sessionForm.value.subject && !!sessionForm.value.topic;
-  }
   return !!selectedTaskId.value;
 });
 
@@ -832,14 +809,14 @@ async function startSession() {
     return;
   }
 
+  if (!selectedTask.value?.id) {
+    ElMessage.warning('内部测试模式下，请先从学习路径中选择任务');
+    return;
+  }
+
   starting.value = true;
   try {
-    const session = await aiTeachingAPI.startSession(
-      sessionForm.value.subject,
-      sessionForm.value.topic,
-      sessionForm.value.difficulty,
-      selectedTask.value?.id
-    );
+    const session = await aiTeachingAPI.startSession(selectedTask.value.id);
 
     sessionInfo.value = {
       sessionId: session.sessionId,

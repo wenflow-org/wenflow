@@ -275,10 +275,9 @@ import dayjs from 'dayjs';
 const AGENT_ROLE_MAP: Record<string, string[]> = {
   'goal-conversation-agent': ['需求收集', '对话澄清'],
   'path-agent': ['路径规划'],
-'content-agent-v3': ['需求收集', '对话澄清'],
   'ai-teaching-agent': ['授课'],
   'progress-agent': ['进度追踪'],
-  'user-profile-agent': ['用户画像']
+  'learner-model-agent': ['学习者模型']
 };
 
 const loading = ref(false);
@@ -292,11 +291,11 @@ const agentLogs = ref<any[]>([]);
 
 const roleCards = computed(() => {
   const definitions = [
-    { key: 'goal', label: '需求收集', description: '澄清用户目标与上下文', match: ['goal-conversation-agent', 'content-agent-v3'] },
+    { key: 'goal', label: '需求收集', description: '澄清用户目标与上下文', match: ['goal-conversation-agent'] },
     { key: 'path', label: '路径规划', description: '生成学习路径与任务拆分', match: ['path-agent'] },
     { key: 'teaching', label: '授课', description: '生成讲解内容与课堂引导', match: ['ai-teaching-agent'] },
     { key: 'tracking', label: '进度追踪', description: '分析执行情况与状态变化', match: ['progress-agent'] },
-    { key: 'profile', label: '用户画像', description: '形成用户特征与偏好判断', match: ['user-profile-agent'] }
+    { key: 'profile', label: '学习者模型', description: '聚合学习者画像、状态与知识记忆', match: ['learner-model-agent'] }
   ];
 
   return definitions.map((definition) => {

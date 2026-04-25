@@ -161,7 +161,8 @@
                     v-for="(reply, index) in msg.quickReplies"
                     :key="index"
                     class="quick-reply-card"
-                    @click="sendQuickReply(reply.text, msg.id)"
+                    :class="{ selected: isQuickReplySelected(reply.text) }"
+                    @click="toggleQuickReplySelection(reply.text, msg.id)"
                   >
                     <span class="reply-icon" v-if="reply.icon">{{ reply.icon }}</span>
                     <span class="reply-text">{{ reply.text }}</span>
@@ -290,6 +291,26 @@
             </div>
           </transition>
 
+          <!-- 已选快捷回复预览 -->
+          <transition name="slide-up">
+            <div v-if="selectedQuickReplies.length > 0" class="selected-quick-replies-preview">
+              <div class="preview-header">
+                <span class="preview-label">已选（{{ selectedQuickReplies.length }}/{{ MAX_QUICK_REPLY_SELECTION }}）</span>
+                <button class="preview-clear-btn" @click="clearQuickReplySelection">清空</button>
+              </div>
+              <div class="preview-tags">
+                <div
+                  v-for="(item, idx) in selectedQuickReplies"
+                  :key="idx"
+                  class="preview-tag"
+                >
+                  <span class="preview-tag-text">{{ item }}</span>
+                  <span class="preview-tag-remove" @click="toggleQuickReplySelection(item, selectedFromMessageId)">×</span>
+                </div>
+              </div>
+            </div>
+          </transition>
+
           <!-- 输入框 -->
           <div class="input-row">
             <div class="input-container">
@@ -306,7 +327,7 @@
               <div class="input-actions">
                 <button
                   @click="sendMessage"
-                  :disabled="loading || !userInput.trim()"
+                  :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)"
                   class="send-btn"
                 >
                   <el-icon v-if="loading"><Loading /></el-icon>
@@ -377,12 +398,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import api from '../utils/api';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowRight, Loading, Promotion, RefreshRight, HomeFilled, EditPen, FolderOpened, User, Switch, Delete } from '@element-plus/icons-vue';
 import { useUserStore } from '../stores/user';
 import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import MarkdownIt from 'markdown-it';
+import {
+  deleteGoalConversation,
+  regenerateGoalConversation,
+  replyGoalConversation,
+  startGoalConversation
+} from '@/api/goalConversation';
 
 const md = new MarkdownIt({
   html: true,
@@ -427,6 +453,53 @@ const showAllSuggestions = ref(false);
 const confidence = ref(0);
 const lastUserMessage = ref('');
 const realProblemConfirmed = ref(false);
+
+const MAX_QUICK_REPLY_SELECTION = 4;
+const selectedQuickReplies = ref<string[]>([]);
+const selectedFromMessageId = ref<string | null>(null);
+
+const isQuickReplySelected = (text: string) => {
+  return selectedQuickReplies.value.includes(text);
+};
+
+const toggleQuickReplySelection = (text: string, messageId?: string) => {
+  if (loading.value) return;
+  
+  if (messageId && selectedFromMessageId.value && selectedFromMessageId.value !== messageId) {
+    selectedQuickReplies.value = [];
+    selectedFromMessageId.value = null;
+  }
+  
+  if (!selectedFromMessageId.value && messageId) {
+    selectedFromMessageId.value = messageId;
+  }
+  
+  const idx = selectedQuickReplies.value.indexOf(text);
+  if (idx >= 0) {
+    selectedQuickReplies.value.splice(idx, 1);
+  } else {
+    if (selectedQuickReplies.value.length >= MAX_QUICK_REPLY_SELECTION) {
+      ElMessage.warning(`最多选择 ${MAX_QUICK_REPLY_SELECTION} 项`);
+      return;
+    }
+    selectedQuickReplies.value.push(text);
+  }
+};
+
+const clearQuickReplySelection = () => {
+  selectedQuickReplies.value = [];
+  selectedFromMessageId.value = null;
+};
+
+const composeQuickReplyPayload = () => {
+  if (selectedQuickReplies.value.length === 0) return '';
+  const base = selectedQuickReplies.value.join('、');
+  const trimmed = userInput.value.trim();
+  if (trimmed) {
+    return `${base}\n${trimmed}`;
+  }
+  return base;
+};
 
 const understanding = ref<{
   surface_goal?: string;
@@ -625,21 +698,18 @@ const navigateToLearningPath = () => {
 
     regenerating.value = true;
     try {
-      const response: any = await api.post(
-        `/goal-conversation/${conversationId.value}/regenerate`,
-        { adjustments: regenerateAdjustments.value || undefined }
+      const response = await regenerateGoalConversation(
+        conversationId.value,
+        regenerateAdjustments.value || undefined
       );
-
-      if (response.success) {
-        const internal = response.internal || response.data;
-        if (internal.learningPath) {
-          generatedPathId.value = internal.learningPath.id;
-          generatedPathStatus.value = internal.learningPath.status || null;
-        }
-        ElMessage.success(response.userVisible || '学习路径已重新生成！');
-        showRegenerateDialog.value = false;
-        regenerateAdjustments.value = '';
+      const core = response.internal.core;
+      if (core.learningPath) {
+        generatedPathId.value = core.learningPath.id;
+        generatedPathStatus.value = core.learningPath.status || null;
       }
+      ElMessage.success(response.userVisible || '学习路径已重新生成！');
+      showRegenerateDialog.value = false;
+      regenerateAdjustments.value = '';
     } catch (error: any) {
       console.error('重新生成路径失败:', error);
       ElMessage.error(error.message || '重新生成失败，请重试');
@@ -662,7 +732,7 @@ const navigateToLearningPath = () => {
       );
 
       if (conversationId.value) {
-        await api.delete(`/goal-conversation/${conversationId.value}`);
+        await deleteGoalConversation(conversationId.value);
       }
 
       // 重置所有状态
@@ -782,30 +852,27 @@ const scrollToBottom = async () => {
 const startConversation = async (goal: string) => {
   loading.value = true;
   try {
-    const response: any = await api.post('/goal-conversation/start', { goal });
-    
-    if (response.success) {
-      const internal = response.internal || response.data;
-      const userVisible = response.userVisible || internal.message;
+    const response = await startGoalConversation(goal);
+    const core = response.internal.core;
+    const goalExt = response.internal.ext.goalConversation;
 
-      conversationId.value = internal.conversationId || internal.sessionId;
-      currentStage.value = internal.stage || 'understanding';
-      confidence.value = internal.confidence || 0;
-      
-      if (internal.understanding) {
-        understanding.value = { ...internal.understanding };
-      }
+    conversationId.value = core.conversationId || '';
+    currentStage.value = core.stage || 'understanding';
+    confidence.value = core.confidence || 0;
 
-      aiMessages.value.push({
-        id: Date.now().toString(),
-        role: 'ai',
-        content: userVisible,
-        time: new Date(),
-        quickReplies: internal.quickReplies,
-        quickRepliesUsed: false
-      });
-      scrollToBottom();
+    if (goalExt.understanding) {
+      understanding.value = { ...goalExt.understanding };
     }
+
+    aiMessages.value.push({
+      id: Date.now().toString(),
+      role: 'ai',
+      content: response.userVisible,
+      time: new Date(),
+      quickReplies: response.renderHints.quickReplies,
+      quickRepliesUsed: false
+    });
+    scrollToBottom();
   } catch (error: any) {
     console.error('开始对话失败:', error);
     ElMessage.error(error.message || '开始对话失败，请稍后重试');
@@ -826,11 +893,16 @@ const hideLastAiQuickReplies = () => {
 };
 
 const sendMessage = async () => {
-  if (!userInput.value.trim() || loading.value) return;
-  const content = userInput.value.trim();
+  const trimmedInput = userInput.value.trim();
+  const hasSelections = selectedQuickReplies.value.length > 0;
   
-  // 隐藏快速回复按钮
+  if (!trimmedInput && !hasSelections) return;
+  if (loading.value) return;
+  
+  const content = hasSelections ? composeQuickReplyPayload() : trimmedInput;
+  
   hideLastAiQuickReplies();
+  clearQuickReplySelection();
   
   userInput.value = '';
   autoResize();
@@ -849,47 +921,7 @@ const sendMessage = async () => {
   await sendMessageInternal(content);
 };
 
-// 发送快速回复
-const sendQuickReply = async (text: string, messageId?: string) => {
-  if (loading.value) return;
-  
-  // 隐藏快速回复按钮
-  if (messageId) {
-    const msgIndex = aiMessages.value.findIndex(m => m.id === messageId);
-    if (msgIndex !== -1) {
-      aiMessages.value[msgIndex].quickRepliesUsed = true;
-    }
-  } else {
-    hideLastAiQuickReplies();
-  }
-  
-  // 检测是否为确认消息，触发路径生成
-  if (text.includes('确认') && text.includes('生成')) {
-    await confirmProposal(text);
-    return;
-  }
-
-  const isAdjustDirectionIntent = /调整|修改|换个方向/.test(text);
-  const payload = isAdjustDirectionIntent
-    ? '我想调整学习方向。请先给我 3 个可调整维度（学习重点、学习节奏、实践方式），并给出可点击的快捷选项。'
-    : text;
-  
-  userInput.value = '';
-  lastUserMessage.value = text;
-  userMessages.value.push({
-    id: Date.now().toString(),
-    role: 'user',
-    content: text,
-    time: new Date()
-  });
-  scrollToBottom();
-  
-  if (!conversationId.value) {
-    await startConversation(payload);
-    return;
-  }
-  await sendMessageInternal(payload);
-};
+// 快速回复已改为多选模式，点击由 toggleQuickReplySelection 处理
 
 // 确认方案 - 生成学习路径
 const confirmProposal = async (confirmText = '确认方案，生成学习路径') => {
@@ -912,37 +944,36 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
     }
 
     loading.value = true;
-    const response: any = await api.post(`/goal-conversation/${conversationId.value}/reply`, { reply: confirmText });
+    const response = await replyGoalConversation(conversationId.value, confirmText);
+    const core = response.internal.core;
+    const goalExt = response.internal.ext.goalConversation;
 
-    if (response.success) {
-      const internal = response.internal || response.data;
-      currentStage.value = internal.stage;
-      confidence.value = internal.confidence || confidence.value;
-      isCompleted.value = internal.isCompleted;
+    currentStage.value = core.stage;
+    confidence.value = core.confidence || confidence.value;
+    isCompleted.value = core.isCompleted;
 
-      if (internal.understanding) {
-        understanding.value = { ...understanding.value, ...internal.understanding };
-      }
-
-      aiMessages.value.push({
-        id: Date.now().toString(),
-        role: 'ai',
-        content: internal.message || '已确认方案，正在生成学习路径...',
-        time: new Date(),
-        quickReplies: internal.quickReplies,
-        quickRepliesUsed: false
-      });
-
-      if (internal.learningPath) {
-        generatedPathId.value = internal.learningPath.id;
-        generatedPathStatus.value = internal.learningPath.status || null;
-      }
-
-      scrollToBottom();
-
-      // 确认按钮点击后必定跳转学习路径页（强兜底，不依赖 stage/learningPath）
-      router.push('/learning-paths?from=goal&auto=1');
+    if (goalExt.understanding) {
+      understanding.value = { ...understanding.value, ...goalExt.understanding };
     }
+
+    aiMessages.value.push({
+      id: Date.now().toString(),
+      role: 'ai',
+      content: response.userVisible || '已确认方案，正在生成学习路径...',
+      time: new Date(),
+      quickReplies: response.renderHints.quickReplies,
+      quickRepliesUsed: false
+    });
+
+    if (core.learningPath) {
+      generatedPathId.value = core.learningPath.id;
+      generatedPathStatus.value = core.learningPath.status || null;
+    }
+
+    scrollToBottom();
+
+    // 确认按钮点击后必定跳转学习路径页（强兜底，不依赖 stage/learningPath）
+    router.push('/learning-paths?from=goal&auto=1');
   } catch (error: any) {
     console.error('确认方案失败:', error);
     ElMessage.error(error.message || '确认失败，请重试');
@@ -954,38 +985,35 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
 const sendMessageInternal = async (content: string) => {
   loading.value = true;
   try {
-    const response: any = await api.post(`/goal-conversation/${conversationId.value}/reply`, { reply: content });
-    
-    if (response.success) {
-      const internal = response.internal || response.data;
-      const userVisible = response.userVisible || internal.message;
-      
-      currentStage.value = internal.stage;
-      confidence.value = internal.confidence || confidence.value;
-      isCompleted.value = internal.isCompleted;
-      
-      if (internal.understanding) {
-        understanding.value = { ...understanding.value, ...internal.understanding };
-      }
-      aiMessages.value.push({
-        id: Date.now().toString(),
-        role: 'ai',
-        content: userVisible,
-        time: new Date(),
-        quickReplies: internal.quickReplies,
-        quickRepliesUsed: false
-      });
-      if (internal.isCompleted) {
-        ElMessage.success('问题理解完成！');
-        conversationComplete.value = true;
-        if (internal.learningPath) {
-          generatedPathId.value = internal.learningPath.id;
-          generatedPathStatus.value = internal.learningPath.status || null;
-        }
-      }
-      
-      scrollToBottom();
+    const response = await replyGoalConversation(conversationId.value, content);
+    const core = response.internal.core;
+    const goalExt = response.internal.ext.goalConversation;
+
+    currentStage.value = core.stage;
+    confidence.value = core.confidence || confidence.value;
+    isCompleted.value = core.isCompleted;
+
+    if (goalExt.understanding) {
+      understanding.value = { ...understanding.value, ...goalExt.understanding };
     }
+    aiMessages.value.push({
+      id: Date.now().toString(),
+      role: 'ai',
+      content: response.userVisible,
+      time: new Date(),
+      quickReplies: response.renderHints.quickReplies,
+      quickRepliesUsed: false
+    });
+    if (core.isCompleted) {
+      ElMessage.success('问题理解完成！');
+      conversationComplete.value = true;
+      if (core.learningPath) {
+        generatedPathId.value = core.learningPath.id;
+        generatedPathStatus.value = core.learningPath.status || null;
+      }
+    }
+
+    scrollToBottom();
   } catch (error: any) {
     console.error('回复失败:', error);
     ElMessage.error(error.message || '回复失败，请稍后重试');
@@ -1832,6 +1860,108 @@ onUnmounted(() => {
 
 .quick-reply-card:active {
   transform: translateY(0);
+}
+
+.quick-reply-card.selected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  box-shadow: 0 2px 10px rgba(102, 126, 234, 0.25);
+}
+
+.quick-reply-card.selected .reply-icon {
+  opacity: 1;
+}
+
+.quick-reply-card.selected .reply-text {
+  color: white;
+}
+
+/* 已选快捷回复预览 */
+.selected-quick-replies-preview {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-muted);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.preview-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.preview-clear-btn {
+  font-size: 0.75rem;
+  color: var(--color-danger);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.preview-clear-btn:hover {
+  background: var(--color-danger-light);
+}
+
+.preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.preview-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--color-primary);
+  transition: all 0.2s ease;
+}
+
+.preview-tag:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.preview-tag:hover .preview-tag-remove {
+  color: white;
+}
+
+.preview-tag-text {
+  white-space: nowrap;
+}
+
+.preview-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--color-primary);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.preview-tag-remove:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .reply-icon {

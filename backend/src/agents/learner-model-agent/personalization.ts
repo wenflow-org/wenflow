@@ -1,17 +1,17 @@
 /**
  * 个性化参数生成器
  * 
- * 基于用户画像生成其他Agent可用的个性化配置
+ * 基于学习者模型生成其他Agent可用的个性化配置
  */
 
 import {
-  UnifiedUserProfile,
-  PersonalizationConfig
+  LearnerModelProfile,
+  LearnerPersonalizationConfig
 } from './types';
 
 export class PersonalizationEngine {
   
-  generateConfig(profile: UnifiedUserProfile): PersonalizationConfig {
+  generateConfig(profile: LearnerModelProfile): LearnerPersonalizationConfig {
     return {
       contentStyle: this.generateContentStyle(profile),
       pacing: this.generatePacing(profile),
@@ -20,7 +20,7 @@ export class PersonalizationEngine {
     };
   }
   
-  private generateContentStyle(profile: UnifiedUserProfile): PersonalizationConfig['contentStyle'] {
+  private generateContentStyle(profile: LearnerModelProfile): LearnerPersonalizationConfig['contentStyle'] {
     const { cognitive, preferences } = profile;
     
     const useAnalogies = cognitive.thinkingStyle === 'intuitive' || 
@@ -54,7 +54,7 @@ export class PersonalizationEngine {
     };
   }
   
-  private generatePacing(profile: UnifiedUserProfile): PersonalizationConfig['pacing'] {
+  private generatePacing(profile: LearnerModelProfile): LearnerPersonalizationConfig['pacing'] {
     const { learning, cognitive, derivedInsights } = profile;
     
     const initialDifficulty: 'easy' | 'medium' | 'hard' = derivedInsights.recommendedDifficulty;
@@ -84,7 +84,7 @@ export class PersonalizationEngine {
     };
   }
   
-  private generateInteraction(profile: UnifiedUserProfile): PersonalizationConfig['interaction'] {
+  private generateInteraction(profile: LearnerModelProfile): LearnerPersonalizationConfig['interaction'] {
     const { cognitive, emotional, learning } = profile;
     
     let hintTiming: 'immediate' | 'delayed' | 'on-request' = 'delayed';
@@ -115,7 +115,7 @@ export class PersonalizationEngine {
     };
   }
   
-  private generatePathAdjustment(profile: UnifiedUserProfile): PersonalizationConfig['pathAdjustment'] {
+  private generatePathAdjustment(profile: LearnerModelProfile): LearnerPersonalizationConfig['pathAdjustment'] {
     const { learning, behavioral, cognitive } = profile;
     
     let compressionThreshold = 0.7;
@@ -144,7 +144,7 @@ export class PersonalizationEngine {
     };
   }
   
-  generatePromptEnhancement(profile: UnifiedUserProfile): string {
+  generatePromptEnhancement(profile: LearnerModelProfile): string {
     const parts: string[] = [];
     
     const { cognitive, preferences, emotional, derivedInsights } = profile;
@@ -171,7 +171,7 @@ export class PersonalizationEngine {
     return parts.length > 0 ? `\n\n【个性化要求】\n${parts.join('。\n')}` : '';
   }
   
-  generateContentHints(profile: UnifiedUserProfile): {
+  generateContentHints(profile: LearnerModelProfile): {
     preferredFormats: string[];
     avoidFormats: string[];
     emphasisAreas: string[];

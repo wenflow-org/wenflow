@@ -6,21 +6,12 @@ import learningService from '../services/learning/learning.service';
 import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
-import { learningSessionService } from '../services/learning/learning-session.service';
 import pathOrchestrator from '../orchestrators/path.orchestrator';
-import { getAgentManifest } from '../services/agent-manifest.service';
 
 const router = express.Router();
 
 // 所有学习路由都需要认证
 router.use(authMiddleware);
-
-const CONTENT_AGENT_OFFLINE_MESSAGE = 'content-agent-v3 已下线，请使用 ai-teaching 学习模式';
-
-const isContentAgentV3Enabled = () => {
-  const manifest = getAgentManifest('content-agent-v3');
-  return !!manifest?.runtimeEnabled;
-};
 
 // 创建学习目标schema
 const createGoalSchema = z.object({
@@ -39,6 +30,7 @@ const generatePathSchema = z.object({
     currentSkillLevel: z.string().optional(),
     learningStyle: z.string().optional(),
     timePerDay: z.string().optional(),
+    totalWeeks: z.number().optional(),
     learningGoal: z.string().optional(),
     deadline: z.string().optional(),
     deadlineText: z.string().optional(),
@@ -46,7 +38,11 @@ const generatePathSchema = z.object({
     emotionalProfile: z.record(z.any()).optional(),
     problemContext: z.any().optional(),
     priorKnowledge: z.array(z.any()).optional(),
-    daysPerWeek: z.number().min(1).max(7).optional()
+    daysPerWeek: z.number().min(1).max(7).optional(),
+    structuredData: z.record(z.any()).optional(),
+    confirmedProposal: z.record(z.any()).optional(),
+    confidenceScores: z.record(z.any()).optional(),
+    conversationHistory: z.array(z.object({ role: z.string(), content: z.string() })).optional()
   }).optional()
 });
 
@@ -65,6 +61,13 @@ const completeTaskSchema = z.object({
   actualMinutes: z.number().optional(),
   subjectiveDifficulty: z.number().min(1).max(10).optional(),
   notes: z.string().optional()
+});
+
+const replanPathSchema = z.object({
+  triggerSource: z.enum(['goal-conversation', 'progress-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
+  reason: z.string().optional(),
+  mode: z.enum(['new_version', 'overwrite']).optional(),
+  evidence: z.record(z.any()).optional()
 });
 
 // 创建学习目标
@@ -370,6 +373,119 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
   }
 });
 
+// 重新生成已有学习路径（主动触发，覆盖当前路径）
+router.post('/paths/:pathId/regenerate', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const { pathId } = req.params;
+
+    const path = await prisma.learning_paths.findUnique({
+      where: { id: pathId }
+    });
+
+    if (!path) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '学习路径不存在' }
+      });
+    }
+
+    if (path.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '无权访问此学习路径' }
+      });
+    }
+
+    await prisma.learning_paths.update({
+      where: { id: pathId },
+      data: {
+        status: 'generating',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+
+    pathOrchestrator.runAsync({
+      userId,
+      description: path.description || path.title || path.name || '个性化学习路径',
+      subject: path.subject || undefined,
+      deadline: path.deadline || undefined,
+      deadlineText: path.deadlineText || undefined,
+      existingPathId: pathId,
+      userProfile: {}
+    }, {
+      onError: async (error) => {
+        logger.error(`重新生成学习路径失败：${pathId}`, error);
+        try {
+          await prisma.learning_paths.update({
+            where: { id: pathId },
+            data: {
+              status: 'failed',
+              updatedAt: new Date()
+            }
+          });
+        } catch (updateError) {
+          logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: '正在重新生成学习路径'
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// 预留：基于已学内容重调路径（当前仅返回占位结果）
+router.post('/paths/:pathId/replan', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const { pathId } = req.params;
+    const payload = replanPathSchema.parse(req.body || {});
+
+    const result = await learningService.requestPathReplan({
+      pathId,
+      userId,
+      triggerSource: payload.triggerSource,
+      reason: payload.reason,
+      mode: payload.mode,
+      evidence: payload.evidence
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: { message: '数据验证失败', details: error.errors }
+      });
+    }
+
+    if (error.message === '学习路径不存在') {
+      return res.status(404).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (error.message === '无权访问此学习路径') {
+      return res.status(403).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    next(error);
+  }
+});
+
 // 删除学习路径
 router.delete('/paths/:pathId', async (req, res, next) => {
   try {
@@ -409,6 +525,54 @@ router.get('/tasks/:taskId', async (req, res, next) => {
   } catch (error: any) {
     if (error.message === '任务不存在') {
       return res.status(404).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (error.message === '无权访问此任务') {
+      return res.status(403).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    next(error);
+  }
+});
+
+router.post('/paths/:pathId/retry-enrichment', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const { pathId } = req.params;
+
+    const result = await learningService.retryPathEnrichment(pathId, userId);
+
+    res.json({
+      success: true,
+      data: result,
+      message: '正在继续准备学习内容'
+    });
+  } catch (error: any) {
+    if (error.message === '学习路径不存在') {
+      return res.status(404).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (error.message === '无权访问此学习路径') {
+      return res.status(403).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (
+      error.message === '学习路径主结构尚未完成，暂不能继续准备'
+      || error.message === '学习内容仍在准备中，请稍后查看'
+    ) {
+      return res.status(400).json({
         success: false,
         error: { message: error.message }
       });
@@ -740,338 +904,4 @@ router.post('/paths/:pathId/generate-all-tasks', async (req, res, next) => {
   }
 });
 */
-// ==================== ContentAgent v3.0 集成端点 ====================
-
-// 开始任务学习（使用 ContentAgent v3.0）
-router.post('/tasks/:taskId/start', async (req, res, next) => {
-  try {
-    if (!isContentAgentV3Enabled()) {
-      return res.status(503).json({
-        success: false,
-        error: { message: CONTENT_AGENT_OFFLINE_MESSAGE }
-      });
-    }
-
-    const userId = req.user.userId;
-    const { taskId } = req.params;
-    const { pathId } = req.query as { pathId?: string };
-
-    logger.info('[Learning API] 开始任务学习', { userId, taskId, pathId });
-
-    // 1. 验证任务存在
-    const task = await prisma.subtasks.findUnique({
-      where: { id: taskId },
-      include: {
-        milestones: {
-          include: {
-            learning_paths: true
-          }
-        },
-        learningContents: true
-      }
-    });
-
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '任务不存在' }
-      });
-    }
-
-    // 2. 创建学习会话
-    const session = await learningSessionService.createSession(userId);
-
-    // 4. 获取任务信息并生成第一轮内容
-    const taskInfo = {
-      id: task.id,
-      title: task.title,
-      description: task.description || '',
-      subject: task.milestones?.learning_paths?.subject || undefined,
-      objective: task.description || ''
-    };
-
-    // 5. 返回初始内容（第一轮）
-    // 注意：完整的多轮对话需要前端配合，这里先返回会话 ID
-    res.json({
-      success: true,
-      data: {
-        sessionId: session.id,
-        taskId: task.id,
-        taskTitle: taskInfo.title,
-        taskDescription: taskInfo.description,
-        message: '对话已初始化，请调用 /tasks/:taskId/respond 获取第一轮内容'
-      }
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 开始任务学习失败:', error.message);
-    next(error);
-  }
-});
-
-// 提交学生回答并获取下一轮内容
-router.post('/tasks/:taskId/respond', async (req, res, next) => {
-  try {
-    if (!isContentAgentV3Enabled()) {
-      return res.status(503).json({
-        success: false,
-        error: { message: CONTENT_AGENT_OFFLINE_MESSAGE }
-      });
-    }
-
-    const userId = req.user.userId;
-    const { taskId } = req.params;
-    const { sessionId, response, conversationHistory = [] } = req.body;
-
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '缺少 sessionId' }
-      });
-    }
-
-    if (!response) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '缺少学生回答' }
-      });
-    }
-
-    logger.info('[Learning API] 提交学生回答', {
-      userId,
-      taskId,
-      sessionId,
-      responseLength: response.length
-    });
-
-    // 1. 验证任务存在
-    const task = await prisma.subtasks.findUnique({
-      where: { id: taskId },
-      include: {
-        milestones: {
-          include: {
-            learning_paths: true
-          }
-        },
-        learningContents: true
-      }
-    });
-
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '任务不存在' }
-      });
-    }
-
-    // 2. 验证会话存在
-    const session = await learningSessionService.getSession(sessionId);
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '会话不存在' }
-      });
-    }
-
-    // 3. 添加学生回答到会话
-    await learningSessionService.addMessageAndAssessState(
-      sessionId,
-      {
-        role: 'user',
-        content: response,
-        timestamp: new Date().toISOString()
-      },
-      userId
-    );
-
-    // 4. 获取学生状态
-    const { learningStateService } = await import('../services/learning/learning-state.service');
-    const studentState = await learningStateService.getCurrentState(userId);
-
-    // 5. 调用 ContentAgent 生成下一轮内容
-    const contentAgent = await import('../agents/content-agent-v3');
-    const agent = new contentAgent.ContentAgentV3();
-
-    const taskInfo = {
-      id: task.id,
-      title: task.title,
-      description: task.description || '',
-      subject: task.milestones?.learning_paths?.subject || undefined,
-      objective: task.description || ''
-    };
-
-    // 6. 执行 ContentAgent（使用公共方法 run）
-    const result = await agent.run({
-      taskId,
-      taskTitle: taskInfo.title,
-      taskDescription: taskInfo.description,
-      cognitiveObjective: taskInfo.objective,
-      studentState: {
-        problemClarity: 0.5,
-        confidence: 0.5,
-        frustration: 0.3,
-        cognitiveDepth: 0.5,
-        learningStyle: 'mixed',
-        currentLSS: studentState?.lss ?? 5,
-        currentKTL: studentState?.ktl ?? 5,
-        currentLF: studentState?.lf ?? 3,
-        currentLSB: studentState?.lsb ?? 2,
-        userId
-      },
-      conversationHistory,
-      currentRound: conversationHistory.length / 2 + 1,
-      sessionId
-    } as any);
-
-    // 7. 添加 AI 内容到会话
-    if (result.userVisible) {
-      await learningSessionService.addMessageAndAssessState(
-        sessionId,
-        {
-          role: 'assistant',
-          content: result.userVisible,
-          timestamp: new Date().toISOString()
-        },
-        userId
-      );
-    }
-
-    logger.info('[Learning API] ContentAgent 生成成功', {
-      sessionId,
-      strategy: (result as any)?.internal?.strategy,
-      stage: (result as any)?.internal?.conversationStage
-    });
-
-    // 8. 返回结果
-    res.json({
-      success: true,
-      data: {
-        sessionId,
-        content: result.userVisible,
-        uiType: (result.internal as any)?.uiType || 'input',
-        options: (result.internal as any)?.options,
-        hint: (result.internal as any)?.inputHint,
-        metadata: {
-          strategy: (result.internal as any)?.strategy,
-          conversationStage: (result.internal as any)?.conversationStage,
-          difficulty: (result.internal as any)?.difficulty,
-          qualityScore: (result.internal as any)?.qualityScore
-        }
-      }
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 提交学生回答失败:', error.message);
-    next(error);
-  }
-});
-
-// 获取学习会话状态
-router.get('/sessions/:sessionId', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { sessionId } = req.params;
-
-    const session = await learningSessionService.getSession(sessionId);
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '会话不存在' }
-      });
-    }
-
-    // 验证权限
-    if (session.userId !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '无权访问此会话' }
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        sessionId: session.id,
-        messages: session.messages,
-        state: session.state,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt
-      }
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 获取会话状态失败:', error.message);
-    next(error);
-  }
-});
-
-// 完成任务学习（结束对话）
-router.post('/tasks/:taskId/complete-dialogue', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { taskId } = req.params;
-    const { sessionId } = req.body;
-
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '缺少 sessionId' }
-      });
-    }
-
-    logger.info('[Learning API] 完成任务学习', { userId, taskId, sessionId });
-
-    // 1. 验证任务和会话
-    const task = await prisma.subtasks.findUnique({
-      where: { id: taskId }
-    });
-
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '任务不存在' }
-      });
-    }
-
-    const session = await learningSessionService.getSession(sessionId);
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '会话不存在' }
-      });
-    }
-
-    // 2. 更新任务状态为完成
-    await prisma.subtasks.update({
-      where: { id: taskId },
-      data: {
-        status: 'completed',
-        completedAt: new Date()
-      }
-    });
-
-    // 3. 获取最终学习状态
-    const { learningStateService } = await import('../services/learning/learning-state.service');
-    const finalState = await learningStateService.getCurrentState(userId);
-
-    // 4. 返回结果
-    res.json({
-      success: true,
-      data: {
-        sessionId,
-        taskId,
-        completedAt: new Date(),
-        finalState: {
-          lss: finalState?.lss ?? 5,
-          ktl: finalState?.ktl ?? 5,
-          lf: finalState?.lf ?? 3,
-          lsb: finalState?.lsb ?? 2
-        },
-        messageCount: session.messages.length
-      }
-    });
-  } catch (error: any) {
-    logger.error('[Learning API] 完成任务学习失败:', error.message);
-    next(error);
-  }
-});
-
 export default router;

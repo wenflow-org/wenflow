@@ -86,12 +86,10 @@ function getAgentCapabilities(name: string): string[] {
 
 const platformNameToCatalogId: Record<string, string> = {
   PathAgent: 'path-agent',
-  ContentAgent: 'content-agent-v3',
   ProgressAgent: 'progress-agent',
   GoalConversationAgent: 'goal-conversation-agent',
-  'content-agent-v3': 'content-agent-v3',
   'ai-teaching-agent': 'ai-teaching-agent',
-  'user-profile-agent': 'user-profile-agent'
+  'learner-model-agent': 'learner-model-agent'
 };
 
 function normalizeCatalogAgentId(nameOrId: string): string {
@@ -529,6 +527,13 @@ router.post('/api-config/test', async (req, res) => {
 router.put('/agents/:name/prompt', async (req, res) => {
   const { name } = req.params;
   const { prompt } = req.body;
+
+  if (name === 'GoalConversationAgent' || name === 'goal-conversation-agent') {
+    return res.status(400).json({
+      success: false,
+      error: 'goal-conversation-agent 已切换为数据库 Prompt 真相源，请使用 /api/admin/agent-prompts 接口管理'
+    });
+  }
 
   try {
     const fs = require('fs').promises;

@@ -96,8 +96,9 @@
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button type="success" link @click="openLearnerModel(row)">学习者模型</el-button>
             <el-button type="primary" link @click="openEditDialog(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDeleteUser(row)">删除</el-button>
           </template>
@@ -182,11 +183,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { adminUsersApi } from '@/api/adminApi';
 import { Search, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 const loading = ref(false);
+const router = useRouter();
 const users = ref<any[]>([]);
 const tableRef = ref<any>(null);
 const createVisible = ref(false);
@@ -246,7 +249,7 @@ const loadUsers = async () => {
           learningGoal: user.learningGoal || '-',
           _count: {
             learningPaths: user._count?.learning_paths || 0,
-            tasks: user._count?.learning_sessions || 0
+            tasks: user._count?.teaching_sessions || 0
           }
         };
       });
@@ -361,6 +364,13 @@ const handleDeleteUser = async (row: any) => {
 
 const handleSelectionChange = (rows: any[]) => {
   selectedUserIds.value = rows.map(row => row.id);
+};
+
+const openLearnerModel = (row: any) => {
+  router.push({
+    name: 'AdminLearnerModelDetail',
+    params: { userId: row.id }
+  });
 };
 
 const handleBatchDelete = async () => {

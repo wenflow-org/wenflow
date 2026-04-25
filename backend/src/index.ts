@@ -13,8 +13,11 @@ import { registerOfficialAgents, registerAllPlugins } from './agents';
 import { allSkillDefinitions, skillHandlers } from './skills';
 
 import { createAgentCollaborationService } from './services/agent-collaboration.service';
-import { userProfileAgent } from './agents/user-profile-agent';
+import { learnerModelAgent } from './agents/learner-model-agent';
 import { getEventBus } from './gateway/event-bus';
+import learningService from './services/learning/learning.service';
+
+const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
@@ -126,7 +129,6 @@ app.get('/health', (req, res) => {
 import authRoutes from './routes/auth';
 import learningRoutes from './routes/learning';
 import userRoutes from './routes/users';
-import sessionRoutes from './routes/sessions';
 import stateTrackingRoutes from './routes/state-tracking.routes';
 import achievementsRoutes from './routes/achievements';
 import reportRoutes from './routes/reports';
@@ -141,6 +143,7 @@ import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
+import adminLearnerModelsRoutes from './routes/admin/learner-models';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import abTestingRoutes from './routes/ab-testing';
@@ -168,7 +171,6 @@ app.get('/api', (req, res) => {
       users: '/api/users',
       learning: '/api/learning',
       goalConversation: '/api/goal-conversation',
-      sessions: '/api/sessions',
       state: '/api/state',
       achievements: '/api/achievements',
       reports: '/api/reports',
@@ -187,7 +189,6 @@ app.get('/api', (req, res) => {
     },
 agents: {
       'path-agent': '学习路径规划',
-      'content-agent-v3': '内容生成',
       'ai-teaching-agent': 'AI授课编排',
       'progress-agent': '进度追踪'
     },
@@ -213,7 +214,6 @@ agents: {
 // 路由注册
 // Platform 层路由 - 核心学习功能
 app.use('/api/learning', authMiddleware, acpContextMiddleware('platform'), learningRoutes);
-app.use('/api/sessions', authMiddleware, acpContextMiddleware('platform'), sessionRoutes);
 app.use('/api/state', authMiddleware, acpContextMiddleware('platform'), stateTrackingRoutes);
 app.use('/api/achievements', authMiddleware, acpContextMiddleware('platform'), achievementsRoutes);
 app.use('/api/reports', authMiddleware, acpContextMiddleware('platform'), reportRoutes);
@@ -230,6 +230,7 @@ app.use('/api/admin-auth', adminAuthRoutes);
 app.use('/api/admin/api-config', authMiddleware, adminApiConfigRoutes);
 app.use('/api/admin/agent-model-configs', authMiddleware, adminAgentModelConfigsRoutes);
 app.use('/api/admin/users', authMiddleware, adminUsersRoutes);
+app.use('/api/admin/learner-models', authMiddleware, adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', authMiddleware, adminGoalConversationsRoutes);  // 具体路由
 app.use('/api/admin', authMiddleware, adminPlatformRoutes);  // 通用路由 - 必须在最后
 app.use('/api/users', authMiddleware, userRoutes);
@@ -292,8 +293,8 @@ async function initializeGateway() {
     ai: {
       baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
       apiKey: process.env.AI_API_KEY || '',
-      defaultModel: process.env.AI_MODEL || 'glm-4-flash',
-      defaultReasoningModel: process.env.AI_MODEL_REASONING || 'deepseek-think',
+      defaultModel: process.env.AI_MODEL || '',
+      defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
     },
     eventBus: {
       persistEvents: true,
@@ -343,7 +344,7 @@ async function initializeAgentCollaboration() {
   
   service.start();
   
-  userProfileAgent.setupEventListeners(eventBus);
+  learnerModelAgent.setupEventListeners(eventBus);
   
   logger.info('✅ Agent Collaboration Service started');
   
@@ -364,10 +365,22 @@ async function startServer() {
 // 初始化 EduClaw Gateway
     await initializeGateway();
     
-    // 初始化 Agent 协作服务
-    await initializeAgentCollaboration();
+     // 初始化 Agent 协作服务
+     await initializeAgentCollaboration();
 
-    app.listen(PORT, () => {
+      // 回收因进程中断等原因遗留的 generating 路径
+      await learningService.recoverStaleGeneratingPaths();
+
+      // 持续自动重试仍在准备失败中的路径
+      setInterval(() => {
+        void learningService.retryEligibleFailedPathPreparations().catch((error) => {
+          logger.warn('自动继续准备学习内容轮询失败', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }, ENRICHMENT_RETRY_POLL_INTERVAL_MS);
+
+     app.listen(PORT, () => {
       logger.info(`🚀 Server is running on port ${PORT}`);
       logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
       logger.info(`🤖 EduClaw Gateway: Agent-Driven Architecture`);

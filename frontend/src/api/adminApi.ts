@@ -218,6 +218,40 @@ export const adminConversationsApi = {
   },
 };
 
+export const adminLearnerModelsApi = {
+  list: async (params?: {
+    userId?: string;
+    pathId?: string;
+    staleOnly?: boolean;
+    riskOnly?: boolean;
+    page?: number;
+    limit?: number;
+  }) => {
+    return adminAxios.get('/admin/learner-models', { params });
+  },
+
+  getDetail: async (userId: string, params?: {
+    pathId?: string;
+    mode?: 'global' | 'path' | 'teaching';
+  }) => {
+    return adminAxios.get(`/admin/learner-models/${userId}`, { params });
+  },
+
+  recompute: async (userId: string, data?: {
+    pathId?: string;
+    scope?: 'global' | 'path' | 'teaching';
+  }) => {
+    return adminAxios.post(`/admin/learner-models/${userId}/recompute`, data || {});
+  },
+
+  getEvidence: async (userId: string, params?: {
+    pathId?: string;
+    limit?: number;
+  }) => {
+    return adminAxios.get(`/admin/learner-models/${userId}/evidence`, { params });
+  }
+};
+
 /**
  * Agent 管理 API
  */
@@ -743,18 +777,6 @@ export const adminDebugSandboxApi = {
 
     
 
-    /**
-
-     * 获取学习会话状态
-
-     */
-
-    getSessionState: async (sessionId: string) => {
-
-      return adminAxios.get(`/admin/platform/session-state/${sessionId}`);
-
-    },
-
   };
 
   /**
@@ -824,6 +846,9 @@ export const adminApi = {
     
     // Conversations
     ...adminConversationsApi,
+
+    // Learner Models
+    ...adminLearnerModelsApi,
     
     // Agents
     ...adminAgentsApi,

@@ -97,6 +97,8 @@ export interface BatchLabelerOutput {
   overallConfidence: number;
 }
 
+const BATCH_ANDERSON_LABELER_MAX_TOKENS = 6000;
+
 const BATCH_LABELER_SYSTEM_PROMPT = `你是教育标注专家，使用安德森教育目标分类框架标注学习任务。
 
 【安德森知识类型】
@@ -175,7 +177,10 @@ ${tasksJson}
     
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'batch-anderson-labeler' };
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({
+      messages,
+      max_tokens: BATCH_ANDERSON_LABELER_MAX_TOKENS
+    }, caller, {});
     
     console.log('[BatchAndersonLabeler] 响应结构:', JSON.stringify({
       id: response.id,

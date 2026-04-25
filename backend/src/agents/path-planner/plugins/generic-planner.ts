@@ -73,7 +73,7 @@ export const genericPlanner: AgentPlugin = {
 【严禁】
 - 不要输出 proposal、learningPath、path 等嵌套结构
 - 不要输出 duration、estimatedTime、time 等时间相关字段`,
-    model: 'deepseek-chat',
+    model: process.env.AI_MODEL || '',
     timeout: 120000,
     retries: 2
   },

@@ -34,13 +34,6 @@ export { registerAllPlugins, getAllPlugins } from './plugins';
 // Path Agent
 export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from './path-agent';
 
-// Content Agent v3.0 (状态感知对话型)
-export { 
-  contentAgentV3Definition, 
-  registerContentAgentV3,
-  ContentAgentV3 
-} from './content-agent-v3';
-
 // Progress Agent
 export {
   progressAgentDefinition,
@@ -57,11 +50,16 @@ export {
 
 // User Profile Agent
 export {
-  userProfileAgentDefinition,
-  userProfileAgentHandler as userProfileAgentHandlerFn,
-  UserProfileAgent,
-  userProfileAgent
-} from './user-profile-agent';
+  learnerModelAgentDefinition,
+  learnerModelAgentHandler as learnerModelAgentHandlerFn,
+  LearnerModelAgent,
+  learnerModelAgent
+} from './learner-model-agent';
+
+export {
+  teachingTurnAgentDefinition,
+  teachingTurnAgentHandler,
+} from './teaching-turn-agent';
 
 // Path Adjustment
 export {
@@ -98,10 +96,10 @@ export {
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from './path-agent';
-import { contentAgentV3Definition, ContentAgentV3 } from './content-agent-v3';
 import { progressAgentDefinition, progressAgentHandler as progressAgentHandlerFn } from './progress-agent';
-import { userProfileAgentDefinition, userProfileAgentHandler as userProfileAgentHandlerFn } from './user-profile-agent';
+import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from './goal-conversation-agent';
+import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from './teaching-turn-agent';
 import { peerAgentDefinition, peerAgentHandler } from './peer-agent';
 import { summaryAgentDefinition, summaryAgentHandler } from './summary-agent';
 import { sessionEvaluationAgentDefinition, sessionEvaluationAgentHandler } from './session-evaluation-agent';
@@ -109,10 +107,10 @@ import { getAgentManifest } from '../services/agent-manifest.service';
 
 export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
-  contentAgentV3Definition,
   progressAgentDefinition,
-  userProfileAgentDefinition,
+  learnerModelAgentDefinition,
   goalConversationAgentDefinition,
+  teachingTurnAgentDefinition,
   peerAgentDefinition,
   summaryAgentDefinition,
   sessionEvaluationAgentDefinition
@@ -120,13 +118,10 @@ export const allAgentDefinitions: AgentDefinition[] = [
 
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
   'path-agent': pathAgentHandlerFn,
-  'content-agent-v3': async (input: any, context: any) => {
-    const agent = new ContentAgentV3();
-    return await (agent as any).execute(input);
-  },
   'progress-agent': progressAgentHandlerFn,
-  'user-profile-agent': userProfileAgentHandlerFn,
+  'learner-model-agent': learnerModelAgentHandlerFn,
   'goal-conversation-agent': goalConversationAgentHandler,
+  'teaching-turn-agent': teachingTurnAgentHandler,
   'peer-agent': peerAgentHandler,
   'summary-agent': summaryAgentHandler,
   'session-evaluation-agent': sessionEvaluationAgentHandler

@@ -113,7 +113,7 @@ export interface SessionEvaluationOutput {
 }
 
 export interface SessionEvaluationResult {
-  source: 'model';
+  source: 'model' | 'fallback';
   evaluation: SessionEvaluationOutput;
 }
 
@@ -169,7 +169,10 @@ JSON 模板：
       const gateway = getAPIGateway();
       const caller: CallerInfo = { agentId: 'session-evaluation-agent' };
       const response = await gateway.execute({
-        messages: [{ role: 'system', content: systemPrompt }]
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '请输出严格 JSON，会话评分只允许返回数值字段与 reasoning。' },
+        ]
       }, caller, { userId: 'system' });
 
       const content = response.choices[0]?.message.content || '{}';
@@ -196,7 +199,11 @@ JSON 模板：
     } catch (e) {
       error = e instanceof Error ? e : new Error('Unknown error');
       logger.error('[SessionEvaluationAgent] 评估失败', { error });
-      throw error;
+      result = {
+        source: 'fallback',
+        evaluation: this.buildFallbackEvaluation(input),
+      };
+      return result;
     } finally {
       try {
         const durationMs = Date.now() - startTime;
@@ -312,6 +319,31 @@ JSON 模板：
       throw new Error('SESSION_EVALUATION_OUTPUT_INVALID: reasoning cannot be empty');
     }
     return text;
+  }
+
+  private buildFallbackEvaluation(input: SessionEvaluationInput): SessionEvaluationOutput {
+    const progressScores = input.knowledgePoints
+      .map((item) => Number(item.progress || 0))
+      .filter((value) => !Number.isNaN(value));
+    const avgProgress = progressScores.length > 0
+      ? progressScores.reduce((sum, value) => sum + value, 0) / progressScores.length
+      : 0;
+
+    const masteredCount = input.knowledgePoints.filter((item) => item.status === 'mastered').length;
+    const reviewCount = input.knowledgePoints.filter((item) => item.status === 'review').length;
+    const learningCount = input.knowledgePoints.filter((item) => item.status === 'learning').length;
+
+    const sessionKtl = Math.max(0, Math.min(10, Number((avgProgress / 12 + masteredCount * 1.1).toFixed(2))));
+    const sessionLf = Math.max(0, Math.min(10, Number((Math.min(input.sessionInfo.durationMinutes / 12, 6) + reviewCount * 0.9).toFixed(2))));
+    const sessionLss = Math.max(0, Math.min(10, Number((Math.max(2, reviewCount * 1.2 + learningCount * 0.8 + input.sessionInfo.durationMinutes / 20)).toFixed(2))));
+
+    return {
+      sessionLss,
+      sessionKtl,
+      sessionLf,
+      confidence: 0.45,
+      reasoning: '模型评估结果不可用，已根据知识点进度、复习状态与课程时长生成兜底评分。',
+    };
   }
 }
 

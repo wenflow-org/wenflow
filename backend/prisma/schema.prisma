@@ -471,31 +471,6 @@ model goal_conversations {
   users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model interactive_sessions {
-  id                 String         @id
-  userId             String
-  taskId             String
-  pathId             String
-  stage              String
-  activationQuestion String?
-  segments           String         @default("[]")
-  userResponses      String         @default("[]")
-  understandingScore Float?
-  understandingLevel String?
-  skippedActivation  Boolean        @default(false)
-  completedAt        DateTime?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime
-  learning_paths     learning_paths @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  subtasks           subtasks       @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  users              users          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([createdAt])
-  @@index([stage])
-  @@index([taskId])
-  @@index([userId])
-}
-
 model learningContents {
   id          String   @id
   subtaskId   String
@@ -554,6 +529,10 @@ model learning_metrics {
 model learning_paths {
   id                   String                 @id
   userId               String
+  sourcePathId         String?
+  replanMode           String?
+  replanTriggerSource  String?
+  replanReason         String?
   title                String
   name                 String?
   description          String?
@@ -569,7 +548,6 @@ model learning_paths {
   updatedAt            DateTime
   deadline             DateTime?
   deadlineText         String?
-  interactive_sessions interactive_sessions[]
   users                users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   milestones           milestones[]
 
@@ -577,20 +555,33 @@ model learning_paths {
   @@index([userId])
 }
 
-model learning_sessions {
-  id        String    @id
-  userId    String
-  goalId    String?
-  taskId    String?
-  startTime DateTime  @default(now())
-  endTime   DateTime?
-  duration  Int?
-  status    String    @default("active")
-  messages  String?
-  state     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
-  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model teaching_sessions {
+  id             String   @id
+  userId         String
+  taskId         String
+  learningPathId String?
+  milestoneId    String?
+  subject        String
+  topic          String
+  taskType       String   @default("practice")
+  mode           String   @default("tutor")
+  status         String   @default("active")
+  messages       String?
+  knowledgeState String?
+  teachingState  String?
+  summary        String?
+  evaluation     String?
+  startTime      DateTime @default(now())
+  endTime        DateTime?
+  duration       Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+  users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([status])
+  @@index([userId, taskId, status])
 }
 
 model milestones {
@@ -707,7 +698,6 @@ model subtasks {
   knowledgeType        String?
   learningObjectives   String?
   transferable         Boolean?               @default(false)
-  interactive_sessions interactive_sessions[]
   learningContents     learningContents[]
   milestones           milestones             @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
   users                users?                 @relation(fields: [usersId], references: [id])
@@ -830,11 +820,10 @@ model users {
   content_feedback         content_feedback[]
   dialogue_sessions        dialogue_sessions[]
   goal_conversations       goal_conversations[]
-  interactive_sessions     interactive_sessions[]
   learning_goals           learning_goals[]
   learning_metrics         learning_metrics[]
   learning_paths           learning_paths[]
-  learning_sessions        learning_sessions[]
+  teaching_sessions        teaching_sessions[]
   path_decompositions      path_decompositions[]
   student_baselines        student_baselines?
   subtasks                 subtasks[]

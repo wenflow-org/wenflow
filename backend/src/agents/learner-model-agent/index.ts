@@ -1,7 +1,7 @@
 /**
- * User Profile Agent
+ * Learner Model Agent
  * 
- * 用户画像Agent - 从多个数据源整合用户画像，向其他Agent提供个性化参数
+ * 学习者模型Agent - 从多个数据源整合学习者画像、状态与知识记忆，向其他Agent提供个性化参数
  */
 
 import {
@@ -14,18 +14,20 @@ import { EventBus, getEventBus } from '../../gateway/event-bus';
 import { profileAggregator } from './profile-aggregator';
 import { personalizationEngine } from './personalization';
 import {
-  UnifiedUserProfile,
-  PersonalizationConfig,
+  LearnerSnapshot,
+  LearnerModelProfile,
+  LearnerPersonalizationConfig,
   ProfileUpdateSource
 } from './types';
+import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
 
-export const userProfileAgentDefinition: AgentDefinition = {
-  id: 'user-profile-agent',
-  name: '用户画像Agent',
+export const learnerModelAgentDefinition: AgentDefinition = {
+  id: 'learner-model-agent',
+  name: '学习者模型Agent',
   version: '1.0.0',
   type: 'custom',
   category: 'standard',
-  description: '整合多源用户数据，提供统一画像和个性化参数',
+  description: '整合多源学习数据，提供统一学习者快照和个性化参数',
   
   capabilities: [
     'profile-aggregation',
@@ -48,20 +50,18 @@ export const userProfileAgentDefinition: AgentDefinition = {
   
   inputSchema: {
     type: 'object',
-    properties: {
-      action: { type: 'string', enum: ['get', 'update', 'get-personalization'] },
-      userId: { type: 'string' },
-      dataType: { type: 'string' },
-      data: { type: 'object' }
+      properties: {
+        action: { type: 'string', enum: ['get', 'update', 'get-personalization', 'get-snapshot'] },
+        userId: { type: 'string' },
+        dataType: { type: 'string' },
+        data: { type: 'object' }
     }
   },
   
   outputSchema: {
     type: 'object',
     properties: {
-      profile: { type: 'object' },
-      personalization: { type: 'object' },
-      changes: { type: 'array' }
+      learner: { type: 'object' }
     }
   },
   
@@ -72,8 +72,8 @@ export const userProfileAgentDefinition: AgentDefinition = {
   }
 };
 
-class UserProfileAgent {
-  private profileCache: Map<string, { profile: UnifiedUserProfile; timestamp: number }> = new Map();
+class LearnerModelAgent {
+  private profileCache: Map<string, { profile: LearnerModelProfile; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
   
   async handler(input: AgentInput, context: AgentContext): Promise<AgentOutput> {
@@ -86,7 +86,17 @@ class UserProfileAgent {
       
       switch (action) {
         case 'get':
-          result = await this.getProfile(context.userId);
+          result = await this.getSnapshot({ userId: context.userId, mode: 'global' });
+          break;
+
+        case 'get-snapshot':
+          result = await this.getSnapshot({
+            userId: context.userId,
+            learningPathId: input.metadata?.learningPathId,
+            milestoneId: input.metadata?.milestoneId,
+            taskId: input.metadata?.taskId,
+            mode: input.metadata?.mode,
+          });
           break;
           
         case 'update':
@@ -102,39 +112,49 @@ class UserProfileAgent {
       }
       
       const duration = Date.now() - startTime;
-      userProfileAgentDefinition.stats.callCount++;
-      userProfileAgentDefinition.stats.avgLatency = 
-        (userProfileAgentDefinition.stats.avgLatency * (userProfileAgentDefinition.stats.callCount - 1) + duration) 
-        / userProfileAgentDefinition.stats.callCount;
+      learnerModelAgentDefinition.stats.callCount++;
+      learnerModelAgentDefinition.stats.avgLatency = 
+        (learnerModelAgentDefinition.stats.avgLatency * (learnerModelAgentDefinition.stats.callCount - 1) + duration) 
+        / learnerModelAgentDefinition.stats.callCount;
       
       return {
         success: true,
         userVisible: action === 'get-personalization'
           ? '已生成个性化学习建议'
-          : (action === 'update' ? '用户画像已更新' : '用户画像已获取'),
+          : (action === 'update' ? '学习者模型已更新' : '学习者快照已获取'),
         internal: {
-          action,
-          result
+          core: {
+            stage: 'snapshot-ready',
+            confidence: result.confidence || 0.8,
+            isCompleted: true,
+          },
+          ext: {
+            learner: {
+              action,
+              ...result,
+            }
+          }
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
-          agentId: 'user-profile-agent',
-          agentName: '用户画像Agent',
+          agentId: 'learner-model-agent',
+          agentName: '学习者模型Agent',
           agentType: 'custom',
           confidence: result.confidence || 0.8,
           generatedAt: new Date().toISOString()
-        },
-        ...result
+        }
       };
     } catch (error) {
-      console.error('[UserProfileAgent] Error:', error);
+      console.error('[LearnerModelAgent] Error:', error);
       
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
+        userVisible: '学习者模型生成失败',
+        schemaVersion: 'agent-output-v1',
         metadata: {
-          agentId: 'user-profile-agent',
-          agentName: '用户画像Agent',
+          agentId: 'learner-model-agent',
+          agentName: '学习者模型Agent',
           agentType: 'custom',
           confidence: 0,
           generatedAt: new Date().toISOString()
@@ -143,7 +163,7 @@ class UserProfileAgent {
     }
   }
   
-  async getProfile(userId: string): Promise<{ profile: UnifiedUserProfile; confidence: number }> {
+  async getProfile(userId: string): Promise<{ profile: LearnerModelProfile; confidence: number }> {
     const cached = this.profileCache.get(userId);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return { profile: cached.profile, confidence: 0.9 };
@@ -162,7 +182,7 @@ class UserProfileAgent {
   async updateProfile(
     userId: string,
     source: ProfileUpdateSource
-  ): Promise<{ profile: UnifiedUserProfile; changes: string[] }> {
+  ): Promise<{ profile: LearnerModelProfile; changes: string[] }> {
     await profileAggregator.applyUpdate(userId, source);
     
     this.profileCache.delete(userId);
@@ -172,7 +192,7 @@ class UserProfileAgent {
     const eventBus = getEventBus();
     await eventBus.emit({
       type: 'profile:updated',
-      source: 'user-profile-agent',
+      source: 'learner-model-agent',
       userId,
       data: {
         changes: result.changes,
@@ -189,8 +209,8 @@ class UserProfileAgent {
   }
   
   async getPersonalization(userId: string): Promise<{
-    profile: UnifiedUserProfile;
-    config: PersonalizationConfig;
+    profile: LearnerModelProfile;
+    config: LearnerPersonalizationConfig;
     promptEnhancement: string;
     contentHints: {
       preferredFormats: string[];
@@ -205,6 +225,20 @@ class UserProfileAgent {
     const contentHints = personalizationEngine.generateContentHints(profile);
     
     return { profile, config, promptEnhancement, contentHints };
+  }
+
+  async getSnapshot(input: {
+    userId: string;
+    learningPathId?: string;
+    milestoneId?: string;
+    taskId?: string;
+    mode?: 'global' | 'path' | 'teaching';
+  }): Promise<{ snapshot: LearnerSnapshot; confidence: number }> {
+    const snapshot = await learnerSnapshotService.getSnapshot(input);
+    return {
+      snapshot,
+      confidence: snapshot.freshness.confidence,
+    };
   }
   
   setupEventListeners(eventBus: EventBus): void {
@@ -246,14 +280,14 @@ class UserProfileAgent {
   }
 }
 
-const userProfileAgent = new UserProfileAgent();
+const learnerModelAgent = new LearnerModelAgent();
 
-export async function userProfileAgentHandler(
+export async function learnerModelAgentHandler(
   input: AgentInput,
   context: AgentContext
 ): Promise<AgentOutput> {
-  return userProfileAgent.handler(input, context);
+  return learnerModelAgent.handler(input, context);
 }
 
-export { UserProfileAgent, userProfileAgent };
-export default userProfileAgentHandler;
+export { LearnerModelAgent, learnerModelAgent };
+export default learnerModelAgentHandler;

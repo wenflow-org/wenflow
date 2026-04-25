@@ -14,6 +14,8 @@ import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import learningService from '../services/learning/learning.service';
+import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
 
 const router = Router();
 
@@ -22,48 +24,21 @@ router.use(authMiddleware);
 
 /**
  * 开始授课会话
- * POST /api/ai-teaching/sessions
+ * POST /api/ai-teaching/tasks/:taskId/session
  */
-router.post('/sessions', async (req: any, res) => {
+router.post('/tasks/:taskId/session', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ success: false, error: '未登录' });
     }
 
-    const { subject, topic, difficulty = 5, taskId } = req.body;
-    if (!subject || !topic) {
-      return res.status(400).json({
-        success: false,
-        error: '缺少必要参数：subject, topic',
-      });
-    }
+    const { taskId } = req.params;
 
-    // 从任务详情中获取 taskType
-    let taskType: 'reading' | 'practice' | 'project' | 'quiz' = 'practice';
-    if (taskId) {
-      try {
-        const task = await prisma.subtasks.findUnique({
-          where: { id: taskId },
-          select: { taskType: true },
-        });
-        if (task?.taskType) {
-          taskType = task.taskType as 'reading' | 'practice' | 'project' | 'quiz';
-        }
-      } catch (error) {
-        logger.warn(`获取任务 ${taskId} 的 taskType 失败：${error}`);
-      }
-    }
-
-    const sessionId = `teaching_${Date.now()}_${userId}`;
+    await learningService.assertTaskReadyForLearning(taskId, userId);
 
     const session = await aiTeachingOrchestrator.startSession({
       userId,
-      sessionId,
-      subject,
-      topic,
-      difficulty,
-      taskType,
       taskId,
     });
 
@@ -99,15 +74,9 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
 
     const { sessionId } = req.params;
     
-    // 验证会话所有权
-    if (!sessionId.includes(userId)) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '无权访问此会话' }
-      });
-    }
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
 
-    const { message, lssInputs } = req.body;
+    const { message } = req.body;
 
     if (!message) {
       return res.status(400).json({
@@ -118,8 +87,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
 
     const result = await aiTeachingOrchestrator.processStudentMessage(
       sessionId,
-      message,
-      lssInputs
+      message
     );
 
     res.json({
@@ -170,13 +138,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
 
     const { sessionId } = req.params;
     
-    // 验证会话所有权
-    if (!sessionId.includes(userId)) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '无权访问此会话' }
-      });
-    }
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
     
     const result = await aiTeachingOrchestrator.endSession(sessionId);
 
@@ -282,13 +244,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
 
     const { sessionId } = req.params;
     
-    // 验证会话所有权
-    if (!sessionId.includes(userId)) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '无权访问此会话' }
-      });
-    }
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
 
     const { message } = req.body;
 
@@ -501,13 +457,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
 
     const { sessionId } = req.params;
     
-    // 验证会话所有权
-    if (!sessionId.includes(userId)) {
-      return res.status(403).json({
-        success: false,
-        error: { message: '无权访问此会话' }
-      });
-    }
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
     
     const session = await aiTeachingOrchestrator.getSessionDetail(sessionId, userId);
 
