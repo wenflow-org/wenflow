@@ -339,7 +339,8 @@ http {
     $configContent = $configContent.Replace('__BACKEND_PORT__', [string]$BackendPort)
 
     $configPath = Join-Path $RuntimeDir $ConfigFileName
-    Set-Content -Path $configPath -Value $configContent -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($configPath, $configContent, $utf8NoBom)
 
     Write-Host "Validating Nginx config..." -ForegroundColor Yellow
     & $NginxExecutable -t -p "$RuntimeDir\" -c $ConfigFileName
