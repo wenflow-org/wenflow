@@ -4,7 +4,10 @@ param(
     [switch]$NoBrowser,
     [switch]$Setup,
     [switch]$EditEnv,
-    [switch]$SkipPrisma
+    [switch]$SkipPrisma,
+    [switch]$UseNginx,
+    [string]$Domain = '',
+    [string]$NginxExePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,6 +79,50 @@ function Ensure-NpmDependencies {
     }
 }
 
+function Ensure-PrismaReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackendPath
+    )
+
+    Write-Host "Preparing database schema (Prisma)..." -ForegroundColor Yellow
+    Push-Location $BackendPath
+    try {
+        npx prisma generate
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "prisma generate failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
+        npx prisma db push
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "prisma db push failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+function Ensure-FrontendBuild {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FrontendPath
+    )
+
+    Write-Host "Building frontend for Nginx..." -ForegroundColor Yellow
+    Push-Location $FrontendPath
+    try {
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "frontend build failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 function Get-EnvValue {
     param(
         [Parameter(Mandatory = $true)]
@@ -95,6 +142,247 @@ function Get-EnvValue {
     }
 
     return (($line -replace "^\s*$escapedKey\s*=", '').Trim())
+}
+
+function Set-EnvValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    $content = @()
+    if (Test-Path $Path) {
+        $content = @(Get-Content -Path $Path)
+    }
+
+    $escapedKey = [Regex]::Escape($Key)
+    $newLine = "$Key=$Value"
+    $updated = $false
+
+    for ($i = 0; $i -lt $content.Count; $i++) {
+        if ($content[$i] -match "^\s*$escapedKey\s*=") {
+            $content[$i] = $newLine
+            $updated = $true
+            break
+        }
+    }
+
+    if (-not $updated) {
+        if ($content.Count -gt 0 -and $content[-1] -ne '') {
+            $content += ''
+        }
+        $content += $newLine
+    }
+
+    Set-Content -Path $Path -Value $content -Encoding UTF8
+}
+
+function Resolve-NginxExecutable {
+    param(
+        [string]$PreferredPath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath)) {
+        if (Test-Path $PreferredPath) {
+            return $PreferredPath
+        }
+
+        Write-Host "Nginx executable not found: $PreferredPath" -ForegroundColor Red
+        exit 1
+    }
+
+    $nginxCommand = Get-Command nginx -ErrorAction SilentlyContinue
+    if ($nginxCommand) {
+        return $nginxCommand.Source
+    }
+
+    Write-Host "Nginx not found in PATH. Install Nginx or use -NginxExePath." -ForegroundColor Red
+    exit 1
+}
+
+function Ensure-BackendEnvForNginx {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EnvPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ServerName
+    )
+
+    $defaultLocalCorsOrigin = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
+    if ($ServerName -eq 'localhost') {
+        $frontendUrl = 'http://localhost'
+        $corsOrigin = $defaultLocalCorsOrigin
+    } else {
+        $frontendUrl = "http://$ServerName"
+        $corsOrigin = "http://$ServerName,$defaultLocalCorsOrigin"
+    }
+
+    Set-EnvValue -Path $EnvPath -Key 'FRONTEND_URL' -Value $frontendUrl
+    Set-EnvValue -Path $EnvPath -Key 'CORS_ORIGIN' -Value $corsOrigin
+
+    Write-Host "Updated backend env for Nginx mode:" -ForegroundColor DarkGray
+    Write-Host "  FRONTEND_URL=$frontendUrl" -ForegroundColor DarkGray
+    Write-Host "  CORS_ORIGIN=$corsOrigin" -ForegroundColor DarkGray
+}
+
+function Ensure-NginxReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$NginxExecutable,
+        [Parameter(Mandatory = $true)]
+        [string]$RuntimeDir,
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigFileName,
+        [Parameter(Mandatory = $true)]
+        [string]$ServerName,
+        [Parameter(Mandatory = $true)]
+        [string]$FrontendDistPath,
+        [int]$BackendPort = 3001
+    )
+
+    if (-not (Test-Path $RuntimeDir)) {
+        New-Item -ItemType Directory -Path $RuntimeDir | Out-Null
+    }
+
+    $logsDir = Join-Path $RuntimeDir 'logs'
+    if (-not (Test-Path $logsDir)) {
+        New-Item -ItemType Directory -Path $logsDir | Out-Null
+    }
+
+    $tempDir = Join-Path $RuntimeDir 'temp'
+    if (-not (Test-Path $tempDir)) {
+        New-Item -ItemType Directory -Path $tempDir | Out-Null
+    }
+
+    $frontendDistNginxPath = $FrontendDistPath.Replace('\', '/')
+    $nginxHome = Split-Path -Parent $NginxExecutable
+    $mimeTypesPath = (Join-Path $nginxHome 'conf\mime.types').Replace('\', '/')
+    if (-not (Test-Path ($mimeTypesPath -replace '/', '\\'))) {
+        Write-Host "Nginx mime.types not found near executable: $mimeTypesPath" -ForegroundColor Red
+        exit 1
+    }
+
+    $configTemplate = @'
+worker_processes  1;
+
+error_log  logs/error.log warn;
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       __MIME_TYPES__;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+    keepalive_timeout  65;
+
+    client_body_temp_path temp/client_body;
+    proxy_temp_path       temp/proxy;
+    fastcgi_temp_path     temp/fastcgi;
+    uwsgi_temp_path       temp/uwsgi;
+    scgi_temp_path        temp/scgi;
+
+    server {
+        listen       80;
+        server_name  __SERVER_NAME__;
+
+        root __FRONTEND_DIST__;
+        index index.html;
+
+        location /api {
+            proxy_pass http://127.0.0.1:__BACKEND_PORT__;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_cache_bypass $http_upgrade;
+            proxy_read_timeout 300s;
+        }
+
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+
+        gzip on;
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_types text/plain text/css text/xml text/javascript application/json application/javascript application/xml+rss application/rss+xml font/truetype font/opentype application/vnd.ms-fontobject image/svg+xml;
+
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
+'@
+
+    $configContent = $configTemplate
+    $configContent = $configContent.Replace('__MIME_TYPES__', $mimeTypesPath)
+    $configContent = $configContent.Replace('__SERVER_NAME__', "$ServerName localhost 127.0.0.1")
+    $configContent = $configContent.Replace('__FRONTEND_DIST__', $frontendDistNginxPath)
+    $configContent = $configContent.Replace('__BACKEND_PORT__', [string]$BackendPort)
+
+    $configPath = Join-Path $RuntimeDir $ConfigFileName
+    Set-Content -Path $configPath -Value $configContent -Encoding UTF8
+
+    Write-Host "Validating Nginx config..." -ForegroundColor Yellow
+    & $NginxExecutable -t -p "$RuntimeDir\" -c $ConfigFileName
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Nginx config validation failed" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+
+    $pidFile = Join-Path $RuntimeDir 'logs\nginx.pid'
+    $canReload = $false
+    if (Test-Path $pidFile) {
+        try {
+            $pidValue = (Get-Content -Path $pidFile | Select-Object -First 1).Trim()
+            if ($pidValue -match '^\d+$') {
+                $existingProcess = Get-Process -Id ([int]$pidValue) -ErrorAction SilentlyContinue
+                if ($existingProcess) {
+                    $canReload = $true
+                }
+            }
+        } catch {
+            $canReload = $false
+        }
+    }
+
+    if ($canReload) {
+        Write-Host "Reloading Nginx..." -ForegroundColor Yellow
+        & $NginxExecutable -s reload -p "$RuntimeDir\" -c $ConfigFileName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Nginx reload failed, trying fresh start..." -ForegroundColor DarkYellow
+            & $NginxExecutable -p "$RuntimeDir\" -c $ConfigFileName
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Nginx start failed" -ForegroundColor Red
+                exit $LASTEXITCODE
+            }
+        }
+    } else {
+        Write-Host "Starting Nginx..." -ForegroundColor Yellow
+        & $NginxExecutable -p "$RuntimeDir\" -c $ConfigFileName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Nginx start failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    }
 }
 
 Write-Host "Starting WenFlow..." -ForegroundColor Cyan
@@ -152,31 +440,6 @@ if ($needsEnvSetup) {
     }
 }
 
-function Ensure-PrismaReady {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$BackendPath
-    )
-
-    Write-Host "Preparing database schema (Prisma)..." -ForegroundColor Yellow
-    Push-Location $BackendPath
-    try {
-        npx prisma generate
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "prisma generate failed" -ForegroundColor Red
-            exit $LASTEXITCODE
-        }
-
-        npx prisma db push
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "prisma db push failed" -ForegroundColor Red
-            exit $LASTEXITCODE
-        }
-    } finally {
-        Pop-Location
-    }
-}
-
 Ensure-NpmDependencies -ProjectPath $backendPath -ProjectName 'Backend'
 Ensure-NpmDependencies -ProjectPath $frontendPath -ProjectName 'Frontend'
 
@@ -186,9 +449,20 @@ if (-not $SkipPrisma) {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }
 
-Write-Host "Checking ports (3001, 5173)..." -ForegroundColor Yellow
+$serverName = $Domain.Trim()
+if ([string]::IsNullOrWhiteSpace($serverName)) {
+    $serverName = 'localhost'
+}
+
+if ($UseNginx) {
+    Ensure-BackendEnvForNginx -EnvPath $backendEnvPath -ServerName $serverName
+}
+
+Write-Host "Checking ports..." -ForegroundColor Yellow
 Stop-PortProcess -Port 3001
-Stop-PortProcess -Port 5173
+if (-not $UseNginx) {
+    Stop-PortProcess -Port 5173
+}
 
 Write-Host "Starting backend on port 3001..." -ForegroundColor Green
 Start-Process -FilePath 'powershell' -ArgumentList '-NoExit', '-Command', 'npm run dev' -WorkingDirectory $backendPath | Out-Null
@@ -199,6 +473,47 @@ if ($backendReady) {
     Write-Host "Backend is ready." -ForegroundColor Green
 } else {
     Write-Host "Backend did not become ready in time. Check the backend window for errors." -ForegroundColor Yellow
+}
+
+if ($UseNginx) {
+    Ensure-FrontendBuild -FrontendPath $frontendPath
+
+    $nginxExecutable = Resolve-NginxExecutable -PreferredPath $NginxExePath
+    $nginxRuntimeDir = Join-Path $scriptDir 'runtime\nginx'
+    $nginxConfigFile = 'wenflow.nginx.conf'
+    $frontendDistPath = Join-Path $frontendPath 'dist'
+
+    if (-not (Test-Path $frontendDistPath)) {
+        Write-Host "Frontend dist folder missing: $frontendDistPath" -ForegroundColor Red
+        exit 1
+    }
+
+    Ensure-NginxReady -NginxExecutable $nginxExecutable -RuntimeDir $nginxRuntimeDir -ConfigFileName $nginxConfigFile -ServerName $serverName -FrontendDistPath $frontendDistPath -BackendPort 3001
+
+    Write-Host "Waiting for Nginx health check..." -ForegroundColor Yellow
+    $nginxReady = Test-ServiceReady -Url 'http://127.0.0.1/health'
+    if ($nginxReady) {
+        Write-Host "Nginx gateway is ready." -ForegroundColor Green
+    } else {
+        Write-Host "Nginx health check failed. See runtime/nginx/logs/error.log" -ForegroundColor Yellow
+    }
+
+    $browserUrl = "http://$serverName"
+    if ($serverName -eq 'localhost') {
+        $browserUrl = 'http://localhost'
+    }
+
+    if (-not $NoBrowser) {
+        Write-Host "Opening browser..." -ForegroundColor Cyan
+        Start-Process $browserUrl
+    }
+
+    Write-Host "`nNginx deployment startup finished." -ForegroundColor Green
+    Write-Host "Backend health: http://localhost:3001/health"
+    Write-Host "Gateway health: http://127.0.0.1/health"
+    Write-Host "Frontend UI:    $browserUrl"
+    Write-Host "Nginx config:   runtime/nginx/$nginxConfigFile"
+    exit 0
 }
 
 Write-Host "Starting frontend on port 5173..." -ForegroundColor Green

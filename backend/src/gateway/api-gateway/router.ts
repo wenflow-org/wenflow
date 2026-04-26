@@ -22,6 +22,10 @@ interface AgentConfigRecord {
 }
 
 export class APIRouter {
+  private resolveBaseEndpoint(): string {
+    return (process.env.AI_API_URL || '').trim() || 'https://api.openai.com/v1';
+  }
+
   private withRequestTimeout(route: ResolvedRoute, agentId?: string): ResolvedRoute {
     const timeoutInfo = getAgentRequestTimeoutInfo(agentId);
     return {
@@ -102,7 +106,7 @@ export class APIRouter {
 
       return {
         providerId: `user-agent:${userId}:${agentId}`,
-        endpoint: config.endpoint || platformConfig?.apiUrl || process.env.AI_API_ENDPOINT || 'https://api.openai.com/v1',
+        endpoint: config.endpoint || platformConfig?.apiUrl || this.resolveBaseEndpoint(),
         apiKey: config.apiKey || platformConfig?.apiKey || process.env.AI_API_KEY || '',
         model: this.resolveModel(config.model || platformConfig?.defaultModel),
         temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
@@ -196,8 +200,7 @@ export class APIRouter {
 
     const endpoint = (isReasoning ? config.endpoint || platformConfig?.reasoningEndpoint : config.endpoint)
       || platformConfig?.apiUrl
-      || process.env.AI_API_ENDPOINT
-      || 'https://api.openai.com/v1';
+      || this.resolveBaseEndpoint();
 
     const apiKey = config.apiKey
       || platformConfig?.apiKey
@@ -232,7 +235,7 @@ export class APIRouter {
 
       return {
         providerId: 'platform',
-        endpoint: config.apiUrl || process.env.AI_API_ENDPOINT || 'https://api.openai.com/v1',
+        endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: config.apiKey || process.env.AI_API_KEY || '',
         model: this.resolveModel(config.defaultModel),
         temperature: config.defaultTemperature ?? 0.7,
@@ -251,7 +254,7 @@ export class APIRouter {
   private getFallbackConfig(): ResolvedRoute {
     return {
       providerId: 'env-default',
-      endpoint: process.env.AI_API_ENDPOINT || 'https://api.openai.com/v1',
+      endpoint: this.resolveBaseEndpoint(),
       apiKey: process.env.AI_API_KEY || '',
       model: this.resolveModel(),
       temperature: 0.7,

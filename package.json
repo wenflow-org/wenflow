@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1",
+    "dev:nginx": "powershell -ExecutionPolicy Bypass -File ./start-dev.ps1 -UseNginx",
     "env:setup": "powershell -ExecutionPolicy Bypass -File ./setup-env.ps1",
     "env:edit": "powershell -ExecutionPolicy Bypass -File ./setup-env.ps1 -EditOnly",
     "test:contentagent": "node backend/test-content-agent-browser.mjs",

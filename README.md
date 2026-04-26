@@ -96,6 +96,21 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 ./start-dev.ps1
 ```
 
+### 一键测试部署（本机 Nginx，HTTP）
+
+```bash
+# 依赖本机已安装 nginx（并已加入 PATH）
+./start-dev.ps1 -UseNginx
+
+# 指定域名（不填默认 localhost）
+./start-dev.ps1 -UseNginx -Domain test.example.com
+
+# nginx 不在 PATH 时，指定可执行文件路径
+./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
+```
+
+说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`。
+
 ### 首次环境配置（推荐）
 
 ```bash
