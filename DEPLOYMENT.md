@@ -7,12 +7,13 @@
 | Node.js | 18+ | 运行环境 |
 | npm | 9+ | 包管理器 |
 | Git | 2.x | 版本控制 |
+| Nginx | 最新稳定版 | 可选，仅 `-UseNginx` 模式需要 |
 
 ---
 
 ## 快速开始
 
-### 方式一：一键启动（Windows）
+### 方式一：一键启动（Windows，开发模式）
 
 ```powershell
 # 在项目根目录执行
@@ -20,82 +21,95 @@
 ```
 
 脚本会自动：
-- 检查并清理端口占用
-- 启动后端服务（端口 3001）
-- 启动前端服务（端口 5173）
+- 检查并补齐 `backend/.env`（必要时触发配置向导）
+- 自动安装依赖（缺少 `node_modules` 时）
+- 自动执行 Prisma 初始化（`prisma generate` + `prisma db push`）
+- 清理开发端口占用（3001、5173）
+- 启动后端与前端开发服务
 - 自动打开浏览器
 
-### 方式二：手动启动
+如需跳过 Prisma 初始化：
 
-#### 1. 克隆项目
-
-```bash
-git clone https://github.com/your-repo/wenflow.git
-cd wenflow
+```powershell
+.\start-dev.ps1 -SkipPrisma
 ```
 
-#### 2. 启动后端
+### 方式二：一键测试部署（本机 Nginx，HTTP）
 
-```bash
+```powershell
+# Nginx 在 PATH 中
+.\start-dev.ps1 -UseNginx
+
+# 指定域名
+.\start-dev.ps1 -UseNginx -Domain wenflow.org
+
+# Nginx 不在 PATH 中
+.\start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
+```
+
+`-UseNginx` 模式会自动：
+- 构建前端（`npm run build`）
+- 生成运行时配置 `runtime/nginx/wenflow.nginx.conf`
+- 停止系统 nginx 进程并启动/重载脚本管理的 Nginx
+- 写入反向代理相关环境变量（`FRONTEND_URL`、`CORS_ORIGIN`、`TRUST_PROXY=1`）
+
+### 方式三：手动启动
+
+```powershell
+# 后端
 cd backend
-
-# 安装依赖
 npm install
-
-# 生成 Prisma 客户端
+Copy-Item .env.example .env
 npx prisma generate
-
-# 初始化数据库
 npx prisma db push
-
-# 启动开发服务
 npm run dev
-```
 
-后端启动后访问：http://localhost:3001
-
-#### 3. 启动前端
-
-```bash
-cd frontend
-
-# 安装依赖
+# 前端
+cd ..\frontend
 npm install
-
-# 启动开发服务
+Copy-Item .env.example .env
 npm run dev
 ```
-
-前端启动后访问：http://localhost:5173
 
 ---
 
 ## 配置说明
 
-### 后端配置（backend/.env）
+### 后端配置（`backend/.env`）
 
-创建 `backend/.env` 文件：
+推荐方式：
 
-```bash
-# 复制示例配置
-cp backend/.env.example backend/.env
+```powershell
+# 项目根目录执行
+npm run env:setup
 ```
 
-**必需配置项**：
+常用关键项：
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
+| `JWT_SECRET` | 必填，至少 32 位随机串 | `base64-random-string` |
 | `AI_API_URL` | AI 服务地址 | `https://api.deepseek.com` |
-| `AI_API_KEY` | API 密钥 | `sk-xxx` |
-| `JWT_SECRET` | JWT 密钥 | 随机字符串 |
+| `AI_API_KEY` | AI API 密钥 | `sk-xxx` |
+| `CORS_ORIGIN` | 允许来源（逗号分隔） | `https://wenflow.org` |
+| `FRONTEND_URL` | 前端主地址 | `https://wenflow.org` |
+| `TRUST_PROXY` | 反向代理信任 | `1` |
+| `INIT_ADMIN_NAME` | 初始管理员用户名 | `admin` |
+| `INIT_ADMIN_PASSWORD` | 初始管理员密码 | `YourStrongPassword123` |
 
-**完整配置示例**：
+生产示例：
 
 ```env
-DATABASE_URL=file:./dev.db
-JWT_SECRET=your-secret-key-change-in-production
+NODE_ENV=production
 PORT=3001
-CORS_ORIGIN=http://localhost:5173
+DATABASE_URL=file:./dev.db
+
+JWT_SECRET=replace-with-strong-secret
+JWT_EXPIRES_IN=7d
+
+CORS_ORIGIN=https://wenflow.org
+FRONTEND_URL=https://wenflow.org
+TRUST_PROXY=1
 
 AI_API_URL=https://api.deepseek.com
 AI_API_KEY=sk-your-api-key
@@ -103,19 +117,14 @@ AI_MODEL=deepseek-chat
 AI_MODEL_REASONING=deepseek-reasoner
 
 INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=admin123
+INIT_ADMIN_PASSWORD=YourStrongPassword123
 ```
 
-### 前端配置（frontend/.env）
+### 前端配置（`frontend/.env`）
 
-创建 `frontend/.env` 文件：
-
-```bash
-# 复制示例配置
-cp frontend/.env.example frontend/.env
+```powershell
+Copy-Item frontend/.env.example frontend/.env
 ```
-
-**配置项**：
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -124,140 +133,88 @@ cp frontend/.env.example frontend/.env
 
 ---
 
-## 数据库
+## 管理员账户
 
-### 数据库类型
+系统会在后端启动时尝试自动创建初始管理员：
 
-开发环境使用 **SQLite**，无需额外安装数据库服务。
-
-### 数据库文件位置
-
-```
-backend/prisma/dev.db
+```env
+INIT_ADMIN_NAME=admin
+INIT_ADMIN_PASSWORD=YourStrongPassword123
 ```
 
-### 常用命令
+说明：
+- 如果数据库里已存在管理员，会自动跳过
+- 建议首次登录后立即修改密码
 
-```bash
-# 查看数据库结构
-npx prisma studio
-
-# 重置数据库（清空所有数据）
-npx prisma db push --force-reset
-
-# 查看数据库内容
-npx prisma studio
-# 打开 http://localhost:5555
-```
+详见 `ADMIN_SETUP.md`。
 
 ---
 
 ## 常见问题
 
-### 端口占用
-
-**Windows 检查端口**：
+### 1) 后端启动失败（Prisma 表不存在）
 
 ```powershell
-# 检查 3001 端口
-Get-NetTCPConnection -LocalPort 3001
-
-# 终止占用进程
-Stop-Process -Id <进程ID> -Force
+cd backend
+npx prisma generate
+npx prisma db push
 ```
 
-**或使用 start-dev.ps1 脚本**，会自动清理端口占用。
+### 2) 反向代理后出现 403「请求来源不被允许」
 
-### 后端启动失败
+检查：
+- `CORS_ORIGIN` 是否包含真实访问域名
+- 域名建议不要带结尾 `/`
+- `TRUST_PROXY=1` 是否已设置
 
-**检查项**：
+### 3) 出现 `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
 
-1. 数据库文件是否存在
-   ```bash
-   ls backend/prisma/dev.db
-   ```
+这是反向代理环境未正确信任代理导致，设置：
 
-2. Prisma 客户端是否生成
-   ```bash
-   npx prisma generate
-   ```
+```env
+TRUST_PROXY=1
+```
 
-3. 依赖是否安装
-   ```bash
-   npm install
-   ```
+### 4) 访问到 Welcome to nginx 默认页
 
-### 前端无法连接后端
-
-**检查项**：
-
-1. 后端是否启动（访问 http://localhost:3001/api/health）
-2. CORS 配置是否正确
-3. 前端 .env 中的 `VITE_API_BASE_URL` 是否正确
-
-### AI 功能不工作
-
-**检查项**：
-
-1. `AI_API_KEY` 是否配置
-2. API 余额是否充足
-3. API 地址是否正确
+说明系统 Nginx 默认站点在响应。使用 `-UseNginx` 时脚本会先停止系统 nginx 并启动 runtime 配置。
 
 ---
 
-## 开发工具
-
-### Prisma Studio
-
-可视化数据库管理工具：
+## 健康检查
 
 ```bash
-cd backend
-npx prisma studio
+# 后端直连
+curl http://localhost:3001/health
+
+# Nginx 网关（UseNginx 模式）
+curl http://127.0.0.1/health
 ```
-
-访问 http://localhost:5555
-
-### API 健康检查
-
-```bash
-curl http://localhost:3001/api/health
-# 预期返回：{"status":"healthy"}
-```
-
-### 查看后端 API 端点
-
-访问 http://localhost:3001/api 可查看所有 API 端点列表。
 
 ---
 
 ## 目录结构
 
-```
+```text
 wenflow/
-├── backend/           # 后端服务
-│   ├── src/           # 源代码
-│   ├── prisma/        # 数据库
-│   │   ├── schema.prisma
-│   │   └── dev.db     # SQLite 数据库文件
-│   └── .env           # 环境配置
-├── frontend/          # 前端服务
-│   ├── src/           # 源代码
-│   └── .env           # 环境配置
-├── docs/              # 文档
-├── start-dev.ps1      # 一键启动脚本
-└── DEPLOYMENT.md      # 本文档
+├── backend/
+├── frontend/
+├── runtime/
+│   └── nginx/                 # 脚本生成的 Nginx 运行时目录
+├── start-dev.ps1
+├── setup-env.ps1
+├── README.md
+└── DEPLOYMENT.md
 ```
 
 ---
 
 ## 相关文档
 
-- [开发指南](./DEVELOPMENT.md)
-- [API 文档](./API.md)
-- [用户指南](./USER_GUIDE.md)
+- `README.md`
+- `ADMIN_SETUP.md`
 
 ---
 
-*文档版本：v3.0*
-*最后更新：2026-04-12*
+*文档版本：v3.1*
+*最后更新：2026-04-26*

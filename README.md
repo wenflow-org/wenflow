@@ -96,11 +96,17 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 ./start-dev.ps1
 ```
 
+说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建 `backend/.env`。
+如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。
+
 ### 一键测试部署（本机 Nginx，HTTP）
 
 ```bash
 # 依赖本机已安装 nginx（并已加入 PATH）
 ./start-dev.ps1 -UseNginx
+
+# 或使用 npm 脚本
+npm run dev:nginx
 
 # 指定域名（不填默认 localhost）
 ./start-dev.ps1 -UseNginx -Domain test.example.com
@@ -109,7 +115,7 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 ./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
 ```
 
-说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`。
+说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`，同时会先停止系统 nginx 进程避免端口冲突。
 
 ### 首次环境配置（推荐）
 
@@ -121,10 +127,28 @@ npm run env:setup
 npm run env:edit
 ```
 
+说明：`env:setup` 不再单独询问域名；Nginx 模式下域名由 `-Domain`（优先）或 `backend/.env` 中的 `FRONTEND_URL` 推断。
+
 ### 手动启动
 
+```powershell
+# 后端（PowerShell）
+cd backend
+npm install
+Copy-Item .env.example .env
+npx prisma generate
+npx prisma db push
+npm run dev
+
+# 前端（PowerShell）
+cd frontend
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
 ```bash
-# 后端
+# 后端（Linux/macOS）
 cd backend
 npm install
 cp .env.example .env
@@ -132,7 +156,7 @@ npx prisma generate
 npx prisma db push
 npm run dev
 
-# 前端
+# 前端（Linux/macOS）
 cd frontend
 npm install
 cp .env.example .env
@@ -152,14 +176,24 @@ npm run dev
 
 ## 管理员账户
 
-首次部署后，需要创建管理员账户：
+首次启动时，系统会读取 `backend/.env` 中的以下字段自动创建初始管理员：
 
-```bash
-cd backend
-npx ts-node scripts/create-admin.ts <用户名> <密码>
+```env
+INIT_ADMIN_NAME=admin
+INIT_ADMIN_PASSWORD=YourStrongPassword123
 ```
 
+如果数据库里已经存在管理员，系统会自动跳过创建。
+
+建议：首次登录管理端后立即修改密码，生产环境请使用强密码。
+
 详见 [ADMIN_SETUP.md](ADMIN_SETUP.md)
+
+### 反向代理常见坑
+
+- `CORS_ORIGIN` 建议不要写尾部 `/`（如 `https://wenflow.org`，不要写成 `https://wenflow.org/`）。
+- 使用 Nginx/Cloudflare 等反向代理时，建议配置 `TRUST_PROXY=1`。
+- 如果遇到“请求来源不被允许”，先检查浏览器 `Origin` 与 `CORS_ORIGIN` 是否匹配。
 
 ---
 
