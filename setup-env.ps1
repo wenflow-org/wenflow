@@ -62,7 +62,8 @@ function Set-EnvValue {
         $content += $newLine
     }
 
-    Set-Content -Path $Path -Value $content -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines($Path, $content, $utf8NoBom)
 }
 
 function New-RandomSecret {
@@ -121,11 +122,6 @@ if ([string]::IsNullOrWhiteSpace($currentJwtSecret) -or $currentJwtSecret.Length
 
 $defaultLocalFrontendUrl = 'http://localhost:5173'
 $defaultLocalCorsOrigin = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
-$useDomainConfig = $false
-$domainModeInput = Read-Host 'Need domain configuration? (y/N)'
-if (-not [string]::IsNullOrWhiteSpace($domainModeInput) -and $domainModeInput.Trim().ToLower() -in @('y', 'yes')) {
-    $useDomainConfig = $true
-}
 
 $frontendUrlCurrent = Get-EnvValue -Path $envPath -Key 'FRONTEND_URL'
 if ([string]::IsNullOrWhiteSpace($frontendUrlCurrent)) {
@@ -134,31 +130,6 @@ if ([string]::IsNullOrWhiteSpace($frontendUrlCurrent)) {
 
 $corsOriginCurrent = Get-EnvValue -Path $envPath -Key 'CORS_ORIGIN'
 if ([string]::IsNullOrWhiteSpace($corsOriginCurrent)) {
-    $corsOriginCurrent = $defaultLocalCorsOrigin
-}
-
-if ($useDomainConfig) {
-    $domainInput = Read-Host "Primary domain URL (Enter for localhost, example: https://your-domain.com)"
-    if ([string]::IsNullOrWhiteSpace($domainInput)) {
-        $frontendUrlCurrent = $defaultLocalFrontendUrl
-        $corsOriginCurrent = $defaultLocalCorsOrigin
-    } else {
-        $domainValue = $domainInput.Trim()
-        $frontendUrlCurrent = $domainValue
-        $corsOriginCurrent = "$domainValue,$defaultLocalCorsOrigin"
-    }
-
-    $frontendUrlInput = Read-Host "FRONTEND_URL [$frontendUrlCurrent]"
-    if (-not [string]::IsNullOrWhiteSpace($frontendUrlInput)) {
-        $frontendUrlCurrent = $frontendUrlInput.Trim()
-    }
-
-    $corsOriginInput = Read-Host "CORS_ORIGIN [$corsOriginCurrent]"
-    if (-not [string]::IsNullOrWhiteSpace($corsOriginInput)) {
-        $corsOriginCurrent = $corsOriginInput.Trim()
-    }
-} else {
-    $frontendUrlCurrent = $defaultLocalFrontendUrl
     $corsOriginCurrent = $defaultLocalCorsOrigin
 }
 

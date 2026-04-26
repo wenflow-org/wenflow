@@ -1,5 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 
+const normalizeOrigin = (value?: string): string => {
+  if (!value) {
+    return '';
+  }
+
+  return value.trim().replace(/\/$/, '');
+};
+
 export const generateCsrfToken = (): string => {
   return require('crypto').randomBytes(32).toString('hex');
 };
@@ -9,10 +17,12 @@ export const csrfMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
-  const origin = req.headers.origin;
+  const origin = normalizeOrigin(req.headers.origin);
   const referer = req.headers.referer;
-  const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) || 
-    ['http://localhost:5173', 'http://localhost:3000'];
+  const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') ||
+    ['http://localhost:5173', 'http://localhost:3000'])
+    .map(o => normalizeOrigin(o))
+    .filter(Boolean);
   
   if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
     if (origin && !allowedOrigins.includes(origin)) {
@@ -24,7 +34,7 @@ export const csrfMiddleware = (
     
     if (referer) {
       try {
-        const refererOrigin = new URL(referer).origin;
+        const refererOrigin = normalizeOrigin(new URL(referer).origin);
         if (!allowedOrigins.includes(refererOrigin)) {
           return res.status(403).json({
             success: false,

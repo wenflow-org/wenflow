@@ -178,7 +178,62 @@ function Set-EnvValue {
         $content += $newLine
     }
 
-    Set-Content -Path $Path -Value $content -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines($Path, $content, $utf8NoBom)
+}
+
+function Get-NormalizedOrigin {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    $trimmed = $Value.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return ''
+    }
+
+    if ($trimmed.EndsWith('/')) {
+        $trimmed = $trimmed.TrimEnd('/')
+    }
+
+    return $trimmed
+}
+
+function Resolve-ServerName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DomainValue,
+        [Parameter(Mandatory = $true)]
+        [string]$EnvPath
+    )
+
+    $candidate = $DomainValue.Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        $frontendUrl = Get-EnvValue -Path $EnvPath -Key 'FRONTEND_URL'
+        $candidate = $frontendUrl.Trim()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return 'localhost'
+    }
+
+    $candidate = $candidate.TrimEnd('/')
+    if ($candidate -match '^https?://') {
+        try {
+            $uri = [System.Uri]$candidate
+            if (-not [string]::IsNullOrWhiteSpace($uri.Host)) {
+                return $uri.Host
+            }
+        } catch {
+        }
+    }
+
+    if ($candidate.Contains('/')) {
+        $candidate = $candidate.Split('/')[0]
+    }
+
+    return $candidate
 }
 
 function Resolve-NginxExecutable {
@@ -217,16 +272,43 @@ function Ensure-BackendEnvForNginx {
         $frontendUrl = 'http://localhost'
         $corsOrigin = $defaultLocalCorsOrigin
     } else {
-        $frontendUrl = "http://$ServerName"
-        $corsOrigin = "http://$ServerName,$defaultLocalCorsOrigin"
+        $frontendUrl = "https://$ServerName"
+        $corsOrigin = "https://$ServerName,http://$ServerName,$defaultLocalCorsOrigin"
     }
 
     Set-EnvValue -Path $EnvPath -Key 'FRONTEND_URL' -Value $frontendUrl
     Set-EnvValue -Path $EnvPath -Key 'CORS_ORIGIN' -Value $corsOrigin
+    Set-EnvValue -Path $EnvPath -Key 'TRUST_PROXY' -Value '1'
 
     Write-Host "Updated backend env for Nginx mode:" -ForegroundColor DarkGray
     Write-Host "  FRONTEND_URL=$frontendUrl" -ForegroundColor DarkGray
     Write-Host "  CORS_ORIGIN=$corsOrigin" -ForegroundColor DarkGray
+    Write-Host "  TRUST_PROXY=1" -ForegroundColor DarkGray
+}
+
+function Stop-SystemNginx {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$NginxExecutable
+    )
+
+    Write-Host "Stopping system Nginx processes..." -ForegroundColor Yellow
+
+    try {
+        & $NginxExecutable -s quit | Out-Null
+    } catch {
+    }
+
+    Start-Sleep -Seconds 1
+
+    $nginxProcesses = Get-Process -Name nginx -ErrorAction SilentlyContinue
+    foreach ($proc in $nginxProcesses) {
+        try {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "   Stopped nginx process (PID: $($proc.Id))" -ForegroundColor DarkGray
+        } catch {
+        }
+    }
 }
 
 function Ensure-NginxReady {
@@ -450,7 +532,8 @@ if (-not $SkipPrisma) {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }
 
-$serverName = $Domain.Trim()
+$serverName = Resolve-ServerName -DomainValue $Domain -EnvPath $backendEnvPath
+$serverName = Get-NormalizedOrigin -Value $serverName
 if ([string]::IsNullOrWhiteSpace($serverName)) {
     $serverName = 'localhost'
 }
@@ -483,6 +566,8 @@ if ($UseNginx) {
     $nginxRuntimeDir = Join-Path $scriptDir 'runtime\nginx'
     $nginxConfigFile = 'wenflow.nginx.conf'
     $frontendDistPath = Join-Path $frontendPath 'dist'
+
+    Stop-SystemNginx -NginxExecutable $nginxExecutable
 
     if (-not (Test-Path $frontendDistPath)) {
         Write-Host "Frontend dist folder missing: $frontendDistPath" -ForegroundColor Red

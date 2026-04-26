@@ -54,6 +54,17 @@ console.log('✅ 安全配置检查通过');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const trustProxyEnv = (process.env.TRUST_PROXY || '').trim().toLowerCase();
+if (trustProxyEnv === 'true') {
+  app.set('trust proxy', true);
+} else if (trustProxyEnv === 'false') {
+  app.set('trust proxy', false);
+} else if (/^\d+$/.test(trustProxyEnv)) {
+  app.set('trust proxy', Number(trustProxyEnv));
+} else if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // 全局 API 限流
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
