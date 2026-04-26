@@ -10,8 +10,8 @@
 
 > 仅作 Demo 演示，不提供正式服务。
 
-**测试账号**: `123`
-**测试密码**: `123456`
+**测试账号**: `test`
+**测试密码**: `test1234`
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
