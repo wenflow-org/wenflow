@@ -57,6 +57,35 @@ WenFlow 教的是思维（道）——看到联系、识别模式、系统思考
 | LF | 学习疲劳度 | 短期累计，7天衰减因子 0.70 |
 | LSB | 学习状态平衡 | KTL - LF，预警过度学习 |
 
+### 平台 Agent 架构（简版）
+
+```mermaid
+flowchart TD
+    U[用户] --> G1[目标对话 Agent\n澄清学习目标]
+    G1 --> P1[路径规划 Agent\n生成阶段与任务]
+    P1 --> T0[AI 教学编排器\n管理整节课流程]
+
+    T0 --> T1[教学回合 Agent\n每轮讲解 提问 诊断]
+    T1 --> K1[知识状态更新\n知识点进度]
+    T1 --> S1[学习状态更新\nLSS KTL LF LSB]
+
+    T1 --> D{需要强化?}
+    D -- 是 --> PEER[伴学 Agent\n讨论式强化]
+    D -- 否 --> NEXT[继续教学]
+
+    NEXT --> END{本节结束?}
+    PEER --> END
+
+    END -- 结束 --> W1[课后产出 Agent\n总结与评估]
+    W1 --> R1[重规划建议\n是否调整路径]
+    R1 --> P1
+```
+
+- 先澄清目标，再把目标拆成可执行学习路径
+- 教学阶段按回合推进，边教边判断理解程度
+- 学生卡住时触发伴学强化，不直接放弃当前任务
+- 课后自动产出总结与评估，并给出是否重规划建议
+
 ---
 
 ## 技术栈
@@ -65,9 +94,10 @@ WenFlow 教的是思维（道）——看到联系、识别模式、系统思考
 |------|------|
 | **前端** | Vue 3 + TypeScript + Vite 5 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库** | PostgreSQL (生产) / SQLite (开发) |
-| **AI** | DeepSeek / GLM / Gemini（兼容 OpenAI API） |
-| **容器** | Docker + Docker Compose + Nginx |
+| **数据库（当前）** | SQLite |
+| **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek） |
+| **Agent 编排** | EduClaw Gateway + Orchestrators + Event Bus |
+| **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署） |
 
 ---
 
@@ -87,7 +117,6 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 
 ### 环境要求
 - Node.js >= 18
-- PostgreSQL（生产环境）
 
 ### 一键启动（开发环境）
 
