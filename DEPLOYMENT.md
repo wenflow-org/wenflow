@@ -113,8 +113,8 @@ TRUST_PROXY=1
 
 AI_API_URL=https://api.deepseek.com
 AI_API_KEY=sk-your-api-key
-AI_MODEL=deepseek-chat
-AI_MODEL_REASONING=deepseek-reasoner
+AI_MODEL=deepseek-v4-flash
+AI_MODEL_REASONING=deepseek-v4-pro
 
 INIT_ADMIN_NAME=admin
 INIT_ADMIN_PASSWORD=YourStrongPassword123

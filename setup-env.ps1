@@ -155,7 +155,7 @@ if (-not [string]::IsNullOrWhiteSpace($apiKeyInput)) {
 
 $aiModelCurrent = Get-EnvValue -Path $envPath -Key 'AI_MODEL'
 if ([string]::IsNullOrWhiteSpace($aiModelCurrent)) {
-    $aiModelCurrent = 'deepseek-chat'
+    $aiModelCurrent = 'deepseek-v4-flash'
 }
 $aiModelInput = Read-Host "AI_MODEL [$aiModelCurrent]"
 if (-not [string]::IsNullOrWhiteSpace($aiModelInput)) {
@@ -165,7 +165,7 @@ Set-EnvValue -Path $envPath -Key 'AI_MODEL' -Value $aiModelCurrent
 
 $aiReasoningModelCurrent = Get-EnvValue -Path $envPath -Key 'AI_MODEL_REASONING'
 if ([string]::IsNullOrWhiteSpace($aiReasoningModelCurrent)) {
-    $aiReasoningModelCurrent = 'deepseek-reasoner'
+    $aiReasoningModelCurrent = 'deepseek-v4-pro'
 }
 $aiReasoningModelInput = Read-Host "AI_MODEL_REASONING [$aiReasoningModelCurrent]"
 if (-not [string]::IsNullOrWhiteSpace($aiReasoningModelInput)) {

@@ -202,13 +202,14 @@ function Get-NormalizedOrigin {
 
 function Resolve-ServerName {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$DomainValue,
+        [AllowEmptyString()]
+        [string]$DomainValue = '',
         [Parameter(Mandatory = $true)]
         [string]$EnvPath
     )
 
-    $candidate = $DomainValue.Trim()
+    $candidate = [string]$DomainValue
+    $candidate = $candidate.Trim()
     if ([string]::IsNullOrWhiteSpace($candidate)) {
         $frontendUrl = Get-EnvValue -Path $EnvPath -Key 'FRONTEND_URL'
         $candidate = $frontendUrl.Trim()
@@ -532,13 +533,14 @@ if (-not $SkipPrisma) {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }
 
-$serverName = Resolve-ServerName -DomainValue $Domain -EnvPath $backendEnvPath
-$serverName = Get-NormalizedOrigin -Value $serverName
-if ([string]::IsNullOrWhiteSpace($serverName)) {
-    $serverName = 'localhost'
-}
-
+$serverName = 'localhost'
 if ($UseNginx) {
+    $serverName = Resolve-ServerName -DomainValue $Domain -EnvPath $backendEnvPath
+    $serverName = Get-NormalizedOrigin -Value $serverName
+    if ([string]::IsNullOrWhiteSpace($serverName)) {
+        $serverName = 'localhost'
+    }
+
     Ensure-BackendEnvForNginx -EnvPath $backendEnvPath -ServerName $serverName
 }
 

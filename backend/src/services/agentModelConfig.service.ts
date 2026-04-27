@@ -16,7 +16,28 @@ export interface AgentModelConfig {
 class AgentModelConfigService {
   async getAll(): Promise<AgentModelConfig[]> {
     try {
-      return await prisma.agent_model_configs.findMany();
+      const persistedConfigs = await prisma.agent_model_configs.findMany();
+      const persistedMap = new Map(persistedConfigs.map((config) => [config.agentId, config]));
+      const mergedConfigs = getDefaultAgentModelConfigs().map((defaultConfig) => {
+        const persisted = persistedMap.get(defaultConfig.agentId);
+        if (!persisted) {
+          return {
+            agentId: defaultConfig.agentId,
+            tier: defaultConfig.tier,
+            temperature: defaultConfig.temperature,
+            maxTokens: defaultConfig.maxTokens,
+            enabled: true,
+          } satisfies AgentModelConfig;
+        }
+
+        return persisted;
+      });
+
+      const missingManifestConfigs = persistedConfigs.filter(
+        (config) => !mergedConfigs.some((merged) => merged.agentId === config.agentId)
+      );
+
+      return [...mergedConfigs, ...missingManifestConfigs];
     } catch (error) {
       logger.error('Failed to get all agent configs:', error);
       throw error;
