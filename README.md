@@ -6,6 +6,8 @@
 
 > 问流 - 在 AI 时代，学会提出比解答更重要的问题
 
+[English Version](README_EN.md) | 中文版
+
 🌐 **官网**: https://wenflow.org
 
 > 仅作 Demo 演示，不提供正式服务。
