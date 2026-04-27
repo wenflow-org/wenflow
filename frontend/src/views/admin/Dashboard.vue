@@ -9,9 +9,8 @@
     <header class="dashboard-header">
       <div class="header-container">
         <div class="header-left">
-          <h1 class="header-title">
-            <img src="/logo.png" alt="WenFlow Logo" class="title-icon-img" />
-            问流 WenFlow · 管理平台
+          <h1 class="header-title" aria-label="WenFlow 管理平台">
+            <img src="/logo.png" alt="" class="title-icon-img" />
           </h1>
 
           <el-menu
@@ -23,7 +22,7 @@
           >
             <el-menu-item index="/admin/dashboard">
               <el-icon><DataAnalysis /></el-icon>
-              <span>数据概览</span>
+              <span>概览</span>
             </el-menu-item>
 
             <el-menu-item index="/admin/users">
@@ -33,12 +32,12 @@
 
             <el-menu-item index="/admin/learner-models">
               <el-icon><Reading /></el-icon>
-              <span>学习者模型</span>
+              <span>学习模型</span>
             </el-menu-item>
 
             <el-menu-item index="/admin/teaching-sessions">
               <el-icon><Reading /></el-icon>
-              <span>教学会话调试</span>
+              <span>教学会话</span>
             </el-menu-item>
 
             <el-menu-item index="/admin/api-config">
@@ -53,7 +52,7 @@
 
             <el-menu-item index="/admin/orchestrators">
               <el-icon><Connection /></el-icon>
-              <span>编排器视图</span>
+              <span>编排视图</span>
             </el-menu-item>
 
             <el-menu-item index="/admin/agent-registry">
@@ -63,12 +62,12 @@
 
             <el-menu-item index="/admin/agent-model-configs">
               <el-icon><Cpu /></el-icon>
-              <span>Agent 模型配置</span>
+              <span>模型配置</span>
             </el-menu-item>
 
             <el-menu-item index="/admin/manifest-diagnostics">
               <el-icon><WarningFilled /></el-icon>
-              <span>架构诊断</span>
+              <span>诊断</span>
             </el-menu-item>
           </el-menu>
         </div>
@@ -220,22 +219,22 @@ const handleLogout = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  flex: 1;
+  gap: 0.75rem;
   min-width: 0;
 }
 
 .header-title {
-  font-size: 1.25rem;
-  font-weight: 700;
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .title-icon {
@@ -252,6 +251,7 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-shrink: 0;
 }
 
 .user-menu {
@@ -273,6 +273,7 @@ const handleLogout = () => {
 .user-name {
   font-size: 0.95rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .top-menu {
@@ -284,19 +285,32 @@ const handleLogout = () => {
   height: 44px;
   line-height: 44px;
   padding: 0 0.35rem;
-  flex: 1;
-  min-width: 420px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.top-menu::-webkit-scrollbar {
+  height: 6px;
+}
+
+.top-menu::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  border-radius: 999px;
 }
 
 .top-menu :deep(.el-menu-item) {
   height: 36px;
   line-height: 36px;
   margin: 0 0.2rem;
-  padding: 0 0.85rem;
+  padding: 0 0.7rem;
   border-radius: var(--radius-md);
   font-size: 0.9rem;
   border-bottom: none !important;
   color: var(--text-secondary) !important;
+  flex-shrink: 0;
   transition: all 0.22s ease;
 }
 
@@ -365,23 +379,29 @@ const handleLogout = () => {
 }
 
 /* 响应式 */
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .header-container {
     padding: 0 1rem;
   }
 
-  .top-menu :deep(.el-menu-item) {
-    flex-shrink: 0;
-    padding: 0 1rem;
+  .user-name {
+    display: none;
   }
 
+  .user-menu {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .top-menu :deep(.el-menu-item) {
+    padding: 0 0.6rem;
+  }
+}
+
+@media (max-width: 1024px) {
   .header-left {
     gap: 0.5rem;
-    overflow-x: auto;
-  }
-
-  .top-menu {
-    min-width: 280px;
+    overflow: hidden;
   }
 
   .content-container {
