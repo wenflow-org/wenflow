@@ -2,8 +2,11 @@
   <div class="learner-model-detail-page" v-loading="loading">
     <div class="page-header">
       <div>
-        <h2 class="page-title">学习者模型详情</h2>
-        <p class="page-subtitle">查看学习者画像、动态状态、知识记忆与教学提示</p>
+        <h2 class="page-title">
+          <el-icon class="page-title-icon"><Reading /></el-icon>
+          学习者模型详情
+        </h2>
+        <p class="page-subtitle">查看用户详细的学习模型数据</p>
       </div>
       <div class="header-actions">
         <el-button @click="goBack">返回</el-button>
@@ -152,6 +155,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { Reading } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
 
 const route = useRoute();
@@ -225,7 +229,7 @@ onMounted(loadData);
 .page-subtitle { margin: 8px 0 0; color: var(--text-secondary); }
 .header-actions { display: flex; gap: 12px; }
 .summary-alert { margin-bottom: 16px; }
-.json-block { margin: 0; padding: 16px; border-radius: 12px; background: var(--bg-elevated); overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.json-block { margin: 0; padding: 16px; border-radius: var(--fluent-radius-lg); background: var(--bg-elevated); overflow: auto; white-space: pre-wrap; word-break: break-word; }
 .grid { display: grid; gap: 16px; }
 .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
@@ -240,6 +244,15 @@ onMounted(loadData);
 .empty-text { color: var(--text-secondary); }
 .text-block { white-space: pre-wrap; line-height: 1.7; }
 .evidence-item { display: grid; gap: 4px; }
+
+[data-theme="dark"] .learner-model-detail-page {
+  --bg-elevated: var(--glass-bg-dark);
+}
+
+[data-theme="dark"] .summary-alert {
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
+}
 
 @media (max-width: 960px) {
   .two-col, .metric-grid { grid-template-columns: 1fr; }

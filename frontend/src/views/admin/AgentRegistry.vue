@@ -5,7 +5,7 @@
         <el-icon class="page-title-icon"><Grid /></el-icon>
         Agent 注册管理
       </h2>
-      <p class="page-subtitle">查看已注册 Agent 的状态、调用和版本信息</p>
+      <p class="page-subtitle">查看和管理已注册的 Agent 列表</p>
     </div>
 
     <div class="summary-grid" v-if="summary">
@@ -45,7 +45,11 @@
     <el-table :data="filteredAgents" v-loading="loading" stripe style="width: 100%">
       <el-table-column prop="agentId" label="Agent ID" min-width="170" />
       <el-table-column prop="name" label="名称" min-width="180" />
-      <el-table-column prop="type" label="类型" width="100" />
+      <el-table-column prop="type" label="类型" min-width="160">
+        <template #default="{ row }">
+          <span class="type-cell">{{ row.type }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="运行角色/层级" width="130">
         <template #default="{ row }">
           <el-tag :type="getRuntimeRoleTagType(row)" size="small">{{ getRuntimeRoleLabel(row) }}</el-tag>
@@ -403,6 +407,10 @@ onMounted(loadRegistry);
 
 .rate-bad {
   color: var(--color-danger);
+}
+
+.type-cell {
+  white-space: nowrap;
 }
 
 .design-drawer {

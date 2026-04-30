@@ -1,8 +1,8 @@
 <template>
-  <div class="preview-stage">
-    <div class="preview-frame" :class="`preview-frame--${device}`">
-      <div class="preview-browser">
-          <div class="browser-chrome">
+  <div class="preview-stage" :class="{ 'preview-stage--standalone': standalone }">
+    <div class="preview-frame" :class="[`preview-frame--${device}`, { 'preview-frame--standalone': standalone }]">
+      <div class="preview-browser" :class="{ 'preview-browser--standalone': standalone }">
+          <div v-if="!standalone" class="browser-chrome">
             <div class="chrome-dots">
               <span></span>
               <span></span>
@@ -15,7 +15,7 @@
             <div class="chrome-mode">{{ deviceLabel }}</div>
           </div>
 
-        <div class="preview-canvas" :class="`preview-canvas--${theme.id}`">
+        <div class="preview-canvas" :class="[`preview-canvas--${theme.id}`, { 'preview-canvas--standalone': standalone }]">
           <template v-if="scene.id === 'home'">
             <div class="preview-page preview-page--landing preview-page--home-native">
               <header class="site-header">
@@ -41,24 +41,58 @@
               </header>
 
               <section class="surface-card surface-card--hero home-hero-native">
-                <div class="hero-badge-native">
-                  <span class="hero-badge-native__dot"></span>
-                  <span>为想解决真问题的人准备</span>
-                </div>
+                <div class="home-hero-native__layout">
+                  <div class="home-hero-native__main">
+                    <div class="hero-badge-native">
+                      <span class="hero-badge-native__dot"></span>
+                      <span>为想解决真问题的人准备</span>
+                    </div>
 
-                <h1 class="home-hero-native__title">
-                  <span>想学的东西很多</span>
-                  <span class="home-hero-native__highlight">先把真正的问题想清楚</span>
-                </h1>
+                    <h1 class="home-hero-native__title">
+                      <span>想学的东西很多</span>
+                      <span class="home-hero-native__highlight">先把真正的问题想清楚</span>
+                    </h1>
 
-                <p class="home-hero-native__subtitle">
-                  <strong>问流帮你把模糊目标拆成可执行路径。</strong>
-                  先想清要解决什么，再进入 AI 规划、对话学习和进度追踪，少走弯路。
-                </p>
+                    <p class="home-hero-native__subtitle">
+                      <strong>问流帮你把模糊目标拆成可执行路径。</strong>
+                      先想清要解决什么，再进入 AI 规划、对话学习和进度追踪，少走弯路。
+                    </p>
 
-                <div class="button-row">
-                  <button type="button" class="solid-button">开始体验</button>
-                  <button type="button" class="ghost-button">先了解理念</button>
+                    <div class="button-row">
+                      <button type="button" class="solid-button">开始体验</button>
+                      <button type="button" class="ghost-button">先了解理念</button>
+                    </div>
+                  </div>
+
+                  <aside class="surface-card home-flow-card">
+                    <div class="home-flow-card__head">
+                      <span class="section-kicker">产品流程预览</span>
+                      <strong>从问题到学习闭环</strong>
+                    </div>
+                    <div class="timeline-list">
+                      <div class="timeline-row">
+                        <span class="timeline-row__dot"></span>
+                        <div>
+                          <strong>说出真实问题</strong>
+                          <p>不是泛泛学知识，而是先确定你要解决的麻烦。</p>
+                        </div>
+                      </div>
+                      <div class="timeline-row">
+                        <span class="timeline-row__dot"></span>
+                        <div>
+                          <strong>AI 生成学习路径</strong>
+                          <p>结合时间、基础和场景，拆成可执行的小任务。</p>
+                        </div>
+                      </div>
+                      <div class="timeline-row">
+                        <span class="timeline-row__dot"></span>
+                        <div>
+                          <strong>对话学习并追踪状态</strong>
+                          <p>边学边确认掌握情况，知道下一步该做什么。</p>
+                        </div>
+                      </div>
+                    </div>
+                  </aside>
                 </div>
 
                 <div class="card-grid card-grid--three compact-grid home-proof-row">
@@ -71,10 +105,27 @@
                 <div class="home-scroll-hint">往下看，先判断这是不是适合你的学习方式</div>
               </section>
 
-              <EinsteinQuote />
-              <MindVsTool />
-              <ProblemCreator />
-              <CapabilityList />
+              <section class="surface-card home-method-strip" aria-label="产品方法">
+                <article class="info-tile info-tile--soft">
+                  <span class="info-tile__label">01</span>
+                  <strong>从真实问题出发</strong>
+                </article>
+                <article class="info-tile info-tile--soft">
+                  <span class="info-tile__label">02</span>
+                  <strong>围绕约束生成路径</strong>
+                </article>
+                <article class="info-tile info-tile--soft">
+                  <span class="info-tile__label">03</span>
+                  <strong>边学边确认自己会了</strong>
+                </article>
+              </section>
+
+              <div class="home-native-sections">
+                <EinsteinQuote />
+                <MindVsTool />
+                <ProblemCreator />
+                <CapabilityList />
+              </div>
 
               <footer class="landing-footer surface-card home-footer-native">
                 <div class="home-footer-native__quote">
@@ -299,6 +350,12 @@
                 </section>
 
                 <section class="surface-card conversation-card conversation-card--native">
+                  <div class="session-meta-row">
+                    <span class="meta-chip">阶段：问题澄清</span>
+                    <span class="meta-chip">第 3 轮对话</span>
+                    <span class="meta-chip">预计还需 1-2 分钟</span>
+                  </div>
+
                   <div class="message-thread">
                     <article
                       v-for="message in plannerMessages"
@@ -321,6 +378,17 @@
                     <button v-for="reply in plannerReplies" :key="reply" type="button" class="reply-chip">
                       {{ reply }}
                     </button>
+                  </div>
+
+                  <div class="selected-replies-preview">
+                    <div class="selected-replies-preview__head">
+                      <span>已选（2/4）</span>
+                      <button type="button" class="ghost-button ghost-button--small">清空</button>
+                    </div>
+                    <div class="meta-chip-row">
+                      <span class="meta-chip">对，这就是核心问题</span>
+                      <span class="meta-chip">我还有时间限制</span>
+                    </div>
                   </div>
 
                   <article class="surface-card proposal-card-preview">
@@ -349,7 +417,10 @@
 
                   <div class="composer">
                     <div class="composer__field">告诉我你想学什么，或者想解决什么问题...</div>
-                    <button type="button" class="solid-button solid-button--small">发送</button>
+                    <div class="composer__actions">
+                      <button type="button" class="ghost-button ghost-button--small">语音输入</button>
+                      <button type="button" class="solid-button solid-button--small">发送</button>
+                    </div>
                   </div>
                 </section>
               </main>
@@ -407,18 +478,22 @@
                   >
                     <template v-if="path.state === 'generating'">
                       <div class="native-path-card__status native-path-card__status--centered">
+                        <span class="status-pill status-pill--warning">AI 正在生成</span>
                         <strong>正在生成学习路径...</strong>
                         <p>{{ path.summary }}</p>
                         <div class="progress-line">
                           <span class="progress-line__fill" style="width: 42%"></span>
                         </div>
+                        <small>已完成问题收敛，正在拆分阶段任务</small>
                       </div>
                     </template>
 
                     <template v-else-if="path.state === 'failed'">
                       <div class="native-path-card__status native-path-card__status--centered">
+                        <span class="status-pill status-pill--danger">上次生成失败</span>
                         <strong>学习路径生成失败</strong>
                         <p>{{ path.summary }}</p>
+                        <small>失败原因：关键信息不足（缺少样例文件）</small>
                         <div class="button-row button-row--tight">
                           <button type="button" class="solid-button solid-button--small">重试生成</button>
                           <button type="button" class="ghost-button ghost-button--small ghost-button--warning">删除路径</button>
@@ -432,7 +507,10 @@
                           <strong>{{ path.title }}</strong>
                           <p>{{ path.summary }}</p>
                         </div>
-                        <span class="status-pill" :class="`status-pill--${path.tone}`">{{ path.badge }}</span>
+                        <div class="meta-chip-row">
+                          <span class="status-pill" :class="`status-pill--${path.tone}`">{{ path.badge }}</span>
+                          <button type="button" class="ghost-button ghost-button--small">更多</button>
+                        </div>
                       </div>
 
                       <div class="meta-chip-row">
@@ -447,6 +525,10 @@
                         <div class="info-tile info-tile--soft">
                           <span class="info-tile__label">阶段</span>
                           <strong>{{ path.totalStages }}</strong>
+                        </div>
+                        <div class="info-tile info-tile--soft">
+                          <span class="info-tile__label">进度</span>
+                          <strong>{{ path.progress }}%</strong>
                         </div>
                       </div>
 
@@ -549,7 +631,10 @@
                         <article v-for="task in stage.tasks" :key="task.title" class="surface-card task-detail-card-preview">
                           <div class="task-detail-card-preview__head">
                             <div>
-                              <strong>{{ task.title }}</strong>
+                              <strong>
+                                <span class="task-state-dot" :class="`task-state-dot--${task.tone}`"></span>
+                                {{ task.title }}
+                              </strong>
                               <p>{{ task.note }}</p>
                             </div>
                             <div class="meta-chip-row">
@@ -597,22 +682,7 @@
 
               <div class="learning-layout learning-layout--native">
                 <aside class="surface-card knowledge-pane">
-                  <div class="section-head section-head--compact">
-                    <div>
-                      <span class="section-kicker">知识点</span>
-                      <h2>知识点</h2>
-                    </div>
-                  </div>
-
-                  <div class="knowledge-list">
-                    <article v-for="item in learningKnowledgePoints" :key="item.title" class="knowledge-item">
-                      <div class="knowledge-item__head">
-                        <strong>{{ item.title }}</strong>
-                        <span class="status-pill" :class="`status-pill--${item.tone}`">{{ item.badge }}</span>
-                      </div>
-                      <p>{{ item.desc }}</p>
-                    </article>
-                  </div>
+                  <KnowledgePointList :knowledge-points="learningKnowledgePoints" />
                 </aside>
 
                 <main class="surface-card lesson-main lesson-main--native">
@@ -632,6 +702,15 @@
                         <p>{{ message.content }}</p>
                         <div v-if="message.tags?.length" class="meta-chip-row">
                           <span v-for="tag in message.tags" :key="tag" class="meta-chip">{{ tag }}</span>
+                        </div>
+                        <KnowledgePointCard
+                          v-if="message.knowledgePoint"
+                          :knowledge-point="message.knowledgePoint"
+                          status="learning"
+                        />
+                        <div v-if="message.role === 'ai'" class="message-tools-row">
+                          <button type="button" class="ghost-button ghost-button--small">继续解释</button>
+                          <button type="button" class="ghost-button ghost-button--small">复制要点</button>
                         </div>
                       </div>
                     </article>
@@ -704,6 +783,8 @@
 
 <script setup lang="ts">
 import CapabilityList from '@/components/home/CapabilityList.vue';
+import KnowledgePointCard from '@/components/KnowledgePointCard.vue';
+import KnowledgePointList from '@/components/KnowledgePointList.vue';
 import EinsteinQuote from '@/components/home/EinsteinQuote.vue';
 import MindVsTool from '@/components/home/MindVsTool.vue';
 import ProblemCreator from '@/components/home/ProblemCreator.vue';
@@ -737,12 +818,20 @@ defineProps<{
   scene: LabScene;
   device: DeviceId;
   deviceLabel: string;
+  standalone?: boolean;
 }>();
 </script>
 
 <style scoped>
 .preview-stage {
   min-height: 0;
+}
+
+.preview-stage--standalone,
+.preview-stage--standalone .preview-frame,
+.preview-stage--standalone .preview-browser,
+.preview-stage--standalone .preview-canvas {
+  height: 100%;
 }
 
 .preview-frame {
@@ -765,6 +854,13 @@ defineProps<{
   border-radius: 28px;
   background: color-mix(in srgb, var(--lab-surface) 88%, white);
   box-shadow: var(--lab-shadow);
+}
+
+.preview-browser--standalone {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
 }
 
 .preview-frame--desktop .preview-browser {
@@ -847,6 +943,11 @@ defineProps<{
     linear-gradient(180deg, color-mix(in srgb, var(--lab-canvas) 92%, white) 0%, var(--lab-canvas) 100%);
 }
 
+.preview-canvas--standalone {
+  height: 100%;
+  min-height: 100%;
+}
+
 .preview-frame--desktop .preview-canvas {
   height: clamp(760px, calc(100vh - 250px), 1100px);
 }
@@ -911,6 +1012,49 @@ defineProps<{
 .task-detail-card-preview {
   display: grid;
   gap: 14px;
+}
+
+.home-hero-native__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.home-hero-native__main {
+  display: grid;
+  gap: 14px;
+}
+
+.home-flow-card {
+  align-content: start;
+  background: color-mix(in srgb, var(--lab-surface-alt) 78%, white);
+}
+
+.home-flow-card__head {
+  display: grid;
+  gap: 6px;
+}
+
+.home-flow-card__head strong {
+  font-size: 18px;
+}
+
+.home-flow-card .timeline-row p {
+  margin: 0;
+  color: var(--lab-muted);
+  line-height: 1.6;
+}
+
+.home-method-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-native-sections :deep(.fade-in) {
+  opacity: 1;
+  transform: none;
 }
 
 .surface-card--hero {
@@ -1107,6 +1251,28 @@ defineProps<{
   gap: 18px;
 }
 
+.session-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-replies-preview {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--lab-border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--lab-surface-alt) 78%, white);
+}
+
+.selected-replies-preview__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
 .alert-card-preview {
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--lab-primary) 26%, var(--lab-border));
@@ -1136,8 +1302,12 @@ defineProps<{
 
 .native-path-card__stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.native-path-card__head .meta-chip-row {
+  justify-content: flex-end;
 }
 
 .page-header-card {
@@ -1161,6 +1331,35 @@ defineProps<{
   align-items: center;
 }
 
+.task-detail-card-preview__head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-state-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--lab-muted);
+}
+
+.task-state-dot--primary {
+  background: var(--lab-primary);
+}
+
+.task-state-dot--success {
+  background: var(--lab-success);
+}
+
+.task-state-dot--warning {
+  background: var(--lab-warning);
+}
+
+.task-state-dot--accent {
+  background: var(--lab-accent);
+}
+
 .task-detail-card-preview__head p,
 .task-detail-card-preview__foot small {
   margin: 0;
@@ -1173,6 +1372,27 @@ defineProps<{
 
 .lesson-main--native {
   gap: 18px;
+}
+
+.knowledge-pane :deep(.el-card) {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.knowledge-pane :deep(.el-card__header),
+.knowledge-pane :deep(.el-card__body) {
+  padding: 0;
+}
+
+.lesson-main--native :deep(.knowledge-point-card) {
+  margin-top: 12px;
+}
+
+.message-tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .report-dialog--native {
@@ -1200,6 +1420,7 @@ defineProps<{
 .site-nav,
 .app-nav,
 .button-row,
+.composer__actions,
 .meta-chip-row,
 .chip-row,
 .reply-row,
@@ -2063,6 +2284,7 @@ defineProps<{
 }
 
 @media (max-width: 1180px) {
+  .home-hero-native__layout,
   .landing-hero,
   .hero-strip,
   .page-grid--dashboard,
@@ -2111,6 +2333,7 @@ defineProps<{
   }
 
   .card-grid--two,
+  .home-method-strip,
   .card-grid--four {
     grid-template-columns: 1fr;
   }
@@ -2125,6 +2348,7 @@ defineProps<{
   .path-overview-card__head,
   .path-overview-card__foot,
   .lesson-banner,
+  .composer__actions,
   .completion-prompt,
   .dialog-actions {
     flex-direction: column;

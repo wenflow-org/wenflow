@@ -5,7 +5,7 @@
         <el-icon><Setting /></el-icon>
         API 管理
       </h2>
-      <p class="page-subtitle">配置平台 AI 服务地址、模型与默认推理参数</p>
+      <p class="page-subtitle">配置和管理外部 API 密钥与服务</p>
     </div>
 
     <div class="config-shell">
@@ -256,11 +256,11 @@ onMounted(() => {
 }
 
 .config-card {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: var(--radius-xl);
+  background: var(--glass-bg-light);
+  border: 1px solid var(--glass-border-light);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: var(--fluent-radius-lg);
 }
 
 .card-header {
@@ -300,9 +300,9 @@ onMounted(() => {
   gap: 1rem;
   margin-bottom: 0.9rem;
   padding: 0.9rem;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--fluent-radius-md);
+  background: color-mix(in srgb, var(--glass-bg-light) 90%, transparent);
+  border: 1px solid var(--glass-border-light);
 }
 
 .registration-actions {
@@ -313,9 +313,9 @@ onMounted(() => {
 
 .status-item {
   padding: 1rem;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--fluent-radius-md);
+  background: color-mix(in srgb, var(--glass-bg-light) 90%, transparent);
+  border: 1px solid var(--glass-border-light);
 }
 
 .status-label {
@@ -354,8 +354,8 @@ onMounted(() => {
 [data-theme="dark"] .config-card,
 [data-theme="dark"] .status-item,
 [data-theme="dark"] .registration-control {
-  background: rgba(30, 45, 58, 0.74);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
 }
 
 @media (max-width: 1024px) {

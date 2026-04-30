@@ -5,7 +5,7 @@
         <el-icon class="page-title-icon"><Cpu /></el-icon>
         Agent 模型配置
       </h2>
-      <p class="page-subtitle">统一管理 Agent 的模型层级、温度和 token 配额</p>
+      <p class="page-subtitle">配置 Agent 使用的 AI 模型参数</p>
     </div>
 
     <div class="action-bar">
@@ -228,7 +228,7 @@ onMounted(() => fetchConfigs());
 
 .table-shell {
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
+  border-radius: var(--fluent-radius-md);
   overflow: hidden;
   background: var(--bg-elevated);
 }

@@ -1,8 +1,11 @@
 <template>
   <div class="admin-users">
     <div class="page-header">
-      <h2 class="page-title">👥 用户管理</h2>
-      <p class="page-subtitle">查看和管理平台用户</p>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><User /></el-icon>
+        用户管理
+      </h2>
+      <p class="page-subtitle">管理系统用户账号、角色和权限</p>
     </div>
 
     <!-- 筛选工具栏 -->
@@ -185,7 +188,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminUsersApi } from '@/api/adminApi';
-import { Search, Refresh } from '@element-plus/icons-vue';
+import { User, Search, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 const loading = ref(false);
@@ -494,11 +497,11 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: var(--radius-xl);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--glass-bg-light);
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--fluent-radius-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow-sm);
 }
 
@@ -515,11 +518,12 @@ onMounted(() => {
 /* 表格 */
 .table-container {
   overflow-x: auto;
-  border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  max-width: 100%;
+  border-radius: var(--fluent-radius-lg);
+  border: 1px solid var(--glass-border-light);
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow-sm);
   padding: 0.25rem;
   width: 100%;
@@ -527,7 +531,7 @@ onMounted(() => {
 }
 
 .table-container :deep(.el-table) {
-  border-radius: var(--radius-lg);
+  border-radius: var(--fluent-radius-md);
   overflow: visible;
   width: 100%;
   --el-table-bg-color: transparent;
@@ -555,7 +559,7 @@ onMounted(() => {
 
 [data-theme="dark"] .toolbar,
 [data-theme="dark"] .table-container {
-  background: rgba(30, 45, 58, 0.74);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
 }
 </style>

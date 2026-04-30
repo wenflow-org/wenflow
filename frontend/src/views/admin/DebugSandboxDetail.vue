@@ -7,9 +7,13 @@
           <el-icon><ArrowLeft /></el-icon>
           返回
         </el-button>
-        <h2 class="page-title">{{ snapshot?.name || '快照详情' }}</h2>
+        <h2 class="page-title">
+          <el-icon class="page-title-icon"><Monitor /></el-icon>
+          沙箱详情
+        </h2>
       </div>
       <div class="header-actions">
+        <p class="page-subtitle">查看快照详细数据和管道状态</p>
         <el-button type="danger" plain @click="deleteSnapshot">
           删除快照
         </el-button>
@@ -356,7 +360,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowLeft, Delete, Refresh } from '@element-plus/icons-vue';
+import { ArrowLeft, Delete, Refresh, Monitor } from '@element-plus/icons-vue';
 import { adminDebugSandboxApi } from '@/api/adminApi';
 
 const router = useRouter();
@@ -781,11 +785,11 @@ onMounted(() => {
 }
 
 .version-item {
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: 8px;
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--fluent-radius-md);
   padding: 1rem;
-  transition: all 0.2s ease;
-  background: rgba(255, 255, 255, 0.72);
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
+  background: var(--glass-bg-light);
 }
 
 .version-item.active {
@@ -866,8 +870,8 @@ onMounted(() => {
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: 6px;
+  background: var(--glass-bg-light);
+  border-radius: var(--fluent-radius-sm);
 }
 
 .path-item.active {

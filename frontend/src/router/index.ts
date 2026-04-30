@@ -56,10 +56,94 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '学习中', requiresAuth: true }
   },
   {
-    path: '/demo/question-cards',
-    name: 'QuestionCardDemo',
+    path: '/ui-lab',
+    name: 'UILabHome',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 首页', uiLabSceneId: 'home' }
+  },
+  {
+    path: '/ui-lab/vision',
+    name: 'UILabVision',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 愿景', uiLabSceneId: 'vision' }
+  },
+  {
+    path: '/ui-lab/login',
+    name: 'UILabLogin',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 登录', uiLabSceneId: 'login' }
+  },
+  {
+    path: '/ui-lab/register',
+    name: 'UILabRegister',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 注册', uiLabSceneId: 'register' }
+  },
+  {
+    path: '/ui-lab/dashboard',
+    name: 'UILabDashboard',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 学习台', uiLabSceneId: 'dashboard' }
+  },
+  {
+    path: '/ui-lab/planning',
+    name: 'UILabPlanning',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab AI 规划', uiLabSceneId: 'requirement' }
+  },
+  {
+    path: '/ui-lab/planning-immersive',
+    redirect: '/ui-lab/planning'
+  },
+  {
+    path: '/ui-lab/planning-formal',
+    redirect: '/ui-lab/planning'
+  },
+  {
+    path: '/ui-lab/paths',
+    name: 'UILabPaths',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 学习路径', uiLabSceneId: 'paths' }
+  },
+  {
+    path: '/ui-lab/paths/:id',
+    name: 'UILabPathDetail',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 路径详情', uiLabSceneId: 'path-detail' }
+  },
+  {
+    path: '/ui-lab/state',
+    name: 'UILabState',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 学习状态', uiLabSceneId: 'state' }
+  },
+  {
+    path: '/ui-lab/achievements',
+    name: 'UILabAchievements',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 成就', uiLabSceneId: 'achievements' }
+  },
+  {
+    path: '/ui-lab/learn/:taskId',
+    name: 'UILabLearning',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 学习中', uiLabSceneId: 'learning' }
+  },
+  {
+    path: '/ui-lab/feedback',
+    name: 'UILabFeedback',
+    component: () => import('@/views/DemoScenePage.vue'),
+    meta: { title: 'UI Lab 学习反馈', uiLabSceneId: 'evaluation' }
+  },
+  {
+    path: '/ui-lab/dashboard-legacy',
+    redirect: '/ui-lab/dashboard'
+  },
+  {
+    path: '/ui-lab/question-cards',
+    name: 'QuestionCardUILab',
     component: () => import('@/views/QuestionCardDemo.vue'),
-    meta: { title: '问题卡片演示' }
+    meta: { title: 'UI Lab 问题卡片' }
   },
   {
     path: '/user',
@@ -145,37 +229,37 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'AdminDashboard',
         component: () => import('@/views/admin/Overview.vue'),
-        meta: { title: '数据概览', requiresAdminAuth: true }
+        meta: { title: '数据概览', requiresAdminAuth: true, adminGroup: 'content' }
       },
       {
         path: 'users',
         name: 'AdminUsers',
         component: () => import('@/views/admin/Users.vue'),
-        meta: { title: '用户管理', requiresAdminAuth: true }
+        meta: { title: '用户管理', requiresAdminAuth: true, adminGroup: 'content' }
       },
       {
         path: 'learner-models',
         name: 'AdminLearnerModels',
         component: () => import('@/views/admin/LearnerModels.vue'),
-        meta: { title: '学习者模型', requiresAdminAuth: true }
+        meta: { title: '学习者模型', requiresAdminAuth: true, adminGroup: 'content' }
       },
       {
         path: 'learner-models/:userId',
         name: 'AdminLearnerModelDetail',
         component: () => import('@/views/admin/LearnerModelDetail.vue'),
-        meta: { title: '学习者模型详情', requiresAdminAuth: true }
+        meta: { title: '学习者模型详情', requiresAdminAuth: true, adminGroup: 'content' }
       },
       {
         path: 'teaching-sessions',
         name: 'AdminTeachingSessions',
         component: () => import('@/views/admin/TeachingSessions.vue'),
-        meta: { title: '教学会话调试', requiresAdminAuth: true }
+        meta: { title: '教学会话调试', requiresAdminAuth: true, adminGroup: 'content' }
       },
       {
         path: 'api-config',
         name: 'AdminApiConfig',
         component: () => import('@/views/admin/ApiConfig.vue'),
-        meta: { title: 'API 管理', requiresAdminAuth: true }
+        meta: { title: 'API 管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'agents',
@@ -185,7 +269,7 @@ const routes: RouteRecordRaw[] = [
         path: 'agent-registry',
         name: 'AdminAgentRegistry',
         component: () => import('@/views/admin/AgentRegistry.vue'),
-        meta: { title: 'Agent 注册管理', requiresAdminAuth: true }
+        meta: { title: 'Agent 注册管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'conversations',
@@ -195,19 +279,19 @@ const routes: RouteRecordRaw[] = [
         path: 'execution-logs',
         name: 'AdminExecutionLogs',
         component: () => import('@/views/admin/ExecutionLogs.vue'),
-        meta: { title: 'Agent 执行日志', requiresAdminAuth: true }
+        meta: { title: 'Agent 执行日志', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
         path: 'orchestrators',
         name: 'AdminOrchestrators',
         component: () => import('@/views/admin/Orchestrators.vue'),
-        meta: { title: '编排器视图', requiresAdminAuth: true }
+        meta: { title: '编排器视图', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
         path: 'manifest-diagnostics',
         name: 'AdminManifestDiagnostics',
         component: () => import('@/views/admin/ManifestDiagnostics.vue'),
-        meta: { title: '架构诊断', requiresAdminAuth: true }
+        meta: { title: '架构诊断', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
 
       {
@@ -246,13 +330,13 @@ const routes: RouteRecordRaw[] = [
         path: 'agent-model-configs',
         name: 'AdminAgentModelConfigs',
         component: () => import('@/views/admin/AgentModelConfig.vue'),
-        meta: { title: 'Agent 模型配置', requiresAdminAuth: true }
+        meta: { title: 'Agent 模型配置', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'class-test',
         name: 'AdminClassTest',
         component: () => import('@/views/ClassTest.vue'),
-        meta: { title: 'AI 授课测试', requiresAdminAuth: true }
+        meta: { title: 'AI 授课测试', requiresAdminAuth: true, adminGroup: 'monitor' }
       }
     ]
   }

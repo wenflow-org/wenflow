@@ -1,8 +1,11 @@
 <template>
   <div class="orchestrators-page">
     <div class="page-header">
-      <h2 class="page-title">🧭 编排器视图</h2>
-      <p class="page-subtitle">查看编排器健康度、所属 Agent 成员和调用趋势</p>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><Connection /></el-icon>
+        编排器视图
+      </h2>
+      <p class="page-subtitle">监控 Agent 编排流程和执行链路</p>
     </div>
 
     <div class="toolbar">
@@ -97,6 +100,7 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { Connection } from '@element-plus/icons-vue';
 import { adminAgentsApi, type OrchestratorRelationItem } from '@/api/adminApi';
 
 type TimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all';
@@ -281,6 +285,7 @@ onMounted(loadData);
 <style scoped>
 .orchestrators-page {
   padding: 1.25rem;
+  padding-bottom: 24px;
 }
 
 .page-header {
@@ -315,7 +320,7 @@ onMounted(loadData);
 }
 
 .stats-card {
-  border-radius: var(--radius-xl);
+  border-radius: var(--fluent-radius-lg);
 }
 
 .card-head {
@@ -347,7 +352,7 @@ onMounted(loadData);
 
 .metric {
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--fluent-radius-md);
   padding: 0.55rem 0.65rem;
   display: flex;
   justify-content: space-between;

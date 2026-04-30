@@ -1,6 +1,6 @@
 /* ========================================
    AI学习平台 - 统一视觉设计系统
-   配色方案：温润学习风
+   配色方案：友好陪伴风 × Fluent Design 2.0
    
    设计原则：
    1. 护眼优先 - 长时间学习友好
@@ -8,34 +8,35 @@
    3. 正向激励 - 亮色强调成就
    4. 专业可信 - 教育/科技感
    5. 暗色模式支持
+   6. Fluent Design 2.0 亚克力材质
    ======================================== */
 
 :root {
   /* ==========================================
-     核心色彩系统
+     核心色彩系统（对齐 UI Lab 友好陪伴风）
      ========================================== */
   
-  /* 主色系 - 温润蓝 */
-  --color-primary: #4A6FA5;
-  --color-primary-light: #6B9AC4;
-  --color-primary-lighter: #8DB6D7;
-  --color-primary-dark: #3A5A8A;
-  --color-primary-darker: #2D4770;
+  /* 主色系 - 友好蓝 */
+  --color-primary: #3478f6;
+  --color-primary-light: #5a94f8;
+  --color-primary-lighter: #8db3fa;
+  --color-primary-dark: #1f57cc;
+  --color-primary-darker: #1843a3;
   
-  /* 辅色系 - 柔和青 */
-  --color-secondary: #6B9AC4;
-  --color-secondary-light: #8DB6D7;
-  --color-secondary-dark: #4A7DA8;
+  /* 辅色系 - 清新青 */
+  --color-secondary: #43b0d8;
+  --color-secondary-light: #6ec5e3;
+  --color-secondary-dark: #3593b5;
   
-  /* 强调色系 - 琥珀橙（成就/激励） */
-  --color-accent: #F4A261;
-  --color-accent-light: #F7BA8A;
-  --color-accent-dark: #E08B3A;
+  /* 强调色系 - 薰衣草紫 */
+  --color-accent: #8d6bff;
+  --color-accent-light: #a98fff;
+  --color-accent-dark: #6b4ae0;
   
-  /* 警示色系 - 珊瑚红（重要提醒） */
-  --color-danger: #E76F51;
-  --color-danger-light: #F09A85;
-  --color-danger-dark: #C94E33;
+  /* 警示色系 - 柔和红 */
+  --color-danger: #ef7578;
+  --color-danger-light: #f49a9c;
+  --color-danger-dark: #d95054;
   
   /* ==========================================
      中性色系（亮色模式）
@@ -57,11 +58,11 @@
      ========================================== */
   
   /* 成功/完成 */
-  --color-success: #2ECC71;
-  --color-success-light: #58D68D;
-  --color-success-dark: #27AE60;
-  --color-success-bg: rgba(46, 204, 113, 0.1);
-  --color-success-border: rgba(46, 204, 113, 0.2);
+  --color-success: #31b16f;
+  --color-success-light: #5cc98b;
+  --color-success-dark: #28965a;
+  --color-success-bg: rgba(49, 177, 111, 0.1);
+  --color-success-border: rgba(49, 177, 111, 0.2);
   
   /* 进行中 */
   --color-progress: #3498DB;
@@ -78,11 +79,11 @@
   --color-pending-border: rgba(149, 165, 166, 0.2);
   
   /* 疲劳预警（LSB < 0） */
-  --color-warning: #E74C3C;
-  --color-warning-light: #F1948A;
-  --color-warning-dark: #C0392B;
-  --color-warning-bg: rgba(231, 76, 60, 0.1);
-  --color-warning-border: rgba(231, 76, 60, 0.2);
+  --color-warning: #f4aa46;
+  --color-warning-light: #f7c07a;
+  --color-warning-dark: #d9932e;
+  --color-warning-bg: rgba(244, 170, 70, 0.1);
+  --color-warning-border: rgba(244, 170, 70, 0.2);
   
   /* 高效状态（LSB ≥ 4） */
   --color-efficient: #F39C12;
@@ -227,12 +228,60 @@
   --radius-full: 9999px;
   
   /* ==========================================
-     过渡动画
+     过渡动画（Fluent Design 曲线）
      ========================================== */
-  --transition-fast: 150ms ease;
-  --transition-normal: 200ms ease;
-  --transition-slow: 300ms ease;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-bounce: 300ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  
+  /* ==========================================
+     Fluent Design 2.0 材质系统
+     ========================================== */
+  
+  /* 亚克力材质 */
+  --acrylic-bg-light: rgba(243, 243, 243, 0.72);
+  --acrylic-bg-dark: rgba(30, 45, 58, 0.74);
+  --acrylic-blur: blur(30px);
+  --acrylic-saturate: saturate(180%);
+  
+  /* 统一玻璃态 */
+  --glass-bg-light: rgba(255, 255, 255, 0.72);
+  --glass-bg-dark: rgba(30, 45, 58, 0.74);
+  --glass-border-light: rgba(255, 255, 255, 0.35);
+  --glass-border-dark: rgba(255, 255, 255, 0.1);
+  --glass-blur: blur(12px);
+  
+  /* Fluent 圆角（Admin 专用，比全局更紧凑） */
+  --fluent-radius-sm: 4px;
+  --fluent-radius-md: 6px;
+  --fluent-radius-lg: 8px;
+  --fluent-radius-xl: 12px;
+  
+  /* Fluent 动效时长 */
+  --fluent-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fluent-duration-fast: 150ms;
+  --fluent-duration-normal: 280ms;
+  --fluent-duration-slow: 400ms;
+  
+  /* ==========================================
+     Admin 布局系统
+     ========================================== */
+  
+  /* 侧边栏 */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
+  --sidebar-active-bg: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --sidebar-active-indicator: var(--color-primary);
+  
+  /* 面包屑 */
+  --breadcrumb-color: var(--text-muted);
+  --breadcrumb-active: var(--text-primary);
+  --breadcrumb-separator: var(--text-disabled);
+  
+  /* 页面标题 */
+  --page-title-size: 1.5rem;
+  --page-subtitle-color: var(--text-secondary);
   
   /* ==========================================
      层级系统
@@ -254,26 +303,26 @@
 [data-theme="dark"],
 .dark {
   /* 主色系调整 - 暗色模式下降低饱和度 */
-  --color-primary: #6B9AC4;
-  --color-primary-light: #8DB6D7;
-  --color-primary-lighter: #AFCDE8;
-  --color-primary-dark: #4A7DA8;
-  --color-primary-darker: #3A5A8A;
+  --color-primary: #5a94f8;
+  --color-primary-light: #8db3fa;
+  --color-primary-lighter: #a8c5fc;
+  --color-primary-dark: #3478f6;
+  --color-primary-darker: #1f57cc;
   
   /* 辅色系 */
-  --color-secondary: #8DB6D7;
-  --color-secondary-light: #AFCDE8;
-  --color-secondary-dark: #6B9AC4;
+  --color-secondary: #6ec5e3;
+  --color-secondary-light: #96d5ec;
+  --color-secondary-dark: #43b0d8;
   
   /* 强调色 - 暗色模式下稍亮 */
-  --color-accent: #F7BA8A;
-  --color-accent-light: #FAD5B8;
-  --color-accent-dark: #F4A261;
+  --color-accent: #a98fff;
+  --color-accent-light: #c0aaff;
+  --color-accent-dark: #8d6bff;
   
   /* 警示色 */
-  --color-danger: #F09A85;
-  --color-danger-light: #F5BEB0;
-  --color-danger-dark: #E76F51;
+  --color-danger: #f49a9c;
+  --color-danger-light: #f7b8b9;
+  --color-danger-dark: #ef7578;
   
   /* 中性色系反转 */
   --neutral-50: #1A252F;
@@ -326,15 +375,20 @@
   --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.4);
   --shadow-2xl: 0 24px 48px rgba(0, 0, 0, 0.45);
   
+  /* 暗色模式 Fluent 材质 */
+  --acrylic-bg-light: rgba(30, 45, 58, 0.74);
+  --glass-bg-light: rgba(30, 45, 58, 0.74);
+  --glass-border-light: rgba(255, 255, 255, 0.1);
+  
   /* 状态色透明度调整 */
-  --color-success-bg: rgba(46, 204, 113, 0.15);
-  --color-success-border: rgba(46, 204, 113, 0.3);
+  --color-success-bg: rgba(49, 177, 111, 0.15);
+  --color-success-border: rgba(49, 177, 111, 0.3);
   --color-progress-bg: rgba(52, 152, 219, 0.15);
   --color-progress-border: rgba(52, 152, 219, 0.3);
   --color-pending-bg: rgba(149, 165, 166, 0.15);
   --color-pending-border: rgba(149, 165, 166, 0.3);
-  --color-warning-bg: rgba(231, 76, 60, 0.15);
-  --color-warning-border: rgba(231, 76, 60, 0.3);
+  --color-warning-bg: rgba(244, 170, 70, 0.15);
+  --color-warning-border: rgba(244, 170, 70, 0.3);
   --color-efficient-bg: rgba(243, 156, 18, 0.15);
   --color-efficient-border: rgba(243, 156, 18, 0.3);
 }

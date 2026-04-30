@@ -2,10 +2,10 @@
   <div class="debug-sandbox">
     <div class="page-header">
       <h2 class="page-title">
-        <el-icon class="page-title-icon"><Setting /></el-icon>
-        调试沙盒
+        <el-icon class="page-title-icon"><Monitor /></el-icon>
+        调试沙箱
       </h2>
-      <p class="page-subtitle">快速测试和优化学习路径生成效果</p>
+      <p class="page-subtitle">管理和调试快照数据</p>
     </div>
 
     <!-- 创建快照卡片 -->
@@ -239,7 +239,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Plus, Delete, Refresh, Document, Collection, Setting } from '@element-plus/icons-vue';
+import { Plus, Delete, Refresh, Document, Collection, Monitor } from '@element-plus/icons-vue';
 import { adminDebugSandboxApi } from '@/api/adminApi';
 
 const router = useRouter();
@@ -583,11 +583,11 @@ onMounted(() => {
 
 .snapshot-item {
   padding: 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: 8px;
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--fluent-radius-md);
   cursor: pointer;
-  transition: all 0.2s ease;
-  background: rgba(255, 255, 255, 0.72);
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
+  background: var(--glass-bg-light);
 }
 
 .snapshot-item:hover {
@@ -621,9 +621,9 @@ onMounted(() => {
 }
 
 .snapshot-info {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-bg-light);
   padding: 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--fluent-radius-sm);
   margin-bottom: 0.75rem;
 }
 

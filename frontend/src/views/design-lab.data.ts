@@ -211,28 +211,217 @@ export const homeProofCards = [
 export const dashboardWelcomeSubtitle = '继续围绕真实问题推进，先做一个最容易开始的小任务。';
 
 export const dashboardOverviewCards = [
-  { tag: '路径', value: '2', label: '当前学习路径', hint: 'Python 自动化提效仍是当前主路径', footer: '学习方向已建立', tone: 'primary' as Tone },
-  { tag: '进度', value: '8', label: '已完成任务', hint: '还有 2 个任务正在推进', footer: '完成率 62%', tone: 'success' as Tone },
-  { tag: '投入', value: '6.5', label: '累计学习小时', hint: '累计 390 分钟真实学习记录', footer: '日均 1.1 小时', tone: 'warning' as Tone },
-  { tag: '状态', value: '78', label: '当前状态良好', hint: '完成学习后会继续更新你的节奏和疲劳状态', footer: '建议继续轻量推进', tone: 'accent' as Tone },
+  { tag: '路径', value: '2', label: '正在推进的路径', hint: '你现在有 2 条路径正在继续整理和推进', footer: '先聚焦一条主路径会更轻松', tone: 'primary' as Tone },
+  { tag: '投入', value: '51', label: '最近学习分钟', hint: '最近几次学习累计 51 分钟，已经开始形成手感', footer: '先保持发生，再慢慢拉长时长', tone: 'success' as Tone },
+  { tag: '节奏', value: '20%', label: '完整收口率', hint: '最近已经开始了不少学习，但真正完整结束的次数还不多', footer: '先把一次学习完整做完，比继续加内容更重要', tone: 'warning' as Tone },
+  { tag: '状态', value: 'LSB +3.6', label: '当前状态脉冲', hint: 'KTL 6.8 / LF 3.2，说明还有余力，但不适合猛冲', footer: '建议继续轻量推进', tone: 'accent' as Tone },
 ];
 
-export const dashboardSnapshotCards = [
-  { label: '连续学习', value: '6 天', note: '慢一点也没关系，先保持手感' },
-  { label: '当前主路径', value: 'Python 自动化', note: '阶段 2 / 3，离跑通又近一点' },
-  { label: '今日建议', value: '先做日志', note: '20 分钟就能完成一个小闭环' }
+export const dashboardPathRadar = [
+  {
+    title: '在会议讨论中主动表达后避免误解的清晰表达入门',
+    badge: '主路径',
+    tone: 'primary' as Tone,
+    status: 'active',
+    estimatedHours: '18 小时',
+    milestones: '0 / 4 节点',
+    deadline: '1-2 天见效',
+    updatedAt: '最近更新：今天 10:41',
+    summary: '围绕真实会议场景训练表达前澄清、表达中收束、表达后确认的完整闭环。',
+    nextStep: '下一步：进入一次“冲突经历地图”反思练习'
+  },
+  {
+    title: '跨部门协作冲突解决入门路径：从意见分歧到高效共识',
+    badge: '辅路径',
+    tone: 'success' as Tone,
+    status: 'active',
+    estimatedHours: '24 小时',
+    milestones: '0 / 4 节点',
+    deadline: '无硬截止',
+    updatedAt: '最近更新：3 天前',
+    summary: '把冲突从“沟通失败”翻译成可观察、可拆解、可练习的协作问题。',
+    nextStep: '下一步：完成一次案例分析，提炼冲突触发点'
+  },
+  {
+    title: '数据看板自动汇总',
+    badge: '待重试',
+    tone: 'danger' as Tone,
+    status: 'failed',
+    estimatedHours: '待确认',
+    milestones: '--',
+    deadline: '缺少样例文件',
+    updatedAt: '最近更新：5 天前',
+    summary: '路径生成失败并不意味着它应该消失，它只是说明条件还不够。',
+    nextStep: '下一步：补一份真实文件后重新生成'
+  }
 ];
 
-export const dashboardRhythmNotes = [
-  '今天更适合做 20-30 分钟的小任务，不建议同时开新路径。',
-  '你现在还有余力，但最好先做能收口的小步骤，这样更容易获得正反馈。',
-  '如果这节课学完还有精神，再回头补上一条复盘就够了。'
+export const dashboardSessionFeed = [
+  {
+    topic: '反思练习：盘点你的“冲突经历地图”',
+    taskType: 'practice',
+    status: 'timeout',
+    duration: '未完整结束',
+    time: '今天 13:52',
+    note: '你已经开始进入学习了，下一步更重要的是把它顺利收住。'
+  },
+  {
+    topic: '案例分析：解码一次真实的跨部门会议冲突',
+    taskType: 'reading',
+    status: 'completed',
+    duration: '18 分钟',
+    time: '今天 11:35',
+    note: '这是最近一次完整学完的一节，节奏刚刚好。'
+  },
+  {
+    topic: '阅读：理解跨部门冲突的必然性与价值',
+    taskType: 'reading',
+    status: 'timeout',
+    duration: '中途退出',
+    time: '今天 09:50',
+    note: '如果最近总在中途停下，先把一次学习完整走完就会轻松很多。'
+  }
+];
+
+export const dashboardStatePulse = [
+  { label: '11:49', lsb: '+4.47', ktl: '7.57', lf: '3.10', lss: '2.96' },
+  { label: '11:51', lsb: '+4.22', ktl: '7.35', lf: '3.14', lss: '3.21' },
+  { label: '11:53', lsb: '+3.66', ktl: '6.98', lf: '3.32', lss: '3.26' },
+  { label: '11:55', lsb: '+3.61', ktl: '6.77', lf: '3.17', lss: '2.81' }
+];
+
+export const dashboardStateSummary = {
+  headline: '状态还在正区间，但知识增量开始变慢。',
+  body: '这更像一次适合轻量推进的学习窗口。先做一个能收住的小步骤，会比一下子塞进太多内容更舒服。'
+};
+
+export const dashboardFrictionSignals = [
+  {
+    title: '最近经常学到一半停下',
+    value: '8 / 10 次未完整结束',
+    desc: '这不一定说明时间不够，更可能说明你现在需要更短、更容易收口的学习安排。',
+    tone: 'warning' as Tone
+  },
+  {
+    title: '路径已经有了，推进还没开始',
+    value: '2 条路径待真正启动',
+    desc: '你已经有了可以继续走的方向，接下来更重要的是把第一步真正做完。',
+    tone: 'primary' as Tone
+  },
+  {
+    title: '先把主路径走顺，比加新内容更重要',
+    value: '先聚焦当前重点',
+    desc: '现在最值得做的不是再开新坑，而是把手头这条主路径慢慢走稳。',
+    tone: 'accent' as Tone
+  }
+];
+
+export const dashboardMomentumTimeline = [
+  { title: '最近回来过', desc: '上次登录：4 月 27 日 10:39。你已经在重新把学习接起来。', tone: 'success' as Tone },
+  { title: '最近整理出一条新路径', desc: '今天 10:41 新生成了表达训练路径，说明方向已经开始变清楚。', tone: 'primary' as Tone },
+  { title: '最近一次完整学完', desc: '最近一次完整学习用了 18 分钟，这可以作为你现在最舒服的学习长度。', tone: 'accent' as Tone }
 ];
 
 export const dashboardCoachFeed = [
-  { title: '继续保持', desc: '你最近 6 天都维持了轻量推进，这种稳定性比偶尔猛冲更难得。' },
-  { title: '先把这一小步做稳', desc: '把异常处理做好之后，再考虑自动发邮件这类新功能，会轻松很多。' },
-  { title: '给自己留一个小尾巴', desc: '把这节没懂的点记下来，下次开场时会更容易接上。' }
+  { title: '先把一次学习完整做完', desc: '如果最近总是在中途停下，先缩短任务长度，把一次学习稳稳收住。' },
+  { title: '主路径先别换', desc: '现在最值得做的不是再找新方向，而是先把眼前这条主路径推进起来。' },
+  { title: '今天适合轻量推进', desc: '你现在还有余力，但更适合做一个能完成的小步骤，而不是一口气塞进太多内容。' }
+];
+
+export const dashboardActionItems = [
+  { title: '继续当前主路径', desc: '把“冲突经历地图”这一步完整做完，先形成一次完整收口。', to: '/ui-lab/learn/task-1', badge: '优先', tone: 'primary' as Tone },
+  { title: '回看最近一次中断点', desc: '找到上次停下的位置，只补一个最小步骤，不额外开新内容。', to: '/ui-lab/state', badge: '轻任务', tone: 'warning' as Tone },
+  { title: '记录一次小复盘', desc: '用一句话写下今天学到了什么，帮助下一次更容易接上。', to: '/ui-lab/feedback', badge: '收口', tone: 'accent' as Tone }
+];
+
+export const dashboardAchievementSnapshot = {
+  recent: {
+    title: '连续学习回归',
+    desc: '重新回到学习节奏，并完成最近一次完整学习。',
+    xp: '+120 XP'
+  },
+  next: {
+    title: '稳定推进者',
+    desc: '再完成 2 次完整学习，就能解锁下一个稳定推进成就。',
+    progress: '2 / 4'
+  },
+  summary: {
+    xp: '2610 XP',
+    rate: '28%',
+    unlocked: '7 个已解锁'
+  }
+};
+
+export const stateDetailMetrics = [
+  { label: 'LSB', value: '+3.61', note: '整体状态仍在正区间，适合继续推进。', tone: 'primary' as Tone },
+  { label: 'LSS', value: '2.81', note: '当前压力不高，适合做轻量任务。', tone: 'warning' as Tone },
+  { label: 'KTL', value: '6.77', note: '理解还在增长，但增速开始放缓。', tone: 'success' as Tone },
+  { label: 'LF', value: '3.17', note: '疲劳可控，但不建议继续加太多内容。', tone: 'accent' as Tone }
+];
+
+export const stateTrendSeries = [
+  { time: '周一', lsb: '+2.8', lss: '3.4', ktl: '6.2', lf: '3.4' },
+  { time: '周二', lsb: '+3.1', lss: '3.1', ktl: '6.4', lf: '3.3' },
+  { time: '周三', lsb: '+3.5', lss: '2.9', ktl: '6.6', lf: '3.1' },
+  { time: '周四', lsb: '+3.7', lss: '2.8', ktl: '6.9', lf: '3.2' },
+  { time: '今天', lsb: '+3.6', lss: '2.8', ktl: '6.8', lf: '3.2' }
+];
+
+export const stateInsightCards = [
+  { title: '当前建议', desc: '今天更适合做一件能完成的小步骤，而不是继续扩展新内容。', tone: 'primary' as Tone },
+  { title: '风险提醒', desc: '最近学习容易中途停下，建议把单次学习控制在 20 分钟左右。', tone: 'warning' as Tone },
+  { title: '指标说明', desc: 'LSB 代表状态平衡，LSS 代表压力，KTL 代表理解增长，LF 代表疲劳累积。', tone: 'accent' as Tone }
+];
+
+export const achievementOverviewCards = [
+  { label: '已解锁成就', value: '7', note: '已经有一批长期努力被记录下来。', tone: 'success' as Tone },
+  { label: '待解锁成就', value: '18', note: '还有不少里程碑等你慢慢接近。', tone: 'primary' as Tone },
+  { label: '累计 XP', value: '2610', note: '长期投入正在慢慢积累成结果。', tone: 'warning' as Tone },
+  { label: '完成率', value: '28%', note: '成就是长期反馈，不需要着急。', tone: 'accent' as Tone }
+];
+
+export const achievementCategories = ['全部', '学习习惯', '路径推进', '状态稳定', '表达成长'];
+
+export const achievementCards = [
+  { title: '连续学习回归', desc: '重新回到学习节奏，并完成最近一次完整学习。', status: 'unlocked', xp: '+120 XP', category: '学习习惯', progress: '已完成' },
+  { title: '主路径启动者', desc: '让当前主路径第一次真正推进，而不只是停留在已生成状态。', status: 'next', xp: '+180 XP', category: '路径推进', progress: '2 / 4' },
+  { title: '轻量稳定推进', desc: '连续 4 次保持可收口的小步学习，不在中途放弃。', status: 'locked', xp: '+240 XP', category: '状态稳定', progress: '1 / 4' },
+  { title: '表达复盘者', desc: '完成一次表达训练后，写下自己的反思与修正。', status: 'locked', xp: '+90 XP', category: '表达成长', progress: '0 / 1' }
+];
+
+// Legacy preview exports kept for DesignLabPreview compatibility.
+export const dashboardSnapshotCards = [
+  { label: '当前主路径', value: dashboardPathRadar[0].badge, note: dashboardPathRadar[0].title },
+  { label: '最近会话', value: dashboardSessionFeed[0].status, note: dashboardSessionFeed[0].topic },
+  { label: '状态摘要', value: dashboardStatePulse[dashboardStatePulse.length - 1].lsb, note: dashboardStateSummary.headline }
+];
+
+export const dashboardRhythmNotes = dashboardFrictionSignals.map((item) => `${item.title}：${item.desc}`);
+
+export const dashboardTasks = dashboardSessionFeed.map((item, index) => ({
+  title: item.topic,
+  desc: item.note,
+  badge: index === 0 ? '最近发生' : item.status,
+  tone: (index === 0 ? 'primary' : index === 1 ? 'success' : 'accent') as Tone
+}));
+
+export const dashboardTracks = dashboardPathRadar.map((item, index) => ({
+  title: item.title,
+  desc: item.summary,
+  nextStep: item.nextStep,
+  badge: item.badge,
+  tone: (item.tone ?? (index === 0 ? 'primary' : index === 1 ? 'success' : 'accent')) as Tone,
+  progress: index === 0 ? 24 : index === 1 ? 12 : 0
+}));
+
+export const dashboardCalendar = [
+  { label: '一', tone: 'warning' as Tone },
+  { label: '二', tone: 'accent' as Tone },
+  { label: '三', tone: 'primary' as Tone },
+  { label: '四', tone: 'warning' as Tone },
+  { label: '五', tone: 'success' as Tone },
+  { label: '六', tone: 'warning' as Tone },
+  { label: '日', tone: 'primary' as Tone }
 ];
 
 export const plannerSummaryChips = ['真实问题：周报自动化', '当前水平：零散入门', '希望：3 周见效', '当前阻碍：时间碎片化'];
@@ -246,28 +435,6 @@ export const dashboardStats = [
   { label: '连续学习', value: '6 天', hint: '建议保持轻节奏', tone: 'success' as Tone },
   { label: '当前路径', value: '2 条', hint: '一主一辅更合理', tone: 'accent' as Tone },
   { label: '学习状态', value: 'LSB +2.1', hint: '尚可继续推进', tone: 'warning' as Tone }
-];
-
-export const dashboardTasks = [
-  { title: '继续异常处理任务', desc: '把日志输出和错误捕获接成一个最小闭环', badge: '先做这个', tone: 'primary' as Tone },
-  { title: '复盘上一节困惑', desc: '把还没想通的地方整理成下一次开场问题', badge: '轻复盘', tone: 'accent' as Tone },
-  { title: '做 1 道检核题', desc: '确认你是真的理解了，不只是刚好看懂', badge: '小检核', tone: 'success' as Tone }
-];
-
-export const dashboardTracks = [
-  { title: 'Python 自动化提效', desc: '围绕真实 Excel 报表继续推进异常处理与日志。', nextStep: '下一步：把错误行写进日志文件', badge: '主路径', tone: 'primary' as Tone, progress: 62 },
-  { title: '概率论错题修复', desc: '回到条件概率薄弱点，先用 1 个错题把原理讲清楚。', nextStep: '下一步：条件概率直觉解释', badge: '本周重点', tone: 'success' as Tone, progress: 48 },
-  { title: '英语复述表达训练', desc: '保持轻任务节奏，不让它和主路径抢精力。', nextStep: '下一步：围绕一段新闻做 90 秒复述', badge: '轻任务', tone: 'accent' as Tone, progress: 34 }
-];
-
-export const dashboardCalendar = [
-  { label: '一', tone: 'success' },
-  { label: '二', tone: 'success' },
-  { label: '三', tone: 'warning' },
-  { label: '四', tone: 'primary' },
-  { label: '五', tone: 'accent' },
-  { label: '六', tone: 'warning' },
-  { label: '日', tone: 'primary' }
 ];
 
 export const plannerMessages = [
@@ -374,9 +541,9 @@ export const pathDetailPlan = [
 ];
 
 export const learningKnowledgePoints = [
-  { title: 'try / except', desc: '知道错误被捕获后该如何处理。', badge: '正在学会', tone: 'primary' as Tone },
-  { title: '日志输出', desc: '让失败具备可解释性和可回看性。', badge: '还要练一练', tone: 'warning' as Tone },
-  { title: '场景迁移', desc: '把课堂知识放回真实报表流程。', badge: '已经连上了', tone: 'success' as Tone }
+  { title: 'try / except', name: 'try / except', desc: '知道错误被捕获后该如何处理。', badge: '正在学会', tone: 'primary' as Tone, status: 'learning', progress: 62 },
+  { title: '日志输出', name: '日志输出', desc: '让失败具备可解释性和可回看性。', badge: '还要练一练', tone: 'warning' as Tone, status: 'learning', progress: 38 },
+  { title: '场景迁移', name: '场景迁移', desc: '把课堂知识放回真实报表流程。', badge: '已经连上了', tone: 'success' as Tone, status: 'mastered', progress: 100 }
 ];
 
 export const learningSessionStats = [
@@ -389,8 +556,7 @@ export const learningSessionStats = [
 export const learningMessages = [
   { role: 'ai' as const, avatar: '教', author: 'AI 讲解助手', time: '授课中', content: '如果脚本遇到空值直接报错，你希望它停止，还是继续处理并记录问题？', tags: ['概念澄清', '真实场景'] },
   { role: 'user' as const, avatar: '你', author: '你', time: '刚刚', content: '我更希望它继续，但要把出错行记下来。', tags: ['需求表达'] },
-  { role: 'ai' as const, avatar: '教', author: 'AI 讲解助手', time: '现在', content: '这就是为什么日志和异常处理要一起讲，因为你要的是可继续执行的流程。', tags: ['核心解释'] },
-  { role: 'ai' as const, avatar: '卡', author: '知识点卡', time: '现在', content: '最小模式：先捕获异常，再记录文件名、行号、错误信息，最后决定是否继续处理。', tags: ['知识点卡', '可迁移'] }
+  { role: 'ai' as const, avatar: '教', author: 'AI 讲解助手', time: '现在', content: '这就是为什么日志和异常处理要一起讲，因为你要的是可继续执行的流程。最小模式是先捕获异常，再记录文件名、行号、错误信息，最后决定是否继续处理。', tags: ['核心解释', '可迁移'], knowledgePoint: '日志记录' }
 ];
 
 export const learningQuizOptions = [

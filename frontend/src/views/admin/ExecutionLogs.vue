@@ -580,11 +580,13 @@ const calculatePercent = (part: number, total: number) => {
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr);
   return date.toLocaleString('zh-CN', {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
+    hour12: false
   });
 };
 
@@ -681,7 +683,7 @@ onUnmounted(() => {
 
 <style scoped>
 .execution-logs-page {
-  padding: 1.5rem;
+  padding: 0;
 }
 
 /* 页面标题 */
@@ -715,13 +717,13 @@ onUnmounted(() => {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--glass-bg-light);
+  border-radius: var(--fluent-radius-lg);
+  border: 1px solid var(--glass-border-light);
   margin-bottom: 1.25rem;
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .stat-item {
@@ -901,14 +903,14 @@ onUnmounted(() => {
 
 /* 筛选器 */
 .filter-section {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-bg-light);
   padding: 1.25rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--fluent-radius-lg);
+  border: 1px solid var(--glass-border-light);
   margin-bottom: 1.25rem;
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .filter-row {
@@ -974,15 +976,15 @@ onUnmounted(() => {
 }
 
 .log-card {
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: var(--radius-xl);
+  background: var(--glass-bg-light);
+  border-radius: var(--fluent-radius-lg);
   padding: 1rem;
   box-shadow: var(--shadow-sm);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid var(--glass-border-light);
   border-left: 4px solid transparent;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.2s;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
 .log-card:hover {
@@ -1166,9 +1168,8 @@ onUnmounted(() => {
 
 [data-theme="dark"] .stats-bar,
 [data-theme="dark"] .filter-section,
-[data-theme="dark"] .agent-card,
 [data-theme="dark"] .log-card {
-  background: rgba(30, 45, 58, 0.74);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
 }
 </style>

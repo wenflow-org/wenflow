@@ -530,7 +530,7 @@ onMounted(() => {
 
 /* 会话列表 */
 .sessions-card {
-  border-radius: 12px;
+  border-radius: var(--fluent-radius-lg);
 }
 
 .card-header {
@@ -553,9 +553,9 @@ onMounted(() => {
 .session-item {
   padding: 1.25rem;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
 .session-item:hover {

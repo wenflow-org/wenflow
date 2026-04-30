@@ -1363,7 +1363,7 @@ onMounted(() => {
   margin-bottom: 1.5rem;
   padding: 1rem;
   background: var(--bg-surface);
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   border: 1px solid var(--border-default);
 }
 
@@ -1440,7 +1440,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 0.5rem;
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   border: 1px solid transparent;
   transition: all 0.3s;
 }
@@ -1562,7 +1562,7 @@ onMounted(() => {
 .suggestion-item {
   padding: 1rem;
   background: var(--bg-surface);
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   border-left: 4px solid var(--color-primary);
   border: 1px solid var(--border-default);
 }

@@ -1532,6 +1532,15 @@ router.get('/activity', async (req: Request, res: Response) => {
       }
     });
 
+    const sessionTaskIds = Array.from(new Set(recentSessions.map((session) => session.taskId).filter(Boolean)));
+    const sessionTasks = sessionTaskIds.length > 0
+      ? await prisma.subtasks.findMany({
+          where: { id: { in: sessionTaskIds } },
+          select: { id: true, title: true },
+        })
+      : [];
+    const sessionTaskMap = new Map(sessionTasks.map((task) => [task.id, task]));
+
     // 最近注册的用户
     const recentUsers = await prisma.users.findMany({
       take: 20,
@@ -1559,7 +1568,22 @@ router.get('/activity', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        recentSessions,
+        recentSessions: recentSessions.map((session) => ({
+          ...session,
+          user: session.users
+            ? {
+                id: session.users.id,
+                email: session.users.email,
+                name: session.users.name,
+              }
+            : null,
+          task: sessionTaskMap.get(session.taskId)
+            ? {
+                id: session.taskId,
+                title: sessionTaskMap.get(session.taskId)?.title,
+              }
+            : null,
+        })),
         recentUsers,
         completedTasks
       }

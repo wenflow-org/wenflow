@@ -1,82 +1,87 @@
 /* ========================================
-   问流 WenFlow - 现代化设计系统增强包 v2.0
-   参考：Coursera, edX, Udemy, Khan Academy
+   问流 WenFlow - 现代化设计系统增强包 v3.0
+   配色方案：友好陪伴风 × Fluent Design 2.0
+   参考：Coursera, edX, Udemy, Khan Academy, Fluent 2
    
    新增特性：
-   1. 现代渐变系统
-   2. 玻璃态效果
-   3. 高级动效
+   1. 现代渐变系统（对齐 UI Lab 色板）
+   2. 玻璃态效果（统一 --glass-* 变量）
+   3. 高级动效（Fluent 曲线）
    4. 卡片设计增强
    5. 数据可视化优化
    6. 响应式增强
    ======================================== */
 
 /* ==========================================
-   现代化渐变系统
+   现代化渐变系统（对齐 UI Lab 友好陪伴风）
    ========================================== */
 
 :root {
-  /* 主色渐变 */
-  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --gradient-primary-light: linear-gradient(135deg, #a8b5d9 0%, #c49fd9 100%);
-  --gradient-primary-dark: linear-gradient(135deg, #4c5a95 0%, #5a3a7a 100%);
+  /* 主色渐变 - 蓝紫青三色 */
+  --gradient-primary: linear-gradient(135deg, #3478f6 0%, #8d6bff 54%, #43b0d8 100%);
+  --gradient-primary-light: linear-gradient(135deg, #5a94f8 0%, #a98fff 54%, #6ec5e3 100%);
+  --gradient-primary-dark: linear-gradient(135deg, #1f57cc 0%, #6b4ae0 54%, #3593b5 100%);
+  
+  /* Fluent 双色渐变 */
+  --gradient-fluent: linear-gradient(135deg, #3478f6 0%, #50E6FF 100%);
+  --gradient-fluent-subtle: linear-gradient(180deg, rgba(52, 120, 246, 0.06), transparent 44%);
   
   /* 成功渐变 */
-  --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  --gradient-success: linear-gradient(135deg, #31b16f 0%, #5cc98b 100%);
   
   /* 警告渐变 */
-  --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-warning: linear-gradient(135deg, #f4aa46 0%, #f7c07a 100%);
   
-  /* 成就渐变 */
-  --gradient-achievement: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+  /* 成就渐变 - 紫蓝 */
+  --gradient-achievement: linear-gradient(135deg, #8d6bff 0%, #3478f6 100%);
   
   /* 学习渐变 */
-  --gradient-learning: linear-gradient(135deg, #5ee7df 0%, #b490ca 100%);
+  --gradient-learning: linear-gradient(135deg, #3478f6 0%, #43b0d8 100%);
   
   /* 科技渐变 */
-  --gradient-tech: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-tech: linear-gradient(135deg, #3478f6 0%, #8d6bff 100%);
   
   /* 温暖渐变 */
-  --gradient-warm: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+  --gradient-warm: linear-gradient(135deg, #f4aa46 0%, #ef7578 100%);
   
   /* 冷静渐变 */
-  --gradient-calm: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+  --gradient-calm: linear-gradient(135deg, #43b0d8 0%, #8db3fa 100%);
   
   /* 能量渐变 */
-  --gradient-energy: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  --gradient-energy: linear-gradient(135deg, #f4aa46 0%, #f7c07a 100%);
   
   /* 深夜渐变 */
   --gradient-midnight: linear-gradient(135deg, #232526 0%, #414345 100%);
   
   /* 极光渐变 */
-  --gradient-aurora: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+  --gradient-aurora: linear-gradient(135deg, #3478f6 0%, #43b0d8 100%);
   
   /* 日落渐变 */
-  --gradient-sunset: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  --gradient-sunset: linear-gradient(135deg, #f4aa46 0%, #ef7578 100%);
   
   /* 海洋渐变 */
-  --gradient-ocean: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+  --gradient-ocean: linear-gradient(135deg, #43b0d8 0%, #3478f6 100%);
   
   /* 森林渐变 */
-  --gradient-forest: linear-gradient(135deg, #134e5e 0%, #71b280 100%);
+  --gradient-forest: linear-gradient(135deg, #31b16f 0%, #43b0d8 100%);
 }
 
 /* ==========================================
-   玻璃态效果（Glassmorphism）
+   玻璃态效果（Glassmorphism - 统一变量）
    ========================================== */
 
 .glass {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-light);
 }
 
 .glass-strong {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--glass-border-light);
 }
 
 .glass-light {

@@ -1,109 +1,102 @@
 <template>
   <div class="admin-dashboard">
-    <div class="admin-ambient-bg" aria-hidden="true">
-      <div class="ambient-orb ambient-orb-1"></div>
-      <div class="ambient-orb ambient-orb-2"></div>
-    </div>
+    <!-- 顶部栏 -->
+    <header class="admin-header">
+      <div class="admin-header__brand">
+        <img src="/logo.png" alt="" class="admin-header__logo" />
+        <span class="admin-header__title">WenFlow 管理平台</span>
+      </div>
 
-    <!-- 顶部标题栏 -->
-    <header class="dashboard-header">
-      <div class="header-container">
-        <div class="header-left">
-          <h1 class="header-title" aria-label="WenFlow 管理平台">
-            <img src="/logo.png" alt="" class="title-icon-img" />
-          </h1>
-
-          <el-menu
-            :default-active="activeMenu"
-            class="top-menu"
-            mode="horizontal"
-            :ellipsis="false"
-            router
-          >
-            <el-menu-item index="/admin/dashboard">
-              <el-icon><DataAnalysis /></el-icon>
-              <span>概览</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/users">
-              <el-icon><User /></el-icon>
-              <span>用户管理</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/learner-models">
-              <el-icon><Reading /></el-icon>
-              <span>学习模型</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/teaching-sessions">
-              <el-icon><Reading /></el-icon>
-              <span>教学会话</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/api-config">
-              <el-icon><Setting /></el-icon>
-              <span>API 管理</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/execution-logs">
-              <el-icon><Cpu /></el-icon>
-              <span>执行日志</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/orchestrators">
-              <el-icon><Connection /></el-icon>
-              <span>编排视图</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/agent-registry">
-              <el-icon><Grid /></el-icon>
-              <span>Agent 注册</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/agent-model-configs">
-              <el-icon><Cpu /></el-icon>
-              <span>模型配置</span>
-            </el-menu-item>
-
-            <el-menu-item index="/admin/manifest-diagnostics">
-              <el-icon><WarningFilled /></el-icon>
-              <span>诊断</span>
-            </el-menu-item>
-          </el-menu>
-        </div>
-        <div class="header-right">
-          <el-dropdown trigger="click">
-            <div class="user-menu">
-              <el-avatar :size="36" :src="currentUser?.avatarUrl">
-                {{ currentUser?.name?.charAt(0) || 'A' }}
-              </el-avatar>
-              <span class="user-name">{{ currentUser?.name || 'Admin' }}</span>
-              <el-icon><ArrowDown /></el-icon>
-            </div>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="handleLogout">
-                  <el-icon><SwitchButton /></el-icon>
-                  退出登录
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
+      <div class="admin-header__right">
+        <ThemeSwitcher />
+        <el-dropdown trigger="click">
+          <div class="admin-header__user">
+            <el-avatar :size="32" :src="currentUser?.avatarUrl">
+              {{ currentUser?.name?.charAt(0) || 'A' }}
+            </el-avatar>
+            <span class="admin-header__user-name">{{ currentUser?.name || 'Admin' }}</span>
+            <el-icon><ArrowDown /></el-icon>
+          </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="handleLogout">
+                <el-icon><SwitchButton /></el-icon>
+                退出登录
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </header>
 
-    <!-- 主内容区 -->
-    <main class="dashboard-content">
-      <div class="content-container">
-        <router-view />
-      </div>
-    </main>
+    <div class="admin-layout">
+      <!-- 侧边栏 -->
+      <aside class="admin-sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <nav class="admin-sidebar__nav">
+          <!-- 分组 1: 内容管理 -->
+          <div class="admin-sidebar__group">
+            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">内容管理</span>
+            <router-link
+              v-for="item in contentNav"
+              :key="item.to"
+              :to="item.to"
+              class="admin-sidebar__item"
+              :class="{ active: isActiveRoute(item.to) }"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
+            </router-link>
+          </div>
+
+          <!-- 分组 2: 系统配置 -->
+          <div class="admin-sidebar__group">
+            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">系统配置</span>
+            <router-link
+              v-for="item in systemNav"
+              :key="item.to"
+              :to="item.to"
+              class="admin-sidebar__item"
+              :class="{ active: isActiveRoute(item.to) }"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
+            </router-link>
+          </div>
+
+          <!-- 分组 3: 监控诊断 -->
+          <div class="admin-sidebar__group">
+            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">监控诊断</span>
+            <router-link
+              v-for="item in monitorNav"
+              :key="item.to"
+              :to="item.to"
+              class="admin-sidebar__item"
+              :class="{ active: isActiveRoute(item.to) }"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
+            </router-link>
+          </div>
+        </nav>
+
+        <!-- 折叠按钮 -->
+        <button class="admin-sidebar__toggle" @click="toggleSidebar" :title="sidebarCollapsed ? '展开' : '折叠'">
+          <el-icon><component :is="sidebarCollapsed ? 'Expand' : 'Fold'" /></el-icon>
+        </button>
+      </aside>
+
+      <!-- 主内容区 -->
+      <main class="admin-main">
+        <div class="admin-content">
+          <router-view />
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import {
@@ -117,16 +110,30 @@ import {
   Setting,
   ArrowDown,
   SwitchButton,
+  Expand,
+  Fold,
 } from '@element-plus/icons-vue';
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue';
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: any;
+}
 
 const router = useRouter();
 const route = useRoute();
 
 const currentUser = ref<any>(null);
-const activeMenu = computed(() => route.path);
+const sidebarCollapsed = ref(false);
 
+// 侧边栏状态持久化
 onMounted(() => {
-  // 获取当前用户信息
+  const saved = localStorage.getItem('admin-sidebar-collapsed');
+  if (saved !== null) {
+    sidebarCollapsed.value = saved === 'true';
+  }
+
   const userStr = localStorage.getItem('admin_user');
   if (userStr) {
     currentUser.value = JSON.parse(userStr);
@@ -134,6 +141,37 @@ onMounted(() => {
     router.push('/admin/login');
   }
 });
+
+const toggleSidebar = () => {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  localStorage.setItem('admin-sidebar-collapsed', String(sidebarCollapsed.value));
+};
+
+const isActiveRoute = (path: string) => {
+  if (path === '/admin/dashboard') {
+    return route.path === '/admin/dashboard' || route.path === '/admin/overview';
+  }
+  return route.path.startsWith(path);
+};
+
+const contentNav: NavItem[] = [
+  { to: '/admin/dashboard', label: '概览', icon: DataAnalysis },
+  { to: '/admin/users', label: '用户管理', icon: User },
+  { to: '/admin/learner-models', label: '学习模型', icon: Reading },
+  { to: '/admin/teaching-sessions', label: '教学会话', icon: Reading },
+];
+
+const systemNav: NavItem[] = [
+  { to: '/admin/api-config', label: 'API 管理', icon: Setting },
+  { to: '/admin/agent-registry', label: 'Agent 注册', icon: Grid },
+  { to: '/admin/agent-model-configs', label: '模型配置', icon: Cpu },
+];
+
+const monitorNav: NavItem[] = [
+  { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
+  { to: '/admin/orchestrators', label: '编排视图', icon: Connection },
+  { to: '/admin/manifest-diagnostics', label: '诊断', icon: WarningFilled },
+];
 
 const handleLogout = () => {
   localStorage.removeItem('admin_token');
@@ -147,265 +185,258 @@ const handleLogout = () => {
 .admin-dashboard {
   min-height: 100vh;
   background: var(--bg-body);
-  position: relative;
+  display: flex;
+  flex-direction: column;
   transition: background var(--transition-normal);
 }
 
-.admin-ambient-bg {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.ambient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(95px);
-  opacity: 0.34;
-  animation: admin-float 20s ease-in-out infinite;
-}
-
-.ambient-orb-1 {
-  width: 680px;
-  height: 680px;
-  background: var(--gradient-primary);
-  top: -260px;
-  right: -180px;
-}
-
-.ambient-orb-2 {
-  width: 520px;
-  height: 520px;
-  background: var(--gradient-achievement);
-  left: -120px;
-  bottom: -180px;
-  animation-delay: -10s;
-}
-
-@keyframes admin-float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(36px, 44px) scale(1.05); }
-}
-
-/* 顶部标题栏 */
-.dashboard-header {
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  color: var(--text-primary);
-  padding: 0.75rem 0;
-  box-shadow: var(--shadow-sm);
-  border-bottom: 1px solid transparent;
+/* ========== 顶部栏 ========== */
+.admin-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border-light);
   position: sticky;
   top: 0;
   z-index: 101;
-  transition: background var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
+  transition: background var(--transition-normal), border-color var(--transition-normal);
 }
 
-[data-theme="dark"] .dashboard-header {
-  background: rgba(30, 45, 58, 0.78);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  color: var(--text-primary);
-  border-bottom-color: var(--border-default);
+[data-theme="dark"] .admin-header {
+  background: var(--glass-bg-dark);
+  border-bottom-color: var(--glass-border-dark);
 }
 
-.header-container {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.header-left {
+.admin-header__brand {
   display: flex;
   align-items: center;
-  flex: 1;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.header-title {
-  margin: 0;
-  display: flex;
-  align-items: center;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.title-icon {
-  font-size: 1.5rem;
-}
-
-.title-icon-img {
-  height: 32px;
+.admin-header__logo {
+  height: 28px;
   width: auto;
   object-fit: contain;
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-shrink: 0;
-}
-
-.user-menu {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  cursor: pointer;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-xl);
-  color: var(--text-secondary);
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.user-menu:hover {
-  background: var(--bg-muted);
+.admin-header__title {
+  font-size: 1rem;
+  font-weight: 700;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
-.user-name {
-  font-size: 0.95rem;
+.admin-header__right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-header__user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--fluent-radius-lg);
+  color: var(--text-secondary);
+  transition: background var(--fluent-duration-fast) var(--fluent-easing);
+}
+
+.admin-header__user:hover {
+  background: var(--bg-muted);
+}
+
+.admin-header__user-name {
+  font-size: 0.875rem;
   font-weight: 500;
   white-space: nowrap;
 }
 
-.top-menu {
-  background: rgba(255, 255, 255, 0.58) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.35) !important;
-  border-radius: var(--radius-xl);
-  height: 44px;
-  line-height: 44px;
-  padding: 0 0.35rem;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+/* ========== 布局 ========== */
+.admin-layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width, 240px) 1fr;
+  min-height: calc(100vh - 56px);
+  transition: grid-template-columns var(--fluent-duration-normal) var(--fluent-easing);
 }
 
-.top-menu::-webkit-scrollbar {
-  height: 6px;
+/* ========== 侧边栏 ========== */
+.admin-sidebar {
+  width: var(--sidebar-width, 240px);
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--glass-border-light);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  overflow: hidden;
+  transition: width var(--fluent-duration-normal) var(--fluent-easing), background var(--transition-normal);
 }
 
-.top-menu::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
-  border-radius: 999px;
+.admin-sidebar.collapsed {
+  width: var(--sidebar-collapsed-width, 64px);
 }
 
-.top-menu :deep(.el-menu-item) {
-  height: 36px;
-  line-height: 36px;
-  margin: 0 0.2rem;
-  padding: 0 0.7rem;
-  border-radius: var(--radius-md);
-  font-size: 0.9rem;
-  border-bottom: none !important;
-  color: var(--text-secondary) !important;
-  flex-shrink: 0;
-  transition: all 0.22s ease;
+[data-theme="dark"] .admin-sidebar {
+  background: var(--glass-bg-dark);
+  border-right-color: var(--glass-border-dark);
 }
 
-.top-menu :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.62) !important;
-  color: var(--text-primary) !important;
+.admin-sidebar__nav {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 12px;
 }
 
-.top-menu :deep(.el-menu-item.is-active) {
-  background: color-mix(in srgb, var(--color-primary) 14%, white 86%) !important;
-  color: var(--color-primary) !important;
-  border-bottom-color: transparent !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 35%, white 65%);
-  font-weight: var(--font-semibold);
+.admin-sidebar__nav::-webkit-scrollbar {
+  width: 4px;
 }
 
-[data-theme="dark"] .top-menu {
-  background: rgba(30, 45, 58, 0.72) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+.admin-sidebar__nav::-webkit-scrollbar-thumb {
+  background: var(--neutral-400);
+  border-radius: var(--radius-full);
 }
 
-[data-theme="dark"] .top-menu :deep(.el-menu-item) {
-  color: var(--text-secondary) !important;
+.admin-sidebar__group {
+  margin-bottom: 24px;
 }
 
-[data-theme="dark"] .top-menu :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: var(--text-primary) !important;
+.admin-sidebar__group-title {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  margin-bottom: 8px;
+  white-space: nowrap;
 }
 
-[data-theme="dark"] .top-menu :deep(.el-menu-item.is-active) {
-  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 45%, transparent);
-}
-
-.top-menu :deep(.el-icon) {
-  margin-right: 0.5rem;
-  font-size: 1.1rem;
-}
-
-/* 主内容区 */
-.dashboard-content {
+.admin-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--fluent-radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
   position: relative;
-  z-index: 1;
-  padding: 1.25rem 0;
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
-.content-container {
-  max-width: 1600px;
+.admin-sidebar__item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.admin-sidebar__item.active {
+  background: var(--sidebar-active-bg, color-mix(in srgb, var(--color-primary) 12%, transparent));
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.admin-sidebar__item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--color-primary);
+  border-radius: 0 2px 2px 0;
+}
+
+.admin-sidebar__item .el-icon {
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+/* 折叠按钮 */
+.admin-sidebar__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-top: 1px solid var(--border-default);
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
+}
+
+.admin-sidebar__toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.admin-sidebar__toggle .el-icon {
+  font-size: 1.125rem;
+}
+
+/* ========== 主内容区 ========== */
+.admin-main {
+  padding: 24px;
+  background: var(--bg-body);
+  min-height: calc(100vh - 56px);
+  transition: background var(--transition-normal);
+}
+
+.admin-content {
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 1.25rem 2rem;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
-  min-height: calc(100vh - 110px);
-  transition: background var(--transition-normal), box-shadow var(--transition-normal);
 }
 
-[data-theme="dark"] .content-container {
-  background: rgba(30, 45, 58, 0.76);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: var(--shadow-lg);
-}
-
-/* 响应式 */
-@media (max-width: 1280px) {
-  .header-container {
-    padding: 0 1rem;
-  }
-
-  .user-name {
+/* ========== 响应式 ========== */
+@media (max-width: 1024px) {
+  .admin-header__title {
     display: none;
   }
 
-  .user-menu {
-    padding: 0.5rem 0.75rem;
-    gap: 0.5rem;
+  .admin-header__user-name {
+    display: none;
   }
 
-  .top-menu :deep(.el-menu-item) {
-    padding: 0 0.6rem;
+  .admin-layout {
+    grid-template-columns: var(--sidebar-collapsed-width, 64px) 1fr;
+  }
+
+  .admin-sidebar {
+    width: var(--sidebar-collapsed-width, 64px);
+  }
+
+  .admin-sidebar .admin-sidebar__group-title,
+  .admin-sidebar .admin-sidebar__item span {
+    display: none;
+  }
+
+  .admin-main {
+    padding: 16px;
   }
 }
 
-@media (max-width: 1024px) {
-  .header-left {
-    gap: 0.5rem;
-    overflow: hidden;
+@media (max-width: 768px) {
+  .admin-header {
+    padding: 0 12px;
   }
 
-  .content-container {
-    padding: 0 1rem;
+  .admin-main {
+    padding: 12px;
   }
 }
 </style>

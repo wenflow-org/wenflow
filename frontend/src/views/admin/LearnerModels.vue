@@ -1,8 +1,11 @@
 <template>
   <div class="learner-models-page" v-loading="loading">
     <div class="page-header">
-      <h2 class="page-title">学习者模型</h2>
-      <p class="page-subtitle">查看学习者快照、风险信号与当前路径位置</p>
+      <h2 class="page-title">
+        <el-icon class="page-title-icon"><Reading /></el-icon>
+        学习者模型
+      </h2>
+      <p class="page-subtitle">查看和分析用户的学习模型与状态</p>
     </div>
 
     <div class="toolbar">
@@ -21,8 +24,8 @@
     <el-table :data="items" stripe>
       <el-table-column prop="userName" label="用户" min-width="140" />
       <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="pathTitle" label="当前路径" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="currentMilestone" label="当前阶段" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="pathTitle" label="当前路径" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="currentMilestone" label="当前阶段" min-width="200" show-overflow-tooltip />
       <el-table-column prop="currentTask" label="当前任务" min-width="180" show-overflow-tooltip />
       <el-table-column label="趋势" width="100" align="center">
         <template #default="{ row }">
@@ -79,6 +82,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { Reading } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
 
 const router = useRouter();
@@ -163,4 +167,13 @@ onMounted(loadData);
 .toolbar-left { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .toolbar-right { display: flex; gap: 12px; }
 .pagination-container { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+[data-theme="dark"] .learner-models-page {
+  background: var(--glass-bg-dark);
+}
+
+[data-theme="dark"] .toolbar {
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
+}
 </style>

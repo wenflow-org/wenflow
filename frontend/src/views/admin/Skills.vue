@@ -628,12 +628,12 @@ onMounted(() => {
 
 .category-item {
   padding: 0.75rem;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: var(--fluent-radius-md);
+  background: var(--glass-bg-light);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
   text-align: center;
-  border: 2px solid rgba(255, 255, 255, 0.32);
+  border: 2px solid var(--glass-border-light);
 }
 
 .category-item:hover {
@@ -687,9 +687,9 @@ onMounted(() => {
 
 .skill-card {
   cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  background: rgba(255, 255, 255, 0.72);
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
+  border: 1px solid var(--glass-border-light);
+  background: var(--glass-bg-light);
 }
 
 .skill-card:hover {
@@ -803,8 +803,8 @@ onMounted(() => {
 .detail-stat {
   text-align: center;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: 8px;
+  background: var(--glass-bg-light);
+  border-radius: var(--fluent-radius-md);
 }
 
 .detail-stat-value {
@@ -836,10 +836,10 @@ onMounted(() => {
 }
 
 .test-result {
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: 8px;
+  background: var(--glass-bg-light);
+  border-radius: var(--fluent-radius-md);
   padding: 1rem;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--glass-border-light);
 }
 
 .test-result-header {
@@ -871,18 +871,18 @@ onMounted(() => {
 }
 
 [data-theme="dark"] .category-item {
-  background: rgba(30, 45, 58, 0.74);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
 }
 
 [data-theme="dark"] .category-item:hover,
 [data-theme="dark"] .category-item.active {
-  background: rgba(30, 45, 58, 0.85);
+  background: color-mix(in srgb, var(--glass-bg-dark) 95%, transparent);
 }
 
 [data-theme="dark"] .skill-card {
-  background: rgba(30, 45, 58, 0.74);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg-dark);
+  border-color: var(--glass-border-dark);
 }
 
 [data-theme="dark"] .skill-card:hover {
@@ -891,7 +891,7 @@ onMounted(() => {
 
 [data-theme="dark"] .detail-stat,
 [data-theme="dark"] .test-result {
-  background: rgba(30, 45, 58, 0.74);
+  background: var(--glass-bg-dark);
 }
 
 [data-theme="dark"] .test-output {

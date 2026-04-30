@@ -479,7 +479,7 @@ onMounted(() => {
   margin-bottom: 1.5rem;
   padding: 1rem;
   background: var(--bg-elevated);
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   border: 1px solid var(--border-light);
 }
 
@@ -510,7 +510,7 @@ onMounted(() => {
 /* 表格 */
 .table-container {
   overflow-x: auto;
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   width: 100%;
   -webkit-overflow-scrolling: touch;
 }
@@ -520,7 +520,7 @@ onMounted(() => {
 }
 
 .table-container :deep(.el-table) {
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   overflow: visible;
   width: 100%;
 }
@@ -559,7 +559,7 @@ onMounted(() => {
   margin: 1rem 0;
   padding: 1rem;
   background: var(--bg-elevated);
-  border-radius: 4px;
+  border-radius: var(--fluent-radius-sm);
   border: 1px solid var(--border-light);
 }
 
@@ -572,7 +572,7 @@ onMounted(() => {
   overflow-y: auto;
   background: var(--bg-muted);
   padding: 1rem;
-  border-radius: 4px;
+  border-radius: var(--fluent-radius-sm);
   border: 1px solid var(--border-light);
 }
 
@@ -587,7 +587,7 @@ onMounted(() => {
   display: flex;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--fluent-radius-md);
   background: var(--bg-elevated);
   border: 1px solid var(--border-light);
 }

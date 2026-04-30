@@ -10,7 +10,7 @@
       <header class="demo-bar">
         <div class="demo-bar__top">
           <div class="demo-brand">
-            <span class="demo-brand__pill">WenFlow Demo</span>
+            <span class="demo-brand__pill">WenFlow UI Lab</span>
             <strong>问流陪伴式学习体验</strong>
           </div>
 
@@ -29,7 +29,7 @@
           </div>
         </div>
 
-        <nav class="scene-nav" aria-label="Demo 页面导航">
+        <nav class="scene-nav" aria-label="UI Lab 页面导航">
           <button
             v-for="scene in scenes"
             :key="scene.id"

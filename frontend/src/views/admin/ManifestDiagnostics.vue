@@ -3,9 +3,9 @@
     <div class="page-header">
       <h2 class="page-title">
         <el-icon class="page-title-icon"><WarningFilled /></el-icon>
-        架构一致性诊断
+        架构诊断
       </h2>
-      <p class="page-subtitle">检查 Manifest 与注册表、模型配置、日志、目录之间的漂移</p>
+      <p class="page-subtitle">检查 Agent 架构完整性和潜在问题</p>
     </div>
 
     <div class="toolbar">
@@ -257,7 +257,7 @@ onMounted(loadData);
 }
 
 .panel-card {
-  border-radius: var(--radius-xl);
+  border-radius: var(--fluent-radius-lg);
 }
 
 .card-header {
@@ -276,7 +276,7 @@ onMounted(loadData);
   justify-content: space-between;
   align-items: center;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--fluent-radius-md);
   padding: 0.65rem 0.8rem;
 }
 
@@ -298,7 +298,7 @@ onMounted(loadData);
 
 .drift-item {
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--fluent-radius-md);
   padding: 0.75rem;
 }
 
@@ -335,7 +335,7 @@ onMounted(loadData);
 
 .sample-item {
   border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--fluent-radius-md);
   padding: 0.7rem;
 }
 

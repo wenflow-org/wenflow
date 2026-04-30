@@ -248,11 +248,12 @@ const loadActivity = async () => {
     // 添加学习会话活动
     if (data.recentSessions) {
       data.recentSessions.forEach((session: any) => {
+        const taskTitle = session.task?.title || session.topic || session.taskId || '未知任务';
         activities.push({
           id: session.id,
           type: 'success',
           title: '学习会话',
-          description: `${session.user?.name || '用户'} 开始了任务 "${session.task?.title || '未知任务'}"`,
+          description: `${session.user?.name || session.users?.name || '用户'} 开始了任务 "${taskTitle}"`,
           createdAt: session.startTime
         });
       });
@@ -343,6 +344,7 @@ onMounted(() => {
 <style scoped>
 .admin-overview {
   padding: 0;
+  padding-bottom: 24px;
 }
 
 .page-header {
@@ -382,12 +384,12 @@ onMounted(() => {
   align-items: center;
   gap: 1.5rem;
   padding: 1.5rem !important;
-  border-radius: var(--radius-xl) !important;
-  border: 1px solid rgba(255, 255, 255, 0.32) !important;
-  background: rgba(255, 255, 255, 0.72) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.3s ease;
+  border-radius: var(--fluent-radius-lg) !important;
+  border: 1px solid var(--glass-border-light) !important;
+  background: var(--glass-bg-light) !important;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  transition: all var(--fluent-duration-normal) var(--fluent-easing);
 }
 
 .stat-card:hover {
@@ -457,22 +459,22 @@ onMounted(() => {
 }
 
 /* 不同卡片的图标背景色 */
-.stat-card--users .stat-icon { background: linear-gradient(135deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.stat-card--active .stat-icon { background: linear-gradient(135deg, #f59e0b, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.stat-card--paths .stat-icon { background: linear-gradient(135deg, #10b981, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.stat-card--tasks .stat-icon { background: linear-gradient(135deg, #8b5cf6, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.stat-card--conversations .stat-icon { background: linear-gradient(135deg, #ec4899, #db2777); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.stat-card--agents .stat-icon { background: linear-gradient(135deg, #06b6d4, #0891b2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card--users .stat-icon { background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card--active .stat-icon { background: var(--gradient-warning); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card--paths .stat-icon { background: var(--gradient-success); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card--tasks .stat-icon { background: var(--gradient-achievement); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card--conversations .stat-icon { background: linear-gradient(135deg, var(--color-accent), var(--color-danger)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card--agents .stat-icon { background: var(--gradient-fluent); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
 /* Section */
 .section {
   margin-top: 2rem;
   padding: 1.25rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--fluent-radius-lg);
+  border: 1px solid var(--glass-border-light);
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow-sm);
 }
 
@@ -499,9 +501,9 @@ onMounted(() => {
 }
 
 .trend-panel {
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--fluent-radius-md);
+  background: color-mix(in srgb, var(--glass-bg-light) 94%, transparent);
   padding: 0.75rem 1rem;
 }
 
@@ -581,13 +583,13 @@ onMounted(() => {
 }
 
 [data-theme="dark"] .stat-card {
-  background: rgba(30, 45, 58, 0.74) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: var(--glass-bg-dark) !important;
+  border-color: var(--glass-border-dark) !important;
 }
 
 [data-theme="dark"] .section {
-  background: rgba(30, 45, 58, 0.74) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: var(--glass-bg-dark) !important;
+  border-color: var(--glass-border-dark) !important;
 }
 
 [data-theme="dark"] .page-title {
