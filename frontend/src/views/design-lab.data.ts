@@ -382,11 +382,77 @@ export const achievementOverviewCards = [
 
 export const achievementCategories = ['全部', '学习习惯', '路径推进', '状态稳定', '表达成长'];
 
+export const achievementSpotlight = {
+  recent: {
+    title: '最近解锁',
+    name: '连续学习回归',
+    desc: '重新回到学习节奏，并完成最近一次完整学习。',
+    xp: '+120 XP',
+    earnedAt: '4 月 28 日'
+  },
+  next: {
+    title: '下一步最值得追',
+    name: '主路径启动者',
+    desc: '再完成 2 次主路径任务推进，就能解锁这条里程碑成就。',
+    progress: '2 / 4',
+    actionLabel: '继续主路径',
+    actionTo: '/ui-lab/paths/1'
+  }
+};
+
 export const achievementCards = [
-  { title: '连续学习回归', desc: '重新回到学习节奏，并完成最近一次完整学习。', status: 'unlocked', xp: '+120 XP', category: '学习习惯', progress: '已完成' },
-  { title: '主路径启动者', desc: '让当前主路径第一次真正推进，而不只是停留在已生成状态。', status: 'next', xp: '+180 XP', category: '路径推进', progress: '2 / 4' },
-  { title: '轻量稳定推进', desc: '连续 4 次保持可收口的小步学习，不在中途放弃。', status: 'locked', xp: '+240 XP', category: '状态稳定', progress: '1 / 4' },
-  { title: '表达复盘者', desc: '完成一次表达训练后，写下自己的反思与修正。', status: 'locked', xp: '+90 XP', category: '表达成长', progress: '0 / 1' }
+  {
+    title: '连续学习回归',
+    desc: '重新回到学习节奏，并完成最近一次完整学习。',
+    status: 'unlocked',
+    xp: '+120 XP',
+    category: '学习习惯',
+    progress: '已完成',
+    icon: '🔥',
+    unlocked: true,
+    earnedAt: '4 月 28 日',
+    actionLabel: '查看学习台',
+    actionTo: '/ui-lab/dashboard'
+  },
+  {
+    title: '主路径启动者',
+    desc: '让当前主路径第一次真正推进，而不只是停留在已生成状态。',
+    status: 'next',
+    xp: '+180 XP',
+    category: '路径推进',
+    progress: '2 / 4',
+    icon: '🚀',
+    unlocked: false,
+    progressDetail: { current: 2, total: 4, percentage: 50 },
+    actionLabel: '继续主路径',
+    actionTo: '/ui-lab/paths/1'
+  },
+  {
+    title: '轻量稳定推进',
+    desc: '连续 4 次保持可收口的小步学习，不在中途放弃。',
+    status: 'locked',
+    xp: '+240 XP',
+    category: '状态稳定',
+    progress: '1 / 4',
+    icon: '🧭',
+    unlocked: false,
+    progressDetail: { current: 1, total: 4, percentage: 25 },
+    actionLabel: '继续当前任务',
+    actionTo: '/ui-lab/learn/task-1'
+  },
+  {
+    title: '表达复盘者',
+    desc: '完成一次表达训练后，写下自己的反思与修正。',
+    status: 'locked',
+    xp: '+90 XP',
+    category: '表达成长',
+    progress: '0 / 1',
+    icon: '📝',
+    unlocked: false,
+    progressDetail: { current: 0, total: 1, percentage: 0 },
+    actionLabel: '进入表达训练',
+    actionTo: '/ui-lab/planning'
+  }
 ];
 
 // Legacy preview exports kept for DesignLabPreview compatibility.
@@ -495,9 +561,9 @@ export const pathStages = [
     tone: 'success' as Tone,
     objectives: ['读取 Excel/CSV', '识别关键字段', '定义输出格式'],
     tasks: [
-      { title: '读取一份真实报表', note: '从你自己的输入文件开始，而不是示例数据。', badge: '已完成', tone: 'success' as Tone, taskType: '观察任务', estimatedMinutes: 20, actionLabel: '已完成' },
-      { title: '识别关键字段', note: '区分必须字段和可选字段，避免脚本依赖过强。', badge: '已完成', tone: 'success' as Tone, taskType: '分析任务', estimatedMinutes: 15, actionLabel: '已完成' },
-      { title: '确定输出结构', note: '先定义最终结果，后面任务才不会跑偏。', badge: '已完成', tone: 'success' as Tone, taskType: '整理任务', estimatedMinutes: 15, actionLabel: '已完成' }
+      { title: '读取一份真实报表', note: '从你自己的输入文件开始，而不是示例数据。', badge: '已完成', tone: 'success' as Tone, taskType: '观察任务', estimatedMinutes: 20, ability: '问题定义', statusLabel: '已完成', actionLabel: '复习', actionTo: '/ui-lab/learn/task-1' },
+      { title: '识别关键字段', note: '区分必须字段和可选字段，避免脚本依赖过强。', badge: '已完成', tone: 'success' as Tone, taskType: '分析任务', estimatedMinutes: 15, ability: '结构分析', statusLabel: '已完成', actionLabel: '复习', actionTo: '/ui-lab/learn/task-1' },
+      { title: '确定输出结构', note: '先定义最终结果，后面任务才不会跑偏。', badge: '已完成', tone: 'success' as Tone, taskType: '整理任务', estimatedMinutes: 15, ability: '结果定义', statusLabel: '已完成', actionLabel: '复习', actionTo: '/ui-lab/learn/task-1' }
     ]
   },
   {
@@ -508,9 +574,9 @@ export const pathStages = [
     tone: 'primary' as Tone,
     objectives: ['异常处理', '日志记录', '失败回溯'],
     tasks: [
-      { title: '理解 try / except', note: '知道错误被捕获后应该记录什么。', badge: '学习中', tone: 'primary' as Tone, taskType: '授课任务', estimatedMinutes: 25, actionLabel: '开始学习' },
-      { title: '为关键分支补日志', note: '记录失败位置、原因和输入上下文。', badge: '待开始', tone: 'warning' as Tone, taskType: '练习任务', estimatedMinutes: 20, actionLabel: '开始学习' },
-      { title: '做一次失败回溯', note: '通过日志定位问题，不只看报错提示。', badge: '待开始', tone: 'warning' as Tone, taskType: '复盘任务', estimatedMinutes: 15, actionLabel: '开始学习' }
+      { title: '理解 try / except', note: '知道错误被捕获后应该记录什么。', badge: '学习中', tone: 'primary' as Tone, taskType: '授课任务', estimatedMinutes: 25, ability: '异常处理', statusLabel: '进行中', actionLabel: '继续学习', actionTo: '/ui-lab/learn/task-1' },
+      { title: '为关键分支补日志', note: '记录失败位置、原因和输入上下文。', badge: '待开始', tone: 'warning' as Tone, taskType: '练习任务', estimatedMinutes: 20, ability: '日志记录', statusLabel: '未开始', actionLabel: '开始学习', actionTo: '/ui-lab/learn/task-1' },
+      { title: '做一次失败回溯', note: '通过日志定位问题，不只看报错提示。', badge: '待开始', tone: 'warning' as Tone, taskType: '复盘任务', estimatedMinutes: 15, ability: '问题回溯', statusLabel: '未开始', actionLabel: '开始学习', actionTo: '/ui-lab/learn/task-1' }
     ]
   },
   {
@@ -521,9 +587,9 @@ export const pathStages = [
     tone: 'accent' as Tone,
     objectives: ['批量处理', '输出归档', '流程复盘'],
     tasks: [
-      { title: '对接完整输入目录', note: '让脚本从固定目录批量读取本周文件。', badge: '锁定', tone: 'accent' as Tone, taskType: '实践任务', estimatedMinutes: 30, actionLabel: '等待解锁' },
-      { title: '输出结果归档', note: '形成可回查的结果命名规范。', badge: '锁定', tone: 'accent' as Tone, taskType: '整理任务', estimatedMinutes: 20, actionLabel: '等待解锁' },
-      { title: '写一次流程复盘', note: '确认脚本是否真正省掉了重复劳动。', badge: '锁定', tone: 'accent' as Tone, taskType: '复盘任务', estimatedMinutes: 15, actionLabel: '等待解锁' }
+      { title: '对接完整输入目录', note: '让脚本从固定目录批量读取本周文件。', badge: '锁定', tone: 'accent' as Tone, taskType: '实践任务', estimatedMinutes: 30, ability: '流程接入', statusLabel: '前置阻塞', actionLabel: '去补前置' },
+      { title: '输出结果归档', note: '形成可回查的结果命名规范。', badge: '锁定', tone: 'accent' as Tone, taskType: '整理任务', estimatedMinutes: 20, ability: '结果归档', statusLabel: '前置阻塞', actionLabel: '去补前置' },
+      { title: '写一次流程复盘', note: '确认脚本是否真正省掉了重复劳动。', badge: '锁定', tone: 'accent' as Tone, taskType: '复盘任务', estimatedMinutes: 15, ability: '流程复盘', statusLabel: '前置阻塞', actionLabel: '去补前置' }
     ]
   }
 ];
@@ -541,9 +607,55 @@ export const pathDetailPlan = [
 ];
 
 export const learningKnowledgePoints = [
-  { title: 'try / except', name: 'try / except', desc: '知道错误被捕获后该如何处理。', badge: '正在学会', tone: 'primary' as Tone, status: 'learning', progress: 62 },
-  { title: '日志输出', name: '日志输出', desc: '让失败具备可解释性和可回看性。', badge: '还要练一练', tone: 'warning' as Tone, status: 'learning', progress: 38 },
-  { title: '场景迁移', name: '场景迁移', desc: '把课堂知识放回真实报表流程。', badge: '已经连上了', tone: 'success' as Tone, status: 'mastered', progress: 100 }
+  {
+    id: 'kp-1',
+    order: '01',
+    title: '异常处理',
+    name: 'try / except',
+    desc: '知道错误被捕获后该如何处理。',
+    badge: '已完成',
+    tone: 'success' as Tone,
+    status: 'mastered',
+    progress: 100,
+    current: false,
+    children: [
+      { id: 'kp-1-1', title: '为什么不能直接报错退出', status: 'completed' },
+      { id: 'kp-1-2', title: '异常捕获的最小结构', status: 'completed' }
+    ]
+  },
+  {
+    id: 'kp-2',
+    order: '02',
+    title: '日志记录',
+    name: '日志输出',
+    desc: '让失败具备可解释性和可回看性。',
+    badge: '进行中',
+    tone: 'primary' as Tone,
+    status: 'learning',
+    progress: 38,
+    current: true,
+    children: [
+      { id: 'kp-2-1', title: '为什么要记录错误', status: 'completed' },
+      { id: 'kp-2-2', title: '应该记录哪些字段', status: 'current' },
+      { id: 'kp-2-3', title: '做一次小检核', status: 'pending' }
+    ]
+  },
+  {
+    id: 'kp-3',
+    order: '03',
+    title: '场景迁移',
+    name: '场景迁移',
+    desc: '把课堂知识放回真实报表流程。',
+    badge: '未开始',
+    tone: 'warning' as Tone,
+    status: 'pending',
+    progress: 0,
+    current: false,
+    children: [
+      { id: 'kp-3-1', title: '将日志接回报表流程', status: 'pending' },
+      { id: 'kp-3-2', title: '验证失败回溯是否可用', status: 'pending' }
+    ]
+  }
 ];
 
 export const learningSessionStats = [
