@@ -13,7 +13,7 @@
     <main class="auth-shell">
       <aside class="auth-brand">
         <div class="auth-brand__content">
-          <span class="auth-brand__eyebrow">问流 WenFlow</span>
+          <span class="auth-brand__eyebrow">WenFlow</span>
           <h1>不是先找课，而是先找到真正的问题。</h1>
           <p>登录后回到你的目标、路径和学习进展，从当前最小的一步继续。</p>
 
@@ -30,17 +30,17 @@
         <div class="auth-card">
           <div class="auth-card__top">
             <span class="auth-card__pill">登录</span>
-            <ThemeSwitcher />
+            <router-link to="/" class="auth-back-link">← 返回首页</router-link>
           </div>
 
           <div class="auth-card__header">
             <h2>欢迎回来</h2>
-            <p>登录账号，继续你的学习过程。</p>
+            <p>登录后，继续你的目标、路径和学习进展。</p>
           </div>
 
           <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="auth-form" @keyup.enter="handleLogin">
-            <el-form-item label="用户名" prop="name">
-              <el-input v-model="loginForm.name" type="text" placeholder="请输入用户名" prefix-icon="User" clearable />
+            <el-form-item label="用户名或邮箱" prop="name">
+              <el-input v-model="loginForm.name" type="text" placeholder="请输入用户名或邮箱" prefix-icon="User" clearable />
             </el-form-item>
 
             <el-form-item label="密码" prop="password">
@@ -48,7 +48,7 @@
             </el-form-item>
 
             <div class="auth-meta">
-              <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
+              <el-checkbox v-model="loginForm.remember">记住登录状态</el-checkbox>
             </div>
 
             <el-button type="primary" :loading="loading" class="auth-submit" @click="handleLogin">
@@ -61,8 +61,6 @@
             </div>
           </el-form>
         </div>
-
-        <router-link to="/" class="auth-footer-link">返回首页</router-link>
       </section>
     </main>
   </div>
@@ -75,7 +73,6 @@ import { type FormInstance, type FormRules } from 'element-plus';
 import { toast } from '../utils/toast';
 import { useUserStore } from '../stores/user';
 import { authAPI } from '../api/auth';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -83,9 +80,9 @@ const formRef = ref<FormInstance>();
 const loading = ref(false);
 
 const loginPoints = [
-  { title: '继续目标', desc: '回到你已经澄清过的问题和路径。' },
+  { title: '继续目标', desc: '回到你已经整理过的目标、问题和学习路径。' },
   { title: '接上学习', desc: '从当前最小任务继续，不被内容淹没。' },
-  { title: '看见进展', desc: '学习结束后知道哪里稳、哪里还需要补。' }
+  { title: '看见进展', desc: '看见已经掌握的部分，也看见下一步该补哪里。' }
 ];
 
 const loginForm = reactive({
@@ -146,6 +143,7 @@ const handleGoRegister = async () => {
   --auth-blue: #3478f6;
   --auth-blue-deep: #1f57cc;
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
   overflow: hidden;
   background: #f3f6fb;
@@ -208,23 +206,24 @@ const handleGoRegister = async () => {
   z-index: 1;
   width: min(1240px, calc(100% - 72px));
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 98px 0 72px;
   display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(420px, 0.98fr);
+  grid-template-columns: minmax(0, 0.94fr) minmax(440px, 1.06fr);
   gap: 28px;
   align-items: center;
 }
 
 .auth-brand {
-  min-height: 620px;
+  min-height: 584px;
   border-radius: 32px;
-  padding: 44px;
-  background: linear-gradient(180deg, #16233c, #0f172a);
+  padding: 40px;
+  background: linear-gradient(180deg, #1a2740, #121b2d);
   color: #fff;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
 }
 
 .auth-brand::before {
@@ -264,7 +263,7 @@ const handleGoRegister = async () => {
 
 .auth-brand h1 {
   max-width: 12ch;
-  font-size: clamp(38px, 4.2vw, 58px);
+  font-size: clamp(34px, 3.8vw, 52px);
 }
 
 .auth-brand p {
@@ -285,8 +284,8 @@ const handleGoRegister = async () => {
   gap: 5px;
   padding: 18px 20px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .auth-point strong {
@@ -303,16 +302,16 @@ const handleGoRegister = async () => {
 .auth-panel {
   display: grid;
   justify-items: center;
-  gap: 18px;
+  gap: 0;
 }
 
 .auth-card {
   width: min(100%, 520px);
   padding: 36px;
   border-radius: 30px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(37, 99, 235, 0.08);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  box-shadow: 0 34px 88px rgba(15, 23, 42, 0.16);
   display: grid;
   gap: 28px;
   backdrop-filter: blur(18px);
@@ -377,7 +376,7 @@ const handleGoRegister = async () => {
 }
 
 .auth-switch button,
-.auth-footer-link {
+.auth-back-link {
   border: 0;
   background: transparent;
   color: var(--auth-blue-deep);
@@ -387,8 +386,9 @@ const handleGoRegister = async () => {
   cursor: pointer;
 }
 
-.auth-footer-link {
+.auth-back-link {
   color: color-mix(in srgb, var(--auth-ink) 68%, white);
+  font-size: 14px;
 }
 
 :deep(.el-form-item) {
@@ -438,6 +438,24 @@ const handleGoRegister = async () => {
 
   .auth-card {
     padding: 24px;
+  }
+}
+
+@media (max-width: 420px) {
+  .auth-shell {
+    width: min(100% - 20px, 620px);
+    padding-bottom: calc(28px + var(--safe-area-bottom));
+  }
+
+  .auth-card {
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .auth-card__top,
+  .auth-switch {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

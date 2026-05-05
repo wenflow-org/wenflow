@@ -990,6 +990,83 @@ const copyText = async (text: string, successMessage: string) => {
         }
       }
     }
+
+    .filters {
+      padding: 16px 16px 2px;
+      border-radius: 20px;
+    }
+
+    .stats {
+      :deep(.el-row) {
+        row-gap: 12px;
+      }
+
+      :deep(.el-col) {
+        max-width: 100%;
+        flex: 0 0 100%;
+      }
+    }
+
+    :deep(.filters .el-form) {
+      display: grid;
+      gap: 8px;
+    }
+
+    :deep(.filters .el-form-item) {
+      width: 100%;
+      margin-right: 0;
+    }
+
+    :deep(.filters .el-form-item__content) {
+      width: 100%;
+    }
+
+    :deep(.filters .el-select),
+    :deep(.filters .el-date-editor),
+    :deep(.filters .el-button) {
+      width: 100%;
+    }
+
+    .actions {
+      width: 100%;
+      justify-content: stretch;
+    }
+
+    .actions > * {
+      flex: 1 1 100%;
+    }
+
+    .logs-table-panel__header {
+      gap: 8px;
+    }
+
+    .logs-table-panel__scroller {
+      margin-inline: -4px;
+      padding-inline: 4px;
+    }
+
+    .pagination {
+      justify-content: flex-start;
+      overflow-x: auto;
+    }
+
+    :deep(.el-dialog) {
+      margin: 0;
+      border-radius: 0;
+    }
+
+    :deep(.el-dialog__header),
+    :deep(.el-dialog__body),
+    :deep(.el-dialog__footer) {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    :deep(.io-descriptions .el-descriptions__label) {
+      width: auto;
+      min-width: 84px;
+      white-space: normal;
+    }
   }
 
   .code-block {

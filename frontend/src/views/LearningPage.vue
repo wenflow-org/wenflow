@@ -1113,6 +1113,9 @@ onUnmounted(() => {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   max-width: 100%;
   color: var(--ink);
   background: #f3f6fb;
@@ -1515,6 +1518,7 @@ onUnmounted(() => {
   height: 100%;
   min-height: 0;
   padding: 24px;
+  padding-bottom: calc(24px + var(--safe-area-bottom));
   gap: 0;
   overflow: hidden;
 }
@@ -1744,8 +1748,8 @@ onUnmounted(() => {
 /* ---- peer chat ---- */
 .peer-chat-float-btn {
   position: fixed;
-  bottom: 100px;
-  right: 28px;
+  bottom: calc(100px + var(--safe-area-bottom));
+  right: max(16px, calc(16px + var(--safe-area-right)));
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   z-index: 9997;
   transition: all 0.3s ease;
@@ -1796,6 +1800,7 @@ onUnmounted(() => {
 @media (max-width: 900px) {
   .learning-layout {
     grid-template-columns: 1fr;
+    max-width: min(100% - 24px, 1240px);
   }
 
   .learning-sidebar {
@@ -1810,6 +1815,105 @@ onUnmounted(() => {
   .learning-msg {
     max-width: 95%;
     min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .learning-page {
+    min-height: 100dvh;
+    height: auto;
+  }
+
+  .learning-header-card {
+    max-width: min(100% - 20px, 1240px);
+    margin-top: 10px;
+    padding: 14px 16px;
+    border-radius: 18px;
+  }
+
+  .learning-header-card__controls,
+  .learning-header-card__meta {
+    width: 100%;
+  }
+
+  .learning-layout {
+    max-width: min(100% - 20px, 1240px);
+  }
+
+  .learning-main {
+    padding: 16px;
+    padding-bottom: calc(16px + var(--safe-area-bottom));
+  }
+
+  .learning-messages {
+    gap: 12px;
+    padding-right: 0;
+  }
+
+  .learning-msg,
+  .learning-msg--user {
+    max-width: 100%;
+  }
+
+  .learning-completion {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .learning-completion__actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .learning-completion__actions :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .learning-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .learning-composer :deep(.el-button) {
+    width: 100%;
+  }
+
+  .peer-chat-float-btn {
+    bottom: calc(84px + var(--safe-area-bottom));
+    right: max(12px, calc(12px + var(--safe-area-right)));
+  }
+}
+
+@media (max-width: 520px) {
+  .learning-header-card {
+    max-width: min(100% - 16px, 1240px);
+    padding: 12px 14px;
+  }
+
+  .learning-layout {
+    max-width: min(100% - 16px, 1240px);
+  }
+
+  .learning-sidebar,
+  .learning-main {
+    padding: 14px;
+  }
+
+  .learning-msg {
+    padding: 14px;
+  }
+
+  .quick-replies {
+    gap: 6px;
+  }
+
+  .quick-reply-card {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .peer-chat-float-btn {
+    bottom: calc(76px + var(--safe-area-bottom));
   }
 }
 </style>

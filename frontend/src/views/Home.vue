@@ -15,11 +15,11 @@
         <div class="site-actions">
           <template v-if="isLoggedIn">
             <router-link to="/dashboard" class="site-cta site-cta--ghost">回到学习台</router-link>
-            <router-link to="/goal-conversation" class="site-cta site-cta--primary">新建目标规划</router-link>
+            <router-link to="/goal-conversation" class="site-cta site-cta--primary">从一个问题开始</router-link>
           </template>
           <template v-else>
             <router-link to="/login" class="site-cta site-cta--ghost">登录</router-link>
-            <router-link to="/register" class="site-cta site-cta--primary">开始规划我的目标</router-link>
+            <router-link to="/register" class="site-cta site-cta--primary">从一个问题开始</router-link>
           </template>
         </div>
 
@@ -52,39 +52,74 @@
         <div class="home-hero__copy">
           <span class="home-kicker">问流 WenFlow</span>
           <h1>先说清你想解决的事，再开始学习。</h1>
-          <p>问流会陪你把模糊目标拆成第一步：该学什么、先做什么、什么时候算真的会了。</p>
+          <p>WenFlow 会把一个模糊目标，拆成可以马上行动的学习路径：先确认问题，再生成路线，再根据反馈继续调整。</p>
           <div class="home-hero__actions">
             <router-link :to="primaryCtaPath" class="btn btn--primary btn--lg">{{ primaryCtaLabel }}</router-link>
-            <a href="#how" class="btn btn--ghost">先看看怎么开始</a>
+            <a href="#hero-example" class="btn btn--ghost">看一个示例</a>
           </div>
         </div>
 
-        <aside class="home-hero__scene" aria-label="目标澄清示例">
-          <div class="scene-turn scene-turn--user">我想学 Python，但不知道从哪里开始。</div>
-          <div class="scene-turn scene-turn--ai">先不急着选课。你最近最想用它解决什么？</div>
-          <div class="scene-turn scene-turn--user">每周 Excel 周报太耗时间，我想先自动化一部分。</div>
-          <div class="scene-outcome">
-            <span>可以开始的目标</span>
-            <strong>用 Python 自动化一段周报流程</strong>
-            <small>下一步：生成第一版学习路径</small>
+        <aside id="hero-example" class="home-hero__demo" aria-label="产品演示示例">
+          <div class="demo-message demo-message--user">
+            <p>我想学 Python，但不知道该从哪开始。</p>
+          </div>
+          <div class="demo-message demo-message--assistant">
+            <p>你现在更想学这门技能，还是先解决手头一个具体问题？</p>
+          </div>
+          <div class="demo-message demo-message--user">
+            <p>先解决问题吧。我每周做 Excel 周报很花时间。</p>
+          </div>
+
+          <div class="demo-supplements" aria-label="补充条件示例">
+            <span>零基础</span>
+            <span>每天 1 小时</span>
+            <span>两周内想先用起来</span>
+          </div>
+
+          <div class="demo-result">
+            <div class="demo-result__head">
+              <span class="demo-result__eyebrow">确认并生成路径</span>
+              <strong>先把问题说清楚，再决定第一步怎么开始。</strong>
+            </div>
+            <div class="demo-result__list">
+              <div class="demo-result__item">
+                <strong>核心问题</strong>
+                <p>先把每周 Excel 周报里最耗时间的一段自动化掉</p>
+              </div>
+              <div class="demo-result__item">
+                <strong>阶段建议</strong>
+                <div class="demo-result__hints">
+                  <p>先读懂一份现有周报表</p>
+                  <p>找到要保留和处理的关键列</p>
+                  <p>跑通第一版自动化结果</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo-result__actions" aria-hidden="true">
+              <span class="demo-action demo-action--primary">确认并生成路径</span>
+              <span class="demo-action">继续补充</span>
+            </div>
           </div>
         </aside>
       </section>
 
       <section class="home-why">
-        <div class="home-why__lead">
-          <p>很多学习卡住，不是因为你不努力，而是因为一开始的问题太大、太泛、离真实场景太远。</p>
+        <div class="home-why__lead section-head">
+          <span class="home-kicker">先从起点看</span>
+          <h2 class="home-why__title">学习卡住，常常不是因为不努力。</h2>
+          <p>而是目标太大、资料太多、第一步不清楚。WenFlow 先帮你把问题缩小到今天能行动的一步。</p>
         </div>
         <div class="home-compare-grid">
           <article class="compare-card compare-card--muted">
             <span>常见开始方式</span>
-            <h2>先找课程和资料</h2>
-            <p>内容很多，但你还是不知道今天先做哪一步，也很难判断自己是不是真的会了。</p>
+            <h2>先收藏课程、资料和教程。</h2>
+            <p>内容越来越多，但今天该做什么仍然不清楚。</p>
           </article>
           <article class="compare-card compare-card--strong">
-            <span>问流的开始方式</span>
-            <h2>先把目标缩小到能行动</h2>
-            <p>从你真实想解决的事出发，确认基础、时间和场景，再拆出可以完成的第一步。</p>
+            <span>WenFlow 的开始方式</span>
+            <h2>先说出一个真实场景。</h2>
+            <p>系统会继续追问边界、基础和时间，再生成第一步。</p>
           </article>
         </div>
       </section>
@@ -106,7 +141,7 @@
       <section class="home-preview">
         <div class="section-head">
           <span class="home-kicker">进入学习后</span>
-          <h2>每一步都要帮你决定下一步。</h2>
+          <h2>每一步，都让下一步更清楚。</h2>
         </div>
         <div class="preview-grid">
           <article v-for="item in previewCards" :key="item.title" class="preview-card">
@@ -114,6 +149,37 @@
             <strong>{{ item.title }}</strong>
             <p>{{ item.desc }}</p>
           </article>
+        </div>
+      </section>
+
+      <section ref="productFlowRef" class="home-product-flow" :class="{ 'is-in-view': productFlowInView }">
+        <div class="section-head home-product-flow__head">
+          <span class="home-kicker">怎么运转</span>
+          <h2>从一个真实问题，到一条能开始的学习路径。</h2>
+          <p>它不是一次性排课，而是在目标、路径、学习和反馈之间持续流动。</p>
+        </div>
+
+        <div class="home-product-flow__canvas">
+          <svg class="home-product-flow__svg" viewBox="0 0 1200 220" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <path class="home-product-flow__path home-product-flow__path--glow" d="M 60 108 C 205 36, 345 180, 490 108 C 635 36, 775 180, 920 108 C 1040 50, 1100 108, 1140 108" />
+            <path class="home-product-flow__path" d="M 60 108 C 205 36, 345 180, 490 108 C 635 36, 775 180, 920 108 C 1040 50, 1100 108, 1140 108" />
+            <defs>
+              <linearGradient id="home-product-flow-gradient" x1="60" y1="108" x2="1140" y2="108" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#43b0d8" stop-opacity="0.28" />
+                <stop offset="0.45" stop-color="#3478f6" />
+                <stop offset="0.72" stop-color="#8d6bff" stop-opacity="0.8" />
+                <stop offset="1" stop-color="#43b0d8" stop-opacity="0.28" />
+              </linearGradient>
+            </defs>
+          </svg>
+
+          <div class="home-product-flow__grid">
+            <article v-for="(step, idx) in productFlowSteps" :key="step.title" class="product-flow-card" :style="{ '--flow-index': idx }">
+              <span>{{ idx + 1 }}</span>
+              <strong>{{ step.title }}</strong>
+              <p>{{ step.desc }}</p>
+            </article>
+          </div>
         </div>
       </section>
 
@@ -127,7 +193,7 @@
       <section class="home-final-band">
         <div class="home-final-band__glow"></div>
         <div class="home-final-band__inner">
-          <h2>先体验一次完整学习闭环。</h2>
+          <h2 class="home-final-band__title">先体验一次完整学习闭环。</h2>
           <p>从一个模糊目标开始，看看问流如何帮你澄清、规划，并进入真正的学习过程。</p>
           <div class="home-final-band__actions">
             <router-link :to="primaryCtaPath" class="btn btn--primary btn--lg">{{ footerCtaLabel }}</router-link>
@@ -145,6 +211,9 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 const scrolled = ref(false);
 const mobileNavOpen = ref(false);
 const isLoggedIn = ref(false);
+const productFlowRef = ref<HTMLElement | null>(null);
+const productFlowInView = ref(false);
+let productFlowObserver: IntersectionObserver | null = null;
 
 const flowSteps = [
   { title: '先说出真实场景', desc: '不用整理成学习目标，先说最近卡在哪里、想做到什么。' },
@@ -154,16 +223,24 @@ const flowSteps = [
 ];
 
 const previewCards = [
-  { label: '目标规划', title: '从一句话到第一步', desc: '把“我想学 Python”变成“先自动化一段周报流程”。' },
-  { label: '学习路径', title: '知道今天做什么', desc: '路径不会一次塞满所有内容，而是按阶段给出最小任务。' },
-  { label: '课后总结', title: '学完知道哪里还不稳', desc: '每次学习结束后，收口本节掌握、卡点和下一步动作。' }
+  { label: '目标规划', title: '把“我想学 Python”变成“先完成一个 Excel 自动化任务”。', desc: '把模糊目标先压缩成一个可以开始的真实任务。' },
+  { label: '学习路径', title: '不一次塞满所有内容，而是按阶段给出最小任务。', desc: '先把今天该做什么说清楚，再继续往后展开。' },
+  { label: '课后总结', title: '每次学习后，整理掌握点、卡点和下一步。', desc: '每学完一段，就把进展和下一步收口清楚。' }
+];
+
+const productFlowSteps = [
+  { title: '说出问题', desc: '从最近真正卡住的事开始，不用一开始就说得很完整。' },
+  { title: '澄清目标', desc: '补齐场景、基础、时间和限制，把问题缩小到能行动的范围。' },
+  { title: '生成路径', desc: '把目标拆成阶段、任务和今天就能开始的学习节奏。' },
+  { title: '边学边做', desc: '围绕真实问题推进，在解释、练习和输出中巩固理解。' },
+  { title: '复盘调整', desc: '根据掌握情况、卡点和反馈，决定下一步怎么调整。' }
 ];
 
 const capabilityTags = ['问题定义', '拆解目标', '对话学习', '输出检验', '节奏调整'];
 
 const primaryCtaPath = computed(() => (isLoggedIn.value ? '/goal-conversation' : '/register'));
-const primaryCtaLabel = computed(() => (isLoggedIn.value ? '新建目标规划' : '开始规划我的目标'));
-const footerCtaLabel = computed(() => (isLoggedIn.value ? '继续规划一个新目标' : '开始第一次目标规划'));
+const primaryCtaLabel = '从一个问题开始';
+const footerCtaLabel = '从一个问题开始';
 
 const syncAuthState = () => {
   isLoggedIn.value = Boolean(localStorage.getItem('token'));
@@ -183,16 +260,38 @@ const closeMobileNav = () => {
   document.body.style.overflow = '';
 };
 
+const setupProductFlowObserver = () => {
+  productFlowObserver?.disconnect();
+
+  if (!productFlowRef.value) return;
+
+  productFlowObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          productFlowInView.value = true;
+          productFlowObserver?.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.28 }
+  );
+
+  productFlowObserver.observe(productFlowRef.value);
+};
+
 onMounted(() => {
   syncAuthState();
   window.addEventListener('storage', syncAuthState);
   window.addEventListener('scroll', handleScroll, { passive: true });
   handleScroll();
+  setupProductFlowObserver();
 });
 
 onUnmounted(() => {
   window.removeEventListener('storage', syncAuthState);
   window.removeEventListener('scroll', handleScroll);
+  productFlowObserver?.disconnect();
   document.body.style.overflow = '';
 });
 </script>
@@ -205,6 +304,7 @@ onUnmounted(() => {
   --home-blue: #3478f6;
   --home-blue-deep: #1f57cc;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f3f6fb;
   color: var(--home-ink);
   overflow-x: hidden;
@@ -390,6 +490,7 @@ onUnmounted(() => {
 .home-why,
 .home-how,
 .home-preview,
+.home-product-flow,
 .home-capabilities {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
@@ -397,6 +498,7 @@ onUnmounted(() => {
 
 .home-hero {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 430px;
   gap: 52px;
@@ -448,7 +550,7 @@ onUnmounted(() => {
 }
 
 .home-hero__copy > p {
-  max-width: 620px;
+  max-width: 700px;
   font-size: 18px;
 }
 
@@ -458,79 +560,167 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 
-.home-hero__scene {
+.home-hero__demo {
   position: relative;
   display: grid;
   gap: 14px;
   padding: 24px;
   border-radius: 34px;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(23, 32, 51, 0.06);
   box-shadow: 0 30px 90px rgba(58, 101, 197, 0.15);
   backdrop-filter: blur(16px);
 }
 
-.scene-turn {
-  width: fit-content;
-  max-width: 86%;
-  padding: 14px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.scene-turn--user {
-  justify-self: end;
-  background: rgba(52, 120, 246, 0.1);
-  color: var(--home-blue-deep);
-}
-
-.scene-turn--ai {
-  justify-self: start;
-  background: #f2f5fb;
-}
-
-.scene-outcome {
+.demo-message,
+.demo-result {
   display: grid;
   gap: 8px;
-  margin-top: 6px;
   padding: 18px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.1), rgba(255, 255, 255, 0.9));
+  border-radius: 24px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(243, 247, 253, 0.92));
+}
+
+.demo-message {
+  max-width: 84%;
+}
+
+.demo-message--assistant {
+  justify-self: start;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.12), rgba(255, 255, 255, 0.96));
+  border-color: rgba(52, 120, 246, 0.16);
+}
+
+.demo-message--user {
+  justify-self: end;
+  background: rgba(248, 251, 255, 0.98);
+}
+
+.demo-message p,
+.demo-result__item p {
+  margin: 0;
+  color: var(--home-ink);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.demo-supplements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-inline: 6px;
+}
+
+.demo-supplements span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  color: var(--home-blue-deep);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.demo-result {
+  display: grid;
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.12), rgba(255, 255, 255, 0.96));
   border: 1px solid rgba(52, 120, 246, 0.12);
 }
 
-.scene-outcome span,
-.scene-outcome small,
+.demo-result__head {
+  display: grid;
+  gap: 6px;
+}
+
+.demo-result__head strong {
+  font-size: 18px;
+  line-height: 1.35;
+  letter-spacing: -0.03em;
+}
+
+.demo-result__eyebrow,
 .compare-card span,
 .preview-card span,
 .flow-card span {
   color: var(--home-muted);
   font-size: 12px;
   font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
-.scene-outcome strong {
-  font-size: 20px;
+.demo-result__list {
+  display: grid;
+  gap: 12px;
+}
+
+.demo-result__item {
+  display: grid;
+  gap: 4px;
+}
+
+.demo-result__hints {
+  display: grid;
+  gap: 6px;
+}
+
+.demo-result__item + .demo-result__item {
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 32, 51, 0.08);
+}
+
+.demo-result__item strong {
+  color: var(--home-blue-deep);
+  font-size: 14px;
+}
+
+.demo-result__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.demo-action {
+  min-height: 40px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--home-ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.demo-action--primary {
+  border-color: rgba(52, 120, 246, 0.18);
+  background: linear-gradient(135deg, var(--home-blue), var(--home-blue-deep));
+  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.22);
+  color: #fff;
 }
 
 .home-why,
 .home-how,
 .home-preview,
+.home-product-flow,
 .home-capabilities {
   padding: 76px 0;
 }
 
 .home-why__lead {
   max-width: 780px;
-  margin-bottom: 28px;
+}
+
+.home-why__title {
+  white-space: nowrap;
 }
 
 .home-why__lead p {
-  margin: 0;
-  font-size: clamp(28px, 4vw, 48px);
-  line-height: 1.2;
-  letter-spacing: -0.045em;
+  max-width: 700px;
+  font-size: 18px;
 }
 
 .home-compare-grid,
@@ -586,6 +776,100 @@ onUnmounted(() => {
 
 .preview-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.home-product-flow__head {
+  max-width: 760px;
+  margin-bottom: 32px;
+}
+
+.home-product-flow__canvas {
+  position: relative;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-top: 6px;
+}
+
+.home-product-flow__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.home-product-flow__path {
+  stroke: url(#home-product-flow-gradient);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1900;
+  stroke-dashoffset: 1900;
+  filter: drop-shadow(0 14px 22px rgba(52, 120, 246, 0.2));
+  transition: stroke-dashoffset 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-product-flow__path--glow {
+  stroke: rgba(52, 120, 246, 0.16);
+  stroke-width: 18;
+  filter: blur(8px);
+}
+
+.home-product-flow.is-in-view .home-product-flow__path {
+  stroke-dashoffset: 0;
+}
+
+.home-product-flow__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: -54px;
+  position: relative;
+  z-index: 2;
+}
+
+.product-flow-card {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+  min-height: 220px;
+  padding: 24px 22px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition-delay: calc(var(--flow-index) * 130ms + 520ms);
+}
+
+.home-product-flow.is-in-view .product-flow-card {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.product-flow-card span {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--home-blue), var(--home-blue-deep));
+  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.2);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.product-flow-card strong {
+  font-size: 18px;
+}
+
+.product-flow-card p {
+  margin: 0;
+  max-width: 190px;
+  color: var(--home-muted);
+  line-height: 1.75;
 }
 
 .home-capabilities {
@@ -655,6 +939,10 @@ onUnmounted(() => {
   letter-spacing: -0.055em;
 }
 
+.home-final-band__title {
+  white-space: nowrap;
+}
+
 .home-final-band p {
   max-width: 580px;
   margin: 0;
@@ -715,14 +1003,23 @@ onUnmounted(() => {
     padding-top: 118px;
   }
 
-  .home-hero__scene {
+  .home-hero__demo {
     max-width: 560px;
   }
 
   .home-flow,
+  .home-product-flow__grid,
   .preview-grid,
   .home-compare-grid {
     grid-template-columns: 1fr;
+  }
+
+  .home-product-flow__svg {
+    display: none;
+  }
+
+  .home-product-flow__grid {
+    margin-top: 0;
   }
 
   .home-final-band {
@@ -737,6 +1034,7 @@ onUnmounted(() => {
   .home-why,
   .home-how,
   .home-preview,
+  .home-product-flow,
   .home-capabilities {
     width: min(100% - 28px, 1180px);
   }
@@ -763,9 +1061,34 @@ onUnmounted(() => {
     flex-direction: column;
   }
 
+  .home-final-band__title {
+    white-space: normal;
+  }
+
+  .home-why__title {
+    white-space: normal;
+  }
+
   .btn,
   .site-cta {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .site-nav-shell,
+  .home-hero,
+  .home-why,
+  .home-how,
+  .home-preview,
+  .home-product-flow,
+  .home-capabilities {
+    width: min(100% - 20px, 1180px);
+  }
+
+  .home-hero {
+    min-height: calc(100dvh - 24px);
+    padding-bottom: calc(40px + var(--safe-area-bottom));
   }
 }
 </style>

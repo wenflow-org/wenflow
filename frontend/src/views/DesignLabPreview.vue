@@ -55,7 +55,7 @@
 
                     <p class="home-hero-native__subtitle">
                       <strong>问流帮你把模糊目标拆成可执行路径。</strong>
-                      先想清要解决什么，再进入 AI 规划、对话学习和进度追踪，少走弯路。
+                      先想清要解决什么，再进入目标规划、对话学习和进度追踪，少走弯路。
                     </p>
 
                     <div class="button-row">
@@ -185,7 +185,7 @@
                     <h1>欢迎回来，林语！</h1>
                     <p>{{ dashboardWelcomeSubtitle }}</p>
                     <div class="button-row">
-                      <button type="button" class="solid-button">开始 AI 规划</button>
+                      <button type="button" class="solid-button">开始目标规划</button>
                       <button type="button" class="ghost-button">继续我的学习</button>
                     </div>
 
@@ -291,7 +291,7 @@
                   <span class="brand-mark">WF</span>
                   <div>
                     <strong>问流 WenFlow</strong>
-                    <small>AI 规划</small>
+                    <small>目标规划</small>
                   </div>
                 </div>
 
@@ -301,7 +301,7 @@
                     :key="item"
                     type="button"
                     class="app-nav__item"
-                    :class="{ 'app-nav__item--active': item === 'AI 规划' }"
+                    :class="{ 'app-nav__item--active': item === '目标规划' }"
                   >
                     {{ item }}
                   </button>

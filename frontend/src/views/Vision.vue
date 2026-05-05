@@ -14,7 +14,7 @@
 
         <div class="vision-actions">
           <router-link :to="isLoggedIn ? '/dashboard' : '/login'" class="vision-cta vision-cta--ghost">{{ isLoggedIn ? '回到学习台' : '登录' }}</router-link>
-          <router-link :to="isLoggedIn ? '/goal-conversation' : '/register'" class="vision-cta vision-cta--primary">{{ isLoggedIn ? '新建目标规划' : '开始规划我的目标' }}</router-link>
+          <router-link :to="isLoggedIn ? '/goal-conversation' : '/register'" class="vision-cta vision-cta--primary">从一个问题开始</router-link>
         </div>
       </div>
     </header>
@@ -28,13 +28,13 @@
 
       <section class="vision-hero">
         <div class="vision-hero__copy">
-          <span class="vision-kicker">问流的学习观</span>
+          <span class="vision-kicker">WenFlow 的学习观</span>
           <h1>旧的学习方式，越来越难回应新的问题。</h1>
-          <p>当 AI 已经能快速给出答案，学习更需要训练的，反而是提出问题、判断方向和持续修正的能力。</p>
+          <p>当 AI 已经能快速给出答案，学习更需要训练的，不只是记住内容，而是提出问题、判断方向和持续修正。</p>
         </div>
         <aside class="vision-hero__signal">
           <span>1946 → 2026</span>
-          <strong>技术变了，真正该升级的是人的思维方式。</strong>
+          <strong>答案变多以后，问题本身变得更重要。</strong>
         </aside>
       </section>
 
@@ -72,7 +72,7 @@
       <section class="vision-problem-section">
         <div class="vision-section-head">
           <span class="vision-kicker">问题意识</span>
-          <h2>真正困难的问题，往往不是别人出的题。</h2>
+          <h2>真正有价值的学习，往往从自己的问题开始。</h2>
           <p>标准题训练我们找到答案；真实问题要求我们定义边界、判断取舍，并决定下一步怎么走。WenFlow 关注的是后者。</p>
         </div>
 
@@ -101,7 +101,8 @@
       <section class="vision-mindset-section">
         <div class="vision-section-head">
           <span class="vision-kicker">思维优先</span>
-          <h2>工具会变，真正留下来的是思维方式。</h2>
+          <h2>真正留下来的，是思维方式。</h2>
+          <p>工具会变，模型会变，界面也会变。但提出问题、组织信息、判断取舍、创造连接的能力，会一直重要。</p>
         </div>
 
         <div class="vision-mindset-grid">
@@ -132,9 +133,9 @@
       </section>
 
       <section class="vision-capability-section">
-        <div class="vision-section-head">
+        <div class="vision-section-head vision-section-head--capabilities">
           <span class="vision-kicker">AI 时代的能力</span>
-          <h2>AI 时代更值得训练的 5 种能力。</h2>
+          <h2>AI 时代，更值得训练这 5 种能力。</h2>
         </div>
 
         <div class="vision-capability-grid">
@@ -142,39 +143,7 @@
             <span>{{ item.index }}</span>
             <strong>{{ item.title }}</strong>
             <p>{{ item.desc }}</p>
-            <small>而非：{{ item.traditional }}</small>
           </article>
-        </div>
-      </section>
-
-      <section ref="flowRef" class="vision-flow-section" :class="{ 'is-in-view': flowInView }">
-        <div class="vision-section-head">
-          <span class="vision-kicker">落到产品</span>
-          <h2>WenFlow 把这件事变成一条可继续的路径。</h2>
-          <p>它不是一次性排课，而是在目标、路径、学习和反馈之间持续流动。</p>
-        </div>
-
-        <div class="vision-flow">
-          <svg class="vision-flow__svg" viewBox="0 0 1200 220" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-            <path class="vision-flow__path vision-flow__path--glow" d="M 60 108 C 205 36, 345 180, 490 108 C 635 36, 775 180, 920 108 C 1040 50, 1100 108, 1140 108" />
-            <path class="vision-flow__path" d="M 60 108 C 205 36, 345 180, 490 108 C 635 36, 775 180, 920 108 C 1040 50, 1100 108, 1140 108" />
-            <defs>
-              <linearGradient id="vision-flow-gradient" x1="60" y1="108" x2="1140" y2="108" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stop-color="#43b0d8" stop-opacity="0.28" />
-                <stop offset="0.45" stop-color="#3478f6" />
-                <stop offset="0.72" stop-color="#8d6bff" stop-opacity="0.8" />
-                <stop offset="1" stop-color="#43b0d8" stop-opacity="0.28" />
-              </linearGradient>
-            </defs>
-          </svg>
-
-          <div class="vision-flow__nodes">
-            <article v-for="(step, index) in flowSteps" :key="step.title" class="vision-flow-card" :style="{ '--flow-index': index }">
-              <span>{{ index + 1 }}</span>
-              <strong>{{ step.title }}</strong>
-              <p>{{ step.desc }}</p>
-            </article>
-          </div>
         </div>
       </section>
 
@@ -182,23 +151,24 @@
         <div class="vision-why-card">
           <div class="vision-why-intro">
             <span class="vision-kicker">WHY WENFLOW</span>
-            <h2>WenFlow 想留下的，不是一份固定答案。</h2>
-            <p>它更像一套可以反复使用的学习过程：帮你澄清问题、生成路径、进入学习，并根据反馈继续调整。</p>
+            <h2>WenFlow 不是一个终点，而是一条路。</h2>
+            <p>WenFlow 是一个 AI 驱动的学习路径原型，也是一次关于未来学习方式的开源探索。</p>
           </div>
 
           <div class="vision-why-grid">
             <article>
-              <span>为什么需要它</span>
-              <p>AI 已经能回答很多标准问题，但真实学习常常卡在：不知道该问什么、该从哪里开始、什么时候该调整。</p>
+              <span>为什么需要 WenFlow</span>
+              <p>在 AI 已经能够回答大量标准问题的时代，真正重要的，不再只是更快获得答案，而是更清楚地提出问题，更准确地理解目标，并在持续输出与反馈中形成自己的判断。</p>
             </article>
             <article>
-              <span>它提供什么</span>
-              <p>一个从目标澄清到路径生成、对话学习和复盘反馈的连续过程。</p>
+              <span>WenFlow 想提供什么</span>
+              <p>我们相信，学习不应只是内容消费，也不应只是完成既定路径。它更应该是一种不断澄清、不断修正、不断成长的过程。</p>
             </article>
           </div>
 
           <div class="vision-why-manifesto">
-            <p>如果它能帮助一个人把模糊目标变成清晰行动，或者帮助一个团队重新设计学习路径，那它就已经有意义。</p>
+            <p>WenFlow 不试图提供一套标准答案，而是希望留下一块可以继续探索、修改、拆解与重建的基础。</p>
+            <p>如果它能帮助某个个体重新理解学习，帮助某个团队重新设计路径，或者帮助某个未来的教育产品少走一点弯路，那它就已经有意义。</p>
           </div>
         </div>
       </section>
@@ -208,9 +178,9 @@
         <div class="vision-final-cta__inner">
           <span class="vision-kicker">如果你认同这套学习观</span>
           <h2>带着一个真实问题开始。</h2>
-          <p>不需要先写完整计划。说出你最近真正想解决的事，让问流陪你把它变成下一步行动。</p>
+          <p>不需要先写完整计划。说出你最近真正想解决的事，让 WenFlow 陪你把它变成下一步行动。</p>
           <router-link :to="isLoggedIn ? '/goal-conversation' : '/register'" class="vision-cta vision-cta--primary vision-cta--large">
-            {{ isLoggedIn ? '新建目标规划' : '开始第一次目标规划' }}
+            开始第一次目标拆解
           </router-link>
         </div>
       </section>
@@ -223,20 +193,9 @@ import { onMounted, onUnmounted, ref } from 'vue';
 
 const scrolled = ref(false);
 const isLoggedIn = ref(false);
-const flowRef = ref<HTMLElement | null>(null);
-const flowInView = ref(false);
-let flowObserver: IntersectionObserver | null = null;
 
 const oldLearning = ['更快找到答案', '更快完成任务', '更快记住内容', '更快走完既定路径'];
 const wenflowLearning = ['先澄清真正的问题', '生成适合当前约束的路径', '在对话和输出中学习', '通过反馈不断修正方向'];
-
-const flowSteps = [
-  { title: '说出问题', desc: '从最近真正卡住的事开始，不要求一开始就准确。' },
-  { title: '澄清目标', desc: '补齐场景、基础、时间和约束，缩小问题范围。' },
-  { title: '生成路径', desc: '把目标拆成阶段、任务和能开始的学习节奏。' },
-  { title: '对话学习', desc: '围绕真实问题推进，通过解释、练习和输出巩固理解。' },
-  { title: '复盘反馈', desc: '根据掌握情况和学习状态，决定下一步怎么调整。' }
-];
 
 const mindsetItems = [
   { title: '看见联系', desc: '理解知识、场景和目标之间的关系。' },
@@ -253,11 +212,11 @@ const toolItems = [
 ];
 
 const capabilities = [
-  { index: '01', title: '问题定义能力', desc: '把模糊目标变成可以探索的问题。', traditional: '知识记忆' },
-  { index: '02', title: '系统思维能力', desc: '看见知识、场景和行动之间的结构。', traditional: '单点解题' },
-  { index: '03', title: '判断力', desc: '在信息过载中辨别什么值得相信、值得继续。', traditional: '标准答案' },
-  { index: '04', title: 'AI 协作力', desc: '把 AI 当成追问、反馈和推演的伙伴。', traditional: '独立蛮干' },
-  { index: '05', title: '创造力', desc: '在已有知识之间建立新的连接。', traditional: '重复练习' }
+  { index: '01', title: '问题定义能力', desc: '把模糊目标变成可以探索的问题。' },
+  { index: '02', title: '系统思维能力', desc: '看见知识、场景和行动之间的结构。' },
+  { index: '03', title: '判断力', desc: '在信息过载中判断什么值得相信、值得继续。' },
+  { index: '04', title: 'AI 协作力', desc: '把 AI 当成追问、反馈和推演的伙伴。' },
+  { index: '05', title: '创造力', desc: '在已有知识之间建立新的连接。' }
 ];
 
 const syncAuthState = () => {
@@ -268,38 +227,16 @@ const handleScroll = () => {
   scrolled.value = window.scrollY > 24;
 };
 
-const setupFlowObserver = () => {
-  flowObserver?.disconnect();
-
-  if (!flowRef.value) return;
-
-  flowObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          flowInView.value = true;
-          flowObserver?.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.28 }
-  );
-
-  flowObserver.observe(flowRef.value);
-};
-
 onMounted(() => {
   syncAuthState();
   window.addEventListener('storage', syncAuthState);
   window.addEventListener('scroll', handleScroll, { passive: true });
   handleScroll();
-  setupFlowObserver();
 });
 
 onUnmounted(() => {
   window.removeEventListener('storage', syncAuthState);
   window.removeEventListener('scroll', handleScroll);
-  flowObserver?.disconnect();
 });
 </script>
 
@@ -310,6 +247,7 @@ onUnmounted(() => {
   --vision-blue: #3478f6;
   --vision-blue-deep: #1f57cc;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f3f6fb;
   color: var(--vision-ink);
   overflow-x: hidden;
@@ -335,10 +273,9 @@ onUnmounted(() => {
 .vision-quote-section,
 .vision-compare,
 .vision-mindset-section,
-.vision-flow-section,
-.vision-problem-section,
-.vision-capability-section,
-.vision-why-section {
+  .vision-problem-section,
+  .vision-capability-section,
+  .vision-why-section {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
 }
@@ -466,6 +403,7 @@ onUnmounted(() => {
 
 .vision-hero {
   min-height: 88vh;
+  min-height: 88dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 52px;
@@ -478,7 +416,6 @@ onUnmounted(() => {
 .vision-hero__signal,
 .vision-quote-card,
 .vision-compare-card,
-.vision-flow-card,
 .vision-problem-grid article,
 .vision-capability-card {
   display: grid;
@@ -513,7 +450,6 @@ onUnmounted(() => {
 .vision-section-head p,
 .vision-quote-card p,
 .vision-compare-card li,
-.vision-flow-card p,
 .vision-problem-grid li,
 .vision-capability-card p,
 .vision-final-cta p {
@@ -530,7 +466,6 @@ onUnmounted(() => {
 .vision-hero__signal,
 .vision-quote-card,
 .vision-compare-card,
-.vision-flow-card,
 .vision-problem-grid article,
 .vision-capability-card {
   padding: 26px;
@@ -543,7 +478,6 @@ onUnmounted(() => {
 .vision-hero__signal span,
 .vision-quote-card span,
 .vision-compare-card span,
-.vision-flow-card span,
 .vision-problem-grid span,
 .vision-capability-card span {
   color: var(--vision-blue-deep);
@@ -559,7 +493,6 @@ onUnmounted(() => {
 .vision-quote-section,
 .vision-compare,
 .vision-mindset-section,
-.vision-flow-section,
 .vision-problem-section,
 .vision-capability-section,
 .vision-why-section {
@@ -580,6 +513,10 @@ onUnmounted(() => {
 .vision-section-head {
   max-width: 780px;
   margin-bottom: 28px;
+}
+
+.vision-section-head--capabilities h2 {
+  white-space: nowrap;
 }
 
 .vision-section-head h2,
@@ -685,93 +622,24 @@ onUnmounted(() => {
   color: var(--vision-blue-deep);
 }
 
-.vision-flow {
-  position: relative;
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 6px 0 0;
-}
-
-.vision-flow__svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.vision-flow__path {
-  stroke: url(#vision-flow-gradient);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-dasharray: 1900;
-  stroke-dashoffset: 1900;
-  filter: drop-shadow(0 14px 22px rgba(52, 120, 246, 0.2));
-  transition: stroke-dashoffset 1.8s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.vision-flow__path--glow {
-  stroke: rgba(52, 120, 246, 0.16);
-  stroke-width: 18;
-  filter: blur(8px);
-}
-
-.vision-flow-section.is-in-view .vision-flow__path {
-  stroke-dashoffset: 0;
-}
-
-.vision-flow__nodes {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: -54px;
-  position: relative;
-  z-index: 2;
-}
-
-.vision-flow-card strong,
 .vision-capability-card strong {
-  font-size: 18px;
-}
-
-.vision-flow-card {
-  justify-items: center;
-  text-align: center;
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
-  transition-delay: calc(var(--flow-index) * 130ms + 520ms);
-}
-
-.vision-flow-section.is-in-view .vision-flow-card {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.vision-flow-card span {
-  width: 50px;
-  height: 50px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  color: #fff;
-  background: linear-gradient(135deg, var(--vision-blue), var(--vision-blue-deep));
-  box-shadow: 0 14px 34px rgba(52, 120, 246, 0.26);
-  font-weight: 900;
-}
-
-.vision-flow-card p {
-  max-width: 190px;
+  font-size: 17px;
 }
 
 .vision-capability-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .vision-capability-card {
   grid-column: span 2;
-  min-height: 210px;
+  min-height: 176px;
+  padding: 22px 20px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(246, 249, 255, 0.96), rgba(239, 244, 251, 0.92));
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.04);
 }
 
 .vision-capability-card:nth-child(4),
@@ -855,6 +723,18 @@ onUnmounted(() => {
 .vision-why-manifesto {
   margin-top: 16px;
   max-width: 780px;
+  margin-inline: auto;
+  gap: 14px;
+}
+
+.vision-why-manifesto p:first-child {
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 700;
+}
+
+.vision-why-manifesto p + p {
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .vision-final-cta {
@@ -908,7 +788,6 @@ onUnmounted(() => {
     display: none;
   }
 
-  .vision-flow__nodes,
   .vision-capability-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -917,14 +796,6 @@ onUnmounted(() => {
   .vision-capability-card:nth-child(4),
   .vision-capability-card:nth-child(5) {
     grid-column: auto;
-  }
-
-  .vision-flow__svg {
-    display: none;
-  }
-
-  .vision-flow__nodes {
-    margin-top: 0;
   }
 
   .vision-mindset-grid {
@@ -962,7 +833,6 @@ onUnmounted(() => {
     .vision-quote-section,
     .vision-compare,
     .vision-mindset-section,
-    .vision-flow-section,
     .vision-problem-section,
     .vision-capability-section,
     .vision-why-section {
@@ -983,7 +853,6 @@ onUnmounted(() => {
     font-size: 12px;
   }
 
-  .vision-flow__nodes,
   .vision-capability-grid {
     grid-template-columns: 1fr;
   }
@@ -991,11 +860,14 @@ onUnmounted(() => {
   .vision-quote-section,
   .vision-compare,
   .vision-mindset-section,
-  .vision-flow-section,
   .vision-problem-section,
   .vision-capability-section,
   .vision-why-section {
     padding: 52px 0;
+  }
+
+  .vision-section-head--capabilities h2 {
+    white-space: normal;
   }
 
   .vision-why-card {
@@ -1004,6 +876,23 @@ onUnmounted(() => {
 
   .vision-final-cta {
     padding: 76px 20px 88px;
+  }
+}
+
+@media (max-width: 480px) {
+  .vision-nav-shell,
+  .vision-hero,
+  .vision-quote-section,
+  .vision-compare,
+  .vision-mindset-section,
+  .vision-problem-section,
+  .vision-capability-section,
+  .vision-why-section {
+    width: min(100% - 20px, 1180px);
+  }
+
+  .vision-hero {
+    padding-bottom: calc(40px + var(--safe-area-bottom));
   }
 }
 </style>

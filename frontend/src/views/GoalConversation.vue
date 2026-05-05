@@ -13,14 +13,14 @@
 
         <nav class="header-nav planning-nav" aria-label="应用导航">
           <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item nav-item--active">AI 规划</router-link>
+          <router-link to="/goal-conversation" class="nav-item nav-item--active">目标规划</router-link>
           <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
           <router-link to="/learning-state" class="nav-item">学习状态</router-link>
           <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right planning-header__actions">
-          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
           <el-dropdown>
             <button type="button" class="user-chip planning-user-chip">
               <span>{{ userInitial }}</span>
@@ -47,14 +47,14 @@
       <section class="planning-conversation-layout" :class="{ 'planning-conversation-layout--entry': !showPlanningSidePanels }">
         <aside v-if="showPlanningSidePanels" class="planning-status-card planning-side-card glass-card">
           <div class="planning-side-card__head">
-            <h2>已确认信息</h2>
+            <h2>当前方向</h2>
             <div class="planning-status-stack">
               <span class="planning-status-item planning-status-item--current">{{ activePlanningStageLabel }}</span>
             </div>
           </div>
 
           <div class="planning-understand__meter">
-            <span>理解度</span>
+            <span>方向清晰度</span>
             <div class="planning-meter-bar">
               <div class="planning-meter-bar__fill" :style="{ width: `${planningConfidencePercent}%` }"></div>
             </div>
@@ -76,7 +76,7 @@
               </article>
             </div>
             <div v-else class="planning-status-empty">
-              这里仅显示已经从真实对话中收集到的信息。
+              你说清楚的信息，会在这里逐步整理出来。
             </div>
           </section>
 
@@ -92,7 +92,7 @@
             <div class="planning-chat-card__meta" :class="{ 'planning-chat-card__meta--compact': hasConversationStarted }">
               <router-link v-if="!hasConversationStarted" to="/dashboard" class="planning-secondary-btn">回到学习台</router-link>
               <div v-if="hasConversationStarted" class="planning-chat-card__head-actions">
-                <button type="button" class="planning-secondary-btn" @click="resetConversation">重新开始</button>
+                <button type="button" class="planning-secondary-btn" @click="resetConversation">重置本次目标</button>
               </div>
             </div>
           </div>
@@ -195,12 +195,27 @@
                       <el-icon v-if="loading"><Loading /></el-icon>
                       <span>确认并生成路径</span>
                     </button>
-                    <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">继续补充</button>
+                    <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">继续补充信息</button>
                   </div>
                 </div>
               </transition>
 
-              <transition name="slide-up">
+              <transition name="upload-fold">
+                <button
+                  v-if="shouldShowUploadSummary"
+                  type="button"
+                  class="planning-upload-summary"
+                  @click="showUploadPanel = true"
+                >
+                  <div class="planning-upload-summary__copy">
+                    <strong>已添加 {{ uploadedFiles.length }} 份材料</strong>
+                    <span>{{ uploadSummaryHint }}</span>
+                  </div>
+                  <span class="planning-upload-summary__action">展开</span>
+                </button>
+              </transition>
+
+              <transition name="upload-fold">
                 <div v-if="shouldShowUploadPanel" class="planning-upload-panel planning-upload-panel--compact">
                   <div class="planning-upload-panel__head">
                     <div>
@@ -208,12 +223,11 @@
                       <h3>可选地补充文件、截图或参考材料。</h3>
                     </div>
                     <button
-                      v-if="uploadedFiles.length === 0"
                       type="button"
                       class="planning-upload-collapse"
                       @click="showUploadPanel = false"
                     >
-                      收起
+                      {{ uploadedFiles.length > 0 ? '收起材料' : '收起' }}
                     </button>
                   </div>
                   <p class="planning-upload-panel__note">当前只做材料收集，不会自动解析，也不会直接发送给 AI。</p>
@@ -305,24 +319,30 @@
                     v-model="userInput"
                     @keydown.enter.exact.prevent="sendMessage"
                     @keydown.enter.shift.exact="inputNewLine"
-                    :placeholder="hasConversationStarted ? '直接回答上面这个问题，或补充任何会影响路径边界的信息...' : '先说说你最近想解决什么，或现在卡在哪里...'"
+                    :placeholder="hasConversationStarted ? '回答上面的问题，或补充你的基础、时间和限制…' : '先说说你最近想解决什么，或现在卡在哪里...'"
                     :disabled="loading"
                     rows="1"
-                    @input="autoResize"
-                  ></textarea>
+                     @input="autoResize"
+                   ></textarea>
+                 </div>
+                <div class="planning-composer__row">
+                  <button
+                    type="button"
+                    class="planning-attach-btn"
+                    :class="{ active: showUploadPanel || hasUploadedFiles }"
+                    title="上传资料"
+                    aria-label="上传资料"
+                    @click="showUploadPanel = !showUploadPanel"
+                  >
+                    <el-icon><FolderOpened /></el-icon>
+                    <span>上传资料</span>
+                  </button>
+                  <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
+                    <el-icon v-if="loading"><Loading /></el-icon>
+                    <el-icon v-else><Promotion /></el-icon>
+                    <span>发送</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="planning-attach-btn"
-                  :class="{ active: shouldShowUploadPanel }"
-                  @click="showUploadPanel = !showUploadPanel"
-                >
-                  <el-icon><FolderOpened /></el-icon>
-                </button>
-                <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
-                  <el-icon v-if="loading"><Loading /></el-icon>
-                  <el-icon v-else><Promotion /></el-icon>
-                </button>
               </div>
             </div>
           </div>
@@ -484,6 +504,8 @@ interface PlanningUploadFile {
 }
 
 const uploadedFiles = ref<PlanningUploadFile[]>([]);
+
+const hasUploadedFiles = computed(() => uploadedFiles.value.length > 0);
 
 const isQuickReplySelected = (text: string) => {
   return selectedQuickReplies.value.includes(text);
@@ -777,7 +799,18 @@ const activeQuickReplies = computed(() => {
 
 const hasConversationStarted = computed(() => Boolean(conversationId.value || userMessages.value.length > 0 || loading.value));
 const showPlanningSidePanels = computed(() => hasConversationStarted.value);
-const shouldShowUploadPanel = computed(() => showUploadPanel.value || uploadedFiles.value.length > 0);
+const shouldShowUploadPanel = computed(() => showUploadPanel.value);
+const shouldShowUploadSummary = computed(() => !showUploadPanel.value && hasUploadedFiles.value);
+const uploadSummaryHint = computed(() => {
+  const errorCount = uploadedFiles.value.filter((item) => item.status === 'error').length;
+  if (errorCount > 0) {
+    return `${errorCount} 份材料需要处理，点击展开继续管理`;
+  }
+  if (uploadedFiles.value.length === 1) {
+    return uploadedFiles.value[0].name;
+  }
+  return '点击展开继续管理材料';
+});
 
 const showSuggestions = computed(() => {
   return currentStage.value === 'understanding' && aiMessages.value.length <= 1 && !isCompleted.value;
@@ -1236,8 +1269,8 @@ const planningConfidencePercent = computed(() => Math.max(0, Math.min(100, Math.
 
 const activePlanningStageLabel = computed(() => {
   if (isCompleted.value || currentStage.value === 'completed' || currentStage.value === 'ready') return '可生成路径';
-  if (currentStage.value === 'proposing') return '理解中';
-  return '识别问题中';
+  if (currentStage.value === 'proposing') return '继续澄清中';
+  return '继续澄清中';
 });
 
 const readStoredConversationId = () => {
@@ -1483,7 +1516,7 @@ const retryLastMessage = async () => {
 
   const resetConversation = async () => {
     try {
-      await ElMessageBox.confirm('确定要重新开始吗？当前对话将被清空。', '重新开始', {
+      await ElMessageBox.confirm('确定要重置本次目标吗？当前对话将被清空。', '重置本次目标', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
@@ -1705,6 +1738,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .goal-conversation-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-body);
   position: relative;
   overflow-x: hidden;
@@ -2269,9 +2303,10 @@ onUnmounted(() => {
 
 /* ========== 聊天区域 ========== */
 .planning-chat-flow {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 8px;
+  flex: 1;
   min-height: 0;
 }
 
@@ -2280,7 +2315,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 4px 0;
-  max-height: 480px;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 }
 
@@ -2290,9 +2326,12 @@ onUnmounted(() => {
 }
 
 .planning-conversation-layout--entry .planning-chat-flow {
-  flex: 1;
   min-height: 0;
   gap: 8px;
+}
+
+.planning-conversation-layout--entry .planning-start-card {
+  align-self: start;
 }
 
 .planning-msg {
@@ -2758,11 +2797,10 @@ onUnmounted(() => {
 .planning-composer {
   display: grid;
   gap: 12px;
-  margin-top: auto;
 }
 
 .planning-composer--entry {
-  margin-top: auto;
+  margin-top: 0;
 }
 
 .planning-composer__suggestions {
@@ -2820,6 +2858,10 @@ onUnmounted(() => {
   border: 1px solid rgba(23, 32, 51, 0.08);
 }
 
+.planning-composer__row {
+  display: contents;
+}
+
 .planning-composer__field {
   display: flex;
   flex-wrap: wrap;
@@ -2860,6 +2902,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.45rem;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -2868,6 +2911,11 @@ onUnmounted(() => {
   color: var(--planning-muted);
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.planning-attach-btn span,
+.planning-send-btn span {
+  display: none;
 }
 
 .planning-attach-btn:hover {
@@ -3379,14 +3427,33 @@ textarea::placeholder {
 
 .slide-up-enter-active,
 .slide-up-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity 0.24s ease, transform 0.24s ease;
 }
 
 .slide-up-enter-from,
 .slide-up-leave-to {
   opacity: 0;
-  transform: translateY(20px);
+  transform: translateY(12px);
+}
+
+.upload-fold-enter-active,
+.upload-fold-leave-active {
+  overflow: hidden;
+  transition: max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease, margin 0.28s ease, padding 0.28s ease;
+}
+
+.upload-fold-enter-from,
+.upload-fold-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
   max-height: 0;
+}
+
+.upload-fold-enter-to,
+.upload-fold-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 520px;
 }
 
 .fade-enter-active,
@@ -3646,6 +3713,13 @@ textarea::placeholder {
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
   padding: 28px 0 8px;
+  min-height: calc(100vh - 72px);
+  min-height: calc(100dvh - 72px);
+  height: calc(100vh - 72px);
+  height: calc(100dvh - 72px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .planning-topbar-card,
@@ -3741,11 +3815,14 @@ textarea::placeholder {
   gap: 24px;
   align-items: start;
   margin-top: 0;
+  min-height: 0;
+  flex: 1;
 }
 
 .planning-conversation-layout--entry {
   grid-template-columns: minmax(0, 1fr);
   justify-content: center;
+  min-height: 0;
 }
 
 .planning-side-card,
@@ -4055,24 +4132,30 @@ textarea::placeholder {
 
 .planning-chat-card {
   min-height: calc(100vh - 92px);
+  min-height: calc(100dvh - 92px);
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(260px, 1fr) auto;
   gap: 14px;
   padding: 22px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
-  min-height: calc(100vh - 160px);
+  min-height: 0;
+  height: 100%;
   padding-bottom: 12px;
 }
 
 .planning-conversation-layout--entry .planning-chat-card {
-  min-height: calc(100vh - 160px);
-  height: calc(100vh - 160px);
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 22px;
+  overflow: hidden;
 }
 
 .planning-chat-card__head {
@@ -4111,6 +4194,7 @@ textarea::placeholder {
   border-radius: 24px;
   border: 1px solid rgba(52, 120, 246, 0.12);
   background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(255, 255, 255, 0.96));
+  align-content: start;
 }
 
 .planning-start-card__copy {
@@ -4142,6 +4226,8 @@ textarea::placeholder {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  align-content: flex-start;
+  align-items: flex-start;
 }
 
 .planning-start-card__example {
@@ -4264,6 +4350,7 @@ font-weight: 800;
 
 .planning-chat-content {
   max-height: 62vh;
+  max-height: min(62vh, calc(100dvh - 280px));
   padding: 4px 4px 12px;
   overflow-y: auto;
 }
@@ -4453,6 +4540,56 @@ font-weight: 800;
   display: grid;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.planning-upload-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(243, 246, 251, 0.82);
+  color: var(--planning-ink);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.planning-upload-summary:hover {
+  border-color: rgba(52, 120, 246, 0.18);
+  background: rgba(247, 250, 255, 0.94);
+}
+
+.planning-upload-summary__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.planning-upload-summary__copy strong {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--planning-ink);
+}
+
+.planning-upload-summary__copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--planning-muted);
+}
+
+.planning-upload-summary__action {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--planning-blue-deep);
 }
 
 .planning-upload-panel--compact {
@@ -4664,12 +4801,20 @@ font-weight: 800;
     grid-template-columns: 1fr;
   }
 
+  .planning-main {
+    min-height: auto;
+    height: auto;
+    overflow: visible;
+  }
+
   .planning-chat-card {
     order: 1;
   }
 
   .planning-chat-card {
     min-height: auto;
+    height: auto;
+    overflow: visible;
   }
 
   .planning-messages {
@@ -4685,6 +4830,10 @@ font-weight: 800;
   .planning-main {
     width: min(100% - 28px, 1280px);
     padding-top: 18px;
+    padding-bottom: calc(16px + var(--safe-area-bottom));
+    min-height: auto;
+    height: auto;
+    overflow: visible;
   }
 
   .planning-topbar-card,
@@ -4712,10 +4861,18 @@ font-weight: 800;
   .planning-conversation-layout--entry .planning-chat-card,
   .planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
     padding: 20px;
+    height: auto;
+    overflow: visible;
   }
 
   .planning-proposal__stages {
     grid-template-columns: 1fr;
+  }
+
+  .planning-chat-main,
+  .planning-chat-content {
+    min-height: 0;
+    max-height: none;
   }
 
   .planning-upload-item {
@@ -4745,6 +4902,158 @@ font-weight: 800;
 
   .main-content {
     padding: 0 1rem;
+  }
+
+  .header-container {
+    padding: 0.9rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .header-left,
+  .header-right,
+  .session-info {
+    min-width: 0;
+  }
+
+  .planning-main {
+    width: min(100% - 20px, 1280px);
+  }
+
+  .planning-topbar-card p,
+  .planning-chat-card__intro,
+  .planning-chat-card__hint {
+    max-width: none;
+  }
+
+  .planning-chat-card__hint,
+  .planning-chat-card__meta,
+  .planning-chat-card__meta--compact {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .planning-chat-card__meta--compact {
+    justify-content: flex-start;
+  }
+
+  .planning-conversation-layout,
+  .planning-conversation-layout--entry {
+    gap: 16px;
+  }
+
+  .planning-side-card,
+  .planning-chat-card,
+  .planning-topbar-card,
+  .planning-proposal,
+  .planning-start-card {
+    border-radius: 20px;
+  }
+
+  .planning-chat-card,
+  .planning-conversation-layout--entry .planning-chat-card,
+  .planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
+    padding: 16px;
+  }
+
+  .planning-chat-content {
+    padding-inline: 0;
+  }
+
+  .planning-message-wrapper,
+  .planning-msg {
+    max-width: 100%;
+  }
+
+  .planning-composer__box {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .planning-composer__field {
+    align-items: flex-start;
+  }
+
+  .planning-composer__selected-tags {
+    width: 100%;
+  }
+
+  .planning-composer__box textarea {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .planning-composer__row {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 10px;
+    width: 100%;
+  }
+
+  .planning-attach-btn,
+  .planning-send-btn {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 14px;
+  }
+
+  .planning-attach-btn {
+    height: auto;
+    justify-content: center;
+    padding: 0 14px;
+  }
+
+  .planning-send-btn {
+    height: auto;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0 16px;
+  }
+
+  .planning-attach-btn span,
+  .planning-send-btn span {
+    display: inline;
+  }
+
+  .planning-upload-summary,
+  .planning-upload-preview {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planning-upload-summary__action,
+  .planning-upload-preview__action {
+    white-space: normal;
+  }
+
+  .planning-upload-summary__copy span,
+  .planning-upload-item__meta strong,
+  .planning-upload-preview__copy p {
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .planning-upload-item {
+    gap: 10px;
+  }
+
+  .planning-upload-item__actions {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .planning-proposal__actions,
+  .planning-topbar-card__actions,
+  .planning-completion-card__actions {
+    width: 100%;
+  }
+
+  .planning-proposal__actions > *,
+  .planning-topbar-card__actions > *,
+  .planning-completion-card__actions > * {
+    flex: 1 1 100%;
   }
 
   .understanding-panel {
@@ -4789,6 +5098,35 @@ font-weight: 800;
 
   .completion-secondary-actions {
     gap: 0.5rem 1rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .planning-topbar-card h1 {
+    font-size: 1.8rem;
+  }
+
+  .planning-side-card__head h2,
+  .planning-side-card h2,
+  .planning-chat-card__head h2 {
+    font-size: 1.25rem;
+  }
+
+  .planning-proposal,
+  .planning-start-card,
+  .planning-upload-panel--compact {
+    padding: 14px;
+  }
+
+  .planning-upload-item__meta,
+  .planning-upload-item__status-row,
+  .planning-upload-item__actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .planning-composer__row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

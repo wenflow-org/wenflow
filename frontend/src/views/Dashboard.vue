@@ -14,14 +14,14 @@
 
         <nav class="header-nav" aria-label="应用导航">
           <router-link to="/dashboard" class="nav-item nav-item--active">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
           <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
           <router-link to="/learning-state" class="nav-item">学习状态</router-link>
           <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -72,7 +72,7 @@
 
         <aside class="focus-card">
           <div class="focus-card__head">
-            <span class="section-kicker">你现在主要在学习</span>
+            <span class="section-kicker">当前路径</span>
             <span class="focus-card__badge">{{ hasLearningPath ? '进行中' : '待开始' }}</span>
           </div>
 
@@ -86,22 +86,22 @@
             <article>
               <span>路径数量</span>
               <strong>{{ pathCount }}</strong>
-              <p>{{ hasLearningPath ? '当前学习路径数量' : '规划目标后会生成路径' }}</p>
+              <p>{{ hasLearningPath ? '当前学习路径数量' : '还没有创建学习路径' }}</p>
             </article>
             <article>
-              <span>当前进度</span>
-              <strong>{{ completedTaskCount }}/{{ totalTaskCount }}</strong>
+              <span>{{ hasLearningPath ? '当前进度' : '准备状态' }}</span>
+              <strong>{{ hasLearningPath ? `${completedTaskCount}/${totalTaskCount}` : '未开始' }}</strong>
               <p>{{ currentPathHint }}</p>
             </article>
             <article>
-              <span>下一步</span>
+              <span>{{ hasLearningPath ? (primaryActionTask ? '当前任务' : '下一步') : '下一步' }}</span>
               <strong>{{ nextStepLabel }}</strong>
-              <p>{{ nextStepHint }}</p>
+              <p v-if="nextStepHint">{{ nextStepHint }}</p>
             </article>
           </div>
 
-          <router-link :to="hasLearningPath ? '/learning-paths' : '/goal-conversation'" class="btn btn--primary btn--full">
-            {{ hasLearningPath ? '查看主路径' : '先去规划目标' }}
+          <router-link :to="hasLearningPath ? continueLearningTarget : '/goal-conversation'" class="btn btn--primary btn--full">
+            {{ hasLearningPath ? '继续上次学习' : '创建第一个目标' }}
           </router-link>
         </aside>
       </section>
@@ -138,7 +138,7 @@
                   <strong class="dashboard-calendar-status__text">{{ selectedCalendarDay.primaryTaskTitle || '暂无任务' }}</strong>
                 </article>
                 <article class="dashboard-calendar-status__card">
-                  <span>负荷等级</span>
+                  <span>学习强度</span>
                   <strong class="dashboard-calendar-status__zone" :class="calendarDayZone(selectedCalendarDay.durationMinutes).cls">
                     {{ calendarDayZone(selectedCalendarDay.durationMinutes).label }}
                   </strong>
@@ -165,12 +165,15 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import { Switch, User } from '@element-plus/icons-vue';
 import LoadCalendar from '../components/LoadCalendar.vue';
-import { learningAPI, type LearningStats } from '../api/learning';
+import { learningAPI, type LearningPath, type LearningStats, type Stage, type Task, type Week } from '../api/learning';
 import { useUserStore } from '../stores/user';
 
 const router = useRouter();
 const userStore = useUserStore();
 const stats = ref<LearningStats | null>(null);
+type DashboardPath = LearningPath & { status?: string };
+
+const paths = ref<DashboardPath[]>([]);
 const loading = ref(false);
 const scrolled = ref(false);
 const selectedCalendarDay = ref<any>(null);
@@ -181,7 +184,58 @@ const hasLearningPath = computed(() => pathCount.value > 0);
 const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.value?.subtasks?.completed || 0);
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);
 const totalTaskCount = computed(() => completedTaskCount.value + inProgressTaskCount.value || 1);
-const totalLearningMinutes = computed(() => stats.value?.time.totalCompleted || stats.value?.time.totalMinutes || 0);
+
+const getEnrichmentStatus = (path: DashboardPath | null | undefined) => path?.generationStatus?.enrichment || null;
+
+const getPathDisplayState = (path: DashboardPath | null | undefined) => {
+  if (!path) return 'attention';
+  if (path.status === 'failed') return 'attention';
+  if (path.status === 'generating') return 'generating';
+  if (getEnrichmentStatus(path) === 'failed') return 'attention';
+  if (getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending') return 'generating';
+  return 'active';
+};
+
+const getPathStages = (path: DashboardPath | null | undefined) => path?.milestones || path?.weeks || [];
+
+const normalizeTaskList = (stage: Stage | Week | null | undefined): Task[] => {
+  if (!stage) return [];
+  return 'subtasks' in stage ? stage.subtasks || [] : stage.tasks || [];
+};
+
+const getActiveStage = (path: DashboardPath | null | undefined) => {
+  const stages = getPathStages(path);
+  if (!stages.length) return null;
+
+  return stages.find((stage) => normalizeTaskList(stage).some((task) => task.status !== 'completed')) || stages[0] || null;
+};
+
+const getPrimaryActionTask = (path: DashboardPath | null | undefined) => {
+  const tasks = normalizeTaskList(getActiveStage(path));
+  return tasks.find((task) => task.status === 'todo')
+    || tasks.find((task) => task.status === 'in_progress')
+    || null;
+};
+
+const primaryPath = computed(() => {
+  const activePaths = paths.value.filter((path) => getPathDisplayState(path) === 'active');
+  return activePaths.find((path) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
+});
+
+const primaryActionTask = computed(() => getPrimaryActionTask(primaryPath.value));
+
+const continueLearningTarget = computed(() => {
+  const nextTask = getPrimaryActionTask(primaryPath.value);
+  if (nextTask?.id) {
+    return `/learn/${nextTask.id}`;
+  }
+
+  if (primaryPath.value?.id) {
+    return `/learning-path/${primaryPath.value.id}`;
+  }
+
+  return '/learning-paths';
+});
 
 const dashboardTitle = computed(() => {
   if (!hasLearningPath.value) return `你好，${userStore.user?.name || '同学'}，先从一个具体目标开始。`;
@@ -190,32 +244,30 @@ const dashboardTitle = computed(() => {
 
 const dashboardSubtitle = computed(() => {
   if (!hasLearningPath.value) return '描述一件你最近想解决的事，把它缩小到可以开始的一步。';
-  return '今天先完成一件最重要的小事。';
+  return '从上次停下的位置继续，把学习接上。';
 });
 
-const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习重点' : '还没有学习路径'));
+const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习路径' : '还没有学习路径'));
 const primaryPathDesc = computed(() => (
   hasLearningPath.value
-    ? '你正在推进一条学习路径。'
+    ? '从上次停下的位置继续。'
     : '从一个具体目标开始，系统会根据你的情况生成第一版学习路径。'
 ));
 
 const currentPathHint = computed(() => {
   if (inProgressTaskCount.value > 0) return `${inProgressTaskCount.value} 个任务进行中`;
   if (completedTaskCount.value > 0) return '已完成部分任务';
-  return hasLearningPath.value ? '路径已生成' : '需要先规划目标';
+  return hasLearningPath.value ? '路径已生成' : '先创建一个目标';
 });
 
-const nextStepLabel = computed(() => (hasLearningPath.value ? '查看任务' : '规划目标'));
-const nextStepHint = computed(() => (hasLearningPath.value ? '当前路径中有一项小任务待完成。' : '先描述你想解决的事。'));
+const nextStepLabel = computed(() => {
+  if (!hasLearningPath.value) return '创建第一个目标';
+  return primaryActionTask.value?.title || '查看学习路径';
+});
 
-const currentStateLabel = computed(() => {
-  const lsb = stats.value?.state?.lsb;
-  if (typeof lsb !== 'number') return '暂无状态数据';
-  if (lsb >= 4) return '可以继续深入';
-  if (lsb >= 0) return '适合轻量推进';
-  if (lsb >= -3) return '建议放慢一点';
-  return '今天先恢复状态';
+const nextStepHint = computed(() => {
+  if (!hasLearningPath.value) return '从一个真实问题开始';
+  return primaryActionTask.value ? '' : '进入学习路径查看安排';
 });
 
 const todayActionItems = computed(() => {
@@ -231,20 +283,20 @@ const todayActionItems = computed(() => {
   const suggestion = stats.value?.suggestion?.message;
 
   const task = inProgressTaskCount.value > 0
-    ? { id: 'task', tone: 'primary', dot: 'active', title: `继续当前任务（${inProgressTaskCount.value} 个进行中）`, desc: '回到学习路径，接着上次推进。', action: '继续学习', to: '/learning-paths' }
-    : { id: 'task', tone: 'primary', dot: 'active', title: '从当前路径开始第一个任务', desc: '今天迈出第一步，比完美更重要。', action: '查看路径', to: '/learning-paths' };
+    ? { id: 'task', tone: 'primary', dot: 'active', title: '继续上次学习', desc: '从上次停下的位置继续推进。', action: '继续学习', to: continueLearningTarget.value }
+    : { id: 'task', tone: 'primary', dot: 'active', title: '继续上次学习', desc: '从上次停下的位置继续推进。', action: '继续学习', to: continueLearningTarget.value };
 
-  const record = { id: 'record', tone: 'muted', dot: 'dim', title: '查看学习记录', desc: totalLearningMinutes.value > 0 ? '你已经有学习积累，查看记录可以复盘节奏。' : '开始一次学习后会自动记录。', action: '前往查看', to: '/achievements' };
+  const record = { id: 'record', tone: 'muted', dot: 'dim', title: '查看学习记录', desc: '回顾最近的学习内容和复盘。', action: '前往查看', to: '/achievements' };
 
   let suggest;
   if (typeof lsb === 'number' && suggestion) {
     const tone = lsb >= 0 ? 'accent' : 'warn';
-    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: suggestion, action: '前往查看', to: '/learning-state' };
+    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '前往查看', to: '/learning-state' };
   } else if (typeof lsb === 'number') {
     const tone = lsb >= 0 ? 'accent' : 'warn';
-    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: currentStateLabel.value, action: '前往查看', to: '/learning-state' };
+    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '前往查看', to: '/learning-state' };
   } else {
-    suggest = { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '完成一次学习后，系统会根据你的节奏给出建议。', action: '前往查看', to: '/learning-state' };
+    suggest = { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '前往查看', to: '/learning-state' };
   }
 
   return [task, suggest, record];
@@ -261,9 +313,9 @@ const calendarDayFormatDate = (dateStr: string) => {
 };
 
 const calendarDayZone = (minutes: number) => {
-  if (minutes >= 120) return { label: 'Z3 高强度', cls: 'dashboard-calendar-status__zone--z3' };
-  if (minutes >= 60) return { label: 'Z2 中度', cls: 'dashboard-calendar-status__zone--z2' };
-  if (minutes > 0) return { label: 'Z1 轻度', cls: 'dashboard-calendar-status__zone--z1' };
+  if (minutes >= 120) return { label: '高强度', cls: 'dashboard-calendar-status__zone--z3' };
+  if (minutes >= 60) return { label: '中度', cls: 'dashboard-calendar-status__zone--z2' };
+  if (minutes > 0) return { label: '轻度', cls: 'dashboard-calendar-status__zone--z1' };
   return { label: '休息日', cls: 'dashboard-calendar-status__zone--rest' };
 };
 
@@ -277,18 +329,33 @@ const calendarDayFormatDuration = (minutes: number) => {
 const calendarDayAnalysis = computed(() => {
   const day = selectedCalendarDay.value;
   if (!day) return '';
-  if (day.durationMinutes === 0) return '这一天还没有学习记录，可以作为休息日，或者补一次短时学习。';
+  if (day.durationMinutes === 0) return '今天还没有学习记录。可以休息，也可以补一次短时学习。';
   if (day.durationMinutes >= 120) return `高强度学习日，累计 ${calendarDayFormatDuration(day.durationMinutes)}。建议之后适当安排恢复。`;
   if (day.durationMinutes >= 60) return `学习投入比较扎实，累计 ${calendarDayFormatDuration(day.durationMinutes)}。保持这个节奏就好。`;
   return `轻量学习日，累计 ${calendarDayFormatDuration(day.durationMinutes)}，适合保持节奏或复习。`;
 });
 
-async function fetchStats() {
+async function fetchDashboardData() {
   loading.value = true;
   try {
-    stats.value = await learningAPI.getStats();
+    const [statsResult, pathsResult] = await Promise.allSettled([
+      learningAPI.getStats(),
+      learningAPI.getPaths(),
+    ]);
+
+    if (statsResult.status === 'fulfilled') {
+      stats.value = statsResult.value;
+    } else {
+      console.error('获取统计失败:', statsResult.reason);
+    }
+
+    if (pathsResult.status === 'fulfilled') {
+      paths.value = (pathsResult.value as DashboardPath[]) || [];
+    } else {
+      console.error('获取学习路径失败:', pathsResult.reason);
+    }
   } catch (error) {
-    console.error('获取统计失败:', error);
+    console.error('获取学习台数据失败:', error);
   } finally {
     loading.value = false;
   }
@@ -314,7 +381,7 @@ const handleLogout = async () => {
 };
 
 onMounted(async () => {
-  await fetchStats();
+  await fetchDashboardData();
   window.addEventListener('scroll', handleScroll, { passive: true });
   handleScroll();
 });
@@ -331,6 +398,7 @@ onUnmounted(() => {
   --dash-blue: #3478f6;
   --dash-blue-deep: #1f57cc;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f3f6fb;
   color: var(--dash-ink);
   position: relative;
@@ -512,7 +580,7 @@ onUnmounted(() => {
   z-index: 1;
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 28px 0 80px;
+  padding: 28px 0 calc(80px + var(--safe-area-bottom));
   display: grid;
   gap: 24px;
 }
@@ -1162,6 +1230,66 @@ a.dashboard-list__item:hover .dashboard-list__action {
 
   .btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-container,
+  .dashboard-main {
+    width: min(100% - 20px, 1240px);
+  }
+
+  .dashboard-main {
+    gap: 16px;
+    padding-top: 18px;
+  }
+
+  .dashboard-hero,
+  .today-card,
+  .focus-card,
+  .overview-card,
+  .dashboard-panel,
+  .dashboard-calendar-panel,
+  .dashboard-calendar-status {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .dashboard-hero h1 {
+    font-size: clamp(2.25rem, 12vw, 3.2rem);
+  }
+
+  .dashboard-hero__copy > p {
+    font-size: 0.95rem;
+  }
+
+  .dashboard-list__item,
+  .today-item,
+  .dashboard-calendar-status__card,
+  .achievement-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-list__action,
+  .today-item__action,
+  .dashboard-calendar-status__card span,
+  .dashboard-calendar-status__text {
+    white-space: normal;
+  }
+
+  .dashboard-calendar-status__card strong,
+  .dashboard-calendar-status__text {
+    text-align: left;
+    max-width: none;
+  }
+
+  .dashboard-calendar-status__zone {
+    align-self: flex-start;
+  }
+
+  .achievement-note {
+    grid-template-columns: 1fr;
   }
 }
 </style>

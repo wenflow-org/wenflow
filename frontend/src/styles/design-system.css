@@ -251,6 +251,12 @@
   --glass-border-light: rgba(255, 255, 255, 0.35);
   --glass-border-dark: rgba(255, 255, 255, 0.1);
   --glass-blur: blur(12px);
+
+  /* 移动端安全区 */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   
   /* Fluent 圆角（Admin 专用，比全局更紧凑） */
   --fluent-radius-sm: 4px;

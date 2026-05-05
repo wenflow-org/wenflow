@@ -2,28 +2,28 @@
   <div class="load-calendar">
     <div class="calendar-header">
       <div class="header-left">
-        <h3 class="calendar-title">学习负荷日历</h3>
+        <h3 class="calendar-title">学习节奏日历</h3>
         <div class="month-selector">
-          <button @click="changeMonth(-1)" class="month-btn">
+          <button type="button" @click="changeMonth(-1)" class="month-btn">
             <span>◀</span>
           </button>
           <span class="current-month">{{ currentMonthLabel }}</span>
-          <button @click="changeMonth(1)" class="month-btn">
+          <button type="button" @click="changeMonth(1)" class="month-btn">
             <span>▶</span>
           </button>
         </div>
         <div class="zone-legend">
           <span class="zone-item">
             <i class="zone-dot z1"></i>
-            <span>Z1 轻度</span>
+            <span>轻度：短时间、低压力</span>
           </span>
           <span class="zone-item">
             <i class="zone-dot z2"></i>
-            <span>Z2 中度</span>
+            <span>中度：有投入，但可持续</span>
           </span>
           <span class="zone-item">
             <i class="zone-dot z3"></i>
-            <span>Z3 高强度</span>
+            <span>高强度：时间较长或连续任务较多</span>
           </span>
         </div>
       </div>
@@ -45,18 +45,13 @@
       </div>
     </div>
 
-    <div class="loading-state" v-if="loading">
-      <el-icon class="loading-icon"><Loading /></el-icon>
-      <span>加载中...</span>
-    </div>
-
-    <div class="empty-state" v-else-if="!loading && weeksList.length === 0">
+    <div class="empty-state" v-if="!loading && weeksList.length === 0">
       <span class="empty-icon">📅</span>
       <p>本月暂无学习记录</p>
       <p class="empty-hint">开始学习后，这里会显示你的学习日历</p>
     </div>
 
-    <div v-if="!loading && weeksList.length > 0 && selectedDay" class="selected-day-bar">
+    <div v-if="weeksList.length > 0 && selectedDay" class="selected-day-bar">
       <div>
         <div class="selected-day-label">已选日期</div>
         <div class="selected-day-value">
@@ -69,92 +64,104 @@
       </button>
     </div>
 
-    <div class="weeks-container" v-if="!loading && weeksList.length > 0">
-      <div
-        v-for="(week, weekIndex) in weeksList"
-        :key="weekIndex"
-        class="week-row"
-        :class="{ 'current-week': isCurrentWeek(week) }"
-      >
-        <div class="week-stats">
-          <div class="week-label">{{ getWeekLabel(week, weekIndex) }}</div>
-          <div class="week-summary">
-            <div class="summary-item">
-              <span class="summary-label">总时长</span>
-              <span class="summary-value">{{ getWeekTotalMinutes(week) }}分钟</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-label">学习天数</span>
-              <span class="summary-value">{{ getWeekStudyDays(week) }}天</span>
-            </div>
-          </div>
-          <div class="week-achievement" v-if="getWeekAchievement(week)">
-            <span class="achievement-icon">🏆</span>
-            <span class="achievement-text">{{ getWeekAchievement(week) }}</span>
-          </div>
+    <div v-if="weeksList.length > 0" class="weeks-container-wrap">
+      <div class="weeks-loading-overlay" v-if="loading">
+        <div class="loading-state weeks-loading-state">
+          <el-icon class="loading-icon"><Loading /></el-icon>
+          <span>加载中...</span>
         </div>
+      </div>
 
-        <div class="days-grid">
-          <button
-            v-for="day in week"
-            :key="day.date"
-            type="button"
-            class="day-card"
-            :class="{
-              'has-load': day.durationMinutes > 0,
-              'is-today': isToday(day.date),
-              'is-empty': !day.isCurrentMonth,
-              'is-clickable': day.isCurrentMonth && !isFutureDay(day.date),
-              'is-selected': selectedDay?.date === day.date
-            }"
-            :disabled="!day.isCurrentMonth || isFutureDay(day.date)"
-            @click="openDayDetail(day)"
-          >
-            <div class="card-header" :style="day.durationMinutes > 0 ? { backgroundColor: getBgColor(day.durationMinutes) } : {}">
-              <div class="header-left">
-                <span class="day-weekday">{{ day.weekLabel }}</span>
-                <span class="day-date">{{ day.dayNum }}</span>
+      <div class="weeks-container">
+        <div
+          v-for="(week, weekIndex) in weeksList"
+          :key="weekIndex"
+          class="week-row"
+          :class="{ 'current-week': isCurrentWeek(week) }"
+        >
+          <div class="week-stats">
+            <div class="week-label">{{ getWeekLabel(week, weekIndex) }}</div>
+            <div class="week-summary">
+              <div class="summary-item">
+                <span class="summary-label">总时长</span>
+                <span class="summary-value">{{ getWeekTotalMinutes(week) }}分钟</span>
               </div>
-              <div class="header-right" v-if="day.durationMinutes > 0">
-                <span class="study-time">{{ formatDuration(day.durationMinutes) }}</span>
+              <div class="summary-item">
+                <span class="summary-label">学习天数</span>
+                <span class="summary-value">{{ getWeekStudyDays(week) }}天</span>
               </div>
             </div>
-
-            <div class="card-content">
-              <div class="task-title" v-if="day.primaryTaskTitle">
-                {{ day.primaryTaskTitle }}
-              </div>
-              <div class="day-meta" v-if="day.sessionCount > 0">
-                <span>{{ day.sessionCount }}次会话</span>
-                <span class="day-zone" :class="getLoadZoneClass(day.durationMinutes)">
-                  {{ getLoadZoneLabel(day.durationMinutes) }}
-                </span>
-              </div>
-              <div class="no-data" v-else-if="day.isCurrentMonth && !isFutureDay(day.date)">
-                <span class="no-data-text">点击查看</span>
-              </div>
+            <div class="week-achievement" v-if="getWeekAchievement(week)">
+              <span class="achievement-icon">🏆</span>
+              <span class="achievement-text">{{ getWeekAchievement(week) }}</span>
             </div>
-          </button>
+          </div>
+
+          <div class="days-grid">
+            <button
+              v-for="day in week"
+              :key="day.date"
+              type="button"
+              class="day-card"
+              :class="{
+                'has-load': day.durationMinutes > 0,
+                'is-today': isToday(day.date),
+                'is-empty': !day.isCurrentMonth,
+                'is-clickable': day.isCurrentMonth && !isFutureDay(day.date),
+                'is-selected': selectedDay?.date === day.date
+              }"
+              :disabled="!day.isCurrentMonth || isFutureDay(day.date)"
+              @click="openDayDetail(day)"
+            >
+              <div class="card-header" :style="day.durationMinutes > 0 ? { backgroundColor: getBgColor(day.durationMinutes) } : {}">
+                <div class="header-left">
+                  <span class="day-weekday">{{ day.weekLabel }}</span>
+                  <span class="day-date">{{ day.dayNum }}</span>
+                </div>
+                <div class="header-right" v-if="day.durationMinutes > 0">
+                  <span class="study-time">{{ formatDuration(day.durationMinutes) }}</span>
+                </div>
+              </div>
+
+              <div class="card-content">
+                <div class="day-meta" v-if="day.durationMinutes > 0">
+                  <span class="day-zone" :class="getLoadZoneClass(day.durationMinutes)">
+                    {{ getLoadZoneLabel(day.durationMinutes) }}
+                  </span>
+                </div>
+                <div class="no-data" v-else-if="day.isCurrentMonth && !isFutureDay(day.date)">
+                  <span class="no-data-text">点击查看</span>
+                </div>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <el-drawer
       v-model="dayDetailOpen"
-      size="460px"
+      :size="drawerSize"
+      :direction="drawerDirection"
       :with-header="false"
       :lock-scroll="false"
-      :modal="false"
+      :close-on-click-modal="true"
       class="day-detail-drawer"
     >
       <div v-if="selectedDay" class="day-detail">
+        <div class="day-detail-sheet-handle" v-if="isMobileDrawer"></div>
         <div class="detail-header">
           <div>
             <div class="detail-date">{{ formatDetailDate(selectedDay.date) }}</div>
             <h4 class="detail-title">{{ getDayHeadline(selectedDay) }}</h4>
           </div>
-          <div class="detail-zone" :class="getLoadZoneClass(selectedDay.durationMinutes)">
-            {{ getLoadZoneLabel(selectedDay.durationMinutes) }}
+          <div class="detail-header-actions">
+            <div class="detail-zone" :class="getLoadZoneClass(selectedDay.durationMinutes)">
+              {{ getLoadZoneLabel(selectedDay.durationMinutes) }}
+            </div>
+            <button type="button" class="detail-close-btn" @click="dayDetailOpen = false" aria-label="关闭当天明细">
+              <span>关闭</span>
+            </button>
           </div>
         </div>
 
@@ -172,7 +179,7 @@
             <strong class="detail-summary-value detail-summary-text">{{ selectedDay.primaryTaskTitle || '暂无任务标题' }}</strong>
           </div>
           <div class="detail-summary-card">
-            <span class="detail-summary-label">当天状态</span>
+            <span class="detail-summary-label">学习状态</span>
             <strong class="detail-summary-value detail-summary-text">{{ getDayStateSummary(selectedDay) }}</strong>
           </div>
         </div>
@@ -212,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Loading } from '@element-plus/icons-vue';
 import api from '../utils/api';
 import dayjs from 'dayjs';
@@ -271,6 +278,14 @@ const currentYear = ref(new Date().getFullYear());
 const currentMonth = ref(new Date().getMonth());
 const selectedDay = ref<DayData | null>(null);
 const dayDetailOpen = ref(false);
+const isMobileDrawer = ref(false);
+
+const syncDrawerViewport = () => {
+  isMobileDrawer.value = window.innerWidth <= 768;
+};
+
+const drawerDirection = computed(() => (isMobileDrawer.value ? 'btt' : 'rtl'));
+const drawerSize = computed(() => (isMobileDrawer.value ? '78vh' : '460px'));
 
 // 获取本地日期字符串（格式：YYYY-MM-DD）
 const getLocalDateStr = (date: Date): string => {
@@ -452,9 +467,6 @@ const isFutureDay = (dateStr: string) => {
 
 // 获取周标签
 const getWeekLabel = (week: DayData[], index: number) => {
-  const firstDay = week[0];
-  const lastDay = week[week.length - 1];
-  
   if (isCurrentWeek(week)) {
     return '本周';
   }
@@ -506,8 +518,8 @@ const getLoadZoneClass = (minutes: number) => {
 
 const getLoadZoneLabel = (minutes: number) => {
   if (minutes >= 120) return '高强度';
-  if (minutes >= 60) return '中等强度';
-  if (minutes > 0) return '轻度学习';
+  if (minutes >= 60) return '中度';
+  if (minutes > 0) return '轻度';
   return '休息日';
 };
 
@@ -544,28 +556,70 @@ const getDayHeadline = (day: DayData) => {
 };
 
 const getDayStateSummary = (day: DayData) => {
-  if (day.sessionCount === 0) return '暂无状态数据';
+  if (day.sessionCount === 0) return '状态未评估';
 
   const states = day.sessions.map((session) => session.parsedState).filter(Boolean) as SessionState[];
-  if (states.length === 0) return getLoadZoneLabel(day.durationMinutes);
+  if (states.length === 0) return '状态未评估';
 
   const avgStress = states.reduce((sum, state) => sum + (state.stress || 0), 0) / states.length;
   const avgEngagement = states.reduce((sum, state) => sum + (state.engagement || 0), 0) / states.length;
   if (states.some((state) => state.anomaly)) return '有异常波动';
-  if (avgStress >= 0.75) return '投入高，压力偏大';
-  if (avgEngagement >= 0.7) return '专注度不错';
-  return '整体平稳';
+  if (avgStress >= 0.75) return '压力偏高';
+  if (avgEngagement >= 0.7) return '专注度较好';
+  return '过程平稳';
 };
 
 const getDayAnalysis = (day: DayData) => {
-  if (day.sessionCount === 0) return '这一天没有可分析的学习行为。';
-  if (day.durationMinutes >= 120) return `这一天累计学习 ${formatDuration(day.durationMinutes)}，强度已经比较高。${day.primaryTaskTitle ? `主要围绕“${day.primaryTaskTitle}”展开。` : ''}`;
-  if (day.durationMinutes >= 60) return `这一天学习投入比较扎实，累计 ${formatDuration(day.durationMinutes)}。${day.primaryTaskTitle ? `主要内容是“${day.primaryTaskTitle}”。` : ''}`;
-  return `这一天是轻量学习日，累计 ${formatDuration(day.durationMinutes)}，更适合热身、复习或保持节奏。`;
+  if (day.sessionCount === 0) return '今天还没有学习记录。可以休息，也可以补一次短时学习。';
+  const stateSummary = getDayStateSummary(day);
+  const taskFragment = day.primaryTaskTitle ? `主要围绕“${day.primaryTaskTitle}”展开。` : '';
+
+  if (day.durationMinutes >= 120) {
+    if (stateSummary === '压力偏高') {
+      return `今天学习时长较长，累计 ${formatDuration(day.durationMinutes)}，而且压力偏高。建议适当放慢节奏，注意恢复。${taskFragment}`;
+    }
+    if (stateSummary === '专注度较好') {
+      return `今天学习时长较长，累计 ${formatDuration(day.durationMinutes)}，但整体专注度不错。后续注意恢复，就能把这个节奏维持住。${taskFragment}`;
+    }
+    if (stateSummary === '过程平稳') {
+      return `今天学习时长较长，累计 ${formatDuration(day.durationMinutes)}，但过程整体平稳。建议之后安排恢复。${taskFragment}`;
+    }
+    return `今天学习时长较长，累计 ${formatDuration(day.durationMinutes)}。当前还没有足够状态数据，建议结合体感安排恢复。${taskFragment}`;
+  }
+
+  if (day.durationMinutes >= 60) {
+    if (stateSummary === '压力偏高') {
+      return `今天学习投入比较扎实，累计 ${formatDuration(day.durationMinutes)}，但压力有点高。可以继续推进，同时注意别把节奏拉得太满。${taskFragment}`;
+    }
+    if (stateSummary === '专注度较好') {
+      return `今天学习投入比较扎实，累计 ${formatDuration(day.durationMinutes)}，专注度也不错。保持这个节奏就好。${taskFragment}`;
+    }
+    if (stateSummary === '过程平稳') {
+      return `今天学习投入比较扎实，累计 ${formatDuration(day.durationMinutes)}，过程也比较平稳。适合继续稳步推进。${taskFragment}`;
+    }
+    return `今天学习投入比较扎实，累计 ${formatDuration(day.durationMinutes)}。当前还没有足够状态数据，可以继续观察自己的学习节奏。${taskFragment}`;
+  }
+
+  if (stateSummary === '压力偏高') {
+    return `今天是一次轻量学习，累计 ${formatDuration(day.durationMinutes)}，但过程里已经出现了压力偏高的信号。接下来适合放慢一点。${taskFragment}`;
+  }
+  if (stateSummary === '专注度较好') {
+    return `今天完成了一次轻量学习，累计 ${formatDuration(day.durationMinutes)}，专注度不错，适合继续保持节奏。${taskFragment}`;
+  }
+  if (stateSummary === '过程平稳') {
+    return `今天完成了一次轻量学习，累计 ${formatDuration(day.durationMinutes)}，过程平稳，适合热身、复习或保持节奏。${taskFragment}`;
+  }
+  return `今天完成了一次轻量学习，累计 ${formatDuration(day.durationMinutes)}。当前还没有足够状态数据，适合作为热身或短时复习。${taskFragment}`;
 };
 
 onMounted(() => {
+  syncDrawerViewport();
+  window.addEventListener('resize', syncDrawerViewport);
   fetchMonthData();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', syncDrawerViewport);
 });
 </script>
 
@@ -761,6 +815,31 @@ onMounted(() => {
   background: #4338ca;
 }
 
+.weeks-container-wrap {
+  position: relative;
+}
+
+.weeks-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.72);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.weeks-loading-state {
+  padding: 1rem 1.25rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
 .weeks-container {
   overflow-x: auto;
 }
@@ -907,19 +986,10 @@ onMounted(() => {
 
 .card-content {
   padding: 0.4rem 0.5rem;
-  min-height: 30px;
-}
-
-.task-title {
-  font-size: 0.65rem;
-  color: #4a5568;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 24px;
 }
 
 .day-meta {
-  margin-top: 0.35rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
@@ -971,6 +1041,17 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  height: 100%;
+  overflow: auto;
+}
+
+.day-detail-sheet-handle {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.45);
+  align-self: center;
+  margin-top: -0.25rem;
 }
 
 .detail-header {
@@ -978,6 +1059,12 @@ onMounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.detail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .detail-date {
@@ -998,6 +1085,25 @@ onMounted(() => {
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.detail-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 0.9rem;
+  border: 1px solid #dbe4ef;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.detail-close-btn:hover {
+  background: #f8fafc;
 }
 
 .detail-summary-grid {
@@ -1132,9 +1238,30 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .day-detail {
+    padding-bottom: calc(0.5rem + var(--safe-area-bottom));
+  }
+
+  .detail-header {
+    flex-direction: column;
+  }
+
+  .detail-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .selected-day-bar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .session-card-header {
+    flex-direction: column;
+  }
+
+  .session-duration {
+    white-space: normal;
   }
 
   .detail-summary-grid {
@@ -1152,6 +1279,39 @@ onMounted(() => {
   
   .month-stats {
     display: none;
+  }
+
+  :deep(.day-detail-drawer.el-drawer) {
+    width: 100% !important;
+    max-width: 100%;
+    border-radius: 24px 24px 0 0;
+  }
+
+  :deep(.day-detail-drawer .el-drawer__body) {
+    padding: 16px 16px 0;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 480px) {
+  .selected-day-bar,
+  .session-card,
+  .detail-empty {
+    padding: 0.875rem;
+  }
+
+  .detail-summary-card,
+  .detail-analysis {
+    padding: 0.875rem;
+  }
+
+  .detail-close-btn {
+    min-height: 38px;
+    padding-inline: 0.8rem;
+  }
+
+  .days-grid {
+    gap: 0.2rem;
   }
 }
 </style>

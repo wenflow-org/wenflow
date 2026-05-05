@@ -102,7 +102,7 @@ export const themes: LabTheme[] = [
     copy: {
       tagline: '友好陪伴风',
       homeTitle: '想学的东西很多，先把真正的问题想清楚',
-      homeSubtitle: '从真实问题出发，再进入 AI 规划、对话学习和进度追踪。',
+      homeSubtitle: '从真实问题出发，再进入目标规划、对话学习和进度追踪。',
       dashboardTitle: '欢迎回来，今天先推进一个最容易开始的小任务',
       dashboardSubtitle: '先给你一个可以马上行动的起点，再看进度和状态。',
       plannerTitle: '先把真正要解决的问题说清楚',
@@ -148,7 +148,7 @@ export const scenes: LabScene[] = [
     title: '路径列表',
     route: '/learning-paths',
     summary: '同时容纳生成中、失败和推进中的路径。',
-    focus: ['列表页就要提供状态解释。', '异常状态必须可重试，不应消失。', '把主路径和次路径区分清楚。']
+    focus: ['列表页就要提供状态解释。', '异常状态必须可重试，不应消失。', '把最近在学和其他路径区分清楚。']
   },
   {
     id: 'path-detail',
@@ -176,7 +176,7 @@ export const scenes: LabScene[] = [
   }
 ];
 
-export const appNavItems = ['学习台', 'AI 规划', '学习路径', '学习状态'];
+export const appNavItems = ['学习台', '目标规划', '学习路径', '学习状态'];
 
 export const homeJourneySteps = [
   { step: '01', title: '先把困扰说出来', desc: '不用先会很多，只要把你眼前最真实的麻烦讲清楚。' },
@@ -191,7 +191,7 @@ export const homeMethodSteps = [
 ];
 
 export const homePrinciples = [
-  'AI 规划：把模糊目标拆成能开始的学习路径。',
+  '目标规划：把模糊目标拆成能开始的学习路径。',
   '对话学习：围绕你的真实任务继续追问和讲解。',
   '状态追踪：在掌握、压力和下一步行动之间保持节奏。'
 ];
@@ -211,7 +211,7 @@ export const homeProofCards = [
 export const dashboardWelcomeSubtitle = '继续围绕真实问题推进，先做一个最容易开始的小任务。';
 
 export const dashboardOverviewCards = [
-  { tag: '路径', value: '2', label: '正在推进的路径', hint: '你现在有 2 条路径正在继续整理和推进', footer: '先聚焦一条主路径会更轻松', tone: 'primary' as Tone },
+  { tag: '路径', value: '2', label: '正在推进的路径', hint: '你现在有 2 条路径正在继续整理和推进', footer: '先聚焦最近在学的那条会更轻松', tone: 'primary' as Tone },
   { tag: '投入', value: '51', label: '最近学习分钟', hint: '最近几次学习累计 51 分钟，已经开始形成手感', footer: '先保持发生，再慢慢拉长时长', tone: 'success' as Tone },
   { tag: '节奏', value: '20%', label: '完整收口率', hint: '最近已经开始了不少学习，但真正完整结束的次数还不多', footer: '先把一次学习完整做完，比继续加内容更重要', tone: 'warning' as Tone },
   { tag: '状态', value: 'LSB +3.6', label: '当前状态脉冲', hint: 'KTL 6.8 / LF 3.2，说明还有余力，但不适合猛冲', footer: '建议继续轻量推进', tone: 'accent' as Tone },
@@ -220,7 +220,7 @@ export const dashboardOverviewCards = [
 export const dashboardPathRadar = [
   {
     title: '在会议讨论中主动表达后避免误解的清晰表达入门',
-    badge: '主路径',
+    badge: '最近在学',
     tone: 'primary' as Tone,
     status: 'active',
     estimatedHours: '18 小时',
@@ -309,9 +309,9 @@ export const dashboardFrictionSignals = [
     tone: 'primary' as Tone
   },
   {
-    title: '先把主路径走顺，比加新内容更重要',
+    title: '先把最近在学的内容走顺，比加新内容更重要',
     value: '先聚焦当前重点',
-    desc: '现在最值得做的不是再开新坑，而是把手头这条主路径慢慢走稳。',
+    desc: '现在最值得做的不是再开新坑，而是把手头这条最近在学的路径慢慢走稳。',
     tone: 'accent' as Tone
   }
 ];
@@ -324,12 +324,12 @@ export const dashboardMomentumTimeline = [
 
 export const dashboardCoachFeed = [
   { title: '先把一次学习完整做完', desc: '如果最近总是在中途停下，先缩短任务长度，把一次学习稳稳收住。' },
-  { title: '主路径先别换', desc: '现在最值得做的不是再找新方向，而是先把眼前这条主路径推进起来。' },
+  { title: '最近在学的先别换', desc: '现在最值得做的不是再找新方向，而是先把眼前这条最近在学的路径推进起来。' },
   { title: '今天适合轻量推进', desc: '你现在还有余力，但更适合做一个能完成的小步骤，而不是一口气塞进太多内容。' }
 ];
 
 export const dashboardActionItems = [
-  { title: '继续当前主路径', desc: '把“冲突经历地图”这一步完整做完，先形成一次完整收口。', to: '/ui-lab/learn/task-1', badge: '优先', tone: 'primary' as Tone },
+  { title: '继续上次学习', desc: '把“冲突经历地图”这一步完整做完，先形成一次完整收口。', to: '/ui-lab/learn/task-1', badge: '优先', tone: 'primary' as Tone },
   { title: '回看最近一次中断点', desc: '找到上次停下的位置，只补一个最小步骤，不额外开新内容。', to: '/ui-lab/state', badge: '轻任务', tone: 'warning' as Tone },
   { title: '记录一次小复盘', desc: '用一句话写下今天学到了什么，帮助下一次更容易接上。', to: '/ui-lab/feedback', badge: '收口', tone: 'accent' as Tone }
 ];
@@ -392,10 +392,10 @@ export const achievementSpotlight = {
   },
   next: {
     title: '下一步最值得追',
-    name: '主路径启动者',
-    desc: '再完成 2 次主路径任务推进，就能解锁这条里程碑成就。',
+    name: '学习启动者',
+    desc: '再完成 2 次最近学习任务推进，就能解锁这条里程碑成就。',
     progress: '2 / 4',
-    actionLabel: '继续主路径',
+    actionLabel: '继续上次学习',
     actionTo: '/ui-lab/paths/1'
   }
 };
@@ -415,8 +415,8 @@ export const achievementCards = [
     actionTo: '/ui-lab/dashboard'
   },
   {
-    title: '主路径启动者',
-    desc: '让当前主路径第一次真正推进，而不只是停留在已生成状态。',
+    title: '学习启动者',
+    desc: '让最近在学的路径第一次真正推进，而不只是停留在已生成状态。',
     status: 'next',
     xp: '+180 XP',
     category: '路径推进',
@@ -424,7 +424,7 @@ export const achievementCards = [
     icon: '🚀',
     unlocked: false,
     progressDetail: { current: 2, total: 4, percentage: 50 },
-    actionLabel: '继续主路径',
+    actionLabel: '继续上次学习',
     actionTo: '/ui-lab/paths/1'
   },
   {
@@ -457,7 +457,7 @@ export const achievementCards = [
 
 // Legacy preview exports kept for DesignLabPreview compatibility.
 export const dashboardSnapshotCards = [
-  { label: '当前主路径', value: dashboardPathRadar[0].badge, note: dashboardPathRadar[0].title },
+  { label: '最近在学', value: dashboardPathRadar[0].badge, note: dashboardPathRadar[0].title },
   { label: '最近会话', value: dashboardSessionFeed[0].status, note: dashboardSessionFeed[0].topic },
   { label: '状态摘要', value: dashboardStatePulse[dashboardStatePulse.length - 1].lsb, note: dashboardStateSummary.headline }
 ];
@@ -499,7 +499,7 @@ export const pathDetailProgress = 62;
 export const dashboardStats = [
   { label: '今日任务', value: '3 项', hint: '按优先级排序', tone: 'primary' as Tone },
   { label: '连续学习', value: '6 天', hint: '建议保持轻节奏', tone: 'success' as Tone },
-  { label: '当前路径', value: '2 条', hint: '一主一辅更合理', tone: 'accent' as Tone },
+  { label: '当前路径', value: '2 条', hint: '先聚焦最近在学的那条更合理', tone: 'accent' as Tone },
   { label: '学习状态', value: 'LSB +2.1', hint: '尚可继续推进', tone: 'warning' as Tone }
 ];
 
@@ -527,8 +527,8 @@ export const plannerDraftPath = [
 ];
 
 export const pathCards = [
-  { title: 'Python 自动化提效', summary: '从 Excel 清洗到日志与异常处理，围绕每周真实报表场景推进。', badge: '主路径', tone: 'primary' as Tone, state: 'active', meta: ['3 周', '9 个任务', '主路径'], progress: 62, nextStep: '下一步：异常处理与日志记录', action: '查看详情', estimatedHours: 6.5, totalStages: 3 },
-  { title: '概率论错题修复', summary: '用错题回推知识漏洞，让概念和做题重新对齐。', badge: '本周重点', tone: 'success' as Tone, state: 'active', meta: ['2 周', '6 个任务', '主路径'], progress: 48, nextStep: '下一步：条件概率与贝叶斯直觉', action: '查看详情', estimatedHours: 4, totalStages: 2 },
+  { title: 'Python 自动化提效', summary: '从 Excel 清洗到日志与异常处理，围绕每周真实报表场景推进。', badge: '最近在学', tone: 'primary' as Tone, state: 'active', meta: ['3 周', '9 个任务', '最近在学'], progress: 62, nextStep: '下一步：异常处理与日志记录', action: '查看详情', estimatedHours: 6.5, totalStages: 3 },
+  { title: '概率论错题修复', summary: '用错题回推知识漏洞，让概念和做题重新对齐。', badge: '本周重点', tone: 'success' as Tone, state: 'active', meta: ['2 周', '6 个任务', '最近在学'], progress: 48, nextStep: '下一步：条件概率与贝叶斯直觉', action: '查看详情', estimatedHours: 4, totalStages: 2 },
   { title: '英语复述表达训练', summary: '通过句式拆解、复述和反馈循环提升口头表达的连续性。', badge: '生成中', tone: 'warning' as Tone, state: 'generating', meta: ['轻任务', '每日 20 分钟', '生成中'], progress: 24, nextStep: 'AI 正在补充练习任务与反馈节点', action: '等它整理好', estimatedHours: 0, totalStages: 0 },
   { title: '数据看板自动汇总', summary: '这条路径上次没有顺利生成，需要补充条件后再来一次。', badge: '生成失败', tone: 'danger' as Tone, state: 'failed', meta: ['失败', '需要重试', '条件不足'], progress: 0, nextStep: '建议补充真实文件样例后重新生成', action: '重试生成', estimatedHours: 0, totalStages: 0 }
 ];
@@ -542,7 +542,7 @@ export const pathGenerationStates = [
 export const pathListNotes = [
   '生成中的路径会继续留在这里，整理完成后就能直接进入。',
   '失败的路径可以补充条件后重试，不需要重新从头开始。',
-  '主路径优先，其余路径保持轻量推进，节奏会更稳。'
+  '优先从最近在学的那条继续，其余路径保持轻量推进，节奏会更稳。'
 ];
 
 export const pathDetailMeta = [

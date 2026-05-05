@@ -14,14 +14,14 @@
 
         <nav class="header-nav" aria-label="应用导航">
           <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
           <router-link to="/learning-paths" class="nav-item nav-item--active">学习路径</router-link>
           <router-link to="/learning-state" class="nav-item">学习状态</router-link>
           <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -49,7 +49,7 @@
         <transition name="slide-down">
           <el-alert
             v-if="showGeneratingAlert"
-            title="学习路径正在生成中，通常 1-3 分钟完成，请稍候"
+            title="学习路径正在生成，通常 1-3 分钟完成。"
             type="info"
             :closable="true"
             show-icon
@@ -61,12 +61,12 @@
         <section class="paths-hero glass-card">
           <div class="paths-hero__copy">
             <span class="pill">路径总览</span>
-            <h1>看见每一条路径的状态，<br />学习才不会中断。</h1>
-            <p>推进中的继续走，生成中的等待完成，失败的及时重试，始终保留一条最值得推进的主路径。</p>
+            <h1>查看所有路径进度。</h1>
+            <p>在这里查看你创建过的学习路径、当前阶段和学习进度。</p>
           </div>
           <div class="paths-hero__actions">
-            <router-link v-if="primaryPath" :to="`/learning-path/${primaryPath.id}`" class="btn btn-primary">继续主路径</router-link>
-            <router-link to="/goal-conversation" class="btn btn-ghost">开始新规划</router-link>
+            <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续学习</button>
+            <router-link to="/goal-conversation" class="btn btn-ghost">创建新目标</router-link>
           </div>
         </section>
 
@@ -99,15 +99,14 @@
                 <template v-if="getPathDisplayState(path) === 'generating'">
                   <div class="path-overview-card__status-row">
                     <span class="path-state-pill path-state-pill--generating">生成中</span>
-                    <span v-if="primaryPath?.id === path.id" class="path-state-pill path-state-pill--primary">主路径</span>
                   </div>
                   <strong>{{ getPathTitle(path) }}</strong>
-                  <p>{{ getPathSummary(path) || 'AI 正在生成学习路径' }}</p>
+                  <p>{{ getPathSummary(path) || '这条学习路径正在生成。' }}</p>
                   <div class="path-overview-card__progress-bar">
                     <div class="path-overview-card__progress-fill path-overview-card__progress-fill--loading"></div>
                   </div>
                   <div class="path-overview-card__actions-row">
-                    <button class="btn btn-ghost" @click="loadPaths">查看进度</button>
+                    <button type="button" class="btn btn-ghost" @click="loadPaths">刷新状态</button>
                   </div>
                 </template>
 
@@ -118,21 +117,20 @@
                   <strong>{{ getPathTitle(path) }}</strong>
                   <p>{{ getFailureCopy(path) }}</p>
                   <div class="path-overview-card__actions-row">
-                    <button class="btn btn-ghost" :disabled="retryingPathId === path.id" @click="retryPathGeneration(path)">重试</button>
-                    <button class="btn btn-ghost" @click="confirmDelete(path)">删除</button>
+                    <button type="button" class="btn btn-ghost" :disabled="retryingPathId === path.id" @click="retryPathGeneration(path)">重试</button>
+                    <button type="button" class="btn btn-ghost" @click="confirmDelete(path)">删除</button>
                   </div>
                 </template>
 
                 <template v-else>
                   <div class="path-overview-card__status-row">
-                    <span v-if="primaryPath?.id === path.id" class="path-state-pill path-state-pill--primary">主路径</span>
                     <span class="path-state-pill path-state-pill--active">进行中</span>
                     <span v-if="getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending'" class="path-state-pill path-state-pill--soft">准备中</span>
                   </div>
                   <div class="path-overview-card__head">
                     <strong>{{ getPathTitle(path) }}</strong>
                     <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, path)">
-                      <button class="more-btn" @click.stop>
+                      <button type="button" class="more-btn" @click.stop>
                         <el-icon><More /></el-icon>
                       </button>
                       <template #dropdown>
@@ -150,6 +148,10 @@
                     </el-dropdown>
                   </div>
                   <p>{{ getPathSummary(path) }}</p>
+                  <div class="path-overview-card__next-task">
+                    <span>当前任务</span>
+                    <strong>{{ getPathNextTaskLabel(path) }}</strong>
+                  </div>
                   <div class="path-overview-card__stats">
                     <span>当前阶段：{{ getPathCurrentStage(path) }} / {{ getPathStageCount(path) }}</span>
                     <span>预计投入：{{ getPathEstimatedHours(path) }} 小时</span>
@@ -164,18 +166,18 @@
                     </div>
                   </div>
                   <div class="path-overview-card__actions-row">
-                    <button class="btn btn-primary" @click="goToPathDetail(path.id)">继续推进</button>
-                    <button class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
+                    <button type="button" class="btn btn-primary" @click="continuePath(path)">继续学习</button>
+                    <button type="button" class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
                   </div>
                 </template>
               </article>
             </div>
 
             <section v-else-if="!loading" class="paths-empty-state glass-card">
-              <span class="pill">还没有路径</span>
-              <h2>先把问题收敛清楚，再生成真正能开始的学习路径。</h2>
-              <p>从一个真实任务开始，系统会帮你收敛目标、约束和时间窗口，再生成能立刻推进的路径。</p>
-              <router-link to="/goal-conversation" class="btn btn-primary">开始新规划</router-link>
+              <span class="pill">还没有学习路径</span>
+              <h2>还没有学习路径。</h2>
+              <p>先创建一个目标，生成第一条学习路径。</p>
+              <router-link to="/goal-conversation" class="btn btn-primary">创建新目标</router-link>
             </section>
           </div>
         </section>
@@ -311,7 +313,40 @@ const timeoutPaths = computed(() =>
 
 const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
 
-const getPathSummary = (path: any) => path.summary || path.description || '这条路径还在整理中，建议先从最接近真实场景的一步开始推进。';
+const getPathSummary = (path: any) => path.summary || path.description || '这里会显示这条学习路径的简要说明。';
+
+const getPathStages = (path: any) => path?.milestones || path?.weeks || [];
+
+const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
+
+const getActiveStage = (path: any) => {
+  const stages = getPathStages(path);
+  if (!stages.length) return null;
+
+  return stages.find((stage: any) => {
+    const tasks = normalizeTaskList(stage);
+    return tasks.some((task: any) => task.status !== 'completed');
+  }) || stages[0] || null;
+};
+
+const getPrimaryActionTask = (path: any) => {
+  const tasks = normalizeTaskList(getActiveStage(path));
+  return tasks.find((task: any) => task.status === 'todo')
+    || tasks.find((task: any) => task.status === 'in_progress')
+    || null;
+};
+
+const getPathContinueTarget = (path: any) => {
+  const nextTask = getPrimaryActionTask(path);
+  if (nextTask?.id) {
+    return `/learn/${nextTask.id}`;
+  }
+  return `/learning-path/${path.id}`;
+};
+
+const getPathNextTaskLabel = (path: any) => {
+  return getPrimaryActionTask(path)?.title || '进入路径查看安排';
+};
 
 const getPathStageCount = (path: any) => path.totalMilestones || path.milestones?.length || path.weeks?.length || 0;
 
@@ -349,9 +384,9 @@ const getPathDisplayState = (path: any) => {
 
 const getFailureCopy = (path: any) => {
   if (path.status === 'generating' && isPathTimeout(path)) {
-    return path.description || '这条路径生成时间过长，建议重试或回到规划补充条件。';
+    return path.description || '这条路径生成时间较长，可以稍后刷新，或直接重试。';
   }
-  return path.description || path.summary || '这条路径上次没有顺利生成，建议补充条件后再来一次。';
+  return path.description || path.summary || '这条路径暂时没有生成成功，可以直接重试。';
 };
 
 const sortedPaths = computed(() => {
@@ -365,7 +400,10 @@ const sortedPaths = computed(() => {
   });
 });
 
-const primaryPath = computed(() => sortedPaths.value.find((path: any) => getPathDisplayState(path) === 'active') || null);
+const primaryPath = computed(() => {
+  const activePaths = sortedPaths.value.filter((path: any) => getPathDisplayState(path) === 'active');
+  return activePaths.find((path: any) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
+});
 
 const pathFilterChips = computed(() => {
   const list = sortedPaths.value;
@@ -397,7 +435,7 @@ const startPolling = () => {
       // 检查超时（只提示一次）
         timeoutPaths.value.forEach((timeoutPath: any) => {
           if (!notifiedTimeoutIds.has(timeoutPath.id)) {
-          toast.warning('学习路径生成时间较长，请稍候或重试');
+          toast.warning('学习路径生成时间较长，可以稍后刷新或直接重试');
           notifiedTimeoutIds.add(timeoutPath.id);
           }
         });
@@ -533,7 +571,7 @@ const regeneratePath = async () => {
 
     notifiedTimeoutIds.delete(pathToRegenerate.value.id);
     showRegenerateDialog.value = false;
-    toast.success('正在重新生成学习路径...');
+    toast.success('已开始重新生成学习路径');
 
     if (!pollingTimer) {
       startPolling();
@@ -549,6 +587,11 @@ const regeneratePath = async () => {
 
 const goToPathDetail = (id: string) => {
   router.push(`/learning-path/${id}`);
+};
+
+const continuePath = (path: any) => {
+  if (!path?.id) return;
+  router.push(getPathContinueTarget(path));
 };
 
 // 重试生成失败的路径
@@ -572,7 +615,7 @@ const retryPathGeneration = async (path: any) => {
     }
     notifiedTimeoutIds.delete(path.id);
     
-    toast.success('正在重新生成学习路径...');
+    toast.success('已开始重新生成学习路径');
     
     if (!pollingTimer) {
       startPolling();
@@ -618,6 +661,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .learning-paths-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-body);
   position: relative;
   overflow-x: hidden;
@@ -1075,13 +1119,13 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
   color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(52, 120, 246, 0.28);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 20px rgba(52, 120, 246, 0.4);
   transform: translateY(-2px);
 }
 
@@ -1751,6 +1795,27 @@ onUnmounted(() => {
   color: #66758d;
 }
 
+.path-overview-card__next-task {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+}
+
+.path-overview-card__next-task span {
+  font-size: 12px;
+  font-weight: 800;
+  color: #52627c;
+}
+
+.path-overview-card__next-task strong {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
 .path-overview-card__progress-block {
   display: grid;
   gap: 8px;
@@ -1856,6 +1921,7 @@ onUnmounted(() => {
 
 [data-theme="dark"] .paths-hero h1,
 [data-theme="dark"] .path-overview-card strong,
+[data-theme="dark"] .path-overview-card__next-task strong,
 [data-theme="dark"] .paths-empty-state h2,
 [data-theme="dark"] .paths-filter-chip strong,
 [data-theme="dark"] .btn-ghost {
@@ -1864,11 +1930,17 @@ onUnmounted(() => {
 
 [data-theme="dark"] .paths-hero p,
 [data-theme="dark"] .path-overview-card p,
+[data-theme="dark"] .path-overview-card__next-task span,
 [data-theme="dark"] .paths-empty-state p,
 [data-theme="dark"] .paths-filter-chip,
 [data-theme="dark"] .path-overview-card__stats,
 [data-theme="dark"] .path-overview-card__progress-top span {
   color: #94a3b8;
+}
+
+[data-theme="dark"] .path-overview-card__next-task {
+  background: rgba(15, 23, 42, 0.32);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] .paths-filter-chip--active {
@@ -1940,6 +2012,47 @@ onUnmounted(() => {
 
   .paths-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-container {
+    padding: 0.9rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .header-left,
+  .header-right,
+  .header-nav {
+    min-width: 0;
+  }
+
+  .paths-main {
+    padding-inline: 0.75rem;
+    padding-bottom: calc(1rem + var(--safe-area-bottom));
+  }
+
+  .paths-hero,
+  .path-overview-card,
+  .paths-empty-state {
+    border-radius: 20px;
+  }
+
+  .paths-hero__actions,
+  .path-overview-card__actions-row {
+    width: 100%;
+  }
+
+  .paths-hero__actions > *,
+  .path-overview-card__actions-row > * {
+    flex: 1 1 100%;
+  }
+
+  .path-overview-card__status-row,
+  .path-overview-card__head,
+  .path-overview-card__progress-top {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

@@ -15,14 +15,14 @@
 
         <nav class="header-nav" aria-label="应用导航">
           <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
           <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
           <router-link to="/learning-state" class="nav-item">学习状态</router-link>
           <router-link to="/achievements" class="nav-item nav-item--active">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -55,8 +55,8 @@
             </div>
 
             <div class="app-page-head__intro">
-              <h1>把长期努力变成可见的里程碑，让学习更容易坚持下去。</h1>
-              <p>这里不是奖励陈列，而是帮你看清已经做到的、正在接近的，以及下一步最值得追的成就。</p>
+              <h1>把学习过程变成看得见的里程碑。</h1>
+              <p>这里记录你已经完成的任务、路径、复盘和持续学习，不用只靠感觉判断自己有没有前进。</p>
             </div>
 
             <div class="app-page-head__summary achievements-hero__summary">
@@ -259,6 +259,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .achievements-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f3f6fb;
   position: relative;
   overflow-x: hidden;
@@ -1110,6 +1111,40 @@ onUnmounted(() => {
 
   .achievement-card-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-container {
+    padding: 0.9rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .header-left,
+  .header-right,
+  .header-nav {
+    min-width: 0;
+  }
+
+  .app-page-head,
+  .achievement-card-item,
+  .achievement-filter-row {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .achievement-filter-tabs,
+  .achievement-filter-tags {
+    justify-content: flex-start;
+  }
+
+  .achievement-card-item__desc {
+    white-space: normal;
+  }
+
+  .achievement-card-item__foot {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

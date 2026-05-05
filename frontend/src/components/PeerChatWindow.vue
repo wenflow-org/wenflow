@@ -104,8 +104,8 @@ const userInput = ref('');
 const messageListRef = ref<HTMLElement | null>(null);
 
 const windowStyle = computed(() => ({
-  width: '360px',
-  height: '500px',
+  width: 'min(360px, calc(100vw - 24px))',
+  height: 'min(500px, calc(100dvh - 132px))',
 }));
 
 const sendMessage = () => {
@@ -139,8 +139,8 @@ watch(() => props.messages, () => {
 <style scoped>
 .peer-chat-window {
   position: fixed;
-  bottom: 80px;
-  right: 24px;
+  bottom: calc(80px + var(--safe-area-bottom));
+  right: max(12px, calc(12px + var(--safe-area-right)));
   background-color: #ffffff;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
@@ -270,5 +270,35 @@ watch(() => props.messages, () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .peer-chat-window {
+    left: max(12px, calc(12px + var(--safe-area-left)));
+    right: max(12px, calc(12px + var(--safe-area-right)));
+    bottom: calc(12px + var(--safe-area-bottom));
+    border-radius: 18px;
+  }
+
+  .window-header {
+    padding: 10px 12px;
+    cursor: default;
+  }
+
+  .message-list {
+    padding: 12px;
+  }
+
+  .message-body {
+    max-width: 100%;
+  }
+
+  .window-input {
+    padding: 10px;
+  }
+
+  .input-actions .el-button {
+    width: 100%;
+  }
 }
 </style>

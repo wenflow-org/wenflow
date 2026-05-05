@@ -15,14 +15,14 @@
 
         <nav class="header-nav" aria-label="应用导航">
           <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
           <router-link to="/learning-paths" class="nav-item nav-item--active">学习路径</router-link>
           <router-link to="/learning-state" class="nav-item">学习状态</router-link>
           <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -91,7 +91,7 @@
                     </div>
                   </div>
                   <button class="btn btn-primary btn--full" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
-                    {{ canStartLearning ? '继续学习' : '等待标注完成' }}
+                    {{ primaryActionLabel }}
                   </button>
                 </div>
               </div>
@@ -129,11 +129,6 @@
 
           <section class="path-detail-main-grid">
             <section class="weeks-section">
-              <h2 class="section-title">
-                <span class="section-icon">📚</span>
-                学习内容
-              </h2>
-
               <div class="weeks-container">
                 <div
                   v-for="week in (path.milestones || path.weeks || [])"
@@ -283,8 +278,8 @@
             <aside class="path-detail-sidebar">
               <article class="glass-card path-detail-side-card">
                 <div class="path-detail-side-card__head">
-                  <span class="section-kicker">本周先这样走</span>
-                  <h2>本周先这样走</h2>
+                  <span class="section-kicker">本周学习建议</span>
+                  <h2>本周学习建议</h2>
                 </div>
                 <div class="path-detail-side-card__time">预计总投入：{{ currentStageEffortText }}</div>
                 <ul class="path-detail-note-list">
@@ -304,7 +299,7 @@
                   </article>
                 </div>
                 <button class="btn btn-primary btn--full" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
-                  {{ canStartLearning ? '开始学习' : '等待标注完成' }}
+                  {{ primaryActionLabel }}
                 </button>
               </article>
 
@@ -490,10 +485,14 @@ const activeStage = computed(() => {
 const activeStageTasks = computed(() => normalizeTaskList(activeStage.value));
 
 const primaryActionTask = computed(() => {
-  return activeStageTasks.value.find((task: any) => task.status === 'in_progress')
-    || activeStageTasks.value.find((task: any) => task.status !== 'completed')
-    || activeStageTasks.value[0]
+  return activeStageTasks.value.find((task: any) => task.status === 'todo')
+    || activeStageTasks.value.find((task: any) => task.status === 'in_progress')
     || null;
+});
+
+const primaryActionLabel = computed(() => {
+  if (!canStartLearning.value) return '等待标注完成';
+  return primaryActionTask.value?.status === 'in_progress' ? '继续学习' : '开始学习';
 });
 
 const nextActionTasks = computed(() => {
@@ -878,6 +877,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .learning-path-detail-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(circle at top right, rgba(52, 120, 246, 0.12), transparent 28%),
     radial-gradient(circle at left 20%, rgba(141, 107, 255, 0.08), transparent 24%),
@@ -2107,6 +2107,66 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-container {
+    padding: 0.9rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .header-right,
+  .header-nav,
+  .brand {
+    min-width: 0;
+  }
+
+  .path-detail-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .path-detail-main-grid {
+    gap: 16px;
+  }
+
+  .path-detail-side-card,
+  .week-card,
+  .learning-objectives,
+  .task-card,
+  .week-content {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .week-header {
+    padding: 16px;
+  }
+
+  .progress-ring-wrapper {
+    transform: scale(0.88);
+    transform-origin: top center;
+  }
+
+  .week-title-wrapper,
+  .task-card,
+  .task-header,
+  .task-footer,
+  .completed-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .week-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .task-btn,
+  .completed-actions .task-btn,
+  .btn--full {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

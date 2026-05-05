@@ -423,7 +423,7 @@
 
             <aside class="dashboard-focus-card">
               <div class="dashboard-focus-card__head">
-                <span class="section-kicker">当前主路径摘要</span>
+                <span class="section-kicker">最近学习摘要</span>
                 <span class="dashboard-focus-card__badge">{{ dashboardPrimaryPathCard.badge }}</span>
               </div>
 
@@ -443,7 +443,7 @@
                 </article>
                 <article class="dashboard-focus-item">
                   <span>下一步</span>
-                  <strong>继续主路径</strong>
+                  <strong>继续上次学习</strong>
                   <p>{{ dashboardPrimaryPathCard.nextStep }}</p>
                 </article>
               </div>
@@ -753,7 +753,7 @@
             <div class="planning-topbar__main planning-topbar__main--final">
               <span class="pill">{{ workbenchSceneMeta.pill }}</span>
               <div>
-                <h1>AI 规划</h1>
+                <h1>目标规划</h1>
                 <p>先把问题说清楚，再决定第一步怎么开始。</p>
               </div>
             </div>
@@ -918,10 +918,10 @@
             <div class="paths-hero__copy">
               <span class="pill">路径总览</span>
               <h1>看见每一条路径的状态，<br />学习才不会中断。</h1>
-              <p>推进中的继续走，生成中的等待完成，失败的及时重试，始终保留一条最值得推进的主路径。</p>
+              <p>推进中的继续走，生成中的等待完成，失败的及时重试，优先从最近在学的那条继续。</p>
             </div>
             <div class="paths-hero__actions">
-              <router-link to="/ui-lab/paths/1" class="btn btn--primary">继续主路径</router-link>
+              <router-link to="/ui-lab/paths/1" class="btn btn--primary">继续上次学习</router-link>
               <router-link to="/ui-lab/planning" class="btn btn--ghost">开始新规划</router-link>
             </div>
           </section>
@@ -972,7 +972,7 @@
 
             <div v-else class="path-card__active">
               <div class="path-card__status-row">
-                <span v-if="path.isPrimary" class="path-card__state-pill path-card__state-pill--primary">主路径</span>
+                <span v-if="path.isPrimary" class="path-card__state-pill path-card__state-pill--primary">最近在学</span>
                 <span class="path-card__state-pill path-card__state-pill--active">进行中</span>
               </div>
               <div class="path-card__head">
@@ -1010,7 +1010,7 @@
           <section class="path-detail-hero surface-card">
             <div class="path-detail-hero__copy">
               <div class="path-detail-hero__tags">
-                <span class="pill">主路径</span>
+                <span class="pill">最近在学</span>
                 <span class="path-detail-hero__tag">进行中</span>
                 <span class="path-detail-hero__tag">自动化提效</span>
               </div>
@@ -1143,8 +1143,8 @@
             </div>
 
             <div class="app-page-head__intro">
-              <h1>看清你的节奏、压力、理解和疲劳，决定下一步怎么学。</h1>
-              <p>这里展示完整的状态分析，不只是一个结论。你可以看到当前指标、近期变化以及更适合你的学习建议。</p>
+              <h1>看见最近的学习状态，再决定下一步怎么学。</h1>
+              <p>这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。</p>
             </div>
           </section>
         </section>
@@ -1200,8 +1200,8 @@
             </div>
 
             <div class="app-page-head__intro">
-              <h1>把长期努力变成可见的里程碑，让学习更容易坚持下去。</h1>
-              <p>这里不是奖励陈列，而是帮你看清已经做到的、正在接近的，以及下一步最值得追的成就。</p>
+              <h1>把学习过程变成看得见的里程碑。</h1>
+              <p>这里记录你已经完成的任务、路径、复盘和持续学习，不用只靠感觉判断自己有没有前进。</p>
             </div>
           </section>
         </section>
@@ -1558,7 +1558,7 @@ const navSecondaryLabel = computed(() => (authPreviewState.value === 'registered
 const isRegisteredPreview = computed(() => authPreviewState.value === 'registered');
 const dashboardAppNav = [
   { to: '/ui-lab/dashboard', label: '学习台', sceneId: 'dashboard' as const },
-  { to: '/ui-lab/planning', label: 'AI 规划', sceneId: 'requirement' as const },
+  { to: '/ui-lab/planning', label: '目标规划', sceneId: 'requirement' as const },
   { to: '/ui-lab/paths', label: '学习路径', sceneId: 'paths' as const },
   { to: '/ui-lab/state', label: '学习状态', sceneId: 'state' as const },
   { to: '/ui-lab/achievements', label: '成就', sceneId: 'achievements' as const },
@@ -1590,14 +1590,14 @@ const dashboardPrimaryAction = computed(() => (
 ));
 const dashboardSecondaryAction = computed(() => (
   isRegisteredPreview.value
-    ? { to: '/ui-lab/planning', label: '开始 AI 规划' }
+    ? { to: '/ui-lab/planning', label: '开始目标规划' }
     : { to: '/ui-lab/login', label: '已有账号，先登录' }
 ));
 const dashboardStarterProgress = computed(() => (isRegisteredPreview.value ? 1 : 0));
 const dashboardStarterSteps = computed(() => [
   {
     label: '先把当前最重要的一条路径定下来',
-    note: '先把注意力放在一条主路径上，开始会更稳。',
+    note: '先把注意力放在最近在学的那条上，开始会更稳。',
     done: isRegisteredPreview.value,
     current: !isRegisteredPreview.value
   },
@@ -1910,7 +1910,7 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
     return {
       appbarKicker: '路径详情',
       appbarNote: '把注意力锁在当前阶段，不要一次同时推进整条路径。',
-      pill: '主路径详情',
+      pill: '最近学习详情',
       title: '真正有用的路径，不是排满课程，而是每一步都能落回真实任务。',
       desc: '这条路径围绕每周 Excel 周报自动化展开。你现在需要的不是再开一条新路线，而是把当前阶段的异常处理和日志闭环做稳。',
       primaryAction: { to: '/ui-lab/learn/task-1', label: '进入当前任务' },
@@ -1946,7 +1946,7 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
 
   if (sceneId.value === 'requirement') {
     return {
-      appbarKicker: 'AI 规划',
+      appbarKicker: '目标规划',
       appbarNote: '路径不是先生成出来再看，而是在追问里慢慢收敛出来。',
       pill: '规划中',
       title: '先把问题收敛清楚，再生成真正能开始的学习路径。',
@@ -1974,12 +1974,12 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
       pill: '路径总览',
       title: '不同状态的路径都应该被看见，这样学习流程才不会断。',
       desc: '列表页不只是用来展示成功生成的结果，它也要承载生成中、失败重试和主次路径取舍，让你知道现在最该推进哪一条。',
-      primaryAction: { to: '/ui-lab/paths/1', label: '继续主路径' },
+      primaryAction: { to: '/ui-lab/paths/1', label: '继续上次学习' },
       secondaryAction: { to: '/ui-lab/planning', label: '开始新规划' },
       summaryTitle: '当前路径分布',
-      summaryDesc: '主路径优先，其余保持轻量推进，注意力才不会被切碎。',
+      summaryDesc: '优先从最近在学的位置继续，其余保持轻量推进，注意力才不会被切碎。',
       summaryItems: [
-        { label: '推进中路径', value: `${activePathCount} 条`, note: '优先只保留 1 条真正的主路径。' },
+        { label: '推进中路径', value: `${activePathCount} 条`, note: '优先只保留 1 条最近在学的路径。' },
         { label: '生成中路径', value: `${generatingPathCount} 条`, note: '生成完成后会自动进入列表继续推进。' },
         { label: '待重试路径', value: `${failedPathCount} 条`, note: '失败不是消失，而是补条件后继续。' }
       ]

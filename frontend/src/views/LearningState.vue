@@ -15,14 +15,14 @@
 
         <nav class="header-nav" aria-label="应用导航">
           <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
           <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
           <router-link to="/learning-state" class="nav-item nav-item--active">学习状态</router-link>
           <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -59,8 +59,8 @@
             </div>
 
             <div class="app-page-head__intro">
-              <h1>看清你的节奏、压力、理解和疲劳，决定下一步怎么学。</h1>
-              <p>这里展示完整的状态分析，不只是一个结论。你可以看到当前指标、近期变化以及更适合你的学习建议。</p>
+              <h1>看见最近的学习状态，再决定下一步怎么学。</h1>
+              <p>这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。</p>
             </div>
 
             <div v-if="state" class="app-page-head__summary state-hero__summary">
@@ -539,6 +539,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .learning-state-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f3f6fb;
   position: relative;
   overflow-x: hidden;
@@ -1995,6 +1996,48 @@ section {
 
   .chart-container {
     height: 300px;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-container {
+    padding: 0.9rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .header-left,
+  .header-right {
+    min-width: 0;
+  }
+
+  .app-page-head,
+  .state-overview-card,
+  .state-metrics-card,
+  .state-side-card,
+  .trends-card,
+  .info-panel,
+  .state-warning-card,
+  .state-category-card,
+  .state-definition-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .state-metrics-grid,
+  .app-page-head__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .app-page-head__actions {
+    width: 100%;
+  }
+
+  .app-page-head__actions > * {
+    flex: 1 1 100%;
+  }
+
+  .chart-container {
+    height: 260px;
   }
 }
 </style>

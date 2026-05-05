@@ -97,6 +97,7 @@ async function handleLogout() {
 <style scoped lang="scss">
 .capability-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
   overflow-x: hidden;
   background: var(--bg-body);
@@ -271,6 +272,7 @@ async function handleLogout() {
   position: relative;
   z-index: 1;
   padding: 2rem;
+  padding-bottom: calc(2rem + var(--safe-area-bottom));
 }
 
 .shell-hero {
@@ -356,12 +358,26 @@ async function handleLogout() {
 }
 
 @media (max-width: 768px) {
+  .shell-header {
+    top: 0;
+  }
+
   .shell-main {
     padding: 16px;
+    padding-bottom: calc(20px + var(--safe-area-bottom));
   }
 
   .shell-header__inner {
     padding: 12px 16px;
+  }
+
+  .shell-brand__title {
+    font-size: 1.1rem;
+  }
+
+  .shell-header__actions {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .shell-hero {
@@ -371,6 +387,49 @@ async function handleLogout() {
 
   .shell-hero__title {
     font-size: 1.75rem;
+  }
+
+  .shell-hero__actions {
+    width: 100%;
+  }
+
+  .shell-hero__actions :deep(.el-button),
+  .shell-hero__actions :deep(.el-button + .el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell-header__inner {
+    gap: 12px;
+    padding-inline: 14px;
+  }
+
+  .shell-nav {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .shell-nav__item {
+    flex: 0 0 auto;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.9rem;
+  }
+
+  .shell-main {
+    padding-inline: 14px;
+  }
+
+  .shell-hero {
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .shell-hero__description {
+    font-size: 0.95rem;
   }
 }
 </style>
