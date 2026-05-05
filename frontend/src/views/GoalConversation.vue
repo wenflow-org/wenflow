@@ -200,105 +200,7 @@
                 </div>
               </transition>
 
-              <transition name="upload-fold">
-                <button
-                  v-if="shouldShowUploadSummary"
-                  type="button"
-                  class="planning-upload-summary"
-                  @click="showUploadPanel = true"
-                >
-                  <div class="planning-upload-summary__copy">
-                    <strong>已添加 {{ uploadedFiles.length }} 份材料</strong>
-                    <span>{{ uploadSummaryHint }}</span>
-                  </div>
-                  <span class="planning-upload-summary__action">展开</span>
-                </button>
-              </transition>
-
-              <transition name="upload-fold">
-                <div v-if="shouldShowUploadPanel" class="planning-upload-panel planning-upload-panel--compact">
-                  <div class="planning-upload-panel__head">
-                    <div>
-                      <span class="planning-section-kicker">补充材料</span>
-                      <h3>可选地补充文件、截图或参考材料。</h3>
-                    </div>
-                    <button
-                      type="button"
-                      class="planning-upload-collapse"
-                      @click="showUploadPanel = false"
-                    >
-                      {{ uploadedFiles.length > 0 ? '收起材料' : '收起' }}
-                    </button>
-                  </div>
-                  <p class="planning-upload-panel__note">当前只做材料收集，不会自动解析，也不会直接发送给 AI。</p>
-
-                  <input
-                    ref="fileInputRef"
-                    type="file"
-                    class="planning-upload-input"
-                    multiple
-                    :accept="acceptedFileTypes"
-                    @change="handleFileInputChange"
-                  />
-
-                  <button
-                    type="button"
-                    class="planning-upload-dropzone planning-upload-dropzone--compact"
-                    :class="{ 'is-dragging': isDraggingFile }"
-                    @click="openFilePicker"
-                    @dragenter.prevent="handleFileDragEnter"
-                    @dragover.prevent="handleFileDragOver"
-                    @dragleave.prevent="handleFileDragLeave"
-                    @drop.prevent="handleFileDrop"
-                  >
-                    <div class="planning-upload-dropzone__copy">
-                      <strong>{{ isDraggingFile ? '松开后添加到材料列表' : '拖放文件到此处，或点击选择文件' }}</strong>
-                      <span>支持 PDF、DOCX、TXT、MD、CSV、XLSX、PNG、JPG，最大 10MB</span>
-                    </div>
-                  </button>
-
-                  <div v-if="uploadedFiles.length > 0" class="planning-upload-list">
-                    <article v-for="file in uploadedFiles" :key="file.id" class="planning-upload-item">
-                      <div class="planning-upload-item__preview" :class="{ 'is-image': file.previewUrl }">
-                        <img v-if="file.previewUrl" :src="file.previewUrl" :alt="file.name" />
-                        <span v-else>{{ getFileIcon(file) }}</span>
-                      </div>
-
-                      <div class="planning-upload-item__body">
-                        <div class="planning-upload-item__meta">
-                          <strong>{{ file.name }}</strong>
-                          <span>{{ formatFileSize(file.size) }}</span>
-                        </div>
-
-                        <div class="planning-upload-item__status-row">
-                          <span class="planning-upload-status" :class="`planning-upload-status--${file.status}`">
-                            {{ getUploadStatusLabel(file.status) }}
-                          </span>
-                          <span v-if="file.error" class="planning-upload-error">{{ file.error }}</span>
-                        </div>
-                      </div>
-
-                      <div class="planning-upload-item__actions">
-                        <button
-                          v-if="file.status === 'error'"
-                          type="button"
-                          class="planning-upload-action planning-upload-action--retry"
-                          @click.stop="retryUploadedFile(file.id)"
-                        >
-                          重试
-                        </button>
-                        <button
-                          type="button"
-                          class="planning-upload-action planning-upload-action--remove"
-                          @click.stop="removeUploadedFile(file.id)"
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </article>
-                  </div>
-                </div>
-              </transition>
+              <!-- 上传入口已临时下线 -->
 
               <div class="planning-composer__box planning-composer__box--final">
                 <div class="planning-composer__field">
@@ -326,17 +228,7 @@
                    ></textarea>
                  </div>
                 <div class="planning-composer__row">
-                  <button
-                    type="button"
-                    class="planning-attach-btn"
-                    :class="{ active: showUploadPanel || hasUploadedFiles }"
-                    title="上传资料"
-                    aria-label="上传资料"
-                    @click="showUploadPanel = !showUploadPanel"
-                  >
-                    <el-icon><FolderOpened /></el-icon>
-                    <span>上传资料</span>
-                  </button>
+                  <!-- 上传资料按钮已临时下线 -->
                   <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
                     <el-icon v-if="loading"><Loading /></el-icon>
                     <el-icon v-else><Promotion /></el-icon>
