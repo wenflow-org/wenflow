@@ -1,0 +1,182 @@
+<template>
+  <Teleport to="body">
+    <div class="toast-host" aria-live="polite">
+      <TransitionGroup name="toast-slide">
+        <div
+          v-for="item in toast.toasts"
+          :key="item.id"
+          class="toast-item"
+          :class="[`toast-item--${item.type}`, { 'toast-item--closing': item.closing }]"
+          @mouseenter="pauseToast(item)"
+          @mouseleave="resumeToast(item)"
+          @click="dismissToast(item)"
+        >
+          <span class="toast-icon" :class="`toast-icon--${item.type}`" aria-hidden="true">
+            <template v-if="item.type === 'success'">&#10003;</template>
+            <template v-else-if="item.type === 'error'">&#10007;</template>
+            <template v-else-if="item.type === 'warning'">&#9888;</template>
+            <template v-else>&#8505;</template>
+          </span>
+          <p class="toast-message">{{ item.message }}</p>
+          <button
+            type="button"
+            class="toast-close"
+            aria-label="关闭"
+            @click.stop="dismissToast(item)"
+          >&times;</button>
+        </div>
+      </TransitionGroup>
+    </div>
+  </Teleport>
+</template>
+
+<script setup lang="ts">
+import { onUnmounted } from 'vue';
+import { toast, type ToastItem } from '../../utils/toast';
+
+const timers = new Map<number, ReturnType<typeof setTimeout>>();
+
+const pauseToast = (item: ToastItem) => {
+  if (timers.has(item.id)) return;
+  const timer = setTimeout(() => {}, 0);
+  timers.set(item.id, timer);
+};
+
+const resumeToast = (item: ToastItem) => {
+  if (timers.has(item.id)) {
+    clearTimeout(timers.get(item.id)!);
+    timers.delete(item.id);
+  }
+};
+
+const dismissToast = (item: ToastItem) => {
+  toast.close(item.id);
+};
+
+onUnmounted(() => {
+  timers.forEach((t) => clearTimeout(t));
+  timers.clear();
+});
+</script>
+
+<style scoped>
+.toast-host {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+}
+
+.toast-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 340px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: box-shadow 0.2s ease;
+}
+
+.toast-item:hover {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+.toast-icon--success {
+  color: #166534;
+  background: rgba(22, 163, 74, 0.1);
+}
+
+.toast-icon--error {
+  color: #991b1b;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.toast-icon--warning {
+  color: #92400e;
+  background: rgba(217, 119, 6, 0.1);
+}
+
+.toast-icon--info {
+  color: #1e40af;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.toast-message {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+  color: #333333;
+  word-break: break-word;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #999999;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.toast-close:hover {
+  color: #555555;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Transition */
+.toast-slide-enter-active {
+  transition: all 220ms ease-out;
+}
+
+.toast-slide-leave-active {
+  transition: all 220ms ease-in;
+}
+
+.toast-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-12px) translateX(8px);
+}
+
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.toast-slide-move {
+  transition: transform 200ms ease;
+}
+</style>

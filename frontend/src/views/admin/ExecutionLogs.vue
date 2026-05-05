@@ -1,12 +1,14 @@
 <template>
   <div class="execution-logs-page">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h2 class="page-title">
+    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
+
+    <div class="page-hero">
+      <span class="pill">Admin</span>
+      <h2 class="page-hero__title">
         <el-icon class="title-icon"><Cpu /></el-icon>
         Agent 监控与日志
       </h2>
-      <p class="page-subtitle">实时监控 Agent 运行状态，查看执行日志</p>
+      <p class="page-hero__subtitle">实时监控 Agent 运行状态，查看执行日志</p>
     </div>
 
     <!-- 统计信息 -->
@@ -142,7 +144,7 @@
             <el-icon><Search /></el-icon>
             查询
           </el-button>
-          <el-button @click="handleReset">
+          <el-button type="default" @click="handleReset">
             <el-icon><Refresh /></el-icon>
             重置
           </el-button>
@@ -158,7 +160,7 @@
         </el-checkbox>
       </div>
       <div class="toolbar-right">
-        <el-button size="small" @click="handleExport">
+        <el-button type="default" size="small" @click="handleExport">
           <el-icon><Download /></el-icon>
           导出当前页
         </el-button>
@@ -214,11 +216,11 @@
         </div>
 
         <div class="log-actions">
-          <el-button size="small" @click="showDetail(log)">
+          <el-button type="primary" size="small" @click="showDetail(log)">
             <el-icon><View /></el-icon>
             查看详情
           </el-button>
-          <el-button size="small" @click="copyLog(log)">
+          <el-button type="default" size="small" @click="copyLog(log)">
             <el-icon><DocumentCopy /></el-icon>
             复制
           </el-button>
@@ -246,8 +248,9 @@
     <el-dialog
       v-model="detailVisible"
       title="执行详情"
-      width="800px"
+      width="min(800px, 90vw)"
       class="detail-dialog"
+      destroy-on-close
     >
       <div v-if="selectedLog" class="detail-content">
         <!-- 基本信息 -->
@@ -293,7 +296,7 @@
         <div class="detail-section" v-if="selectedLog.input">
           <div class="section-header">
             <h4>📥 输入</h4>
-            <el-button size="small" @click="copyToClipboard(selectedLog.input)">
+            <el-button type="default" size="small" @click="copyToClipboard(selectedLog.input)">
               <el-icon><DocumentCopy /></el-icon>
               复制
             </el-button>
@@ -305,7 +308,7 @@
         <div class="detail-section" v-if="selectedLog.output && selectedLog.status === 'success'">
           <div class="section-header">
             <h4>📤 输出</h4>
-            <el-button size="small" @click="copyToClipboard(selectedLog.output)">
+            <el-button type="default" size="small" @click="copyToClipboard(selectedLog.output)">
               <el-icon><DocumentCopy /></el-icon>
               复制
             </el-button>
@@ -317,7 +320,7 @@
         <div class="detail-section error" v-if="selectedLog.error">
           <div class="section-header">
             <h4>❌ 错误</h4>
-            <el-button size="small" @click="copyToClipboard(selectedLog.error)">
+            <el-button type="default" size="small" @click="copyToClipboard(selectedLog.error)">
               <el-icon><DocumentCopy /></el-icon>
               复制
             </el-button>
@@ -339,7 +342,6 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue';
-import { ElMessage } from 'element-plus';
 import {
   Search,
   Refresh,
@@ -351,6 +353,7 @@ import {
 } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
 import { adminAxios } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 interface Log {
   id: string;
@@ -457,7 +460,7 @@ const loadLogs = async () => {
     }
   } catch (error) {
     console.error('加载日志失败:', error);
-    ElMessage.error('加载日志失败');
+    toast.error('加载日志失败');
   } finally {
     loading.value = false;
   }
@@ -529,9 +532,9 @@ const copyLog = (log: Log) => {
 // 复制到剪贴板
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
-    ElMessage.success('已复制到剪贴板');
+    toast.success('已复制到剪贴板');
   }).catch(() => {
-    ElMessage.error('复制失败');
+    toast.error('复制失败');
   });
 };
 
@@ -549,7 +552,7 @@ const exportDetail = () => {
   link.click();
   URL.revokeObjectURL(url);
 
-  ElMessage.success('导出成功');
+  toast.success('导出成功');
 };
 
 // 导出当前页
@@ -564,7 +567,7 @@ const handleExport = () => {
   link.click();
   URL.revokeObjectURL(url);
 
-  ElMessage.success('导出成功');
+  toast.success('导出成功');
 };
 
 // 格式化
@@ -684,31 +687,24 @@ onUnmounted(() => {
 <style scoped>
 .execution-logs-page {
   padding: 0;
+  position: relative;
 }
 
-/* 页面标题 */
-.page-header {
-  margin-bottom: 1.5rem;
-}
+/* Background orbs */
+.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 0.25rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
+/* Hero */
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: flex; align-items: center; gap: 0.5rem; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
 .title-icon {
   font-size: 1.75rem;
-}
-
-.page-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin: 0;
 }
 
 /* 统计栏 */
@@ -717,13 +713,15 @@ onUnmounted(() => {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background: var(--glass-bg-light);
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.04), rgba(141, 107, 255, 0.03), var(--glass-bg-light));
   border-radius: var(--fluent-radius-lg);
   border: 1px solid var(--glass-border-light);
   margin-bottom: 1.25rem;
   box-shadow: var(--shadow-sm);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+  position: relative;
+  z-index: 1;
 }
 
 .stat-item {
@@ -780,127 +778,6 @@ onUnmounted(() => {
   background: var(--color-accent);
 }
 
-/* Agent 状态卡片 */
-.agent-cards {
-  margin-bottom: 1.25rem;
-}
-
-.agent-card {
-  border-radius: var(--radius-xl);
-  border: 2px solid transparent;
-  background: rgba(255, 255, 255, 0.72);
-  border-color: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.3s ease;
-}
-
-.agent-card--success {
-  border-color: var(--color-success);
-}
-
-.agent-card--error {
-  border-color: var(--color-danger);
-}
-
-.agent-card--idle {
-  border-color: var(--border-dark);
-}
-
-.agent-card--running {
-  border-color: var(--color-accent);
-}
-
-.agent-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.agent-icon {
-  font-size: 2.5rem;
-}
-
-.agent-info {
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-default);
-}
-
-.agent-name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.75rem;
-}
-
-.agent-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.agent-stats .stat-item {
-  text-align: center;
-}
-
-.agent-stats .stat-label {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.25rem;
-}
-
-.agent-stats .stat-value {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.rate-excellent {
-  color: var(--color-success);
-}
-
-.rate-good {
-  color: var(--color-primary);
-}
-
-.rate-poor {
-  color: var(--color-danger);
-}
-
-.agent-calls {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.calls-label {
-  color: var(--text-secondary);
-}
-
-.calls-value {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.calls-success {
-  color: var(--color-success);
-}
-
-.calls-error {
-  color: var(--color-danger);
-}
-
-.agent-last-activity {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
 /* 筛选器 */
 .filter-section {
   background: var(--glass-bg-light);
@@ -911,6 +788,8 @@ onUnmounted(() => {
   box-shadow: var(--shadow-sm);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+  position: relative;
+  z-index: 1;
 }
 
 .filter-row {
@@ -960,6 +839,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .toolbar-left {
@@ -973,6 +854,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: relative;
+  z-index: 1;
 }
 
 .log-card {
@@ -993,10 +876,12 @@ onUnmounted(() => {
 
 .log-card.log-error {
   border-left-color: var(--color-danger);
+  box-shadow: inset 3px 0 12px -4px rgba(239, 68, 68, 0.25);
 }
 
 .log-card.log-timeout {
   border-left-color: var(--color-accent);
+  box-shadow: inset 3px 0 12px -4px rgba(245, 158, 11, 0.25);
 }
 
 .log-header {
@@ -1077,6 +962,8 @@ onUnmounted(() => {
   margin-top: 1.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border-default);
+  position: relative;
+  z-index: 1;
 }
 
 /* 详情弹窗 */
@@ -1166,10 +1053,60 @@ onUnmounted(() => {
   background: var(--color-accent);
 }
 
+[data-theme="dark"] .page-hero {
+  background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%), linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(20, 20, 30, 0.92));
+  border-color: rgba(52, 120, 246, 0.12);
+}
+
 [data-theme="dark"] .stats-bar,
 [data-theme="dark"] .filter-section,
 [data-theme="dark"] .log-card {
   background: var(--glass-bg-dark);
   border-color: var(--glass-border-dark);
+}
+
+[data-theme="dark"] .stats-bar {
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(141, 107, 255, 0.04), var(--glass-bg-dark));
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1200px) {
+  .filter-row {
+    gap: 0.75rem;
+  }
+  .filter-select { width: 140px; }
+  .filter-input { width: 160px; }
+}
+
+@media (max-width: 1024px) {
+  .stats-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .stat-divider {
+    display: none;
+  }
+  .stat-item {
+    flex: 1;
+    min-width: 120px;
+  }
+  .filter-row {
+    flex-wrap: wrap;
+  }
+  .filter-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 768px) {
+  .log-meta {
+    flex-wrap: wrap;
+  }
+  .log-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
 }
 </style>

@@ -97,7 +97,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { Light } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { toast } from '../utils/toast';
 
 interface Props {
   uiType: 'choice' | 'input' | 'code' | 'reflection';
@@ -199,7 +199,7 @@ const handleSubmit = () => {
     emit('submit', answer);
     
     // 显示成功提示
-    ElMessage.success('答案已提交');
+    toast.success('答案已提交');
   }
 };
 

@@ -40,6 +40,7 @@
 import { onMounted, ref } from 'vue';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { useUserStore } from '../stores/user';
+import { toast } from '../utils/toast';
 
 const userStore = useUserStore();
 
@@ -81,12 +82,12 @@ async function loadConfig() {
 
 async function testConnection() {
   if (!userConfig.endpoint) {
-    ElMessage.warning('请填写模型端点');
+    toast.warning('请填写模型端点');
     return;
   }
   
   if (!userConfig.apiKey && !userConfig.hasApiKey) {
-    ElMessage.warning('请填写 API Key');
+    toast.warning('请填写 API Key');
     return;
   }
   
@@ -97,9 +98,9 @@ async function testConnection() {
       apiKey: userConfig.apiKey,
       model: userConfig.chatModel || 'deepseek-chat',
     });
-    ElMessage.success('连接成功！');
+    toast.success('连接成功！');
   } catch (error: any) {
-    ElMessage.error(error.message || '连接失败');
+    toast.error(error.message || '连接失败');
   } finally {
     testing.value = false;
   }
@@ -107,12 +108,12 @@ async function testConnection() {
 
 async function saveConfig() {
   if (!userConfig.endpoint) {
-    ElMessage.warning('请填写模型端点');
+    toast.warning('请填写模型端点');
     return;
   }
   
   if (!userConfig.chatModel) {
-    ElMessage.warning('请填写对话模型');
+    toast.warning('请填写对话模型');
     return;
   }
   
@@ -125,10 +126,10 @@ async function saveConfig() {
       reasoningModel: userConfig.reasoningModel || userConfig.chatModel,
       enabled: true,
     });
-    ElMessage.success('配置已保存');
+    toast.success('配置已保存');
     await loadConfig();
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败');
+    toast.error(error.message || '保存失败');
   } finally {
     saving.value = false;
   }
@@ -149,9 +150,9 @@ async function clearConfig() {
       reasoningModel: '',
       enabled: false,
     });
-    ElMessage.success('已清空配置，将使用平台默认');
+    toast.success('已清空配置，将使用平台默认');
   } catch (error: any) {
-    ElMessage.error(error.message || '操作失败');
+    toast.error(error.message || '操作失败');
   }
 }
 </script>

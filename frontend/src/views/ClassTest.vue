@@ -572,7 +572,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
 import {
   ArrowLeft,
   VideoPlay,
@@ -830,12 +831,12 @@ const strategyLabel = (id: string) => {
 
 async function startSession() {
   if (!canStart.value) {
-    ElMessage.warning('请选择或填写学科和主题');
+    toast.warning('请选择或填写学科和主题');
     return;
   }
 
   if (!selectedTask.value?.id) {
-    ElMessage.warning('内部测试模式下，请先从学习路径中选择任务');
+    toast.warning('内部测试模式下，请先从学习路径中选择任务');
     return;
   }
 
@@ -876,9 +877,9 @@ async function startSession() {
     });
 
     startTimer();
-    ElMessage.success('授课会话已开始');
+    toast.success('授课会话已开始');
   } catch (error: any) {
-    ElMessage.error(error.message || '开始会话失败');
+    toast.error(error.message || '开始会话失败');
   } finally {
     starting.value = false;
   }
@@ -955,7 +956,7 @@ const sendMessage = async () => {
 
     scrollToBottom();
   } catch (error: any) {
-    ElMessage.error(error.message || '发送消息失败');
+    toast.error(error.message || '发送消息失败');
     // 标记最后一条用户消息为失败
     if (messages.value.length > 0) {
       const lastMsg = messages.value[messages.value.length - 1];
@@ -1009,7 +1010,7 @@ const handlePeerChatSend = async (text: string) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    ElMessage.error(error.message || '同伴消息发送失败');
+    toast.error(error.message || '同伴消息发送失败');
     peerChatMessages.value.pop();
   }
 };
@@ -1046,7 +1047,7 @@ const openPeerChatFromNotification = async () => {
       });
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '拉取同伴消息失败');
+    toast.error(error.message || '拉取同伴消息失败');
   } finally {
     peerInitializing.value = false;
   }
@@ -1081,7 +1082,7 @@ const handlePeerSend = async (text: string) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    ElMessage.error(error.message || '同伴消息发送失败');
+    toast.error(error.message || '同伴消息发送失败');
   } finally {
     peerLoading.value = false;
   }
@@ -1123,10 +1124,10 @@ const endSession = async () => {
       showEvaluationDialog.value = true;
     }
 
-    ElMessage.success('会话已结束');
+    toast.success('会话已结束');
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '结束会话失败');
+      toast.error(error.message || '结束会话失败');
     }
   }
 };
@@ -1173,7 +1174,7 @@ function exportSession() {
   a.click();
   URL.revokeObjectURL(url);
   
-  ElMessage.success('导出成功');
+  toast.success('导出成功');
 }
 
 const scrollToBottom = () => {
@@ -1231,14 +1232,14 @@ async function viewSessionDetail(sessionId: string) {
     historyDetail.value = detail;
     viewingHistory.value = true;
   } else {
-    ElMessage.error('获取会话详情失败');
+    toast.error('获取会话详情失败');
   }
 }
 
 async function continueSession(item: SessionHistoryItem) {
   const detail = await aiTeachingAPI.getSessionDetail(item.id);
   if (!detail) {
-    ElMessage.error('获取会话详情失败');
+    toast.error('获取会话详情失败');
     return;
   }
 
@@ -1285,7 +1286,7 @@ async function continueSession(item: SessionHistoryItem) {
   sessionActive.value = true;
   viewingHistory.value = false;
   startTimer();
-  ElMessage.success('已恢复历史会话，继续授课');
+  toast.success('已恢复历史会话，继续授课');
 }
 
 function formatDateTime(iso: string) {

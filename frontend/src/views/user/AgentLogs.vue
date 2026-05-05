@@ -289,8 +289,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
-import { ElMessage } from 'element-plus';
 import { CopyDocument, DocumentCopy, Download, View } from '@element-plus/icons-vue';
+import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
 import dayjs from 'dayjs';
@@ -686,9 +686,9 @@ const downloadBlob = (blob: Blob, fileName: string) => {
 const copyText = async (text: string, successMessage: string) => {
   try {
     await navigator.clipboard.writeText(text);
-    ElMessage.success(successMessage);
+    toast.success(successMessage);
   } catch {
-    ElMessage.error('复制失败，请检查浏览器权限');
+    toast.error('复制失败，请检查浏览器权限');
   }
 };
 </script>

@@ -132,7 +132,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { toast } from '../utils/toast';
 
 interface RatingData {
   difficulty: number;
@@ -265,7 +265,7 @@ const resetRatings = () => {
 // 提交
 const handleSubmit = () => {
   emit('submit', { ...ratings.value });
-  ElMessage.success('评分已提交，感谢反馈！');
+  toast.success('评分已提交，感谢反馈！');
   visible.value = false;
   resetRatings();
 };

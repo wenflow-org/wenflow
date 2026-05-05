@@ -1,14 +1,20 @@
 <template>
   <div class="orchestrators-page">
-    <div class="page-header">
-      <h2 class="page-title">
+    <div class="bg-layer" aria-hidden="true">
+      <div class="bg-orb bg-orb--1"></div>
+      <div class="bg-orb bg-orb--2"></div>
+    </div>
+
+    <div class="page-hero">
+      <span class="pill">Admin</span>
+      <h2 class="page-hero__title">
         <el-icon class="page-title-icon"><Connection /></el-icon>
         编排器视图
       </h2>
-      <p class="page-subtitle">监控 Agent 编排流程和执行链路</p>
+      <p class="page-hero__subtitle">监控 Agent 编排流程和执行链路</p>
     </div>
 
-    <div class="toolbar">
+    <div class="toolbar" style="position: relative; z-index: 1;">
       <el-select v-model="timeRange" class="time-select" size="large">
         <el-option label="今天" value="today" />
         <el-option label="昨天" value="yesterday" />
@@ -25,7 +31,7 @@
       <el-button type="primary" :loading="loading" @click="loadData">刷新</el-button>
     </div>
 
-    <div class="cards-grid" v-loading="loading">
+    <div class="cards-grid" v-loading="loading" style="position: relative; z-index: 1;">
       <el-card v-for="item in orchestratorStats" :key="item.id" shadow="hover" class="stats-card">
         <div class="card-head">
           <div>
@@ -46,10 +52,10 @@
           <div class="member-head">
             <span class="member-title">所属 Agent</span>
             <div class="member-actions">
-              <el-button text type="primary" size="small" @click="toggleMembers(item.id)">
+              <el-button text type="primary" @click="toggleMembers(item.id)">
                 {{ expandedIds.has(item.id) ? '收起' : `查看(${item.members.length})` }}
               </el-button>
-              <el-button text size="small" @click="goExecutionLogs(item)">查看日志</el-button>
+              <el-button text type="primary" @click="goExecutionLogs(item)">查看日志</el-button>
             </div>
           </div>
 
@@ -97,11 +103,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import { Connection } from '@element-plus/icons-vue';
 import { adminAgentsApi, type OrchestratorRelationItem } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 type TimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all';
 
@@ -273,11 +279,15 @@ const loadData = async () => {
     orchestratorStats.value = result;
   } catch (error) {
     console.error('加载编排器视图失败:', error);
-    ElMessage.error('加载编排器视图失败');
+    toast.error('加载编排器视图失败');
   } finally {
     loading.value = false;
   }
 };
+
+watch([timeRange, showAggregated], () => {
+  loadData();
+});
 
 onMounted(loadData);
 </script>
@@ -286,20 +296,24 @@ onMounted(loadData);
 .orchestrators-page {
   padding: 1.25rem;
   padding-bottom: 24px;
+  position: relative;
 }
 
-.page-header {
-  margin-bottom: 1rem;
-}
+/* Background orbs */
+.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-}
+/* Hero */
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 0.5rem; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
-.page-subtitle {
-  margin: 0.4rem 0 0;
-  color: var(--text-secondary);
+.page-title-icon {
+  color: var(--color-primary);
 }
 
 .toolbar {
@@ -307,6 +321,7 @@ onMounted(loadData);
   display: flex;
   gap: 0.7rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .time-select {
@@ -319,8 +334,18 @@ onMounted(loadData);
   gap: 1rem;
 }
 
+/* Glass card effect */
 .stats-card {
-  border-radius: var(--fluent-radius-lg);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(244, 247, 252, 0.88));
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+.stats-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(52, 120, 246, 0.1);
 }
 
 .card-head {
@@ -413,7 +438,7 @@ onMounted(loadData);
 
 .trend-row {
   display: grid;
-  grid-template-columns: 48px 1fr 24px;
+  grid-template-columns: 48px 1fr 36px;
   gap: 0.45rem;
   align-items: center;
 }
@@ -425,7 +450,7 @@ onMounted(loadData);
 }
 
 .trend-bar-wrap {
-  height: 7px;
+  height: 10px;
   border-radius: 999px;
   background: var(--bg-muted);
 }
@@ -434,6 +459,7 @@ onMounted(loadData);
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+  box-shadow: 0 0 8px rgba(20, 184, 166, 0.3);
 }
 
 .trend-value {

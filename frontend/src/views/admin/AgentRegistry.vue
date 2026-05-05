@@ -1,33 +1,39 @@
 <template>
   <div class="agent-registry-page">
-    <div class="page-header">
-      <h2 class="page-title">
+    <div class="bg-layer" aria-hidden="true">
+      <div class="bg-orb bg-orb--1"></div>
+      <div class="bg-orb bg-orb--2"></div>
+    </div>
+
+    <div class="page-hero">
+      <span class="pill">Admin</span>
+      <h2 class="page-hero__title">
         <el-icon class="page-title-icon"><Grid /></el-icon>
         Agent 注册管理
       </h2>
-      <p class="page-subtitle">查看和管理已注册的 Agent 列表</p>
+      <p class="page-hero__subtitle">查看和管理已注册的 Agent 列表</p>
     </div>
 
-    <div class="summary-grid" v-if="summary">
-      <el-card class="summary-card" shadow="hover">
+    <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
+      <el-card class="summary-card summary-card--blue" shadow="hover">
         <div class="label">已注册</div>
-        <div class="value">{{ summary.total }}</div>
+        <div class="value">{{ summary?.total }}</div>
       </el-card>
-      <el-card class="summary-card" shadow="hover">
+      <el-card class="summary-card summary-card--green" shadow="hover">
         <div class="label">24h 活跃</div>
-        <div class="value">{{ summary.active24h }}</div>
+        <div class="value">{{ summary?.active24h }}</div>
       </el-card>
-      <el-card class="summary-card" shadow="hover">
+      <el-card class="summary-card summary-card--orange" shadow="hover">
         <div class="label">未调用</div>
-        <div class="value">{{ summary.neverCalled }}</div>
+        <div class="value">{{ summary?.neverCalled }}</div>
       </el-card>
-      <el-card class="summary-card" shadow="hover">
+      <el-card class="summary-card summary-card--red" shadow="hover">
         <div class="label">需关注</div>
-        <div class="value danger">{{ summary.unhealthy }}</div>
+        <div class="value danger">{{ summary?.unhealthy }}</div>
       </el-card>
     </div>
 
-    <div class="filters">
+    <div class="filters" style="position: relative; z-index: 1;">
       <el-input v-model="keyword" placeholder="搜索 Agent ID / 名称" clearable class="search" />
       <el-select v-model="lifecycle" placeholder="发布状态" clearable class="select">
         <el-option label="草稿" value="draft" />
@@ -40,12 +46,16 @@
         <el-option label="异常" value="error" />
         <el-option label="空闲" value="idle" />
       </el-select>
+      <el-button type="primary" @click="loadRegistry" :loading="loading">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
     </div>
 
-    <el-table :data="filteredAgents" v-loading="loading" stripe style="width: 100%">
-      <el-table-column prop="agentId" label="Agent ID" min-width="170" />
-      <el-table-column prop="name" label="名称" min-width="180" />
-      <el-table-column prop="type" label="类型" min-width="160">
+    <el-table :data="filteredAgents" v-loading="loading" stripe style="width: 100%; position: relative; z-index: 1;">
+      <el-table-column prop="agentId" label="Agent ID" min-width="170" show-overflow-tooltip />
+      <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="type" label="类型" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">
           <span class="type-cell">{{ row.type }}</span>
         </template>
@@ -88,7 +98,7 @@
     <el-drawer
       v-model="designDrawerVisible"
       :title="`Agent 设计详情 · ${currentDesign?.agentId || ''}`"
-      size="58%"
+      size="min(58%, 800px)"
       destroy-on-close
     >
       <div v-loading="designLoading" class="design-drawer">
@@ -186,9 +196,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { Grid } from '@element-plus/icons-vue';
+import { Grid, Refresh } from '@element-plus/icons-vue';
 import { adminAgentsApi, type AdminRegistryAgent, type AgentDesignDetail } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const loading = ref(false);
 const summary = ref<{ total: number; active24h: number; neverCalled: number; unhealthy: number } | null>(null);
@@ -224,7 +234,7 @@ const loadRegistry = async () => {
     agents.value = response.data.data.agents || [];
   } catch (error) {
     console.error('加载 Agent 注册列表失败:', error);
-    ElMessage.error('加载 Agent 注册列表失败');
+    toast.error('加载 Agent 注册列表失败');
   } finally {
     loading.value = false;
   }
@@ -285,7 +295,7 @@ const openDesign = async (agent: AdminRegistryAgent) => {
     currentDesign.value = response.data.data;
   } catch (error) {
     console.error('加载 Agent 设计失败:', error);
-    ElMessage.error('加载 Agent 设计失败');
+    toast.error('加载 Agent 设计失败');
   } finally {
     designLoading.value = false;
   }
@@ -337,27 +347,24 @@ onMounted(loadRegistry);
 <style scoped>
 .agent-registry-page {
   padding: 1.25rem;
+  position: relative;
 }
 
-.page-header {
-  margin-bottom: 1rem;
-}
+/* Background orbs */
+.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
+/* Hero */
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 0.5rem; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
 .page-title-icon {
   color: var(--color-primary);
-}
-
-.page-subtitle {
-  margin: 0.4rem 0 0;
-  color: var(--text-secondary);
 }
 
 .summary-grid {
@@ -381,6 +388,12 @@ onMounted(loadRegistry);
 .summary-card .value.danger {
   color: var(--color-danger);
 }
+
+/* Summary card gradient variants */
+.summary-card--blue { border-radius: 16px; background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(52, 120, 246, 0.02)); border: 1px solid rgba(52, 120, 246, 0.1); }
+.summary-card--green { border-radius: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(16, 185, 129, 0.02)); border: 1px solid rgba(16, 185, 129, 0.1); }
+.summary-card--orange { border-radius: 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(245, 158, 11, 0.02)); border: 1px solid rgba(245, 158, 11, 0.1); }
+.summary-card--red { border-radius: 16px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(239, 68, 68, 0.02)); border: 1px solid rgba(239, 68, 68, 0.1); }
 
 .filters {
   margin-bottom: 1rem;
@@ -464,5 +477,26 @@ onMounted(loadRegistry);
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* Table deep overrides */
+.agent-registry-page :deep(.el-table) {
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.agent-registry-page :deep(.el-table th.el-table__cell) {
+  background: rgba(52, 120, 246, 0.04);
+  font-weight: 600;
+}
+
+.agent-registry-page :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+  background: rgba(52, 120, 246, 0.02);
+}
+
+.agent-registry-page :deep(.el-table td.el-table__cell) {
+  border-bottom: 1px solid rgba(52, 120, 246, 0.06);
 }
 </style>

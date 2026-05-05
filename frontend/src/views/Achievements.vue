@@ -7,66 +7,40 @@
     </div>
 
     <!-- 顶部导航栏 -->
-    <header class="dashboard-header" :class="{ 'header-scrolled': scrolled }">
+    <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': scrolled }">
       <div class="header-container">
-        <div class="header-left">
-          <div class="brand" @click="$router.push('/dashboard')">
-            <span class="brand-icon">🎓</span>
-            <span class="brand-text">问流 WenFlow</span>
-          </div>
-        </div>
+        <button type="button" class="brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
+        </button>
 
-        <nav class="header-nav">
-          <router-link to="/dashboard" class="nav-item">
-            <el-icon><HomeFilled /></el-icon>
-            <span>首页</span>
-          </router-link>
-          <router-link to="/goal-conversation" class="nav-item">
-            <el-icon><EditPen /></el-icon>
-            <span>AI 规划</span>
-          </router-link>
-          <router-link to="/learning-paths" class="nav-item">
-            <el-icon><FolderOpened /></el-icon>
-            <span>学习路径</span>
-          </router-link>
-          <router-link to="/learning-state" class="nav-item">
-            <el-icon><TrendCharts /></el-icon>
-            <span>学习状态</span>
-          </router-link>
-          <router-link to="/achievements" class="nav-item nav-item-active">
-            <el-icon><Trophy /></el-icon>
-            <span>成就</span>
-          </router-link>
+        <nav class="header-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="nav-item">学习台</router-link>
+          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
+          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
+          <router-link to="/achievements" class="nav-item nav-item--active">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <ThemeSwitcher />
-
-          <div class="user-menu">
-            <el-dropdown>
-              <div class="user-avatar">
-                <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-                <div v-else class="avatar-placeholder">
-                  {{ userStore.user?.name?.charAt(0) || 'U' }}
-                </div>
-              </div>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item>
-                    <span class="user-name">{{ userStore.user?.name || '用户' }}</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="$router.push('/user')">
-                    <el-icon><User /></el-icon>
-                    能力中心
-                  </el-dropdown-item>
-                  <el-dropdown-item divided @click="handleLogout">
-                    <el-icon><Switch /></el-icon>
-                    退出登录
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <el-dropdown>
+            <button type="button" class="user-chip">
+              <span>{{ userInitial }}</span>
+              <strong>{{ userStore.user?.name || '同学' }}</strong>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="router.push('/user')">
+                  <el-icon><User /></el-icon>
+                  能力中心
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <el-icon><Switch /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </header>
@@ -74,211 +48,80 @@
     <!-- 主内容区 -->
     <main class="main-content">
       <div class="content-container">
-        <!-- 页面标题区 -->
-        <section class="page-header-section glass-card">
-          <div class="page-header-content">
-            <div class="page-title-wrapper">
-              <h1 class="page-title">
-                <span class="title-icon">🏆</span>
-                成就系统
-              </h1>
-              <p class="page-subtitle">解锁成就，获得 XP 奖励，记录你的学习里程碑</p>
+        <section class="achievements-page-shell">
+          <section class="app-page-head glass-card achievements-hero">
+            <div class="app-page-head__top">
+              <span class="pill">成就</span>
             </div>
-          </div>
+
+            <div class="app-page-head__intro">
+              <h1>把长期努力变成可见的里程碑，让学习更容易坚持下去。</h1>
+              <p>这里不是奖励陈列，而是帮你看清已经做到的、正在接近的，以及下一步最值得追的成就。</p>
+            </div>
+
+            <div class="app-page-head__summary achievements-hero__summary">
+              <article v-for="item in achievementOverviewCards" :key="item.label" class="app-page-head__summary-card achievements-hero__summary-card" :class="`achievements-hero__summary-card--${item.tone}`">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <p>{{ item.note }}</p>
+              </article>
+            </div>
+          </section>
         </section>
 
         <div v-loading="loading" class="achievements-content">
-          <!-- 统计卡片 -->
-          <section class="stats-section">
-            <div class="stats-grid">
-              <div class="stat-card glass-card stat-card--unlocked">
-                <div class="stat-card-header">
-                  <div class="stat-icon icon-unlocked">
-                    <el-icon><Trophy /></el-icon>
-                  </div>
-                  <el-tag type="success" size="small" effect="light">已解锁</el-tag>
-                </div>
-                <div class="stat-card-body">
-                  <div class="stat-value value-success">{{ unlockedCount }}</div>
-                  <div class="stat-label">已解锁成就</div>
-                </div>
-              </div>
 
-              <div class="stat-card glass-card stat-card--locked">
-                <div class="stat-card-header">
-                  <div class="stat-icon icon-locked">
-                    <el-icon><Lock /></el-icon>
-                  </div>
-                  <el-tag type="info" size="small" effect="light">待解锁</el-tag>
-                </div>
-                <div class="stat-card-body">
-                  <div class="stat-value">{{ totalCount - unlockedCount }}</div>
-                  <div class="stat-label">待解锁成就</div>
-                </div>
-              </div>
-
-              <div class="stat-card glass-card stat-card--xp">
-                <div class="stat-card-header">
-                  <div class="stat-icon icon-xp">
-                    <el-icon><Star /></el-icon>
-                  </div>
-                  <el-tag type="warning" size="small" effect="light">奖励</el-tag>
-                </div>
-                <div class="stat-card-body">
-                  <div class="stat-value value-warning">{{ totalXP }}</div>
-                  <div class="stat-label">总 XP 奖励</div>
-                </div>
-              </div>
-
-              <div class="stat-card glass-card stat-card--rate">
-                <div class="stat-card-header">
-                  <div class="stat-icon icon-rate">
-                    <el-icon><TrendCharts /></el-icon>
-                  </div>
-                  <el-tag type="primary" size="small" effect="light">进度</el-tag>
-                </div>
-                <div class="stat-card-body">
-                  <div class="stat-value value-primary">{{ completionRate }}%</div>
-                  <div class="stat-label">完成率</div>
-                  <div class="stat-progress">
-                    <div class="progress-bar">
-                      <div class="progress-fill" :style="{ width: completionRate + '%' }"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <section class="achievement-filter-row">
+            <div class="achievement-filter-tabs">
+              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'all' }" @click="filterType = 'all'">全部</button>
+              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'unlocked' }" @click="filterType = 'unlocked'">已解锁</button>
+              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'locked' }" @click="filterType = 'locked'">未解锁</button>
             </div>
-          </section>
-
-          <!-- 筛选器 -->
-          <section class="filter-section">
-            <div class="filter-card glass-card">
-              <div class="filter-tabs">
-                <button
-                  class="filter-tab"
-                  :class="{ active: filterType === 'all' }"
-                  @click="filterType = 'all'"
-                >
-                  <span class="tab-icon">🎯</span>
-                  <span class="tab-text">全部</span>
-                  <span class="tab-count">{{ totalCount }}</span>
-                </button>
-                <button
-                  class="filter-tab"
-                  :class="{ active: filterType === 'unlocked' }"
-                  @click="filterType = 'unlocked'"
-                >
-                  <span class="tab-icon">🔓</span>
-                  <span class="tab-text">已解锁</span>
-                  <span class="tab-count">{{ unlockedCount }}</span>
-                </button>
-                <button
-                  class="filter-tab"
-                  :class="{ active: filterType === 'locked' }"
-                  @click="filterType = 'locked'"
-                >
-                  <span class="tab-icon">🔒</span>
-                  <span class="tab-text">未解锁</span>
-                  <span class="tab-count">{{ totalCount - unlockedCount }}</span>
-                </button>
-              </div>
-
-              <div class="filter-divider"></div>
-
-              <div class="category-filters">
-                <button
-                  v-for="type in achievementTypes"
-                  :key="type.value"
-                  class="category-tag"
-                  :class="{ active: filterCategory === type.value }"
-                  @click="filterCategory = filterCategory === type.value ? 'all' : type.value"
-                >
-                  <span class="category-icon">{{ type.icon }}</span>
-                  <span class="category-label">{{ type.label }}</span>
-                  <span class="category-count">{{ getCategoryCount(type.value) }}</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <!-- 成就网格 -->
-          <section class="achievements-grid-section">
-            <div v-if="filteredAchievements.length > 0" class="achievements-grid">
-              <div
-                v-for="achievement in filteredAchievements"
-                :key="achievement.id"
-                class="achievement-card-wrapper"
+            <div class="achievement-filter-tags">
+              <button
+                v-for="type in achievementTypes"
+                :key="type.value"
+                class="achievement-filter-chip achievement-filter-chip--tag"
+                :class="{ 'achievement-filter-chip--active': filterCategory === type.value }"
+                @click="filterCategory = filterCategory === type.value ? 'all' : type.value"
               >
-                <div
-                  class="achievement-card glass-card"
-                  :class="{ unlocked: achievement.unlocked, locked: !achievement.unlocked }"
-                >
-                  <div class="achievement-icon-wrapper">
-                    <div class="achievement-icon">{{ achievement.icon }}</div>
-                    <div v-if="achievement.unlocked" class="achievement-badge">✓</div>
-                  </div>
-
-                  <div class="achievement-content">
-                    <div class="achievement-header">
-                      <h3 class="achievement-name">{{ achievement.name }}</h3>
-                      <el-tag
-                        v-if="achievement.unlocked"
-                        type="success"
-                        size="small"
-                        effect="light"
-                      >
-                        已解锁
-                      </el-tag>
-                      <el-tag
-                        v-else
-                        type="info"
-                        size="small"
-                        effect="light"
-                      >
-                        未解锁
-                      </el-tag>
-                    </div>
-
-                    <p class="achievement-desc">{{ achievement.description }}</p>
-
-                    <!-- 进度条 -->
-                    <div v-if="!achievement.unlocked && achievement.progress" class="achievement-progress">
-                      <div class="progress-header">
-                        <span class="progress-label">进度</span>
-                        <span class="progress-value">{{ achievement.progress.percentage }}%</span>
-                      </div>
-                      <div class="progress-track">
-                        <div
-                          class="progress-bar-achievement"
-                          :style="{ width: achievement.progress.percentage + '%', background: getProgressColor(achievement.progress.percentage) }"
-                        ></div>
-                      </div>
-                      <div class="progress-numbers">
-                        {{ achievement.progress.current }} / {{ achievement.progress.total }}
-                      </div>
-                    </div>
-
-                    <div class="achievement-footer">
-                      <div class="xp-badge">
-                        <el-icon><Star /></el-icon>
-                        <span>+{{ achievement.xpReward }} XP</span>
-                      </div>
-                      <span v-if="achievement.earnedAt" class="unlock-date">
-                        {{ formatDate(achievement.earnedAt) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 空状态 -->
-            <div v-else class="empty-state glass-card">
-              <div class="empty-icon">🎯</div>
-              <h3 class="empty-title">暂无成就</h3>
-              <p class="empty-desc">继续学习，解锁更多成就！</p>
+                {{ type.label }}
+              </button>
             </div>
           </section>
+
+          <section v-if="filteredAchievements.length > 0" class="achievement-card-grid">
+            <article v-for="item in filteredAchievements" :key="item.id" class="achievement-card-item glass-card" :class="item.unlocked ? 'achievement-card-item--unlocked' : 'achievement-card-item--locked'">
+              <div class="achievement-card-item__status">
+                <span v-if="item.unlocked" class="achievement-card-item__badge achievement-card-item__badge--unlocked">已解锁</span>
+                <span v-else class="achievement-card-item__badge achievement-card-item__badge--locked">未解锁</span>
+              </div>
+              <div class="achievement-card-item__icon">{{ item.icon }}</div>
+              <strong class="achievement-card-item__name">{{ item.name }}</strong>
+              <p class="achievement-card-item__desc">{{ item.description }}</p>
+
+              <div v-if="item.unlocked" class="achievement-card-item__foot">
+                <span class="achievement-card-item__xp">+{{ item.xpReward }} XP</span>
+                <small>{{ item.earnedAt ? formatDate(item.earnedAt) : '' }}</small>
+              </div>
+              <div v-else class="achievement-card-item__progress">
+                <div class="achievement-card-item__progress-head">
+                  <span>进度</span>
+                  <strong v-if="item.progress">{{ item.progress.percentage }}%</strong>
+                </div>
+                <div v-if="item.progress" class="achievement-card-item__progress-bar">
+                  <div class="achievement-card-item__progress-fill" :style="{ width: `${item.progress.percentage}%` }"></div>
+                </div>
+                <small v-if="item.progress">{{ item.progress.current }} / {{ item.progress.total }}</small>
+              </div>
+            </article>
+          </section>
+
+          <div v-if="filteredAchievements.length === 0" class="empty-state glass-card">
+            <div class="empty-icon">🎯</div>
+            <h3 class="empty-title">暂无成就</h3>
+            <p class="empty-desc">继续学习，解锁更多成就！</p>
+          </div>
         </div>
       </div>
     </main>
@@ -288,26 +131,19 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
 import request from '../utils/request';
 import { useUserStore } from '../stores/user';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import {
-  HomeFilled,
-  FolderOpened,
-  TrendCharts,
-  ChatDotSquare,
   User,
   Switch,
-  EditPen,
-  Trophy,
-  Lock,
-  Star
 } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 
+const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const scrolled = ref(false);
 const loading = ref(true);
 const achievements = ref<Achievement[]>([]);
@@ -345,6 +181,13 @@ const completionRate = computed(() => {
   return Math.round((unlockedCount.value / totalCount.value) * 100);
 });
 
+const achievementOverviewCards = computed(() => [
+  { label: '已解锁成就', value: String(unlockedCount.value), note: '已完成的里程碑', tone: 'success' },
+  { label: '待解锁成就', value: String(totalCount.value - unlockedCount.value), note: '值得继续追的目标', tone: 'primary' },
+  { label: '总 XP 奖励', value: String(totalXP.value), note: '持续投入的回报', tone: 'warning' },
+  { label: '完成率', value: `${completionRate.value}%`, note: '成就完成占比', tone: 'accent' }
+]);
+
 const filteredAchievements = computed(() => {
   let result = [...achievements.value];
 
@@ -375,22 +218,11 @@ const handleLogout = async () => {
       type: 'warning'
     });
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // 用户取消
   }
-};
-
-const getCategoryCount = (category: string) => {
-  return achievements.value.filter(a => a.type === category).length;
-};
-
-const getProgressColor = (percentage: number) => {
-  if (percentage >= 100) return 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-  if (percentage >= 50) return 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
-  if (percentage >= 25) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
-  return 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
 };
 
 const formatDate = (date: Date) => {
@@ -407,7 +239,7 @@ const loadAchievements = async () => {
     const response = await request.get('/achievements/all');
     achievements.value = response.data.data;
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error?.message || '加载成就失败');
+    toast.error(error.response?.data?.error?.message || '加载成就失败');
   } finally {
     loading.value = false;
   }
@@ -427,7 +259,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .achievements-page {
   min-height: 100vh;
-  background: var(--bg-body);
+  background: #f3f6fb;
   position: relative;
   overflow-x: hidden;
 }
@@ -446,25 +278,25 @@ onUnmounted(() => {
 .gradient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.4;
+  filter: blur(110px);
+  opacity: 0.24;
   animation: float 20s ease-in-out infinite;
 }
 
 .gradient-orb-1 {
-  width: 800px;
-  height: 800px;
-  background: var(--gradient-primary);
-  top: -300px;
-  right: -200px;
+  width: 720px;
+  height: 720px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.28), transparent 70%);
+  top: -220px;
+  right: -120px;
 }
 
 .gradient-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: var(--gradient-achievement);
-  bottom: -200px;
-  left: -100px;
+  width: 540px;
+  height: 540px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+  bottom: -180px;
+  left: -80px;
   animation-delay: -10s;
 }
 
@@ -482,16 +314,17 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid rgba(23, 32, 51, 0.05);
   transition: all 0.3s ease;
 }
 
-.header-scrolled {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
+.header-scrolled,
+.dashboard-header--scrolled {
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom-color: rgba(23, 32, 51, 0.06);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }
 
 [data-theme="dark"] .dashboard-header {
@@ -552,12 +385,14 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-.nav-item-active {
+.nav-item-active,
+.nav-item--active {
   background: var(--color-primary);
   color: white;
 }
 
-.nav-item-active:hover {
+.nav-item-active:hover,
+.nav-item--active:hover {
   background: var(--color-primary);
   color: white;
 }
@@ -575,6 +410,66 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.brand {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+
+.brand-logo {
+  height: 40px;
+}
+
+.brand {
+  width: auto;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.brand-logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), #1f57cc);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-primary);
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
 }
 
 .user-avatar {
@@ -614,25 +509,116 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+/* Dashboard Nav Exact Override */
+.dashboard-header {
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.header-container {
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+}
+
+.brand {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.header-nav {
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.nav-item {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #172033 68%, white);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.nav-item:hover,
+.nav-item--active {
+  background: rgba(52, 120, 246, 0.09);
+  color: #1f57cc;
+}
+
+.header-right {
+  gap: 10px;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-chip {
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: #172033;
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
+}
+
 /* ========== 主内容区 ========== */
 .main-content {
   position: relative;
   z-index: 1;
-  padding: 2rem;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
 }
 
 .content-container {
-  max-width: 1600px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 /* ========== 玻璃卡片 ========== */
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(23, 32, 51, 0.06);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.05);
 }
 
 [data-theme="dark"] .glass-card {
@@ -641,144 +627,168 @@ onUnmounted(() => {
 }
 
 /* ========== 页面标题区 ========== */
-.page-header-section {
-  padding: 2rem 2.5rem;
-  margin-bottom: 2rem;
+.achievements-page-shell {
+  margin-bottom: 18px;
 }
 
-.page-header-content {
+.app-page-head {
+  padding: 24px 28px;
+  display: grid;
+  gap: 18px;
+}
+
+.app-page-head__top,
+.app-page-head__actions,
+.achievement-card-new__head,
+.achievement-card-new__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
+  gap: 12px;
 }
 
-.page-title-wrapper {
-  flex: 1;
+.app-page-head__intro {
+  display: grid;
+  gap: 10px;
 }
 
-.page-title {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 0.5rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.title-icon {
-  font-size: 2rem;
-}
-
-.page-subtitle {
-  font-size: 1rem;
-  color: var(--text-secondary);
+.app-page-head__intro h1 {
   margin: 0;
+  font-size: clamp(30px, 3.8vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: #172033;
+}
+
+.app-page-head__intro p,
+.achievement-spotlight-card p,
+.achievement-card-new p,
+.achievement-card-new__foot {
+  margin: 0;
+  color: color-mix(in srgb, #172033 72%, #fff);
+  line-height: 1.7;
+}
+
+.app-page-head__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.app-page-head__summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.app-page-head__summary-card span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.app-page-head__summary-card strong {
+  font-size: 28px;
+  line-height: 1.05;
+  color: #172033;
+}
+
+.app-page-head__summary-card p {
+  font-size: 13px;
+  margin: 0;
+  color: color-mix(in srgb, #172033 72%, #fff);
+  line-height: 1.7;
+}
+
+.achievements-hero__summary-card--success {
+  border-color: rgba(49, 177, 111, 0.15);
+}
+
+.achievements-hero__summary-card--primary {
+  border-color: rgba(52, 120, 246, 0.15);
+}
+
+.achievements-hero__summary-card--warning {
+  border-color: rgba(245, 158, 11, 0.15);
+}
+
+.achievements-hero__summary-card--accent {
+  border-color: rgba(141, 107, 255, 0.15);
+}
+
+.pill,
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.82);
+  color: #172033;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.btn-ghost:hover {
+  background: rgba(243, 246, 251, 0.92);
 }
 
 /* ========== 统计卡片 ========== */
-.stats-section {
-  margin-bottom: 2rem;
-}
-
-.stats-grid {
+.achievement-overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-@media (max-width: 1200px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.achievement-overview-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
 }
 
-@media (max-width: 600px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.stat-card {
-  padding: 1.5rem;
-  transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-}
-
-.stat-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  color: white;
-}
-
-.icon-unlocked {
-  background: var(--gradient-success);
-}
-
-.icon-locked {
-  background: var(--gradient-primary);
-}
-
-.icon-xp {
-  background: var(--gradient-warning);
-}
-
-.icon-rate {
-  background: var(--gradient-achievement);
-}
-
-.stat-card-body {
-  text-align: center;
-}
-
-.stat-value {
-  font-size: 2.5rem;
-  font-weight: 800;
-  line-height: 1;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-
-.value-success {
-  color: var(--color-success);
-}
-
-.value-warning {
-  color: var(--color-warning);
-}
-
-.value-primary {
-  color: var(--color-primary);
-}
-
-.stat-label {
-  font-size: 0.875rem;
+.achievement-overview-card span,
+.achievement-card-new__foot small,
+.achievement-card-new__head span {
+  font-size: 12px;
   color: var(--text-muted);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.75rem;
 }
 
-.stat-progress {
-  margin-top: 0.75rem;
+.achievement-overview-card strong,
+.achievement-spotlight-card strong {
+  font-size: 28px;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: #172033;
+}
+
+.achievement-overview-card--success {
+  background: linear-gradient(180deg, rgba(49, 177, 111, 0.06), rgba(255, 255, 255, 0.88));
+}
+
+.achievement-overview-card--primary {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.06), rgba(255, 255, 255, 0.88));
+}
+
+.achievement-overview-card--warning {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.88));
+}
+
+.achievement-overview-card--accent {
+  background: linear-gradient(180deg, rgba(141, 107, 255, 0.08), rgba(255, 255, 255, 0.88));
 }
 
 .progress-bar {
@@ -796,298 +806,232 @@ onUnmounted(() => {
 }
 
 /* ========== 筛选器 ========== */
-.filter-section {
-  margin-bottom: 2rem;
+.achievement-filter-row {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.filter-card {
-  padding: 1.5rem;
-}
-
-.filter-tabs {
+.achievement-filter-tabs,
+.achievement-filter-tags {
   display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
   flex-wrap: wrap;
+  gap: 10px;
 }
 
-.filter-tab {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  border-radius: var(--radius-xl);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.filter-tab:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.filter-tab.active {
-  background: var(--gradient-primary);
-  border-color: transparent;
-  color: white;
-}
-
-.tab-icon {
-  font-size: 1.125rem;
-}
-
-.tab-count {
-  padding: 0.125rem 0.5rem;
-  background: var(--bg-muted);
+.achievement-filter-chip {
+  min-height: 38px;
+  padding: 0 14px;
   border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
 }
 
-.filter-tab.active .tab-count {
-  background: rgba(255, 255, 255, 0.2);
+.achievement-filter-chip--active {
+  background: rgba(52, 120, 246, 0.1);
+  border-color: rgba(52, 120, 246, 0.18);
+  color: #1f57cc;
 }
 
-.filter-divider {
-  height: 1px;
-  background: var(--border-light);
-  margin-bottom: 1.25rem;
-}
-
-.category-filters {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.category-tag {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.category-tag:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.category-tag.active {
-  background: var(--color-primary-light);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.category-icon {
-  font-size: 1rem;
-}
-
-.category-count {
-  padding: 0.125rem 0.375rem;
-  background: var(--bg-muted);
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.category-tag.active .category-count {
-  background: var(--color-primary-lighter);
+.achievement-filter-chip--tag {
+  color: var(--text-muted);
 }
 
 /* ========== 成就网格 ========== */
-.achievements-grid-section {
-  margin-bottom: 2rem;
-}
-
-.achievements-grid {
+.achievement-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 
-@media (max-width: 1200px) {
-  .achievements-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .achievements-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.achievement-card-wrapper {
-  height: 100%;
-}
-
-.achievement-card {
-  padding: 1.5rem;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s ease;
+.achievement-card-item {
   position: relative;
-  overflow: hidden;
-}
-
-.achievement-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-}
-
-.achievement-card.unlocked {
-  border: 2px solid var(--color-success);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(255, 255, 255, 0.7) 100%);
-}
-
-.achievement-card.locked {
-  opacity: 0.85;
-}
-
-.achievement-card.locked .achievement-icon {
-  filter: grayscale(0.5);
-}
-
-.achievement-icon-wrapper {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1rem;
-}
-
-.achievement-icon {
-  font-size: 4rem;
-  line-height: 1;
-}
-
-.achievement-badge {
-  position: absolute;
-  bottom: 0;
-  right: calc(50% - 2.5rem);
-  width: 28px;
-  height: 28px;
-  background: var(--gradient-success);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.875rem;
-  font-weight: 700;
-  border: 3px solid white;
-  box-shadow: var(--shadow-sm);
-}
-
-.achievement-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.achievement-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.achievement-name {
-  font-size: 1.0625rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-  flex: 1;
-}
-
-.achievement-desc {
-  font-size: 0.9375rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0 0 1rem 0;
-  flex: 1;
-}
-
-/* 进度条 */
-.achievement-progress {
-  margin-bottom: 1rem;
-}
-
-.progress-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.progress-label {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.progress-value {
-  font-size: 0.8125rem;
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.progress-track {
-  height: 8px;
-  background: var(--bg-muted);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-bottom: 0.5rem;
-}
-
-.progress-bar-achievement {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width 0.5s ease;
-}
-
-.progress-numbers {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  display: grid;
+  gap: 10px;
+  padding: 22px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(52, 120, 246, 0.08);
   text-align: center;
 }
 
-.achievement-footer {
+.achievement-card-item--unlocked {
+  border-color: rgba(49, 177, 111, 0.18);
+  background: linear-gradient(180deg, rgba(49, 177, 111, 0.04), rgba(255, 255, 255, 0.86));
+}
+
+.achievement-card-item--locked {
+  border-color: rgba(23, 32, 51, 0.08);
+}
+
+.achievement-card-item__status {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.achievement-card-item__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.achievement-card-item__badge--unlocked {
+  background: rgba(49, 177, 111, 0.1);
+  color: #1a8a5a;
+}
+
+.achievement-card-item__badge--locked {
+  background: rgba(23, 32, 51, 0.06);
+  color: #66758d;
+}
+
+.achievement-card-item__icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(243, 246, 251, 0.92);
+  font-size: 24px;
+}
+
+.achievement-card-item__name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #172033;
+  line-height: 1.3;
+}
+
+.achievement-card-item__desc {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, #172033 60%, #fff);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.achievement-card-item__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-light);
-  margin-top: auto;
+  gap: 10px;
+  margin-top: 4px;
 }
 
-.xp-badge {
+.achievement-card-item__xp {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(236, 72, 153, 0.1);
+  color: #d63f8a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.achievement-card-item__foot small {
+  font-size: 12px;
+  color: #66758d;
+}
+
+.achievement-card-item__progress {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.achievement-card-item__progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.achievement-card-item__progress-head span {
+  font-size: 12px;
+  color: #66758d;
+}
+
+.achievement-card-item__progress-head strong {
+  font-size: 13px;
+  color: #172033;
+}
+
+.achievement-card-item__progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  overflow: hidden;
+}
+
+.achievement-card-item__progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3478f6, #1f57cc);
+  transition: width 0.6s ease;
+}
+
+.achievement-card-item__progress small {
+  font-size: 12px;
+  color: #66758d;
+}
+
+.achievement-spotlight-card {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+}
+
+.achievement-spotlight-card__foot {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  background: var(--gradient-warning);
-  color: white;
-  border-radius: var(--radius-full);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.unlock-date {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+.achievement-spotlight-card__foot span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f57cc;
+}
+
+.achievement-spotlight-card--recent {
+  background: linear-gradient(180deg, rgba(49, 177, 111, 0.06), rgba(255, 255, 255, 0.84));
+}
+
+.achievement-spotlight-card--next {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.06), rgba(255, 255, 255, 0.84));
+}
+
+
+
+.achievement-card-new__progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  overflow: hidden;
+}
+
+.achievement-card-new__progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3478f6, #1f57cc);
 }
 
 /* ========== 空状态 ========== */
@@ -1132,33 +1076,39 @@ onUnmounted(() => {
     padding: 1rem;
   }
 
-  .page-header-section {
-    padding: 1.5rem;
+  .app-page-head {
+    padding: 18px;
   }
 
-  .page-title {
-    font-size: 1.5rem;
+  .app-page-head__top,
+  .app-page-head__actions {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .app-page-head__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .filter-tabs {
+  .achievement-filter-tabs {
     justify-content: center;
   }
 
-  .category-filters {
+  .achievement-filter-tags {
     justify-content: center;
   }
 
-  .achievements-grid {
-    grid-template-columns: 1fr;
+  .achievement-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 480px) {
-  .stats-grid {
+  .app-page-head__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .achievement-card-grid {
     grid-template-columns: 1fr;
   }
 }

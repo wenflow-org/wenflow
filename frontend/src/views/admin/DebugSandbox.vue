@@ -238,9 +238,9 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import { Plus, Delete, Refresh, Document, Collection, Monitor } from '@element-plus/icons-vue';
 import { adminDebugSandboxApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const router = useRouter();
 
@@ -293,7 +293,7 @@ const loadSnapshots = async () => {
       pagination.total = response.data.data.pagination.total;
     }
   } catch (error: any) {
-    ElMessage.error('加载快照列表失败');
+    toast.error('加载快照列表失败');
   } finally {
     loading.value = false;
   }
@@ -308,11 +308,11 @@ const loadRecentConversations = async () => {
       recentConversations.value = response.data.data || [];
       console.log('加载到最近对话:', recentConversations.value.length, '条');
     } else {
-      ElMessage.warning('获取对话列表失败');
+      toast.warning('获取对话列表失败');
     }
   } catch (error: any) {
     console.error('加载最近对话失败:', error);
-    ElMessage.error('加载对话列表失败: ' + (error.message || '未知错误'));
+    toast.error('加载对话列表失败: ' + (error.message || '未知错误'));
   } finally {
     loadingConversations.value = false;
   }
@@ -321,12 +321,12 @@ const loadRecentConversations = async () => {
 // 创建快照
 const createSnapshot = async () => {
   if (!newSnapshotForm.name.trim()) {
-    ElMessage.warning('请输入快照名称');
+    toast.warning('请输入快照名称');
     return;
   }
 
   if (newSnapshotForm.sourceType === 'conversation' && !newSnapshotForm.conversationId) {
-    ElMessage.warning('请选择一个对话');
+    toast.warning('请选择一个对话');
     return;
   }
 
@@ -362,7 +362,7 @@ const createSnapshot = async () => {
     });
 
     if (response.data.success) {
-      ElMessage.success('快照创建成功');
+      toast.success('快照创建成功');
       // 重置表单
       newSnapshotForm.name = '';
       newSnapshotForm.description = '';
@@ -373,7 +373,7 @@ const createSnapshot = async () => {
       router.push(`/admin/debug-sandbox/${response.data.data.id}`);
     }
   } catch (error: any) {
-    ElMessage.error('创建快照失败');
+    toast.error('创建快照失败');
   } finally {
     creatingSnapshot.value = false;
   }
@@ -384,11 +384,11 @@ const deleteSnapshot = async (id: string) => {
   try {
     const response: any = await adminDebugSandboxApi.deleteSnapshot(id);
     if (response.data.success) {
-      ElMessage.success('快照已删除');
+      toast.success('快照已删除');
       loadSnapshots();
     }
   } catch (error: any) {
-    ElMessage.error('删除失败');
+    toast.error('删除失败');
   }
 };
 
@@ -408,12 +408,12 @@ const cleanupSnapshots = async () => {
   try {
     const response: any = await adminDebugSandboxApi.cleanup(keepRecent.value);
     if (response.data.success) {
-      ElMessage.success(`已清理 ${response.data.data.deletedCount} 个旧快照`);
+      toast.success(`已清理 ${response.data.data.deletedCount} 个旧快照`);
       cleanupDialogVisible.value = false;
       loadSnapshots();
     }
   } catch (error: any) {
-    ElMessage.error('清理失败');
+    toast.error('清理失败');
   } finally {
     cleaning.value = false;
   }

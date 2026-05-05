@@ -7,46 +7,30 @@
     </div>
 
     <!-- 顶部导航栏 -->
-    <header class="dashboard-header" :class="{ 'header-scrolled': headerScrolled }">
+    <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': headerScrolled }">
       <div class="header-container">
-        <div class="header-left">
-          <div class="brand" @click="$router.push('/dashboard')">
-            <span class="brand-icon">🎓</span>
-            <span class="brand-text">问流 WenFlow</span>
-          </div>
-        </div>
+        <button type="button" class="brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
+        </button>
 
-        <nav class="header-nav">
-          <router-link to="/dashboard" class="nav-item">
-            <el-icon><HomeFilled /></el-icon>
-            <span>首页</span>
-          </router-link>
-          <router-link to="/learning-paths" class="nav-item nav-item-active">
-            <el-icon><FolderOpened /></el-icon>
-            <span>学习路径</span>
-          </router-link>
-          <router-link to="/learning-state" class="nav-item">
-            <el-icon><TrendCharts /></el-icon>
-            <span>学习状态</span>
-          </router-link>
-          <router-link to="/achievements" class="nav-item">
-            <el-icon><Trophy /></el-icon>
-            <span>成就</span>
-          </router-link>
+        <nav class="header-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="nav-item">学习台</router-link>
+          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/learning-paths" class="nav-item nav-item--active">学习路径</router-link>
+          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
+          <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <ThemeSwitcher />
-          <el-dropdown class="user-dropdown">
-            <div class="user-avatar">
-              <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-              <div v-else class="avatar-placeholder">
-                {{ userStore.user?.name?.charAt(0) || 'U' }}
-              </div>
-            </div>
+          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <el-dropdown>
+            <button type="button" class="user-chip">
+              <span>{{ userInitial }}</span>
+              <strong>{{ userStore.user?.name || '同学' }}</strong>
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="$router.push('/user')">
+                <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
                   能力中心
                 </el-dropdown-item>
@@ -82,58 +66,33 @@
         <div v-else-if="path" class="path-content">
           <!-- 路径信息卡片 -->
           <section class="path-info-section">
-            <div class="path-info-card glass-card">
-              <div class="card-header">
-                <div class="header-main">
+            <div class="path-info-card path-detail-hero glass-card">
+              <div class="card-header path-detail-hero__layout">
+                <div class="header-main path-detail-hero__copy">
+                  <div class="path-detail-hero__tags">
+                    <span class="pill">学习路径</span>
+                    <span class="path-detail-hero__tag">{{ pathStatusLabel }}</span>
+                    <span v-if="path.subject" class="path-detail-hero__tag">{{ path.subject }}</span>
+                  </div>
                   <h1 class="path-title">{{ path.name }}</h1>
                   <p class="path-description">{{ path.summary || path.description }}</p>
+                  <div class="path-detail-overview-grid">
+                    <article v-for="item in pathOverviewMetrics" :key="item.label" class="path-detail-overview-card">
+                      <span>{{ item.label }}</span>
+                      <strong>{{ item.value }}</strong>
+                    </article>
+                  </div>
                 </div>
-                <div class="progress-ring-wrapper">
-                  <div class="progress-ring" :style="{ '--progress': completionRate }">
-                    <div class="progress-inner">
+                <div class="progress-ring-wrapper path-detail-hero__progress">
+                  <div class="progress-ring path-detail-progress__ring" :style="{ '--progress': completionRate }">
+                    <div class="progress-inner path-detail-progress__ring-label">
                       <span class="progress-value">{{ completionRate }}%</span>
-                      <span class="progress-label">完成度</span>
+                      <span class="progress-label">总进度</span>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              <div class="path-meta">
-                <div class="meta-item">
-                  <div class="meta-icon icon-calendar">
-                    <el-icon><Calendar /></el-icon>
-                  </div>
-                  <div class="meta-info">
-                    <span class="meta-value">{{ path.totalMilestones || path.totalStages || path.totalWeeks || 0 }}</span>
-                    <span class="meta-label">阶段</span>
-                  </div>
-                </div>
-                <div class="meta-item">
-                  <div class="meta-icon icon-clock">
-                    <el-icon><Clock /></el-icon>
-                  </div>
-                  <div class="meta-info">
-                    <span class="meta-value">{{ formatHours(path.estimatedHours) }}</span>
-                    <span class="meta-label">小时</span>
-                  </div>
-                </div>
-                <div class="meta-item">
-                  <div class="meta-icon icon-folder">
-                    <el-icon><Folder /></el-icon>
-                  </div>
-                  <div class="meta-info">
-                    <span class="meta-value">{{ path.subject }}</span>
-                    <span class="meta-label">方向</span>
-                  </div>
-                </div>
-                <div class="meta-item">
-                  <div class="meta-icon icon-tasks">
-                    <el-icon><CircleCheck /></el-icon>
-                  </div>
-                  <div class="meta-info">
-                    <span class="meta-value">{{ completedTasks }}</span>
-                    <span class="meta-label">/ {{ totalTasks }} 任务</span>
-                  </div>
+                  <button class="btn btn-primary btn--full" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
+                    {{ canStartLearning ? '继续学习' : '等待标注完成' }}
+                  </button>
                 </div>
               </div>
 
@@ -168,84 +127,80 @@
             </div>
           </section>
 
-          <!-- 阶段任务列表 -->
-          <section class="weeks-section">
-            <h2 class="section-title">
-              <span class="section-icon">📚</span>
-              学习内容
-            </h2>
+          <section class="path-detail-main-grid">
+            <section class="weeks-section">
+              <h2 class="section-title">
+                <span class="section-icon">📚</span>
+                学习内容
+              </h2>
 
-            <div class="weeks-container">
-              <div
-                v-for="(week, index) in (path.milestones || path.weeks || [])"
-                :key="week.id"
-                class="week-card glass-card"
-                :class="{ 'week-expanded': activeWeeks.includes(week.stageNumber || week.weekNumber) }"
-              >
-                <!-- 阶段标题栏 -->
-                <div class="week-header" @click="toggleWeek(week)">
-                  <div class="week-title-wrapper">
-                    <div class="week-number">阶段 {{ week.stageNumber || week.weekNumber }}</div>
-                    <div class="week-title">{{ week.title }}</div>
-                  </div>
-                  <div class="week-meta">
-                    <div class="week-progress">
-                      <div class="progress-bar">
-                        <div class="progress-fill" :style="{ width: getWeekProgress(week) + '%' }"></div>
-                      </div>
-                      <span class="progress-text">{{ getWeekCompletedCount(week) }}/{{ (week.subtasks || week.tasks || []).length }}</span>
+              <div class="weeks-container">
+                <div
+                  v-for="week in (path.milestones || path.weeks || [])"
+                  :key="week.id"
+                  class="week-card glass-card"
+                  :class="{ 'week-expanded': activeWeeks.includes(week.stageNumber || week.weekNumber) }"
+                >
+                  <div class="week-header" @click="toggleWeek(week)">
+                    <div class="week-title-wrapper">
+                      <div class="week-number">阶段 {{ week.stageNumber || week.weekNumber }}</div>
+                      <div class="week-title">{{ week.title }}</div>
                     </div>
-                    <el-icon class="expand-icon"><ArrowDown /></el-icon>
-                  </div>
-                </div>
-
-                <!-- 阶段内容 -->
-                <div v-show="activeWeeks.includes(week.stageNumber || week.weekNumber)" class="week-content">
-                  <p class="week-description">{{ week.description || week.goal }}</p>
-
-                  <!-- 学习目标 -->
-                  <div
-                    v-if="enrichmentStatus !== 'succeeded'"
-                    class="week-pending-note"
-                  >
-                    {{ enrichmentPendingHint }}
-                  </div>
-                  <div
-                    v-if="week.learningObjectives && week.learningObjectives.length > 0"
-                    class="learning-objectives"
-                  >
-                    <h4 class="objectives-title">
-                      <el-icon><Aim /></el-icon>
-                      学习目标
-                    </h4>
-                    <ul class="objectives-list">
-                      <li v-for="(obj, index) in week.learningObjectives" :key="index">
-                        <span class="objective-check">✓</span>
-                        {{ obj }}
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- 任务列表 -->
-                  <div class="tasks-list">
-                    <div
-                      v-for="task in (week.subtasks || week.tasks || [])"
-                      :key="task.id"
-                      class="task-card"
-                      :class="{
-                        'task-completed': task.status === 'completed',
-                        'task-locked': !canStartLearning && task.status !== 'completed'
-                      }"
-                      @click="openTaskDetail(task)"
-                    >
-                      <div class="task-status-icon">
-                        <el-icon v-if="task.status === 'completed'"><CircleCheck /></el-icon>
-                        <el-icon v-else-if="task.status === 'in_progress'"><Loading /></el-icon>
-                        <span v-else class="status-dot"></span>
+                    <div class="week-meta">
+                      <div class="week-progress">
+                        <div class="progress-bar">
+                          <div class="progress-fill" :style="{ width: getWeekProgress(week) + '%' }"></div>
+                        </div>
+                        <span class="progress-text">{{ getWeekCompletedCount(week) }}/{{ (week.subtasks || week.tasks || []).length }}</span>
                       </div>
+                      <el-icon class="expand-icon"><ArrowDown /></el-icon>
+                    </div>
+                  </div>
 
-                      <div class="task-info">
-<div class="task-header">
+                  <div v-show="activeWeeks.includes(week.stageNumber || week.weekNumber)" class="week-content">
+                    <p class="week-description">{{ week.description || week.goal }}</p>
+
+                    <div
+                      v-if="enrichmentStatus !== 'succeeded'"
+                      class="week-pending-note"
+                    >
+                      {{ enrichmentPendingHint }}
+                    </div>
+                    <div
+                      v-if="week.learningObjectives && week.learningObjectives.length > 0"
+                      class="learning-objectives"
+                    >
+                      <h4 class="objectives-title">
+                        <el-icon><Aim /></el-icon>
+                        学习目标
+                      </h4>
+                      <ul class="objectives-list">
+                        <li v-for="(obj, index) in week.learningObjectives" :key="index">
+                          <span class="objective-check">✓</span>
+                          {{ obj }}
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div class="tasks-list">
+                      <div
+                        v-for="task in (week.subtasks || week.tasks || [])"
+                        :key="task.id"
+                        class="task-card"
+                        :class="{
+                          'task-completed': task.status === 'completed',
+                          'task-locked': !canStartLearning && task.status !== 'completed'
+                        }"
+                        @click="openTaskDetail(task)"
+                      >
+                        <div class="task-status-icon">
+                          <el-icon v-if="task.status === 'completed'"><CircleCheck /></el-icon>
+                          <el-icon v-else-if="task.status === 'in_progress'"><Loading /></el-icon>
+                          <span v-else class="status-dot"></span>
+                        </div>
+
+                        <div class="task-info">
+                          <div class="task-header">
                             <h4 class="task-title">{{ task.title }}</h4>
                             <div class="task-tags">
                               <el-tag :type="getStatusType(task.status)" size="small">
@@ -254,16 +209,16 @@
                               <el-tag type="info" size="small" effect="light">
                                 {{ getTaskTypeText(task.taskType) }}
                               </el-tag>
-                              <el-tag 
-                                v-if="task.knowledgeType" 
+                              <el-tag
+                                v-if="task.knowledgeType"
                                 :color="getKnowledgeTypeColor(task.knowledgeType)"
                                 size="small"
                                 effect="light"
                               >
                                 {{ getKnowledgeTypeLabel(task.knowledgeType) }}
                               </el-tag>
-                              <el-tag 
-                                v-if="task.cognitiveLevel" 
+                              <el-tag
+                                v-if="task.cognitiveLevel"
                                 :color="getCognitiveLevelColor(task.cognitiveLevel)"
                                 size="small"
                                 effect="light"
@@ -275,7 +230,7 @@
                               </span>
                             </div>
                           </div>
-                        <p class="task-desc">{{ task.description }}</p>
+                          <p class="task-desc">{{ task.description }}</p>
                           <div class="task-footer">
                             <div class="task-time">
                               <el-icon><Clock /></el-icon>
@@ -284,45 +239,88 @@
                                 | {{ task.status === 'completed' ? '实际' : '已学习' }} {{ formatActualMinutes(task.actualMinutes) }} 分钟
                               </span>
                             </div>
-                          <div v-if="task.status === 'completed'" class="completed-actions">
-                            <button class="task-btn btn-completed" disabled>
-                              <el-icon><Check /></el-icon>
-                              已完成
-                            </button>
-                            <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
-                              <el-icon><DataAnalysis /></el-icon>
-                              查看当堂评估
-                            </button>
-                          </div>
-                          <div v-else-if="task.status === 'in_progress'" class="completed-actions">
-                            <button
+                            <div v-if="task.status === 'completed'" class="completed-actions">
+                              <button class="task-btn btn-completed" disabled>
+                                <el-icon><Check /></el-icon>
+                                已完成
+                              </button>
+                              <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
+                                <el-icon><DataAnalysis /></el-icon>
+                                查看当堂评估
+                              </button>
+                            </div>
+                            <div v-else-if="task.status === 'in_progress'" class="completed-actions">
+                              <button
+                                class="task-btn btn-start"
+                                :disabled="!canStartLearning"
+                                @click.stop="startTask(task)"
+                              >
+                                {{ canStartLearning ? '继续学习' : '等待标注完成' }}
+                                <el-icon><ArrowRight /></el-icon>
+                              </button>
+                              <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
+                                <el-icon><DataAnalysis /></el-icon>
+                                查看最近一节评估
+                              </button>
+                            </div>
+                            <button v-else
                               class="task-btn btn-start"
                               :disabled="!canStartLearning"
                               @click.stop="startTask(task)"
                             >
-                              {{ canStartLearning ? '继续学习' : '等待标注完成' }}
+                              {{ canStartLearning ? '开始学习' : '等待标注完成' }}
                               <el-icon><ArrowRight /></el-icon>
                             </button>
-                            <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
-                              <el-icon><DataAnalysis /></el-icon>
-                              查看最近一节评估
-                            </button>
                           </div>
-                          <button v-else
-                            class="task-btn btn-start"
-                            :disabled="!canStartLearning"
-                            @click.stop="startTask(task)"
-                          >
-                            {{ canStartLearning ? '开始学习' : '等待标注完成' }}
-                            <el-icon><ArrowRight /></el-icon>
-                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
+
+            <aside class="path-detail-sidebar">
+              <article class="glass-card path-detail-side-card">
+                <div class="path-detail-side-card__head">
+                  <span class="section-kicker">本周先这样走</span>
+                  <h2>本周先这样走</h2>
+                </div>
+                <div class="path-detail-side-card__time">预计总投入：{{ currentStageEffortText }}</div>
+                <ul class="path-detail-note-list">
+                  <li v-for="item in pathDetailNotes" :key="item">{{ item }}</li>
+                </ul>
+              </article>
+
+              <article class="glass-card path-detail-side-card">
+                <div class="path-detail-side-card__head">
+                  <span class="section-kicker">下一步</span>
+                  <h2>当前最值得先完成的任务</h2>
+                </div>
+                <div class="path-detail-plan-list">
+                  <article v-for="item in pathDetailPlan" :key="item.title" class="path-detail-plan-item">
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.desc }}</p>
+                  </article>
+                </div>
+                <button class="btn btn-primary btn--full" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
+                  {{ canStartLearning ? '开始学习' : '等待标注完成' }}
+                </button>
+              </article>
+
+              <article class="glass-card path-detail-side-card path-detail-side-card--light">
+                <div class="path-detail-side-card__head">
+                  <span class="section-kicker">节奏提示</span>
+                  <h2>当前建议学习节奏</h2>
+                </div>
+                <div class="path-detail-plan-list">
+                  <article v-for="item in paceSuggestionCards" :key="item.title" class="path-detail-plan-item">
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.desc }}</p>
+                  </article>
+                </div>
+              </article>
+            </aside>
           </section>
         </div>
 
@@ -359,19 +357,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, onActivated } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
 import {
-  HomeFilled,
-  FolderOpened,
-  TrendCharts,
-  Trophy,
   User,
   Switch,
-  Calendar,
   Clock,
-  Folder,
   Aim,
   ArrowDown,
   ArrowRight,
@@ -381,7 +374,6 @@ import {
   DataAnalysis,
 } from '@element-plus/icons-vue';
 import { useUserStore } from '../stores/user';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import CompletionCard from '../components/CompletionCard.vue';
 import api from '../utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
@@ -393,6 +385,7 @@ const router = useRouter();
 const userStore = useUserStore();
 const pathId = route.params.id as string;
 
+const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerScrolled = ref(false);
 const loading = ref(true);
 const path = ref<any>(null);
@@ -423,6 +416,27 @@ const completedTasks = computed(() => {
 const completionRate = computed(() => {
   if (totalTasks.value === 0) return 0;
   return Math.round((completedTasks.value / totalTasks.value) * 100);
+});
+
+const pathStatusLabel = computed(() => {
+  const status = path.value?.status;
+  if (status === 'active') return '进行中';
+  if (status === 'completed') return '已完成';
+  if (status === 'draft' || status === 'generating') return '生成中';
+  return '规划中';
+});
+
+const pathOverviewMetrics = computed(() => {
+  return [
+    { label: '阶段数', value: String(path.value?.totalMilestones || path.value?.totalStages || path.value?.totalWeeks || 0) },
+    { label: '预计投入', value: `${formatHours(path.value?.estimatedHours || 0)} 小时` },
+    { label: '当前阶段', value: (() => {
+      const stages = pathStages.value;
+      const idx = stages.findIndex((s: any) => s === activeStage.value);
+      return idx >= 0 ? `第 ${idx + 1} 阶段` : '待开始';
+    })() },
+    { label: '任务进度', value: `${completedTasks.value}/${totalTasks.value}` }
+  ];
 });
 
 const generationStatus = computed(() => path.value?.generationStatus || null);
@@ -459,6 +473,112 @@ const enrichmentPendingHint = computed(() => {
   return '这一阶段的学习内容仍在准备中，完成后就可以开始学习。';
 });
 
+const pathStages = computed(() => path.value?.milestones || path.value?.weeks || []);
+
+const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
+
+const activeStage = computed(() => {
+  const stages = pathStages.value;
+  if (!stages.length) return null;
+
+  return stages.find((stage: any) => {
+    const tasks = normalizeTaskList(stage);
+    return tasks.some((task: any) => task.status !== 'completed');
+  }) || stages[0];
+});
+
+const activeStageTasks = computed(() => normalizeTaskList(activeStage.value));
+
+const primaryActionTask = computed(() => {
+  return activeStageTasks.value.find((task: any) => task.status === 'in_progress')
+    || activeStageTasks.value.find((task: any) => task.status !== 'completed')
+    || activeStageTasks.value[0]
+    || null;
+});
+
+const nextActionTasks = computed(() => {
+  const upcoming = activeStageTasks.value.filter((task: any) => task.status !== 'completed');
+  return (upcoming.length > 0 ? upcoming : activeStageTasks.value).slice(0, 3);
+});
+
+const currentStageEffortMinutes = computed(() => {
+  return nextActionTasks.value.reduce((sum: number, task: any) => sum + Math.max(0, Number(task.estimatedMinutes) || 0), 0);
+});
+
+const currentStageEffortText = computed(() => {
+  const minutes = currentStageEffortMinutes.value;
+  if (minutes <= 0) return '按当前任务推进';
+  return `${minutes} 分钟`;
+});
+
+const paceRangeText = computed(() => {
+  const taskMinutes = nextActionTasks.value
+    .map((task: any) => Math.max(0, Number(task.estimatedMinutes) || 0))
+    .filter((value: number) => value > 0);
+
+  if (taskMinutes.length === 0) return '单次 20-25 分钟';
+
+  const min = Math.max(15, Math.min(...taskMinutes));
+  const max = Math.max(min, Math.max(...taskMinutes));
+  if (max - min <= 5) return `单次 ${min}-${Math.max(min + 5, max)} 分钟`;
+  return `单次 ${min}-${max} 分钟`;
+});
+
+const pathDetailNotes = computed(() => {
+  const notes: string[] = [];
+  const stage = activeStage.value;
+  const stageSummary = stage?.description || stage?.goal;
+  if (stageSummary) {
+    notes.push(`这一阶段先围绕「${stageSummary}」推进，不用同时展开太多分支。`);
+  }
+
+  const objectives = Array.isArray(stage?.learningObjectives) ? stage.learningObjectives.filter(Boolean) : [];
+  if (objectives.length > 0) {
+    notes.push(`优先把「${objectives[0]}」落成一个可验证结果，再继续扩展。`);
+  }
+
+  if (nextActionTasks.value.length > 0) {
+    notes.push(`每完成一个任务，就顺手记录这一步遇到的真实问题，方便下一轮补强。`);
+  }
+
+  if (!canStartLearning.value) {
+    notes.push('当前学习内容还在准备中，先浏览阶段目标与任务结构，稍后再回来开始。');
+  }
+
+  if (notes.length === 0) {
+    notes.push('先从当前阶段最小任务开始推进，完成后再继续扩展后续内容。');
+  }
+
+  return notes.slice(0, 3);
+});
+
+const pathDetailPlan = computed(() => {
+  const items = nextActionTasks.value.map((task: any, index: number) => ({
+    title: `任务 ${index + 1}`,
+    desc: `${task.title}${task.estimatedMinutes ? ` · 预计 ${task.estimatedMinutes} 分钟` : ''}`
+  }));
+
+  if (items.length === 0) {
+    return [{ title: '当前暂无待推进任务', desc: '等学习内容准备完成后，这里会出现最值得先开始的任务。' }];
+  }
+
+  return items;
+});
+
+const paceSuggestionCards = computed(() => {
+  const stage = activeStage.value;
+  return [
+    {
+      title: paceRangeText.value,
+      desc: '优先把一个任务完整收口，再继续下一个步骤。'
+    },
+    {
+      title: `当前阶段先聚焦「${stage?.title || '这一阶段'}」`,
+      desc: '先把当前阶段的关键任务做稳，再决定是否扩展更多内容。'
+    }
+  ];
+});
+
 const handleLogout = async () => {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -467,7 +587,7 @@ const handleLogout = async () => {
       type: 'warning'
     });
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // 用户取消
@@ -514,7 +634,7 @@ const loadPathData = async () => {
       stopEnrichmentPolling();
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error?.message || '加载路径详情失败');
+    toast.error(error.response?.data?.error?.message || '加载路径详情失败');
   } finally {
     loading.value = false;
   }
@@ -531,8 +651,13 @@ const toggleWeek = (week: any) => {
 };
 
 const openTaskDetail = (task: any) => {
-  if (!canStartLearning.value && task.status !== 'completed') {
-    ElMessage.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
+  if (task.status === 'completed') {
+    toast.info('本任务已完成，请查看当堂评估');
+    return;
+  }
+
+  if (!canStartLearning.value) {
+    toast.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
     return;
   }
 
@@ -541,12 +666,22 @@ const openTaskDetail = (task: any) => {
 
 // 点击"开始学习"按钮
 const startTask = (task: any) => {
+  if (task.status === 'completed') {
+    toast.info('本任务已完成，请查看当堂评估');
+    return;
+  }
+
   if (!canStartLearning.value) {
-    ElMessage.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
+    toast.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
     return;
   }
 
   router.push(`/learn/${task.id}`);
+};
+
+const startPrimaryActionTask = () => {
+  if (!primaryActionTask.value) return;
+  startTask(primaryActionTask.value);
 };
 
 const retryEnrichment = async () => {
@@ -555,10 +690,10 @@ const retryEnrichment = async () => {
   retryingEnrichment.value = true;
   try {
     await learningAPI.retryPathEnrichment(path.value.id);
-    ElMessage.success('已在后台继续完善学习内容，无需停留当前页面。');
+    toast.success('已在后台继续完善学习内容，无需停留当前页面。');
     await loadPathData();
   } catch (error: any) {
-    ElMessage.error(error.message || '继续完善学习内容失败');
+    toast.error(error.message || '继续完善学习内容失败');
   } finally {
     retryingEnrichment.value = false;
   }
@@ -613,13 +748,13 @@ const viewTaskEvaluation = async (task: any) => {
   try {
     const result = await aiTeachingAPI.getLatestTaskEvaluation(task.id);
     if (!result) {
-      ElMessage.warning('暂无当堂评估记录');
+      toast.warning('暂无当堂评估记录');
       evaluationDialogVisible.value = false;
       return;
     }
     selectedTaskEvaluation.value = result;
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || error.message || '获取当堂评估失败');
+    toast.error(error.response?.data?.error || error.message || '获取当堂评估失败');
     evaluationDialogVisible.value = false;
   } finally {
     evaluationLoading.value = false;
@@ -729,6 +864,10 @@ onMounted(() => {
   window.addEventListener('scroll', handleScroll);
 });
 
+onActivated(() => {
+  loadPathData();
+});
+
 onUnmounted(() => {
   stopEnrichmentPolling();
   window.removeEventListener('scroll', handleScroll);
@@ -739,7 +878,10 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .learning-path-detail-page {
   min-height: 100vh;
-  background: var(--bg-body);
+  background:
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.12), transparent 28%),
+    radial-gradient(circle at left 20%, rgba(141, 107, 255, 0.08), transparent 24%),
+    #f4f7fc;
   position: relative;
   overflow-x: hidden;
 }
@@ -758,25 +900,25 @@ onUnmounted(() => {
 .gradient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.4;
+  filter: blur(110px);
+  opacity: 0.24;
   animation: float 20s ease-in-out infinite;
 }
 
 .gradient-orb-1 {
-  width: 800px;
-  height: 800px;
-  background: var(--gradient-primary);
-  top: -300px;
-  right: -200px;
+  width: 720px;
+  height: 720px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.28), transparent 70%);
+  top: -220px;
+  right: -120px;
 }
 
 .gradient-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: var(--gradient-achievement);
-  bottom: -200px;
-  left: -100px;
+  width: 540px;
+  height: 540px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+  bottom: -180px;
+  left: -80px;
   animation-delay: -10s;
 }
 
@@ -794,16 +936,17 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid rgba(23, 32, 51, 0.05);
   transition: all 0.3s ease;
 }
 
-.header-scrolled {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
+.header-scrolled,
+.dashboard-header--scrolled {
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom-color: rgba(23, 32, 51, 0.06);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }
 
 .header-container {
@@ -856,12 +999,14 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-.nav-item-active {
+.nav-item-active,
+.nav-item--active {
   background: var(--color-primary);
   color: white;
 }
 
-.nav-item-active:hover {
+.nav-item-active:hover,
+.nav-item--active:hover {
   background: var(--color-primary);
   color: white;
 }
@@ -879,6 +1024,66 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.brand {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+
+.brand-logo {
+  height: 40px;
+}
+
+.brand {
+  width: auto;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.brand-logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), #1f57cc);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-primary);
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
 }
 
 .user-avatar {
@@ -913,13 +1118,103 @@ onUnmounted(() => {
   font-size: 1rem;
 }
 
+/* Dashboard Nav Exact Override */
+.dashboard-header {
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.header-container {
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+}
+
+.brand {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.header-nav {
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.nav-item {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #172033 68%, white);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.nav-item:hover,
+.nav-item--active {
+  background: rgba(52, 120, 246, 0.09);
+  color: #1f57cc;
+}
+
+.header-right {
+  gap: 10px;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-chip {
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: #172033;
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
+}
+
 /* ========== 玻璃卡片 ========== */
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(23, 32, 51, 0.06);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.05);
 }
 
 [data-theme="dark"] .glass-card {
@@ -931,12 +1226,24 @@ onUnmounted(() => {
 .main-content {
   position: relative;
   z-index: 1;
-  padding: 2rem;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
 }
 
 .content-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+}
+
+.section-kicker {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: #1f57cc;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* ========== 面包屑 ========== */
@@ -975,7 +1282,49 @@ onUnmounted(() => {
 }
 
 .path-info-card {
-  padding: 2rem;
+  padding: 28px;
+}
+
+.path-detail-hero {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.path-detail-hero__layout {
+  align-items: stretch;
+  margin-bottom: 0;
+}
+
+.path-detail-hero__copy {
+  display: grid;
+  gap: 16px;
+}
+
+.path-detail-hero__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill,
+.path-detail-hero__tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pill {
+  background: rgba(52, 120, 246, 0.12);
+  color: #1f57cc;
+}
+
+.path-detail-hero__tag {
+  background: rgba(243, 246, 251, 0.9);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  color: var(--text-muted);
 }
 
 .card-header {
@@ -991,17 +1340,45 @@ onUnmounted(() => {
 }
 
 .path-title {
-  font-size: 1.75rem;
+  font-size: clamp(30px, 3.8vw, 44px);
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 0.75rem 0;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  margin: 0;
 }
 
 .path-description {
   color: var(--text-secondary);
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: 0.98rem;
+  line-height: 1.7;
   margin: 0;
+}
+
+.path-detail-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.path-detail-overview-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  display: grid;
+  gap: 6px;
+}
+
+.path-detail-overview-card span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.path-detail-overview-card strong {
+  font-size: 24px;
+  line-height: 1.05;
+  color: var(--text-primary);
 }
 
 /* 环形进度 */
@@ -1010,24 +1387,26 @@ onUnmounted(() => {
 }
 
 .progress-ring {
-  width: 100px;
-  height: 100px;
+  width: 148px;
+  height: 148px;
   border-radius: 50%;
   background: conic-gradient(
-    var(--color-primary) calc(var(--progress) * 3.6deg),
-    var(--bg-muted) 0deg
+    #3478f6 calc(var(--progress) * 3.6deg),
+    #8d6bff calc(var(--progress) * 3.6deg),
+    rgba(52, 120, 246, 0.08) 0deg
   );
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  box-shadow: inset 0 0 0 1px rgba(52, 120, 246, 0.06);
 }
 
 .progress-inner {
-  width: 80px;
-  height: 80px;
+  width: 116px;
+  height: 116px;
   border-radius: 50%;
-  background: var(--bg-surface);
+  background: rgba(255, 255, 255, 0.92);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1035,17 +1414,24 @@ onUnmounted(() => {
 }
 
 .progress-value {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  color: var(--color-primary);
+  color: #172033;
   line-height: 1;
 }
 
 .progress-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.path-detail-hero__progress {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  align-content: center;
 }
 
 /* 元信息 */
@@ -1159,6 +1545,102 @@ onUnmounted(() => {
   margin-bottom: 2rem;
 }
 
+.path-detail-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+  padding-bottom: 40px;
+}
+
+.path-detail-sidebar {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 104px;
+}
+
+.path-detail-side-card {
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 20px 52px rgba(15, 23, 42, 0.05);
+}
+
+.path-detail-side-card--light {
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.path-detail-side-card__head {
+  display: grid;
+  gap: 8px;
+}
+
+.path-detail-side-card__head h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.14;
+  color: var(--text-primary);
+}
+
+.path-detail-side-card__time {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f57cc;
+}
+
+.path-detail-note-list,
+.path-detail-plan-list {
+  display: grid;
+  gap: 12px;
+}
+
+.path-detail-note-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.path-detail-note-list li {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.path-detail-plan-item {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(243, 246, 251, 0.82);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.path-detail-plan-item strong {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.path-detail-plan-item p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.btn--full {
+  width: 100%;
+  justify-content: center;
+}
+
+.btn-primary:disabled {
+  background: linear-gradient(135deg, #c8ceda 0%, #b2b9c6 100%);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .section-title {
   font-size: 1.25rem;
   font-weight: 700;
@@ -1182,10 +1664,13 @@ onUnmounted(() => {
 .week-card {
   overflow: hidden;
   transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.04);
 }
 
 .week-card:hover {
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 54px rgba(15, 23, 42, 0.08);
 }
 
 .week-header {
@@ -1198,7 +1683,7 @@ onUnmounted(() => {
 }
 
 .week-header:hover {
-  background: var(--bg-muted);
+  background: rgba(243, 246, 251, 0.72);
 }
 
 .week-title-wrapper {
@@ -1209,11 +1694,11 @@ onUnmounted(() => {
 
 .week-number {
   padding: 0.375rem 0.875rem;
-  background: var(--gradient-primary);
-  color: white;
-  border-radius: var(--radius-lg);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .week-title {
@@ -1237,14 +1722,14 @@ onUnmounted(() => {
 .progress-bar {
   width: 80px;
   height: 6px;
-  background: var(--bg-muted);
+  background: rgba(52, 120, 246, 0.1);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #9adfb5 0%, #6fc898 100%);
+  background: linear-gradient(90deg, #3478f6 0%, #8d6bff 100%);
   border-radius: var(--radius-full);
   transition: width 0.5s ease;
 }
@@ -1292,7 +1777,8 @@ onUnmounted(() => {
 
 /* 学习目标 */
 .learning-objectives {
-  background: var(--color-primary-lighter);
+  background: rgba(244, 247, 252, 0.92);
+  border: 1px solid rgba(52, 120, 246, 0.08);
   padding: 1.25rem;
   border-radius: var(--radius-xl);
   margin-bottom: 1.25rem;
@@ -1339,22 +1825,22 @@ onUnmounted(() => {
   display: flex;
   gap: 1rem;
   padding: 1.25rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(52, 120, 246, 0.08);
   border-radius: var(--radius-xl);
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .task-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-md);
+  border-color: rgba(52, 120, 246, 0.18);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
   transform: translateY(-2px);
 }
 
 .task-card.task-completed {
-  background: rgba(103, 194, 58, 0.08);
-  border-color: rgba(103, 194, 58, 0.3);
+  background: rgba(240, 249, 244, 0.92);
+  border-color: rgba(49, 177, 111, 0.18);
 }
 
 .task-card.task-locked {
@@ -1365,7 +1851,7 @@ onUnmounted(() => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--bg-muted);
+  background: rgba(243, 246, 251, 0.92);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1375,8 +1861,8 @@ onUnmounted(() => {
 }
 
 .task-card.task-completed .task-status-icon {
-  background: rgba(103, 194, 58, 0.14);
-  color: #2f8f4f;
+  background: rgba(49, 177, 111, 0.12);
+  color: #238a58;
 }
 
 .task-card.task-locked:not(.task-completed):hover {
@@ -1473,13 +1959,13 @@ onUnmounted(() => {
 }
 
 .btn-start {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #3478f6 0%, #1f57cc 100%);
   color: white;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 10px 24px rgba(52, 120, 246, 0.2);
 }
 
 .btn-start:hover {
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 14px 30px rgba(52, 120, 246, 0.28);
   transform: translateY(-1px);
 }
 
@@ -1556,13 +2042,13 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #3478f6 0%, #1f57cc 100%);
   color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 10px 28px rgba(52, 120, 246, 0.22);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 14px 34px rgba(52, 120, 246, 0.28);
   transform: translateY(-2px);
 }
 
@@ -1580,9 +2066,21 @@ onUnmounted(() => {
     padding: 1rem;
   }
 
+  .path-detail-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .path-detail-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .path-detail-sidebar {
+    position: static;
   }
 
   .progress-ring-wrapper {

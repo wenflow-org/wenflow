@@ -25,6 +25,8 @@ export interface ResolvedRoute {
   endpoint: string;
   apiKey: string;
   model: string;
+  thinkingMode?: 'default' | 'enabled' | 'disabled';
+  reasoningEffort?: 'default' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
   timeoutMs?: number;

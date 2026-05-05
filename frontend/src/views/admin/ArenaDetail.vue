@@ -572,9 +572,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
 import { ArrowLeft, Delete, InfoFilled, Edit, RefreshRight, VideoPlay, VideoPause } from '@element-plus/icons-vue';
 import { adminArenaApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const router = useRouter();
 const route = useRoute();
@@ -716,9 +717,9 @@ async function saveEditMessage(index: number) {
       messages: messages
     });
     
-    ElMessage.success('已保存到后端');
+    toast.success('已保存到后端');
   } catch (error: any) {
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'));
+    toast.error('保存失败: ' + (error.message || '未知错误'));
     console.error('Save dialogue failed:', error);
   } finally {
     editingMessageIndex.value = null;
@@ -735,7 +736,7 @@ function cancelEditMessage() {
 // 从指定轮次重新生成
 async function regenerateFromRound(round: number) {
   if (!round || round < 1) {
-    ElMessage.warning('请选择有效的轮次');
+    toast.warning('请选择有效的轮次');
     return;
   }
 
@@ -758,18 +759,18 @@ async function regenerateFromRound(round: number) {
   currentPollInterval = pollInterval;
 
   try {
-    ElMessage.info(`从第${round}轮重新生成...`);
+    toast.info(`从第${round}轮重新生成...`);
 
     const response: any = await adminArenaApi.runAgent(sessionId.value, 'dialogue', {
       fromRound: round
     });
 
     if (response.data.success) {
-      ElMessage.success('重新生成完成');
+      toast.success('重新生成完成');
       await loadSession();
     }
   } catch (error: any) {
-    ElMessage.error('重新生成失败：' + (error.response?.data?.error || error.message));
+    toast.error('重新生成失败：' + (error.response?.data?.error || error.message));
   } finally {
     if (pollInterval) {
       clearInterval(pollInterval);
@@ -817,7 +818,7 @@ const loadSession = async () => {
       }
     }
   } catch (error: any) {
-    ElMessage.error('加载详情失败');
+    toast.error('加载详情失败');
     console.error('Load session error:', error);
   } finally {
     loading.value = false;
@@ -830,12 +831,12 @@ const deleteSession = async () => {
     await ElMessageBox.confirm('确定删除此演练吗？', '确认删除', { type: 'warning' });
     const response: any = await adminArenaApi.deleteSession(sessionId.value);
     if (response.data.success) {
-      ElMessage.success('已删除');
+      toast.success('已删除');
       router.push('/admin/arena');
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败');
+      toast.error('删除失败');
     }
   }
 };
@@ -861,11 +862,11 @@ const runAgentManually = async (agentType: string) => {
   }
 
   try {
-    ElMessage.info(`正在执行 ${getAgentName(agentType)}...`);
+    toast.info(`正在执行 ${getAgentName(agentType)}...`);
     const response: any = await adminArenaApi.runAgent(sessionId.value, agentType);
     console.log('Run agent response:', response);
     if (response.data.success) {
-      ElMessage.success(`${getAgentName(agentType)} 执行完成`);
+      toast.success(`${getAgentName(agentType)} 执行完成`);
       console.log('Loading session after agent execution...');
       await loadSession();
       showAgentDetail.value = agentType;
@@ -877,7 +878,7 @@ const runAgentManually = async (agentType: string) => {
     }
   } catch (error: any) {
     console.error('Run agent error:', error);
-    ElMessage.error('执行失败：' + (error.response?.data?.error || error.message));
+    toast.error('执行失败：' + (error.response?.data?.error || error.message));
   } finally {
     runningAgent.value = null;
     if (pollInterval) {
@@ -890,10 +891,10 @@ const runAgentManually = async (agentType: string) => {
 // 停止对话
 const stopDialogue = async () => {
   try {
-    ElMessage.info('正在停止对话...');
+    toast.info('正在停止对话...');
     const response: any = await adminArenaApi.stopDialogue(sessionId.value);
     if (response.data.success) {
-      ElMessage.success('对话已停止');
+      toast.success('对话已停止');
 
       // 清除轮询
       if (currentPollInterval) {
@@ -907,7 +908,7 @@ const stopDialogue = async () => {
     }
   } catch (error: any) {
     console.error('Stop dialogue error:', error);
-    ElMessage.error('停止失败：' + (error.response?.data?.error || error.message));
+    toast.error('停止失败：' + (error.response?.data?.error || error.message));
   }
 };
 
@@ -922,11 +923,11 @@ const runAllAgents = async () => {
       if (!canRunAgent(agentType)) continue;
       
       runningAgent.value = agentType;
-      ElMessage.info(`正在执行 ${getAgentName(agentType)}...`);
+      toast.info(`正在执行 ${getAgentName(agentType)}...`);
       
       const response: any = await adminArenaApi.runAgent(sessionId.value, agentType);
       if (response.data.success) {
-        ElMessage.success(`${getAgentName(agentType)} 执行完成`);
+        toast.success(`${getAgentName(agentType)} 执行完成`);
         await loadSession();
       }
       
@@ -934,9 +935,9 @@ const runAllAgents = async () => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    ElMessage.success('所有 Agent 执行完成');
+    toast.success('所有 Agent 执行完成');
   } catch (error: any) {
-    ElMessage.error('执行失败：' + (error.response?.data?.error || error.message));
+    toast.error('执行失败：' + (error.response?.data?.error || error.message));
   } finally {
     runningAll.value = false;
     runningAgent.value = null;

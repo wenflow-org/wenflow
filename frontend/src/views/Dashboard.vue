@@ -1,395 +1,286 @@
 <template>
   <div class="dashboard-page">
-    <!-- 动态背景 -->
-    <div class="animated-bg">
-      <div class="gradient-orb gradient-orb-1"></div>
-      <div class="gradient-orb gradient-orb-2"></div>
+    <div class="dashboard-bg-layer">
+      <div class="dashboard-bg-orb dashboard-bg-orb--1"></div>
+      <div class="dashboard-bg-orb dashboard-bg-orb--2"></div>
+      <div class="dashboard-bg-grid"></div>
     </div>
 
-    <!-- 顶部导航栏 -->
-    <header class="dashboard-header" :class="{ 'header-scrolled': scrolled }">
+    <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': scrolled }">
       <div class="header-container">
-        <div class="header-left">
-          <div class="brand" @click="$router.push('/dashboard')">
-            <span class="brand-icon">🎓</span>
-            <span class="brand-text">问流 WenFlow</span>
-          </div>
-        </div>
-        
-        <nav class="header-nav">
-          <router-link to="/goal-conversation" class="nav-item">
-            <el-icon><EditPen /></el-icon>
-            <span>AI 规划</span>
-          </router-link>
-          <router-link to="/learning-paths" class="nav-item">
-            <el-icon><FolderOpened /></el-icon>
-            <span>学习路径</span>
-          </router-link>
-          <router-link to="/learning-state" class="nav-item">
-            <el-icon><TrendCharts /></el-icon>
-            <span>学习状态</span>
-          </router-link>
-          <router-link to="/achievements" class="nav-item">
-            <el-icon><Trophy /></el-icon>
-            <span>成就</span>
-          </router-link>
+        <button type="button" class="brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
+        </button>
+
+        <nav class="header-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="nav-item nav-item--active">学习台</router-link>
+          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
+          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
+          <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <ThemeSwitcher />
-          
-          <div class="user-menu">
-            <el-dropdown>
-              <div class="user-avatar">
-                <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-                <div v-else class="avatar-placeholder">
-                  {{ userStore.user?.name?.charAt(0) || 'U' }}
-                </div>
-              </div>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item>
-                    <span class="user-name">{{ userStore.user?.name || '用户' }}</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="$router.push('/user')">
-                    <el-icon><User /></el-icon>
-                    能力中心
-                  </el-dropdown-item>
-                  <el-dropdown-item divided @click="handleLogout">
-                    <el-icon><Switch /></el-icon>
-                    退出登录
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <el-dropdown>
+            <button type="button" class="user-chip">
+              <span>{{ userInitial }}</span>
+              <strong>{{ userStore.user?.name || '同学' }}</strong>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="router.push('/user')">
+                  <el-icon><User /></el-icon>
+                  能力中心
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <el-icon><Switch /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </header>
 
-    <!-- 主内容区 -->
-    <main class="main-content">
-      <div class="content-container">
-        <!-- 欢迎区域 -->
-        <section class="welcome-section glass-card">
-          <div class="welcome-content">
-            <h1 class="welcome-title">
-              <span v-if="isNewUser">你好，{{ userStore.user?.name || '同学' }}！</span>
-              <span v-else>欢迎回来，{{ userStore.user?.name || '同学' }}！</span>
-            </h1>
-            <p class="welcome-subtitle">
-              {{ welcomeSubtitle }}
-            </p>
-            <div class="welcome-actions">
-              <router-link to="/goal-conversation" class="btn btn-primary btn-glow">
-                <el-icon><EditPen /></el-icon>
-                {{ isNewUser ? '我想学点什么' : '开始 AI 规划' }}
+    <main class="dashboard-main">
+      <section class="dashboard-hero surface-card">
+        <div class="dashboard-hero__copy">
+          <span class="pill">学习台</span>
+          <h1>{{ dashboardTitle }}</h1>
+          <p>{{ dashboardSubtitle }}</p>
+
+          <div class="dashboard-list-section">
+            <div class="dashboard-list-section__head">
+              <span class="section-kicker">今天建议</span>
+              <strong>先完成一件最重要的小事</strong>
+            </div>
+
+            <div class="dashboard-list">
+              <router-link v-for="item in todayActionItems" :key="item.id" :to="item.to" class="dashboard-list__item" :class="`dashboard-list__item--${item.tone}`">
+                <span class="dashboard-list__dot" :class="`dashboard-list__dot--${item.dot}`"></span>
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.desc }}</p>
+                </div>
+                <span class="dashboard-list__action">{{ item.action }}</span>
               </router-link>
-              <router-link to="/learning-paths" class="btn btn-outline" v-if="hasLearningPath">
-                <el-icon><FolderOpened /></el-icon>
-                继续我的学习
-              </router-link>
-            </div>
-            
-            <!-- 新手任务条（仅新用户显示） -->
-            <div v-if="isNewUser" class="newbie-tasks">
-              <div class="task-header">
-                <span class="task-title">🎯 新手任务</span>
-                <span class="task-progress">{{ newbieProgress }}/3</span>
-              </div>
-              <div class="task-list">
-                <div class="task-item" :class="{ completed: newbieProgress >= 1 }">
-                  <el-icon class="task-icon">
-                    <CircleCheck v-if="newbieProgress >= 1" />
-                    <Check v-else />
-                  </el-icon>
-                  <span class="task-text">告诉 AI 你想探索什么</span>
-                </div>
-                <div class="task-item" :class="{ completed: newbieProgress >= 2 }">
-                  <el-icon class="task-icon">
-                    <CircleCheck v-if="newbieProgress >= 2" />
-                    <Check v-else />
-                  </el-icon>
-                  <span class="task-text">生成第一张学习地图</span>
-                </div>
-                <div class="task-item" :class="{ completed: newbieProgress >= 3 }">
-                  <el-icon class="task-icon">
-                    <CircleCheck v-if="newbieProgress >= 3" />
-                    <Check v-else />
-                  </el-icon>
-                  <span class="task-text">完成第一个小任务</span>
-                </div>
-              </div>
-              <el-progress :percentage="(newbieProgress / 3) * 100" :stroke-width="6" :show-text="false" />
             </div>
           </div>
-          <div class="welcome-visual">
-            <div class="visual-emoji">{{ isNewUser ? '🚀' : '✨' }}</div>
-          </div>
-        </section>
+        </div>
 
-        <!-- 统计卡片 -->
-        <section class="stats-section">
-          <div class="section-header">
-            <h2 class="section-title">学习概览</h2>
-            <p class="section-subtitle">你的学习数据统计</p>
+        <aside class="focus-card">
+          <div class="focus-card__head">
+            <span class="section-kicker">你现在主要在学习</span>
+            <span class="focus-card__badge">{{ hasLearningPath ? '进行中' : '待开始' }}</span>
           </div>
 
-          <div class="stats-grid">
-            <!-- 学习路径卡片 -->
-            <div class="stat-card stat-card--level">
-              <div class="stat-card-header">
-                <div class="stat-icon icon-gradient-1">
-                  <el-icon><FolderOpened /></el-icon>
-                </div>
-                <el-tag type="info" size="small" effect="plain">路径</el-tag>
-              </div>
-              <div class="stat-card-body">
-                <div class="stat-value">{{ pathCount }}</div>
-                <div class="stat-label">
-                  {{ pathCount > 0 ? '当前学习路径' : '还没有学习路径' }}
-                </div>
-                <div class="stat-hint" v-if="pathCount > 0">
-                  <el-icon><Lightning /></el-icon>
-                  <span>{{ currentPathHint }}</span>
-                </div>
-                <div class="stat-hint" v-else>
-                  <el-icon><Flag /></el-icon>
-                  <span>先做一次 AI 规划，生成第一条路径</span>
-                </div>
-              </div>
-              <div class="stat-card-footer">
-                <span class="stat-trend stat-trend--up">{{ pathCount > 0 ? '学习方向已建立' : '等待开始' }}</span>
-              </div>
-            </div>
-
-            <!-- 任务进度卡片 -->
-            <div class="stat-card stat-card--completed">
-              <div class="stat-card-header">
-                <div class="stat-icon icon-gradient-2">
-                  <el-icon><CircleCheck /></el-icon>
-                </div>
-                <el-tag type="success" size="small" effect="plain">进度</el-tag>
-              </div>
-              <div class="stat-card-body">
-                <div class="stat-value success">{{ completedTaskCount }}</div>
-                <div class="stat-label">
-                  {{ completedTaskCount > 0 ? '已完成任务' : '尚未完成任务' }}
-                </div>
-                <div class="stat-delta stat-delta--up" v-if="inProgressTaskCount > 0">
-                  <el-icon><Top /></el-icon>
-                  <span>还有 {{ inProgressTaskCount }} 个任务正在推进</span>
-                </div>
-                <div class="stat-hint" v-else>
-                  <el-icon><Flag /></el-icon>
-                  <span>{{ completedTaskCount > 0 ? '可以继续解锁下一步任务' : '从一条路径里的第一个任务开始' }}</span>
-                </div>
-              </div>
-              <div class="stat-card-footer">
-                <span class="stat-trend stat-trend--success">完成率 {{ completionRate }}%</span>
-              </div>
-            </div>
-
-            <!-- 学习投入卡片 -->
-            <div class="stat-card stat-card--time">
-              <div class="stat-card-header">
-                <div class="stat-icon icon-gradient-3">
-                  <el-icon><Clock /></el-icon>
-                </div>
-                <el-tag type="warning" size="small" effect="plain">投入</el-tag>
-              </div>
-              <div class="stat-card-body">
-                <div class="stat-value warning">{{ totalLearningHours }}</div>
-                <div class="stat-label">
-                  {{ totalLearningMinutes > 0 ? '累计学习小时' : '还没有学习投入' }}
-                </div>
-                <div class="stat-delta stat-delta--neutral" v-if="totalLearningMinutes > 0">
-                  <el-icon><Timer /></el-icon>
-                  <span>累计 {{ totalLearningMinutes }} 分钟真实学习记录</span>
-                </div>
-                <div class="stat-hint" v-else>
-                  <el-icon><Coffee /></el-icon>
-                  <span>开始一次学习，会自动记录到日历里</span>
-                </div>
-              </div>
-              <div class="stat-card-footer">
-                <span class="stat-trend stat-trend--warning">{{ totalLearningMinutes > 0 ? '日均 ' + avgDailyHours + ' 小时' : '轻量起步也可以' }}</span>
-              </div>
-            </div>
-
-            <!-- 当前状态卡片 -->
-            <div class="stat-card stat-card--xp">
-              <div class="stat-card-header">
-                <div class="stat-icon icon-gradient-4">
-                  <el-icon><TrendCharts /></el-icon>
-                </div>
-                <el-tag type="warning" size="small" effect="plain">状态</el-tag>
-              </div>
-              <div class="stat-card-body">
-                <div class="stat-value accent">{{ currentStateScore }}</div>
-                <div class="stat-label">
-                  {{ currentStateLabel }}
-                </div>
-                <div class="stat-delta stat-delta--up" v-if="stats?.state">
-                  <el-icon><Top /></el-icon>
-                  <span>{{ currentStateHint }}</span>
-                </div>
-                <div class="stat-hint" v-else>
-                  <el-icon><Star /></el-icon>
-                  <span>完成学习后，这里会展示你的节奏和疲劳状态</span>
-                </div>
-              </div>
-              <div class="stat-card-footer">
-                <span class="stat-trend stat-trend--accent">{{ currentStateAction }}</span>
-              </div>
-            </div>
+          <div class="focus-card__summary">
+            <h2>{{ primaryPathTitle }}</h2>
+            <p>{{ primaryPathDesc }}</p>
           </div>
-        </section>
 
-        <!-- 学习状态和日历 -->
-        <section class="bottom-section">
-          <div class="calendar-wrapper glass-card">
+
+          <div class="focus-card__stats">
+            <article>
+              <span>路径数量</span>
+              <strong>{{ pathCount }}</strong>
+              <p>{{ hasLearningPath ? '当前学习路径数量' : '规划目标后会生成路径' }}</p>
+            </article>
+            <article>
+              <span>当前进度</span>
+              <strong>{{ completedTaskCount }}/{{ totalTaskCount }}</strong>
+              <p>{{ currentPathHint }}</p>
+            </article>
+            <article>
+              <span>下一步</span>
+              <strong>{{ nextStepLabel }}</strong>
+              <p>{{ nextStepHint }}</p>
+            </article>
+          </div>
+
+          <router-link :to="hasLearningPath ? '/learning-paths' : '/goal-conversation'" class="btn btn--primary btn--full">
+            {{ hasLearningPath ? '查看主路径' : '先去规划目标' }}
+          </router-link>
+        </aside>
+      </section>
+
+      <section class="dashboard-calendar-section">
+        <div class="dashboard-calendar-layout">
+          <article class="surface-card dashboard-calendar-panel">
             <LoadCalendar @day-select="handleCalendarDaySelect" />
-          </div>
-          <div class="metrics-wrapper glass-card">
-            <LearningMetrics :selected-day="selectedCalendarDay" @clear-selection="clearCalendarSelection" />
-          </div>
-        </section>
-      </div>
+          </article>
+
+          <aside class="surface-card dashboard-calendar-status">
+            <div v-if="!selectedCalendarDay" class="dashboard-calendar-status__empty">
+              <div class="dashboard-calendar-status__empty-icon">📅</div>
+              <p>点击日历中的某一天，查看当天状态</p>
+            </div>
+
+            <div v-else class="dashboard-calendar-status__content">
+              <div class="dashboard-calendar-status__head">
+                <span class="section-kicker">所选日期状态</span>
+                <strong>{{ calendarDayFormatDate(selectedCalendarDay.date) }}</strong>
+              </div>
+
+              <div class="dashboard-calendar-status__cards">
+                <article class="dashboard-calendar-status__card">
+                  <span>学习总时长</span>
+                  <strong>{{ calendarDayFormatDuration(selectedCalendarDay.durationMinutes) }}</strong>
+                </article>
+                <article class="dashboard-calendar-status__card">
+                  <span>学习会话</span>
+                  <strong>{{ selectedCalendarDay.sessionCount }}次</strong>
+                </article>
+                <article class="dashboard-calendar-status__card">
+                  <span>主要内容</span>
+                  <strong class="dashboard-calendar-status__text">{{ selectedCalendarDay.primaryTaskTitle || '暂无任务' }}</strong>
+                </article>
+                <article class="dashboard-calendar-status__card">
+                  <span>负荷等级</span>
+                  <strong class="dashboard-calendar-status__zone" :class="calendarDayZone(selectedCalendarDay.durationMinutes).cls">
+                    {{ calendarDayZone(selectedCalendarDay.durationMinutes).label }}
+                  </strong>
+                </article>
+              </div>
+
+              <div class="dashboard-calendar-status__analysis">
+                <strong>当天观察</strong>
+                <p>{{ calendarDayAnalysis }}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onUnmounted } from 'vue';
-  import { useRouter } from 'vue-router';
-  import { ElMessageBox, ElMessage } from 'element-plus';
-  import { useUserStore } from '../stores/user';
-import { learningAPI, type LearningStats } from '../api/learning';
-import LearningMetrics from '../components/LearningMetrics.vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
+import { Switch, User } from '@element-plus/icons-vue';
 import LoadCalendar from '../components/LoadCalendar.vue';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
-import {
-  FolderOpened,
-  TrendCharts,
-  User,
-  Switch,
-  CircleCheck,
-  Clock,
-  Trophy,
-  EditPen,
-  Top,
-  Timer,
-  Lightning,
-  Flag,
-  Coffee,
-  Star,
-  Check,
-  Plus
-} from '@element-plus/icons-vue';
+import { learningAPI, type LearningStats } from '../api/learning';
+import { useUserStore } from '../stores/user';
 
 const router = useRouter();
 const userStore = useUserStore();
-
-const scrolled = ref(false);
 const stats = ref<LearningStats | null>(null);
 const loading = ref(false);
-const selectedCalendarDay = ref<any | null>(null);
+const scrolled = ref(false);
+const selectedCalendarDay = ref<any>(null);
 
-const completionRate = computed(() => {
-  if (!stats.value) return 0;
-  const total = stats.value.tasks.completed + stats.value.tasks.inProgress;
-  if (total === 0) return 0;
-  return Math.round((stats.value.tasks.completed / total) * 100);
-});
-
-const formatHours = (minutes: number) => {
-  const hours = minutes / 60;
-  return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
-};
-
-const avgDailyHours = computed(() => {
-  if (!stats.value) return '0';
-  const avgDailyMinutes = stats.value.time.avgDailyMinutes;
-  if (typeof avgDailyMinutes === 'number' && avgDailyMinutes > 0) {
-    return formatHours(avgDailyMinutes);
-  }
-  const totalMinutes = stats.value.time.totalCompleted || stats.value.time.totalMinutes || 0;
-  const activeDays = stats.value.time.activeLearningDays || 0;
-  if (totalMinutes <= 0 || activeDays <= 0) return '0';
-  return formatHours(totalMinutes / activeDays);
-});
-
-const totalLearningMinutes = computed(() => stats.value?.time.totalCompleted || stats.value?.time.totalMinutes || 0);
-const totalLearningHours = computed(() => formatHours(totalLearningMinutes.value));
+const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const pathCount = computed(() => stats.value?.paths?.total || 0);
+const hasLearningPath = computed(() => pathCount.value > 0);
 const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.value?.subtasks?.completed || 0);
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);
+const totalTaskCount = computed(() => completedTaskCount.value + inProgressTaskCount.value || 1);
+const totalLearningMinutes = computed(() => stats.value?.time.totalCompleted || stats.value?.time.totalMinutes || 0);
+
+const dashboardTitle = computed(() => {
+  if (!hasLearningPath.value) return `你好，${userStore.user?.name || '同学'}，先从一个具体目标开始。`;
+  return `欢迎回来，${userStore.user?.name || '同学'}。`;
+});
+
+const dashboardSubtitle = computed(() => {
+  if (!hasLearningPath.value) return '描述一件你最近想解决的事，把它缩小到可以开始的一步。';
+  return '今天先完成一件最重要的小事。';
+});
+
+const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习重点' : '还没有学习路径'));
+const primaryPathDesc = computed(() => (
+  hasLearningPath.value
+    ? '你正在推进一条学习路径。'
+    : '从一个具体目标开始，系统会根据你的情况生成第一版学习路径。'
+));
+
 const currentPathHint = computed(() => {
-  if (inProgressTaskCount.value > 0) return `${inProgressTaskCount.value} 个任务正在进行中`;
-  if (completedTaskCount.value > 0) return '已经有学习进展，继续保持';
-  return '路径已经生成，可以开始第一步';
+  if (inProgressTaskCount.value > 0) return `${inProgressTaskCount.value} 个任务进行中`;
+  if (completedTaskCount.value > 0) return '已完成部分任务';
+  return hasLearningPath.value ? '路径已生成' : '需要先规划目标';
 });
-const currentStateScore = computed(() => {
-  const lsb = stats.value?.state?.lsb;
-  return typeof lsb === 'number' ? lsb.toFixed(1) : '--';
-});
+
+const nextStepLabel = computed(() => (hasLearningPath.value ? '查看任务' : '规划目标'));
+const nextStepHint = computed(() => (hasLearningPath.value ? '当前路径中有一项小任务待完成。' : '先描述你想解决的事。'));
+
 const currentStateLabel = computed(() => {
   const lsb = stats.value?.state?.lsb;
   if (typeof lsb !== 'number') return '暂无状态数据';
-  if (lsb >= 4) return '高效学习区';
-  if (lsb >= 0) return '状态平稳';
-  if (lsb >= -3) return '疲劳预警';
-  return '需要休息';
-});
-const currentStateHint = computed(() => {
-  if (stats.value?.suggestion?.message) return stats.value.suggestion.message;
-  const lsb = stats.value?.state?.lsb;
-  if (typeof lsb !== 'number') return '完成学习后会自动生成状态判断';
-  if (lsb >= 4) return '可以继续保持当前节奏';
-  if (lsb >= 0) return '学习节奏比较稳';
-  if (lsb >= -3) return '疲劳在累积，建议适当放缓';
-  return '建议先休息，再继续学习';
-});
-const currentStateAction = computed(() => {
-  if (stats.value?.suggestion?.action) return stats.value.suggestion.action;
-  return stats.value?.state ? '查看学习状态页获取更多解释' : '开始学习后这里会给出建议';
+  if (lsb >= 4) return '可以继续深入';
+  if (lsb >= 0) return '适合轻量推进';
+  if (lsb >= -3) return '建议放慢一点';
+  return '今天先恢复状态';
 });
 
-// 新用户判断（0 任务或 LV.1 且 XP 为 0）
-const isNewUser = computed(() => {
-  if (!stats.value) return true;
-  return ((stats.value.tasks?.completed || 0) === 0 && (stats.value.user?.xp || 0) === 0);
-});
-
-// 是否有学习路径
-const hasLearningPath = computed(() => {
-  return (stats.value?.paths?.total || 0) > 0;
-});
-
-// 新手任务进度
-const newbieProgress = computed(() => {
-  if (!stats.value) return 0;
-  let progress = 0;
-  // 任务 1: 告诉 AI 你想探索什么（只要有学习路径就算完成）
-  if (hasLearningPath.value) progress++;
-  // 任务 2: 生成第一张学习地图（有 1 个以上路径）
-  if ((stats.value.paths?.total || 0) >= 1) progress++;
-  // 任务 3: 完成第一个小任务
-  if ((stats.value.tasks.completed || 0) >= 1) progress++;
-  return progress;
-});
-
-// 欢迎副标题（动态）
-const welcomeSubtitle = computed(() => {
-  if (!stats.value) return '开始你的学习之旅吧';
-  if (isNewUser.value) {
-    return '开始你的第一次学习探索吧';
-  } else if ((stats.value.tasks.completed || 0) > 0) {
-    return '今天也是充满收获的一天';
-  } else {
-    return '今天想探索什么？';
+const todayActionItems = computed(() => {
+  if (!hasLearningPath.value) {
+    return [
+      { id: 'goal', tone: 'primary', dot: 'active', title: '先规划一个目标', desc: '描述你想解决的事，系统会生成学习路径。', action: '规划目标', to: '/goal-conversation' },
+      { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '完成一次学习后，系统会根据你的节奏给出建议。', action: '前往查看', to: '/learning-state' },
+      { id: 'record', tone: 'muted', dot: 'dim', title: '查看学习记录', desc: '开始学习后会自动记录学习时间。', action: '前往查看', to: '/achievements' }
+    ];
   }
+
+  const lsb = stats.value?.state?.lsb;
+  const suggestion = stats.value?.suggestion?.message;
+
+  const task = inProgressTaskCount.value > 0
+    ? { id: 'task', tone: 'primary', dot: 'active', title: `继续当前任务（${inProgressTaskCount.value} 个进行中）`, desc: '回到学习路径，接着上次推进。', action: '继续学习', to: '/learning-paths' }
+    : { id: 'task', tone: 'primary', dot: 'active', title: '从当前路径开始第一个任务', desc: '今天迈出第一步，比完美更重要。', action: '查看路径', to: '/learning-paths' };
+
+  const record = { id: 'record', tone: 'muted', dot: 'dim', title: '查看学习记录', desc: totalLearningMinutes.value > 0 ? '你已经有学习积累，查看记录可以复盘节奏。' : '开始一次学习后会自动记录。', action: '前往查看', to: '/achievements' };
+
+  let suggest;
+  if (typeof lsb === 'number' && suggestion) {
+    const tone = lsb >= 0 ? 'accent' : 'warn';
+    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: suggestion, action: '前往查看', to: '/learning-state' };
+  } else if (typeof lsb === 'number') {
+    const tone = lsb >= 0 ? 'accent' : 'warn';
+    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: currentStateLabel.value, action: '前往查看', to: '/learning-state' };
+  } else {
+    suggest = { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '完成一次学习后，系统会根据你的节奏给出建议。', action: '前往查看', to: '/learning-state' };
+  }
+
+  return [task, suggest, record];
+});
+
+const handleCalendarDaySelect = (day: any) => {
+  selectedCalendarDay.value = day;
+};
+
+const calendarDayFormatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+};
+
+const calendarDayZone = (minutes: number) => {
+  if (minutes >= 120) return { label: 'Z3 高强度', cls: 'dashboard-calendar-status__zone--z3' };
+  if (minutes >= 60) return { label: 'Z2 中度', cls: 'dashboard-calendar-status__zone--z2' };
+  if (minutes > 0) return { label: 'Z1 轻度', cls: 'dashboard-calendar-status__zone--z1' };
+  return { label: '休息日', cls: 'dashboard-calendar-status__zone--rest' };
+};
+
+const calendarDayFormatDuration = (minutes: number) => {
+  if (!minutes) return '0m';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h${m}m` : `${m}m`;
+};
+
+const calendarDayAnalysis = computed(() => {
+  const day = selectedCalendarDay.value;
+  if (!day) return '';
+  if (day.durationMinutes === 0) return '这一天还没有学习记录，可以作为休息日，或者补一次短时学习。';
+  if (day.durationMinutes >= 120) return `高强度学习日，累计 ${calendarDayFormatDuration(day.durationMinutes)}。建议之后适当安排恢复。`;
+  if (day.durationMinutes >= 60) return `学习投入比较扎实，累计 ${calendarDayFormatDuration(day.durationMinutes)}。保持这个节奏就好。`;
+  return `轻量学习日，累计 ${calendarDayFormatDuration(day.durationMinutes)}，适合保持节奏或复习。`;
 });
 
 async function fetchStats() {
@@ -403,16 +294,8 @@ async function fetchStats() {
   }
 }
 
-const handleCalendarDaySelect = (day: any) => {
-  selectedCalendarDay.value = day;
-};
-
-const clearCalendarSelection = () => {
-  selectedCalendarDay.value = null;
-};
-
 const handleScroll = () => {
-  scrolled.value = window.scrollY > 50;
+  scrolled.value = window.scrollY > 24;
 };
 
 const handleLogout = async () => {
@@ -422,9 +305,8 @@ const handleLogout = async () => {
       cancelButtonText: '取消',
       type: 'warning'
     });
-
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // 用户取消
@@ -433,7 +315,8 @@ const handleLogout = async () => {
 
 onMounted(async () => {
   await fetchStats();
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
+  handleScroll();
 });
 
 onUnmounted(() => {
@@ -442,656 +325,843 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ========== 基础布局 ========== */
 .dashboard-page {
+  --dash-ink: #172033;
+  --dash-muted: #66758d;
+  --dash-blue: #3478f6;
+  --dash-blue-deep: #1f57cc;
   min-height: 100vh;
-  background: var(--bg-body);
+  background: #f3f6fb;
+  color: var(--dash-ink);
   position: relative;
   overflow-x: hidden;
 }
 
-.animated-bg {
+.dashboard-bg-layer {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 0;
+  inset: 0;
   pointer-events: none;
   overflow: hidden;
 }
 
-.gradient-orb {
+.dashboard-bg-orb {
   position: absolute;
   border-radius: 50%;
   filter: blur(100px);
-  opacity: 0.4;
-  animation: float 20s ease-in-out infinite;
+  opacity: 0.2;
 }
 
-.gradient-orb-1 {
-  width: 800px;
-  height: 800px;
-  background: var(--gradient-primary);
-  top: -300px;
-  right: -200px;
+.dashboard-bg-orb--1 {
+  width: 520px;
+  height: 520px;
+  top: 80px;
+  right: -150px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.38), transparent 70%);
 }
 
-.gradient-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: var(--gradient-achievement);
-  bottom: -200px;
-  left: -100px;
-  animation-delay: -10s;
+.dashboard-bg-orb--2 {
+  width: 460px;
+  height: 460px;
+  left: -170px;
+  bottom: 30px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(50px, 50px) scale(1.05);
-  }
+.dashboard-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(23, 32, 51, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 32, 51, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent 72%);
 }
 
-/* ========== 头部导航 ========== */
 .dashboard-header {
   position: sticky;
   top: 0;
-  z-index: 1000;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid transparent;
-  transition: all 0.3s ease;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
 }
 
-.header-scrolled {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
-}
-
-[data-theme="dark"] .dashboard-header {
-  background: rgba(26, 37, 47, 0.85);
-}
-
-[data-theme="dark"] .header-scrolled {
-  background: rgba(26, 37, 47, 0.95);
+.dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
 }
 
 .header-container {
-  max-width: 1600px;
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 2rem;
+  gap: 20px;
 }
 
-.header-left .brand {
+.brand,
+.header-nav,
+.header-right,
+.dashboard-hero__actions,
+.today-item,
+.section-head,
+.panel-head,
+.focus-card__head {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
 }
 
-.brand-icon {
-  font-size: 1.75rem;
+.brand {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dash-ink);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
 }
 
-.brand-text {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-primary);
+.brand-logo {
+  height: 40px;
+}
+
+.brand {
+  width: auto;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.brand-logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
 }
 
 .header-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
 }
 
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-radius: var(--radius-xl);
-  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--dash-ink) 68%, white);
   text-decoration: none;
-  font-weight: 500;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 800;
 }
 
-.nav-item:hover {
-  background: var(--bg-muted);
-  color: var(--text-primary);
-}
-
-.nav-item-highlight {
-  background: var(--gradient-primary);
-  color: white;
-}
-
-.nav-item-highlight:hover {
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.nav-item:hover,
+.nav-item--active {
+  background: rgba(52, 120, 246, 0.09);
+  color: var(--dash-blue-deep);
 }
 
 .header-right {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  gap: 10px;
 }
 
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  cursor: pointer;
-  border: 2px solid var(--border-light);
-  transition: border-color 0.2s ease;
-}
-
-.user-avatar:hover {
-  border-color: var(--color-primary);
-}
-
-.user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
+.header-cta,
+.btn,
+.inline-link {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--gradient-primary);
-  color: white;
-  font-weight: 600;
-  font-size: 1rem;
+  text-decoration: none;
+  font-weight: 800;
 }
 
-.user-name {
-  font-weight: 600;
-  color: var(--text-primary);
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--dash-blue), var(--dash-blue-deep));
+  font-size: 13px;
 }
 
-/* ========== 主内容区 ========== */
-.main-content {
-  position: relative;
-  z-index: 1;
-  padding: 2rem;
-}
-
-.content-container {
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-/* ========== 玻璃卡片 ========== */
-.glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
-}
-
-[data-theme="dark"] .glass-card {
-  background: rgba(26, 37, 47, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-/* ========== 欢迎区域 ========== */
-.welcome-section {
+.user-chip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 3rem;
-  margin-bottom: 2rem;
-  overflow: hidden;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--dash-ink);
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--dash-blue-deep);
+  font-weight: 900;
+}
+
+.dashboard-main {
   position: relative;
+  z-index: 1;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 80px;
+  display: grid;
+  gap: 24px;
 }
 
-.welcome-content {
-  flex: 1;
+.surface-card,
+.overview-card,
+.today-card {
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px);
 }
 
-.welcome-title {
-  font-size: clamp(2rem, 4vw, 3rem);
-  font-weight: 800;
-  color: var(--text-primary);
-  margin-bottom: 1rem;
-  line-height: 1.2;
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 28px;
+  padding: 30px;
+  border-radius: 34px;
 }
 
-.gradient-text {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.dashboard-hero__copy,
+.focus-card,
+.dashboard-panel,
+.today-card,
+.friction-list,
+.achievement-note {
+  display: grid;
+  gap: 16px;
 }
 
-.welcome-subtitle {
-  font-size: 1.25rem;
-  color: var(--text-secondary);
-  margin-bottom: 2rem;
+.pill,
+.section-kicker {
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--dash-blue-deep);
 }
 
-.welcome-actions {
-  display: flex;
-  gap: 1rem;
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  justify-self: start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.09);
+  line-height: 1;
+}
+
+.section-kicker {
+  letter-spacing: 0.05em;
+}
+
+.dashboard-hero h1,
+.focus-card h2,
+.section-head h2,
+.panel-head h2 {
+  margin: 0;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.dashboard-hero h1 {
+  max-width: 760px;
+  font-size: clamp(38px, 5vw, 64px);
+}
+
+.dashboard-hero p,
+.focus-card p,
+.today-item p,
+.overview-card p,
+.friction-card p,
+.achievement-note p {
+  margin: 0;
+  color: var(--dash-muted);
+  line-height: 1.65;
+}
+
+.dashboard-hero__copy > p {
+  max-width: 680px;
+  font-size: 16px;
+}
+
+.dashboard-hero__actions {
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .btn {
-  display: inline-flex;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 14px;
+}
+
+.btn--lg {
+  min-height: 50px;
+  padding-inline: 24px;
+}
+
+.btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--dash-blue), var(--dash-blue-deep));
+  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.2);
+}
+
+.btn--ghost {
+  color: var(--dash-ink);
+  background: rgba(255, 255, 255, 0.74);
+  border-color: rgba(23, 32, 51, 0.08);
+}
+
+.btn--full {
+  width: 100%;
+}
+
+.today-card {
+  margin-top: 8px;
+  padding: 18px;
+  border-radius: 24px;
+}
+
+.dashboard-list-section + .dashboard-list-section {
+  margin-top: 24px;
+}
+
+.dashboard-list-section__head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.dashboard-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-list__item {
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.875rem 1.75rem;
-  font-weight: 600;
-  font-size: 1rem;
-  border-radius: var(--radius-xl);
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(243, 246, 251, 0.8);
+  color: inherit;
   text-decoration: none;
-  transition: all 0.3s ease;
-  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.btn-primary {
-  background: var(--gradient-primary);
-  color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+a.dashboard-list__item:hover,
+button.dashboard-list__item:hover,
+.dashboard-list__item:hover {
+  background: rgba(243, 246, 251, 1);
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.06);
 }
 
-.btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-  transform: translateY(-2px);
+.dashboard-list__item div {
+  flex: 1;
+  min-width: 0;
 }
 
-.btn-glow {
-  animation: glow 3s ease-in-out infinite;
-}
-
-@keyframes glow {
-  0%, 100% {
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-  }
-  50% {
-    box-shadow: 0 4px 25px rgba(102, 126, 234, 0.6);
-  }
-}
-
-.btn-outline {
-  background: transparent;
-  border: 2px solid var(--color-primary);
-  color: var(--color-primary);
-}
-
-.btn-outline:hover {
-  background: var(--color-primary);
-  color: white;
-}
-
-.welcome-visual {
+.dashboard-list__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
   flex-shrink: 0;
-  margin-left: 2rem;
+  margin-top: 2px;
 }
 
-.visual-emoji {
-  font-size: 8rem;
-  animation: float 3s ease-in-out infinite;
+.dashboard-list__dot--active {
+  background: var(--dash-blue);
+  box-shadow: 0 0 0 6px rgba(52, 120, 246, 0.1);
 }
 
-/* ========== 新手任务条 ========== */
-.newbie-tasks {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--color-primary);
+.dashboard-list__dot--done {
+  background: #31b16f;
+  box-shadow: 0 0 0 6px rgba(49, 177, 111, 0.1);
 }
 
-.task-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+.dashboard-list__dot--warn {
+  background: #e6a23c;
+  box-shadow: 0 0 0 6px rgba(230, 162, 60, 0.1);
 }
 
-.task-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--text-primary);
+.dashboard-list__dot--dim {
+  background: #c0c4cc;
+  box-shadow: 0 0 0 6px rgba(192, 196, 204, 0.1);
 }
 
-.task-progress {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-primary);
-  background: rgba(102, 126, 234, 0.1);
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-md);
-}
-
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.task-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: var(--text-secondary);
-  transition: all 0.3s;
-}
-
-.task-item.completed {
-  color: var(--color-primary);
-}
-
-.task-icon {
-  font-size: 1.25rem;
-}
-
-.task-text {
-  flex: 1;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.task-item.completed .task-text {
-  text-decoration: line-through;
-  opacity: 0.7;
-}
-
-/* ========== 统计卡片新样式 ========== */
-.stat-hint {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background: rgba(102, 126, 234, 0.05);
-  border-radius: var(--radius-md);
-}
-
-.stat-hint .el-icon {
-  font-size: 1rem;
-  color: var(--color-primary);
-}
-
-/* ========== 媒体查询 ========== */
-.stats-section {
-  margin-bottom: 2rem;
-}
-
-.section-header {
-  margin-bottom: 1.5rem;
-}
-
-.section-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.section-subtitle {
-  font-size: 1rem;
-  color: var(--text-secondary);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
-}
-
-@media (max-width: 1200px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ========== 统计卡片 ========== */
-.stat-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-2xl);
-  padding: 1.5rem;
-  transition: all 0.3s ease;
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-card:hover {
-  border-color: var(--color-primary-light);
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-4px);
-}
-
-.stat-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  color: white;
-}
-
-.icon-gradient-1 {
-  background: var(--gradient-primary);
-}
-
-.icon-gradient-2 {
-  background: var(--gradient-success);
-}
-
-.icon-gradient-3 {
-  background: var(--gradient-warning);
-}
-
-.icon-gradient-4 {
-  background: var(--gradient-achievement);
-}
-
-.stat-card-body {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 2.5rem;
+.dashboard-list__action {
+  flex-shrink: 0;
+  font-size: 12px;
   font-weight: 800;
-  color: var(--text-primary);
-  line-height: 1;
-  margin-bottom: 0.5rem;
+  color: var(--dash-blue-deep);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(52, 120, 246, 0.08);
+  white-space: nowrap;
+  transition: background 0.15s ease;
 }
 
-.stat-value.success {
-  color: var(--color-success);
+.dashboard-list__action--muted {
+  color: var(--dash-ink);
+  background: rgba(23, 32, 51, 0.06);
 }
 
-.stat-value.warning {
-  color: var(--color-warning);
+a.dashboard-list__item:hover .dashboard-list__action {
+  background: rgba(52, 120, 246, 0.14);
 }
 
-.stat-value.accent {
-  color: var(--color-accent);
+.dashboard-list__item--warn .dashboard-list__action {
+  color: #b8860b;
+  background: rgba(230, 162, 60, 0.1);
 }
 
-.stat-label {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  font-weight: 500;
-  margin-bottom: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.dashboard-list__item--warn:hover .dashboard-list__action {
+  background: rgba(230, 162, 60, 0.18);
 }
 
-.stat-delta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.stat-delta--up {
-  background: var(--color-success-bg);
-  color: var(--color-success-dark);
-}
-
-.stat-delta--neutral {
-  background: var(--bg-muted);
-  color: var(--text-muted);
-}
-
-.stat-progress {
-  margin-top: 1rem;
-}
-
-.progress-bar {
-  height: 8px;
-  background: var(--bg-muted);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-bottom: 0.5rem;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-full);
-  transition: width 0.8s ease;
-}
-
-.progress-text {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.stat-card-footer {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-light);
-}
-
-.stat-trend {
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.stat-trend--up {
-  color: var(--color-success);
-}
-
-.stat-trend--success {
-  color: var(--color-success);
-}
-
-.stat-trend--warning {
-  color: var(--color-warning);
-}
-
-.stat-trend--accent {
-  color: var(--color-accent);
-}
-
-/* ========== 底部区域 ========== */
-.bottom-section {
+.today-card__head {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.9fr);
-  gap: 1.5rem;
-  align-items: stretch;
+  gap: 4px;
 }
 
-@media (max-width: 1024px) {
-  .bottom-section {
-    grid-template-columns: 1fr;
-  }
+.today-card__head span,
+.overview-card span,
+.focus-card__stats span,
+.achievement-summary span {
+  font-size: 12px;
+  color: var(--dash-muted);
+  font-weight: 800;
 }
 
-.calendar-wrapper,
-.metrics-wrapper {
-  padding: 1.5rem;
-  min-height: 450px;
-  height: 100%;
+.today-list {
+  display: grid;
+  gap: 10px;
 }
 
-.calendar-wrapper {
-  padding: 1.5rem 1.5rem 1.25rem;
+.overview-grid--today {
+  margin-top: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.metrics-wrapper {
-  padding: 1.25rem;
+.today-item {
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(243, 246, 251, 0.8);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.today-item:hover {
+  background: rgba(243, 246, 251, 1);
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.06);
+}
+
+.today-item__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.today-item__dot--active {
+  background: var(--dash-blue);
+  box-shadow: 0 0 0 6px rgba(52, 120, 246, 0.1);
+}
+
+.today-item__dot--done {
+  background: #31b16f;
+  box-shadow: 0 0 0 6px rgba(49, 177, 111, 0.1);
+}
+
+.today-item__dot--warn {
+  background: #e6a23c;
+  box-shadow: 0 0 0 6px rgba(230, 162, 60, 0.1);
+}
+
+.today-item__dot--dim {
+  background: #c0c4cc;
+  box-shadow: 0 0 0 6px rgba(192, 196, 204, 0.1);
+}
+
+.today-item div {
+  flex: 1;
+  min-width: 0;
+}
+
+.today-item__action {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--dash-blue-deep);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(52, 120, 246, 0.08);
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.today-item:hover .today-item__action {
+  background: rgba(52, 120, 246, 0.14);
+}
+
+.today-item--warn .today-item__action {
+  color: #b8860b;
+  background: rgba(230, 162, 60, 0.1);
+}
+
+.today-item--warn:hover .today-item__action {
+  background: rgba(230, 162, 60, 0.18);
+}
+
+.focus-card {
+  padding: 24px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.07), rgba(255, 255, 255, 0.76));
+  border: 1px solid rgba(52, 120, 246, 0.1);
+}
+
+.focus-card__head,
+.section-head,
+.panel-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.focus-card__badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--dash-blue-deep);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.focus-card__summary {
+  margin-top: -4px;
+}
+
+.focus-card__stats,
+.achievement-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.focus-card__stats article,
+.achievement-summary article,
+.friction-card {
+  padding: 15px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.focus-card__stats strong,
+.overview-card strong,
+.achievement-summary strong {
+  display: block;
+  margin: 4px 0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.dashboard-section,
+.dashboard-bottom-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.section-head h2,
+.panel-head h2 {
+  margin-top: 6px;
+  font-size: clamp(24px, 3vw, 36px);
+}
+
+.inline-link {
+  color: var(--dash-blue-deep);
+  font-size: 13px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.overview-card {
+  display: grid;
+  gap: 8px;
+  padding: 22px;
+  border-radius: 24px;
+}
+
+.overview-card--primary {
+  border-color: rgba(52, 120, 246, 0.14);
+}
+
+.overview-card--success {
+  border-color: rgba(49, 177, 111, 0.14);
+}
+
+.overview-card--warning {
+  border-color: rgba(244, 170, 70, 0.18);
+}
+
+.overview-card--accent {
+  border-color: rgba(141, 107, 255, 0.16);
+}
+
+.overview-card small {
+  color: color-mix(in srgb, var(--dash-ink) 74%, white);
+  font-weight: 900;
+}
+
+.dashboard-bottom-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+}
+
+.dashboard-panel {
+  padding: 24px;
+  border-radius: 28px;
+}
+
+.friction-card strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.achievement-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.achievement-note {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(52, 120, 246, 0.07);
+  color: var(--dash-blue-deep);
+}
+
+/* ========== 学习负荷日历 ========== */
+.dashboard-calendar-section {
+  margin-bottom: 24px;
+}
+
+.dashboard-calendar-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+.dashboard-calendar-panel {
+  padding: 24px;
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.dashboard-calendar-status {
+  padding: 22px;
+  border-radius: 24px;
+  display: grid;
+  gap: 16px;
   position: sticky;
   top: 88px;
 }
 
-/* ========== 响应式 ========== */
-@media (max-width: 768px) {
-  .header-container {
-    padding: 1rem;
-  }
+.dashboard-calendar-status__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--dash-muted);
+  gap: 12px;
+}
 
+.dashboard-calendar-status__empty-icon {
+  font-size: 2rem;
+}
+
+.dashboard-calendar-status__empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dashboard-calendar-status__head {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-calendar-status__head strong {
+  font-size: 18px;
+  color: var(--dash-ink);
+  line-height: 1.2;
+}
+
+.dashboard-calendar-status__cards {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-calendar-status__card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(243, 246, 251, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.04);
+}
+
+.dashboard-calendar-status__card span {
+  font-size: 12px;
+  color: var(--dash-muted);
+  white-space: nowrap;
+}
+
+.dashboard-calendar-status__card strong {
+  font-size: 14px;
+  color: var(--dash-ink);
+  text-align: right;
+}
+
+.dashboard-calendar-status__text {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-calendar-status__zone {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-calendar-status__zone--z1 {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.dashboard-calendar-status__zone--z2 {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.dashboard-calendar-status__zone--z3 {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.dashboard-calendar-status__zone--rest {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.dashboard-calendar-status__analysis {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(52, 120, 246, 0.06);
+  border: 1px solid rgba(52, 120, 246, 0.1);
+}
+
+.dashboard-calendar-status__analysis strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dash-blue-deep);
+}
+
+.dashboard-calendar-status__analysis p {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--dash-ink) 72%, #fff);
+  line-height: 1.6;
+}
+
+@media (max-width: 1120px) {
   .header-nav {
     display: none;
   }
 
-  .main-content {
-    padding: 1rem;
-  }
-
-  .welcome-section {
-    flex-direction: column;
-    padding: 2rem 1.5rem;
-    text-align: center;
-  }
-
-  .welcome-visual {
-    margin-left: 0;
-    margin-top: 2rem;
-  }
-
-  .welcome-actions {
-    justify-content: center;
-  }
-
-  .stats-grid {
+  .dashboard-hero,
+  .dashboard-bottom-grid {
     grid-template-columns: 1fr;
   }
 
-  .metrics-wrapper {
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-calendar-status {
     position: static;
   }
 }
 
-/* ========== onUnmounted 导入 ========== */
+@media (max-width: 700px) {
+  .header-container,
+  .dashboard-main {
+    width: min(100% - 28px, 1240px);
+  }
+
+  .header-cta,
+  .user-chip strong {
+    display: none;
+  }
+
+  .dashboard-hero,
+  .dashboard-panel,
+  .dashboard-calendar-panel {
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .overview-grid,
+  .achievement-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .section-head,
+  .panel-head,
+  .dashboard-hero__actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}
 </style>

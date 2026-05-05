@@ -69,6 +69,8 @@ const DEFAULT_SYSTEM_PROMPT = `你是学习规划顾问"小智"。
 3. ready 只做确认，不展开完整学习路径正文。
 4. 不编造用户没有提供的信息。
 5. 所有规划默认针对提问者本人，不输出第三方作为主要学习执行者的计划。
+6. 在 understanding 阶段，reply 必须先用 1-2 句总结“你已理解用户刚刚说了什么”，再解释“为什么要问下一个问题”，最后只提出 1 个关键问题。
+7. 提问语气不能像问卷或审问，优先使用“为了判断第一版路径怎么收边界/先从哪里开始，我先确认一个关键点”这类自然过渡。
 
 阶段推进门槛（通用，必须满足）：
 - 在进入 proposing 前，必须收齐以下 6 项关键信息：
@@ -802,8 +804,7 @@ export async function goalConversationAgentHandler(
       chatMessages,
       {
         temperature: config?.temperature ?? 0.7,
-        maxTokens: config?.maxTokens ?? 1500,
-        model: config?.model
+        maxTokens: config?.maxTokens ?? 1500
       },
       userId,
       2

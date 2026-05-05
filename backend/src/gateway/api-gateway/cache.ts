@@ -32,8 +32,8 @@ export class GatewayCache {
     });
   }
 
-  invalidate(userId?: string, agentId?: string): void {
-    if (!userId && !agentId) {
+  invalidate(userId?: string, agentId?: string, skillId?: string): void {
+    if (!userId && !agentId && !skillId) {
       this.routeCache.clear();
       return;
     }
@@ -41,7 +41,7 @@ export class GatewayCache {
     const keysToDelete: string[] = [];
     
     for (const key of this.routeCache.keys()) {
-      const [cachedUserId, cachedAgentId] = key.split(':');
+      const [cachedUserId, cachedAgentId, cachedSkillId] = key.split(':');
       
       if (userId && cachedUserId === userId) {
         keysToDelete.push(key);
@@ -49,6 +49,11 @@ export class GatewayCache {
       }
       
       if (agentId && cachedAgentId === agentId) {
+        keysToDelete.push(key);
+        continue;
+      }
+
+      if (skillId && cachedSkillId === skillId) {
         keysToDelete.push(key);
       }
     }

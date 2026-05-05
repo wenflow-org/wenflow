@@ -1,11 +1,13 @@
 <template>
   <div class="api-config-page">
-    <div class="page-header">
-      <h2 class="page-title">
+    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
+    <div class="page-hero">
+      <span class="pill">平台配置</span>
+      <h2 class="page-hero__title">
         <el-icon><Setting /></el-icon>
         API 管理
       </h2>
-      <p class="page-subtitle">配置和管理外部 API 密钥与服务</p>
+      <p class="page-hero__subtitle">配置和管理外部 API 密钥与服务</p>
     </div>
 
     <div class="config-shell">
@@ -56,7 +58,7 @@
 
           <el-form-item>
             <div class="form-actions">
-              <el-button type="success" @click="testConnection" :loading="testing">测试连接</el-button>
+              <el-button type="primary" @click="testConnection" :loading="testing">测试连接</el-button>
               <span v-if="testResult" class="test-result" :class="{ success: testResult.connected, error: !testResult.connected }">
                 {{ testResult.message }}
               </span>
@@ -110,9 +112,9 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
 import { Setting } from '@element-plus/icons-vue';
 import { adminApiConfigApi, adminPlatformSettingsApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const loading = ref(false);
 const saving = ref(false);
@@ -148,7 +150,7 @@ async function loadConfig() {
     form.defaultEvaluationModel = data.defaultEvaluationModel || '';
     modelsInput.value = form.availableModels.join(', ');
   } catch (error: any) {
-    ElMessage.error(error.message || '加载 API 配置失败');
+    toast.error(error.message || '加载 API 配置失败');
   } finally {
     loading.value = false;
   }
@@ -159,7 +161,7 @@ async function loadRegistrationSetting() {
     const response: any = await adminPlatformSettingsApi.getRegistrationSetting();
     registrationEnabled.value = !!response.data?.data?.registrationEnabled;
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error?.message || '加载平台注册设置失败');
+    toast.error(error?.response?.data?.error?.message || '加载平台注册设置失败');
   }
 }
 
@@ -167,9 +169,9 @@ async function saveRegistrationSetting() {
   registrationSaving.value = true;
   try {
     await adminPlatformSettingsApi.updateRegistrationSetting(registrationEnabled.value);
-    ElMessage.success(`平台注册已${registrationEnabled.value ? '开启' : '关闭'}`);
+    toast.success(`平台注册已${registrationEnabled.value ? '开启' : '关闭'}`);
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error?.message || '保存平台注册设置失败');
+    toast.error(error?.response?.data?.error?.message || '保存平台注册设置失败');
   } finally {
     registrationSaving.value = false;
   }
@@ -186,10 +188,10 @@ async function saveConfig() {
       defaultReasoningModel: form.defaultReasoningModel,
       defaultEvaluationModel: form.defaultEvaluationModel
     });
-    ElMessage.success('API 配置已保存');
+    toast.success('API 配置已保存');
     await loadConfig();
   } catch (error: any) {
-    ElMessage.error(error.message || '保存 API 配置失败');
+    toast.error(error.message || '保存 API 配置失败');
   } finally {
     saving.value = false;
   }
@@ -207,13 +209,13 @@ async function testConnection() {
       connected: true,
       message: `连接成功，发现 ${response.data.data.modelsCount} 个模型`
     };
-    ElMessage.success('连接测试成功');
+    toast.success('连接测试成功');
   } catch (error: any) {
     testResult.value = {
       connected: false,
       message: error.response?.data?.error || error.message || '连接测试失败'
     };
-    ElMessage.error('连接测试失败');
+    toast.error('连接测试失败');
   } finally {
     testing.value = false;
   }
@@ -228,28 +230,26 @@ onMounted(() => {
 <style scoped>
 .api-config-page {
   padding: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.page-header {
-  margin-bottom: 1.5rem;
-}
+/* Background orbs */
+.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 0.5rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.page-subtitle {
-  color: var(--text-secondary);
-  margin: 0;
-}
+/* Hero */
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: flex; align-items: center; gap: 0.5rem; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
 .config-shell {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 1rem;
@@ -284,7 +284,7 @@ onMounted(() => {
 }
 
 .config-form {
-  max-width: 860px;
+  max-width: 100%;
 }
 
 .status-grid {
@@ -351,6 +351,9 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
+[data-theme="dark"] .page-hero { background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.1), transparent 34%), linear-gradient(180deg, rgba(30, 33, 42, 0.92), rgba(24, 27, 35, 0.92)); border-color: rgba(52, 120, 246, 0.12); }
+[data-theme="dark"] .pill { background: color-mix(in srgb, var(--color-primary) 18%, transparent); }
+
 [data-theme="dark"] .config-card,
 [data-theme="dark"] .status-item,
 [data-theme="dark"] .registration-control {
@@ -360,6 +363,12 @@ onMounted(() => {
 
 @media (max-width: 1024px) {
   .config-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .status-grid {
     grid-template-columns: 1fr;
   }
 }

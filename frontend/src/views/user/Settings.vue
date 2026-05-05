@@ -107,8 +107,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import { toast } from '../../utils/toast';
 import { getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
 
 const saving = ref(false);
@@ -142,7 +142,7 @@ const loadApiConfig = async () => {
     apiConfig.chatModel = data.chatModel || 'deepseek-chat';
     apiConfig.reasoningModel = data.reasoningModel || 'deepseek-think';
   } catch {
-    ElMessage.error('加载 API 配置失败');
+    toast.error('加载 API 配置失败');
   } finally {
     loading.value = false;
   }
@@ -150,12 +150,12 @@ const loadApiConfig = async () => {
 
 const testConnection = async () => {
   if (!apiConfig.endpoint) {
-    ElMessage.warning('请先填写模型端点');
+    toast.warning('请先填写模型端点');
     return;
   }
 
   if (!apiConfig.apiKey) {
-    ElMessage.warning('请先填写 API Key');
+    toast.warning('请先填写 API Key');
     return;
   }
 
@@ -166,9 +166,9 @@ const testConnection = async () => {
       apiKey: apiConfig.apiKey,
       model: apiConfig.chatModel,
     });
-    ElMessage.success('连接测试成功');
+    toast.success('连接测试成功');
   } catch (error: any) {
-    ElMessage.error(`连接失败：${error.message}`);
+    toast.error(`连接失败：${error.message}`);
   } finally {
     testing.value = false;
   }
@@ -176,12 +176,12 @@ const testConnection = async () => {
 
 const saveApiConfig = async () => {
   if (!apiConfig.endpoint) {
-    ElMessage.warning('请先填写模型端点');
+    toast.warning('请先填写模型端点');
     return;
   }
 
   if (apiConfig.enabled && !apiConfig.apiKey) {
-    ElMessage.warning('启用时必须填写 API Key');
+    toast.warning('启用时必须填写 API Key');
     return;
   }
 
@@ -195,10 +195,10 @@ const saveApiConfig = async () => {
       reasoningModel: apiConfig.reasoningModel,
     });
 
-    ElMessage.success('配置已保存');
+    toast.success('配置已保存');
     // 不重新加载配置，保留用户输入的 apiKey
   } catch (error: any) {
-    ElMessage.error(`保存失败：${error.message}`);
+    toast.error(`保存失败：${error.message}`);
   } finally {
     saving.value = false;
   }
@@ -213,11 +213,11 @@ const disableConfig = async () => {
       chatModel: apiConfig.chatModel,
       reasoningModel: apiConfig.reasoningModel,
     });
-    ElMessage.success('已禁用自定义 API，将使用平台默认配置');
+    toast.success('已禁用自定义 API，将使用平台默认配置');
     apiConfig.enabled = false;
     // 不重新加载配置，保留用户输入的 apiKey
   } catch (error: any) {
-    ElMessage.error(`操作失败：${error.message}`);
+    toast.error(`操作失败：${error.message}`);
   }
 };
 </script>

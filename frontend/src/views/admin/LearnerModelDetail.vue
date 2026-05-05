@@ -1,16 +1,24 @@
 <template>
   <div class="learner-model-detail-page" v-loading="loading">
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">
-          <el-icon class="page-title-icon"><Reading /></el-icon>
-          学习者模型详情
-        </h2>
-        <p class="page-subtitle">查看用户详细的学习模型数据</p>
-      </div>
-      <div class="header-actions">
-        <el-button @click="goBack">返回</el-button>
-        <el-button type="primary" @click="recompute">重算</el-button>
+    <div class="admin-overview-bg">
+      <div class="admin-overview-bg__orb admin-overview-bg__orb--1"></div>
+      <div class="admin-overview-bg__orb admin-overview-bg__orb--2"></div>
+    </div>
+
+    <div class="page-hero">
+      <div class="page-hero__row">
+        <div>
+          <span class="pill">Admin</span>
+          <h2 class="page-hero__title">
+            <el-icon class="page-title-icon"><Reading /></el-icon>
+            学习者模型详情
+          </h2>
+          <p class="page-hero__subtitle">查看用户详细的学习模型数据</p>
+        </div>
+        <div class="header-actions">
+          <el-button type="default" @click="goBack">返回</el-button>
+          <el-button type="primary" :loading="recomputing" @click="recompute">重算</el-button>
+        </div>
       </div>
     </div>
 
@@ -25,7 +33,7 @@
     />
 
     <el-tabs v-if="snapshot" v-model="activeTab">
-      <el-tab-pane label="Profile" name="profile">
+      <el-tab-pane label="认知画像" name="profile">
         <div class="grid two-col">
           <el-card shadow="never">
             <template #header>认知画像</template>
@@ -47,7 +55,7 @@
           </el-card>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="Dynamic State" name="state">
+      <el-tab-pane label="动态状态" name="state">
         <div class="grid metric-grid">
           <el-card shadow="never" v-for="item in stateCards" :key="item.label">
             <div class="metric-card">
@@ -66,7 +74,7 @@
           </div>
         </el-card>
       </el-tab-pane>
-      <el-tab-pane label="Knowledge Memory" name="memory">
+      <el-tab-pane label="知识记忆" name="memory">
         <div class="grid two-col" v-if="snapshot.knowledgeMemory.currentPath">
           <el-card shadow="never">
             <template #header>当前路径位置</template>
@@ -107,7 +115,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      <el-tab-pane label="Teaching Hints" name="hints">
+      <el-tab-pane label="教学建议" name="hints">
         <div class="grid two-col">
           <el-card shadow="never">
             <template #header>教学建议</template>
@@ -135,7 +143,7 @@
           </el-card>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="Evidence" name="evidence">
+      <el-tab-pane label="证据记录" name="evidence">
         <el-timeline>
           <el-timeline-item v-for="(item, index) in evidence" :key="`${item.type}-${index}`" :timestamp="formatTime(item.happenedAt)">
             <div class="evidence-item">
@@ -154,14 +162,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import { Reading } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const route = useRoute();
 const router = useRouter();
 
 const loading = ref(false);
+const recomputing = ref(false);
 const snapshot = ref<any>(null);
 const evidence = ref<any[]>([]);
 const activeTab = ref('profile');
@@ -170,7 +179,6 @@ const userId = route.params.userId as string;
 const pathId = route.query.pathId as string | undefined;
 
 const formatTime = (value: string) => value ? new Date(value).toLocaleString() : '--';
-const formatJson = (value: any) => JSON.stringify(value || {}, null, 2);
 
 const stateCards = computed(() => {
   if (!snapshot.value) return [];
@@ -198,23 +206,26 @@ const loadData = async () => {
     evidence.value = evidenceRes.data?.data || evidenceRes.data || [];
   } catch (error) {
     console.error(error);
-    ElMessage.error('加载学习者模型详情失败');
+    toast.error('加载学习者模型详情失败');
   } finally {
     loading.value = false;
   }
 };
 
 const recompute = async () => {
+  recomputing.value = true;
   try {
     await adminLearnerModelsApi.recompute(userId, {
       pathId,
       scope: pathId ? 'path' : 'global',
     });
-    ElMessage.success('学习者模型已重算');
+    toast.success('学习者模型已重算');
     loadData();
   } catch (error) {
     console.error(error);
-    ElMessage.error('重算失败');
+    toast.error('重算失败');
+  } finally {
+    recomputing.value = false;
   }
 };
 
@@ -224,26 +235,38 @@ onMounted(loadData);
 </script>
 
 <style scoped>
-.page-header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
-.page-title { margin: 0; font-size: 24px; font-weight: 700; }
-.page-subtitle { margin: 8px 0 0; color: var(--text-secondary); }
+.admin-overview-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.admin-overview-bg__orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.admin-overview-bg__orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: admin-orb 26s ease-in-out infinite; }
+.admin-overview-bg__orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: admin-orb 30s ease-in-out infinite reverse; }
+@keyframes admin-orb { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
+
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__row { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+
 .header-actions { display: flex; gap: 12px; }
-.summary-alert { margin-bottom: 16px; }
-.json-block { margin: 0; padding: 16px; border-radius: var(--fluent-radius-lg); background: var(--bg-elevated); overflow: auto; white-space: pre-wrap; word-break: break-word; }
-.grid { display: grid; gap: 16px; }
+.summary-alert { position: relative; z-index: 1; margin-bottom: 16px; }
+.grid { display: grid; gap: 16px; position: relative; z-index: 1; }
 .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
-.metric-card { display: flex; flex-direction: column; gap: 8px; }
+.metric-card { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
 .metric-label { color: var(--text-secondary); font-size: 12px; }
 .metric-value { font-size: 24px; }
+.metric-grid .el-card { background: linear-gradient(135deg, rgba(52, 120, 246, 0.04), rgba(141, 107, 255, 0.03)); border-radius: 20px; }
 .kv-list { display: grid; gap: 12px; }
 .kv-item { display: flex; justify-content: space-between; gap: 16px; }
-.section-card { margin-top: 16px; }
-.section-card-row { margin-top: 16px; }
+.section-card { margin-top: 16px; position: relative; z-index: 1; }
+.section-card-row { margin-top: 16px; position: relative; z-index: 1; }
 .tag-list { display: flex; gap: 8px; flex-wrap: wrap; }
 .empty-text { color: var(--text-secondary); }
 .text-block { white-space: pre-wrap; line-height: 1.7; }
 .evidence-item { display: grid; gap: 4px; }
+
+.section-card :deep(.el-table) { border-radius: 12px; overflow: hidden; }
+.section-card :deep(.el-table th.el-table__cell) { background: rgba(52, 120, 246, 0.04); font-weight: 600; }
 
 [data-theme="dark"] .learner-model-detail-page {
   --bg-elevated: var(--glass-bg-dark);
@@ -252,6 +275,10 @@ onMounted(loadData);
 [data-theme="dark"] .summary-alert {
   background: var(--glass-bg-dark);
   border-color: var(--glass-border-dark);
+}
+
+[data-theme="dark"] .metric-grid .el-card {
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.08), rgba(141, 107, 255, 0.06));
 }
 
 @media (max-width: 960px) {

@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-model-config">
+  <div class="skill-model-config">
     <div class="bg-layer">
       <div class="bg-orb bg-orb--1"></div>
       <div class="bg-orb bg-orb--2"></div>
@@ -7,18 +7,14 @@
 
     <div class="page-hero">
       <span class="pill">
-        <el-icon><Cpu /></el-icon>
-        Agent 模型配置
+        <el-icon><Operation /></el-icon>
+        Skill 模型配置
       </span>
-      <h2 class="page-hero__title">Agent 模型配置</h2>
-      <p class="page-hero__subtitle">配置 Agent 使用的 AI 模型参数</p>
+      <h2 class="page-hero__title">Skill 模型配置</h2>
+      <p class="page-hero__subtitle">配置 Skill 使用的模型、思考模式、思考强度与超时</p>
     </div>
 
     <div class="action-bar">
-      <el-button type="primary" @click="initializeDefaults">
-        <el-icon><Setting /></el-icon>
-        初始化默认配置
-      </el-button>
       <el-button @click="refresh">
         <el-icon><Refresh /></el-icon>
         刷新
@@ -27,18 +23,16 @@
 
     <div class="table-shell">
       <el-table :data="configs" v-loading="loading" stripe>
-        <template #empty>
-          <el-empty description="暂无配置数据，点击上方按钮初始化默认配置" />
-        </template>
-        <el-table-column prop="agentId" label="Agent ID" width="200" />
-        <el-table-column prop="tier" label="模型层级" width="100">
+        <el-table-column prop="skillId" label="Skill ID" min-width="180" />
+        <el-table-column prop="enabled" label="独立配置" width="90">
           <template #default="{ row }">
-            <el-tag>{{ row.tier }}</el-tag>
+            <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '继承' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="model" label="模型" width="150">
+        <el-table-column prop="tier" label="模型层级" width="100" />
+        <el-table-column prop="model" label="模型" min-width="150">
           <template #default="{ row }">
-            {{ row.model || '使用平台默认' }}
+            {{ row.model || '继承 Agent / 平台默认' }}
           </template>
         </el-table-column>
         <el-table-column prop="thinkingMode" label="思考模式" width="120">
@@ -51,71 +45,61 @@
             <el-tag :type="effortTagType(row.reasoningEffort)">{{ formatReasoningEffort(row.reasoningEffort) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="temperature" label="温度" width="80" />
-        <el-table-column prop="maxTokens" label="Max Tokens" width="100" />
-        <el-table-column label="请求超时" width="120">
+        <el-table-column prop="requestTimeoutMs" label="请求超时" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.requestTimeoutSource === 'agent-override' ? 'warning' : 'info'">
-              {{ formatTimeout(row.requestTimeoutMs) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="enabled" label="启用" width="80">
-          <template #default="{ row }">
-            <el-switch v-model="row.enabled" @change="updateConfig(row)" />
+            {{ formatTimeout(row.requestTimeoutMs) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <el-button size="small" @click="editConfig(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteConfig(row)">重置</el-button>
+            <el-button size="small" type="danger" :disabled="!row.enabled" @click="deleteConfig(row)">重置</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="editDialogVisible" title="编辑配置" width="560px" destroy-on-close>
+    <el-dialog v-model="editDialogVisible" title="编辑 Skill 配置" width="620px" destroy-on-close>
       <el-form ref="editFormRef" :model="editForm" :rules="editRules">
-        <el-form-item label="Agent ID">
-          <el-input v-model="editForm.agentId" disabled />
+        <el-form-item label="Skill ID">
+          <el-input v-model="editForm.skillId" disabled />
+        </el-form-item>
+        <el-form-item label="独立配置">
+          <el-switch v-model="editForm.enabled" />
+          <div class="field-hint">关闭后将继承当前调用 Agent 的配置；若无 Agent 上下文，则回落平台默认</div>
         </el-form-item>
         <el-form-item label="模型层级">
-          <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%">
+          <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%" :disabled="!editForm.enabled">
             <el-option label="chat" value="chat" />
             <el-option label="reasoning" value="reasoning" />
           </el-select>
         </el-form-item>
-        <el-form-item label="温度">
-          <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input />
-        </el-form-item>
-        <el-form-item label="Max Tokens">
-          <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" />
-        </el-form-item>
-        <el-form-item label="请求超时">
-          <div class="readonly-field">
-            <span>{{ formatTimeout(editForm.requestTimeoutMs) }}</span>
-            <el-tag size="small" :type="editForm.requestTimeoutSource === 'agent-override' ? 'warning' : 'info'">
-              {{ editForm.requestTimeoutSource === 'agent-override' ? 'Agent 特例' : '默认值' }}
-            </el-tag>
-          </div>
-        </el-form-item>
         <el-form-item label="模型">
-          <el-input v-model="editForm.model" placeholder="留空使用平台默认" />
+          <el-input v-model="editForm.model" :disabled="!editForm.enabled" placeholder="留空继承 Agent / 平台默认" />
         </el-form-item>
         <el-form-item label="思考模式">
-          <el-select v-model="editForm.thinkingMode" placeholder="选择思考模式" style="width: 100%">
-            <el-option label="跟随模型默认" value="default" />
+          <el-select v-model="editForm.thinkingMode" placeholder="选择思考模式" style="width: 100%" :disabled="!editForm.enabled">
+            <el-option label="跟随继承值 / 模型默认" value="default" />
             <el-option label="开启" value="enabled" />
             <el-option label="关闭" value="disabled" />
           </el-select>
         </el-form-item>
         <el-form-item label="思考强度">
-          <el-select v-model="editForm.reasoningEffort" :disabled="editForm.thinkingMode === 'disabled'" placeholder="选择思考强度" style="width: 100%">
-            <el-option label="跟随模型默认" value="default" />
+          <el-select v-model="editForm.reasoningEffort" placeholder="选择思考强度" style="width: 100%" :disabled="!editForm.enabled || editForm.thinkingMode === 'disabled'">
+            <el-option label="跟随继承值 / 模型默认" value="default" />
             <el-option label="high" value="high" />
             <el-option label="max" value="max" />
           </el-select>
           <div class="field-hint">仅在模型启用思考时生效</div>
+        </el-form-item>
+        <el-form-item label="温度">
+          <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input :disabled="!editForm.enabled" />
+        </el-form-item>
+        <el-form-item label="Max Tokens">
+          <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" :disabled="!editForm.enabled" />
+        </el-form-item>
+        <el-form-item label="请求超时(ms)">
+          <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="600000" :step="10000" :disabled="!editForm.enabled" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -128,41 +112,42 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { Cpu, Setting, Refresh } from '@element-plus/icons-vue';
-import { adminAxios } from '@/api/adminApi';
+import { Operation, Refresh } from '@element-plus/icons-vue';
+import { adminSkillsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 import { ElMessageBox } from 'element-plus';
 import type { FormInstance } from 'element-plus';
 
-interface AgentModelConfig {
-  agentId: string;
+interface SkillModelConfig {
+  skillId: string;
   tier: string;
   model?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'high' | 'max';
   temperature?: number;
   maxTokens?: number;
+  requestTimeoutMs?: number | null;
   enabled: boolean;
-  requestTimeoutMs?: number;
-  requestTimeoutSource?: 'default' | 'agent-override';
 }
 
-const configs = ref<AgentModelConfig[]>([]);
+const configs = ref<SkillModelConfig[]>([]);
 const loading = ref(false);
 const editDialogVisible = ref(false);
 const saving = ref(false);
 const editFormRef = ref<FormInstance>();
 const editRules = {
-  model: [{ required: true, message: '请输入模型名称', trigger: 'blur' }],
   temperature: [{ required: true, message: '请设置温度', trigger: 'change' }],
-  maxTokens: [{ required: true, message: '请输入最大 Token 数', trigger: 'blur' }]
+  maxTokens: [{ required: true, message: '请输入最大 Token 数', trigger: 'blur' }],
 };
-const editForm = ref<AgentModelConfig>({
-  agentId: '',
-  tier: '',
+const editForm = ref<SkillModelConfig>({
+  skillId: '',
+  tier: 'chat',
   thinkingMode: 'default',
   reasoningEffort: 'default',
-  enabled: true
+  temperature: 0.7,
+  maxTokens: 2000,
+  requestTimeoutMs: null,
+  enabled: false,
 });
 
 watch(
@@ -177,33 +162,24 @@ watch(
 const fetchConfigs = async () => {
   loading.value = true;
   try {
-    const res = await adminAxios.get('/admin/agent-model-configs');
+    const res = await adminSkillsApi.getSkillModelConfigs();
     configs.value = res.data?.data || [];
-  } catch (error) {
-    toast.error('获取配置失败');
+  } catch {
+    toast.error('获取 Skill 配置失败');
   }
   loading.value = false;
 };
 
-const formatTimeout = (timeoutMs?: number) => {
-  if (!timeoutMs || Number.isNaN(Number(timeoutMs))) return '--';
-  return `${Math.round(Number(timeoutMs) / 1000)}s`;
-};
-
-const toEditablePayload = (config: AgentModelConfig) => ({
-  tier: config.tier,
-  model: config.model,
-  thinkingMode: config.thinkingMode || 'default',
-  reasoningEffort: config.thinkingMode === 'disabled' ? 'default' : (config.reasoningEffort || 'default'),
-  temperature: config.temperature,
-  maxTokens: config.maxTokens,
-  enabled: config.enabled,
-});
-
 const formatThinkingMode = (thinkingMode?: 'default' | 'enabled' | 'disabled') => {
   if (thinkingMode === 'enabled') return '开启';
   if (thinkingMode === 'disabled') return '关闭';
-  return '模型默认';
+  return '继承/默认';
+};
+
+const formatReasoningEffort = (reasoningEffort?: 'default' | 'high' | 'max') => {
+  if (reasoningEffort === 'high') return 'high';
+  if (reasoningEffort === 'max') return 'max';
+  return '继承/默认';
 };
 
 const thinkingTagType = (thinkingMode?: 'default' | 'enabled' | 'disabled') => {
@@ -212,43 +188,33 @@ const thinkingTagType = (thinkingMode?: 'default' | 'enabled' | 'disabled') => {
   return 'info';
 };
 
-const formatReasoningEffort = (reasoningEffort?: 'default' | 'high' | 'max') => {
-  if (reasoningEffort === 'high') return 'high';
-  if (reasoningEffort === 'max') return 'max';
-  return '模型默认';
-};
-
 const effortTagType = (reasoningEffort?: 'default' | 'high' | 'max') => {
   if (reasoningEffort === 'max') return 'danger';
   if (reasoningEffort === 'high') return 'warning';
   return 'info';
 };
 
-const initializeDefaults = async () => {
-  try {
-    await adminAxios.post('/admin/agent-model-configs/initialize');
-    toast.success('默认配置已初始化');
-    fetchConfigs();
-  } catch (error) {
-    toast.error('初始化失败');
-  }
+const formatTimeout = (timeoutMs?: number | null) => {
+  if (!timeoutMs || Number.isNaN(Number(timeoutMs))) return '继承';
+  return `${Math.round(Number(timeoutMs) / 1000)}s`;
 };
 
-const updateConfig = async (row: AgentModelConfig) => {
-  try {
-    await adminAxios.put(`/admin/agent-model-configs/${row.agentId}`, toEditablePayload(row));
-    toast.success('状态已更新');
-  } catch (error) {
-    toast.error('更新失败');
-    fetchConfigs();
-  }
-};
+const toEditablePayload = (config: SkillModelConfig) => ({
+  tier: config.tier,
+  model: config.model,
+  thinkingMode: config.thinkingMode || 'default',
+  reasoningEffort: config.thinkingMode === 'disabled' ? 'default' : (config.reasoningEffort || 'default'),
+  temperature: config.temperature,
+  maxTokens: config.maxTokens,
+  requestTimeoutMs: config.enabled ? config.requestTimeoutMs : null,
+  enabled: config.enabled,
+});
 
-const editConfig = (row: AgentModelConfig) => {
+const editConfig = (row: SkillModelConfig) => {
   editForm.value = {
     ...row,
     thinkingMode: row.thinkingMode || 'default',
-    reasoningEffort: row.reasoningEffort || 'default'
+    reasoningEffort: row.reasoningEffort || 'default',
   };
   editDialogVisible.value = true;
 };
@@ -258,21 +224,21 @@ const saveConfig = async () => {
   if (!valid) return;
   saving.value = true;
   try {
-    await adminAxios.put(`/admin/agent-model-configs/${editForm.value.agentId}`, toEditablePayload(editForm.value));
-    toast.success('配置已更新');
+    await adminSkillsApi.updateSkillModelConfig(editForm.value.skillId, toEditablePayload(editForm.value));
+    toast.success('Skill 配置已更新');
     editDialogVisible.value = false;
     fetchConfigs();
-  } catch (error) {
+  } catch {
     toast.error('保存失败');
   } finally {
     saving.value = false;
   }
 };
 
-const deleteConfig = async (row: AgentModelConfig) => {
+const deleteConfig = async (row: SkillModelConfig) => {
   try {
     await ElMessageBox.confirm(
-      `确定要重置 ${row.agentId} 的模型配置吗？此操作不可撤销。`,
+      `确定要重置 ${row.skillId} 的模型配置吗？此操作不可撤销。`,
       '确认重置',
       {
         confirmButtonText: '确认重置',
@@ -285,10 +251,10 @@ const deleteConfig = async (row: AgentModelConfig) => {
   }
 
   try {
-    await adminAxios.delete(`/admin/agent-model-configs/${row.agentId}`);
+    await adminSkillsApi.deleteSkillModelConfig(row.skillId);
     toast.success('配置已重置');
     fetchConfigs();
-  } catch (error) {
+  } catch {
     toast.error('删除失败');
   }
 };
@@ -299,12 +265,8 @@ onMounted(() => fetchConfigs());
 </script>
 
 <style scoped>
-.agent-model-config {
+.skill-model-config {
   padding: 1.25rem;
-}
-
-.page-header {
-  margin-bottom: 1rem;
 }
 
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
@@ -355,12 +317,6 @@ onMounted(() => fetchConfigs());
   border-bottom-color: rgba(52, 120, 246, 0.04);
 }
 
-.readonly-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .field-hint {
   margin-top: 6px;
   font-size: 12px;
@@ -368,7 +324,7 @@ onMounted(() => fetchConfigs());
 }
 
 @media (max-width: 768px) {
-  .agent-model-config {
+  .skill-model-config {
     padding: 1rem;
   }
 }

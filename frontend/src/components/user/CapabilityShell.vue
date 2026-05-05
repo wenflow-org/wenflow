@@ -65,8 +65,9 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
 import { ArrowLeft } from '@element-plus/icons-vue';
+import { toast } from '../../utils/toast';
 import { useRouter } from 'vue-router';
 import ThemeSwitcher from '../ThemeSwitcher.vue';
 import { useUserStore } from '@/stores/user';
@@ -85,7 +86,7 @@ async function handleLogout() {
     });
 
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // ignore cancel

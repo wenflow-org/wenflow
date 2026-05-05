@@ -6,8 +6,10 @@ param(
     [switch]$EditEnv,
     [switch]$SkipPrisma,
     [switch]$UseNginx,
+    [switch]$Lan,
     [string]$Domain = '',
-    [string]$NginxExePath = ''
+    [string]$NginxExePath = '',
+    [string]$LanIP = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -180,6 +182,41 @@ function Set-EnvValue {
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllLines($Path, $content, $utf8NoBom)
+}
+
+function Get-LocalIPAddress {
+    param(
+        [string]$PreferredIP = ''
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredIP)) {
+        return $PreferredIP.Trim()
+    }
+
+    try {
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 |
+               Where-Object {
+                   $_.InterfaceAlias -notlike "Loopback*" -and
+                   $_.IPAddress -notlike "169.254.*" -and
+                   ($_.IPAddress -like "192.168.*" -or $_.IPAddress -like "10.*" -or $_.IPAddress -like "172.16.*" -or $_.IPAddress -like "172.17.*" -or $_.IPAddress -like "172.18.*" -or $_.IPAddress -like "172.19.*" -or $_.IPAddress -like "172.20.*" -or $_.IPAddress -like "172.21.*" -or $_.IPAddress -like "172.22.*" -or $_.IPAddress -like "172.23.*" -or $_.IPAddress -like "172.24.*" -or $_.IPAddress -like "172.25.*" -or $_.IPAddress -like "172.26.*" -or $_.IPAddress -like "172.27.*" -or $_.IPAddress -like "172.28.*" -or $_.IPAddress -like "172.29.*" -or $_.IPAddress -like "172.30.*" -or $_.IPAddress -like "172.31.*")
+               } |
+               Select-Object -First 1 -ExpandProperty IPAddress)
+
+        if (-not [string]::IsNullOrWhiteSpace($ip)) {
+            return $ip
+        }
+    } catch {
+    }
+
+    try {
+        $ip = (ipconfig | Select-String "IPv4" | Select-Object -First 1).ToString().Split(":")[1].Trim()
+        if (-not [string]::IsNullOrWhiteSpace($ip)) {
+            return $ip
+        }
+    } catch {
+    }
+
+    return ''
 }
 
 function Get-NormalizedOrigin {
@@ -531,6 +568,31 @@ if (-not $SkipPrisma) {
     Ensure-PrismaReady -BackendPath $backendPath
 } else {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
+}
+
+if ($Lan) {
+    $localIP = Get-LocalIPAddress -PreferredIP $LanIP
+    if ([string]::IsNullOrWhiteSpace($localIP)) {
+        Write-Host "Warning: Could not detect local IP address. LAN mode will be skipped." -ForegroundColor Yellow
+    } else {
+        $currentCors = Get-EnvValue -Path $backendEnvPath -Key 'CORS_ORIGIN'
+        $lanOrigins = "http://$localIP`:5173", "http://$localIP`:3000"
+        $existingOrigins = $currentCors -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $newOrigins = @()
+        foreach ($origin in $lanOrigins) {
+            if ($origin -notin $existingOrigins) {
+                $newOrigins += $origin
+            }
+        }
+        if ($newOrigins.Count -gt 0) {
+            $allOrigins = @($existingOrigins) + $newOrigins
+            $updatedCors = ($allOrigins -join ',').Trim()
+            Set-EnvValue -Path $backendEnvPath -Key 'CORS_ORIGIN' -Value $updatedCors
+            Write-Host "Added LAN IP to CORS_ORIGIN: $($newOrigins -join ', ')" -ForegroundColor Green
+        } else {
+            Write-Host "LAN IP already in CORS_ORIGIN: $localIP" -ForegroundColor DarkGray
+        }
+    }
 }
 
 $serverName = 'localhost'

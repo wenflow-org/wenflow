@@ -227,7 +227,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { adminConversationsApi, adminDashboardApi } from '@/api/adminApi';
 import { Search, Refresh, Plus, ChatDotRound } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { toast } from '../../utils/toast';
 
 const loading = ref(false);
 const conversations = ref<any[]>([]);
@@ -269,7 +269,7 @@ const loadConversations = async () => {
     }
   } catch (error: any) {
     console.error('加载对话列表失败:', error);
-    ElMessage.error('加载对话列表失败');
+    toast.error('加载对话列表失败');
   } finally {
     loading.value = false;
   }
@@ -306,7 +306,7 @@ const viewDetail = async (row: any) => {
       dialogVisible.value = true;
     }
   } catch (error: any) {
-    ElMessage.error('加载对话详情失败');
+    toast.error('加载对话详情失败');
   }
 };
 
@@ -320,7 +320,7 @@ const generatePath = async (conversation: any) => {
     const response: any = await adminConversationsApi.generatePath(conversation.id);
     
     if (response.data.success) {
-      ElMessage.success('学习路径生成成功！');
+      toast.success('学习路径生成成功！');
       // 延迟刷新，确保数据库更新完成
       setTimeout(async () => {
         // 刷新对话列表
@@ -334,11 +334,11 @@ const generatePath = async (conversation: any) => {
         }
       }, 500);
     } else {
-      ElMessage.error(response.data.message || '生成失败');
+      toast.error(response.data.message || '生成失败');
     }
   } catch (error: any) {
     console.error('生成学习路径失败:', error);
-    ElMessage.error(error.response?.data?.message || error.message || '生成学习路径失败');
+    toast.error(error.response?.data?.message || error.message || '生成学习路径失败');
   } finally {
     regenerating.value[conversation.id] = false;
   }

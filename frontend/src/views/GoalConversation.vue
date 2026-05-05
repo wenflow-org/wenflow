@@ -1,55 +1,34 @@
 <template>
-  <div class="goal-conversation-page">
-    <!-- 动态背景 -->
-    <div class="animated-bg">
-      <div class="gradient-orb gradient-orb-1"></div>
-      <div class="gradient-orb gradient-orb-2"></div>
+  <div class="goal-conversation-page planning-upgrade">
+    <div class="planning-bg-layer">
+      <div class="planning-bg-orb planning-bg-orb--1"></div>
+      <div class="planning-bg-orb planning-bg-orb--2"></div>
     </div>
 
-    <!-- 顶部导航栏 -->
-    <header class="dashboard-header" :class="{ 'header-scrolled': headerScrolled }">
-      <div class="header-container">
-        <div class="header-left">
-          <div class="brand" @click="navigateToHome">
-            <span class="brand-icon">🎓</span>
-            <span class="brand-text">问流 WenFlow</span>
-          </div>
-          <div class="header-divider"></div>
-          <div class="session-info">
-            <span class="session-badge" :class="stageBadgeClass">{{ stageLabel }}</span>
-            <span class="session-title">AI 规划</span>
-          </div>
-        </div>
+    <header class="dashboard-header planning-header" :class="{ 'dashboard-header--scrolled': headerScrolled }">
+      <div class="header-container planning-header__inner">
+        <button type="button" class="brand planning-brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="brand-logo planning-brand__logo" />
+        </button>
 
-        <nav class="header-nav">
-          <router-link to="/dashboard" class="nav-item">
-            <el-icon><HomeFilled /></el-icon>
-            <span>学习台</span>
-          </router-link>
-          <router-link to="/goal-conversation" class="nav-item nav-item-active">
-            <el-icon><EditPen /></el-icon>
-            <span>AI 规划</span>
-          </router-link>
-          <router-link to="/learning-paths" class="nav-item">
-            <el-icon><FolderOpened /></el-icon>
-            <span>学习路径</span>
-          </router-link>
+        <nav class="header-nav planning-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="nav-item">学习台</router-link>
+          <router-link to="/goal-conversation" class="nav-item nav-item--active">AI 规划</router-link>
+          <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
+          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
+          <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
-        <div class="header-right">
-          <ThemeSwitcher />
-          
-          <!-- 用户头像 -->
-          <el-dropdown class="user-dropdown">
-            <div class="user-avatar">
-              <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-              <div v-else class="avatar-placeholder">
-                {{ userStore.user?.name?.charAt(0) || 'U' }}
-              </div>
-            </div>
+        <div class="header-right planning-header__actions">
+          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <el-dropdown>
+            <button type="button" class="user-chip planning-user-chip">
+              <span>{{ userInitial }}</span>
+              <strong>{{ userStore.user?.name || '同学' }}</strong>
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="$router.push('/user')">
+                <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
                   能力中心
                 </el-dropdown-item>
@@ -64,134 +43,124 @@
       </div>
     </header>
 
-    <!-- 主内容区 -->
-      <main class="main-content">
-        <div class="content-container">
-        <!-- 问题理解面板 -->
-        <transition name="slide-down">
-          <div class="understanding-panel glass-card" v-if="showUnderstandingPanel">
-          <div class="panel-header">
-            <div class="panel-title-wrapper">
-              <div class="panel-icon">🎯</div>
-              <div class="panel-title-content">
-                <h3 class="panel-title">{{ panelTitle }}</h3>
-                <p class="panel-subtitle">{{ panelSubtitle }}</p>
+    <main class="main-content planning-main">
+      <section class="planning-conversation-layout" :class="{ 'planning-conversation-layout--entry': !showPlanningSidePanels }">
+        <aside v-if="showPlanningSidePanels" class="planning-status-card planning-side-card glass-card">
+          <div class="planning-side-card__head">
+            <h2>已确认信息</h2>
+            <div class="planning-status-stack">
+              <span class="planning-status-item planning-status-item--current">{{ activePlanningStageLabel }}</span>
+            </div>
+          </div>
+
+          <div class="planning-understand__meter">
+            <span>理解度</span>
+            <div class="planning-meter-bar">
+              <div class="planning-meter-bar__fill" :style="{ width: `${planningConfidencePercent}%` }"></div>
+            </div>
+            <strong>{{ planningConfidencePercent }}%</strong>
+          </div>
+
+          <section class="planning-card-group planning-confirmed-block">
+            <span class="planning-block-label">已确认信息</span>
+            <div v-if="understandingSummaryCards.length > 0" class="planning-summary-stack">
+              <article
+                v-for="item in understandingSummaryCards"
+                :key="item.label"
+                class="planning-summary-item"
+              >
+                <div class="planning-summary-item__head">
+                  <span>{{ item.label }}</span>
+                </div>
+                <strong>{{ item.value }}</strong>
+              </article>
+            </div>
+            <div v-else class="planning-status-empty">
+              这里仅显示已经从真实对话中收集到的信息。
+            </div>
+          </section>
+
+        </aside>
+
+        <section class="planning-chat-card glass-card">
+<div class="planning-chat-card__head planning-chat-card__head--workbench">
+            <div class="planning-chat-card__copy">
+              <h2 v-if="!hasConversationStarted">说一件你最近卡住的事。</h2>
+              <p v-if="!hasConversationStarted" class="planning-chat-card__intro">想到哪说到哪，先不用整理。</p>
+            </div>
+
+            <div class="planning-chat-card__meta" :class="{ 'planning-chat-card__meta--compact': hasConversationStarted }">
+              <router-link v-if="!hasConversationStarted" to="/dashboard" class="planning-secondary-btn">回到学习台</router-link>
+              <div v-if="hasConversationStarted" class="planning-chat-card__head-actions">
+                <button type="button" class="planning-secondary-btn" @click="resetConversation">重新开始</button>
               </div>
             </div>
-            <div class="panel-header-actions">
-              <div class="confidence-wrapper">
-                <div class="confidence-label">理解度</div>
-                <div class="confidence-bar-wrapper">
-                  <div class="confidence-bar">
-                    <div class="confidence-fill" :style="{ width: (confidence * 100) + '%' }" :class="confidenceClass"></div>
-                  </div>
-                  <span class="confidence-value">{{ Math.round(confidence * 100) }}%</span>
-                </div>
-              </div>
-              <button type="button" class="panel-toggle" @click="showUnderstandingExpanded = !showUnderstandingExpanded">
-                {{ showUnderstandingExpanded ? '收起摘要' : '展开摘要' }}
+          </div>
+
+<div v-if="isCompleted && generatedPathStatus !== 'generating'" class="planning-completion-card">
+            <h3>已经可以先生成一版路径。</h3>
+            <p v-if="realProblemText">我目前理解的重点是：{{ realProblemText }}</p>
+            <div class="planning-completion-card__actions">
+              <button class="proposal-btn proposal-btn-primary" @click="navigateToLearningPath">
+                <span>查看学习路径</span>
+                <el-icon><ArrowRight /></el-icon>
               </button>
+              <button class="proposal-btn proposal-btn-secondary" @click="showRegenerateDialog = true">重新规划</button>
             </div>
           </div>
 
-          <div class="panel-summary-row">
-            <span class="summary-chip summary-chip-primary">{{ understandingHeadline }}</span>
-            <span v-if="hasLevel" class="summary-chip">当前水平：{{ understanding.background?.current_level }}</span>
-            <span v-if="understanding.background?.expected_time" class="summary-chip">期望见效：{{ understanding.background.expected_time }}</span>
-          </div>
-
-          <div class="panel-content" v-if="showUnderstandingExpanded">
-            <div class="understanding-grid">
-              <!-- 痛点 -->
-              <div class="understanding-card glass-card" v-if="understanding.pain_points">
-                <div class="card-icon">💢</div>
-                <div class="card-content">
-                  <span class="card-label">核心痛点</span>
-                  <span class="card-value">{{ understanding.pain_points }}</span>
-                </div>
+          <div v-else class="planning-chat-flow">
+            <div v-if="!hasConversationStarted && !loading" class="planning-start-card">
+              <div class="planning-start-card__copy">
+                <span class="planning-start-card__role">AI 规划师</span>
+                <strong>先告诉我，你现在最想解决的是什么问题。</strong>
+                <p>不需要一开始就说得很准确。可以先描述你眼前最真实的麻烦、想达成的结果，或者你现在卡住的地方。</p>
               </div>
-              
-              <!-- 紧迫度 -->
-              <div class="understanding-card glass-card" v-if="understanding.urgency">
-                <div class="card-icon">🔥</div>
-                <div class="card-content">
-                  <span class="card-label">紧迫程度</span>
-                  <span class="card-value">{{ urgencyLabel }}</span>
-                </div>
-              </div>
-
-              <div class="understanding-card glass-card" v-if="hasMotivation">
-                <div class="card-icon">💡</div>
-                <div class="card-content">
-                  <span class="card-label">学习动机</span>
-                  <span class="card-value">{{ understanding.motivation }}</span>
-                </div>
+              <div class="planning-start-card__examples">
+                <button
+                  v-for="item in entryPromptExamples"
+                  :key="item"
+                  type="button"
+                  class="planning-start-card__example"
+                  @click="setInput(item)"
+                >
+                  {{ item }}
+                </button>
               </div>
             </div>
-            
-            <!-- 约束标签 -->
-            <div class="understanding-tags" v-if="understanding.background?.constraints?.length">
-              <span class="tag" v-for="c in understanding.background.constraints" :key="c">{{ c }}</span>
-            </div>
-          </div>
-        </div>
-      </transition>
 
-      <!-- 聊天主区域 -->
-      <div class="chat-main" ref="chatMain">
-        <div class="chat-content" ref="chatContent">
-          <!-- 消息列表 -->
-          <div v-for="msg in sortedMessages" :key="msg.id" class="message-group" :class="msg.role">
-            <div class="message-wrapper" :class="msg.role">
-              <!-- AI 头像 -->
-              <div v-if="msg.role === 'ai'" class="avatar ai-avatar">
-                <div class="avatar-icon">🤖</div>
-              </div>
-
-              <div class="message-body">
-                <div class="message-header" :class="{ 'user-header': msg.role === 'user' }">
-                  <span class="sender-name">{{ msg.role === 'ai' ? 'AI 规划师' : '你' }}</span>
-                  <span class="message-time">{{ formatTime(msg.time) }}</span>
+            <div v-if="hasConversationStarted || loading" class="planning-messages" ref="chatContent">
+              <article v-for="msg in sortedMessages" :key="msg.id" class="planning-msg" :class="`planning-msg--${msg.role}`">
+                <div class="planning-msg__meta">
+                  <span class="planning-msg__role">{{ msg.role === 'ai' ? '问流' : '你' }}</span>
+                  <small>{{ formatTime(msg.time) }}</small>
                 </div>
-                <div class="message-bubble" :class="msg.role === 'ai' ? 'ai-bubble glass-card' : 'user-bubble'" v-html="msg.role === 'ai' ? formatMessage(msg.content) : msg.content"></div>
-                
-                <!-- 快速回复卡片 -->
-                <div v-if="msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && !msg.quickRepliesUsed && currentStage !== 'proposing'" class="quick-replies">
-                  <div
+                <p v-html="msg.role === 'ai' ? formatMessage(msg.content) : msg.content"></p>
+
+                <div v-if="msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && !msg.quickRepliesUsed && currentStage !== 'proposing'" class="planning-replies">
+                  <span
                     v-for="(reply, index) in msg.quickReplies"
                     :key="index"
-                    class="quick-reply-card"
-                    :class="{ selected: isQuickReplySelected(reply.text) }"
+                    class="planning-reply-chip"
+                    :class="{ 'planning-reply-chip--selected': isQuickReplySelected(reply.text) }"
                     @click="toggleQuickReplySelection(reply.text, msg.id)"
                   >
-                    <span class="reply-icon" v-if="reply.icon">{{ reply.icon }}</span>
-                    <span class="reply-text">{{ reply.text }}</span>
-                  </div>
+                    {{ reply.text }}
+                  </span>
                 </div>
-                
-                <!-- 重试按钮 -->
-                <div v-if="msg.role === 'ai' && isFailedMessage(msg.content)" class="retry-section">
-                  <button class="retry-btn" @click="retryLastMessage" :disabled="loading">
+
+                <div v-if="msg.role === 'ai' && isFailedMessage(msg.content)" class="planning-msg__retry">
+                  <button class="planning-retry-btn" @click="retryLastMessage" :disabled="loading">
                     <el-icon><RefreshRight /></el-icon>
                     <span>重试</span>
                   </button>
                 </div>
-              </div>
+              </article>
 
-              <!-- 用户头像 -->
-              <div v-if="msg.role === 'user'" class="avatar user-avatar">
-                <div class="avatar-icon">👤</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 加载中 -->
-          <div v-if="loading" class="message-group ai">
-            <div class="message-wrapper ai">
-              <div class="avatar ai-avatar">
-                <div class="avatar-icon">🤖</div>
-              </div>
-              <div class="message-body">
+              <div v-if="loading" class="planning-msg planning-msg--ai">
+                <div class="planning-msg__meta">
+                  <span class="planning-msg__role">问流</span>
+                </div>
                 <div class="typing-indicator glass-card">
                   <span class="typing-dot"></span>
                   <span class="typing-dot"></span>
@@ -199,148 +168,168 @@
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- 底部输入区 -->
-      <!-- 完成后的提示 -->
-      <div class="input-section" v-if="isCompleted && generatedPathStatus !== 'generating'">
-        <div class="completion-banner glass-card">
-          <div class="completion-icon-wrapper">
-            <span class="completion-icon">✨</span>
-          </div>
-          <h3 class="completion-title">问题理解完成！</h3>
-          <p class="completion-subtitle">AI 已经理解你的学习目标，接下来可以查看推荐的学习路径</p>
-          <div class="completion-summary" v-if="understanding.real_problem">
-            <span class="summary-label">🎯 真正要解决的问题：</span>
-            <span class="summary-value">{{ understanding.real_problem }}</span>
-          </div>
-          <div class="completion-actions">
-            <button class="cta-btn" @click="navigateToLearningPath">
-              <span>查看学习路径</span>
-              <el-icon><ArrowRight /></el-icon>
-            </button>
-          </div>
-          <div class="completion-secondary-actions">
-            <button class="text-action-btn" @click="showRegenerateDialog = true">
-              <el-icon><RefreshRight /></el-icon>
-              <span>重新规划</span>
-            </button>
-            <button class="text-action-btn" @click="router.push('/dashboard')">
-              <span>回到学习台</span>
-            </button>
-          </div>
-          </div>
-      </div>
+            <div class="planning-composer" :class="{ 'planning-composer--entry': !hasConversationStarted }">
+              <transition name="slide-up">
+                <div v-if="showProposalActionPanel" class="planning-proposal planning-proposal--pending">
+                  <div class="planning-proposal__head">
+                    <span class="planning-proposal__eyebrow">请确认方向</span>
+                    <strong>确认并生成路径</strong>
+                  </div>
 
-      <div class="input-section" v-else>
-        <div class="input-wrapper glass-card">
-          <!-- 方向确认面板 -->
-          <transition name="slide-up">
-            <div v-if="showProposalActionPanel" class="proposal-action-panel">
-              <div class="proposal-header">
-                <span class="proposal-icon">🎯</span>
-                <h3 class="proposal-title">请确认方向</h3>
-              </div>
-              <div class="proposal-content" v-if="understanding.real_problem">
-                <span class="proposal-label">核心问题：</span>
-                <span class="proposal-value">{{ understanding.real_problem }}</span>
-              </div>
-              <div class="proposal-suggestions" v-if="proposalSuggestions.length > 0">
-                <span class="proposal-suggestion-label">阶段建议：</span>
-                <ul class="proposal-suggestion-list">
-                  <li v-for="(suggestion, idx) in proposalSuggestions" :key="idx">{{ suggestion }}</li>
-                </ul>
-              </div>
-              <div class="proposal-actions">
-                <button class="proposal-btn proposal-btn-primary" @click="handleConfirmProposal" :disabled="loading">
-                  <el-icon v-if="loading"><Loading /></el-icon>
-                  <span>确认并生成路径</span>
-                </button>
-                <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">
-                  <span>继续补充</span>
-                </button>
-              </div>
-            </div>
-          </transition>
+                  <div class="planning-proposal__stages planning-proposal__stages--summary">
+                    <article class="planning-proposal__stage planning-proposal__stage--summary">
+                      <strong>核心问题：</strong>
+                      <p>{{ realProblemText || surfaceGoalText || '还在确认中' }}</p>
+                    </article>
+                    <article v-if="proposalStageHighlights.length > 0" class="planning-proposal__stage planning-proposal__stage--summary">
+                      <strong>阶段建议：</strong>
+                      <div class="planning-proposal__hint-list">
+                        <p v-for="item in proposalStageHighlights" :key="item">{{ item }}</p>
+                      </div>
+                    </article>
+                  </div>
 
-          <!-- 快捷建议 -->
-          <transition name="slide-up">
-            <div v-if="showSuggestions" class="suggestions-section">
-              <div class="suggestions-chips">
-                <div
-                  v-for="suggestion in visibleSuggestions"
-                  :key="suggestion.text"
-                  class="suggestion-chip"
-                  :class="suggestion.type"
-                  @click="setInput(suggestion.text)"
-                >
-                  <span class="chip-icon">{{ suggestion.icon }}</span>
-                  <span class="chip-text">{{ suggestion.text }}</span>
+                  <div class="planning-proposal__actions">
+                    <button class="proposal-btn proposal-btn-primary" @click="handleConfirmProposal" :disabled="loading">
+                      <el-icon v-if="loading"><Loading /></el-icon>
+                      <span>确认并生成路径</span>
+                    </button>
+                    <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">继续补充</button>
+                  </div>
+                </div>
+              </transition>
+
+              <transition name="slide-up">
+                <div v-if="shouldShowUploadPanel" class="planning-upload-panel planning-upload-panel--compact">
+                  <div class="planning-upload-panel__head">
+                    <div>
+                      <span class="planning-section-kicker">补充材料</span>
+                      <h3>可选地补充文件、截图或参考材料。</h3>
+                    </div>
+                    <button
+                      v-if="uploadedFiles.length === 0"
+                      type="button"
+                      class="planning-upload-collapse"
+                      @click="showUploadPanel = false"
+                    >
+                      收起
+                    </button>
+                  </div>
+                  <p class="planning-upload-panel__note">当前只做材料收集，不会自动解析，也不会直接发送给 AI。</p>
+
+                  <input
+                    ref="fileInputRef"
+                    type="file"
+                    class="planning-upload-input"
+                    multiple
+                    :accept="acceptedFileTypes"
+                    @change="handleFileInputChange"
+                  />
+
+                  <button
+                    type="button"
+                    class="planning-upload-dropzone planning-upload-dropzone--compact"
+                    :class="{ 'is-dragging': isDraggingFile }"
+                    @click="openFilePicker"
+                    @dragenter.prevent="handleFileDragEnter"
+                    @dragover.prevent="handleFileDragOver"
+                    @dragleave.prevent="handleFileDragLeave"
+                    @drop.prevent="handleFileDrop"
+                  >
+                    <div class="planning-upload-dropzone__copy">
+                      <strong>{{ isDraggingFile ? '松开后添加到材料列表' : '拖放文件到此处，或点击选择文件' }}</strong>
+                      <span>支持 PDF、DOCX、TXT、MD、CSV、XLSX、PNG、JPG，最大 10MB</span>
+                    </div>
+                  </button>
+
+                  <div v-if="uploadedFiles.length > 0" class="planning-upload-list">
+                    <article v-for="file in uploadedFiles" :key="file.id" class="planning-upload-item">
+                      <div class="planning-upload-item__preview" :class="{ 'is-image': file.previewUrl }">
+                        <img v-if="file.previewUrl" :src="file.previewUrl" :alt="file.name" />
+                        <span v-else>{{ getFileIcon(file) }}</span>
+                      </div>
+
+                      <div class="planning-upload-item__body">
+                        <div class="planning-upload-item__meta">
+                          <strong>{{ file.name }}</strong>
+                          <span>{{ formatFileSize(file.size) }}</span>
+                        </div>
+
+                        <div class="planning-upload-item__status-row">
+                          <span class="planning-upload-status" :class="`planning-upload-status--${file.status}`">
+                            {{ getUploadStatusLabel(file.status) }}
+                          </span>
+                          <span v-if="file.error" class="planning-upload-error">{{ file.error }}</span>
+                        </div>
+                      </div>
+
+                      <div class="planning-upload-item__actions">
+                        <button
+                          v-if="file.status === 'error'"
+                          type="button"
+                          class="planning-upload-action planning-upload-action--retry"
+                          @click.stop="retryUploadedFile(file.id)"
+                        >
+                          重试
+                        </button>
+                        <button
+                          type="button"
+                          class="planning-upload-action planning-upload-action--remove"
+                          @click.stop="removeUploadedFile(file.id)"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </transition>
+
+              <div class="planning-composer__box planning-composer__box--final">
+                <div class="planning-composer__field">
+                  <div v-if="selectedQuickReplies.length > 0" class="planning-composer__selected-tags">
+                    <button
+                      v-for="(item, idx) in selectedQuickReplies"
+                      :key="idx"
+                      type="button"
+                      class="planning-selected-reply planning-selected-reply--dismissible"
+                      @click="toggleQuickReplySelection(item, selectedFromMessageId || undefined)"
+                    >
+                      <span>{{ item }}</span>
+                      <span class="planning-selected-reply__remove">×</span>
+                    </button>
+                  </div>
+                  <textarea
+                    ref="inputField"
+                    v-model="userInput"
+                    @keydown.enter.exact.prevent="sendMessage"
+                    @keydown.enter.shift.exact="inputNewLine"
+                    :placeholder="hasConversationStarted ? '直接回答上面这个问题，或补充任何会影响路径边界的信息...' : '先说说你最近想解决什么，或现在卡在哪里...'"
+                    :disabled="loading"
+                    rows="1"
+                    @input="autoResize"
+                  ></textarea>
                 </div>
                 <button
-                  v-if="suggestions.length > 3"
                   type="button"
-                  class="suggestions-more"
-                  @click="showAllSuggestions = !showAllSuggestions"
+                  class="planning-attach-btn"
+                  :class="{ active: shouldShowUploadPanel }"
+                  @click="showUploadPanel = !showUploadPanel"
                 >
-                  {{ showAllSuggestions ? '收起示例' : `更多示例 +${suggestions.length - 3}` }}
+                  <el-icon><FolderOpened /></el-icon>
                 </button>
-              </div>
-            </div>
-          </transition>
-
-          <!-- 已选快捷回复预览 -->
-          <transition name="slide-up">
-            <div v-if="selectedQuickReplies.length > 0" class="selected-quick-replies-preview">
-              <div class="preview-header">
-                <span class="preview-label">已选（{{ selectedQuickReplies.length }}/{{ MAX_QUICK_REPLY_SELECTION }}）</span>
-                <button class="preview-clear-btn" @click="clearQuickReplySelection">清空</button>
-              </div>
-              <div class="preview-tags">
-                <div
-                  v-for="(item, idx) in selectedQuickReplies"
-                  :key="idx"
-                  class="preview-tag"
-                >
-                  <span class="preview-tag-text">{{ item }}</span>
-                  <span class="preview-tag-remove" @click="toggleQuickReplySelection(item, selectedFromMessageId)">×</span>
-                </div>
-              </div>
-            </div>
-          </transition>
-
-          <!-- 输入框 -->
-          <div class="input-row">
-            <div class="input-container">
-              <textarea
-                ref="inputField"
-                v-model="userInput"
-                @keydown.enter.exact.prevent="sendMessage"
-                @keydown.enter.shift.exact="inputNewLine"
-                placeholder="告诉我你想学什么，或者想解决什么问题..."
-                :disabled="loading"
-                rows="1"
-                @input="autoResize"
-              ></textarea>
-              <div class="input-actions">
-                <button
-                  @click="sendMessage"
-                  :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)"
-                  class="send-btn"
-                >
+                <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
                   <el-icon v-if="loading"><Loading /></el-icon>
                   <el-icon v-else><Promotion /></el-icon>
                 </button>
               </div>
             </div>
           </div>
+        </section>
 
-          </div>
-</div>
-      </div>
-      
+      </section>
+
       <!-- 重新规划对话框 -->
       <el-dialog
         v-model="showRegenerateDialog"
@@ -396,15 +385,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowRight, Loading, Promotion, RefreshRight, HomeFilled, EditPen, FolderOpened, User, Switch, Delete } from '@element-plus/icons-vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
+import { ArrowRight, Loading, Promotion, RefreshRight, User, Switch, Delete } from '@element-plus/icons-vue';
 import { useUserStore } from '../stores/user';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import MarkdownIt from 'markdown-it';
+import type { GoalConversationEnvelope } from '@/api/goalConversation';
 import {
   deleteGoalConversation,
+  getGoalConversation,
   regenerateGoalConversation,
   replyGoalConversation,
   startGoalConversation
@@ -416,9 +407,13 @@ const md = new MarkdownIt({
   breaks: true
 });
 
+const ACTIVE_GOAL_CONVERSATION_KEY = 'active_goal_conversation_id';
+
 const headerScrolled = ref(false);
+const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 
 const handleLogout = async () => {
   try {
@@ -428,7 +423,7 @@ const handleLogout = async () => {
       type: 'warning'
     });
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // 用户取消
@@ -437,6 +432,7 @@ const handleLogout = async () => {
 
 const chatContent = ref<HTMLElement | null>(null);
 const inputField = ref<HTMLTextAreaElement | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
 const userInput = ref('');
 const loading = ref(false);
 const conversationId = ref('');
@@ -450,6 +446,7 @@ const regenerateAdjustments = ref('');
 const regenerating = ref(false);
 const showUnderstandingExpanded = ref(false);
 const showAllSuggestions = ref(false);
+const showUploadPanel = ref(false);
 const confidence = ref(0);
 const lastUserMessage = ref('');
 const realProblemConfirmed = ref(false);
@@ -457,6 +454,36 @@ const realProblemConfirmed = ref(false);
 const MAX_QUICK_REPLY_SELECTION = 4;
 const selectedQuickReplies = ref<string[]>([]);
 const selectedFromMessageId = ref<string | null>(null);
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+const acceptedMimeTypes = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/png',
+  'image/jpeg'
+];
+const acceptedExtensions = ['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx', 'png', 'jpg', 'jpeg'];
+const acceptedFileTypes = '.pdf,.docx,.txt,.md,.csv,.xlsx,.png,.jpg,.jpeg';
+const isDraggingFile = ref(false);
+
+type PlanningUploadStatus = 'ready' | 'error';
+
+interface PlanningUploadFile {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  progress: number;
+  status: PlanningUploadStatus;
+  error?: string;
+  previewUrl?: string;
+}
+
+const uploadedFiles = ref<PlanningUploadFile[]>([]);
 
 const isQuickReplySelected = (text: string) => {
   return selectedQuickReplies.value.includes(text);
@@ -464,6 +491,7 @@ const isQuickReplySelected = (text: string) => {
 
 const toggleQuickReplySelection = (text: string, messageId?: string) => {
   if (loading.value) return;
+  const previousCombined = selectedQuickReplies.value.join('、');
   
   if (messageId && selectedFromMessageId.value && selectedFromMessageId.value !== messageId) {
     selectedQuickReplies.value = [];
@@ -479,16 +507,158 @@ const toggleQuickReplySelection = (text: string, messageId?: string) => {
     selectedQuickReplies.value.splice(idx, 1);
   } else {
     if (selectedQuickReplies.value.length >= MAX_QUICK_REPLY_SELECTION) {
-      ElMessage.warning(`最多选择 ${MAX_QUICK_REPLY_SELECTION} 项`);
+      toast.warning(`最多选择 ${MAX_QUICK_REPLY_SELECTION} 项`);
       return;
     }
     selectedQuickReplies.value.push(text);
+  }
+
+  if (userInput.value.trim() === previousCombined || userInput.value.trim() === selectedQuickReplies.value.join('、')) {
+    userInput.value = '';
   }
 };
 
 const clearQuickReplySelection = () => {
   selectedQuickReplies.value = [];
   selectedFromMessageId.value = null;
+};
+
+const createUploadId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const getFileExtension = (file: File) => {
+  const ext = file.name.split('.').pop();
+  return ext ? ext.toLowerCase() : '';
+};
+
+const validateFile = (file: File) => {
+  const extension = getFileExtension(file);
+  const isMimeAccepted = acceptedMimeTypes.includes(file.type);
+  const isExtAccepted = acceptedExtensions.includes(extension);
+
+  if (!isMimeAccepted && !isExtAccepted) {
+    return '暂不支持该文件类型';
+  }
+
+  if (file.size > MAX_UPLOAD_SIZE) {
+    return '文件不能超过 10MB';
+  }
+
+  return null;
+};
+
+const createPreviewUrl = (file: File) => {
+  if (file.type.startsWith('image/')) {
+    return URL.createObjectURL(file);
+  }
+  return undefined;
+};
+
+const addFiles = (files: File[]) => {
+  files.forEach((file) => {
+    const error = validateFile(file);
+    const uploadFile: PlanningUploadFile = {
+      id: createUploadId(),
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      progress: error ? 0 : 100,
+      status: error ? 'error' : 'ready',
+      error: error || undefined,
+      previewUrl: createPreviewUrl(file)
+    };
+
+    uploadedFiles.value.push(uploadFile);
+
+    if (error) {
+      toast.warning(`${file.name}：${error}`);
+    }
+  });
+};
+
+const openFilePicker = () => {
+  fileInputRef.value?.click();
+};
+
+const handleFileInputChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const files = Array.from(target.files || []);
+  if (files.length > 0) {
+    addFiles(files);
+  }
+  target.value = '';
+};
+
+const handleFileDragEnter = () => {
+  isDraggingFile.value = true;
+};
+
+const handleFileDragOver = () => {
+  isDraggingFile.value = true;
+};
+
+const handleFileDragLeave = (event: DragEvent) => {
+  const currentTarget = event.currentTarget as HTMLElement | null;
+  const relatedTarget = event.relatedTarget as Node | null;
+  if (!currentTarget || !relatedTarget || !currentTarget.contains(relatedTarget)) {
+    isDraggingFile.value = false;
+  }
+};
+
+const handleFileDrop = (event: DragEvent) => {
+  isDraggingFile.value = false;
+  const files = Array.from(event.dataTransfer?.files || []);
+  if (files.length > 0) {
+    addFiles(files);
+  }
+};
+
+const revokePreviewUrl = (previewUrl?: string) => {
+  if (previewUrl) {
+    URL.revokeObjectURL(previewUrl);
+  }
+};
+
+const removeUploadedFile = (id: string) => {
+  const target = uploadedFiles.value.find((item) => item.id === id);
+  if (target) {
+    revokePreviewUrl(target.previewUrl);
+  }
+  uploadedFiles.value = uploadedFiles.value.filter((item) => item.id !== id);
+};
+
+const retryUploadedFile = (id: string) => {
+  const target = uploadedFiles.value.find((item) => item.id === id);
+  if (!target) return;
+
+  const error = validateFile(target.file);
+  target.error = error || undefined;
+  target.status = error ? 'error' : 'ready';
+  target.progress = error ? 0 : 100;
+
+  if (error) {
+    toast.warning(`${target.name}：${error}`);
+  }
+};
+
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getUploadStatusLabel = (status: PlanningUploadStatus) => {
+  if (status === 'ready') return '待解析';
+  return '校验失败';
+};
+
+const getFileIcon = (file: PlanningUploadFile) => {
+  if (file.type.startsWith('image/')) return '🖼';
+  const extension = getFileExtension(file.file);
+  if (extension === 'pdf') return '📕';
+  if (extension === 'docx') return '📘';
+  if (extension === 'csv' || extension === 'xlsx') return '📊';
+  return '📄';
 };
 
 const composeQuickReplyPayload = () => {
@@ -530,8 +700,32 @@ interface Message {
   quickRepliesUsed?: boolean;
 }
 
+interface WorkbenchInfoItem {
+  label: string;
+  value: string;
+  note?: string;
+}
+
+interface WorkbenchPendingItem {
+  title: string;
+  desc: string;
+  emphasis?: 'question' | 'missing';
+}
+
+interface ConversationRound {
+  id: string;
+  userText: string;
+  aiText: string;
+  time: string;
+}
+
 const aiMessages = ref<Message[]>([]);
 const userMessages = ref<Message[]>([]);
+const nextQuestions = ref<string[]>([]);
+const collectedData = ref<Record<string, any>>({});
+const structuredData = ref<Record<string, any> | null>(null);
+const confirmedProposal = ref<Record<string, any> | null>(null);
+const confidenceScores = ref<Record<string, any> | null>(null);
 
 const sortedMessages = computed(() => {
   const allMessages = [...aiMessages.value, ...userMessages.value];
@@ -543,7 +737,7 @@ const sortedMessages = computed(() => {
 });
 
 const stages = {
-  understanding: { label: '理解问题中', color: 'info' },
+  understanding: { label: '理解中', color: 'info' },
   proposing: { label: '方案确认中', color: 'warning' },
   ready: { label: '理解完成', color: 'success' },
   completed: { label: '已生成路径', color: 'success' }
@@ -560,11 +754,30 @@ const suggestions = [
 
 const stageLabel = computed(() => stages[currentStage.value]?.label || '交流中');
 const stageBadgeClass = computed(() => `stage-${stages[currentStage.value]?.color || 'info'}`);
-const confidenceClass = computed(() => {
-  if (confidence.value >= 0.7) return 'high';
-  if (confidence.value >= 0.4) return 'medium';
-  return 'low';
+
+const currentAiMessage = computed(() => aiMessages.value[aiMessages.value.length - 1] || null);
+const activeQuickReplyMessage = computed(() => {
+  for (let i = aiMessages.value.length - 1; i >= 0; i--) {
+    const msg = aiMessages.value[i];
+    if (msg.quickReplies?.length && !msg.quickRepliesUsed) {
+      return msg;
+    }
+  }
+
+  return null;
 });
+const activeQuickReplyMessageId = computed(() => activeQuickReplyMessage.value?.id);
+const activeQuickReplies = computed(() => {
+  if (currentStage.value === 'proposing' || isCompleted.value) {
+    return [] as QuickReply[];
+  }
+
+  return activeQuickReplyMessage.value?.quickReplies || [];
+});
+
+const hasConversationStarted = computed(() => Boolean(conversationId.value || userMessages.value.length > 0 || loading.value));
+const showPlanningSidePanels = computed(() => hasConversationStarted.value);
+const shouldShowUploadPanel = computed(() => showUploadPanel.value || uploadedFiles.value.length > 0);
 
 const showSuggestions = computed(() => {
   return currentStage.value === 'understanding' && aiMessages.value.length <= 1 && !isCompleted.value;
@@ -573,6 +786,8 @@ const showSuggestions = computed(() => {
 const visibleSuggestions = computed(() => {
   return showAllSuggestions.value ? suggestions : suggestions.slice(0, 3);
 });
+
+const entryPromptExamples = computed(() => suggestions.slice(0, 3).map((item) => item.text));
 
 const showUnderstandingPanel = computed(() => {
   const hasUnderstanding = isValidValue(understanding.value.surface_goal) ||
@@ -600,40 +815,355 @@ const isValidValue = (value: any): boolean => {
   return true;
 };
 
-// 面板标题和副标题
-const panelTitle = computed(() => {
-  if (currentStage.value === 'proposing') return '方案确认中';
-  if (currentStage.value === 'ready') return '理解完成';
-  return '问题理解中';
+const toPlainText = (text: string) => {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[.*?\]\(.*?\)/g, ' ')
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    .replace(/[*_`>#-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const clipText = (text: string, maxLength = 120) => {
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+};
+
+const getValidText = (...values: any[]): string => {
+  for (const value of values) {
+    if (typeof value === 'string' && isValidValue(value)) {
+      return value.trim();
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return '';
+};
+
+const toTextArray = (value: any): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'number') return String(item);
+        return '';
+      })
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  if (typeof value === 'string' && isValidValue(value)) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const uniqueTextList = (items: string[]) => {
+  return Array.from(new Set(items.map((item) => item.trim()).filter((item) => item.length > 0)));
+};
+
+const extractQuestionFromText = (text: string) => {
+  const matches = text.match(/[^。！？!?]*[？?]/g);
+  if (!matches || matches.length === 0) return '';
+  return matches[matches.length - 1].replace(/\s+/g, ' ').trim();
+};
+
+const surfaceGoalText = computed(() => getValidText(
+  understanding.value.surface_goal,
+  collectedData.value.surface_goal
+));
+
+const realProblemText = computed(() => getValidText(
+  understanding.value.real_problem,
+  collectedData.value.real_problem,
+  surfaceGoalText.value
+));
+
+const motivationText = computed(() => getValidText(
+  understanding.value.motivation,
+  collectedData.value.motivation
+));
+
+const painPointText = computed(() => getValidText(
+  understanding.value.pain_points,
+  collectedData.value.pain_points
+));
+
+const urgencyText = computed(() => getValidText(
+  understanding.value.urgency,
+  collectedData.value.urgency
+));
+
+const currentBaselineText = computed(() => getValidText(
+  understanding.value.background?.current_level,
+  understanding.value.current_baseline?.level,
+  collectedData.value.level
+));
+
+const baselineEvidenceText = computed(() => getValidText(understanding.value.current_baseline?.evidence));
+
+const availableTimeText = computed(() => getValidText(
+  understanding.value.background?.available_time,
+  understanding.value.available_resources?.time_budget,
+  understanding.value.available_resources?.time_horizon,
+  collectedData.value.timePerDay
+));
+
+const expectedTimeText = computed(() => getValidText(
+  understanding.value.success_criteria?.time_window,
+  understanding.value.background?.expected_time,
+  understanding.value.available_resources?.time_horizon,
+  collectedData.value.expected_time
+));
+
+const firstDeliverableText = computed(() => getValidText(
+  understanding.value.success_criteria?.observable_result,
+  understanding.value.success_criteria?.acceptance_check,
+  confirmedProposal.value?.first_deliverable,
+  confirmedProposal.value?.learning_direction
+));
+
+const constraintChips = computed(() => uniqueTextList([
+  ...toTextArray(understanding.value.constraints_and_boundaries),
+  ...toTextArray(understanding.value.background?.constraints),
+  ...toTextArray(collectedData.value.background?.constraints)
+]).slice(0, 6));
+
+const successCriteriaTexts = computed(() => uniqueTextList([
+  ...toTextArray(understanding.value.success_criteria?.observable_result),
+  ...toTextArray(understanding.value.success_criteria?.acceptance_check),
+  ...toTextArray(understanding.value.success_criteria?.time_window)
+]));
+
+const outOfScopeTexts = computed(() => {
+  const explicit = constraintChips.value.filter((item) => /(暂不|先不|不要|不做|不处理|不包含|避免)/.test(item));
+  if (explicit.length > 0) {
+    return explicit.slice(0, 2);
+  }
+
+  return constraintChips.value.slice(0, 2);
 });
 
-const panelSubtitle = computed(() => {
-  if (currentStage.value === 'proposing') return '请确认学习方向是否正确';
-  if (currentStage.value === 'ready') return '可以生成学习路径了';
-  return 'AI 正在分析你的学习目标';
+const proposalKeyStages = computed(() => uniqueTextList(toTextArray(confirmedProposal.value?.key_stages)));
+
+const confirmedSignals = computed<WorkbenchInfoItem[]>(() => {
+  const items: WorkbenchInfoItem[] = [
+    {
+      label: '核心问题',
+      value: realProblemText.value || surfaceGoalText.value,
+      note: '路径会围绕这件真实问题展开，不再停留在泛泛目标。'
+    },
+    {
+      label: '当前基础',
+      value: [currentBaselineText.value, baselineEvidenceText.value].filter(Boolean).join(' · '),
+      note: '这会决定第一步是补基础还是直接做最小实践。'
+    },
+    {
+      label: '可用时间',
+      value: [availableTimeText.value, expectedTimeText.value]
+        .filter((item, index, array) => item && array.indexOf(item) === index)
+        .join(' · '),
+      note: '时间窗口会直接影响任务颗粒度和路径长度。'
+    },
+    {
+      label: '为什么现在要学',
+      value: motivationText.value,
+      note: '先保留最值得现在就推进的部分。'
+    },
+    {
+      label: '成功标志',
+      value: successCriteriaTexts.value[0] || firstDeliverableText.value,
+      note: '第一版路径会围绕这个可观察结果来生成。'
+    }
+  ].filter((item) => item.value);
+
+  if (items.length === 0) {
+    return [{
+      label: '当前状态',
+      value: '先说最近卡住的一件事，我会从中提取目标、基础、时间和边界。',
+      note: '开始后，每一轮确认的内容都会沉淀到这里。'
+    }];
+  }
+
+  return items.slice(0, 5);
 });
 
-// 过滤后的有效数据
-const hasRealProblem = computed(() => isValidValue(understanding.value.real_problem));
-const hasMotivation = computed(() => isValidValue(understanding.value.motivation));
-const hasLevel = computed(() => isValidValue(understanding.value.background?.current_level));
+const collectedInfoItems = computed<WorkbenchInfoItem[]>(() => {
+  const items: WorkbenchInfoItem[] = [];
 
-const urgencyLabel = computed(() => {
-  const urgency = understanding.value.urgency;
-  if (urgency === '高') return '🔥 紧急';
-  if (urgency === '中') return '⏳ 适中';
-  if (urgency === '低') return '📅 不急';
-  return urgency;
+  if (realProblemText.value) {
+    items.push({ label: '核心问题', value: realProblemText.value });
+  }
+
+  if (motivationText.value) {
+    items.push({ label: '为什么现在要学', value: motivationText.value });
+  }
+
+  if (currentBaselineText.value) {
+    items.push({ label: '当前基础', value: currentBaselineText.value });
+  }
+
+  if (availableTimeText.value) {
+    items.push({ label: '可用时间', value: availableTimeText.value });
+  }
+
+  return items;
 });
 
-const understandingHeadline = computed(() => {
-  if (hasRealProblem.value) return `真正问题：${understanding.value.real_problem}`;
-  if (understanding.value.surface_goal) return `当前目标：${understanding.value.surface_goal}`;
-  return 'AI 正在整理你的学习目标';
+const normalizedUrgencyText = computed(() => {
+  const value = urgencyText.value;
+  if (!value) return '';
+  if (/(高|紧急|尽快|马上|迫切)/.test(value)) return '较高';
+  if (/(低|不急|以后|慢慢)/.test(value)) return '较低';
+  if (/(中|适中|一般)/.test(value)) return '适中';
+  return value;
 });
 
-const showProposalHint = computed(() => {
-  return currentStage.value === 'proposing';
+const understandingSummaryCards = computed(() => {
+  return [
+    { label: '真实问题', value: realProblemText.value || surfaceGoalText.value },
+    { label: '当前水平', value: currentBaselineText.value },
+    { label: '期望周期', value: expectedTimeText.value },
+    { label: '可用时间', value: availableTimeText.value },
+    { label: '核心痛点', value: painPointText.value },
+    { label: '紧迫程度', value: normalizedUrgencyText.value },
+    { label: '学习动机', value: motivationText.value }
+  ].filter((item) => item.value);
+});
+
+const pendingClarificationItems = computed<WorkbenchPendingItem[]>(() => {
+  const items: WorkbenchPendingItem[] = [];
+
+  nextQuestions.value.slice(0, 2).forEach((question, index) => {
+    items.push({
+      title: index === 0 ? '当前关键问题' : `后续待确认 ${index + 1}`,
+      desc: question,
+      emphasis: 'question'
+    });
+  });
+
+  if (!surfaceGoalText.value) {
+    items.push({
+      title: '表面目标还不够明确',
+      desc: '先用一句话说清你现在最想学什么，或想解决什么。',
+      emphasis: 'missing'
+    });
+  }
+
+  if (!realProblemText.value || realProblemText.value === surfaceGoalText.value) {
+    items.push({
+      title: '真实问题还没落到场景',
+      desc: '需要把“想学什么”进一步落到真实场景、阻碍和影响上。',
+      emphasis: 'missing'
+    });
+  }
+
+  if (!currentBaselineText.value) {
+    items.push({
+      title: '当前基础还没校准',
+      desc: '确认你现在会到什么程度，才能判断第一版应该先补概念还是先做最小实践。',
+      emphasis: 'missing'
+    });
+  }
+
+  if (!availableTimeText.value) {
+    items.push({
+      title: '可投入资源还不够清楚',
+      desc: '每天或每周能投入多少时间，会直接决定路径颗粒度。',
+      emphasis: 'missing'
+    });
+  }
+
+  if (!constraintChips.value.length) {
+    items.push({
+      title: '边界条件还没收齐',
+      desc: '哪些不能接受、哪些暂不处理，会直接影响第一版路径的范围。',
+      emphasis: 'missing'
+    });
+  }
+
+  if (!firstDeliverableText.value) {
+    items.push({
+      title: '第一版交付目标还没明确',
+      desc: '先确认第一次最小结果是什么，避免一开始就把目标做大。',
+      emphasis: 'missing'
+    });
+  }
+
+  const deduped = items.filter((item, index, array) => {
+    return array.findIndex((candidate) => candidate.title === item.title && candidate.desc === item.desc) === index;
+  });
+
+  if (deduped.length === 0) {
+    return [{
+      title: '已具备生成条件',
+      desc: '核心问题、基础、时间和边界已经足够清楚，可以先确认方向后生成第一版路径。',
+      emphasis: 'question'
+    }];
+  }
+
+  return deduped;
+});
+
+const pathBoundaryItems = computed<WorkbenchInfoItem[]>(() => [
+  {
+    label: '核心问题',
+    value: realProblemText.value || '还在继续澄清中'
+  },
+  {
+    label: '当前基础',
+    value: [currentBaselineText.value, baselineEvidenceText.value].filter(Boolean).join(' · ') || '还在确认中'
+  },
+  {
+    label: '可用时间',
+    value: [availableTimeText.value, expectedTimeText.value]
+      .filter((item, index, array) => item && array.indexOf(item) === index)
+      .join(' · ') || '还在确认中'
+  },
+  {
+    label: '第一版交付目标',
+    value: firstDeliverableText.value || '先确认第一次最小结果，再进入路径生成'
+  },
+  {
+    label: '暂不处理的内容',
+    value: outOfScopeTexts.value[0] || '先不把目标扩成完整系统，优先围绕最小可用结果生成第一版路径。'
+  }
+]);
+
+const proposalConfirmationItems = computed(() => pathBoundaryItems.value);
+
+const currentAiPlainText = computed(() => currentAiMessage.value ? toPlainText(currentAiMessage.value.content) : '');
+const currentQuestionText = computed(() => {
+  const nextQuestion = nextQuestions.value.find((question) => question.trim().length > 0);
+  if (nextQuestion) {
+    return nextQuestion.trim();
+  }
+
+  const extracted = extractQuestionFromText(currentAiPlainText.value);
+  if (extracted) {
+    return extracted;
+  }
+
+  if (!conversationId.value) {
+    return '你最近最想解决的一件事是什么？';
+  }
+
+  return '这件事里现在最关键、最需要先确认的一点是什么？';
+});
+
+const currentAiSummaryText = computed(() => {
+  if (!currentAiPlainText.value) return '';
+
+  if (currentQuestionText.value && currentAiPlainText.value.includes(currentQuestionText.value)) {
+    return clipText(currentAiPlainText.value.replace(currentQuestionText.value, '').trim(), 180);
+  }
+
+  return clipText(currentAiPlainText.value, 180);
 });
 
 const showProposalActionPanel = computed(() => {
@@ -651,6 +1181,11 @@ const proposalSuggestions = computed(() => {
   return suggestions.slice(0, 2);
 });
 
+const proposalStageHighlights = computed(() => uniqueTextList([
+  ...proposalKeyStages.value,
+  ...proposalSuggestions.value
+]).slice(0, 4));
+
 const handleConfirmProposal = async () => {
   await confirmProposal('确认，生成路径');
 };
@@ -663,11 +1198,194 @@ const handleContinueSupplement = () => {
 };
 
 const inputHint = computed(() => {
-  if (currentStage.value === 'proposing') return '确认方案方向，或提出调整建议';
-  if (!understanding.value.surface_goal) return '描述你想学什么，或想解决什么问题';
-  if (!understanding.value.real_problem) return 'AI 正在理解你的真实需求...';
-  return '分享更多细节，帮助 AI 更好地规划';
+  if (currentStage.value === 'proposing') return '先确认方向是否正确，或继续补边界';
+  if (!conversationId.value) return '先说现状，我来帮你收窄。';
+  if (nextQuestions.value.length > 0) return `当前聚焦：${nextQuestions.value[0]}`;
+  if (!realProblemText.value) return '先把真实问题说具体，路径才不会变空';
+  return '补充这一轮信息，帮助系统决定下一步如何追问';
 });
+
+const topbarDescription = computed(() => {
+  if (isCompleted.value || generatedPathStatus.value === 'generated') {
+    return '已经把问题收敛到可执行范围，现在可以直接查看这次生成的学习路径。';
+  }
+
+  if (currentStage.value === 'proposing') {
+    return '先把问题说清楚，再决定第一步怎么开始。';
+  }
+
+  return '先把混乱说出来，再把问题理清楚。';
+});
+
+const topbarPill = computed(() => {
+  if (isCompleted.value || generatedPathStatus.value === 'generated') return '可查看路径';
+  if (currentStage.value === 'proposing') return '待确认';
+  return '规划中';
+});
+
+const topbarPrimaryActionLabel = computed(() => {
+  if (generatedPathStatus.value === 'generating') return '路径生成中';
+  return '查看生成路径';
+});
+
+const canShowTopbarPrimaryAction = computed(() => {
+  return Boolean(generatedPathId.value) && generatedPathStatus.value !== 'failed';
+});
+
+const planningConfidencePercent = computed(() => Math.max(0, Math.min(100, Math.round(confidence.value * 100))));
+
+const activePlanningStageLabel = computed(() => {
+  if (isCompleted.value || currentStage.value === 'completed' || currentStage.value === 'ready') return '可生成路径';
+  if (currentStage.value === 'proposing') return '理解中';
+  return '识别问题中';
+});
+
+const readStoredConversationId = () => {
+  return localStorage.getItem(ACTIVE_GOAL_CONVERSATION_KEY) || '';
+};
+
+const writeStoredConversationId = (id: string) => {
+  if (!id) {
+    localStorage.removeItem(ACTIVE_GOAL_CONVERSATION_KEY);
+    return;
+  }
+
+  localStorage.setItem(ACTIVE_GOAL_CONVERSATION_KEY, id);
+};
+
+const syncConversationRoute = (id: string) => {
+  const normalized = id.trim();
+  const currentRouteId = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
+
+  if (normalized === currentRouteId) {
+    return;
+  }
+
+  router.replace(normalized ? `/goal-conversation/${normalized}` : '/goal-conversation');
+};
+
+const mapStoredMessage = (message: any, index: number): Message | null => {
+  if (!message || (message.role !== 'user' && message.role !== 'ai')) {
+    return null;
+  }
+
+  return {
+    id: `${message.role}-${message.time || index}`,
+    role: message.role,
+    content: String(message.content || ''),
+    time: message.time ? new Date(message.time) : new Date(),
+    quickReplies: [],
+    quickRepliesUsed: true
+  };
+};
+
+const syncConversationState = (response: GoalConversationEnvelope) => {
+  const core = response.internal.core;
+  const goalExt = response.internal.ext.goalConversation;
+
+  conversationId.value = core.conversationId || conversationId.value;
+  currentStage.value = core.stage || currentStage.value;
+  confidence.value = typeof core.confidence === 'number' ? core.confidence : confidence.value;
+  isCompleted.value = !!core.isCompleted;
+  conversationComplete.value = !!core.isCompleted;
+
+  nextQuestions.value = Array.isArray(goalExt.nextQuestions)
+    ? goalExt.nextQuestions.filter((item) => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  collectedData.value = goalExt.collected || {};
+
+  if (goalExt.understanding) {
+    understanding.value = { ...understanding.value, ...goalExt.understanding };
+  }
+
+  structuredData.value = goalExt.structuredData || structuredData.value;
+  confidenceScores.value = goalExt.confidenceScores || confidenceScores.value;
+
+  if (goalExt.confirmedProposal) {
+    confirmedProposal.value = goalExt.confirmedProposal;
+  } else if (core.stage === 'understanding') {
+    confirmedProposal.value = null;
+  }
+
+  if (core.learningPath) {
+    generatedPathId.value = core.learningPath.id;
+    generatedPathStatus.value = core.learningPath.status || null;
+  }
+
+  if (conversationId.value) {
+    writeStoredConversationId(conversationId.value);
+    syncConversationRoute(conversationId.value);
+  }
+};
+
+const syncConversationHistory = (messages: any[] = []) => {
+  const mappedMessages = messages
+    .map((message, index) => mapStoredMessage(message, index))
+    .filter((message): message is Message => Boolean(message));
+
+  aiMessages.value = mappedMessages.filter((message) => message.role === 'ai');
+  userMessages.value = mappedMessages.filter((message) => message.role === 'user');
+
+};
+
+const hydrateConversation = (response: GoalConversationEnvelope, options?: { messages?: any[] }) => {
+  syncConversationState(response);
+
+  if (options?.messages) {
+    syncConversationHistory(options.messages);
+  }
+};
+
+const restoreConversation = async (targetConversationId?: string) => {
+  const routeConversationId = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
+  const storedId = (targetConversationId || routeConversationId).trim();
+  if (!storedId) return;
+
+  loading.value = true;
+  try {
+    const response = await getGoalConversation(storedId);
+    hydrateConversation(response, {
+      messages: response.meta.messages
+    });
+    await scrollToBottom();
+  } catch (error: any) {
+    writeStoredConversationId('');
+    if (error?.response?.status !== 404) {
+      toast.error(error.message || '恢复对话失败，请稍后重试');
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+const resetLocalConversationState = () => {
+  understanding.value = {};
+  nextQuestions.value = [];
+  collectedData.value = {};
+  structuredData.value = null;
+  confirmedProposal.value = null;
+  confidenceScores.value = null;
+  showUnderstandingExpanded.value = false;
+  showAllSuggestions.value = false;
+  realProblemConfirmed.value = false;
+  confidence.value = 0;
+  currentStage.value = 'understanding';
+  conversationId.value = '';
+  conversationComplete.value = false;
+  isCompleted.value = false;
+  generatedPathId.value = null;
+  generatedPathStatus.value = null;
+  showUploadPanel.value = false;
+  userInput.value = '';
+  lastUserMessage.value = '';
+  clearQuickReplySelection();
+  aiMessages.value = [];
+  userMessages.value = [];
+  uploadedFiles.value.forEach((file) => revokePreviewUrl(file.previewUrl));
+  uploadedFiles.value = [];
+  writeStoredConversationId('');
+  syncConversationRoute('');
+};
 
 const formatMessage = (text: string) => md.render(text);
 const formatTime = (date: Date | string) => {
@@ -702,17 +1420,13 @@ const navigateToLearningPath = () => {
         conversationId.value,
         regenerateAdjustments.value || undefined
       );
-      const core = response.internal.core;
-      if (core.learningPath) {
-        generatedPathId.value = core.learningPath.id;
-        generatedPathStatus.value = core.learningPath.status || null;
-      }
-      ElMessage.success(response.userVisible || '学习路径已重新生成！');
+      syncConversationState(response);
+      toast.success(response.userVisible || '学习路径已重新生成！');
       showRegenerateDialog.value = false;
       regenerateAdjustments.value = '';
     } catch (error: any) {
       console.error('重新生成路径失败:', error);
-      ElMessage.error(error.message || '重新生成失败，请重试');
+      toast.error(error.message || '重新生成失败，请重试');
     } finally {
       regenerating.value = false;
     }
@@ -735,27 +1449,10 @@ const navigateToLearningPath = () => {
         await deleteGoalConversation(conversationId.value);
       }
 
-      // 重置所有状态
-      understanding.value = {};
-      showUnderstandingExpanded.value = false;
-      showAllSuggestions.value = false;
-      realProblemConfirmed.value = false;
-      confidence.value = 0;
-      currentStage.value = 'understanding';
-      conversationId.value = '';
-      conversationComplete.value = false;
-      generatedPathId.value = null;
-      generatedPathStatus.value = null;
-      aiMessages.value = [{
-        id: 'welcome',
-        role: 'ai',
-        content: '好的，让我们重新开始！👋\n\n**告诉我你想学什么，我来帮你找到真正要解决的问题。**',
-        time: new Date()
-      }];
-      userMessages.value = [];
+      resetLocalConversationState();
       showRegenerateDialog.value = false;
 
-      ElMessage.success('已重置，请重新描述你的学习目标');
+      toast.success('已重置，请重新描述你的学习目标');
     } catch {
       // 用户取消
     }
@@ -781,7 +1478,7 @@ const retryLastMessage = async () => {
 
   const confirmRealProblem = () => {
     realProblemConfirmed.value = true;
-    ElMessage.success('已确认，继续描述你的需求');
+    toast.success('已确认，继续描述你的需求');
   };
 
   const resetConversation = async () => {
@@ -791,26 +1488,10 @@ const retryLastMessage = async () => {
         cancelButtonText: '取消',
         type: 'warning'
       });
+
+      resetLocalConversationState();
       
-      understanding.value = {};
-      showUnderstandingExpanded.value = false;
-      showAllSuggestions.value = false;
-      realProblemConfirmed.value = false;
-      confidence.value = 0;
-      currentStage.value = 'understanding';
-      conversationId.value = '';
-      conversationComplete.value = false;
-      generatedPathId.value = null;
-      generatedPathStatus.value = null;
-      aiMessages.value = [{
-        id: 'welcome',
-        role: 'ai',
-        content: '好的，让我们重新开始！👋\n\n**告诉我你想学什么，我来帮你找到真正要解决的问题。**',
-        time: new Date()
-      }];
-      userMessages.value = [];
-      
-      ElMessage.info('已清空，请重新描述你的学习目标');
+      toast.info('已清空，请重新描述你的学习目标');
     } catch {
       // 用户取消
     }
@@ -853,16 +1534,7 @@ const startConversation = async (goal: string) => {
   loading.value = true;
   try {
     const response = await startGoalConversation(goal);
-    const core = response.internal.core;
-    const goalExt = response.internal.ext.goalConversation;
-
-    conversationId.value = core.conversationId || '';
-    currentStage.value = core.stage || 'understanding';
-    confidence.value = core.confidence || 0;
-
-    if (goalExt.understanding) {
-      understanding.value = { ...goalExt.understanding };
-    }
+    syncConversationState(response);
 
     aiMessages.value.push({
       id: Date.now().toString(),
@@ -875,7 +1547,7 @@ const startConversation = async (goal: string) => {
     scrollToBottom();
   } catch (error: any) {
     console.error('开始对话失败:', error);
-    ElMessage.error(error.message || '开始对话失败，请稍后重试');
+    toast.error(error.message || '开始对话失败，请稍后重试');
   } finally {
     loading.value = false;
   }
@@ -945,16 +1617,7 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
 
     loading.value = true;
     const response = await replyGoalConversation(conversationId.value, confirmText);
-    const core = response.internal.core;
-    const goalExt = response.internal.ext.goalConversation;
-
-    currentStage.value = core.stage;
-    confidence.value = core.confidence || confidence.value;
-    isCompleted.value = core.isCompleted;
-
-    if (goalExt.understanding) {
-      understanding.value = { ...understanding.value, ...goalExt.understanding };
-    }
+    syncConversationState(response);
 
     aiMessages.value.push({
       id: Date.now().toString(),
@@ -965,18 +1628,13 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
       quickRepliesUsed: false
     });
 
-    if (core.learningPath) {
-      generatedPathId.value = core.learningPath.id;
-      generatedPathStatus.value = core.learningPath.status || null;
-    }
-
     scrollToBottom();
 
     // 确认按钮点击后必定跳转学习路径页（强兜底，不依赖 stage/learningPath）
     router.push('/learning-paths?from=goal&auto=1');
   } catch (error: any) {
     console.error('确认方案失败:', error);
-    ElMessage.error(error.message || '确认失败，请重试');
+    toast.error(error.message || '确认失败，请重试');
   } finally {
     loading.value = false;
   }
@@ -986,16 +1644,7 @@ const sendMessageInternal = async (content: string) => {
   loading.value = true;
   try {
     const response = await replyGoalConversation(conversationId.value, content);
-    const core = response.internal.core;
-    const goalExt = response.internal.ext.goalConversation;
-
-    currentStage.value = core.stage;
-    confidence.value = core.confidence || confidence.value;
-    isCompleted.value = core.isCompleted;
-
-    if (goalExt.understanding) {
-      understanding.value = { ...understanding.value, ...goalExt.understanding };
-    }
+    syncConversationState(response);
     aiMessages.value.push({
       id: Date.now().toString(),
       role: 'ai',
@@ -1004,19 +1653,15 @@ const sendMessageInternal = async (content: string) => {
       quickReplies: response.renderHints.quickReplies,
       quickRepliesUsed: false
     });
-    if (core.isCompleted) {
-      ElMessage.success('问题理解完成！');
-      conversationComplete.value = true;
-      if (core.learningPath) {
-        generatedPathId.value = core.learningPath.id;
-        generatedPathStatus.value = core.learningPath.status || null;
-      }
+
+    if (response.internal.core.isCompleted) {
+      toast.success('问题理解完成！');
     }
 
     scrollToBottom();
   } catch (error: any) {
     console.error('回复失败:', error);
-    ElMessage.error(error.message || '回复失败，请稍后重试');
+    toast.error(error.message || '回复失败，请稍后重试');
   } finally {
     loading.value = false;
   }
@@ -1027,18 +1672,32 @@ const handleScroll = () => {
 };
 
 onMounted(() => {
-  aiMessages.value.push({
-    id: 'welcome',
-    role: 'ai',
-    content: '你好！👋 我是你的规划师小智。\n\n**告诉我你想学什么，我来帮你找到真正要解决的问题。**',
-    time: new Date()
-  });
+  void restoreConversation();
   
   window.addEventListener('scroll', handleScroll);
 });
 
+watch(
+  () => route.params.conversationId,
+  (newConversationId, oldConversationId) => {
+    const nextId = typeof newConversationId === 'string' ? newConversationId : '';
+    const prevId = typeof oldConversationId === 'string' ? oldConversationId : '';
+
+    if (!nextId) {
+      resetLocalConversationState();
+      return;
+    }
+
+    if (nextId !== prevId && nextId !== conversationId.value) {
+      resetLocalConversationState();
+      void restoreConversation(nextId);
+    }
+  }
+);
+
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
+  uploadedFiles.value.forEach((file) => revokePreviewUrl(file.previewUrl));
 });
 </script>
 
@@ -1109,7 +1768,8 @@ onUnmounted(() => {
   transition: all 0.3s ease;
 }
 
-.header-scrolled {
+.header-scrolled,
+.dashboard-header--scrolled {
   background: rgba(255, 255, 255, 0.95);
   border-bottom-color: var(--border-default);
   box-shadow: var(--shadow-sm);
@@ -1119,7 +1779,8 @@ onUnmounted(() => {
   background: rgba(26, 37, 47, 0.85);
 }
 
-[data-theme="dark"] .header-scrolled {
+[data-theme="dark"] .header-scrolled,
+[data-theme="dark"] .dashboard-header--scrolled {
   background: rgba(26, 37, 47, 0.95);
 }
 
@@ -1607,372 +2268,314 @@ onUnmounted(() => {
 }
 
 /* ========== 聊天区域 ========== */
-.chat-main {
-  flex: 1;
-  overflow: hidden;
+.planning-chat-flow {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  min-height: 0;
 }
 
-.chat-content {
-  flex: 1;
+.planning-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+  max-height: 480px;
   overflow-y: auto;
-  padding: 1.5rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
 }
 
-.message-group {
-  display: flex;
-  animation: fadeIn 0.3s ease;
+.planning-conversation-layout--entry .planning-messages {
+  max-height: none;
+  gap: 8px;
 }
 
-.message-group.ai {
-  justify-content: flex-start;
-}
-
-.message-group.user {
-  justify-content: flex-end;
-}
-
-.message-wrapper {
-  display: flex;
-  gap: 0.75rem;
-  max-width: 80%;
-}
-
-.message-wrapper.ai {
-  flex-direction: row;
-}
-
-.message-wrapper.user {
-  flex-direction: row;
-}
-
-.avatar {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-}
-
-.ai-avatar {
-  background: var(--gradient-primary);
-}
-
-.user-avatar {
-  background: var(--gradient-warning);
-}
-
-[data-theme="dark"] .confidence-bar {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.avatar-icon {
-  font-size: 1.25rem;
-}
-
-.message-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
+.planning-conversation-layout--entry .planning-chat-flow {
   flex: 1;
+  min-height: 0;
+  gap: 8px;
 }
 
-.message-header {
+.planning-msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  animation: fadeIn 0.3s ease;
+  align-self: start;
+}
+
+.planning-msg--ai {
+  align-self: flex-start;
+  background: rgba(243, 246, 251, 0.94);
+}
+
+[data-theme="dark"] .planning-msg--ai {
+  background: rgba(30, 41, 59, 0.94);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.planning-msg--user {
+  align-self: flex-end;
+  background: rgba(52, 120, 246, 0.09);
+}
+
+[data-theme="dark"] .planning-msg--user {
+  background: rgba(52, 120, 246, 0.18);
+  border-color: rgba(52, 120, 246, 0.2);
+}
+
+.planning-msg__meta {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 10px;
   align-items: center;
-  gap: 0.5rem;
 }
 
-.user-header {
-  justify-content: flex-end;
+.planning-msg__meta small {
+  font-size: 11px;
+  color: var(--planning-muted);
 }
 
-.sender-name {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+.planning-msg__role {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--planning-blue-deep);
+  letter-spacing: 0.04em;
 }
 
-.message-time {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.message-header.user-header .sender-name {
-  order: 2;
-}
-
-.message-header.user-header .message-time {
-  order: 1;
-}
-
-.message-bubble {
-  padding: 1rem 1.25rem;
-  border-radius: var(--radius-xl);
+.planning-msg p {
+  margin: 0;
+  font-size: 14px;
   line-height: 1.6;
-  font-size: 0.9375rem;
-  word-wrap: break-word;
+  color: var(--planning-ink);
 }
 
-.ai-bubble {
-  color: var(--text-primary);
-  border-bottom-left-radius: 0.25rem;
-}
-
-.ai-bubble :deep(p) {
+.planning-msg p :deep(p) {
   margin: 0 0 0.75rem;
 }
 
-.ai-bubble :deep(p:last-child) {
+.planning-msg p :deep(p:last-child) {
   margin-bottom: 0;
 }
 
-.ai-bubble :deep(ul),
-.ai-bubble :deep(ol) {
+.planning-msg p :deep(ul),
+.planning-msg p :deep(ol) {
   margin: 0.5rem 0 0.75rem;
   padding-left: 1.25rem;
 }
 
-.ai-bubble :deep(ul:last-child),
-.ai-bubble :deep(ol:last-child) {
+.planning-msg p :deep(ul:last-child),
+.planning-msg p :deep(ol:last-child) {
   margin-bottom: 0;
 }
 
-.ai-bubble :deep(li) {
+.planning-msg p :deep(li) {
   margin: 0.25rem 0;
-  padding-left: 0.125rem;
 }
 
-.ai-bubble :deep(li::marker) {
-  color: var(--text-secondary);
-}
-
-.ai-bubble :deep(strong) {
-  font-weight: 700;
-}
-
-.ai-bubble :deep(code) {
+.planning-msg p :deep(code) {
   padding: 0.125rem 0.375rem;
   border-radius: 0.375rem;
-  background: rgba(102, 126, 234, 0.12);
-  color: var(--color-primary-dark);
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--planning-blue-deep);
   font-size: 0.875em;
 }
 
-.ai-bubble :deep(pre) {
+.planning-msg p :deep(pre) {
   margin: 0.75rem 0;
   padding: 0.875rem 1rem;
-  border-radius: var(--radius-lg);
+  border-radius: 14px;
   background: rgba(15, 23, 42, 0.92);
   overflow-x: auto;
 }
 
-.ai-bubble :deep(pre code) {
+.planning-msg p :deep(pre code) {
   padding: 0;
   background: transparent;
   color: #e2e8f0;
   font-size: 0.875rem;
 }
 
-.ai-bubble :deep(blockquote) {
+.planning-msg p :deep(blockquote) {
   margin: 0.75rem 0;
   padding-left: 0.875rem;
-  border-left: 3px solid rgba(102, 126, 234, 0.35);
-  color: var(--text-secondary);
+  border-left: 3px solid rgba(52, 120, 246, 0.35);
+  color: var(--planning-muted);
 }
 
-.user-bubble {
-  background: var(--gradient-primary);
-  color: white;
-  border-bottom-right-radius: 0.25rem;
+.planning-msg--user p {
+  color: var(--planning-ink);
 }
 
-.retry-section {
-  margin-top: 0.5rem;
+[data-theme="dark"] .planning-msg p {
+  color: var(--planning-ink);
 }
 
-.retry-btn {
+[data-theme="dark"] .planning-msg__meta small {
+  color: rgba(148, 163, 184, 0.9);
+}
+
+[data-theme="dark"] .planning-msg__role {
+  color: rgba(96, 165, 250, 0.95);
+}
+
+[data-theme="dark"] .planning-msg p :deep(code) {
+  background: rgba(52, 120, 246, 0.15);
+  color: rgba(96, 165, 250, 0.95);
+}
+
+[data-theme="dark"] .planning-msg p :deep(blockquote) {
+  border-left-color: rgba(52, 120, 246, 0.4);
+  color: rgba(148, 163, 184, 0.85);
+}
+
+[data-theme="dark"] .planning-reply-chip {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(52, 120, 246, 0.18);
+  color: rgba(96, 165, 250, 0.95);
+}
+
+[data-theme="dark"] .planning-reply-chip:hover {
+  background: rgba(52, 120, 246, 0.12);
+  border-color: rgba(52, 120, 246, 0.28);
+}
+
+[data-theme="dark"] .planning-selected-strip {
+  background: rgba(30, 41, 59, 0.76);
+  border-color: rgba(52, 120, 246, 0.25);
+}
+
+[data-theme="dark"] .planning-selected-strip__label {
+  color: rgba(148, 163, 184, 0.9);
+}
+
+[data-theme="dark"] .planning-selected-reply {
+  background: rgba(52, 120, 246, 0.12);
+  border-color: rgba(52, 120, 246, 0.15);
+  color: rgba(96, 165, 250, 0.95);
+}
+
+.planning-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.planning-reply-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.875rem;
-  background: var(--color-danger-light);
-  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--planning-blue-deep);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.planning-reply-chip:hover {
+  background: rgba(52, 120, 246, 0.08);
+  border-color: rgba(52, 120, 246, 0.2);
+}
+
+.planning-reply-chip--selected {
+  background: rgba(52, 120, 246, 0.14);
+  border-color: rgba(52, 120, 246, 0.24);
+  color: var(--planning-blue-deep);
+  font-weight: 700;
+}
+
+.planning-msg__retry {
+  margin-top: 8px;
+}
+
+.planning-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #c23b3b;
   border: none;
-  border-radius: var(--radius-lg);
-  font-size: 0.75rem;
+  border-radius: 12px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.retry-btn:hover {
-  background: var(--color-danger);
-  color: white;
+.planning-retry-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.14);
 }
 
-.retry-btn:disabled {
+.planning-retry-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* 快速回复卡片 */
-.quick-replies {
+.planning-selected-strip {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(243, 246, 251, 0.76);
+  border: 1px dashed rgba(52, 120, 246, 0.18);
+}
+
+.planning-selected-strip__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--planning-muted);
+}
+
+.planning-selected-strip__items {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding: 0 0.25rem;
+  gap: 8px;
 }
 
-.quick-reply-card {
+.planning-selected-reply {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  background: var(--bg-muted);
-  border: 1.5px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  font-size: 0.875rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  max-width: 100%;
-}
-
-.quick-reply-card:hover {
-  background: var(--color-primary-light);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
-}
-
-.quick-reply-card:active {
-  transform: translateY(0);
-}
-
-.quick-reply-card.selected {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
-  box-shadow: 0 2px 10px rgba(102, 126, 234, 0.25);
-}
-
-.quick-reply-card.selected .reply-icon {
-  opacity: 1;
-}
-
-.quick-reply-card.selected .reply-text {
-  color: white;
-}
-
-/* 已选快捷回复预览 */
-.selected-quick-replies-preview {
-  margin-bottom: 0.75rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg-muted);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-}
-
-.preview-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.preview-label {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
+  color: var(--planning-blue-deep);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(52, 120, 246, 0.12);
 }
 
-.preview-clear-btn {
-  font-size: 0.75rem;
-  color: var(--color-danger);
-  background: transparent;
-  border: none;
+.planning-selected-reply--dismissible {
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.preview-clear-btn:hover {
-  background: var(--color-danger-light);
+.planning-selected-reply--dismissible:hover {
+  background: rgba(52, 120, 246, 0.06);
+  border-color: rgba(52, 120, 246, 0.24);
 }
 
-.preview-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.preview-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  background: var(--color-primary-light);
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  font-size: 0.8125rem;
-  color: var(--color-primary);
-  transition: all 0.2s ease;
-}
-
-.preview-tag:hover {
-  background: var(--color-primary);
-  color: white;
-}
-
-.preview-tag:hover .preview-tag-remove {
-  color: white;
-}
-
-.preview-tag-text {
-  white-space: nowrap;
-}
-
-.preview-tag-remove {
+.planning-selected-reply__remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  font-size: 0.875rem;
-  line-height: 1;
-  color: var(--color-primary);
-  cursor: pointer;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  transition: all 0.2s ease;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--planning-muted);
 }
 
-.preview-tag-remove:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.reply-icon {
-  font-size: 1rem;
-}
-
-.reply-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 200px;
+.planning-selected-reply--dismissible:hover .planning-selected-reply__remove {
+  color: var(--planning-blue-deep);
 }
 
 .typing-indicator {
@@ -2148,10 +2751,160 @@ onUnmounted(() => {
 }
 
 .input-wrapper {
-  padding: 1.25rem;
+  display: grid;
+  gap: 16px;
+}
+
+.planning-composer {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.planning-composer--entry {
+  margin-top: auto;
+}
+
+.planning-composer__suggestions {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.planning-composer__suggestion {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--planning-blue-deep);
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.planning-composer__suggestion:hover {
+  background: rgba(52, 120, 246, 0.08);
+  border-color: rgba(52, 120, 246, 0.2);
+}
+
+.planning-composer__more {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--planning-muted);
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px dashed rgba(23, 32, 51, 0.12);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.planning-composer__more:hover {
+  border-color: rgba(52, 120, 246, 0.2);
+  color: var(--planning-blue-deep);
+  background: rgba(52, 120, 246, 0.04);
+}
+
+.planning-composer__box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(23, 32, 51, 0.08);
+}
+
+.planning-composer__field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.planning-composer__selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.planning-composer__box textarea {
+  width: auto;
+  flex: 1;
+  min-width: 180px;
+  border: none;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: var(--planning-ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 1.6em;
+  max-height: 100px;
+  padding: 0;
+}
+
+.planning-composer__box textarea::placeholder {
+  color: var(--planning-muted);
+}
+
+.planning-attach-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(243, 246, 251, 0.78);
+  color: var(--planning-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.planning-attach-btn:hover {
+  border-color: rgba(52, 120, 246, 0.2);
+  color: var(--planning-blue-deep);
+  background: rgba(52, 120, 246, 0.06);
+}
+
+.planning-attach-btn.active {
+  border-color: rgba(52, 120, 246, 0.24);
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--planning-blue-deep);
+}
+
+.planning-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--planning-blue), var(--planning-blue-deep));
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(52, 120, 246, 0.3);
+}
+
+.planning-send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(52, 120, 246, 0.4);
+}
+
+.planning-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .proposal-action-panel {
@@ -2241,24 +2994,25 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-lg);
-  font-size: 0.9375rem;
-  font-weight: 600;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .proposal-btn-primary {
-  background: var(--gradient-success);
+  background: linear-gradient(135deg, var(--planning-blue), var(--planning-blue-deep));
   color: white;
   border: none;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.24);
 }
 
 .proposal-btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
 }
 
 .proposal-btn-primary:disabled {
@@ -2267,15 +3021,27 @@ onUnmounted(() => {
 }
 
 .proposal-btn-secondary {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1.5px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--planning-ink);
+  border: 1px solid rgba(23, 32, 51, 0.08);
 }
 
 .proposal-btn-secondary:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-primary-light);
+  border-color: rgba(52, 120, 246, 0.24);
+  color: var(--planning-blue-deep);
+  background: rgba(52, 120, 246, 0.06);
+}
+
+[data-theme="dark"] .proposal-btn-secondary {
+  background: rgba(30, 41, 59, 0.92);
+  color: var(--planning-ink);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .proposal-btn-secondary:hover {
+  border-color: rgba(96, 165, 250, 0.28);
+  color: rgba(96, 165, 250, 0.95);
+  background: rgba(52, 120, 246, 0.12);
 }
 
 @media (max-width: 640px) {
@@ -2633,6 +3399,1340 @@ textarea::placeholder {
   opacity: 0;
 }
 
+/* ========== Planning Upgrade ========== */
+.planning-upgrade {
+  --planning-ink: #172033;
+  --planning-muted: #66758d;
+  --planning-blue: #3478f6;
+  --planning-blue-deep: #1f57cc;
+  background: linear-gradient(180deg, #f7f9fd 0%, #eef3fb 100%);
+  color: var(--planning-ink);
+}
+
+[data-theme="dark"] .planning-upgrade {
+  --planning-ink: #e2e8f0;
+  --planning-muted: #94a3b8;
+  --planning-blue: #60a5fa;
+  --planning-blue-deep: #3b82f6;
+  background: linear-gradient(180deg, #0f172a 0%, #111c31 100%);
+}
+
+.planning-bg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.planning-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(110px);
+  opacity: 0.24;
+}
+
+.planning-bg-orb--1 {
+  top: 120px;
+  right: -120px;
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.18), transparent 70%);
+  animation: orb-drift 28s ease-in-out infinite;
+}
+
+.planning-bg-orb--2 {
+  left: -100px;
+  bottom: 80px;
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.14), transparent 70%);
+  animation: orb-drift 32s ease-in-out infinite reverse;
+}
+
+[data-theme="dark"] .planning-bg-orb {
+  opacity: 0.14;
+}
+
+.planning-header {
+  background: rgba(255, 255, 255, 0.84);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+[data-theme="dark"] .planning-header {
+  background: rgba(15, 23, 42, 0.84);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.planning-header__inner {
+  max-width: 1280px;
+  min-height: 72px;
+}
+
+.planning-brand {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.planning-brand__logo {
+  height: 48px;
+  width: auto;
+  display: block;
+}
+
+.planning-nav {
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+[data-theme="dark"] .planning-nav {
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.planning-nav .nav-item {
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.planning-nav .nav-item-active,
+.planning-nav .nav-item:hover {
+  background: rgba(52, 120, 246, 0.09);
+  color: var(--planning-blue-deep);
+}
+
+[data-theme="dark"] .planning-nav .nav-item-active,
+[data-theme="dark"] .planning-nav .nav-item:hover {
+  background: rgba(52, 120, 246, 0.15);
+  color: rgba(96, 165, 250, 0.95);
+}
+
+.planning-header__actions {
+  gap: 10px;
+}
+
+.planning-user-chip {
+  width: auto;
+  height: auto;
+}
+
+/* Dashboard Nav Exact Override */
+.dashboard-header {
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.header-container {
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+}
+
+.brand {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.brand-logo {
+  height: 40px;
+}
+
+.brand {
+  width: auto;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.brand-logo,
+.planning-brand__logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+
+.header-nav {
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.nav-item {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #172033 68%, white);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.nav-item:hover,
+.nav-item--active,
+.planning-nav .nav-item:hover,
+.planning-nav .nav-item--active {
+  background: rgba(52, 120, 246, 0.09);
+  color: #1f57cc;
+}
+
+.header-right {
+  gap: 10px;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: #172033;
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
+}
+
+[data-theme="dark"] .planning-user-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(30, 41, 59, 0.76);
+  color: rgba(96, 165, 250, 0.95);
+}
+
+.planning-main {
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 8px;
+}
+
+.planning-topbar-card,
+.planning-workbench {
+  position: relative;
+  z-index: 1;
+}
+
+.planning-topbar-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-end;
+  padding: 20px 24px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.06);
+}
+
+.planning-topbar-card h1,
+.planning-side-card h2,
+.planning-chat-card__head h2 {
+  margin: 0;
+  color: var(--planning-ink);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.planning-topbar-card h1 {
+  margin-top: 8px;
+  font-size: clamp(28px, 3.5vw, 42px);
+}
+
+.planning-topbar-card p,
+.planning-side-card p,
+.planning-summary-item strong,
+.planning-pending-list p,
+.planning-risk-note p,
+.planning-chat-card__hint {
+  margin: 0;
+  color: var(--planning-muted);
+  line-height: 1.65;
+}
+
+.planning-topbar-card p {
+  max-width: 720px;
+  margin-top: 6px;
+}
+
+.planning-pill,
+.planning-section-kicker {
+  display: inline-flex;
+  width: fit-content;
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.planning-pill {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.09);
+}
+
+.planning-topbar-card__actions,
+.planning-completion-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planning-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--planning-ink);
+  text-decoration: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.planning-conversation-layout {
+  display: grid;
+  grid-template-columns: minmax(255px, 290px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 0;
+}
+
+.planning-conversation-layout--entry {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: center;
+}
+
+.planning-side-card,
+.planning-chat-card {
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.05);
+}
+
+.planning-side-card {
+  display: grid;
+  gap: 20px;
+  padding: 22px 20px;
+  min-height: auto;
+  align-self: start;
+}
+
+.planning-status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-status-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(235, 242, 255, 0.92);
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planning-status-item--current {
+  background: rgba(235, 242, 255, 0.92);
+  border-color: rgba(52, 120, 246, 0.14);
+  color: var(--planning-blue-deep);
+}
+
+.planning-understand__meter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.planning-understand__meter span,
+.planning-understand__meter span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--planning-muted);
+}
+
+.planning-understand__meter strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--planning-blue-deep);
+}
+
+.planning-meter-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+}
+
+.planning-meter-bar__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--planning-blue), var(--planning-blue-deep));
+}
+
+.planning-understand__constraints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-constraint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: rgba(243, 246, 251, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  color: color-mix(in srgb, var(--planning-ink) 74%, white);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.planning-pending__list {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-side-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.planning-side-card__head h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+}
+
+.planning-side-card h2,
+.planning-chat-card__head h2 {
+  font-size: 24px;
+}
+
+.planning-clear-meter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.planning-clear-meter span,
+.planning-summary-item span,
+.planning-risk-note span {
+  color: var(--planning-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.planning-clear-meter strong {
+  color: var(--planning-blue-deep);
+  font-size: 13px;
+}
+
+.planning-clear-meter__bar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+}
+
+.planning-clear-meter__bar div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--planning-blue), var(--planning-blue-deep));
+}
+
+.planning-summary-stack,
+.planning-pending-list {
+  display: grid;
+  gap: 0;
+}
+
+.planning-confirmed-block {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-confirmed-block--compact {
+  gap: 0;
+}
+
+.planning-summary-item,
+.planning-pending-list article,
+.planning-risk-note,
+.planning-completion-card {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 16px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(216, 224, 239, 0.92);
+  align-self: start;
+}
+
+.planning-summary-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.planning-current-question-card {
+  min-height: 100%;
+  align-content: start;
+}
+
+.planning-card-group {
+  display: grid;
+  gap: 14px;
+}
+
+.planning-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.planning-block-label {
+  color: var(--planning-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.planning-block-caption {
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planning-stage-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-stage-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(243, 246, 251, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.planning-stage-item span {
+  min-width: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.planning-stage-item strong,
+.planning-summary-item strong,
+.planning-pending-card strong,
+.planning-proposal-detail strong,
+.planning-upload-panel__head h3 {
+  color: var(--planning-ink);
+}
+
+.planning-summary-item strong {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.planning-stage-item strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.planning-stage-item p,
+.planning-summary-item p,
+.planning-pending-card p,
+.planning-upload-panel__head p {
+  margin: 0;
+  color: var(--planning-muted);
+  line-height: 1.6;
+}
+
+.planning-stage-item.is-current {
+  border-color: rgba(52, 120, 246, 0.18);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.9));
+}
+
+.planning-stage-item.is-complete span {
+  background: rgba(16, 185, 129, 0.12);
+  color: #0f8a63;
+}
+
+.planning-constraint-list,
+.planning-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-constraint-list span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  color: color-mix(in srgb, var(--planning-ink) 74%, white);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planning-constraint-list--soft span {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.planning-chat-card {
+  min-height: calc(100vh - 92px);
+  display: grid;
+  grid-template-rows: auto minmax(260px, 1fr) auto;
+  gap: 14px;
+  padding: 22px;
+}
+
+.planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
+  min-height: calc(100vh - 160px);
+  padding-bottom: 12px;
+}
+
+.planning-conversation-layout--entry .planning-chat-card {
+  min-height: calc(100vh - 160px);
+  height: calc(100vh - 160px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+}
+
+.planning-chat-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.planning-chat-card__head--workbench {
+  padding-bottom: 2px;
+}
+
+.planning-chat-card__hint {
+  max-width: 220px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.planning-chat-card__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.planning-chat-card__intro {
+  max-width: 680px;
+  margin: 0;
+  color: var(--planning-muted);
+}
+
+.planning-start-card {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(255, 255, 255, 0.96));
+}
+
+.planning-start-card__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.planning-start-card__role {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--planning-blue-deep);
+  letter-spacing: 0.04em;
+}
+
+.planning-start-card__copy strong {
+  font-size: 22px;
+  line-height: 1.3;
+  color: var(--planning-ink);
+}
+
+.planning-start-card__copy p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--planning-muted);
+}
+
+.planning-start-card__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planning-start-card__example {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--planning-ink) 72%, white);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.planning-start-card__example:hover {
+  background: rgba(52, 120, 246, 0.06);
+  border-color: rgba(52, 120, 246, 0.18);
+  color: var(--planning-blue-deep);
+}
+
+.planning-chat-card__meta {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.planning-chat-card__meta--compact {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.planning-status-card {
+  display: grid;
+  gap: 14px;
+}
+
+.planning-proposal-detail span {
+  color: var(--planning-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.planning-upload-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.planning-upload-panel__head div {
+  display: grid;
+  gap: 6px;
+}
+
+.planning-upload-panel__head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.planning-upload-panel__head p {
+  max-width: 280px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planning-upload-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  padding: 10px 2px 4px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+}
+
+.planning-upload-preview__copy {
+  display: grid;
+  gap: 2px;
+}
+
+.planning-upload-preview__copy strong {
+  font-size: 13px;
+  color: var(--planning-ink);
+}
+
+.planning-upload-preview__copy p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--planning-muted);
+}
+
+.planning-upload-preview__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--planning-blue-deep);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12px;
+font-weight: 800;
+  cursor: pointer;
+}
+
+.planning-chat-main {
+  min-height: 360px;
+  max-height: none;
+  overflow: hidden;
+  padding: 0;
+}
+
+.planning-chat-content {
+  max-height: 62vh;
+  padding: 4px 4px 12px;
+  overflow-y: auto;
+}
+
+.planning-message-wrapper {
+  max-width: 94%;
+}
+
+.planning-message-group.user .planning-message-wrapper {
+  margin-left: auto;
+}
+
+
+
+.planning-input-section {
+  grid-row: 3 / 5;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  position: static;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.planning-input-section--started {
+  grid-row: 2 / 5;
+}
+
+.planning-input-wrapper {
+  margin-top: 16px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.planning-composer__actions {
+  gap: 8px;
+}
+
+.planning-attach-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--planning-blue-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.planning-attach-btn.active,
+.planning-attach-btn:hover {
+  border-color: rgba(52, 120, 246, 0.24);
+  background: rgba(52, 120, 246, 0.08);
+}
+
+.planning-proposal {
+  padding: 24px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  display: grid;
+  gap: 16px;
+}
+
+.planning-proposal--pending {
+  margin-top: 4px;
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.03), rgba(255, 255, 255, 0.94));
+}
+
+.planning-proposal__head {
+  display: grid;
+  gap: 6px;
+}
+
+.planning-proposal__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--planning-blue-deep);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.planning-proposal__head strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--planning-ink);
+}
+
+.planning-proposal__head span {
+  font-size: 13px;
+  color: var(--planning-muted);
+}
+
+.planning-proposal__transition {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--planning-blue-deep);
+  font-weight: 600;
+}
+
+.planning-proposal__stages {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-proposal__stage {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.84);
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(23, 32, 51, 0.05);
+}
+
+.planning-proposal__stage strong {
+  font-size: 14px;
+  color: var(--planning-ink);
+  line-height: 1.45;
+}
+
+.planning-proposal__stage p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--planning-muted);
+}
+
+.planning-proposal__stages--summary {
+  gap: 12px;
+}
+
+.planning-proposal__stage--summary strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.planning-proposal__stage--summary p {
+  color: var(--planning-ink);
+}
+
+.planning-proposal__hint-list {
+  display: grid;
+  gap: 6px;
+}
+
+.planning-proposal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.planning-pending-card--compact {
+  padding: 12px 14px;
+}
+
+.planning-pending-card--question {
+  border-color: rgba(52, 120, 246, 0.16);
+  background: rgba(52, 120, 246, 0.06);
+}
+
+.planning-alert-list {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-risk-note--stacked {
+  background: rgba(255, 247, 232, 0.9);
+  border-color: rgba(245, 158, 11, 0.16);
+}
+
+.planning-risk-note--stacked p {
+  color: var(--planning-ink);
+}
+
+.planning-upload-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.planning-upload-panel--compact {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(243, 246, 251, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.planning-upload-collapse {
+  border: 0;
+  background: transparent;
+  color: var(--planning-blue-deep);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.planning-upload-panel__note {
+  margin: 0;
+  color: var(--planning-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.planning-upload-input {
+  display: none;
+}
+
+.planning-upload-dropzone {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 20px 18px;
+  border-radius: 24px;
+  border: 1.5px dashed rgba(52, 120, 246, 0.22);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--planning-ink);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.planning-upload-dropzone--compact {
+  padding: 16px 18px;
+  border-radius: 18px;
+}
+
+.planning-upload-dropzone:hover,
+.planning-upload-dropzone.is-dragging {
+  border-style: solid;
+  border-color: rgba(52, 120, 246, 0.4);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.92));
+  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.08);
+}
+
+.planning-upload-dropzone.is-dragging {
+  transform: translateY(-1px);
+}
+
+.planning-upload-dropzone__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.planning-upload-dropzone__copy strong {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--planning-ink);
+}
+
+.planning-upload-dropzone__copy span {
+  margin: 0;
+  color: var(--planning-muted);
+}
+
+.planning-upload-dropzone__copy span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--planning-blue-deep);
+}
+
+.planning-upload-list {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-upload-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.planning-upload-item__preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(52, 120, 246, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 22px;
+}
+
+.planning-upload-item__preview.is-image {
+  background: rgba(23, 32, 51, 0.06);
+}
+
+.planning-upload-item__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.planning-upload-item__body {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.planning-upload-item__meta,
+.planning-upload-item__status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.planning-upload-item__meta strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--planning-ink);
+}
+
+.planning-upload-item__meta span,
+.planning-upload-error {
+  font-size: 12px;
+  color: var(--planning-muted);
+}
+
+.planning-upload-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planning-upload-status--ready {
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--planning-blue-deep);
+}
+
+.planning-upload-status--error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #c23b3b;
+}
+
+.planning-upload-item__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.planning-upload-action {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.planning-upload-action--retry {
+  color: var(--planning-blue-deep);
+}
+
+.planning-upload-action--remove {
+  color: #c23b3b;
+}
+
+.planning-completion-card {
+  border-color: rgba(52, 120, 246, 0.14);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.06), rgba(255, 255, 255, 0.9));
+}
+
+.planning-completion-card h3 {
+  margin: 0;
+  color: var(--planning-ink);
+}
+
+@media (max-width: 1180px) {
+  .planning-conversation-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-chat-card {
+    order: 1;
+  }
+
+  .planning-chat-card {
+    min-height: auto;
+  }
+
+  .planning-messages {
+    max-height: 420px;
+  }
+}
+
+@media (max-width: 820px) {
+  .planning-brand__logo {
+    height: 42px;
+  }
+
+  .planning-main {
+    width: min(100% - 28px, 1280px);
+    padding-top: 18px;
+  }
+
+  .planning-topbar-card,
+  .planning-chat-card__head,
+  .planning-topbar-card__actions,
+  .planning-chat-card__meta,
+  .planning-upload-panel__head,
+  .planning-block-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planning-header__actions .session-badge,
+  .planning-nav {
+    display: none;
+  }
+
+  .planning-chat-card,
+  .planning-side-card,
+  .planning-topbar-card {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .planning-conversation-layout--entry .planning-chat-card,
+  .planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
+    padding: 20px;
+  }
+
+  .planning-proposal__stages {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-upload-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .planning-upload-item__actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .planning-msg {
+    max-width: 100%;
+  }
+}
+
 /* ========== 响应式 ========== */
 @media (max-width: 768px) {
   .header-container {
@@ -2679,6 +4779,12 @@ textarea::placeholder {
 
   .input-section {
     padding: 0.75rem 0 1rem;
+  }
+
+  .planning-upload-item__meta,
+  .planning-upload-item__status-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .completion-secondary-actions {

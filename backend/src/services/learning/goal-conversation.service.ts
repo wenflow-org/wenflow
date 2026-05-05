@@ -69,7 +69,11 @@ class GoalConversationService {
             messages: [],       // 对话历史
             collected: {},      // 已收集的信息
             understanding: {},  // 问题理解状态
-            confidence: 0
+            confidence: 0,
+            confirmedProposal: null,
+            structuredData: null,
+            confidenceScores: null,
+            learningPath: null
           })
         }
       });
@@ -540,6 +544,22 @@ async continueConversation(conversationId: string, userReply: string, userId: st
       data.questions_to_ask = goalExt.nextQuestions;
     }
 
+    if (goalExt.confirmedProposal !== undefined) {
+      data.confirmedProposal = goalExt.confirmedProposal;
+    }
+
+    if (goalExt.structuredData !== undefined) {
+      data.structuredData = goalExt.structuredData;
+    }
+
+    if (goalExt.confidenceScores !== undefined) {
+      data.confidenceScores = goalExt.confidenceScores;
+    }
+
+    if (core.learningPath !== undefined) {
+      data.learningPath = core.learningPath || null;
+    }
+
     await prisma.goal_conversations.update({
       where: { id: conversationId },
       data: { collectedData: JSON.stringify(data) }
@@ -823,6 +843,11 @@ async continueConversation(conversationId: string, userReply: string, userId: st
       messages: data.messages || [],
       collected: data.collected || {},
       understanding: data.understanding || {},
+      nextQuestions: data.questions_to_ask || [],
+      confirmedProposal: data.confirmedProposal || null,
+      structuredData: data.structuredData || null,
+      confidenceScores: data.confidenceScores || null,
+      learningPath: data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null),
       confidence: data.confidence || 0,
       createdAt: conversation.createdAt,
       completedAt: conversation.completedAt

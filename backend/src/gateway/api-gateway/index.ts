@@ -34,6 +34,8 @@ export class APIGateway {
     
     const normalizedCaller: CallerInfo = {
       ...caller,
+      agentId: caller.agentId || requestContext.agentId,
+      skillId: caller.skillId || requestContext.skillId,
       userId: executionContext.userId
     };
 
@@ -66,8 +68,8 @@ export class APIGateway {
     return route;
   }
 
-  invalidateCache(userId?: string, agentId?: string): void {
-    this.cache.invalidate(userId, agentId);
+  invalidateCache(userId?: string, agentId?: string, skillId?: string): void {
+    this.cache.invalidate(userId, agentId, skillId);
   }
 }
 

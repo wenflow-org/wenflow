@@ -861,6 +861,8 @@ model agent_model_configs {
   agentId     String    @unique
   tier        String    @default("chat")
   model       String?
+  thinkingMode String?
+  reasoningEffort String?
   endpoint    String?
   apiKey      String?
   temperature Float     @default(0.7)
@@ -869,6 +871,23 @@ model agent_model_configs {
   enabled     Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model skill_model_configs {
+  id               String    @id @default(cuid())
+  skillId          String    @unique
+  tier             String    @default("chat")
+  model            String?
+  thinkingMode     String?
+  reasoningEffort  String?
+  endpoint         String?
+  apiKey           String?
+  temperature      Float     @default(0.7)
+  maxTokens        Int       @default(2000)
+  requestTimeoutMs Int?
+  enabled          Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model user_agent_model_configs {

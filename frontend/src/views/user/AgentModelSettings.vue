@@ -56,8 +56,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
 import api from '@/utils/api';
+import { toast } from '../../utils/toast';
 
 interface UserAgentConfig {
   agentId: string;
@@ -81,7 +81,7 @@ const fetchConfigs = async () => {
     const res = await api.get('/user/agent-model-settings');
     configs.value = res.data?.data || [];
   } catch (error) {
-    ElMessage.error('获取配置失败');
+    toast.error('获取配置失败');
   }
   loading.value = false;
 };
@@ -89,9 +89,9 @@ const fetchConfigs = async () => {
 const toggleOverride = async (row: UserAgentConfig) => {
   try {
     await api.put(`/user/agent-model-settings/${row.agentId}/toggle`, { enabled: row.enabled });
-    ElMessage.success(row.enabled ? '已启用覆盖' : '已禁用覆盖');
+    toast.success(row.enabled ? '已启用覆盖' : '已禁用覆盖');
   } catch (error) {
-    ElMessage.error('操作失败');
+    toast.error('操作失败');
     fetchConfigs();
   }
 };
@@ -104,21 +104,21 @@ const editOverride = (row: UserAgentConfig) => {
 const saveOverride = async () => {
   try {
     await api.put(`/user/agent-model-settings/${editForm.value.agentId}`, editForm.value);
-    ElMessage.success('配置已保存');
+    toast.success('配置已保存');
     editDialogVisible.value = false;
     fetchConfigs();
   } catch (error) {
-    ElMessage.error('保存失败');
+    toast.error('保存失败');
   }
 };
 
 const resetOverride = async (row: UserAgentConfig) => {
   try {
     await api.delete(`/user/agent-model-settings/${row.agentId}`);
-    ElMessage.success('已重置为系统默认');
+    toast.success('已重置为系统默认');
     fetchConfigs();
   } catch (error) {
-    ElMessage.error('重置失败');
+    toast.error('重置失败');
   }
 };
 

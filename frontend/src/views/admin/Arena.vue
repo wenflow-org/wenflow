@@ -207,9 +207,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import { Plus, DocumentCopy, Refresh, ChatDotRound, Timer, Delete, Connection } from '@element-plus/icons-vue';
 import { adminArenaApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const router = useRouter();
 
@@ -287,7 +287,7 @@ const loadSessions = async () => {
       pagination.total = response.data.data.pagination.total;
     }
   } catch (error: any) {
-    ElMessage.error('加载演练列表失败');
+    toast.error('加载演练列表失败');
   } finally {
     loading.value = false;
   }
@@ -322,14 +322,14 @@ const createSession = async () => {
       config
     });
     if (response.data.success) {
-      ElMessage.success('演练会话已创建');
+      toast.success('演练会话已创建');
       createDialogVisible.value = false;
       loadSessions();
       // 跳转到详情页
       router.push(`/admin/arena/${response.data.data.id}`);
     }
   } catch (error: any) {
-    ElMessage.error('创建失败');
+    toast.error('创建失败');
   } finally {
     creating.value = false;
   }
@@ -338,7 +338,7 @@ const createSession = async () => {
 // 批量测试
 const runBatch = async () => {
   if (!batchForm.personasText.trim()) {
-    ElMessage.warning('请输入画像列表');
+    toast.warning('请输入画像列表');
     return;
   }
 
@@ -359,12 +359,12 @@ const runBatch = async () => {
 
     const response: any = await adminArenaApi.createBatch(personas);
     if (response.data.success) {
-      ElMessage.success(`已创建 ${response.data.data.count} 个演练`);
+      toast.success(`已创建 ${response.data.data.count} 个演练`);
       batchDialogVisible.value = false;
       loadSessions();
     }
   } catch (error: any) {
-    ElMessage.error('批量创建失败');
+    toast.error('批量创建失败');
   } finally {
     batchRunning.value = false;
   }
@@ -403,12 +403,12 @@ const deleteSession = async (session: any) => {
     );
     
     await adminArenaApi.deleteSession(session.id);
-    ElMessage.success('删除成功');
+    toast.success('删除成功');
     loadSessions();
     loadStats();
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + (error.message || '未知错误'));
+      toast.error('删除失败: ' + (error.message || '未知错误'));
     }
   }
 };

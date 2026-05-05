@@ -359,9 +359,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
 import { ArrowLeft, Delete, Refresh, Monitor } from '@element-plus/icons-vue';
 import { adminDebugSandboxApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const router = useRouter();
 const route = useRoute();
@@ -475,7 +476,7 @@ const loadSnapshot = async () => {
       parsedMessages.value = response.data.data.parsedMessages || [];
     }
   } catch (error: any) {
-    ElMessage.error('加载快照详情失败');
+    toast.error('加载快照详情失败');
     console.error(error);
   } finally {
     loading.value = false;
@@ -485,7 +486,7 @@ const loadSnapshot = async () => {
 // 重新生成方案轮廓（调用后端 API）
 const regenerateProposalOutline = async () => {
   if (parsedMessages.value.length === 0) {
-    ElMessage.warning('没有原始对话数据');
+    toast.warning('没有原始对话数据');
     return;
   }
   
@@ -509,10 +510,10 @@ const regenerateProposalOutline = async () => {
       // 切换到新版本
       selectedOutlineVersion.value = proposalOutlineVersions.value.length - 1;
       
-      ElMessage.success(`方案轮廓已重新生成（版本 v${proposalOutlineVersions.value.length - 1}）`);
+      toast.success(`方案轮廓已重新生成（版本 v${proposalOutlineVersions.value.length - 1}）`);
     }
   } catch (error: any) {
-    ElMessage.error('生成失败：' + (error.response?.data?.error || error.message));
+    toast.error('生成失败：' + (error.response?.data?.error || error.message));
   } finally {
     regeneratingOutline.value = false;
   }
@@ -524,12 +525,12 @@ const regenerateRequirement = async () => {
   try {
     const response: any = await adminDebugSandboxApi.regenerateRequirement(snapshotId.value, requirementParams);
     if (response.data.success) {
-      ElMessage.success('需求收集完成');
+      toast.success('需求收集完成');
       regenerateRequirementDialogVisible.value = false;
       loadSnapshot();
     }
   } catch (error: any) {
-    ElMessage.error('需求收集失败');
+    toast.error('需求收集失败');
   } finally {
     regenerating.value = false;
   }
@@ -540,11 +541,11 @@ const activateRequirement = async (id: string) => {
   try {
     const response: any = await adminDebugSandboxApi.activateRequirement(id);
     if (response.data.success) {
-      ElMessage.success('已设为当前版本');
+      toast.success('已设为当前版本');
       loadSnapshot();
     }
   } catch (error: any) {
-    ElMessage.error('设置失败');
+    toast.error('设置失败');
   }
 };
 
@@ -579,7 +580,7 @@ const showRegenerateProposalDialog = () => {
 const regenerateProposal = async () => {
   const reqId = activeRequirement.value?.id;
   if (!reqId) {
-    ElMessage.warning('请先激活一个需求版本');
+    toast.warning('请先激活一个需求版本');
     return;
   }
 
@@ -587,12 +588,12 @@ const regenerateProposal = async () => {
   try {
     const response: any = await adminDebugSandboxApi.regenerateProposal(reqId, proposalParams);
     if (response.data.success) {
-      ElMessage.success('方案生成完成');
+      toast.success('方案生成完成');
       regenerateProposalDialogVisible.value = false;
       loadSnapshot();
     }
   } catch (error: any) {
-    ElMessage.error('方案生成失败');
+    toast.error('方案生成失败');
   } finally {
     regeneratingProposal.value = false;
   }
@@ -603,11 +604,11 @@ const activateProposal = async (id: string) => {
   try {
     const response: any = await adminDebugSandboxApi.activateProposal(id);
     if (response.data.success) {
-      ElMessage.success('已设为当前版本');
+      toast.success('已设为当前版本');
       loadSnapshot();
     }
   } catch (error: any) {
-    ElMessage.error('设置失败');
+    toast.error('设置失败');
   }
 };
 
@@ -625,7 +626,7 @@ const showProposalDetail = (proposal: any) => {
 // 显示生成路径对话框
 const showRegeneratePathDialog = (proposalId: string) => {
   currentProposalId.value = proposalId;
-  ElMessage.info('路径生成功能开发中');
+  toast.info('路径生成功能开发中');
 };
 
 // 激活路径
@@ -633,11 +634,11 @@ const activatePath = async (id: string) => {
   try {
     const response: any = await adminDebugSandboxApi.activatePath(id);
     if (response.data.success) {
-      ElMessage.success('已设为当前版本');
+      toast.success('已设为当前版本');
       loadSnapshot();
     }
   } catch (error: any) {
-    ElMessage.error('设置失败');
+    toast.error('设置失败');
   }
 };
 
@@ -658,12 +659,12 @@ const deleteSnapshot = async () => {
     await ElMessageBox.confirm('确定删除此快照吗？所有相关数据也将被删除', '确认删除', { type: 'warning' });
     const response: any = await adminDebugSandboxApi.deleteSnapshot(snapshotId.value);
     if (response.data.success) {
-      ElMessage.success('快照已删除');
+      toast.success('快照已删除');
       router.push('/admin/debug-sandbox');
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败');
+      toast.error('删除失败');
     }
   }
 };

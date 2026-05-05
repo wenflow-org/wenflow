@@ -209,8 +209,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import { toast } from '../../utils/toast';
 import dayjs from 'dayjs';
 import {
   deleteUserSkill,
@@ -267,7 +268,7 @@ async function loadSkills() {
     const res = await getUserSkills(params);
     skills.value = res.data || [];
   } catch (error) {
-    ElMessage.error('加载 Skills 失败');
+    toast.error('加载 Skills 失败');
   } finally {
     loading.value = false;
   }
@@ -302,13 +303,13 @@ async function editSkill(skill: any) {
     formData.customCode = detail.customCode || '';
     dialogVisible.value = true;
   } catch {
-    ElMessage.error('加载 Skill 详情失败');
+    toast.error('加载 Skill 详情失败');
   }
 }
 
 async function submitForm() {
   if (!formData.skillName) {
-    ElMessage.warning('请填写 Skill 名称');
+    toast.warning('请填写 Skill 名称');
     return;
   }
 
@@ -328,12 +329,12 @@ async function submitForm() {
     } else {
       await saveUserSkill(payload);
     }
-    ElMessage.success('保存成功');
+    toast.success('保存成功');
     dialogVisible.value = false;
     resetForm();
     await loadSkills();
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败');
+    toast.error(error.message || '保存失败');
   } finally {
     submitting.value = false;
   }
@@ -342,10 +343,10 @@ async function submitForm() {
 async function toggleSkill(skill: any) {
   try {
     await toggleUserSkill(skill.skillName, skill.enabled);
-    ElMessage.success(skill.enabled ? '已启用' : '已禁用');
+    toast.success(skill.enabled ? '已启用' : '已禁用');
   } catch {
     skill.enabled = !skill.enabled;
-    ElMessage.error('操作失败');
+    toast.error('操作失败');
   }
 }
 
@@ -381,11 +382,11 @@ async function removeSkill(skill: any) {
   try {
     await ElMessageBox.confirm(`确定删除 Skill "${skill.skillName}" 吗？`, '确认删除', { type: 'warning' });
     await deleteUserSkill(skill.skillName);
-    ElMessage.success('删除成功');
+    toast.success('删除成功');
     await loadSkills();
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败');
+      toast.error('删除失败');
     }
   }
 }

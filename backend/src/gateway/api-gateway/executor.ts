@@ -118,6 +118,18 @@ export class APIExecutor {
         temperature: request.temperature ?? route.temperature,
         max_tokens: request.max_tokens ?? route.maxTokens
       };
+      this.applyThinkingMode(route, requestBody);
+
+      logger.info('[api-gateway] request payload resolved', {
+        providerId: route.providerId,
+        source: route.source,
+        requestUrl,
+        routeModel: route.model,
+        requestModel: request.model || null,
+        finalModel: requestBody.model,
+        thinkingMode: route.thinkingMode || 'default',
+        reasoningEffort: route.reasoningEffort || 'default'
+      });
 
       const response = await fetch(requestUrl, {
         method: 'POST',
@@ -164,6 +176,7 @@ export class APIExecutor {
       let parsedResponse: ChatResponse;
       try {
         parsedResponse = JSON.parse(responseText) as ChatResponse;
+        (parsedResponse as any)._routeThinkingMode = route.thinkingMode || 'default';
       } catch {
         throw new APIExecutionError(
           `API returned invalid JSON from ${requestUrl}. Body preview: ${this.truncate(responseText, 300)}`,
@@ -191,6 +204,27 @@ export class APIExecutor {
       }
       throw error;
     }
+  }
+
+  private applyThinkingMode(route: ResolvedRoute, requestBody: ChatRequest): void {
+    if (!this.isDeepSeekV4Model(String(requestBody.model || route.model || ''))) {
+      return;
+    }
+
+    if (route.thinkingMode === 'enabled' || route.thinkingMode === 'disabled') {
+      requestBody.thinking = {
+        type: route.thinkingMode
+      };
+    }
+
+    if (route.thinkingMode !== 'disabled' && (route.reasoningEffort === 'high' || route.reasoningEffort === 'max')) {
+      requestBody.reasoning_effort = route.reasoningEffort;
+    }
+  }
+
+  private isDeepSeekV4Model(model: string): boolean {
+    const normalized = model.trim().toLowerCase();
+    return normalized === 'deepseek-v4-flash' || normalized === 'deepseek-v4-pro';
   }
 
   private delay(ms: number): Promise<void> {

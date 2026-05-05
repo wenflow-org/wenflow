@@ -263,7 +263,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
 import {
   Operation,
   Promotion,
@@ -274,6 +273,7 @@ import {
   Document
 } from '@element-plus/icons-vue';
 import { adminSkillsApi } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 interface Skill {
   name: string;
@@ -475,7 +475,7 @@ async function loadSkills() {
     skills.value = skillsRes.data.data || [];
     categories.value = [{ name: 'all', label: '全部', count: skills.value.length, totalCalls: skills.value.reduce((s: any, sk: any) => s + sk.stats.callCount, 0), avgSuccessRate: 0 }, ...(categoriesRes.data.data || [])];
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error?.message || '加载 Skill 列表失败');
+    toast.error(error.response?.data?.error?.message || '加载 Skill 列表失败');
   } finally {
     loading.value = false;
   }
@@ -501,7 +501,7 @@ async function executeTest() {
   try {
     input = JSON.parse(testInput.value);
   } catch {
-    ElMessage.error('请输入有效的 JSON 格式');
+    toast.error('请输入有效的 JSON 格式');
     return;
   }
 
@@ -511,12 +511,12 @@ async function executeTest() {
     const res = await adminSkillsApi.testSkill(selectedSkill.value.name, input);
     testResult.value = res.data.data;
     if (res.data.data.success) {
-      ElMessage.success('执行成功');
+      toast.success('执行成功');
     } else {
-      ElMessage.warning('执行完成但返回失败状态');
+      toast.warning('执行完成但返回失败状态');
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error?.message || '执行失败');
+    toast.error(error.response?.data?.error?.message || '执行失败');
     testResult.value = {
       success: false,
       output: error.response?.data?.error?.message || 'Unknown error',

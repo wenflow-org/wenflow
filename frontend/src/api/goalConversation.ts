@@ -32,6 +32,11 @@ export interface GoalConversationEnvelope {
   meta: {
     source: string;
     timestamp: string;
+    messages?: Array<{
+      role: 'user' | 'ai';
+      content: string;
+      time: string;
+    }>;
   };
 }
 
@@ -52,6 +57,12 @@ export async function replyGoalConversation(conversationId: string, text: string
   const response = await api.post(`/goal-conversation/${conversationId}/reply`, {
     input: { text }
   }) as GoalConversationApiResponse;
+
+  return response.data;
+}
+
+export async function getGoalConversation(conversationId: string): Promise<GoalConversationEnvelope> {
+  const response = await api.get(`/goal-conversation/${conversationId}`) as GoalConversationApiResponse;
 
   return response.data;
 }

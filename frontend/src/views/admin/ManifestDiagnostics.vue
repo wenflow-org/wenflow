@@ -1,11 +1,14 @@
 <template>
   <div class="manifest-diagnostics-page" v-loading="loading">
-    <div class="page-header">
-      <h2 class="page-title">
-        <el-icon class="page-title-icon"><WarningFilled /></el-icon>
+    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
+
+    <div class="page-hero">
+      <span class="pill">Admin</span>
+      <h2 class="page-hero__title">
+        <el-icon class="page-hero__icon"><WarningFilled /></el-icon>
         架构诊断
       </h2>
-      <p class="page-subtitle">检查 Agent 架构完整性和潜在问题</p>
+      <p class="page-hero__subtitle">检查 Agent 架构完整性和潜在问题</p>
     </div>
 
     <div class="toolbar">
@@ -132,14 +135,17 @@
         </div>
       </el-card>
     </div>
+    <div v-else-if="!loading" class="empty-state">
+      <el-empty description="暂无诊断数据，请点击刷新" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
 import { WarningFilled } from '@element-plus/icons-vue';
 import { adminAgentsApi, type ManifestDiagnosticsData } from '@/api/adminApi';
+import { toast } from '../../utils/toast';
 
 const loading = ref(false);
 const diagnostics = ref<ManifestDiagnosticsData | null>(null);
@@ -211,7 +217,7 @@ const loadData = async () => {
     diagnostics.value = res.data?.data || null;
   } catch (error) {
     console.error('加载 manifest 诊断失败:', error);
-    ElMessage.error('加载诊断数据失败');
+    toast.error('加载诊断数据失败');
   } finally {
     loading.value = false;
   }
@@ -222,42 +228,45 @@ onMounted(loadData);
 
 <style scoped>
 .manifest-diagnostics-page {
-  padding: 1.25rem;
+  padding: 0;
+  position: relative;
 }
 
-.page-header {
-  margin-bottom: 0.9rem;
-}
+/* Background orbs */
+.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.page-title-icon {
-  color: var(--color-primary);
-}
-
-.page-subtitle {
-  margin: 0.4rem 0 0;
-  color: var(--text-secondary);
-}
+/* Hero */
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 0.5rem; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
+.page-hero__icon { color: var(--color-primary); }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
 .toolbar {
   margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .content-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   gap: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
+/* Panel glass cards */
 .panel-card {
-  border-radius: var(--fluent-radius-lg);
+  border-radius: 20px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .card-header {
@@ -276,8 +285,14 @@ onMounted(loadData);
   justify-content: space-between;
   align-items: center;
   border: 1px solid var(--border-light);
+  border-left: 3px solid var(--color-primary);
   border-radius: var(--fluent-radius-md);
   padding: 0.65rem 0.8rem;
+  transition: border-color 0.2s;
+}
+
+.summary-item:hover {
+  border-left-color: rgba(52, 120, 246, 0.5);
 }
 
 .summary-item .label {
@@ -345,6 +360,22 @@ onMounted(loadData);
   font-size: 0.88rem;
 }
 
+/* Table deep overrides */
+.panel-card :deep(.el-table) {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panel-card :deep(.el-table th.el-table__cell) {
+  background: rgba(52, 120, 246, 0.04);
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.panel-card :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+  background: rgba(141, 107, 255, 0.02);
+}
+
 @media (max-width: 768px) {
   .content-grid {
     grid-template-columns: 1fr;
@@ -353,5 +384,15 @@ onMounted(loadData);
   .summary-grid {
     grid-template-columns: 1fr;
   }
+}
+
+[data-theme="dark"] .page-hero {
+  background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%), linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(20, 20, 30, 0.92));
+  border-color: rgba(52, 120, 246, 0.12);
+}
+
+[data-theme="dark"] .panel-card {
+  background: linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(20, 20, 30, 0.92));
+  border-color: rgba(52, 120, 246, 0.12);
 }
 </style>

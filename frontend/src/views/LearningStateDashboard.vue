@@ -233,7 +233,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { adminApi } from '../api/adminApi';
-import { ElMessage } from 'element-plus';
+import { toast } from '../utils/toast';
 import {
   Lightning,
   Sunny,
@@ -374,7 +374,7 @@ const getStateTagType = (cognitive: number) => {
 
 const viewSessionDetail = (sessionId: string) => {
   // TODO: 实现会话详情查看
-  ElMessage.info('会话详情功能开发中...');
+  toast.info('会话详情功能开发中...');
 };
 
 onMounted(() => {

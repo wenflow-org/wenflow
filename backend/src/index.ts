@@ -151,6 +151,7 @@ import pluginRoutes from './routes/plugins';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
+import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
@@ -240,6 +241,7 @@ app.use('/api/admin-auth/login', adminAccessRestrictMiddleware, adminAuthRoutes)
 app.use('/api/admin-auth', adminAuthRoutes);
 app.use('/api/admin/api-config', authMiddleware, adminApiConfigRoutes);
 app.use('/api/admin/agent-model-configs', authMiddleware, adminAgentModelConfigsRoutes);
+app.use('/api/admin/skill-model-configs', authMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', authMiddleware, adminUsersRoutes);
 app.use('/api/admin/learner-models', authMiddleware, adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', authMiddleware, adminGoalConversationsRoutes);  // 具体路由

@@ -80,9 +80,9 @@
         </nav>
 
         <!-- 折叠按钮 -->
-        <button class="admin-sidebar__toggle" @click="toggleSidebar" :title="sidebarCollapsed ? '展开' : '折叠'">
+        <el-button class="admin-sidebar__toggle" @click="toggleSidebar" :title="sidebarCollapsed ? '展开' : '折叠'" text>
           <el-icon><component :is="sidebarCollapsed ? 'Expand' : 'Fold'" /></el-icon>
-        </button>
+        </el-button>
       </aside>
 
       <!-- 主内容区 -->
@@ -98,12 +98,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { toast } from '../../utils/toast';
 import {
   DataAnalysis,
   User,
   Reading,
   Cpu,
+  Operation,
   Connection,
   Grid,
   WarningFilled,
@@ -134,7 +135,7 @@ onMounted(() => {
     sidebarCollapsed.value = saved === 'true';
   }
 
-  const userStr = localStorage.getItem('admin_user');
+  const userStr = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user');
   if (userStr) {
     currentUser.value = JSON.parse(userStr);
   } else {
@@ -165,6 +166,7 @@ const systemNav: NavItem[] = [
   { to: '/admin/api-config', label: 'API 管理', icon: Setting },
   { to: '/admin/agent-registry', label: 'Agent 注册', icon: Grid },
   { to: '/admin/agent-model-configs', label: '模型配置', icon: Cpu },
+  { to: '/admin/skill-model-configs', label: 'Skill 模型', icon: Operation },
 ];
 
 const monitorNav: NavItem[] = [
@@ -176,14 +178,17 @@ const monitorNav: NavItem[] = [
 const handleLogout = () => {
   localStorage.removeItem('admin_token');
   localStorage.removeItem('admin_user');
-  ElMessage.success('已退出登录');
+  sessionStorage.removeItem('admin_token');
+  sessionStorage.removeItem('admin_user');
+  toast.success('已退出登录');
   router.push('/admin/login');
 };
 </script>
 
 <style scoped>
 .admin-dashboard {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg-body);
   display: flex;
   flex-direction: column;
@@ -263,13 +268,18 @@ const handleLogout = () => {
 .admin-layout {
   display: grid;
   grid-template-columns: var(--sidebar-width, 240px) 1fr;
-  min-height: calc(100vh - 56px);
+  height: calc(100vh - 56px);
+  overflow: hidden;
   transition: grid-template-columns var(--fluent-duration-normal) var(--fluent-easing);
 }
 
 /* ========== 侧边栏 ========== */
 .admin-sidebar {
   width: var(--sidebar-width, 240px);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
   background: var(--glass-bg-light);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -393,7 +403,8 @@ const handleLogout = () => {
 .admin-main {
   padding: 24px;
   background: var(--bg-body);
-  min-height: calc(100vh - 56px);
+  height: calc(100vh - 56px);
+  overflow-y: auto;
   transition: background var(--transition-normal);
 }
 

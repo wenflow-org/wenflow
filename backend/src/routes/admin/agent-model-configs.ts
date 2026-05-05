@@ -16,6 +16,8 @@ function pickEditableConfig(body: any) {
   return {
     tier: body?.tier,
     model: body?.model,
+    thinkingMode: body?.thinkingMode,
+    reasoningEffort: body?.reasoningEffort,
     endpoint: body?.endpoint,
     apiKey: body?.apiKey,
     temperature: body?.temperature,

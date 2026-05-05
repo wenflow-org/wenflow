@@ -8,6 +8,8 @@ interface Config {
   endpoint: string;
   apiKey: string;
   model: string;
+  thinkingMode?: 'default' | 'enabled' | 'disabled';
+  reasoningEffort?: 'default' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
 }
@@ -17,8 +19,22 @@ interface AgentConfigRecord {
   apiKey: string | null;
   model: string | null;
   tier: string | null;
+  thinkingMode?: string | null;
+  reasoningEffort?: string | null;
   temperature: number | null;
   maxTokens: number | null;
+}
+
+interface SkillConfigRecord {
+  endpoint: string | null;
+  apiKey: string | null;
+  model: string | null;
+  tier: string | null;
+  thinkingMode?: string | null;
+  reasoningEffort?: string | null;
+  temperature: number | null;
+  maxTokens: number | null;
+  requestTimeoutMs?: number | null;
 }
 
 export class APIRouter {
@@ -51,6 +67,19 @@ export class APIRouter {
   }
 
   async resolve(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {
+    if (caller.skillId) {
+      const inheritedRoute = await this.resolveBaseRoute(caller, userId);
+      const skillRoute = await this.getSkillConfig(caller.skillId, inheritedRoute);
+      if (skillRoute) {
+        return this.withRequestTimeout(skillRoute, caller.agentId);
+      }
+      return inheritedRoute;
+    }
+
+    return this.resolveBaseRoute(caller, userId);
+  }
+
+  private async resolveBaseRoute(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {
     if (userId && caller.agentId) {
       const userOverride = await this.getUserOverride(userId, caller.agentId);
       if (userOverride) {
@@ -88,6 +117,61 @@ export class APIRouter {
     return this.withRequestTimeout(platformDefault, caller.agentId);
   }
 
+  private async getSkillConfig(skillId: string, inheritedRoute: ResolvedRoute): Promise<ResolvedRoute | null> {
+    try {
+      const config = await prisma.skill_model_configs.findFirst({
+        where: {
+          skillId,
+          enabled: true,
+        },
+      });
+
+      if (!config) {
+        return null;
+      }
+
+      const tier = (config.tier || '').toLowerCase();
+      const isReasoning = tier === 'reasoning';
+      const platformConfig = await this.getPlatformConfigRecord();
+
+      const endpoint = config.endpoint
+        || inheritedRoute.endpoint
+        || (isReasoning ? platformConfig?.reasoningEndpoint : undefined)
+        || platformConfig?.apiUrl
+        || this.resolveBaseEndpoint();
+
+      const apiKey = config.apiKey
+        || inheritedRoute.apiKey
+        || platformConfig?.apiKey
+        || process.env.AI_API_KEY
+        || '';
+
+      const model = config.model
+        ? (isReasoning ? this.resolveReasoningModel(config.model) : this.resolveModel(config.model))
+        : inheritedRoute.model;
+
+      return {
+        ...inheritedRoute,
+        providerId: `skill:${skillId}`,
+        endpoint,
+        apiKey,
+        model,
+        thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
+        reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
+        temperature: config.temperature ?? inheritedRoute.temperature,
+        maxTokens: config.maxTokens ?? inheritedRoute.maxTokens,
+        timeoutMs: config.requestTimeoutMs ?? inheritedRoute.timeoutMs,
+        source: 'platform',
+      };
+    } catch (error) {
+      logger.error('[api-gateway] fetch skill config failed', {
+        skillId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   private async getUserOverride(userId: string, agentId: string): Promise<Config | null> {
     try {
       const config = await prisma.user_agent_model_configs.findFirst({
@@ -109,6 +193,8 @@ export class APIRouter {
         endpoint: config.endpoint || platformConfig?.apiUrl || this.resolveBaseEndpoint(),
         apiKey: config.apiKey || platformConfig?.apiKey || process.env.AI_API_KEY || '',
         model: this.resolveModel(config.model || platformConfig?.defaultModel),
+        thinkingMode: 'default',
+        reasoningEffort: 'default',
         temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
         maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000
       };
@@ -143,6 +229,8 @@ export class APIRouter {
         endpoint: config.endpoint,
         apiKey: config.apiKey,
         model: this.resolveModel(config.chatModel),
+        thinkingMode: 'default',
+        reasoningEffort: 'default',
         temperature: 0.7,
         maxTokens: 2000
       };
@@ -216,9 +304,33 @@ export class APIRouter {
       endpoint,
       apiKey,
       model,
+      thinkingMode: this.normalizeThinkingMode(config.thinkingMode),
+      reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort),
       temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
       maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000
     };
+  }
+
+  private normalizeThinkingMode(value?: string | null): 'default' | 'enabled' | 'disabled' {
+    const normalized = (value || '').trim().toLowerCase();
+    if (normalized === 'enabled' || normalized === 'disabled') {
+      return normalized;
+    }
+    if (normalized === 'on') {
+      return 'enabled';
+    }
+    if (normalized === 'off') {
+      return 'disabled';
+    }
+    return 'default';
+  }
+
+  private normalizeReasoningEffort(value?: string | null): 'default' | 'high' | 'max' {
+    const normalized = (value || '').trim().toLowerCase();
+    if (normalized === 'high' || normalized === 'max') {
+      return normalized;
+    }
+    return 'default';
   }
 
   private async getPlatformDefault(): Promise<ResolvedRoute> {
@@ -238,6 +350,8 @@ export class APIRouter {
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: config.apiKey || process.env.AI_API_KEY || '',
         model: this.resolveModel(config.defaultModel),
+        thinkingMode: 'default',
+        reasoningEffort: 'default',
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         providerType: 'openai-compatible',
@@ -257,6 +371,8 @@ export class APIRouter {
       endpoint: this.resolveBaseEndpoint(),
       apiKey: process.env.AI_API_KEY || '',
       model: this.resolveModel(),
+      thinkingMode: 'default',
+      reasoningEffort: 'default',
       temperature: 0.7,
       maxTokens: 2000,
       providerType: 'openai-compatible',

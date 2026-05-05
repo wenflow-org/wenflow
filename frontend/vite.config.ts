@@ -15,7 +15,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
-        changeOrigin: true,
+        changeOrigin: false,
         configure: (proxy, options) => {
           proxy.on('proxyRes', (proxyRes, req, res) => {
             // 确保响应使用 UTF-8 编码

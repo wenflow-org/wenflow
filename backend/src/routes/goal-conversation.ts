@@ -156,13 +156,17 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
             conversationId,
             stage: conversation.stage,
             confidence: conversation.confidence,
-            isCompleted: conversation.status === 'completed'
+            isCompleted: conversation.status === 'completed',
+            learningPath: conversation.learningPath || null
           },
           ext: {
             goalConversation: {
               understanding: conversation.understanding || {},
-              nextQuestions: conversation.collected?.questions_to_ask || [],
+              nextQuestions: conversation.nextQuestions || [],
               quickReplies: [],
+              structuredData: conversation.structuredData || null,
+              confirmedProposal: conversation.confirmedProposal || null,
+              confidenceScores: conversation.confidenceScores || null,
               collected: conversation.collected || {}
             }
           }
@@ -171,7 +175,8 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
         schemaVersion: 'agent-output-v1',
         meta: {
           source: 'goal-conversation',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          messages: conversation.messages || []
         }
       }
     });

@@ -20,6 +20,33 @@ export interface KnowledgePointStatus {
   progress: number;
 }
 
+export interface CheckpointOption {
+  id: string;
+  text: string;
+}
+
+export interface Checkpoint {
+  id: string;
+  type: 'single_choice' | 'multi_choice' | 'short_answer';
+  title: string;
+  question: string;
+  options?: CheckpointOption[];
+  allowSkip?: boolean;
+  contextHint?: string;
+}
+
+export interface CheckpointSubmitPayload {
+  selectedOptionIds?: string[];
+  answerText?: string;
+}
+
+export interface CheckpointSubmitResult {
+  passed: boolean;
+  feedback: string;
+  hint?: string;
+  nextAction: 'continue' | 'review' | 'retry';
+}
+
 export interface MessageResult {
   aiResponse: string;
   analysis: {
@@ -42,6 +69,7 @@ export interface MessageResult {
   isCompletion: boolean;
   peerTriggered: boolean;
   peerMessage?: string | null;
+  checkpoint?: Checkpoint | null;
 }
 
 export interface PeerMessageResult {
@@ -89,6 +117,7 @@ export interface SessionDetail {
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;
   advisory?: ReplanAdvisory | null;
+  pendingCheckpoint?: Checkpoint | null;
 }
 
 export interface SessionEvaluation {
@@ -236,6 +265,10 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
+  async resetSession(sessionId: string): Promise<void> {
+    await api.post(`/ai-teaching/sessions/${sessionId}/reset`);
+  },
+
   async getState(): Promise<LearningState | null> {
     const result = await api.get('/ai-teaching/state');
     return result.data || null;
@@ -267,6 +300,11 @@ export const aiTeachingAPI = {
   async getLatestTaskEvaluation(taskId: string): Promise<TaskEvaluationDetail | null> {
     const result = await api.get(`/ai-teaching/tasks/${taskId}/evaluation/latest`);
     return result.data || null;
+  },
+
+  async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload): Promise<CheckpointSubmitResult> {
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`, payload);
+    return result.data || result;
   }
 };
 

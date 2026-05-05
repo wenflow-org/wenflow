@@ -794,7 +794,7 @@ export const adminDebugSandboxApi = {
   /**
    * Skills 管理 API
    */
-  export const adminSkillsApi = {
+export const adminSkillsApi = {
     /**
      * 获取所有 Skill 列表
      */
@@ -833,10 +833,26 @@ export const adminDebugSandboxApi = {
     /**
      * 获取使用趋势
      */
-    getUsageTrends: async () => {
-      return adminAxios.get('/admin/skills/usage/trends');
-    },
-  };
+  getUsageTrends: async () => {
+    return adminAxios.get('/admin/skills/usage/trends');
+  },
+
+  getSkillModelConfigs: async () => {
+    return adminAxios.get('/admin/skill-model-configs');
+  },
+
+  getSkillModelConfig: async (skillId: string) => {
+    return adminAxios.get(`/admin/skill-model-configs/${skillId}`);
+  },
+
+  updateSkillModelConfig: async (skillId: string, data: any) => {
+    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, data);
+  },
+
+  deleteSkillModelConfig: async (skillId: string) => {
+    return adminAxios.delete(`/admin/skill-model-configs/${skillId}`);
+  },
+};
 
   // ========== 统一导出 ==========
   

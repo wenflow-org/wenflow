@@ -7,66 +7,40 @@
     </div>
 
     <!-- 顶部导航栏 -->
-    <header class="dashboard-header" :class="{ 'header-scrolled': scrolled }">
+    <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': scrolled }">
       <div class="header-container">
-        <div class="header-left">
-          <div class="brand" @click="$router.push('/dashboard')">
-            <span class="brand-icon">🎓</span>
-            <span class="brand-text">问流 WenFlow</span>
-          </div>
-        </div>
+        <button type="button" class="brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
+        </button>
 
-        <nav class="header-nav">
-          <router-link to="/dashboard" class="nav-item">
-            <el-icon><HomeFilled /></el-icon>
-            <span>学习台</span>
-          </router-link>
-          <router-link to="/goal-conversation" class="nav-item">
-            <el-icon><EditPen /></el-icon>
-            <span>AI 规划</span>
-          </router-link>
-          <router-link to="/learning-paths" class="nav-item">
-            <el-icon><FolderOpened /></el-icon>
-            <span>学习路径</span>
-          </router-link>
-          <router-link to="/learning-state" class="nav-item nav-item-active">
-            <el-icon><TrendCharts /></el-icon>
-            <span>学习状态</span>
-          </router-link>
-          <router-link to="/achievements" class="nav-item">
-            <el-icon><Trophy /></el-icon>
-            <span>成就</span>
-          </router-link>
+        <nav class="header-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="nav-item">学习台</router-link>
+          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
+          <router-link to="/learning-state" class="nav-item nav-item--active">学习状态</router-link>
+          <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <ThemeSwitcher />
-
-          <div class="user-menu">
-            <el-dropdown>
-              <div class="user-avatar">
-                <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-                <div v-else class="avatar-placeholder">
-                  {{ userStore.user?.name?.charAt(0) || 'U' }}
-                </div>
-              </div>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item>
-                    <span class="user-name">{{ userStore.user?.name || '用户' }}</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="$router.push('/user')">
-                    <el-icon><User /></el-icon>
-                    能力中心
-                  </el-dropdown-item>
-                  <el-dropdown-item divided @click="handleLogout">
-                    <el-icon><Switch /></el-icon>
-                    退出登录
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <el-dropdown>
+            <button type="button" class="user-chip">
+              <span>{{ userInitial }}</span>
+              <strong>{{ userStore.user?.name || '同学' }}</strong>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="router.push('/user')">
+                  <el-icon><User /></el-icon>
+                  能力中心
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <el-icon><Switch /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </header>
@@ -74,17 +48,29 @@
     <!-- 主内容区 -->
     <main class="main-content">
       <div class="content-container">
-        <!-- 页面标题区 -->
-        <section class="page-header-section glass-card">
-          <div class="page-header-content">
-            <div class="page-title-wrapper">
-              <h1 class="page-title">
-                <span class="title-icon">📊</span>
-                学习状态追踪
-              </h1>
-              <p class="page-subtitle">科学量化你的学习状态和效率</p>
+        <section class="state-page-shell">
+          <section class="app-page-head glass-card state-hero">
+            <div class="app-page-head__top">
+              <span class="pill">学习状态</span>
+              <div class="app-page-head__actions">
+                <router-link to="/learning-paths" class="btn btn-primary">查看学习路径</router-link>
+                <router-link to="/dashboard" class="btn btn-ghost">回到学习台</router-link>
+              </div>
             </div>
-          </div>
+
+            <div class="app-page-head__intro">
+              <h1>看清你的节奏、压力、理解和疲劳，决定下一步怎么学。</h1>
+              <p>这里展示完整的状态分析，不只是一个结论。你可以看到当前指标、近期变化以及更适合你的学习建议。</p>
+            </div>
+
+            <div v-if="state" class="app-page-head__summary state-hero__summary">
+              <article v-for="item in stateMetricCards" :key="item.label" class="app-page-head__summary-card state-hero__summary-card" :class="`state-hero__summary-card--${item.tone}`">
+                <span>{{ item.label }}</span>
+                <strong :class="item.valueClass">{{ item.value }}</strong>
+                <p>{{ item.note }}</p>
+              </article>
+            </div>
+          </section>
         </section>
 
         <div v-loading="loading" class="state-content">
@@ -100,262 +86,56 @@
           </div>
 
           <div v-else class="state-content-inner">
-            <!-- 主要指标卡片 -->
-            <section class="metrics-section">
-              <div class="metrics-grid">
-                <!-- LSB 状态值卡片 -->
-                <div class="metric-card glass-card metric-card--lsb">
-                  <div class="metric-card-header">
-                    <div class="metric-icon icon-lsb">
-                      <el-icon><ScaleToOriginal /></el-icon>
-                    </div>
-                    <el-tag :type="getLSBLevel(state.lsb)" size="small" effect="light">
-                      {{ getLSBText(state.lsb) }}
-                    </el-tag>
+            <section class="state-layout">
+              <article class="glass-card state-trend-panel">
+                <div class="state-panel__head">
+                  <div>
+                    <span class="section-kicker">趋势图</span>
+                    <h2>最近状态变化</h2>
                   </div>
-                  <div class="metric-card-body">
-                    <div class="metric-value" :class="getLSBValueClass(state.lsb)">
-                      {{ state.lsb.toFixed(2) }}
-                    </div>
-                    <div class="metric-label">LSB 状态值</div>
-                    <div class="metric-formula">
-                      <span class="formula-part ktl">{{ state.ktl.toFixed(2) }}</span>
-                      <span class="formula-op">−</span>
-                      <span class="formula-part lf">{{ state.lf.toFixed(2) }}</span>
-                    </div>
+                  <div class="trend-controls trend-controls--pill">
+                    <button class="trend-btn" :class="{ active: trendDays === 7 }" @click="trendDays = 7">7天</button>
+                    <button class="trend-btn" :class="{ active: trendDays === 30 }" @click="trendDays = 30">30天</button>
                   </div>
                 </div>
 
-                <!-- LSS 学习压力卡片 -->
-                <div class="metric-card glass-card metric-card--lss">
-                  <div class="metric-card-header">
-                    <div class="metric-icon icon-lss">
-                      <el-icon><Warning /></el-icon>
-                    </div>
-                    <el-tag :type="getLSSLevel(state.lss)" size="small" effect="light">
-                      {{ state.lss.toFixed(1) }}/100
-                    </el-tag>
-                  </div>
-                  <div class="metric-card-body">
-                    <div class="metric-value" :class="getLSSValueClass(state.lss)">
-                      {{ state.lss.toFixed(2) }}
-                    </div>
-                    <div class="metric-label">LSS 学习压力</div>
-                    <div class="metric-desc">本次学习压力评分（0-100）</div>
+                <div v-if="trends.length > 0" class="trends-card state-trends-card">
+                  <div class="chart-container chart-container--state">
+                    <canvas ref="trendChart"></canvas>
                   </div>
                 </div>
-
-                <!-- KTL 知识掌握卡片 -->
-                <div class="metric-card glass-card metric-card--ktl">
-                  <div class="metric-card-header">
-                    <div class="metric-icon icon-ktl">
-                      <el-icon><Reading /></el-icon>
-                    </div>
-                    <el-tag type="info" size="small" effect="light">EWMA</el-tag>
-                  </div>
-                  <div class="metric-card-body">
-                    <div class="metric-value value-ktl">{{ state.ktl.toFixed(2) }}</div>
-                    <div class="metric-label">KTL 知识掌握</div>
-                    <div class="metric-desc">42天加权平均</div>
-                  </div>
+                <div v-else class="trends-card chart-empty">
+                  <el-empty description="暂无趋势数据" />
                 </div>
+              </article>
 
-                <!-- LF 学习疲劳卡片 -->
-                <div class="metric-card glass-card metric-card--lf">
-                  <div class="metric-card-header">
-                    <div class="metric-icon icon-lf">
-                      <el-icon><Timer /></el-icon>
-                    </div>
-                    <el-tag :type="getLFLevel(state.lf)" size="small" effect="light">
-                      {{ state.lf.toFixed(1) }}
-                    </el-tag>
+              <aside class="state-side-panels">
+                <article v-if="warnings.length > 0" class="glass-card state-insight-card state-insight-card--warning">
+                  <div class="state-panel__head">
+                    <span class="section-kicker">学习预警</span>
+                    <span class="state-insight-card__badge">{{ warnings.length }} 条</span>
                   </div>
-                  <div class="metric-card-body">
-                    <div class="metric-value" :class="getLFValueClass(state.lf)">
-                      {{ state.lf.toFixed(2) }}
-                    </div>
-                    <div class="metric-label">LF 学习疲劳</div>
-                    <div class="metric-desc">7天短期平均</div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <!-- 学习预警 -->
-            <section v-if="warnings.length > 0" class="warnings-section">
-              <div class="section-header">
-                <h2 class="section-title">
-                  <span class="section-icon">⚠️</span>
-                  学习预警
-                </h2>
-                <el-tag type="danger" size="small">{{ warnings.length }} 条预警</el-tag>
-              </div>
-              <div class="warnings-grid">
-                <div
-                  v-for="(warning, index) in warnings"
-                  :key="index"
-                  class="warning-card glass-card"
-                  :class="'warning-' + warning.level"
-                >
-                  <div class="warning-header">
-                    <span class="warning-title">{{ warning.title }}</span>
-                    <el-tag
-                      :type="warning.level === 'critical' ? 'danger' : warning.level === 'warning' ? 'warning' : 'info'"
-                      size="small"
-                      effect="light"
-                    >
-                      {{ warning.level === 'critical' ? '紧急' : warning.level === 'warning' ? '警告' : '提示' }}
-                    </el-tag>
-                  </div>
-                  <p class="warning-message">{{ warning.message }}</p>
-                  <p class="warning-suggestion">💡 {{ warning.suggestion }}</p>
-                </div>
-              </div>
-            </section>
-
-            <!-- 学习建议 -->
-            <section v-if="state.suggestion" class="suggestion-section">
-              <div class="section-header">
-                <h2 class="section-title">
-                  <span class="section-icon">💡</span>
-                  智能学习建议
-                </h2>
-                <el-tag :type="getSuggestionTagType(state.suggestion.level)" effect="light">
-                  {{ getSuggestionLevelText(state.suggestion.level) }}
-                </el-tag>
-              </div>
-
-              <div class="suggestion-main glass-card">
-                <h3 class="suggestion-title">{{ state.suggestion.message }}</h3>
-                <p class="suggestion-action">建议操作：{{ state.suggestion.action }}</p>
-              </div>
-
-              <!-- 四类详细建议 -->
-              <div v-if="state.suggestion.categories" class="suggestion-categories">
-                <div
-                  v-for="(category, key) in state.suggestion.categories"
-                  :key="key"
-                  class="category-card glass-card"
-                  :class="getCategoryClass(category.status)"
-                >
-                  <div class="category-header">
-                    <span class="category-icon">{{ getCategoryIcon(key) }}</span>
-                    <span class="category-name">{{ getCategoryName(key) }}</span>
-                  </div>
-                  <p class="category-message">{{ category.message }}</p>
-                </div>
-              </div>
-            </section>
-
-            <!-- 学习趋势 + 指标说明（并排） -->
-            <section class="trends-section">
-              <div class="trends-layout">
-                <div class="trends-main">
-                  <div class="section-header">
-                    <h2 class="section-title">
-                      <span class="section-icon">📈</span>
-                      学习趋势
-                    </h2>
-                    <div class="trend-controls">
-                      <button
-                        class="trend-btn"
-                        :class="{ active: trendDays === 7 }"
-                        @click="trendDays = 7"
-                      >
-                        7天
-                      </button>
-                      <button
-                        class="trend-btn"
-                        :class="{ active: trendDays === 30 }"
-                        @click="trendDays = 30"
-                      >
-                        30天
-                      </button>
+                  <div class="state-warning-list">
+                    <div v-for="(warning, index) in warnings.slice(0, 3)" :key="index" class="state-warning-item">
+                      <strong>{{ warning.title }}</strong>
+                      <p>{{ warning.message }}</p>
                     </div>
                   </div>
+                </article>
 
-                  <div class="trends-card glass-card">
-                    <div v-if="trends.length > 0" class="chart-container">
-                      <canvas ref="trendChart"></canvas>
-                    </div>
-                    <div v-else class="chart-empty">
-                      <el-empty description="暂无趋势数据" />
-                    </div>
+                <article class="glass-card state-insight-card">
+                  <div class="state-panel__head">
+                    <span class="section-kicker">指标说明</span>
                   </div>
-                </div>
-
-                <aside class="info-side">
-                  <div class="section-header">
-                    <h2 class="section-title">
-                      <span class="section-icon">📚</span>
-                      指标说明
-                    </h2>
-                  </div>
-
-                  <div class="info-panel glass-card">
-                    <div class="info-grid info-grid--compact">
-                      <div class="info-card">
-                        <div class="info-card-header">
-                          <div class="info-icon icon-lss-info">📉</div>
-                          <h3 class="info-title">LSS 学习压力</h3>
-                        </div>
-                        <p class="info-desc">单次学习的压力评分，范围 0-100。高值表示学习难度大、认知负荷高。</p>
-                        <div class="info-badges info-badges--lss">
-                          <span class="info-badge high">高 (70-100)</span>
-                          <span class="info-badge medium">中 (40-69)</span>
-                          <span class="info-badge low">低 (0-39)</span>
-                        </div>
-                      </div>
-
-                      <div class="info-card">
-                        <div class="info-card-header">
-                          <div class="info-icon icon-ktl-info">📚</div>
-                          <h3 class="info-title">KTL 知识掌握度</h3>
-                        </div>
-                        <p class="info-desc">长期知识积累的量化指标，使用 42 天加权平均（EWMA）计算。</p>
-                        <div class="info-badges info-badges--ktl">
-                          <span class="info-badge high">高 (70-100)</span>
-                          <span class="info-badge medium">中 (40-69)</span>
-                          <span class="info-badge low">低 (0-39)</span>
-                        </div>
-                      </div>
-
-                      <div class="info-card">
-                        <div class="info-card-header">
-                          <div class="info-icon icon-lf-info">😴</div>
-                          <h3 class="info-title">LF 学习疲劳度</h3>
-                        </div>
-                        <p class="info-desc">短期疲劳程度，使用 7 天加权平均计算。随时间衰减。</p>
-                        <div class="info-badges info-badges--lf">
-                          <span class="info-badge high">高 (70-100)</span>
-                          <span class="info-badge medium">中 (40-69)</span>
-                          <span class="info-badge low">低 (0-39)</span>
-                        </div>
-                      </div>
-
-                      <div class="info-card info-card--lsb">
-                        <div class="info-card-header">
-                          <div class="info-icon icon-lsb-info">⚖️</div>
-                          <h3 class="info-title">LSB 学习状态平衡值</h3>
-                        </div>
-                        <p class="info-desc">核心指标，计算公式：<strong>LSB = KTL - LF</strong></p>
-                        <div class="lsb-visual">
-                          <div class="lsb-bar">
-                            <div class="lsb-negative">负值</div>
-                            <div class="lsb-zero">0</div>
-                            <div class="lsb-positive">正值</div>
-                          </div>
-                          <div class="lsb-legend">
-                            <span>🔴 疲劳</span>
-                            <span>🟡 正常</span>
-                            <span>🟢 高效</span>
-                          </div>
-                        </div>
-                      </div>
+                  <div class="state-definition-list">
+                    <div v-for="item in stateDefinitionCards" :key="item.title" class="state-definition-item">
+                      <strong>{{ item.title }}</strong>
+                      <p>{{ item.desc }}</p>
                     </div>
                   </div>
-                </aside>
-              </div>
+                </article>
+
+              </aside>
             </section>
           </div>
         </div>
@@ -365,32 +145,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
 import request from '../utils/request';
 import { metricsAPI } from '../api/metrics';
 import { Chart } from 'chart.js/auto';
 import { useUserStore } from '../stores/user';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import {
-  HomeFilled,
-  FolderOpened,
-  TrendCharts,
-  ChatDotSquare,
   User,
   Switch,
-  EditPen,
-  Trophy,
-  ScaleToOriginal,
-  Warning,
-  Reading,
-  Timer
 } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 
+const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const scrolled = ref(false);
 const loading = ref(true);
 const state = ref<StateMetrics | null>(null);
@@ -406,6 +177,50 @@ const warnings = ref<Array<{
 }>>([]);
 let chartInstance: Chart | null = null;
 const trendCache = new Map<number, TrendData[]>();
+
+const stateMetricCards = computed(() => {
+  if (!state.value) return [];
+
+  return [
+    {
+      label: 'LSB 学习状态',
+      value: state.value.lsb.toFixed(2),
+      note: `状态判断：${getLSBText(state.value.lsb)}`,
+      tone: 'lsb',
+      valueClass: getLSBValueClass(state.value.lsb)
+    },
+    {
+      label: 'LSS 学习压力',
+      value: state.value.lss.toFixed(2),
+      note: '单次学习的即时压力评分',
+      tone: 'lss',
+      valueClass: getLSSValueClass(state.value.lss)
+    },
+    {
+      label: 'KTL 知识掌握',
+      value: state.value.ktl.toFixed(2),
+      note: '42 天加权平均后的长期掌握度',
+      tone: 'ktl',
+      valueClass: 'value-primary'
+    },
+    {
+      label: 'LF 学习疲劳',
+      value: state.value.lf.toFixed(2),
+      note: '7 天短期疲劳水平',
+      tone: 'lf',
+      valueClass: getLFValueClass(state.value.lf)
+    }
+  ];
+});
+
+const stateDefinitionCards = computed(() => {
+  return [
+    { title: 'LSS 学习压力', desc: '单次学习的压力评分，范围 0-100。高值表示认知负荷更高。' },
+    { title: 'KTL 知识掌握', desc: '长期知识积累的量化指标，使用 42 天加权平均计算。' },
+    { title: 'LF 学习疲劳', desc: '短期疲劳程度，使用 7 天加权平均计算，随时间衰减。' },
+    { title: 'LSB 状态平衡值', desc: '核心指标，计算公式为 LSB = KTL - LF，用来判断当前推进状态。' }
+  ];
+});
 
 interface StateMetrics {
   lss: number;
@@ -445,7 +260,7 @@ const handleLogout = async () => {
       type: 'warning'
     });
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // 用户取消
@@ -457,7 +272,7 @@ const loadCurrentState = async () => {
   try {
     state.value = await metricsAPI.getCurrentState();
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error?.message || '加载学习状态失败');
+    toast.error(error.response?.data?.error?.message || '加载学习状态失败');
   } finally {
     loading.value = false;
   }
@@ -638,7 +453,7 @@ const loadTrends = async (days: number) => {
       chartInstance = null;
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error?.message || '加载趋势数据失败');
+    toast.error(error.response?.data?.error?.message || '加载趋势数据失败');
   }
 };
 
@@ -653,13 +468,6 @@ const loadWarnings = async () => {
 };
 
 // get level types
-const getLSBLevel = (lsb: number) => {
-  if (lsb < 0) return 'danger';
-  if (lsb < 20) return 'warning';
-  if (lsb >= 40) return 'success';
-  return 'info';
-};
-
 const getLSBValueClass = (lsb: number) => {
   if (lsb < 0) return 'value-danger';
   if (lsb < 20) return 'value-warning';
@@ -674,13 +482,6 @@ const getLSBText = (lsb: number) => {
   return '正常';
 };
 
-const getLSSLevel = (lss: number) => {
-  if (lss > 70) return 'danger';
-  if (lss > 50) return 'warning';
-  if (lss < 30) return 'success';
-  return 'info';
-};
-
 const getLSSValueClass = (lss: number) => {
   if (lss > 70) return 'value-danger';
   if (lss > 50) return 'value-warning';
@@ -688,67 +489,10 @@ const getLSSValueClass = (lss: number) => {
   return 'value-primary';
 };
 
-const getLFLevel = (lf: number) => {
-  if (lf > 70) return 'danger';
-  if (lf > 40) return 'warning';
-  return 'success';
-};
-
 const getLFValueClass = (lf: number) => {
   if (lf > 70) return 'value-danger';
   if (lf > 40) return 'value-warning';
   return 'value-success';
-};
-
-const getSuggestionTagType = (level: string) => {
-  const map: Record<string, any> = {
-    critical: 'danger',
-    warning: 'warning',
-    normal: 'info',
-    optimal: 'success'
-  };
-  return map[level] || 'info';
-};
-
-const getSuggestionLevelText = (level: string) => {
-  const map: Record<string, string> = {
-    critical: '紧急',
-    warning: '警告',
-    normal: '正常',
-    optimal: '最佳'
-  };
-  return map[level] || level;
-};
-
-const getCategoryClass = (status: string) => {
-  const map: Record<string, string> = {
-    danger: 'category-danger',
-    warning: 'category-warning',
-    normal: 'category-normal',
-    info: 'category-info',
-    success: 'category-success'
-  };
-  return map[status] || 'category-normal';
-};
-
-const getCategoryIcon = (key: string) => {
-  const map: Record<string, string> = {
-    pressure: '📊',
-    state: '⚖️',
-    growth: '📚',
-    duration: '⏱️'
-  };
-  return map[key] || '💡';
-};
-
-const getCategoryName = (key: string) => {
-  const map: Record<string, string> = {
-    pressure: '压力建议',
-    state: '状态建议',
-    growth: '知识增长',
-    duration: '时长建议'
-  };
-  return map[key] || key;
 };
 
 // 监听trendDays变化
@@ -795,7 +539,7 @@ onUnmounted(() => {
 /* ========== 基础布局 ========== */
 .learning-state-page {
   min-height: 100vh;
-  background: var(--bg-body);
+  background: #f3f6fb;
   position: relative;
   overflow-x: hidden;
 }
@@ -814,25 +558,25 @@ onUnmounted(() => {
 .gradient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.4;
+  filter: blur(110px);
+  opacity: 0.24;
   animation: float 20s ease-in-out infinite;
 }
 
 .gradient-orb-1 {
-  width: 800px;
-  height: 800px;
-  background: var(--gradient-primary);
-  top: -300px;
-  right: -200px;
+  width: 720px;
+  height: 720px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.28), transparent 70%);
+  top: -220px;
+  right: -120px;
 }
 
 .gradient-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: var(--gradient-achievement);
-  bottom: -200px;
-  left: -100px;
+  width: 540px;
+  height: 540px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+  bottom: -180px;
+  left: -80px;
   animation-delay: -10s;
 }
 
@@ -850,16 +594,17 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid rgba(23, 32, 51, 0.05);
   transition: all 0.3s ease;
 }
 
-.header-scrolled {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
+.header-scrolled,
+.dashboard-header--scrolled {
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom-color: rgba(23, 32, 51, 0.06);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }
 
 [data-theme="dark"] .dashboard-header {
@@ -920,12 +665,14 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-.nav-item-active {
+.nav-item-active,
+.nav-item--active {
   background: var(--color-primary);
   color: white;
 }
 
-.nav-item-active:hover {
+.nav-item-active:hover,
+.nav-item--active:hover {
   background: var(--color-primary);
   color: white;
 }
@@ -943,6 +690,66 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.brand {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+
+.brand-logo {
+  height: 40px;
+}
+
+.brand {
+  width: auto;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.brand-logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), #1f57cc);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-primary);
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
 }
 
 .user-avatar {
@@ -982,25 +789,116 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+/* Dashboard Nav Exact Override */
+.dashboard-header {
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.header-container {
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+}
+
+.brand {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.header-nav {
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.nav-item {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #172033 68%, white);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.nav-item:hover,
+.nav-item--active {
+  background: rgba(52, 120, 246, 0.09);
+  color: #1f57cc;
+}
+
+.header-right {
+  gap: 10px;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-chip {
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: #172033;
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
+}
+
 /* ========== 主内容区 ========== */
 .main-content {
   position: relative;
   z-index: 1;
-  padding: 2rem;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
 }
 
 .content-container {
-  max-width: 1600px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 /* ========== 玻璃卡片 ========== */
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(23, 32, 51, 0.06);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.05);
 }
 
 [data-theme="dark"] .glass-card {
@@ -1045,6 +943,318 @@ onUnmounted(() => {
   margin: 0;
 }
 
+.state-page-shell {
+  margin-bottom: 18px;
+}
+
+.app-page-head {
+  padding: 24px 28px;
+  display: grid;
+  gap: 18px;
+}
+
+.app-page-head__top,
+.app-page-head__actions,
+.state-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-page-head__intro {
+  display: grid;
+  gap: 10px;
+}
+
+.app-page-head__intro h1 {
+  margin: 0;
+  font-size: clamp(30px, 3.8vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: #172033;
+}
+
+.app-page-head__intro p,
+.state-metric-card p,
+.state-insight-card p,
+.state-warning-item p,
+.state-definition-item p,
+.state-category-item p {
+  margin: 0;
+  color: color-mix(in srgb, #172033 72%, #fff);
+  line-height: 1.7;
+}
+
+.app-page-head__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.app-page-head__summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.app-page-head__summary-card span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.app-page-head__summary-card strong {
+  font-size: 28px;
+  line-height: 1.05;
+  color: #172033;
+}
+
+.app-page-head__summary-card p {
+  font-size: 13px;
+}
+
+.pill,
+.section-kicker,
+.state-insight-card__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pill,
+.section-kicker {
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+}
+
+.state-insight-card__badge {
+  background: rgba(243, 246, 251, 0.92);
+  color: var(--text-muted);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.82);
+  color: #172033;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.btn-ghost:hover {
+  background: rgba(243, 246, 251, 0.92);
+}
+
+.state-content-inner {
+  display: grid;
+  gap: 18px;
+}
+
+.state-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.state-metric-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.04);
+  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+}
+
+.state-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 52px rgba(15, 23, 42, 0.08);
+}
+
+.state-metric-card span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.state-metric-card strong {
+  font-size: 32px;
+  line-height: 1;
+  color: #172033;
+}
+
+.state-metric-card--lsb {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.86));
+  border-color: rgba(52, 120, 246, 0.12);
+}
+
+.state-metric-card--lss {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.86));
+  border-color: rgba(245, 158, 11, 0.12);
+}
+
+.state-metric-card--ktl {
+  background: linear-gradient(180deg, rgba(49, 177, 111, 0.08), rgba(255, 255, 255, 0.86));
+  border-color: rgba(49, 177, 111, 0.12);
+}
+
+.state-metric-card--lf {
+  background: linear-gradient(180deg, rgba(141, 107, 255, 0.08), rgba(255, 255, 255, 0.86));
+  border-color: rgba(141, 107, 255, 0.12);
+}
+
+.state-hero__summary-card--lsb {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.9));
+}
+
+.state-hero__summary-card--lss {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.9));
+}
+
+.state-hero__summary-card--ktl {
+  background: linear-gradient(180deg, rgba(49, 177, 111, 0.08), rgba(255, 255, 255, 0.9));
+}
+
+.state-hero__summary-card--lf {
+  background: linear-gradient(180deg, rgba(141, 107, 255, 0.08), rgba(255, 255, 255, 0.9));
+}
+
+.state-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.state-trend-panel,
+.state-side-panels,
+.state-insight-card {
+  display: grid;
+  gap: 16px;
+}
+
+.state-trend-panel {
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.state-trend-panel h2,
+.state-insight-card__title {
+  margin: 0;
+  color: #172033;
+}
+
+.state-panel__head h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.14;
+}
+
+.state-side-panels {
+  position: sticky;
+  top: 104px;
+}
+
+.state-insight-card {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.04);
+}
+
+.state-insight-card--primary {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.9));
+  border-color: rgba(52, 120, 246, 0.12);
+}
+
+.state-insight-card--warning {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.9));
+  border-color: rgba(245, 158, 11, 0.12);
+}
+
+.state-warning-list,
+.state-definition-list,
+.state-category-list {
+  display: grid;
+  gap: 12px;
+}
+
+.state-warning-item,
+.state-definition-item,
+.state-category-item {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(243, 246, 251, 0.9);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.state-warning-item strong,
+.state-definition-item strong,
+.state-category-item strong {
+  font-size: 15px;
+  color: #172033;
+}
+
+.state-category-item.category-danger {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.05), rgba(255, 255, 255, 0.9));
+  border-color: rgba(239, 68, 68, 0.14);
+}
+
+.state-category-item.category-warning {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.05), rgba(255, 255, 255, 0.9));
+  border-color: rgba(245, 158, 11, 0.16);
+}
+
+.state-category-item.category-success {
+  background: linear-gradient(180deg, rgba(49, 177, 111, 0.05), rgba(255, 255, 255, 0.9));
+  border-color: rgba(49, 177, 111, 0.16);
+}
+
+.trend-controls--pill {
+  gap: 8px;
+}
+
+.trend-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.03);
+}
+
+.trend-btn.active {
+  background: rgba(52, 120, 246, 0.1);
+  border-color: rgba(52, 120, 246, 0.18);
+  color: #1f57cc;
+}
+
+.state-trends-card {
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(243, 246, 251, 0.72);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.chart-container--state {
+  min-height: 360px;
+  padding: 10px 8px 2px;
+}
+
 /* ========== 按钮样式 ========== */
 .btn {
   display: inline-flex;
@@ -1061,13 +1271,13 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #3478f6 0%, #1f57cc 100%);
   color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 10px 28px rgba(52, 120, 246, 0.22);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 14px 34px rgba(52, 120, 246, 0.28);
   transform: translateY(-2px);
 }
 
@@ -1705,6 +1915,39 @@ section {
 
   .main-content {
     padding: 1rem;
+  }
+
+  .app-page-head {
+    padding: 18px;
+  }
+
+  .app-page-head__top,
+  .app-page-head__actions {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .state-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-page-head__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .state-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .state-side-panels {
+    position: static;
+  }
+
+  .path-detail-overview-grid,
+  .state-definition-list,
+  .state-warning-list,
+  .state-category-list {
+    grid-template-columns: 1fr;
   }
 
   .page-header-section {

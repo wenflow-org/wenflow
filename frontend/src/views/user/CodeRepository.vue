@@ -223,8 +223,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import { toast } from '../../utils/toast';
 import {
   getCodeRepositories,
   saveCodeRepository,
@@ -286,7 +287,7 @@ const loadRepositories = async () => {
     const res = await getCodeRepositories(params);
     repositories.value = res.data;
   } catch (error) {
-    ElMessage.error('加载失败');
+    toast.error('加载失败');
   } finally {
     loading.value = false;
   }
@@ -342,18 +343,18 @@ const deleteRepo = async (repo: any) => {
     });
     
     await deleteCodeRepository(repo.id);
-    ElMessage.success('删除成功');
+    toast.success('删除成功');
     loadRepositories();
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败');
+      toast.error('删除失败');
     }
   }
 };
 
 const submitForm = async () => {
   if (!formData.name || !formData.type || !formData.code) {
-    ElMessage.warning('请填写必填项');
+    toast.warning('请填写必填项');
     return;
   }
 
@@ -368,11 +369,11 @@ const submitForm = async () => {
       outputSchema: formData.outputSchema ? JSON.parse(formData.outputSchema) : undefined
     });
     
-    ElMessage.success('保存成功');
+    toast.success('保存成功');
     dialogVisible.value = false;
     loadRepositories();
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败');
+    toast.error(error.message || '保存失败');
   } finally {
     submitting.value = false;
   }

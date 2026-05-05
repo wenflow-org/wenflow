@@ -6,6 +6,8 @@ export interface AgentModelConfig {
   agentId: string;
   tier: string;
   model?: string;
+  thinkingMode?: string;
+  reasoningEffort?: string;
   endpoint?: string;
   apiKey?: string;
   temperature: number;
@@ -24,20 +26,33 @@ class AgentModelConfigService {
           return {
             agentId: defaultConfig.agentId,
             tier: defaultConfig.tier,
+            thinkingMode: 'default',
+            reasoningEffort: 'default',
             temperature: defaultConfig.temperature,
             maxTokens: defaultConfig.maxTokens,
             enabled: true,
           } satisfies AgentModelConfig;
         }
 
-        return persisted;
+        return {
+          ...persisted,
+          thinkingMode: persisted.thinkingMode || 'default',
+          reasoningEffort: persisted.reasoningEffort || 'default'
+        };
       });
 
       const missingManifestConfigs = persistedConfigs.filter(
         (config) => !mergedConfigs.some((merged) => merged.agentId === config.agentId)
       );
 
-      return [...mergedConfigs, ...missingManifestConfigs];
+      return [
+        ...mergedConfigs,
+        ...missingManifestConfigs.map((config) => ({
+          ...config,
+          thinkingMode: config.thinkingMode || 'default',
+          reasoningEffort: config.reasoningEffort || 'default'
+        }))
+      ];
     } catch (error) {
       logger.error('Failed to get all agent configs:', error);
       throw error;
@@ -84,6 +99,8 @@ class AgentModelConfigService {
         if (!existing) {
           await this.upsert(config.agentId, {
             tier: (config as any).tier || 'chat',
+            thinkingMode: 'default',
+            reasoningEffort: 'default',
             temperature: config.temperature,
             maxTokens: config.maxTokens,
             enabled: true

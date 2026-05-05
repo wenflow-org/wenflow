@@ -143,6 +143,8 @@
       v-model="dayDetailOpen"
       size="460px"
       :with-header="false"
+      :lock-scroll="false"
+      :modal="false"
       class="day-detail-drawer"
     >
       <div v-if="selectedDay" class="day-detail">

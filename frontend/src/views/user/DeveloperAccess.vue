@@ -63,8 +63,8 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import { toast } from '../../utils/toast';
 import { getDeveloperOverview, getDeveloperQuickstart } from '@/api/userCustom';
 
 const overview = reactive<any>({
@@ -86,7 +86,7 @@ async function loadOverview() {
     const res = await getDeveloperOverview();
     Object.assign(overview, res.data || {});
   } catch {
-    ElMessage.warning('开发者概览读取失败，展示默认信息');
+    toast.warning('开发者概览读取失败，展示默认信息');
   }
 }
 
@@ -102,9 +102,9 @@ async function loadQuickstart() {
 async function copyQuickstart() {
   try {
     await navigator.clipboard.writeText(quickstart.value);
-    ElMessage.success('Quickstart 已复制');
+    toast.success('Quickstart 已复制');
   } catch {
-    ElMessage.error('复制失败，请手动复制');
+    toast.error('复制失败，请手动复制');
   }
 }
 </script>

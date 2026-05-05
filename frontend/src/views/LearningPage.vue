@@ -1,64 +1,5 @@
 <template>
   <div class="learning-page" v-loading="pageLoading">
-    <header class="learning-header">
-      <div class="header-left">
-        <el-button text @click="goBack">
-          <el-icon><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-        <div class="path-info" v-if="task">
-          <span class="path-name" :title="task.learningPath?.name">{{ task.learningPath?.name }}</span>
-          <span v-if="task.week?.weekNumber" class="week-name">阶段 {{ task.week.weekNumber }}</span>
-        </div>
-      </div>
-      <div class="header-center">
-        <h1 class="task-title" v-if="task">{{ task.title }}</h1>
-      </div>
-      <div class="header-right">
-        <el-tag v-if="sessionPaused" type="warning" size="large" class="status-tag">
-          <el-icon><VideoPause /></el-icon>
-          已暂停
-        </el-tag>
-        <el-tag v-else-if="sessionActive" type="success" size="large" class="status-tag">
-          <el-icon><VideoPlay /></el-icon>
-          授课中
-        </el-tag>
-        <el-tag v-else type="info" size="large" class="status-tag">
-          <el-icon><VideoPause /></el-icon>
-          未开始
-        </el-tag>
-        <el-button 
-          v-if="sessionPaused"
-          type="success" 
-          size="default"
-          @click="resumeSessionFromPause"
-          class="header-action-btn"
-        >
-          <el-icon><VideoPlay /></el-icon>
-          恢复授课
-        </el-button>
-        <el-button 
-          v-if="sessionActive && !sessionPaused"
-          type="warning" 
-          size="default"
-          @click="pauseSession"
-          class="header-action-btn"
-        >
-          <el-icon><VideoPause /></el-icon>
-          暂停授课
-        </el-button>
-        <el-button 
-          v-if="sessionActive && !sessionPaused"
-          type="danger" 
-          size="default"
-          @click="endSession"
-          class="header-action-btn"
-        >
-          <el-icon><VideoPause /></el-icon>
-          结束授课
-        </el-button>
-      </div>
-    </header>
 
     <div v-if="sessionInitializing" class="session-initializing">
       <el-icon class="loading-icon"><Loading /></el-icon>
@@ -69,176 +10,204 @@
       <el-icon :size="48" color="#e6a23c"><WarningFilled /></el-icon>
       <h2>等待学习内容准备完成</h2>
       <p>{{ task.learningPath?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习。' }}</p>
-      <el-button type="primary" @click="goBack">
-        返回路径详情
-      </el-button>
+      <el-button type="primary" @click="goBack">返回路径详情</el-button>
     </div>
 
-    <div v-if="sessionPaused" class="session-paused">
+    <div v-else-if="sessionPaused" class="session-paused">
       <el-icon :size="48" color="#e6a23c"><VideoPause /></el-icon>
       <h2>授课已暂停</h2>
       <p>点击"恢复授课"按钮继续学习</p>
       <el-button type="success" @click="resumeSessionFromPause">
-        <el-icon><VideoPlay /></el-icon>
-        恢复授课
+        <el-icon><VideoPlay /></el-icon> 恢复授课
       </el-button>
     </div>
 
-    <div class="learning-body" v-if="task && sessionActive && !sessionPaused">
-      <main class="main-content">
-        <div class="chat-shell">
-          <aside v-if="knowledgePoints.length > 0" class="chat-knowledge-pane">
-            <KnowledgePointList :knowledge-points="knowledgePoints" />
-          </aside>
+    <template v-else-if="task">
+      <section class="learning-header-card">
+        <div class="learning-header-card__top">
+          <div class="learning-header-card__title">
+            <span class="pill">当前任务</span>
+            <h1>{{ task.title }}</h1>
+            <p v-if="task.learningPath?.name" class="learning-header-card__path">{{ task.learningPath.name }}</p>
+          </div>
+          <div class="learning-header-card__controls">
+            <span v-if="sessionActive" class="learning-header-card__status">学习执行中</span>
+            <el-dropdown
+              v-if="sessionActive"
+              trigger="click"
+              @command="handleSessionCommand"
+            >
+              <el-button class="learning-header-card__more-btn" circle>
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="pause">
+                    <el-icon><VideoPause /></el-icon> 暂停并离开
+                  </el-dropdown-item>
+                  <el-dropdown-item command="reset" divided>
+                    <el-icon><Refresh /></el-icon> 重新开始
+                  </el-dropdown-item>
+                  <el-dropdown-item command="end" divided class="danger-item">
+                    <el-icon><WarningFilled /></el-icon> 结束课程
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
 
-          <div class="chat-area">
-          <div class="message-list" ref="messageListRef">
-            <template v-for="(msg, index) in messages" :key="index">
-              <div :class="['message-item', msg.role]">
-                <div class="message-avatar">
-                  <el-avatar
-                    :size="36"
-                    :style="{
-                      backgroundColor: msg.role === 'user' ? '#409eff' : '#67c23a'
-                    }"
-                  >
-                    <el-icon v-if="msg.role === 'user'"><User /></el-icon>
-                    <el-icon v-else><ChatDotRound /></el-icon>
-                  </el-avatar>
-                </div>
-                <div class="message-body">
-                  <div class="message-bubble" :class="{ failed: (msg as any).failed }">
-                    <MarkdownRenderer :content="msg.content" />
-                    <div v-if="(msg as any).failed" class="message-error">
-                      <el-icon><WarningFilled /></el-icon>
-                      <span>发送失败</span>
-                      <el-button text size="small" @click="retryMessage(index)">
-                        <el-icon><Refresh /></el-icon>
-                        重试
-                      </el-button>
-                    </div>
-                  </div>
-                  <div class="message-meta">
-                    <span class="message-time">{{ formatDateTime(msg.timestamp) }}</span>
-                  </div>
-                  <div v-if="msg.quickReplies && msg.quickReplies.length && !msg.quickRepliesUsed && index === 0" class="quick-replies">
-                    <div
-                      v-for="reply in msg.quickReplies"
-                      :key="reply.text"
-                      class="quick-reply-card"
-                      @click="useOpeningQuickReply(reply.text, index)"
-                    >
-                      <span class="reply-text">{{ reply.text }}</span>
-                    </div>
-                  </div>
-                  <div v-if="showStrategyHints && msg.strategies && msg.strategies.length" class="message-strategies">
-                    <el-tag
-                      v-for="s in msg.strategies"
-                      :key="s"
-                      size="small"
-                      type="info"
-                      effect="plain"
-                    >
-                      {{ strategyLabel(s) }}
-                    </el-tag>
-                  </div>
-                  <div class="message-actions" v-if="msg.role === 'assistant' || msg.role === 'user'">
-                    <el-button 
-                      size="small" 
-                      text 
-                      @click="copyMessage(msg.content)"
-                    >
-                      <el-icon><CopyDocument /></el-icon>
-                      复制
-                    </el-button>
-                  </div>
-                  <KnowledgePointCard
-                    v-if="msg.role === 'assistant' && index === messages.length - 1 && msg.knowledgePoint && !aiLoading"
-                    :knowledge-point="msg.knowledgePoint"
-                    @action="handleKnowledgeAction"
-                  />
-                </div>
-              </div>
-            </template>
+        <div v-if="task.week?.weekNumber" class="learning-header-card__meta">
+          <span>阶段 {{ task.week.weekNumber }}</span>
+        </div>
+      </section>
 
-            <div v-if="aiLoading" class="message-item assistant">
-              <div class="message-avatar">
-                <el-avatar :size="36" style="background-color: #67c23a">
-                  <el-icon><ChatDotRound /></el-icon>
-                </el-avatar>
-              </div>
-              <div class="message-body">
-                <div class="message-bubble thinking">
-                  <el-icon class="loading-icon"><Loading /></el-icon>
-                  <span>AI 思考中...</span>
-                </div>
-              </div>
+      <section class="learning-layout" :class="{ 'learning-layout--no-sidebar': knowledgePoints.length === 0 }">
+        <aside v-if="knowledgePoints.length > 0" class="learning-sidebar">
+          <div class="learning-sidebar__progress">
+            <div class="learning-sidebar__head">
+              <strong>本节学习进度</strong>
+            </div>
+            <div class="learning-sidebar__progress-bar">
+              <div class="learning-sidebar__progress-fill" :style="{ width: kpProgressPercent + '%' }"></div>
+            </div>
+            <div class="learning-sidebar__progress-meta">
+              <span>{{ kpMasteredCount }} / {{ knowledgePoints.length }} 知识点已掌握</span>
+              <strong v-if="kpCurrentFocus">当前焦点：{{ kpCurrentFocus }}</strong>
             </div>
           </div>
 
-          <div class="input-area">
-            <div v-if="showCompletionPrompt" class="completion-prompt">
-              <div class="completion-prompt-main">
-                <p class="completion-prompt-title">已达到课程完成条件</p>
-                <p class="completion-prompt-desc">你可以继续追问，也可以现在结束并生成评估总结。</p>
+          <div class="learning-sidebar__nav">
+            <article
+              v-for="(kp, idx) in knowledgePoints"
+              :key="kp.name"
+              class="learning-kp"
+              :class="[`learning-kp--${kp.status}`, { 'learning-kp--current': idx === kpCurrentIndex }]"
+            >
+              <div class="learning-kp__head">
+                <span class="learning-kp__order">{{ idx + 1 }}</span>
+                <div class="learning-kp__title-group">
+                  <strong>{{ kp.name }}</strong>
+                </div>
+                <span class="learning-kp__state">{{ kpStatusLabel(kp.status) }}</span>
               </div>
-              <div class="completion-prompt-actions">
+              <div class="learning-kp__bar">
+                <div class="learning-kp__fill" :style="{ width: (kp.progress || 0) + '%' }"></div>
+              </div>
+            </article>
+          </div>
+        </aside>
+
+        <div class="learning-main">
+          <div class="learning-messages" ref="messageListRef">
+            <template v-for="(msg, index) in messages" :key="index">
+              <article class="learning-msg" :class="`learning-msg--${msg.role}`">
+                <span class="learning-msg__role">{{ msg.role === 'user' ? '你' : 'AI' }}</span>
+                <div class="learning-msg__body">
+                  <MarkdownRenderer :content="msg.content" />
+                  <div v-if="(msg as any).failed" class="message-error">
+                    <el-icon><WarningFilled /></el-icon>
+                    <span>发送失败</span>
+                    <el-button text size="small" @click="retryMessage(index)">
+                      <el-icon><Refresh /></el-icon> 重试
+                    </el-button>
+                  </div>
+                </div>
+                <div v-if="msg.role === 'assistant' || msg.role === 'user'" class="learning-msg__actions">
+                  <el-button size="small" text @click="copyMessage(msg.content)">
+                    <el-icon><CopyDocument /></el-icon> 复制
+                  </el-button>
+                </div>
+                <div v-if="msg.quickReplies && msg.quickReplies.length && !msg.quickRepliesUsed && index === 0" class="quick-replies">
+                  <div
+                    v-for="reply in msg.quickReplies"
+                    :key="reply.text"
+                    class="quick-reply-card"
+                    @click="useOpeningQuickReply(reply.text, index)"
+                  >
+                    <span class="reply-text">{{ reply.text }}</span>
+                  </div>
+                </div>
+                <KnowledgePointCard
+                  v-if="msg.role === 'assistant' && index === messages.length - 1 && msg.knowledgePoint && !aiLoading"
+                  :knowledge-point="msg.knowledgePoint"
+                  @action="handleKnowledgeAction"
+                />
+              </article>
+            </template>
+
+            <article v-if="aiLoading" class="learning-msg learning-msg--assistant">
+              <span class="learning-msg__role">AI</span>
+              <div class="learning-msg__body learning-msg__body--thinking">
+                <el-icon class="loading-icon"><Loading /></el-icon>
+                <span>思考中...</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="learning-bottom">
+            <CheckpointCard
+              v-if="activeCheckpoint"
+              ref="checkpointRef"
+              :checkpoint="activeCheckpoint"
+              :submitting="checkpointSubmitting"
+              @submit="handleCheckpointSubmit"
+              @skip="handleCheckpointSkip"
+              @continue="handleCheckpointContinue"
+              @review="handleCheckpointReview"
+              @retry="handleCheckpointRetry"
+            />
+
+            <div v-if="showCompletionPrompt" class="learning-completion">
+              <span>已达到课程完成条件</span>
+              <div class="learning-completion__actions">
                 <el-button size="small" @click="dismissCompletionPrompt">继续学习</el-button>
-                <el-button type="success" size="small" :loading="endingSession" @click="confirmCompletionEnd">
-                  结束并评估
-                </el-button>
+                <el-button type="success" size="small" :loading="endingSession" @click="confirmCompletionEnd">结束并评估</el-button>
               </div>
             </div>
 
-            <el-input
-              v-model="userInput"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 6 }"
-              placeholder="输入你的问题或回答... (Ctrl+Enter 发送)"
-              @keydown.ctrl.enter="sendMessage"
-              :disabled="aiLoading"
-              class="message-input"
-            />
-            <div class="input-actions">
+            <div class="learning-composer">
+              <el-input
+                v-model="userInput"
+                type="textarea"
+                :autosize="{ minRows: 1, maxRows: 4 }"
+                placeholder="输入你的想法… (Ctrl+Enter 发送)"
+                @keydown.ctrl.enter="sendMessage"
+                :disabled="aiLoading"
+              />
               <el-button
                 type="primary"
                 @click="sendMessage"
                 :loading="aiLoading"
                 :disabled="!userInput.trim()"
-              >
-                <el-icon><Promotion /></el-icon>
-                发送
-              </el-button>
+              >发送</el-button>
             </div>
           </div>
-          </div>
         </div>
+      </section>
 
-        <PeerNotification
-          :visible="peerNotificationVisible"
-          @click="openPeerChatFromNotification"
-          @close="peerNotificationVisible = false"
-        />
-
-        <PeerChatWindow
-          :visible="peerChatWindowVisible"
-          :messages="peerChatMessages"
-          @send="handlePeerChatSend"
-          @close="peerChatWindowVisible = false"
-        />
-
-        <el-button
-          v-if="peerChatMessages.length > 0 && !peerChatWindowVisible"
-          class="peer-chat-float-btn"
-          type="success"
-          circle
-          size="large"
-          @click="peerChatWindowVisible = true"
-        >
-          <el-icon><ChatDotRound /></el-icon>
-        </el-button>
-      </main>
-    </div>
+      <PeerNotification
+        :visible="peerNotificationVisible"
+        @click="openPeerChatFromNotification"
+        @close="peerNotificationVisible = false"
+      />
+      <PeerChatWindow
+        :visible="peerChatWindowVisible"
+        :messages="peerChatMessages"
+        @send="handlePeerChatSend"
+        @close="peerChatWindowVisible = false"
+      />
+      <el-button
+        v-if="peerChatMessages.length > 0 && !peerChatWindowVisible"
+        class="peer-chat-float-btn"
+        type="success"
+        circle
+        size="large"
+        @click="peerChatWindowVisible = true"
+      >
+        <el-icon><ChatDotRound /></el-icon>
+      </el-button>
+    </template>
 
     <el-dialog
       v-model="showEvaluationDialog"
@@ -264,19 +233,26 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
 import {
-  ArrowLeft, VideoPlay, VideoPause,
-  User, ChatDotRound, Promotion, Loading, WarningFilled,
-  Refresh, CopyDocument
-} from '@element-plus/icons-vue';
-import { aiTeachingAPI } from '@/api/aiTeaching';
-import type { KnowledgePointStatus, ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
+  aiTeachingAPI,
+  type Checkpoint,
+  type CheckpointSubmitPayload,
+  type CheckpointSubmitResult,
+  type KnowledgePointStatus,
+  type ReplanAdvisory,
+  type WrapupArtifact
+} from '@/api/aiTeaching';
 import api from '../utils/api';
-import { learningAPI } from '@/api/learning';
+import CheckpointCard from '@/components/learning/CheckpointCard.vue';
+import {
+  VideoPlay, VideoPause,
+  ChatDotRound, Promotion, Loading, WarningFilled,
+  Refresh, CopyDocument, MoreFilled
+} from '@element-plus/icons-vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import KnowledgePointCard from '@/components/KnowledgePointCard.vue';
-import KnowledgePointList from '@/components/KnowledgePointList.vue';
 import CompletionCard from '@/components/CompletionCard.vue';
 import PeerNotification from '@/components/PeerNotification.vue';
 import PeerChatWindow from '@/components/PeerChatWindow.vue';
@@ -321,6 +297,9 @@ const messages = ref<ChatMessage[]>([]);
 const userInput = ref('');
 const aiLoading = ref(false);
 const messageListRef = ref<HTMLElement | null>(null);
+const checkpointRef = ref<InstanceType<typeof CheckpointCard> | null>(null);
+const activeCheckpoint = ref<Checkpoint | null>(null);
+const checkpointSubmitting = ref(false);
 
 const knowledgePoints = ref<KnowledgePointStatus[]>([]);
 const showCompletionPrompt = ref(false);
@@ -393,6 +372,21 @@ const allKnowledgePointsMastered = computed(() => {
     && knowledgePoints.value.every((kp) => kp.status === 'mastered');
 });
 
+const kpMasteredCount = computed(() => knowledgePoints.value.filter(kp => kp.status === 'mastered').length);
+const kpProgressPercent = computed(() => {
+  if (!knowledgePoints.value.length) return 0;
+  return Math.round((kpMasteredCount.value / knowledgePoints.value.length) * 100);
+});
+const kpCurrentIndex = computed(() => {
+  const idx = knowledgePoints.value.findIndex(kp => kp.status === 'learning');
+  return idx >= 0 ? idx : 0;
+});
+const kpCurrentFocus = computed(() => knowledgePoints.value[kpCurrentIndex.value]?.name || '');
+const kpStatusLabel = (status: string) => {
+  const map: Record<string, string> = { mastered: '已掌握', learning: '学习中', pending: '待学习', review: '待复习' };
+  return map[status] || status;
+};
+
 const STRATEGY_LABELS: Record<string, string> = {
   'socratic-questioning': '苏格拉底式引导',
   'analogy': '类比隐喻',
@@ -419,9 +413,9 @@ const strategyLabel = (id: string) => {
 const copyMessage = async (content: string) => {
   try {
     await navigator.clipboard.writeText(content);
-    ElMessage.success('已复制到剪贴板');
+    toast.success('已复制到剪贴板');
   } catch (error) {
-    ElMessage.error('复制失败');
+    toast.error('复制失败');
   }
 };
 
@@ -444,7 +438,7 @@ const loadTaskData = async () => {
       }
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '加载任务失败');
+    toast.error(error.message || '加载任务失败');
     console.error(error);
   } finally {
     pageLoading.value = false;
@@ -473,6 +467,7 @@ const startSession = async () => {
     knowledgePoints.value = [];
     peerChatMessages.value = [];
     sessionAdvisory.value = null;
+    activeCheckpoint.value = null;
     showCompletionPrompt.value = false;
     completionDurationSeconds.value = 0;
     peerNotificationVisible.value = false;
@@ -491,10 +486,10 @@ const startSession = async () => {
     });
     
     startTimer();
-    ElMessage.success('授课会话已开始');
+    toast.success('授课会话已开始');
   } catch (error: any) {
     sessionInitializing.value = false;
-    ElMessage.error(error.message || '开始会话失败');
+    toast.error(error.message || '开始会话失败');
   }
 };
 
@@ -536,13 +531,20 @@ const sendMessage = async () => {
     if (result.knowledgePoints && result.knowledgePoints.length > 0) {
       knowledgePoints.value = result.knowledgePoints;
     }
+
+    if (result.checkpoint) {
+      activeCheckpoint.value = result.checkpoint;
+      nextTick(() => {
+        checkpointRef.value?.$el?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      });
+    }
     
     if (result.isCompletion && !endingSession.value) {
       if (allKnowledgePointsMastered.value) {
         showCompletionPrompt.value = true;
-        ElMessage.success('🎉 已完成本节课程目标，可选择结束并生成评估');
+        toast.success('🎉 已完成本节课程目标，可选择结束并生成评估');
       } else {
-        ElMessage.info('检测到完成信号，但还有知识点未完全掌握，可继续学习');
+        toast.info('检测到完成信号，但还有知识点未完全掌握，可继续学习');
       }
     }
     
@@ -561,7 +563,7 @@ const sendMessage = async () => {
     
     scrollToBottom();
   } catch (error: any) {
-    ElMessage.error(error.message || '发送消息失败');
+    toast.error(error.message || '发送消息失败');
     if (messages.value.length > 0) {
       const lastMsg = messages.value[messages.value.length - 1];
       if (lastMsg.role === 'user') {
@@ -601,6 +603,49 @@ const useOpeningQuickReply = async (text: string, messageIndex: number) => {
   await sendMessage();
 };
 
+const handleCheckpointSubmit = async (payload: CheckpointSubmitPayload) => {
+  if (!sessionInfo.value.sessionId || !activeCheckpoint.value || checkpointSubmitting.value) return;
+
+  checkpointSubmitting.value = true;
+  try {
+    const result = await aiTeachingAPI.submitCheckpoint(
+      sessionInfo.value.sessionId,
+      activeCheckpoint.value.id,
+      payload
+    );
+
+    checkpointRef.value?.applyResult(result as CheckpointSubmitResult);
+
+    if (result.passed) {
+      toast.success('小检核已通过');
+    } else {
+      toast.info('已收到检核反馈，可继续优化答案');
+    }
+  } catch (error: any) {
+    toast.error(error.message || '提交检核失败');
+  } finally {
+    checkpointSubmitting.value = false;
+  }
+};
+
+const handleCheckpointSkip = () => {
+  activeCheckpoint.value = null;
+  toast.info('已跳过本次小检核');
+};
+
+const handleCheckpointContinue = () => {
+  activeCheckpoint.value = null;
+};
+
+const handleCheckpointReview = () => {
+  userInput.value = '我想回顾一下刚才这个知识点，请你用更直观的方式再讲一遍。';
+  activeCheckpoint.value = null;
+};
+
+const handleCheckpointRetry = () => {
+  toast.info('你可以重新作答这道题');
+};
+
 const handlePeerChatSend = async (text: string) => {
   if (!sessionInfo.value.sessionId) return;
   
@@ -618,7 +663,7 @@ const handlePeerChatSend = async (text: string) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    ElMessage.error(error.message || '同伴消息发送失败');
+    toast.error(error.message || '同伴消息发送失败');
     peerChatMessages.value.pop();
   }
 };
@@ -655,7 +700,7 @@ const openPeerChatFromNotification = async () => {
       });
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '拉取同伴消息失败');
+    toast.error(error.message || '拉取同伴消息失败');
   } finally {
     peerInitializing.value = false;
   }
@@ -664,7 +709,7 @@ const openPeerChatFromNotification = async () => {
 const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
   if (action === 'continue-task') {
     showEvaluationDialog.value = false;
-    ElMessage.success('已保留当前任务进度，你可以稍后继续学习');
+    toast.success('已保留当前任务进度，你可以稍后继续学习');
     return;
   }
 
@@ -674,10 +719,10 @@ const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complet
       await api.post(`/learning/tasks/${taskId.value}/complete`, {
         actualMinutes
       });
-      ElMessage.success('已将本任务标记为完成');
+      toast.success('已将本任务标记为完成');
       closeEvaluationAndReturn();
     } catch (error: any) {
-      ElMessage.error(error.message || '标记任务完成失败');
+      toast.error(error.message || '标记任务完成失败');
     }
     return;
   }
@@ -704,7 +749,7 @@ const pauseSession = () => {
   sessionPaused.value = true;
   stopTimer();
   
-  ElMessage.info('授课已暂停，可随时恢复');
+  toast.info('授课已暂停，可随时恢复');
 };
 
 const resumeSessionFromPause = () => {
@@ -713,7 +758,7 @@ const resumeSessionFromPause = () => {
   sessionPaused.value = false;
   startTimer();
   
-  ElMessage.success('授课已恢复');
+  toast.success('授课已恢复');
 };
 
 const endSession = async (options?: {
@@ -729,11 +774,11 @@ const endSession = async (options?: {
   try {
     if (!options?.skipConfirm) {
       await ElMessageBox.confirm(
-        '确定要结束当前授课会话吗？',
-        '结束授课',
+        '结束后将无法继续当前授课会话，未完成内容不会保留。确定结束吗？',
+        '结束课程并离开',
         {
           confirmButtonText: '确定结束',
-          cancelButtonText: '继续授课',
+          cancelButtonText: '继续学习',
           type: 'warning'
         }
       );
@@ -743,6 +788,7 @@ const endSession = async (options?: {
     
     const result = await aiTeachingAPI.endSession(sessionInfo.value.sessionId);
     showCompletionPrompt.value = false;
+    activeCheckpoint.value = null;
     
     sessionActive.value = false;
     sessionPaused.value = false;
@@ -763,23 +809,26 @@ const endSession = async (options?: {
       : activeTime.value;
 
     if (!result.wrapup?.evaluation) {
-      ElMessage.warning('课程总结已生成，但课后评估未通过 AI 校验。');
+      toast.warning('课程总结已生成，但课后评估未通过 AI 校验。');
     }
 
-    if (!options?.skipEvaluationDialog) {
-      showEvaluationDialog.value = true;
-    }
-    
     if (options?.redirectAfterEnd) {
       closeEvaluationAndReturn();
+    } else if (!options?.skipEvaluationDialog) {
+      const pathId = task.value?.learningPath?.id || '';
+      router.push({
+        path: `/learn/${taskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+        query: pathId ? { pathId } : undefined
+      });
+      return;
     }
 
     if (!options?.silentSuccess) {
-      ElMessage.success('会话已结束');
+      toast.success('会话已结束');
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '结束会话失败');
+      toast.error(error.message || '结束会话失败');
     }
   } finally {
     endingSession.value = false;
@@ -789,7 +838,10 @@ const endSession = async (options?: {
 const closeEvaluationAndReturn = () => {
   showEvaluationDialog.value = false;
   if (task.value?.learningPath?.id) {
-    router.push(`/learning-path/${task.value.learningPath.id}`);
+    router.push({
+      path: `/learning-path/${task.value.learningPath.id}`,
+      query: { t: String(Date.now()) }
+    });
   } else {
     router.push('/dashboard');
   }
@@ -799,13 +851,13 @@ const handleWrapupAdvisoryAction = async (action: string) => {
   if (!sessionAdvisory.value?.shouldSuggest) return;
 
   if (action === 'keep' || action === 'later' || action === 'preview') {
-    if (action === 'keep') ElMessage.success('已保留当前学习计划');
-    if (action === 'later') ElMessage.info('已保留建议，你可以稍后再决定');
+    if (action === 'keep') toast.success('已保留当前学习计划');
+    if (action === 'later') toast.info('已保留建议，你可以稍后再决定');
     return;
   }
 
   if (!task.value?.learningPath?.id) {
-    ElMessage.warning('当前任务缺少学习路径信息，暂无法调整下一阶段');
+    toast.warning('当前任务缺少学习路径信息，暂无法调整下一阶段');
     return;
   }
 
@@ -842,13 +894,13 @@ const handleWrapupAdvisoryAction = async (action: string) => {
 
     const payload = result.data || result;
     const newPathId = payload?.result?.newPathId || payload?.data?.result?.newPathId;
-    ElMessage.success('已创建新的学习路径版本');
+    toast.success('已创建新的学习路径版本');
     if (newPathId) {
       router.push(`/learning-path/${newPathId}`);
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '调整下一阶段失败');
+      toast.error(error.message || '调整下一阶段失败');
     }
   }
 };
@@ -894,39 +946,77 @@ const formatDateTime = (iso: string) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-const goBack = () => {
-  if (sessionPaused.value) {
-    // 暂停状态：直接结束并返回，不显示确认和评估弹窗
-    endSession({
-      skipConfirm: true,
-      silentSuccess: true,
-      skipEvaluationDialog: true,
-      redirectAfterEnd: true,
-    });
-  } else if (sessionActive.value) {
-    // 授课中：需要确认
-    ElMessageBox.confirm(
-      '授课会话正在进行中，确定要返回吗？',
-      '确认返回',
+const pauseAndLeave = () => {
+  if (sessionActive.value && !sessionPaused.value) {
+    sessionPaused.value = true;
+    stopTimer();
+  }
+  toast.success('已暂停，本次进度已保留');
+  const pathId = task.value?.learningPath?.id;
+  router.push(pathId ? `/learning-path/${pathId}` : '/dashboard');
+};
+
+const handleSessionCommand = (command: string) => {
+  if (command === 'pause') {
+    pauseAndLeave();
+  } else if (command === 'end') {
+    endSession();
+  } else if (command === 'reset') {
+    resetAndRestart();
+  }
+};
+
+const resetAndRestart = async () => {
+  if (!sessionInfo.value.sessionId) return;
+
+  try {
+    await ElMessageBox.confirm(
+      '将清空本节课当前进度（对话、知识点推进、小检核状态），并从开头重新开始。此操作不可撤销。',
+      '重新开始本节课',
       {
-        confirmButtonText: '结束并返回',
-        cancelButtonText: '继续授课',
-        type: 'warning'
+        confirmButtonText: '确认重置',
+        cancelButtonText: '继续学习',
+        type: 'warning',
       }
-    ).then(() => {
-      endSession({
-        silentSuccess: true,
-        skipEvaluationDialog: true,
-        redirectAfterEnd: true,
-      });
-    }).catch(() => {});
+    );
+  } catch {
+    return;
+  }
+
+  try {
+    await aiTeachingAPI.resetSession(sessionInfo.value.sessionId);
+  } catch (error: any) {
+    toast.error(error.message || '重置会话失败，请稍后重试');
+    return;
+  }
+
+  stopTimer();
+  messages.value = [];
+  knowledgePoints.value = [];
+  activeCheckpoint.value = null;
+  showCompletionPrompt.value = false;
+  sessionWrapup.value = null;
+  sessionAdvisory.value = null;
+  completionDurationSeconds.value = 0;
+  sessionActive.value = false;
+  sessionPaused.value = false;
+  sessionInfo.value = { sessionId: '', subject: '', topic: '', difficulty: 5 };
+  elapsedTime.value = 0;
+  activeTime.value = 0;
+  peerChatMessages.value = [];
+  peerNotificationVisible.value = false;
+  peerChatWindowVisible.value = false;
+
+  toast.success('已重新开始本节课');
+  await startSession();
+};
+
+const goBack = () => {
+  if (sessionActive.value || sessionPaused.value) {
+    pauseAndLeave();
   } else {
-    // 未开始/已结束：直接返回
-    if (task.value?.learningPath?.id) {
-      router.push(`/learning-path/${task.value.learningPath.id}`);
-    } else {
-      router.push('/dashboard');
-    }
+    const pathId = task.value?.learningPath?.id;
+    router.push(pathId ? `/learning-path/${pathId}` : '/dashboard');
   }
 };
 
@@ -936,7 +1026,7 @@ const resumeSession = async (sessionId: string) => {
   try {
     const detail = await aiTeachingAPI.getSessionDetail(sessionId);
     if (!detail) {
-      ElMessage.error('获取会话详情失败');
+      toast.error('获取会话详情失败');
       sessionInitializing.value = false;
       return;
     }
@@ -956,6 +1046,7 @@ const resumeSession = async (sessionId: string) => {
     }));
 
     knowledgePoints.value = Array.isArray(detail.knowledgePoints) ? detail.knowledgePoints : [];
+    activeCheckpoint.value = detail.pendingCheckpoint || null;
     showCompletionPrompt.value = false;
     completionDurationSeconds.value = 0;
     sessionAdvisory.value = null;
@@ -964,10 +1055,10 @@ const resumeSession = async (sessionId: string) => {
     sessionInitializing.value = false;
     startTimer();
     
-    ElMessage.success('已恢复上次未完成的授课');
+    toast.success('已恢复上次未完成的授课');
   } catch (error: any) {
     sessionInitializing.value = false;
-    ElMessage.error(error.message || '恢复会话失败');
+    toast.error(error.message || '恢复会话失败');
   }
 };
 
@@ -990,6 +1081,14 @@ const checkActiveSession = async (): Promise<boolean> => {
 
 onMounted(async () => {
   await loadTaskData();
+
+  if (task.value?.status === 'completed') {
+    toast.info('本任务已完成，请返回学习路径查看评估');
+    const pathId = task.value?.learningPath?.id;
+    router.replace(pathId ? `/learning-path/${pathId}` : '/dashboard');
+    return;
+  }
+
   if (task.value && task.value.learningPath?.canStartLearning !== false) {
     const resumed = await checkActiveSession();
     if (!resumed) {
@@ -1005,28 +1104,36 @@ onUnmounted(() => {
 
 <style scoped>
 .learning-page {
-  display: flex;
-  flex-direction: column;
+  --ink: #172033;
+  --paper: #f4f7fc;
+  --accent: #3478f6;
+  --accent-deep: #1f57cc;
+  --line: #d8e0ef;
+  --muted: #7a8599;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
-  background:
-    radial-gradient(circle at 8% 10%, color-mix(in srgb, var(--color-primary-light) 14%, transparent), transparent 36%),
-    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--color-accent-light) 18%, transparent), transparent 34%),
-    var(--bg-body);
+  max-width: 100%;
+  color: var(--ink);
+  background: #f3f6fb;
+  overflow: hidden;
 }
 
+/* ---- states ---- */
 .session-initializing {
-  flex: 1;
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 16px;
-  color: var(--text-muted);
-  transition: color var(--transition-normal);
+  min-height: 60vh;
+  color: var(--muted);
+  font-size: 15px;
 }
 
 .session-initializing .loading-icon {
-  font-size: 32px;
+  font-size: 36px;
   animation: rotating 2s linear infinite;
 }
 
@@ -1036,339 +1143,477 @@ onUnmounted(() => {
 }
 
 .session-paused {
-  flex: 1;
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 24px;
-  color: var(--color-accent-dark);
+  min-height: 60vh;
 }
 
 .session-paused h2 {
   margin: 0;
   font-size: 24px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--ink);
 }
 
 .session-paused p {
   margin: 0;
   font-size: 14px;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
-.learning-header {
+/* ---- header card ---- */
+.learning-header-card {
+  max-width: min(1240px, calc(100% - 48px));
+  width: 100%;
+  margin: 12px auto 0;
+  padding: 12px 28px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  display: grid;
+  gap: 8px;
+}
+
+.learning-header-card__top {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  min-height: 64px;
-  padding: 8px 20px;
-  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
-  border-bottom: 1px solid var(--border-default);
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(8px);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.path-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.path-name {
-  font-weight: 500;
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.week-name {
-  color: var(--color-primary-dark);
-  background: color-mix(in srgb, var(--color-primary-light) 20%, transparent);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.header-center {
-  flex: 1;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  padding: 0 20px;
-}
-
-.task-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-  line-height: 1.25;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.header-action-btn {
-  margin-left: 4px;
-}
-
-.status-tag {
-  white-space: nowrap;
-}
-
-.status-tag :deep(.el-tag__content) {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  line-height: 1;
-}
-
-.status-tag :deep(.el-icon) {
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-}
-
-@media (max-width: 1100px) {
-  .learning-header {
-    padding: 8px 12px;
-    min-height: 60px;
-  }
-
-  .path-info {
-    display: none;
-  }
-
-  .task-title {
-    font-size: 15px;
-  }
-
-  .header-center {
-    padding: 0 10px;
-  }
-}
-
-.learning-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  gap: 0;
-  padding: 0;
-}
-
-.main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background-color: var(--bg-surface);
-  overflow: hidden;
-  position: relative;
-}
-
-.chat-shell {
-  flex: 1;
-  min-height: 0;
-  width: min(1440px, 100%);
-  margin: 0 auto;
-  display: flex;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--color-primary-light) 4%);
-  border-left: 1px solid var(--border-default);
-  border-right: 1px solid var(--border-default);
-  box-shadow: var(--shadow-sm);
-}
-
-.chat-knowledge-pane {
-  width: clamp(220px, 24vw, 300px);
-  min-width: 220px;
-  max-width: 320px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 14px 12px;
-  background: var(--bg-elevated);
-  border-right: 1px solid var(--border-default);
-}
-
-.knowledge-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-}
-
-.knowledge-empty-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.knowledge-empty-desc {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.session-info-card,
-.state-card,
-.intervention-card,
-.actions-card {
-  flex-shrink: 0;
-}
-
-.info-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-light);
-  transition: border-color var(--transition-normal);
-}
-
-.info-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  transition: color var(--transition-normal);
-}
-
-.info-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  transition: color var(--transition-normal);
-}
-
-.info-value-topic {
-  display: block;
-  max-width: 180px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: default;
-}
-
-.state-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.state-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.state-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: var(--text-secondary);
-  transition: color var(--transition-normal);
-}
-
-.state-value {
-  font-weight: 600;
-  color: var(--text-primary);
-  transition: color var(--transition-normal);
-}
-
-.chat-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-muted) 8%);
-}
-
-.message-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.message-item {
-  display: flex;
-  gap: 12px;
+  gap: 24px;
   align-items: flex-start;
 }
 
-.message-item.user {
-  flex-direction: row-reverse;
+.learning-header-card__title {
+  display: grid;
+  gap: 8px;
+  max-width: 820px;
+  flex: 1;
+  min-width: 0;
 }
 
-.message-body {
+.learning-header-card__title h1 {
+  margin: 0;
+  font-size: clamp(16px, 1.9vw, 20px);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-weight: 700;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.learning-header-card__path {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--accent-deep);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.learning-header-card__controls {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 75%;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
-.message-item.user .message-body {
-  align-items: flex-end;
+.learning-header-card__more-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-.message-bubble {
-  padding: 12px 16px;
+.learning-header-card__more-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(52, 120, 246, 0.04);
+}
+
+:deep(.el-dropdown-menu__item) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+}
+
+:deep(.el-dropdown-menu__item .el-icon) {
+  font-size: 15px;
+  margin: 0;
+}
+
+:deep(.el-dropdown-menu__item.danger-item) {
+  color: #e86450;
+}
+
+:deep(.el-dropdown-menu__item.danger-item:hover) {
+  background: rgba(232, 100, 80, 0.06);
+  color: #d4503c;
+}
+
+.learning-header-card__status {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a7a42;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
   border-radius: 12px;
-  line-height: 1.6;
-  font-size: 14px;
+  background: rgba(49, 177, 111, 0.1);
+  letter-spacing: 0.02em;
 }
 
-.message-bubble.failed {
-  border: 1px solid var(--color-warning-border);
-  background-color: var(--color-warning-bg);
+.learning-header-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.learning-header-card__meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f3f6fb;
+  border: 1px solid rgba(23, 32, 51, 0.07);
+  font-size: 12px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---- layout ---- */
+.learning-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  max-width: min(1240px, calc(100% - 48px));
+  width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.learning-layout--no-sidebar {
+  grid-template-columns: 1fr;
+  height: 100%;
+}
+
+/* ---- sidebar ---- */
+.learning-sidebar {
+  border-right: 1px solid var(--line);
+  padding: 24px 20px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  background: rgba(255, 255, 255, 0.45);
+  overflow-y: auto;
+}
+
+.learning-sidebar__progress {
+  padding: 18px;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  display: grid;
+  gap: 14px;
+}
+
+.learning-sidebar__head strong {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.learning-sidebar__progress-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  overflow: hidden;
+}
+
+.learning-sidebar__progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-deep));
+  transition: width 0.4s ease;
+}
+
+.learning-sidebar__progress-meta {
+  display: grid;
+  gap: 6px;
+}
+
+.learning-sidebar__progress-meta span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.learning-sidebar__progress-meta strong {
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.learning-sidebar__nav {
+  display: grid;
+  gap: 10px;
+}
+
+.learning-kp {
+  padding: 14px 16px 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(23, 32, 51, 0.07);
+  display: grid;
+  gap: 10px;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.learning-kp--mastered {
+  border-color: rgba(49, 177, 111, 0.2);
+  background: rgba(49, 177, 111, 0.02);
+}
+
+.learning-kp--mastered .learning-kp__state {
+  color: #1a7a42;
+  background: rgba(49, 177, 111, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.learning-kp--review {
+  border-color: rgba(194, 132, 26, 0.2);
+  background: rgba(194, 132, 26, 0.02);
+}
+
+.learning-kp--review .learning-kp__state {
+  color: #9a6b0a;
+  background: rgba(194, 132, 26, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.learning-kp--pending .learning-kp__state {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.learning-kp--current {
+  background: color-mix(in srgb, var(--accent) 6%, white);
+  border-color: rgba(52, 120, 246, 0.2);
+  box-shadow: inset 3px 0 0 var(--accent), 0 1px 4px rgba(52, 120, 246, 0.06);
+}
+
+.learning-kp--current .learning-kp__state {
+  color: #fff;
+  background: var(--accent);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.learning-kp--current .learning-kp__order {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+.learning-kp__head {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+}
+
+.learning-kp__order {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f6fb;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-deep);
+  flex-shrink: 0;
+}
+
+.learning-kp__title-group {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.learning-kp__head strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.learning-kp__state {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.learning-kp__bar {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  overflow: hidden;
+}
+
+.learning-kp__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-deep));
+  transition: width 0.4s ease;
+}
+
+.learning-kp--mastered .learning-kp__fill {
+  background: #31b16f;
+}
+
+/* ---- main area ---- */
+.learning-main {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  padding: 24px;
+  gap: 0;
+  overflow: hidden;
+}
+
+.learning-bottom {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.learning-messages {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.learning-msg {
+  max-width: 88%;
+  min-width: 220px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  position: relative;
+}
+
+.learning-msg--user {
+  max-width: 90%;
+}
+
+.learning-msg--assistant {
+  justify-self: start;
+  background: #fff;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.03);
+}
+
+.learning-msg--user {
+  justify-self: end;
+  background: color-mix(in srgb, var(--accent) 8%, white);
+  border: 1px solid rgba(52, 120, 246, 0.1);
+}
+
+.learning-msg__role {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-deep);
+  letter-spacing: 0.02em;
+}
+
+.learning-msg__body {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.learning-msg__body :deep(p) {
+  margin: 0 0 8px 0;
+}
+
+.learning-msg__body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.learning-msg__body--thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.learning-msg__actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  display: flex;
+  margin-top: -2px;
+}
+
+.learning-msg:hover .learning-msg__actions {
+  opacity: 1;
+}
+
+.learning-msg__actions :deep(.el-button) {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 3px 10px;
+  height: auto;
+  border-radius: 8px;
+  background: rgba(23, 32, 51, 0.04);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  font-weight: 600;
+}
+
+.learning-msg__actions :deep(.el-button:hover) {
+  color: var(--ink);
+  background: rgba(23, 32, 51, 0.08);
 }
 
 .message-error {
@@ -1382,64 +1627,20 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.message-error .el-button {
+.message-error :deep(.el-button) {
+  font-size: 11px;
   color: var(--color-warning);
-  margin-left: 8px;
+  padding: 3px 10px;
+  height: auto;
+  border-radius: 8px;
+  background: rgba(232, 100, 80, 0.06);
+  border: 1px solid rgba(232, 100, 80, 0.12);
+  font-weight: 600;
+  margin-left: 6px;
 }
 
-.message-error .el-button:hover {
-  color: var(--color-warning-dark);
-}
-
-.message-item.assistant .message-bubble {
-  background: color-mix(in srgb, var(--bg-subtle) 94%, var(--color-primary-light) 6%);
-  color: var(--text-primary);
-  border-bottom-left-radius: 4px;
-  border: 1px solid var(--border-default);
-}
-
-.message-item.user .message-bubble {
-  background: color-mix(in srgb, var(--color-primary) 84%, white 16%);
-  color: var(--text-on-primary);
-  border-bottom-right-radius: 4px;
-}
-
-.message-bubble.thinking {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-}
-
-.loading-icon {
-  animation: rotating 2s linear infinite;
-}
-
-@keyframes rotating {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.message-bubble :deep(p) {
-  margin: 0 0 8px 0;
-}
-
-.message-bubble :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.message-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-  display: flex;
-  gap: 12px;
-}
-
-.message-strategies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
+.message-error :deep(.el-button:hover) {
+  background: rgba(232, 100, 80, 0.12);
 }
 
 .quick-replies {
@@ -1452,195 +1653,163 @@ onUnmounted(() => {
 .quick-reply-card {
   display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--border-default) 72%);
-  background: color-mix(in srgb, var(--color-primary-light) 18%, var(--bg-elevated) 82%);
-  color: var(--text-primary);
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(52, 120, 246, 0.18);
+  background: rgba(52, 120, 246, 0.04);
+  color: var(--ink);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .quick-reply-card:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--border-default) 45%);
-  background: color-mix(in srgb, var(--color-primary-light) 28%, var(--bg-elevated) 72%);
+  background: rgba(52, 120, 246, 0.08);
+  border-color: rgba(52, 120, 246, 0.3);
 }
 
-.message-actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.input-area {
-  border-top: 1px solid color-mix(in srgb, var(--border-default) 70%, var(--color-primary-light) 30%);
-  padding: 16px;
-  background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-muted) 10%);
-}
-
-.completion-prompt {
-  margin-bottom: 12px;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--color-success) 35%, var(--border-default) 65%);
-  background: color-mix(in srgb, var(--color-success-bg) 55%, var(--bg-surface) 45%);
+/* ---- completion ---- */
+.learning-completion {
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: rgba(49, 177, 111, 0.06);
+  border: 1px solid rgba(49, 177, 111, 0.15);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
-.completion-prompt-main {
-  min-width: 0;
-}
-
-.completion-prompt-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.completion-prompt-desc {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-.completion-prompt-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.message-input {
-  margin-bottom: 12px;
-}
-
-.input-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.analysis-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.confusion-points {
-  margin-top: 8px;
-  padding: 8px;
-  background-color: #fef0f0;
-  border-radius: 4px;
-}
-
-.confusion-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #f56c6c;
-  margin-bottom: 8px;
-}
-
-.confusion-points ul {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 12px;
-  color: #606266;
-}
-
-.intervention-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.intervention-type {
+.learning-completion span {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #1a7a42;
 }
 
-.intervention-reasoning {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.action-buttons {
+.learning-completion__actions {
   display: flex;
-  flex-direction: column;
+  gap: 10px;
+}
+
+.learning-completion__actions :deep(.el-button) {
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ---- composer ---- */
+.learning-composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.action-btn {
-  width: 100%;
+.learning-composer:focus-within {
+  border-color: rgba(52, 120, 246, 0.3);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.06);
 }
 
+.learning-composer :deep(.el-textarea__inner) {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 8px 0;
+  line-height: 1.6;
+}
+
+.learning-composer :deep(.el-button) {
+  border-radius: 10px;
+  font-weight: 600;
+  min-height: 40px;
+  padding: 0 20px;
+  font-size: 14px;
+}
+
+.loading-icon {
+  animation: rotating 2s linear infinite;
+}
+
+/* ---- peer chat ---- */
 .peer-chat-float-btn {
   position: fixed;
   bottom: 100px;
   right: 28px;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   z-index: 9997;
   transition: all 0.3s ease;
 }
 
 .peer-chat-float-btn:hover {
   transform: scale(1.1);
-  box-shadow: var(--shadow-lg);
 }
 
-.chat-knowledge-pane::-webkit-scrollbar,
-.message-list::-webkit-scrollbar {
+/* ---- scrollbar ---- */
+.learning-messages::-webkit-scrollbar {
   width: 6px;
 }
 
-.chat-knowledge-pane::-webkit-scrollbar-track,
-.message-list::-webkit-scrollbar-track {
-  background: var(--bg-muted);
+.learning-messages::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.chat-knowledge-pane::-webkit-scrollbar-thumb,
-.message-list::-webkit-scrollbar-thumb {
-  background: var(--border-dark);
+.learning-messages::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
   border-radius: 3px;
 }
 
-.chat-knowledge-pane::-webkit-scrollbar-thumb:hover,
-.message-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+.learning-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }
 
+/* ---- responsive ---- */
 @media (max-width: 1100px) {
-  .chat-shell {
+  .learning-layout,
+  .learning-header-card {
     width: 100%;
-    border-left: none;
-    border-right: none;
-    box-shadow: none;
+    padding: 20px 24px;
   }
 
-  .chat-knowledge-pane {
-    width: 190px;
-    min-width: 190px;
-    padding: 10px 8px;
-  }
-
-  .completion-prompt {
+  .learning-header-card__top {
     flex-direction: column;
     align-items: flex-start;
+    gap: 16px;
   }
 
-  .completion-prompt-actions {
+  .learning-header-card__controls {
     width: 100%;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .learning-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .learning-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .learning-msg {
+    max-width: 95%;
+    min-width: 0;
   }
 }
 </style>

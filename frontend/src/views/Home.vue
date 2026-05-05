@@ -1,1038 +1,685 @@
 <template>
   <div class="home-page">
-    <!-- 滚动进度条 -->
-    <div class="scroll-progress" :style="{ width: scrollProgress + '%' }"></div>
+    <header class="site-header" :class="{ 'site-header--scrolled': scrolled }">
+      <div class="site-nav-shell">
+        <router-link to="/" class="site-brand" @click="closeMobileNav">
+          <img src="/logo.png" alt="问流 WenFlow" class="site-brand__logo" />
+        </router-link>
 
-    <!-- 动态背景 -->
-      <div class="animated-bg">
-        <div class="gradient-orb gradient-orb-1"></div>
-        <div class="gradient-orb gradient-orb-2"></div>
-        <div class="gradient-orb gradient-orb-3"></div>
-        <!-- 粒子效果 -->
-        <div class="particles">
-          <div v-for="(style, index) in particleStyles" :key="index" class="particle" :style="style"></div>
-        </div>
-      </div>
-
-    <!-- 导航栏 -->
-    <header class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-      <div class="container navbar-container">
-        <div class="navbar-brand">
-          <router-link to="/" class="brand-link">
-            <img src="/logo.png" alt="WenFlow Logo" class="brand-logo-img" />
-            <span class="brand-text">问流 WenFlow</span>
-          </router-link>
-        </div>
-        
-        <!-- 桌面导航 -->
-        <nav class="navbar-nav" :class="{ 'nav-open': mobileNavOpen }">
-          <a href="#einstein" class="nav-link" :class="{ 'nav-link-active': activeSection === 'einstein' }">理念</a>
-          <a href="#problem-creator" class="nav-link" :class="{ 'nav-link-active': activeSection === 'problem-creator' }">问题意识</a>
-          <a href="#capabilities" class="nav-link" :class="{ 'nav-link-active': activeSection === 'capabilities' }">核心能力</a>
-          <a href="https://github.com/wenflow-org/wenflow" class="nav-link" target="_blank">GitHub</a>
+        <nav class="site-nav" aria-label="页面导航">
+          <a href="#start" class="site-nav__item">首页</a>
+          <router-link to="/vision" class="site-nav__item">愿景</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" class="site-nav__item" target="_blank" rel="noreferrer">GitHub</a>
         </nav>
 
-        <!-- 桌面操作区 -->
-        <div class="navbar-actions">
-          <ThemeSwitcher />
+        <div class="site-actions">
           <template v-if="isLoggedIn">
-            <router-link to="/goal-conversation" class="btn btn-primary">
-              进入规划
-            </router-link>
-            <router-link to="/dashboard" class="btn btn-secondary">
-              我的学习台
-            </router-link>
+            <router-link to="/dashboard" class="site-cta site-cta--ghost">回到学习台</router-link>
+            <router-link to="/goal-conversation" class="site-cta site-cta--primary">新建目标规划</router-link>
           </template>
           <template v-else>
-            <router-link to="/register" class="btn btn-primary">
-              开始体验
-            </router-link>
-            <router-link to="/login" class="btn btn-secondary">
-              登录
-            </router-link>
+            <router-link to="/login" class="site-cta site-cta--ghost">登录</router-link>
+            <router-link to="/register" class="site-cta site-cta--primary">开始规划我的目标</router-link>
           </template>
         </div>
 
-        <!-- 移动端汉堡菜单 -->
-        <button class="mobile-menu-btn" @click="toggleMobileNav" :aria-label="mobileNavOpen ? '关闭菜单' : '打开菜单'">
-          <span class="hamburger" :class="{ 'hamburger-open': mobileNavOpen }">
-            <span class="hamburger-line"></span>
-            <span class="hamburger-line"></span>
-            <span class="hamburger-line"></span>
-          </span>
+        <button type="button" class="mobile-menu-btn" :aria-label="mobileNavOpen ? '关闭菜单' : '打开菜单'" @click="toggleMobileNav">
+          <span></span>
+          <span></span>
+          <span></span>
         </button>
       </div>
 
-      <!-- 移动端下拉菜单 -->
-      <div class="mobile-nav-dropdown" :class="{ 'dropdown-open': mobileNavOpen }">
-        <a href="#einstein" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': activeSection === 'einstein' }" @click="closeMobileNav">理念</a>
-        <a href="#problem-creator" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': activeSection === 'problem-creator' }" @click="closeMobileNav">问题意识</a>
-        <a href="#capabilities" class="mobile-nav-link" :class="{ 'mobile-nav-link-active': activeSection === 'capabilities' }" @click="closeMobileNav">核心能力</a>
-        <a href="https://github.com/wenflow-org/wenflow" class="mobile-nav-link" target="_blank" @click="closeMobileNav">GitHub</a>
-        <div class="mobile-nav-actions">
-          <template v-if="isLoggedIn">
-            <router-link to="/goal-conversation" class="btn btn-primary" @click="closeMobileNav">
-              进入规划
-            </router-link>
-            <router-link to="/dashboard" class="btn btn-secondary" @click="closeMobileNav">
-              我的学习台
-            </router-link>
-          </template>
-          <template v-else>
-            <router-link to="/register" class="btn btn-primary" @click="closeMobileNav">
-              开始体验
-            </router-link>
-            <router-link to="/login" class="btn btn-secondary" @click="closeMobileNav">
-              登录
-            </router-link>
-          </template>
+      <div class="mobile-nav" :class="{ 'mobile-nav--open': mobileNavOpen }">
+        <a href="#start" class="mobile-nav__item" @click="closeMobileNav">首页</a>
+        <router-link to="/vision" class="mobile-nav__item" @click="closeMobileNav">愿景</router-link>
+        <a href="https://github.com/wenflow-org/wenflow" class="mobile-nav__item" target="_blank" rel="noreferrer" @click="closeMobileNav">GitHub</a>
+        <div class="mobile-nav__actions">
+          <router-link :to="isLoggedIn ? '/dashboard' : '/login'" class="site-cta site-cta--ghost" @click="closeMobileNav">{{ isLoggedIn ? '回到学习台' : '登录' }}</router-link>
+          <router-link :to="primaryCtaPath" class="site-cta site-cta--primary" @click="closeMobileNav">{{ primaryCtaLabel }}</router-link>
         </div>
       </div>
     </header>
 
-    <!-- Hero 区域 - 颠覆性开场 -->
-    <section class="hero">
-      <div class="container hero-container">
-        <div class="hero-content fade-in">
-          <div class="hero-badge">
-            <span class="badge-dot"></span>
-            <span>为想解决真问题的人准备</span>
-          </div>
+    <main id="start" class="home-main">
+      <div class="home-bg-layer">
+        <div class="home-bg-orb home-bg-orb--1"></div>
+        <div class="home-bg-orb home-bg-orb--2"></div>
+        <div class="home-bg-grid"></div>
+      </div>
 
-          <h1 class="hero-title">
-            <span class="hero-title-line">想学的东西很多</span>
-            <span class="hero-title-line highlight">先把真正的问题想清楚</span>
-          </h1>
-          
-          <p class="hero-subtitle">
-            <strong>问流帮你把模糊目标拆成可执行路径。</strong>
-            先想清要解决什么，再进入 AI 规划、对话学习和进度追踪，少走弯路。
-          </p>
-
-          <div class="hero-cta">
-            <div class="cta-buttons">
-              <router-link :to="primaryCtaPath" class="btn btn-primary btn-lg btn-glow">
-                <span class="btn-icon">🚀</span>
-                {{ primaryCtaLabel }}
-              </router-link>
-              <a href="#einstein" class="btn btn-outline btn-lg">
-                先了解理念
-              </a>
-            </div>
-
-            <div class="hero-proof">
-              <div class="proof-item">
-                <strong>目标拆解</strong>
-                <span>把“想学”变成一条学习路径</span>
-              </div>
-              <div class="proof-item">
-                <strong>AI 对话学习</strong>
-                <span>边学边问，围绕你的真实问题推进</span>
-              </div>
-              <div class="proof-item">
-                <strong>学习状态追踪</strong>
-                <span>看到节奏、疲劳和长期积累</span>
-              </div>
-            </div>
-
-            <div class="scroll-hint">
-              <span>往下看，先判断这是不是适合你的学习方式</span>
-              <div class="scroll-arrow">↓</div>
-            </div>
+      <section class="home-hero">
+        <div class="home-hero__copy">
+          <span class="home-kicker">问流 WenFlow</span>
+          <h1>先说清你想解决的事，再开始学习。</h1>
+          <p>问流会陪你把模糊目标拆成第一步：该学什么、先做什么、什么时候算真的会了。</p>
+          <div class="home-hero__actions">
+            <router-link :to="primaryCtaPath" class="btn btn--primary btn--lg">{{ primaryCtaLabel }}</router-link>
+            <a href="#how" class="btn btn--ghost">先看看怎么开始</a>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Section 1: 爱因斯坦的警告 -->
-    <div id="einstein">
-      <EinsteinQuote />
-    </div>
-
-    <!-- Section 2: 思维 vs 工具 -->
-    <MindVsTool />
-
-    <!-- Section 3: 问题创建 -->
-    <div id="problem-creator">
-      <ProblemCreator />
-    </div>
-
-    <!-- Section 4: 核心能力 -->
-    <div id="capabilities">
-      <CapabilityList />
-    </div>
-
-    <!-- Footer: 邀请 -->
-    <footer id="footer" class="footer-section">
-      <div class="container">
-        <div class="footer-content fade-in">
-          <div class="footer-quote">
-            <p class="quote-main">
-              "当 AI 在学怎么像人一样思考，<br />
-              我们在教人怎么更会思考。"
-            </p>
-            <p class="quote-sub">
-              当它们相遇，就是未来。
-            </p>
+        <aside class="home-hero__scene" aria-label="目标澄清示例">
+          <div class="scene-turn scene-turn--user">我想学 Python，但不知道从哪里开始。</div>
+          <div class="scene-turn scene-turn--ai">先不急着选课。你最近最想用它解决什么？</div>
+          <div class="scene-turn scene-turn--user">每周 Excel 周报太耗时间，我想先自动化一部分。</div>
+          <div class="scene-outcome">
+            <span>可以开始的目标</span>
+            <strong>用 Python 自动化一段周报流程</strong>
+            <small>下一步：生成第一版学习路径</small>
           </div>
+        </aside>
+      </section>
 
-          <div class="footer-cta">
-            <router-link :to="primaryCtaPath" class="btn btn-primary btn-lg btn-glow">
-              🚀 {{ footerCtaLabel }}
-            </router-link>
-          </div>
+      <section class="home-why">
+        <div class="home-why__lead">
+          <p>很多学习卡住，不是因为你不努力，而是因为一开始的问题太大、太泛、离真实场景太远。</p>
+        </div>
+        <div class="home-compare-grid">
+          <article class="compare-card compare-card--muted">
+            <span>常见开始方式</span>
+            <h2>先找课程和资料</h2>
+            <p>内容很多，但你还是不知道今天先做哪一步，也很难判断自己是不是真的会了。</p>
+          </article>
+          <article class="compare-card compare-card--strong">
+            <span>问流的开始方式</span>
+            <h2>先把目标缩小到能行动</h2>
+            <p>从你真实想解决的事出发，确认基础、时间和场景，再拆出可以完成的第一步。</p>
+          </article>
+        </div>
+      </section>
 
-          <div class="footer-links">
-            <a href="#einstein">理念</a>
-            <a href="#problem-creator">问题意识</a>
-            <a href="#capabilities">核心能力</a>
-            <a href="https://github.com/wenflow-org/wenflow" target="_blank">GitHub</a>
-          </div>
+      <section id="how" class="home-how">
+        <div class="section-head">
+          <span class="home-kicker">怎么开始</span>
+          <h2>不用先想完整计划，先说一句真实需求。</h2>
+        </div>
+        <div class="home-flow">
+          <article v-for="(step, idx) in flowSteps" :key="step.title" class="flow-card">
+            <span>{{ String(idx + 1).padStart(2, '0') }}</span>
+            <strong>{{ step.title }}</strong>
+            <p>{{ step.desc }}</p>
+          </article>
+        </div>
+      </section>
 
-          <div class="footer-bottom">
-            <p>© 2026 问流 WenFlow · 你的学习伙伴</p>
+      <section class="home-preview">
+        <div class="section-head">
+          <span class="home-kicker">进入学习后</span>
+          <h2>每一步都要帮你决定下一步。</h2>
+        </div>
+        <div class="preview-grid">
+          <article v-for="item in previewCards" :key="item.title" class="preview-card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.desc }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="home-capabilities">
+        <h2>不只是听懂一节课，而是能在自己的场景里用出来。</h2>
+        <div class="capability-list">
+          <span v-for="item in capabilityTags" :key="item">{{ item }}</span>
+        </div>
+      </section>
+
+      <section class="home-final-band">
+        <div class="home-final-band__glow"></div>
+        <div class="home-final-band__inner">
+          <h2>先体验一次完整学习闭环。</h2>
+          <p>从一个模糊目标开始，看看问流如何帮你澄清、规划，并进入真正的学习过程。</p>
+          <div class="home-final-band__actions">
+            <router-link :to="primaryCtaPath" class="btn btn--primary btn--lg">{{ footerCtaLabel }}</router-link>
+            <router-link to="/vision" class="btn btn--ghost btn--ghost-light">查看愿景</router-link>
           </div>
         </div>
-      </div>
-    </footer>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue';
-import EinsteinQuote from '@/components/home/EinsteinQuote.vue';
-import MindVsTool from '@/components/home/MindVsTool.vue';
-import ProblemCreator from '@/components/home/ProblemCreator.vue';
-import CapabilityList from '@/components/home/CapabilityList.vue';
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue';
-
-interface ParticleStyle {
-  width: string;
-  height: string;
-  left: string;
-  top: string;
-  animationDelay: string;
-  animationDuration: string;
-}
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const scrolled = ref(false);
 const mobileNavOpen = ref(false);
-const scrollProgress = ref(0);
-const particleStyles = ref<ParticleStyle[]>([]);
 const isLoggedIn = ref(false);
-const activeSection = ref<'einstein' | 'problem-creator' | 'capabilities'>('einstein');
-let scrollObserver: IntersectionObserver | null = null;
-let sectionObserver: IntersectionObserver | null = null;
+
+const flowSteps = [
+  { title: '先说出真实场景', desc: '不用整理成学习目标，先说最近卡在哪里、想做到什么。' },
+  { title: '一起缩小范围', desc: '确认基础、时间和限制，把目标压到今天可以开始。' },
+  { title: '生成第一版路径', desc: '先得到一条可执行路线，后面可以随着学习继续调整。' },
+  { title: '边学边确认', desc: '通过对话、练习和复盘，确认你能不能在自己的场景里用出来。' }
+];
+
+const previewCards = [
+  { label: '目标规划', title: '从一句话到第一步', desc: '把“我想学 Python”变成“先自动化一段周报流程”。' },
+  { label: '学习路径', title: '知道今天做什么', desc: '路径不会一次塞满所有内容，而是按阶段给出最小任务。' },
+  { label: '课后总结', title: '学完知道哪里还不稳', desc: '每次学习结束后，收口本节掌握、卡点和下一步动作。' }
+];
+
+const capabilityTags = ['问题定义', '拆解目标', '对话学习', '输出检验', '节奏调整'];
 
 const primaryCtaPath = computed(() => (isLoggedIn.value ? '/goal-conversation' : '/register'));
-const primaryCtaLabel = computed(() => (isLoggedIn.value ? '进入目标规划' : '开始体验'));
-const footerCtaLabel = computed(() => (isLoggedIn.value ? '继续你的目标规划' : '开始你的第一次目标规划'));
+const primaryCtaLabel = computed(() => (isLoggedIn.value ? '新建目标规划' : '开始规划我的目标'));
+const footerCtaLabel = computed(() => (isLoggedIn.value ? '继续规划一个新目标' : '开始第一次目标规划'));
 
 const syncAuthState = () => {
   isLoggedIn.value = Boolean(localStorage.getItem('token'));
 };
 
 const handleScroll = () => {
-  scrolled.value = window.scrollY > 50;
-
-  // 计算滚动进度
-  const scrollTop = window.scrollY;
-  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-  scrollProgress.value = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  scrolled.value = window.scrollY > 24;
 };
 
-// 切换移动端导航
 const toggleMobileNav = () => {
   mobileNavOpen.value = !mobileNavOpen.value;
   document.body.style.overflow = mobileNavOpen.value ? 'hidden' : '';
 };
 
-// 关闭移动端导航
 const closeMobileNav = () => {
   mobileNavOpen.value = false;
   document.body.style.overflow = '';
 };
 
-// 粒子效果样式
-const createParticleStyle = (): ParticleStyle => {
-  const size = Math.random() * 4 + 2;
-  const left = Math.random() * 100;
-  const top = Math.random() * 100;
-  const delay = Math.random() * 20;
-  const duration = Math.random() * 10 + 15;
-
-  return {
-    width: `${size}px`,
-    height: `${size}px`,
-    left: `${left}%`,
-    top: `${top}%`,
-    animationDelay: `${delay}s`,
-    animationDuration: `${duration}s`
-  };
-};
-
-// 滚动动画
-const setupScrollAnimation = () => {
-  scrollObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-        }
-      });
-    },
-    {
-      threshold: 0.3,
-      rootMargin: '0px 0px -50px 0px'
-    }
-  );
-
-  document.querySelectorAll('.fade-in').forEach((el) => {
-    scrollObserver?.observe(el);
-  });
-};
-
-const setupSectionTracking = () => {
-  sectionObserver = new IntersectionObserver(
-    (entries) => {
-      const visibleEntries = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-
-      if (visibleEntries.length > 0) {
-        activeSection.value = visibleEntries[0].target.id as 'einstein' | 'problem-creator' | 'capabilities';
-      }
-    },
-    {
-      threshold: [0.2, 0.4, 0.6],
-      rootMargin: '-25% 0px -45% 0px'
-    }
-  );
-
-  ['einstein', 'problem-creator', 'capabilities'].forEach((id) => {
-    const section = document.getElementById(id);
-    if (section) {
-      sectionObserver?.observe(section);
-    }
-  });
-};
-
 onMounted(() => {
   syncAuthState();
   window.addEventListener('storage', syncAuthState);
-
-  particleStyles.value = Array.from({ length: 20 }, () => createParticleStyle());
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
   handleScroll();
-  setupScrollAnimation();
-  setupSectionTracking();
-
-  // 初始动画
-  setTimeout(() => {
-    document.querySelectorAll('.hero .fade-in').forEach((el, i) => {
-      setTimeout(() => {
-        el.classList.add('visible');
-      }, i * 150);
-    });
-  }, 100);
 });
 
 onUnmounted(() => {
   window.removeEventListener('storage', syncAuthState);
   window.removeEventListener('scroll', handleScroll);
-  scrollObserver?.disconnect();
-  sectionObserver?.disconnect();
   document.body.style.overflow = '';
 });
 </script>
 
 <style scoped>
-/* ========== 基础变量 ========== */
 .home-page {
+  --home-ink: #172033;
+  --home-muted: #66758d;
+  --home-line: rgba(23, 32, 51, 0.08);
+  --home-blue: #3478f6;
+  --home-blue-deep: #1f57cc;
   min-height: 100vh;
-  background: var(--bg-body);
+  background: #f3f6fb;
+  color: var(--home-ink);
   overflow-x: hidden;
-  position: relative;
 }
 
-.container {
-  max-width: 1280px;
+.site-header {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 20;
+  border-bottom: 1px solid transparent;
+  transition: background 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
+}
+
+.site-header--scrolled {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(23, 32, 51, 0.06);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.site-nav-shell {
+  width: min(1180px, calc(100% - 48px));
+  min-height: 72px;
   margin: 0 auto;
-  padding: 0 2rem;
-}
-
-/* ========== 滚动进度条 ========== */
-.scroll-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 3px;
-  background: var(--gradient-primary);
-  z-index: 1001;
-  transition: width 0.1s ease;
-}
-
-/* ========== 动态背景 ========== */
-.animated-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.gradient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
-  animation: float 20s ease-in-out infinite;
-  will-change: transform;
-}
-
-.gradient-orb-1 {
-  width: 600px;
-  height: 600px;
-  background: var(--gradient-primary);
-  top: -200px;
-  right: -100px;
-  animation-delay: 0s;
-}
-
-.gradient-orb-2 {
-  width: 500px;
-  height: 500px;
-  background: var(--gradient-achievement);
-  bottom: -150px;
-  left: -100px;
-  animation-delay: -7s;
-}
-
-.gradient-orb-3 {
-  width: 400px;
-  height: 400px;
-  background: var(--gradient-learning);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  animation-delay: -14s;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  33% {
-    transform: translate(30px, -50px) scale(1.1);
-  }
-  66% {
-    transform: translate(-20px, 30px) scale(0.9);
-  }
-}
-
-/* 粒子效果 */
-.particles {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-}
-
-.particle {
-  position: absolute;
-  background: radial-gradient(circle, rgba(102, 126, 234, 0.4) 0%, transparent 70%);
-  border-radius: 50%;
-  animation: particle-float infinite ease-in-out;
-}
-
-[data-theme="dark"] .particle {
-  background: radial-gradient(circle, rgba(74, 111, 165, 0.4) 0%, transparent 70%);
-}
-
-@keyframes particle-float {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0;
-  }
-  10% {
-    opacity: 0.6;
-  }
-  90% {
-    opacity: 0.6;
-  }
-  50% {
-    transform: translate(20px, -30px) scale(1.2);
-  }
-}
-
-/* 减少动画偏好 */
-@media (prefers-reduced-motion: reduce) {
-  .gradient-orb,
-  .particle {
-    animation: none;
-  }
-}
-
-/* ========== 导航栏 ========== */
-.navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px);
-  transition: all 0.3s ease;
-}
-
-[data-theme="dark"] .navbar {
-  background: rgba(15, 24, 32, 0.9);
-}
-
-.navbar-scrolled {
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="dark"] .navbar-scrolled {
-  background: rgba(15, 24, 32, 0.98);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.navbar-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-  position: relative;
+  gap: 24px;
 }
 
-.navbar-brand {
+.site-brand,
+.site-nav,
+.site-actions,
+.home-hero__actions,
+.mobile-nav__actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: var(--text-primary);
 }
 
-.brand-link {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  text-decoration: none;
-  color: var(--text-primary);
-  transition: opacity 0.2s ease;
-}
-
-.brand-link:hover {
-  opacity: 0.8;
-}
-
-.brand-logo {
-  font-size: 1.75rem;
-}
-
-.brand-logo-img {
-  height: 36px;
+.site-brand__logo {
+  height: 54px;
   width: auto;
-  object-fit: contain;
+  display: block;
 }
 
-.navbar-nav {
-  display: flex;
-  gap: 2rem;
+.site-nav {
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(23, 32, 51, 0.06);
 }
 
-.nav-link {
-  color: var(--text-secondary);
+.site-nav__item,
+.mobile-nav__item {
+  color: color-mix(in srgb, var(--home-ink) 72%, #fff);
   text-decoration: none;
-  font-weight: 500;
-  font-size: 0.95rem;
-  transition: color 0.2s ease;
-  position: relative;
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.nav-link::after {
-  content: '';
-  position: absolute;
-  bottom: -4px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--gradient-primary);
-  transform: scaleX(0);
-  transition: transform 0.3s ease;
+.site-nav__item {
+  padding: 8px 13px;
+  border-radius: 999px;
 }
 
-.nav-link:hover {
-  color: var(--color-primary);
+.site-nav__item:hover {
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--home-blue-deep);
 }
 
-.nav-link-active {
-  color: var(--color-primary);
+.site-actions {
+  gap: 10px;
 }
 
-.nav-link-active::after,
-.nav-link:hover::after {
-  transform: scaleX(1);
-}
-
-.navbar-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-.btn-primary {
-  background: var(--gradient-primary);
-  color: white;
-  font-weight: 600;
-  padding: 0.625rem 1.5rem;
-  border-radius: var(--radius-lg);
-  transition: all 0.3s;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-  transform: translateY(-2px);
-}
-
-[data-theme="dark"] .btn-primary {
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-}
-
-[data-theme="dark"] .btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-.btn-secondary {
-  background: transparent;
-  color: var(--text-secondary);
-  font-weight: 500;
-  padding: 0.625rem 1.5rem;
-  border-radius: var(--radius-lg);
-  transition: all 0.3s;
-}
-
-.btn-secondary:hover {
-  background: var(--bg-muted);
-  color: var(--text-primary);
-}
-
-/* 移动端汉堡菜单 */
-.mobile-menu-btn {
-  display: none;
-  background: none;
-  border: none;
-  padding: 0.5rem;
-  cursor: pointer;
-  z-index: 1001;
-}
-
-.hamburger {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  width: 24px;
-}
-
-.hamburger-line {
-  width: 100%;
-  height: 2px;
-  background: var(--text-primary);
-  transition: all 0.3s ease;
-}
-
-.hamburger-open .hamburger-line:nth-child(1) {
-  transform: rotate(45deg) translate(5px, 5px);
-}
-
-.hamburger-open .hamburger-line:nth-child(2) {
-  opacity: 0;
-}
-
-.hamburger-open .hamburger-line:nth-child(3) {
-  transform: rotate(-45deg) translate(5px, -5px);
-}
-
-/* 移动端下拉菜单 */
-.mobile-nav-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: var(--bg-body);
-  border-top: 1px solid var(--border-default);
-  padding: 1rem;
-  display: none;
-  flex-direction: column;
-  gap: 0.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transition: background var(--transition-normal), box-shadow var(--transition-normal);
-}
-
-[data-theme="dark"] .mobile-nav-dropdown {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.dropdown-open {
-  display: flex;
-  animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.mobile-nav-link {
-  padding: 0.75rem 1rem;
-  color: var(--text-primary);
-  text-decoration: none;
-  font-weight: 500;
-  font-size: 1rem;
-  border-radius: var(--radius-lg);
-  transition: background 0.2s ease, color var(--transition-normal);
-}
-
-.mobile-nav-link:hover {
-  background: var(--bg-muted);
-}
-
-.mobile-nav-link-active {
-  color: var(--color-primary);
-  background: rgba(102, 126, 234, 0.08);
-}
-
-[data-theme="dark"] .mobile-nav-link-active {
-  background: rgba(74, 111, 165, 0.08);
-}
-
-.mobile-nav-actions {
-  display: flex;
-  gap: 0.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-light);
-  margin-top: 0.5rem;
-}
-
-.mobile-nav-actions .btn {
-  flex: 1;
-  justify-content: center;
-  padding: 0.625rem 1rem;
-  font-size: 0.9rem;
-}
-
-.mobile-nav-actions .btn-primary {
-  box-shadow: 0 3px 12px rgba(102, 126, 234, 0.25);
-}
-
-[data-theme="dark"] .mobile-nav-actions .btn-primary {
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.3);
-}
-
-/* ========== 按钮系统 ========== */
+.site-cta,
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  font-weight: 600;
-  font-size: 0.95rem;
-  border-radius: var(--radius-full);
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
   text-decoration: none;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border: none;
+  font-size: 14px;
+  font-weight: 800;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.btn-outline {
-  background: transparent;
-  border: 2px solid var(--color-primary);
-  color: var(--color-primary);
+.site-cta--primary,
+.btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--home-blue), var(--home-blue-deep));
+  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
 }
 
-.btn-outline:hover {
-  background: var(--color-primary);
-  color: white;
+.site-cta--ghost,
+.btn--ghost {
+  color: var(--home-ink);
+  background: rgba(255, 255, 255, 0.74);
+  border-color: rgba(23, 32, 51, 0.08);
 }
 
-.btn-lg {
-  padding: 1rem 2.5rem;
-  font-size: 1.05rem;
+.site-cta:hover,
+.btn:hover {
+  transform: translateY(-2px);
 }
 
-.btn-glow {
-  animation: glow 3s ease-in-out infinite;
+.btn--lg {
+  min-height: 50px;
+  padding-inline: 24px;
 }
 
-@keyframes glow {
-  0%, 100% {
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-  }
-  50% {
-    box-shadow: 0 4px 25px rgba(102, 126, 234, 0.6);
-  }
+.mobile-menu-btn {
+  display: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
 }
 
-.btn-icon {
-  font-size: 1.25rem;
+.mobile-menu-btn span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin: 4px auto;
+  background: var(--home-ink);
+  border-radius: 999px;
 }
 
-/* ========== Hero 区域 ========== */
-.hero {
+.mobile-nav {
+  display: none;
+}
+
+.home-main {
   position: relative;
-  z-index: 1;
-  padding: 14rem 0 8rem;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
+  isolation: isolate;
 }
 
-.hero-container {
-  text-align: center;
+.home-bg-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
 }
 
-.hero-content {
-  max-width: 900px;
+.home-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.24;
+}
+
+.home-bg-orb--1 {
+  width: 560px;
+  height: 560px;
+  top: 90px;
+  right: -160px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.36), transparent 70%);
+}
+
+.home-bg-orb--2 {
+  width: 460px;
+  height: 460px;
+  top: 620px;
+  left: -160px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.22), transparent 70%);
+}
+
+.home-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(23, 32, 51, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 32, 51, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 68%);
+}
+
+.home-hero,
+.home-why,
+.home-how,
+.home-preview,
+.home-capabilities {
+  width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
 }
 
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-full);
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 2rem;
-}
-
-.badge-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--color-success);
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.hero-title {
-  font-size: clamp(2.6rem, 6.8vw, 5rem);
-  font-weight: 800;
-  line-height: 1.15;
-  color: var(--text-primary);
-  margin-bottom: 2rem;
-  letter-spacing: -0.03em;
-}
-
-.hero-title-line {
-  display: block;
-}
-
-.hero-title .highlight {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.hero-subtitle {
-  font-size: clamp(1.25rem, 2vw, 1.75rem);
-  color: var(--text-secondary);
-  margin-bottom: 3rem;
-  line-height: 1.8;
-}
-
-.hero-subtitle strong {
-  color: var(--color-primary);
-  font-weight: 700;
-}
-
-.hero-cta {
-  margin-bottom: 4rem;
-}
-
-.cta-buttons {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 2rem;
-}
-
-.hero-proof {
+.home-hero {
+  min-height: 100vh;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 0 auto 2rem;
-  max-width: 980px;
-}
-
-.proof-item {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 1rem 1.1rem;
-  text-align: left;
-}
-
-.proof-item strong {
-  display: block;
-  margin-bottom: 0.35rem;
-  color: var(--text-primary);
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.proof-item span {
-  display: block;
-  color: var(--text-secondary);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-/* 滚动提示 */
-.scroll-hint {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  gap: 52px;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--text-muted);
-  font-size: 0.875rem;
+  padding: 120px 0 72px;
 }
 
-.scroll-arrow {
-  font-size: 1.5rem;
-  animation: bounce 2s ease-in-out infinite;
+.home-hero__copy,
+.section-head,
+.home-final-cta > div {
+  display: grid;
+  gap: 14px;
 }
 
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
+.home-kicker {
+  width: fit-content;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.09);
+  color: var(--home-blue-deep);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
 }
 
-/* 统计数据 - 已移除 */
+.home-hero h1,
+.section-head h2,
+.home-capabilities h2,
+.home-final-cta h2 {
+  margin: 0;
+  letter-spacing: -0.055em;
+  line-height: 1.06;
+}
 
-/* ========== Section 通用 ========== */
-section {
+.home-hero h1 {
+  max-width: 760px;
+  font-size: clamp(48px, 7vw, 88px);
+}
+
+.home-hero__copy p,
+.section-head p,
+.compare-card p,
+.flow-card p,
+.preview-card p,
+.home-final-cta p {
+  margin: 0;
+  color: var(--home-muted);
+  line-height: 1.75;
+}
+
+.home-hero__copy > p {
+  max-width: 620px;
+  font-size: 18px;
+}
+
+.home-hero__actions {
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.home-hero__scene {
   position: relative;
-  z-index: 1;
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 34px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.15);
+  backdrop-filter: blur(16px);
 }
 
-/* ========== Footer ========== */
-.footer-section {
-  padding: 8rem 0 4rem;
-  background: linear-gradient(180deg, transparent 0%, rgba(102, 126, 234, 0.08) 100%);
-  transition: background var(--transition-normal);
+.scene-turn {
+  width: fit-content;
+  max-width: 86%;
+  padding: 14px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
-[data-theme="dark"] .footer-section {
-  background: linear-gradient(180deg, transparent 0%, rgba(74, 111, 165, 0.08) 100%);
+.scene-turn--user {
+  justify-self: end;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--home-blue-deep);
 }
 
-.footer-content {
+.scene-turn--ai {
+  justify-self: start;
+  background: #f2f5fb;
+}
+
+.scene-outcome {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.1), rgba(255, 255, 255, 0.9));
+  border: 1px solid rgba(52, 120, 246, 0.12);
+}
+
+.scene-outcome span,
+.scene-outcome small,
+.compare-card span,
+.preview-card span,
+.flow-card span {
+  color: var(--home-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.scene-outcome strong {
+  font-size: 20px;
+}
+
+.home-why,
+.home-how,
+.home-preview,
+.home-capabilities {
+  padding: 76px 0;
+}
+
+.home-why__lead {
+  max-width: 780px;
+  margin-bottom: 28px;
+}
+
+.home-why__lead p {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+}
+
+.home-compare-grid,
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.compare-card,
+.preview-card,
+.flow-card {
+  display: grid;
+  gap: 12px;
+  padding: 26px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.compare-card--strong {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.84));
+  border-color: rgba(52, 120, 246, 0.14);
+}
+
+.compare-card h2 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+
+.section-head {
+  max-width: 720px;
+  margin-bottom: 28px;
+}
+
+.section-head h2,
+.home-capabilities h2,
+.home-final-cta h2 {
+  font-size: clamp(34px, 5vw, 58px);
+}
+
+.home-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.flow-card strong,
+.preview-card strong {
+  font-size: 18px;
+}
+
+.preview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.home-capabilities {
+  display: grid;
+  gap: 28px;
   text-align: center;
 }
 
-.footer-quote {
-  margin-bottom: 3rem;
+.home-capabilities h2 {
+  max-width: 850px;
+  margin-inline: auto;
 }
 
-.quote-main {
-  font-size: 1.5rem;
-  color: var(--text-primary);
-  font-weight: 600;
-  line-height: 1.8;
-  margin-bottom: 1rem;
-}
-
-.quote-sub {
-  font-size: 1.1rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.footer-cta {
-  margin-bottom: 3rem;
-}
-
-.footer-links {
+.capability-list {
   display: flex;
-  justify-content: center;
-  gap: 2rem;
-  margin-bottom: 2rem;
   flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
 }
 
-.footer-links a {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 0.95rem;
-  transition: color 0.2s ease;
+.capability-list span {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  color: color-mix(in srgb, var(--home-ink) 74%, #fff);
+  font-size: 14px;
+  font-weight: 800;
 }
 
-.footer-links a:hover {
-  color: var(--color-primary);
+.home-final-band {
+  position: relative;
+  margin-top: 60px;
+  padding: 104px 24px 118px;
+  background: #121b2d;
+  color: #fff;
+  overflow: hidden;
 }
 
-.footer-bottom {
-  padding-top: 2rem;
-  border-top: 1px solid var(--border-light);
+.home-final-band__glow {
+  position: absolute;
+  inset: auto 50% -220px auto;
+  width: 620px;
+  height: 360px;
+  transform: translateX(50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.28), transparent 68%);
+  filter: blur(45px);
+  pointer-events: none;
 }
 
-.footer-bottom p {
-  font-size: 0.9rem;
-  color: var(--text-muted);
+.home-final-band__inner {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  text-align: center;
+}
+
+.home-final-band h2 {
   margin: 0;
+  font-size: clamp(40px, 5.4vw, 68px);
+  line-height: 1.08;
+  letter-spacing: -0.055em;
 }
 
-/* ========== 动画 ========== */
-.fade-in {
-  opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+.home-final-band p {
+  max-width: 580px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 17px;
+  line-height: 1.75;
 }
 
-.fade-in.visible {
-  opacity: 1;
-  transform: translateY(0);
+.home-final-band__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
 }
 
-/* ========== 响应式 ========== */
-@media (max-width: 968px) {
-  .navbar-nav,
-  .navbar-actions {
+.btn--ghost-light {
+  color: #172033;
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 980px) {
+  .site-nav,
+  .site-actions {
     display: none;
   }
 
@@ -1040,35 +687,85 @@ section {
     display: block;
   }
 
-  .hero {
-    padding: 10rem 0 6rem;
+  .mobile-nav--open {
+    display: grid;
+    gap: 10px;
+    width: calc(100% - 32px);
+    margin: 0 auto 12px;
+    padding: 16px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(23, 32, 51, 0.08);
+    box-shadow: 0 22px 60px rgba(15, 23, 42, 0.1);
   }
 
-  .hero-title {
-    font-size: clamp(2rem, 10vw, 4rem);
+  .mobile-nav__item {
+    padding: 11px 12px;
+    border-radius: 14px;
   }
 
-  .hero-subtitle {
-    font-size: clamp(1rem, 3vw, 1.25rem);
+  .mobile-nav__actions {
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
-  .cta-buttons {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .hero-proof {
+  .home-hero {
     grid-template-columns: 1fr;
+    min-height: auto;
+    padding-top: 118px;
+  }
+
+  .home-hero__scene {
     max-width: 560px;
   }
 
-  .proof-item {
-    text-align: center;
+  .home-flow,
+  .preview-grid,
+  .home-compare-grid {
+    grid-template-columns: 1fr;
   }
 
-  .footer-links {
+  .home-final-band {
+    margin-top: 36px;
+    padding: 84px 20px 96px;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-nav-shell,
+  .home-hero,
+  .home-why,
+  .home-how,
+  .home-preview,
+  .home-capabilities {
+    width: min(100% - 28px, 1180px);
+  }
+
+  .site-brand__logo {
+    height: 46px;
+  }
+
+  .home-hero h1 {
+    font-size: clamp(40px, 14vw, 64px);
+  }
+
+  .home-why,
+  .home-how,
+  .home-preview,
+  .home-capabilities {
+    padding: 52px 0;
+  }
+
+  .home-hero__actions,
+  .mobile-nav__actions,
+  .home-final-band__actions {
+    align-items: stretch;
     flex-direction: column;
-    gap: 1rem;
+  }
+
+  .btn,
+  .site-cta {
+    width: 100%;
   }
 }
 </style>

@@ -488,7 +488,6 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import { adminAxios } from '@/api/adminApi'
 import {
   User,
@@ -509,6 +508,7 @@ import {
   Plus,
   Refresh
 } from '@element-plus/icons-vue'
+import { toast } from '../../utils/toast';
 
 const activeTab = ref('prompt')
 const selectedAgent = ref<any>(null)
@@ -607,7 +607,7 @@ async function fetchAgents() {
       }
     }
   } catch (error: any) {
-    ElMessage.error('获取 Agent 配置失败: ' + (error.message || '未知错误'))
+    toast.error('获取 Agent 配置失败: ' + (error.message || '未知错误'))
     console.error('Failed to fetch agents:', error)
   } finally {
     loading.value = false
@@ -687,12 +687,12 @@ async function createNewVersion() {
       maxTokens: newVersionForm.maxTokens
     })
     if (response.data.success) {
-      ElMessage.success('新版本已创建')
+      toast.success('新版本已创建')
       newVersionDialogVisible.value = false
       await fetchPromptVersions(selectedAgent.value.name)
     }
   } catch (error: any) {
-    ElMessage.error('创建失败: ' + (error.message || '未知错误'))
+    toast.error('创建失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -701,13 +701,13 @@ async function publishVersion(versionId: string) {
   try {
     const response = await adminAxios.put(`/admin/agent-prompts/${versionId}/publish`)
     if (response.data.success) {
-      ElMessage.success('版本已发布')
+      toast.success('版本已发布')
       if (selectedAgent.value) {
         await fetchPromptVersions(selectedAgent.value.name)
       }
     }
   } catch (error: any) {
-    ElMessage.error('发布失败: ' + (error.message || '未知错误'))
+    toast.error('发布失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -722,7 +722,7 @@ async function viewVersionDetail(versionId: string) {
       promptEditDialogVisible.value = true
     }
   } catch (error: any) {
-    ElMessage.error('获取版本详情失败: ' + (error.message || '未知错误'))
+    toast.error('获取版本详情失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -758,11 +758,11 @@ async function saveApiConfig() {
       defaultJudgeModel: apiConfig.defaultJudgeModel
     })
     if (response.data.success) {
-      ElMessage.success('API 配置已保存')
+      toast.success('API 配置已保存')
       apiConfigDialogVisible.value = false
     }
   } catch (error: any) {
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    toast.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -777,13 +777,13 @@ async function testApiConnection() {
     })
     connectionTestResult.value = response.data
     if (response.data.success) {
-      ElMessage.success('API 连接成功！')
+      toast.success('API 连接成功！')
     } else {
-      ElMessage.error('API 连接失败: ' + response.data.error)
+      toast.error('API 连接失败: ' + response.data.error)
     }
   } catch (error: any) {
     connectionTestResult.value = { success: false, error: error.message }
-    ElMessage.error('连接测试失败: ' + (error.message || '未知错误'))
+    toast.error('连接测试失败: ' + (error.message || '未知错误'))
   } finally {
     testingConnection.value = false
   }
@@ -823,16 +823,16 @@ async function saveAgentOverrideConfig() {
       selectedAgent.value.model = agentOverrideConfig.model
       selectedAgent.value.temperature = agentOverrideConfig.temperature
       selectedAgent.value.maxTokens = agentOverrideConfig.maxTokens
-      ElMessage.success('Agent 独立配置已保存')
+      toast.success('Agent 独立配置已保存')
     } else {
       // 删除独立配置，使用平台默认
       await adminAxios.delete(`/admin/agent-lab/agents/${selectedAgent.value.name}/config`)
       selectedAgent.value.useOverride = false
-      ElMessage.success('Agent 配置已重置为平台默认')
+      toast.success('Agent 配置已重置为平台默认')
     }
     agentOverrideDialogVisible.value = false
   } catch (error: any) {
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    toast.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -859,17 +859,17 @@ async function savePrompt() {
       prompt: editedPrompt.value
     })
     selectedAgent.value.systemPrompt = editedPrompt.value
-    ElMessage.success('System Prompt 已保存')
+    toast.success('System Prompt 已保存')
     promptEditDialogVisible.value = false
   } catch (error: any) {
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    toast.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
 
 // 重置 System Prompt
 function resetPrompt() {
   editedPrompt.value = originalPrompt.value
-  ElMessage.info('已重置为原始值')
+  toast.info('已重置为原始值')
 }
 
 // 原始硬编码数据作为 fallback
@@ -1164,10 +1164,10 @@ async function saveLifecycleStatus() {
       status: selectedLifecycleStatus.value
     })
     selectedAgent.value.lifecycleStatus = selectedLifecycleStatus.value
-    ElMessage.success('发布状态已更新')
+    toast.success('发布状态已更新')
     await fetchAgents()
   } catch (error: any) {
-    ElMessage.error('更新失败: ' + (error.message || '未知错误'))
+    toast.error('更新失败: ' + (error.message || '未知错误'))
   } finally {
     savingLifecycleStatus.value = false
   }
@@ -1186,7 +1186,7 @@ function getAgentStatus(name: string) {
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text)
-  ElMessage.success('已复制到剪贴板')
+  toast.success('已复制到剪贴板')
 }
 
 function testAgent() {
@@ -1208,12 +1208,12 @@ async function runTest() {
     
     if (response.data.success) {
       testResult.value = response.data.data
-      ElMessage.success('测试完成')
+      toast.success('测试完成')
     } else {
-      ElMessage.error('测试失败: ' + (response.data.error || '未知错误'))
+      toast.error('测试失败: ' + (response.data.error || '未知错误'))
     }
   } catch (error: any) {
-    ElMessage.error('测试请求失败: ' + (error.message || '未知错误'))
+    toast.error('测试请求失败: ' + (error.message || '未知错误'))
     console.error('Test failed:', error)
   } finally {
     testing.value = false
@@ -1222,12 +1222,12 @@ async function runTest() {
 
 function saveConfig() {
   // 实际应用中这里应该调用 API 保存配置
-  ElMessage.success('配置已保存（演示模式 - 实际应调用后端API）')
+  toast.success('配置已保存（演示模式 - 实际应调用后端API）')
 }
 
 function resetConfig() {
   fetchAgents()
-  ElMessage.info('已重置为默认配置')
+  toast.info('已重置为默认配置')
 }
 
 </script>

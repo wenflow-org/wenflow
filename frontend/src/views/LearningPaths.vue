@@ -1,76 +1,51 @@
 <template>
-  <div class="learning-paths-page">
-    <!-- 动态背景 -->
-    <div class="animated-bg">
-      <div class="gradient-orb gradient-orb-1"></div>
-      <div class="gradient-orb gradient-orb-2"></div>
+  <div class="learning-paths-page paths-upgrade">
+    <div class="paths-bg-layer">
+      <div class="paths-bg-orb paths-bg-orb--1"></div>
+      <div class="paths-bg-orb paths-bg-orb--2"></div>
     </div>
 
     <!-- 顶部导航栏 -->
-    <header class="dashboard-header" :class="{ 'header-scrolled': scrolled }">
+    <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': scrolled }">
       <div class="header-container">
-        <div class="header-left">
-          <div class="brand" @click="$router.push('/dashboard')">
-            <span class="brand-icon">🎓</span>
-            <span class="brand-text">问流 WenFlow</span>
-          </div>
-        </div>
+        <button type="button" class="brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
+        </button>
 
-        <nav class="header-nav">
-          <router-link to="/dashboard" class="nav-item">
-            <el-icon><HomeFilled /></el-icon>
-            <span>学习台</span>
-          </router-link>
-          <router-link to="/learning-paths" class="nav-item nav-item-active">
-            <el-icon><FolderOpened /></el-icon>
-            <span>学习路径</span>
-          </router-link>
-          <router-link to="/learning-state" class="nav-item">
-            <el-icon><TrendCharts /></el-icon>
-            <span>学习状态</span>
-          </router-link>
-          <router-link to="/achievements" class="nav-item">
-            <el-icon><Trophy /></el-icon>
-            <span>成就</span>
-          </router-link>
+        <nav class="header-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="nav-item">学习台</router-link>
+          <router-link to="/goal-conversation" class="nav-item">AI 规划</router-link>
+          <router-link to="/learning-paths" class="nav-item nav-item--active">学习路径</router-link>
+          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
+          <router-link to="/achievements" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <ThemeSwitcher />
-
-          <div class="user-menu">
-            <el-dropdown>
-              <div class="user-avatar">
-                <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-                <div v-else class="avatar-placeholder">
-                  {{ userStore.user?.name?.charAt(0) || 'U' }}
-                </div>
-              </div>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item>
-                    <span class="user-name">{{ userStore.user?.name || '用户' }}</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="$router.push('/user')">
-                    <el-icon><User /></el-icon>
-                    能力中心
-                  </el-dropdown-item>
-                  <el-dropdown-item divided @click="handleLogout">
-                    <el-icon><Switch /></el-icon>
-                    退出登录
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <router-link to="/goal-conversation" class="header-cta">开始新目标</router-link>
+          <el-dropdown>
+            <button type="button" class="user-chip">
+              <span>{{ userInitial }}</span>
+              <strong>{{ userStore.user?.name || '同学' }}</strong>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="router.push('/user')">
+                  <el-icon><User /></el-icon>
+                  能力中心
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <el-icon><Switch /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </header>
 
-    <!-- 主内容区 -->
-    <main class="main-content">
-      <div class="content-container">
-        <!-- 生成中提示 -->
+    <main class="main-content paths-main">
+      <div class="content-container paths-shell">
         <transition name="slide-down">
           <el-alert
             v-if="showGeneratingAlert"
@@ -83,131 +58,87 @@
           />
         </transition>
 
-        <!-- 页面标题区 -->
-        <section class="page-header-section glass-card">
-          <div class="page-header-content">
-            <div class="page-title-wrapper">
-              <h1 class="page-title">
-                <span class="title-icon">📚</span>
-                学习路径
-              </h1>
-              <p class="page-subtitle">管理和追踪你的所有学习计划</p>
-            </div>
-            <div class="page-actions">
-              <router-link to="/goal-conversation" class="btn btn-primary btn-glow">
-                <el-icon><Plus /></el-icon>
-                创建路径
-              </router-link>
-            </div>
+        <section class="paths-hero glass-card">
+          <div class="paths-hero__copy">
+            <span class="pill">路径总览</span>
+            <h1>看见每一条路径的状态，<br />学习才不会中断。</h1>
+            <p>推进中的继续走，生成中的等待完成，失败的及时重试，始终保留一条最值得推进的主路径。</p>
+          </div>
+          <div class="paths-hero__actions">
+            <router-link v-if="primaryPath" :to="`/learning-path/${primaryPath.id}`" class="btn btn-primary">继续主路径</router-link>
+            <router-link to="/goal-conversation" class="btn btn-ghost">开始新规划</router-link>
           </div>
         </section>
 
-        <!-- 路径卡片列表 -->
+        <section class="paths-filter-row">
+          <button
+            v-for="item in pathFilterChips"
+            :key="item.key"
+            type="button"
+            class="paths-filter-chip"
+            :class="{ 'paths-filter-chip--active': activePathFilter === item.key }"
+            @click="activePathFilter = item.key"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.count }}</strong>
+          </button>
+        </section>
+
         <section class="paths-section">
           <div v-loading="loading" class="paths-content">
-            <div v-if="paths.length > 0" class="paths-grid">
-              <div
-                v-for="path in paths"
+            <div v-if="visiblePaths.length > 0" class="paths-grid paths-grid--upgraded">
+              <article
+                v-for="path in visiblePaths"
                 :key="path.id"
-                class="path-card-wrapper"
+                class="path-overview-card glass-card"
+                :class="[
+                  `path-overview-card--${getPathDisplayState(path)}`,
+                  { 'path-overview-card--primary': primaryPath?.id === path.id }
+                ]"
               >
-                <!-- 生成中卡片 -->
-                <div v-if="path.status === 'generating' && !isPathTimeout(path)" class="path-card glass-card generating-card">
-                  <div class="generating-content">
-                    <div class="generating-icon">
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                    </div>
-                    <h3 class="generating-title">正在生成学习路径...</h3>
-                    <p class="generating-desc">{{ path.description || 'AI 正在规划详细的学习内容' }}</p>
-                    <div class="generating-progress">
-                      <div class="progress-bar">
-                        <div class="progress-fill"></div>
-                      </div>
-                    </div>
+                <template v-if="getPathDisplayState(path) === 'generating'">
+                  <div class="path-overview-card__status-row">
+                    <span class="path-state-pill path-state-pill--generating">生成中</span>
+                    <span v-if="primaryPath?.id === path.id" class="path-state-pill path-state-pill--primary">主路径</span>
                   </div>
-                </div>
+                  <strong>{{ getPathTitle(path) }}</strong>
+                  <p>{{ getPathSummary(path) || 'AI 正在生成学习路径' }}</p>
+                  <div class="path-overview-card__progress-bar">
+                    <div class="path-overview-card__progress-fill path-overview-card__progress-fill--loading"></div>
+                  </div>
+                  <div class="path-overview-card__actions-row">
+                    <button class="btn btn-ghost" @click="loadPaths">查看进度</button>
+                  </div>
+                </template>
 
-                <!-- 超时卡片（前端判定） -->
-                <div v-else-if="path.status === 'generating' && isPathTimeout(path)" class="path-card glass-card timeout-card">
-                  <div class="timeout-content">
-                    <div class="timeout-icon">⏱️</div>
-                    <h3 class="timeout-title">生成超时</h3>
-                    <p class="timeout-desc">{{ path.description || '学习路径生成时间过长，请重试' }}</p>
-                    <el-button
-                      type="primary"
-                      size="small"
-                      :loading="retryingPathId === path.id"
-                      @click="retryPathGeneration(path)"
-                    >
-                      重试生成
-                    </el-button>
+                <template v-else-if="getPathDisplayState(path) === 'attention'">
+                  <div class="path-overview-card__status-row">
+                    <span class="path-state-pill path-state-pill--failed">待重试</span>
                   </div>
-                </div>
+                  <strong>{{ getPathTitle(path) }}</strong>
+                  <p>{{ getFailureCopy(path) }}</p>
+                  <div class="path-overview-card__actions-row">
+                    <button class="btn btn-ghost" :disabled="retryingPathId === path.id" @click="retryPathGeneration(path)">重试</button>
+                    <button class="btn btn-ghost" @click="confirmDelete(path)">删除</button>
+                  </div>
+                </template>
 
-                <!-- 生成失败卡片 -->
-                <div v-else-if="path.status === 'failed'" class="path-card glass-card failed-card">
-                  <div class="failed-content">
-                    <div class="failed-icon">⚠️</div>
-                    <h3 class="failed-title">学习路径生成失败</h3>
-                    <p class="failed-desc">{{ path.description || '模型输出异常或服务不可用' }}</p>
-                    <div class="failed-actions">
-                      <el-button
-                        type="primary"
-                        size="small"
-                        :loading="retryingPathId === path.id"
-                        @click="retryPathGeneration(path)"
-                      >
-                        重试生成
-                      </el-button>
-                      <el-button
-                        type="danger"
-                        plain
-                        size="small"
-                        @click="confirmDelete(path)"
-                      >
-                        删除路径
-                      </el-button>
-                    </div>
+                <template v-else>
+                  <div class="path-overview-card__status-row">
+                    <span v-if="primaryPath?.id === path.id" class="path-state-pill path-state-pill--primary">主路径</span>
+                    <span class="path-state-pill path-state-pill--active">进行中</span>
+                    <span v-if="getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending'" class="path-state-pill path-state-pill--soft">准备中</span>
                   </div>
-                </div>
-                
-                <!-- 正常卡片 -->
-                <div v-else class="path-card glass-card" @click="goToPathDetail(path.id)">
-                  <div class="path-card-header">
-                    <div class="path-info-main">
-                      <h3 class="path-name">{{ path.name || path.title }}</h3>
-                      <div class="path-tags">
-                        <el-tag size="small" effect="light" class="path-tag">
-                          {{ path.totalMilestones || path.milestones?.length || path.weeks?.length || 0 }} 阶段
-                        </el-tag>
-                        <el-tag
-                          v-if="getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending'"
-                          size="small"
-                          type="info"
-                          effect="plain"
-                          class="path-tag"
-                        >
-                          准备中
-                        </el-tag>
-                        <el-tag
-                          v-else-if="getEnrichmentStatus(path) === 'failed'"
-                          size="small"
-                          type="warning"
-                          effect="plain"
-                          class="path-tag"
-                        >
-                          继续完善中
-                        </el-tag>
-                      </div>
-                    </div>
-                    <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, path)" @click.stop>
+                  <div class="path-overview-card__head">
+                    <strong>{{ getPathTitle(path) }}</strong>
+                    <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, path)">
                       <button class="more-btn" @click.stop>
                         <el-icon><More /></el-icon>
                       </button>
                       <template #dropdown>
                         <el-dropdown-menu>
                           <el-dropdown-item command="regenerate">
-                            <el-icon><Loading /></el-icon>
+                            <el-icon><Refresh /></el-icon>
                             <span>重新生成路径</span>
                           </el-dropdown-item>
                           <el-dropdown-item command="delete" class="delete-item">
@@ -218,57 +149,34 @@
                       </template>
                     </el-dropdown>
                   </div>
-
-                  <div class="path-card-body">
-                    <p class="path-description">{{ path.summary || path.description || '暂无描述' }}</p>
-
-                    <div v-if="path.replanLineage?.sourcePathId" class="path-replan-lineage">
-                      <el-icon><Refresh /></el-icon>
-                      <span>来自重调版本</span>
+                  <p>{{ getPathSummary(path) }}</p>
+                  <div class="path-overview-card__stats">
+                    <span>当前阶段：{{ getPathCurrentStage(path) }} / {{ getPathStageCount(path) }}</span>
+                    <span>预计投入：{{ getPathEstimatedHours(path) }} 小时</span>
+                  </div>
+                  <div class="path-overview-card__progress-block">
+                    <div class="path-overview-card__progress-top">
+                      <strong>{{ getPathProgress(path) }}%</strong>
+                      <span>进度</span>
                     </div>
-
-                    <div class="path-stats">
-                      <div class="stat-item">
-                        <div class="stat-icon-bg icon-time">
-                          <el-icon><Clock /></el-icon>
-                        </div>
-                        <div class="stat-info">
-                          <span class="stat-value">{{ path.estimatedHours || 0 }}</span>
-                          <span class="stat-label">小时</span>
-                        </div>
-                      </div>
-                      <div class="stat-item">
-                        <div class="stat-icon-bg icon-weeks">
-                          <el-icon><Document /></el-icon>
-                        </div>
-                        <div class="stat-info">
-                          <span class="stat-value">{{ path.totalMilestones || path.milestones?.length || path.weeks?.length || 0 }}</span>
-                          <span class="stat-label">阶段</span>
-                        </div>
-                      </div>
+                    <div class="path-overview-card__progress-bar">
+                      <div class="path-overview-card__progress-fill" :style="{ width: `${getPathProgress(path)}%` }"></div>
                     </div>
                   </div>
-
-                  <div class="path-card-footer">
-                    <button class="start-btn">
-                      <span>查看详情</span>
-                      <el-icon><ArrowRight /></el-icon>
-                    </button>
+                  <div class="path-overview-card__actions-row">
+                    <button class="btn btn-primary" @click="goToPathDetail(path.id)">继续推进</button>
+                    <button class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
                   </div>
-                </div>
-              </div>
+                </template>
+              </article>
             </div>
 
-            <!-- 空状态 -->
-            <div v-else-if="!loading" class="empty-state glass-card">
-              <div class="empty-icon">🎯</div>
-              <h3 class="empty-title">还没有学习路径</h3>
-              <p class="empty-desc">点击上方按钮创建你的第一个学习路径</p>
-              <router-link to="/goal-conversation" class="btn btn-primary">
-                <el-icon><Plus /></el-icon>
-                创建路径
-              </router-link>
-            </div>
+            <section v-else-if="!loading" class="paths-empty-state glass-card">
+              <span class="pill">还没有路径</span>
+              <h2>先把问题收敛清楚，再生成真正能开始的学习路径。</h2>
+              <p>从一个真实任务开始，系统会帮你收敛目标、约束和时间窗口，再生成能立刻推进的路径。</p>
+              <router-link to="/goal-conversation" class="btn btn-primary">开始新规划</router-link>
+            </section>
           </div>
         </section>
       </div>
@@ -338,32 +246,24 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '../utils/toast';
 import {
-  Plus,
-  Clock,
-  Document,
   Delete,
   More,
-  HomeFilled,
-  FolderOpened,
-  TrendCharts,
   User,
   Switch,
-  Trophy,
-  ArrowRight,
-  Loading,
   Refresh
 } from '@element-plus/icons-vue';
 import request from '../utils/request';
 import { useUserStore } from '../stores/user';
-import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import { learningAPI } from '../api/learning';
 
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 
+const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const scrolled = ref(false);
 const loading = ref(true);
 const paths = ref<any[]>([]);
@@ -375,6 +275,7 @@ const showRegenerateDialog = ref(false);
 const pathToRegenerate = ref<any>(null);
 const retryingPathId = ref<string | null>(null);
 const showGeneratingAlert = ref(false);
+const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
 
 // 前端提示超时阈值：4 分钟
 const GENERATION_TIMEOUT_SECONDS = 240;
@@ -408,14 +309,83 @@ const timeoutPaths = computed(() =>
   generatingPaths.value.filter((p: any) => isPathTimeout(p))
 );
 
+const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
+
+const getPathSummary = (path: any) => path.summary || path.description || '这条路径还在整理中，建议先从最接近真实场景的一步开始推进。';
+
+const getPathStageCount = (path: any) => path.totalMilestones || path.milestones?.length || path.weeks?.length || 0;
+
+const getPathCurrentStage = (path: any) => {
+  if (typeof path.currentStage === 'number') return path.currentStage;
+  if (typeof path.currentMilestoneIndex === 'number') return path.currentMilestoneIndex + 1;
+  if (typeof path.currentMilestoneOrder === 'number') return path.currentMilestoneOrder;
+  return getPathStageCount(path) > 0 ? 1 : 0;
+};
+
+const getPathEstimatedHours = (path: any) => {
+  const value = path.estimatedHours || path.totalEstimatedHours || path.hours || 0;
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+};
+
+const getPathProgress = (path: any) => {
+  if (typeof path.progress === 'number') return Math.max(0, Math.min(100, Math.round(path.progress)));
+  if (typeof path.progressPercentage === 'number') return Math.max(0, Math.min(100, Math.round(path.progressPercentage)));
+  if (typeof path.completionRate === 'number') return Math.max(0, Math.min(100, Math.round(path.completionRate * 100)));
+  const total = getPathStageCount(path);
+  const current = getPathCurrentStage(path);
+  if (total > 0 && current > 0) {
+    return Math.max(0, Math.min(100, Math.round(((current - 1) / total) * 100)));
+  }
+  return 0;
+};
+
+const getPathDisplayState = (path: any) => {
+  if (path.status === 'failed') return 'attention';
+  if (path.status === 'generating') return isPathTimeout(path) ? 'attention' : 'generating';
+  if (getEnrichmentStatus(path) === 'failed') return 'attention';
+  if (getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending') return 'generating';
+  return 'active';
+};
+
+const getFailureCopy = (path: any) => {
+  if (path.status === 'generating' && isPathTimeout(path)) {
+    return path.description || '这条路径生成时间过长，建议重试或回到规划补充条件。';
+  }
+  return path.description || path.summary || '这条路径上次没有顺利生成，建议补充条件后再来一次。';
+};
+
+const sortedPaths = computed(() => {
+  const priority = { active: 0, generating: 1, attention: 2 } as const;
+  return [...paths.value].sort((a, b) => {
+    const stateDiff = priority[getPathDisplayState(a)] - priority[getPathDisplayState(b)];
+    if (stateDiff !== 0) return stateDiff;
+    const updatedA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const updatedB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return updatedB - updatedA;
+  });
+});
+
+const primaryPath = computed(() => sortedPaths.value.find((path: any) => getPathDisplayState(path) === 'active') || null);
+
+const pathFilterChips = computed(() => {
+  const list = sortedPaths.value;
+  return [
+    { key: 'all', label: '全部', count: list.length },
+    { key: 'active', label: '进行中', count: list.filter((path: any) => getPathDisplayState(path) === 'active').length },
+    { key: 'generating', label: '生成中', count: list.filter((path: any) => getPathDisplayState(path) === 'generating').length },
+    { key: 'attention', label: '待重试', count: list.filter((path: any) => getPathDisplayState(path) === 'attention').length }
+  ];
+});
+
+const visiblePaths = computed(() => {
+  const list = sortedPaths.value;
+  if (activePathFilter.value === 'all') return list;
+  return list.filter((path: any) => getPathDisplayState(path) === activePathFilter.value);
+});
+
 // 检查是否有正在生成的路径
 const checkGeneratingPath = () => {
   return generatingPaths.value.length > 0 || enrichingPaths.value.length > 0;
-};
-
-// 清除生成中状态（已不需要，保留兼容）
-const clearGeneratingState = () => {
-  // 不再使用 localStorage
 };
 
 // 轮询更新生成中的路径
@@ -427,7 +397,7 @@ const startPolling = () => {
       // 检查超时（只提示一次）
         timeoutPaths.value.forEach((timeoutPath: any) => {
           if (!notifiedTimeoutIds.has(timeoutPath.id)) {
-          ElMessage.warning('学习路径生成时间较长，请稍候或重试');
+          toast.warning('学习路径生成时间较长，请稍候或重试');
           notifiedTimeoutIds.add(timeoutPath.id);
           }
         });
@@ -441,10 +411,10 @@ const startPolling = () => {
           const updatedPath = newPaths.find((p: any) => p.id === genPath.id);
           if (updatedPath && updatedPath.status !== 'generating') {
             if (updatedPath.status === 'active') {
-              ElMessage.success('学习路径生成完成！');
+              toast.success('学习路径生成完成！');
               notifiedTimeoutIds.delete(genPath.id);
             } else if (updatedPath.status === 'failed') {
-              ElMessage.error('学习路径生成失败，请返回目标对话重试。');
+              toast.error('学习路径生成失败，请返回目标对话重试。');
               notifiedTimeoutIds.delete(genPath.id);
             }
           }
@@ -486,7 +456,7 @@ const handleLogout = async () => {
       type: 'warning'
     });
     userStore.logout();
-    ElMessage.success('已退出登录');
+    toast.success('已退出登录');
     router.push('/login');
   } catch {
     // 用户取消
@@ -500,7 +470,7 @@ const loadPaths = async () => {
     paths.value = response.data.data;
   } catch (error: any) {
     console.error('加载学习路径失败:', error);
-    ElMessage.error(error.response?.data?.error?.message || '加载学习路径失败');
+    toast.error(error.response?.data?.error?.message || '加载学习路径失败');
   } finally {
     loading.value = false;
   }
@@ -532,13 +502,13 @@ const deletePath = async () => {
   deleting.value = true;
   try {
     await request.delete(`/learning/paths/${pathToDelete.value.id}`);
-    ElMessage.success('学习路径已删除');
+    toast.success('学习路径已删除');
     showDeleteDialog.value = false;
     pathToDelete.value = null;
     await loadPaths();
   } catch (error: any) {
     console.error('删除学习路径失败:', error);
-    ElMessage.error(error.response?.data?.error?.message || '删除学习路径失败');
+    toast.error(error.response?.data?.error?.message || '删除学习路径失败');
   } finally {
     deleting.value = false;
   }
@@ -563,14 +533,14 @@ const regeneratePath = async () => {
 
     notifiedTimeoutIds.delete(pathToRegenerate.value.id);
     showRegenerateDialog.value = false;
-    ElMessage.success('正在重新生成学习路径...');
+    toast.success('正在重新生成学习路径...');
 
     if (!pollingTimer) {
       startPolling();
     }
   } catch (error: any) {
     console.error('重新生成学习路径失败:', error);
-    ElMessage.error(error.response?.data?.error?.message || '重新生成学习路径失败');
+    toast.error(error.response?.data?.error?.message || '重新生成学习路径失败');
   } finally {
     regenerating.value = false;
     pathToRegenerate.value = null;
@@ -584,7 +554,7 @@ const goToPathDetail = (id: string) => {
 // 重试生成失败的路径
 const retryPathGeneration = async (path: any) => {
   if (!path.description) {
-    ElMessage.error('路径描述缺失，请通过目标对话重新创建');
+    toast.error('路径描述缺失，请通过目标对话重新创建');
     return;
   }
 
@@ -602,14 +572,14 @@ const retryPathGeneration = async (path: any) => {
     }
     notifiedTimeoutIds.delete(path.id);
     
-    ElMessage.success('正在重新生成学习路径...');
+    toast.success('正在重新生成学习路径...');
     
     if (!pollingTimer) {
       startPolling();
     }
   } catch (error: any) {
     console.error('重试生成失败:', error);
-    ElMessage.error(error.response?.data?.error?.message || '重试生成失败，请稍后重试');
+    toast.error(error.response?.data?.error?.message || '重试生成失败，请稍后重试');
   } finally {
     retryingPathId.value = null;
   }
@@ -718,7 +688,8 @@ onUnmounted(() => {
   transition: all 0.3s ease;
 }
 
-.header-scrolled {
+.header-scrolled,
+.dashboard-header--scrolled {
   background: rgba(255, 255, 255, 0.95);
   border-bottom-color: var(--border-default);
   box-shadow: var(--shadow-sm);
@@ -784,12 +755,14 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-.nav-item-active {
+.nav-item-active,
+.nav-item--active {
   background: var(--color-primary);
   color: white;
 }
 
-.nav-item-active:hover {
+.nav-item-active:hover,
+.nav-item--active:hover {
   background: var(--color-primary);
   color: white;
 }
@@ -807,6 +780,66 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.brand {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+
+.brand-logo {
+  height: 40px;
+}
+
+.brand {
+  width: auto;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.brand-logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), #1f57cc);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-primary);
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
 }
 
 .user-avatar {
@@ -846,18 +879,107 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+/* Dashboard Nav Exact Override */
+.dashboard-header {
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.header-container {
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+}
+
+.brand {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.header-nav {
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.nav-item {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #172033 68%, white);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.nav-item:hover,
+.nav-item--active {
+  background: rgba(52, 120, 246, 0.09);
+  color: #1f57cc;
+}
+
+.header-right {
+  gap: 10px;
+}
+
+.header-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-chip {
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: #172033;
+}
+
+.user-chip span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-weight: 900;
+}
+
 /* ========== 主内容区 ========== */
 .main-content {
   position: relative;
   z-index: 1;
-  padding: 2rem;
-  width: 100%;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 80px;
   overflow-x: hidden;
 }
 
 .content-container {
-  max-width: 1600px;
-  margin: 0 auto;
   width: 100%;
   min-width: 0;
 }
@@ -1418,6 +1540,343 @@ onUnmounted(() => {
   100% { width: 100%; transform: translateX(100%); }
 }
 
+/* ========== Paths Upgrade ========== */
+.paths-upgrade {
+  background: linear-gradient(180deg, #f7f9fd 0%, #eef3fb 100%);
+}
+
+[data-theme="dark"] .paths-upgrade {
+  background: linear-gradient(180deg, #0f172a 0%, #111c31 100%);
+}
+
+.paths-bg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.paths-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(110px);
+  opacity: 0.24;
+}
+
+.paths-bg-orb--1 {
+  top: 140px;
+  right: -120px;
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.18), transparent 70%);
+  animation: float 26s ease-in-out infinite;
+}
+
+.paths-bg-orb--2 {
+  left: -100px;
+  bottom: 80px;
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.14), transparent 70%);
+  animation: float 30s ease-in-out infinite reverse;
+}
+
+.paths-main {
+  padding: 28px 0 80px;
+}
+
+.paths-shell {
+  max-width: none;
+}
+
+.paths-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding: 24px 28px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  border-radius: 24px;
+}
+
+.paths-hero__copy {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.pill {
+  display: inline-flex;
+  width: fit-content;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.09);
+  color: #1f57cc;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.paths-hero h1 {
+  margin: 0;
+  font-size: clamp(30px, 3.8vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: #172033;
+}
+
+.paths-hero p,
+.path-overview-card p,
+.paths-empty-state p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #66758d;
+}
+
+.paths-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.92);
+  color: #172033;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+}
+
+.btn-ghost:hover {
+  border-color: rgba(52, 120, 246, 0.24);
+  color: #1f57cc;
+  background: rgba(52, 120, 246, 0.06);
+}
+
+.paths-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.paths-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(255, 255, 255, 0.9);
+  color: #66758d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.paths-filter-chip strong {
+  color: #172033;
+}
+
+.paths-filter-chip--active {
+  border-color: rgba(52, 120, 246, 0.18);
+  background: rgba(52, 120, 246, 0.08);
+  color: #1f57cc;
+}
+
+.paths-grid--upgraded {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.path-overview-card {
+  display: grid;
+  gap: 14px;
+  min-height: 280px;
+  padding: 22px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.path-overview-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.path-overview-card--primary {
+  border-color: rgba(52, 120, 246, 0.14);
+  box-shadow: 0 22px 54px rgba(15, 23, 42, 0.06);
+}
+
+.path-overview-card--attention {
+  background: linear-gradient(180deg, rgba(255, 247, 232, 0.92), rgba(255, 255, 255, 0.96));
+  border-color: rgba(245, 158, 11, 0.18);
+}
+
+.path-overview-card__status-row,
+.path-overview-card__actions-row,
+.path-overview-card__head,
+.path-overview-card__progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.path-overview-card strong {
+  font-size: 22px;
+  line-height: 1.3;
+  color: #172033;
+}
+
+.path-overview-card__head strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 22px;
+}
+
+.path-overview-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 13px;
+  color: #66758d;
+}
+
+.path-overview-card__progress-block {
+  display: grid;
+  gap: 8px;
+}
+
+.path-overview-card__progress-top strong {
+  font-size: 18px;
+}
+
+.path-overview-card__progress-top span {
+  font-size: 12px;
+  color: #66758d;
+  font-weight: 800;
+}
+
+.path-overview-card__progress-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+}
+
+.path-overview-card__progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3478f6, #1f57cc);
+}
+
+.path-overview-card__progress-fill--loading {
+  width: 42%;
+  animation: progress-pulse 2s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+  0%, 100% { width: 24%; opacity: 0.72; }
+  50% { width: 68%; opacity: 1; }
+}
+
+.path-state-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.path-state-pill--primary {
+  background: rgba(52, 120, 246, 0.12);
+  border-color: rgba(52, 120, 246, 0.2);
+  color: #1f57cc;
+}
+
+.path-state-pill--active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.16);
+  color: #0f8a63;
+}
+
+.path-state-pill--generating {
+  background: rgba(52, 120, 246, 0.1);
+  border-color: rgba(52, 120, 246, 0.16);
+  color: #1f57cc;
+}
+
+.path-state-pill--failed {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.path-state-pill--soft {
+  background: rgba(255, 255, 255, 0.92);
+  color: #66758d;
+}
+
+.paths-empty-state {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  padding: 32px;
+  border-radius: 24px;
+}
+
+.paths-empty-state h2 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  color: #172033;
+}
+
+[data-theme="dark"] .paths-hero,
+[data-theme="dark"] .path-overview-card,
+[data-theme="dark"] .paths-empty-state,
+[data-theme="dark"] .paths-filter-chip,
+[data-theme="dark"] .btn-ghost {
+  background: rgba(30, 41, 59, 0.88);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .paths-hero h1,
+[data-theme="dark"] .path-overview-card strong,
+[data-theme="dark"] .paths-empty-state h2,
+[data-theme="dark"] .paths-filter-chip strong,
+[data-theme="dark"] .btn-ghost {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .paths-hero p,
+[data-theme="dark"] .path-overview-card p,
+[data-theme="dark"] .paths-empty-state p,
+[data-theme="dark"] .paths-filter-chip,
+[data-theme="dark"] .path-overview-card__stats,
+[data-theme="dark"] .path-overview-card__progress-top span {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .paths-filter-chip--active {
+  background: rgba(52, 120, 246, 0.14);
+  color: rgba(96, 165, 250, 0.95);
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
 /* ========== 响应式 ========== */
 @media (max-width: 768px) {
   .header-container {
@@ -1430,6 +1889,40 @@ onUnmounted(() => {
 
   .main-content {
     padding: 1rem;
+  }
+
+  .paths-main {
+    padding: 1rem 1rem 1.25rem;
+  }
+
+  .paths-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .paths-hero h1,
+  .paths-empty-state h2 {
+    font-size: 24px;
+  }
+
+  .paths-hero__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .paths-filter-row {
+    gap: 10px;
+  }
+
+  .paths-grid--upgraded {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .path-overview-card {
+    padding: 18px;
+    min-height: auto;
   }
 
   .page-header-section {

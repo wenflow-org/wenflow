@@ -260,8 +260,8 @@
 <script setup lang="ts">
 import { computed, ref, reactive, onMounted } from 'vue';
 import { Reading } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import { toast } from '../../utils/toast';
 import {
   getUserAgents,
   saveUserAgent,
@@ -344,7 +344,7 @@ const loadAgents = async () => {
     const res = await getUserAgents(params);
     agents.value = res.data;
   } catch (error) {
-    ElMessage.error('加载失败');
+    toast.error('加载失败');
   } finally {
     loading.value = false;
   }
@@ -356,7 +356,7 @@ const viewLogs = async (agent: any) => {
     agentLogs.value = res.data;
     logsVisible.value = true;
   } catch (error) {
-    ElMessage.error('加载日志失败');
+    toast.error('加载日志失败');
   }
 };
 
@@ -376,7 +376,7 @@ const toggleAgent = async (agent: any) => {
           systemPrompt: agent.systemPrompt
         });
       }
-      ElMessage.success('已启用');
+      toast.success('已启用');
     } else {
       if (agent.userConfigId) {
         await disableUserAgent(agent.agentName);
@@ -392,10 +392,10 @@ const toggleAgent = async (agent: any) => {
           systemPrompt: agent.systemPrompt
         });
       }
-      ElMessage.success('已禁用');
+      toast.success('已禁用');
     }
   } catch (error) {
-    ElMessage.error('操作失败');
+    toast.error('操作失败');
     agent.enabled = !agent.enabled;
   }
 };
@@ -462,7 +462,7 @@ const getReplacementHint = (agent: any) => {
 
 const submitForm = async () => {
   if (!formData.agentName) {
-    ElMessage.warning('请填写 Agent 名称');
+    toast.warning('请填写 Agent 名称');
     return;
   }
 
@@ -486,11 +486,11 @@ const submitForm = async () => {
       });
     }
     
-    ElMessage.success('保存成功');
+    toast.success('保存成功');
     dialogVisible.value = false;
     loadAgents();
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败');
+    toast.error(error.message || '保存失败');
   } finally {
     submitting.value = false;
   }

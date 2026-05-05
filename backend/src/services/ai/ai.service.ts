@@ -382,25 +382,19 @@ class AIService {
       }
       
       const pathPlanningRequest = isPathPlanningRequest(options?.agentId, options?.action);
+      const thinkingMode = (response as any)?._routeThinkingMode;
       const allowReasoningFallback = options?.allowReasoningFallback ?? pathPlanningRequest;
-
-      // 非路径规划场景禁止将 reasoning_content 直接作为用户可见输出
-      if (!reply && reasoning && allowReasoningFallback) {
-        logger.warn('AI 响应 content 为空，路径规划链路使用 reasoning_content 作为回退', {
-          agentId: options?.agentId,
-          action: options?.action,
-          reasoningPreview: reasoning?.substring(0, 300)
-        });
-        reply = reasoning;
-      }
       
       // 如果还是没有内容，抛出错误
       if (!reply) {
         logger.error('AI 响应 content 为空', { 
+          agentId: options?.agentId,
+          action: options?.action,
+          thinkingMode,
           hasReasoning: !!reasoning,
           reasoningPreview: reasoning?.substring(0, 500)
         });
-        throw new Error('AI 响应格式错误：content 为空，模型可能只输出了思考过程');
+        throw new Error('AI 响应格式错误：content 为空，当前模型返回不符合平台严格输出协议');
       }
 
       const sanitizeOutput = options?.sanitizeUserVisible ?? !pathPlanningRequest;

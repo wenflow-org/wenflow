@@ -99,7 +99,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
-import { ElMessage } from 'element-plus';
+import { toast } from '../utils/toast';
 import { feedbackApi } from '@/api/feedback';
 
 const props = defineProps<{
@@ -142,7 +142,7 @@ function open() {
 
 async function submitFeedback() {
   if (form.rating === 0) {
-    ElMessage.warning('请给出总体评分');
+    toast.warning('请给出总体评分');
     return;
   }
   
@@ -164,12 +164,12 @@ async function submitFeedback() {
       roundNumber: props.roundNumber
     });
     
-    ElMessage.success('感谢你的反馈！帮助我们做得更好 🎉');
+    toast.success('感谢你的反馈！帮助我们做得更好 🎉');
     visible.value = false;
     emit('submitted');
   } catch (error) {
     console.error('提交反馈失败:', error);
-    ElMessage.error('提交失败，请重试');
+    toast.error('提交失败，请重试');
   } finally {
     submitting.value = false;
   }

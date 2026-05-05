@@ -130,6 +130,21 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建 `backend/.env`。
 如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。
 
+### 局域网开发模式
+
+```bash
+# 自动获取局域网 IP 并启动
+./start-lan.ps1
+
+# 或使用 npm 脚本
+npm run dev:lan
+
+# 手动指定 IP
+./start-lan.ps1 -LanIP 192.168.31.26
+```
+
+说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试。
+
 ### 一键测试部署（本机 Nginx，HTTP）
 
 ```bash

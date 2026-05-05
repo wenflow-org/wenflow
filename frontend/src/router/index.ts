@@ -8,6 +8,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '首页' }
   },
   {
+    path: '/vision',
+    name: 'Vision',
+    component: () => import('@/views/Vision.vue'),
+    meta: { title: '愿景' }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
@@ -54,6 +60,12 @@ const routes: RouteRecordRaw[] = [
     name: 'LearningPage',
     component: () => import('@/views/LearningPage.vue'),
     meta: { title: '学习中', requiresAuth: true }
+  },
+  {
+    path: '/learn/:taskId/evaluation/:sessionId',
+    name: 'LearningEvaluationPage',
+    component: () => import('@/views/LearningEvaluationPage.vue'),
+    meta: { title: '课程评估', requiresAuth: true }
   },
   {
     path: '/ui-lab',
@@ -194,7 +206,7 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '模型偏好设置', requiresAuth: true }
   },
   {
-    path: '/goal-conversation',
+    path: '/goal-conversation/:conversationId?',
     name: 'GoalConversation',
     component: () => import('@/views/GoalConversation.vue'),
     meta: { title: '目标规划', requiresAuth: true }
@@ -331,6 +343,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminAgentModelConfigs',
         component: () => import('@/views/admin/AgentModelConfig.vue'),
         meta: { title: 'Agent 模型配置', requiresAdminAuth: true, adminGroup: 'system' }
+      },
+      {
+        path: 'skill-model-configs',
+        name: 'AdminSkillModelConfigs',
+        component: () => import('@/views/admin/SkillModelConfig.vue'),
+        meta: { title: 'Skill 模型配置', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'class-test',
