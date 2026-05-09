@@ -2,18 +2,15 @@
 
 ![WenFlow Banner](docs/logo/品牌横幅.png)
 
-**An Intelligent Learning Platform for Navigating Uncertainty**
+**An AI learning-path prototype that starts from real problems**
 
-> WenFlow - In the AI era, learning to ask questions is more important than finding answers
+> WenFlow: don't start by finding courses; start by clarifying the real problem.
 
 English Version | [中文版](README.md)
 
-🌐 **Website**: https://wenflow.org
+🌐 **Demo Site**: https://wenflow.org
 
 > Demo only, not for production use.
-
-**Test Account**: `test`
-**Test Password**: `test1234`
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
@@ -23,34 +20,50 @@ English Version | [中文版](README.md)
 
 ## Why WenFlow?
 
-When AI can answer all standard questions, **those who ask good questions will define the future.**
+Learning often gets stuck not because you are not trying hard enough, but because the goal is too broad, the resources are overwhelming, and the first step is unclear.
 
-Traditional education teaches tools—how to write loops, how to spell words, what the standard answers are.  
-WenFlow teaches thinking—seeing connections, recognizing patterns, systemic thinking, defining problems.
+Many learning products start by giving you content: courses, materials, exercises, and predefined paths.  
+WenFlow starts somewhere else: helping you clarify what you are really trying to solve.
 
-**Tools become obsolete, thinking endures.**
+It turns a vague goal into an actionable learning path: clarify the problem, generate a route, then keep adjusting through dialogue, output, and feedback.
+
+As AI gets better at producing answers, the more valuable capabilities are no longer just remembering content, but:
+
+- defining problems
+- seeing structure
+- making judgments
+- collaborating with AI
+- continuously adjusting through feedback
+
+**Answers will keep getting cheaper. Problems will matter more.**
 
 ---
 
 ## Core Features
 
-### Interface Preview
+### Product Flow Preview
 
-| Home | Learning Path | Teaching Dialog |
-|:---:|:---:|:---:|
-| ![Home](docs/images/首页.png) | ![Path](docs/images/路径页.png) | ![Teaching](docs/images/教学页.png) |
+These five screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
 
-| Status Tracking | Feedback |
+| Start from a Real Problem |
+|:---:|
+| ![Start from a Real Problem](docs/images/home-start-from-problem.png) |
+
+| Clarify the Real Goal | Generate a Learning Path |
 |:---:|:---:|
-| ![Status](docs/images/状态页.png) | ![Feedback](docs/images/评价页.png) |
+| ![Clarify the Real Goal](docs/images/goal-clarification.png) | ![Generate a Learning Path](docs/images/learning-path.png) |
 
-### Conversational Learning
-- **Goal Collection**: 5-8 rounds of natural dialogue to clarify what you really want to learn
-- **Path Generation**: Vague goals → actionable tasks with dynamic difficulty adjustment
-- **Interactive Learning**: Round-based mode, AI asks → user answers → instant feedback
+| Enter Round-based Learning | Learning Loop Overview |
+|:---:|:---:|
+| ![Enter Round-based Learning](docs/images/round-based-learning.png) | ![Learning Loop Overview](docs/images/learning-loop-overview.png) |
+
+### From Problem to Path
+- **Problem Clarification**: use 5-8 rounds of natural dialogue to surface context, prior knowledge, time, and constraints
+- **Path Generation**: turn a vague goal into phases, tasks, and a first step you can start today
+- **Round-based Learning**: AI asks, the user responds, feedback is immediate, and the path keeps adjusting with understanding
 
 ### Learning State Tracking
-Based on sports science quantification models, scientifically track learning effectiveness:
+Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning state rather than only whether a task was completed:
 
 | Metric | Meaning | Usage |
 |------|------|------|
@@ -105,13 +118,11 @@ flowchart TD
 
 ## Project Status
 
-This project is in **early development stage**, an experimental product for validating educational concepts.
+WenFlow is still in an **early development stage**, serving as an experimental prototype for validating a different learning approach.
 
-There are many AI tools teaching you how to code or use software, but few teach you: **What kind of thinking is truly needed in the AI era?**
+Instead of simply accelerating old learning workflows, it explores another path: what if learning starts from a real problem, and AI helps clarify goals, shape the path, and organize feedback along the way?
 
-WenFlow attempts to answer this question. We don't pursue "improving learning efficiency"—that's industrial-era thinking. We pursue developing **problem definition, systems thinking, judgment, AI collaboration, and creativity** needed in the AI era.
-
-This project is a validation: What happens if we shift education focus from "tool skills" to "thinking patterns"?
+The project is meant to keep exploring how to cultivate five capabilities that matter in the AI era: **problem definition, systems thinking, judgment, AI collaboration, and creativity**.
 
 ---
 
@@ -120,15 +131,42 @@ This project is a validation: What happens if we shift education focus from "too
 ### Requirements
 - Node.js >= 18
 
-### One-click Start (Development)
+### Recommended Order (First Run)
+
+```bash
+# 1) Initialize backend/.env (JWT_SECRET, AI config, initial admin)
+npm run env:setup
+
+# 2) Choose a startup mode as needed
+./start-dev.ps1
+```
+
+Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
+
+### Local Development
 
 ```bash
 # PowerShell
 ./start-dev.ps1
 ```
 
-Note: The script automatically checks and installs dependencies, initializes Prisma (`prisma generate` + `prisma db push`), and guides creation of `backend/.env` if needed.  
+Note: The script automatically checks and installs dependencies, initializes Prisma (`prisma generate` + `prisma db push`), and guides creation or completion of `backend/.env` if needed.  
 To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`
+
+### LAN Development Mode
+
+```bash
+# Auto-detect LAN IP and start
+./start-lan.ps1
+
+# Or use npm script
+npm run dev:lan
+
+# Manually specify IP
+./start-lan.ps1 -LanIP 192.168.31.26
+```
+
+Note: This mode automatically adds the LAN IP to `CORS_ORIGIN`, which is useful for multi-device frontend testing. It does not change the localhost-only restriction on admin login.
 
 ### Test Deployment with Nginx (HTTP)
 
@@ -151,55 +189,33 @@ Note: `-UseNginx` mode runs `npm run build` (frontend) and generates runtime con
 ### First-time Environment Setup (Recommended)
 
 ```bash
-# Interactive initialization of backend/.env (JWT_SECRET, AI config, initial admin)
+# Interactive initialization of backend/.env
 npm run env:setup
 
 # Or quickly open backend/.env for manual editing
 npm run env:edit
 ```
 
-### Manual Start
+Note: `env:setup` no longer asks for a domain separately. In Nginx mode, the domain is inferred from `-Domain` first, then from `FRONTEND_URL` in `backend/.env`.
 
-```powershell
-# Backend (PowerShell)
-cd backend
-npm install
-Copy-Item .env.example .env
-npx prisma generate
-npx prisma db push
-npm run dev
+### Frontend API Environment Variables
 
-# Frontend (PowerShell)
-cd frontend
-npm install
-Copy-Item .env.example .env
-npm run dev
-```
+- By default, the frontend calls the backend through the relative `/api` path, forwarded by Vite proxy or Nginx.
+- The admin panel primarily reads `VITE_API_BASE_URL` from `frontend/.env`.
+- The main user-facing app also supports `VITE_API_URL` outside development mode; if you do not have a custom deployment need, keeping `/api` is the safest default.
 
-```bash
-# Backend (Linux/macOS)
-cd backend
-npm install
-cp .env.example .env
-npx prisma generate
-npx prisma db push
-npm run dev
-
-# Frontend (Linux/macOS)
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
-```
+For more fine-grained deployment steps or non-script startup, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ### Access URLs
 
-**Production**: https://wenflow.org
+**Demo Site**: https://wenflow.org
 
-**Development**
+**Local Development**
 - Frontend: http://localhost:5173
 - Backend: http://localhost:3001
 - Admin Panel: http://localhost:5173/admin
+
+Note: The admin login endpoint currently allows localhost access only. LAN devices or standard reverse-proxy access can still open the admin page, but the backend will reject login attempts.
 
 ---
 
@@ -214,13 +230,15 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 If admin already exists in database, creation is skipped.
 
-Recommendation: Change password immediately after first login. Use strong passwords in production.
+Recommendation: Change password immediately after first login. Use strong passwords for externally accessible deployments.
+
+Important: The admin login endpoint currently only allows `localhost` / `127.0.0.1` / `::1`, which is suitable for local administration but not for direct LAN or public admin logins.
 
 See [ADMIN_SETUP.md](ADMIN_SETUP.md) for details.
 
 ### Reverse Proxy Common Issues
 
-- Don't add trailing `/` to `CORS_ORIGIN` (use `https://wenflow.org`, not `https://wenflow.org/`)
+- Don't add trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
 - When using Nginx/Cloudflare, set `TRUST_PROXY=1`
 - If "origin not allowed" error occurs, check browser `Origin` matches `CORS_ORIGIN`
 

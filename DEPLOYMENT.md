@@ -41,7 +41,7 @@
 .\start-dev.ps1 -UseNginx
 
 # 指定域名
-.\start-dev.ps1 -UseNginx -Domain wenflow.org
+.\start-dev.ps1 -UseNginx -Domain demo.example.com
 
 # Nginx 不在 PATH 中
 .\start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
@@ -91,13 +91,13 @@ npm run env:setup
 | `JWT_SECRET` | 必填，至少 32 位随机串 | `base64-random-string` |
 | `AI_API_URL` | AI 服务地址 | `https://api.deepseek.com` |
 | `AI_API_KEY` | AI API 密钥 | `sk-xxx` |
-| `CORS_ORIGIN` | 允许来源（逗号分隔） | `https://wenflow.org` |
-| `FRONTEND_URL` | 前端主地址 | `https://wenflow.org` |
+| `CORS_ORIGIN` | 允许来源（逗号分隔） | `https://demo.example.com` |
+| `FRONTEND_URL` | 前端主地址 | `https://demo.example.com` |
 | `TRUST_PROXY` | 反向代理信任 | `1` |
 | `INIT_ADMIN_NAME` | 初始管理员用户名 | `admin` |
 | `INIT_ADMIN_PASSWORD` | 初始管理员密码 | `YourStrongPassword123` |
 
-生产示例：
+部署示例：
 
 ```env
 NODE_ENV=production
@@ -107,8 +107,8 @@ DATABASE_URL=file:./dev.db
 JWT_SECRET=replace-with-strong-secret
 JWT_EXPIRES_IN=7d
 
-CORS_ORIGIN=https://wenflow.org
-FRONTEND_URL=https://wenflow.org
+CORS_ORIGIN=https://demo.example.com
+FRONTEND_URL=https://demo.example.com
 TRUST_PROXY=1
 
 AI_API_URL=https://api.deepseek.com

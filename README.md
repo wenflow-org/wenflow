@@ -2,18 +2,15 @@
 
 ![WenFlow 品牌横幅](docs/logo/品牌横幅.png)
 
-**面向不确定性的智能学习平台**
+**从真实问题出发的 AI 学习路径原型**
 
-> 问流 - 在 AI 时代，学会提出比解答更重要的问题
+> 问流：不是先找课，而是先把真正的问题说清楚。
 
 [English Version](README_EN.md) | 中文版
 
-🌐 **官网**: https://wenflow.org
+🌐 **Demo 站点**: https://wenflow.org
 
 > 仅作 Demo 演示，不提供正式服务。
-
-**测试账号**: `test`
-**测试密码**: `test1234`
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
@@ -23,34 +20,51 @@
 
 ## 为什么存在？
 
-当 AI 能解答所有标准问题，**提出好问题的人，将定义未来。**
+学习卡住，常常不是因为不努力。  
+而是目标太大、资料太多、第一步不清楚。
 
-传统教育教的是工具（技）——循环怎么写、单词怎么拼、标准答案是什么。  
-WenFlow 教的是思维（道）——看到联系、识别模式、系统思考、定义问题。
+很多学习产品从“给你内容”开始：课程、资料、题目、路径。  
+WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 
-**工具会过时，思维永流传。**
+它会把一个模糊目标，拆成可以马上行动的学习路径：先澄清问题，再生成路线，再通过对话、输出和反馈持续调整。
+
+当 AI 已经能快速给出大量答案，真正更值得训练的，不只是记住内容，而是：
+
+- 定义问题
+- 看见结构
+- 判断取舍
+- 与 AI 协作
+- 在反馈中持续修正
+
+**答案会越来越多，问题本身会越来越重要。**
 
 ---
 
 ## 核心特性
 
-### 界面预览
+### 产品流程预览
 
-| 首页 | 学习路径 | 教学对话 |
-|:---:|:---:|:---:|
-| ![首页](docs/images/首页.png) | ![路径页](docs/images/路径页.png) | ![教学页](docs/images/教学页.png) |
+这 5 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
 
-| 状态追踪 | 评价反馈 |
+| 从一个问题开始 |
+|:---:|
+| ![从一个问题开始](docs/images/home-start-from-problem.png) |
+
+| 澄清真实目标 | 生成学习路径 |
 |:---:|:---:|
-| ![状态页](docs/images/状态页.png) | ![评价页](docs/images/评价页.png) |
+| ![澄清真实目标](docs/images/goal-clarification.png) | ![生成学习路径](docs/images/learning-path.png) |
 
-### 对话式学习
-- **目标收集**：5-8 轮自然对话，澄清真正想学什么
-- **路径生成**：模糊目标 → 可执行任务，动态难度调整
-- **交互学习**：Round-based 模式，AI 提问 → 用户回答 → 即时反馈
+| 进入回合式学习 | 学习闭环总览 |
+|:---:|:---:|
+| ![进入回合式学习](docs/images/round-based-learning.png) | ![学习闭环总览](docs/images/learning-loop-overview.png) |
+
+### 从问题到路径
+- **问题澄清**：通过 5-8 轮自然对话，补齐场景、基础、时间和限制
+- **路径生成**：把模糊目标拆成阶段、任务和今天能开始的第一步
+- **回合式学习**：AI 提问、用户回答、即时反馈，并根据理解情况继续调整
 
 ### 学习状态追踪
-借鉴运动科学量化模型，科学追踪学习效果：
+借鉴运动科学中的负荷与恢复思路，持续追踪学习状态，而不只记录是否完成任务：
 
 | 指标 | 含义 | 用途 |
 |------|------|------|
@@ -105,13 +119,11 @@ flowchart TD
 
 ## 项目状态
 
-本项目目前处于**原始开发状态**，是一个验证教学概念的实验性产物。
+WenFlow 目前仍处于**原始开发阶段**，是一个验证教学概念的实验性原型。
 
-市面上有太多AI工具教你怎么写代码、怎么用软件，却很少有人教你：**在AI时代，真正需要什么样的思维**。
+它不是要把旧的学习流程简单加速，而是尝试验证另一条路径：如果学习从真实问题开始，再由 AI 帮助澄清目标、生成路径、组织反馈，会不会更适合 AI 时代的学习方式？
 
-WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那是工业时代的思维。我们追求的是培养AI时代需要的**问题定义能力、系统思维、判断力、AI协作力、创造力**。
-
-这个项目是一个验证：如果把教育重心从"工具技能"转向"思维方式"，会发生什么？
+我们希望借它持续探索 5 类能力的训练方式：**问题定义能力、系统思维、判断力、AI 协作力、创造力**。
 
 ---
 
@@ -120,14 +132,26 @@ WenFlow尝试回答这个问题。我们不追求"提高学习效率"——那�
 ### 环境要求
 - Node.js >= 18
 
-### 一键启动（开发环境）
+### 推荐顺序（首次使用）
+
+```bash
+# 1) 初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
+npm run env:setup
+
+# 2) 按需选择启动方式
+./start-dev.ps1
+```
+
+说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
+
+### 本机开发
 
 ```bash
 # PowerShell
 ./start-dev.ps1
 ```
 
-说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建 `backend/.env`。
+说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建或补全 `backend/.env`。
 如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。
 
 ### 局域网开发模式
@@ -143,7 +167,7 @@ npm run dev:lan
 ./start-lan.ps1 -LanIP 192.168.31.26
 ```
 
-说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试。
+说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不会改变管理员登录仅限本机访问的限制。
 
 ### 一键测试部署（本机 Nginx，HTTP）
 
@@ -163,60 +187,36 @@ npm run dev:nginx
 
 说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`，同时会先停止系统 nginx 进程避免端口冲突。
 
-### 首次环境配置（推荐）
+### 环境配置辅助命令
 
 ```bash
-# 交互式初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
+# 交互式初始化 backend/.env
 npm run env:setup
 
-# 仅快速打开 backend/.env 手动编辑
+# 快速打开 backend/.env 手动编辑
 npm run env:edit
 ```
 
 说明：`env:setup` 不再单独询问域名；Nginx 模式下域名由 `-Domain`（优先）或 `backend/.env` 中的 `FRONTEND_URL` 推断。
 
-### 手动启动
+### 前端 API 环境变量
 
-```powershell
-# 后端（PowerShell）
-cd backend
-npm install
-Copy-Item .env.example .env
-npx prisma generate
-npx prisma db push
-npm run dev
+- 默认情况下，前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发。
+- 管理端配置主要读取 `frontend/.env` 中的 `VITE_API_BASE_URL`。
+- 普通用户端在非开发模式下兼容读取 `VITE_API_URL`；如果没有特殊部署需求，保持默认 `/api` 即可。
 
-# 前端（PowerShell）
-cd frontend
-npm install
-Copy-Item .env.example .env
-npm run dev
-```
-
-```bash
-# 后端（Linux/macOS）
-cd backend
-npm install
-cp .env.example .env
-npx prisma generate
-npx prisma db push
-npm run dev
-
-# 前端（Linux/macOS）
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
-```
+如需更细粒度的部署或非脚本方式启动，可参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 ### 访问地址
 
-**生产环境**: https://wenflow.org
+**Demo 站点**: https://wenflow.org
 
-**开发环境**
+**本地开发**
 - 前端: http://localhost:5173
 - 后端: http://localhost:3001
 - 管理后台: http://localhost:5173/admin
+
+说明：当前管理员登录接口默认仅允许本机访问；局域网设备或普通反向代理环境下即使能打开管理页，也会被后端拒绝登录。
 
 ---
 
@@ -231,13 +231,15 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 如果数据库里已经存在管理员，系统会自动跳过创建。
 
-建议：首次登录管理端后立即修改密码，生产环境请使用强密码。
+建议：首次登录管理端后立即修改密码；对外部署时请使用强密码。
+
+注意：管理员登录接口当前仅允许 `localhost` / `127.0.0.1` / `::1` 访问，适合本机管理，不适合直接暴露给局域网或公网管理员登录。
 
 详见 [ADMIN_SETUP.md](ADMIN_SETUP.md)
 
 ### 反向代理常见坑
 
-- `CORS_ORIGIN` 建议不要写尾部 `/`（如 `https://wenflow.org`，不要写成 `https://wenflow.org/`）。
+- `CORS_ORIGIN` 建议不要写尾部 `/`（如 `https://demo.example.com`，不要写成 `https://demo.example.com/`）。
 - 使用 Nginx/Cloudflare 等反向代理时，建议配置 `TRUST_PROXY=1`。
 - 如果遇到“请求来源不被允许”，先检查浏览器 `Origin` 与 `CORS_ORIGIN` 是否匹配。
 
