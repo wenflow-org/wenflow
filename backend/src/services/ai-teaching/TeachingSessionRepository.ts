@@ -141,6 +141,26 @@ class TeachingSessionRepository {
     return record ? mapRecord(record) : null;
   }
 
+  async getRecoverableByTask(
+    userId: string,
+    taskId: string,
+    recoveryWindowMs: number,
+  ): Promise<TeachingSessionRecord | null> {
+    const record = await prisma.teaching_sessions.findFirst({
+      where: {
+        userId,
+        taskId,
+        status: { in: ['active', 'paused', 'timeout'] },
+        updatedAt: {
+          gte: new Date(Date.now() - recoveryWindowMs),
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return record ? mapRecord(record) : null;
+  }
+
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
     const records = await prisma.teaching_sessions.findMany({
       where: { userId },
@@ -165,6 +185,27 @@ class TeachingSessionRepository {
         messages: JSON.stringify(payload.messages),
         knowledgeState: JSON.stringify(payload.knowledgeState),
         teachingState: payload.teachingState ? JSON.stringify(payload.teachingState) : null,
+        updatedAt: new Date(),
+      }
+    });
+  }
+
+  async updateLifecycleState(
+    sessionId: string,
+    payload: {
+      status: string;
+      teachingState?: Record<string, any> | null;
+      endTime?: Date | null;
+      duration?: number | null;
+    }
+  ): Promise<void> {
+    await prisma.teaching_sessions.update({
+      where: { id: sessionId },
+      data: {
+        status: payload.status,
+        teachingState: payload.teachingState ? JSON.stringify(payload.teachingState) : null,
+        endTime: payload.endTime,
+        duration: payload.duration ?? undefined,
         updatedAt: new Date(),
       }
     });

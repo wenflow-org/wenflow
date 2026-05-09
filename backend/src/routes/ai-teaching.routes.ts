@@ -40,6 +40,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
     const session = await aiTeachingOrchestrator.startSession({
       userId,
       taskId,
+      forceNew: !!req.body?.forceNew,
     });
 
     res.json({
@@ -51,6 +52,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         startTime: session.startTime,
         welcomeMessage: session.welcomeMessage,
         opening: session.opening,
+        mode: session.mode,
       },
     });
   } catch (error: any) {
@@ -58,6 +60,59 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '开始会话失败',
+    });
+  }
+});
+
+/**
+ * 暂停授课会话
+ * POST /api/ai-teaching/sessions/:sessionId/pause
+ */
+router.post('/sessions/:sessionId/pause', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+
+    const { sessionId } = req.params;
+    const reason = req.body?.reason === 'pagehide' ? 'pagehide' : 'manual';
+
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+    await aiTeachingOrchestrator.pauseSession(sessionId, userId, reason);
+
+    res.json({ success: true, data: { sessionId, status: 'paused' } });
+  } catch (error: any) {
+    logger.error('暂停授课会话失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '暂停会话失败',
+    });
+  }
+});
+
+/**
+ * 重置授课会话
+ * POST /api/ai-teaching/sessions/:sessionId/reset
+ */
+router.post('/sessions/:sessionId/reset', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+
+    const { sessionId } = req.params;
+
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+    await aiTeachingOrchestrator.resetSession(sessionId, userId);
+
+    res.json({ success: true, data: { sessionId, status: 'completed' } });
+  } catch (error: any) {
+    logger.error('重置授课会话失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '重置会话失败',
     });
   }
 });

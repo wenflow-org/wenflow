@@ -34,6 +34,7 @@ export interface KnowledgePointStatus {
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
+  forceNew?: boolean;
 }
 
 export interface TeachingOpening {
@@ -42,6 +43,10 @@ export interface TeachingOpening {
   quickReplies: Array<{ text: string }>;
   mode: 'self-assess' | 'predict' | 'example-first';
 }
+
+type SessionResumeMode = 'new' | 'resumed';
+
+const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 function buildSessionId(userId: string) {
   return `teaching_${Date.now()}_${userId}`;
@@ -71,6 +76,36 @@ function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]): Knowle
 
 function parseSessionArtifacts(teachingState: Record<string, any> | null | undefined) {
   return teachingState?.sessionArtifacts || {};
+}
+
+function buildTeachingStateWithArtifacts(
+  teachingState: Record<string, any> | null | undefined,
+  sessionArtifacts: Record<string, any>
+) {
+  return {
+    ...(teachingState || {}),
+    sessionArtifacts,
+  };
+}
+
+function computeEffectiveDurationMinutes(session: TeachingSessionRecord) {
+  const rawDuration = Math.max(1, Math.round((Date.now() - session.startTime.getTime()) / 60000));
+  const sessionArtifacts = parseSessionArtifacts(session.teachingState);
+  const pausedDurationMs = Number(sessionArtifacts.pausedDurationMs || 0);
+  if (!Number.isFinite(pausedDurationMs) || pausedDurationMs <= 0) {
+    return rawDuration;
+  }
+
+  return Math.max(1, Math.round((Date.now() - session.startTime.getTime() - pausedDurationMs) / 60000));
+}
+
+function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening {
+  return {
+    message: `已为你恢复这节关于 **${session.topic}** 的课程进度，我们从你上次离开的地方继续。`,
+    question: '准备好了的话，我们继续刚才的内容。',
+    quickReplies: [{ text: '继续上次进度' }, { text: '先回顾一下' }, { text: '从当前焦点继续' }],
+    mode: 'self-assess',
+  };
 }
 
 function computeKnowledgeDelta(
@@ -290,8 +325,49 @@ export class AITeachingOrchestrator {
     startTime: Date;
     welcomeMessage: string;
     opening: TeachingOpening;
+    mode: SessionResumeMode;
   }> {
-    const previousSession = await teachingSessionRepository.getActiveByTask(input.userId, input.taskId);
+    const previousSession = input.forceNew
+      ? null
+      : await teachingSessionRepository.getRecoverableByTask(
+          input.userId,
+          input.taskId,
+          RECOVERY_WINDOW_MS,
+        );
+
+    if (previousSession) {
+      const sessionArtifacts = parseSessionArtifacts(previousSession.teachingState);
+      const wasPausedAt = typeof sessionArtifacts.pausedAt === 'string'
+        ? new Date(sessionArtifacts.pausedAt).getTime()
+        : null;
+      const additionalPausedMs = wasPausedAt ? Math.max(0, Date.now() - wasPausedAt) : 0;
+      const resumedArtifacts = {
+        ...sessionArtifacts,
+        pausedAt: null,
+        pauseReason: null,
+        pausedDurationMs: Math.max(0, Number(sessionArtifacts.pausedDurationMs || 0)) + additionalPausedMs,
+        resumedAt: new Date().toISOString(),
+      };
+
+      await teachingSessionRepository.updateLifecycleState(previousSession.id, {
+        status: 'active',
+        endTime: null,
+        duration: null,
+        teachingState: buildTeachingStateWithArtifacts(previousSession.teachingState, resumedArtifacts),
+      });
+
+      const opening = buildRecoveredOpening(previousSession);
+      return {
+        sessionId: previousSession.id,
+        subject: previousSession.subject,
+        topic: previousSession.topic,
+        startTime: previousSession.startTime,
+        welcomeMessage: previousSession.messages[0]?.content || `${opening.message}\n\n${opening.question}`,
+        opening,
+        mode: 'resumed',
+      };
+    }
+
     const context = await buildTeachingScenarioContext(input.userId, input.taskId, previousSession);
 
     const sessionId = buildSessionId(input.userId);
@@ -341,6 +417,7 @@ export class AITeachingOrchestrator {
       startTime: session.startTime,
       welcomeMessage,
       opening,
+      mode: 'new',
     };
   }
 
@@ -550,7 +627,7 @@ export class AITeachingOrchestrator {
       throw new Error('会话不存在或已结束');
     }
 
-    const durationMinutes = Math.max(1, Math.round((Date.now() - session.startTime.getTime()) / 60000));
+    const durationMinutes = computeEffectiveDurationMinutes(session);
     const sessionArtifacts = parseSessionArtifacts(session.teachingState);
     const initialKnowledgeState = Array.isArray(sessionArtifacts.initialKnowledgeState)
       ? sessionArtifacts.initialKnowledgeState
@@ -792,6 +869,56 @@ export class AITeachingOrchestrator {
       wrapup: session.wrapup,
       advisory: (session.advisory as ReplanAdvisory | null) || null,
     };
+  }
+
+  async pauseSession(
+    sessionId: string,
+    userId: string,
+    reason: 'manual' | 'pagehide' = 'manual'
+  ): Promise<void> {
+    const session = await teachingSessionRepository.getById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new Error('会话不存在');
+    }
+    if (session.status === 'completed') {
+      throw new Error('已结束的会话无法暂停');
+    }
+
+    const sessionArtifacts = parseSessionArtifacts(session.teachingState);
+    if (session.status === 'paused' && sessionArtifacts.pausedAt) {
+      return;
+    }
+
+    await teachingSessionRepository.updateLifecycleState(sessionId, {
+      status: 'paused',
+      endTime: null,
+      duration: null,
+      teachingState: buildTeachingStateWithArtifacts(session.teachingState, {
+        ...sessionArtifacts,
+        pausedAt: new Date().toISOString(),
+        pauseReason: reason,
+      }),
+    });
+  }
+
+  async resetSession(sessionId: string, userId: string): Promise<void> {
+    const session = await teachingSessionRepository.getById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new Error('会话不存在');
+    }
+    if (session.status === 'completed') {
+      throw new Error('已结束的会话无法重置');
+    }
+
+    await teachingSessionRepository.updateLifecycleState(sessionId, {
+      status: 'completed',
+      endTime: new Date(),
+      duration: computeEffectiveDurationMinutes(session),
+      teachingState: buildTeachingStateWithArtifacts(session.teachingState, {
+        ...parseSessionArtifacts(session.teachingState),
+        resetAt: new Date().toISOString(),
+      }),
+    });
   }
 
   async getLatestTaskEvaluation(taskId: string, userId: string): Promise<{

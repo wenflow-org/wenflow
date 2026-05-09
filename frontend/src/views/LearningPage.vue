@@ -3,7 +3,7 @@
 
     <div v-if="sessionInitializing" class="session-initializing">
       <el-icon class="loading-icon"><Loading /></el-icon>
-      <p>正在初始化授课会话...</p>
+      <p>{{ sessionInitMessage }}</p>
     </div>
 
     <div v-else-if="task && task.learningPath?.canStartLearning === false" class="session-paused blocked-state">
@@ -245,10 +245,11 @@ import {
   type WrapupArtifact
 } from '@/api/aiTeaching';
 import api from '../utils/api';
+import { API_BASE_URL } from '../utils/api';
 import CheckpointCard from '@/components/learning/CheckpointCard.vue';
 import {
   VideoPlay, VideoPause,
-  ChatDotRound, Promotion, Loading, WarningFilled,
+  ChatDotRound, Loading, WarningFilled,
   Refresh, CopyDocument, MoreFilled
 } from '@element-plus/icons-vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
@@ -265,6 +266,7 @@ const pageLoading = ref(true);
 const task = ref<any>(null);
 
 const sessionInitializing = ref(false);
+const sessionInitMode = ref<'new' | 'resumed'>('new');
 const sessionActive = ref(false);
 const sessionPaused = ref(false);
 const sessionInfo = ref({
@@ -366,6 +368,11 @@ const sessionWrapup = ref<WrapupArtifact>({
 });
 const sessionAdvisory = ref<ReplanAdvisory | null>(null);
 const showStrategyHints = false;
+const autoPausing = ref(false);
+
+const sessionInitMessage = computed(() => sessionInitMode.value === 'resumed'
+  ? '正在恢复上次授课进度...'
+  : '正在初始化授课会话...');
 
 const allKnowledgePointsMastered = computed(() => {
   return knowledgePoints.value.length > 0
@@ -445,36 +452,119 @@ const loadTaskData = async () => {
   }
 };
 
+const resetSessionState = () => {
+  stopTimer();
+  messages.value = [];
+  knowledgePoints.value = [];
+  activeCheckpoint.value = null;
+  showCompletionPrompt.value = false;
+  completionDurationSeconds.value = 0;
+  sessionWrapup.value = {
+    status: 'summary-only',
+    sources: {
+      summary: 'fallback',
+      evaluation: 'failed',
+    },
+    summary: {
+      topicSummary: '本节课完成了相关主题的学习。',
+      knowledgeSummary: '知识点已学习完成。',
+      practiceAdvice: '建议继续巩固学习。',
+      learningEvaluation: '学习表现良好。',
+      knowledgeItems: [],
+      keyTakeaways: [],
+      actionPlan: [],
+      evaluationHighlights: {
+        strengths: [],
+        improvements: [],
+      },
+      metricInterpretation: {
+        session: '本节表现反映本次课堂的即时投入和产出。',
+        longTerm: '长期状态来自历史累计，不等于单节课程成绩。',
+      },
+      summaryVersion: 'v2',
+    },
+    evaluation: null,
+    progress: {
+      newlyMastered: [],
+      movedToReview: [],
+      stillLearning: [],
+      unchangedMastered: [],
+    },
+    evidence: {
+      turnCount: 0,
+      avgUnderstanding: null,
+      avgEngagement: null,
+      dominantCognitiveLevel: null,
+      lastCognitiveLevel: null,
+      topConfusionPoints: [],
+      emotionalSignals: {
+        positive: 0,
+        neutral: 0,
+        frustrated: 0,
+        confused: 0,
+      },
+      completionCandidateSeen: false,
+    },
+  };
+  sessionAdvisory.value = null;
+  peerChatMessages.value = [];
+  peerNotificationVisible.value = false;
+  peerChatWindowVisible.value = false;
+  elapsedTime.value = 0;
+  activeTime.value = 0;
+  sessionPaused.value = false;
+};
+
+const persistPauseOnPageHide = () => {
+  if (!sessionInfo.value.sessionId || !sessionActive.value || endingSession.value || autoPausing.value) {
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return;
+  }
+
+  autoPausing.value = true;
+  void fetch(`${API_BASE_URL}/ai-teaching/sessions/${sessionInfo.value.sessionId}/pause`, {
+    method: 'POST',
+    keepalive: true,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ reason: 'pagehide' }),
+  }).finally(() => {
+    autoPausing.value = false;
+  });
+};
+
 const startSession = async () => {
   if (!task.value) return;
   
+  sessionInitMode.value = 'new';
   sessionInitializing.value = true;
   
   try {
     const session = await aiTeachingAPI.startSession(task.value.id);
-    
+
+    if (session.mode === 'resumed') {
+      sessionInitMode.value = 'resumed';
+      await resumeSession(session.sessionId);
+      return;
+    }
+
+    resetSessionState();
     sessionInfo.value = {
       sessionId: session.sessionId,
       subject: session.subject,
       topic: session.topic,
       difficulty: 5
     };
-    
+
     sessionActive.value = true;
     sessionInitializing.value = false;
-    
-    messages.value = [];
-    knowledgePoints.value = [];
-    peerChatMessages.value = [];
-    sessionAdvisory.value = null;
-    activeCheckpoint.value = null;
-    showCompletionPrompt.value = false;
-    completionDurationSeconds.value = 0;
-    peerNotificationVisible.value = false;
-    peerChatWindowVisible.value = false;
-    elapsedTime.value = 0;
-    activeTime.value = 0;
-    
+
     messages.value.push({
       role: 'assistant',
       content: session.opening?.message
@@ -484,9 +574,9 @@ const startSession = async () => {
       quickReplies: session.opening?.quickReplies || [],
       quickRepliesUsed: false,
     });
-    
+
     startTimer();
-    toast.success('授课会话已开始');
+    toast.success('授课会话已开始，课程进度将在 48 小时内保留');
   } catch (error: any) {
     sessionInitializing.value = false;
     toast.error(error.message || '开始会话失败');
@@ -743,22 +833,11 @@ const confirmCompletionEnd = async () => {
   });
 };
 
-const pauseSession = () => {
-  if (!sessionActive.value || sessionPaused.value) return;
-  
-  sessionPaused.value = true;
-  stopTimer();
-  
-  toast.info('授课已暂停，可随时恢复');
-};
+const resumeSessionFromPause = async () => {
+  if (!task.value) return;
 
-const resumeSessionFromPause = () => {
-  if (!sessionPaused.value) return;
-  
   sessionPaused.value = false;
-  startTimer();
-  
-  toast.success('授课已恢复');
+  await startSession();
 };
 
 const endSession = async (options?: {
@@ -946,14 +1025,20 @@ const formatDateTime = (iso: string) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-const pauseAndLeave = () => {
-  if (sessionActive.value && !sessionPaused.value) {
-    sessionPaused.value = true;
-    stopTimer();
+const pauseAndLeave = async () => {
+  if (sessionActive.value && !sessionPaused.value && sessionInfo.value.sessionId) {
+    try {
+      await aiTeachingAPI.pauseSession(sessionInfo.value.sessionId, 'manual');
+      sessionPaused.value = true;
+      sessionActive.value = false;
+      stopTimer();
+      toast.success('课程进度已保留，48 小时内可继续学习');
+    } catch (error: any) {
+      toast.warning(error.message || '暂停保存失败，仍可在 48 小时内尝试恢复');
+    }
   }
-  toast.success('已暂停，本次进度已保留');
   const pathId = task.value?.learningPath?.id;
-  router.push(pathId ? `/learning-path/${pathId}` : '/dashboard');
+  await router.push(pathId ? `/learning-path/${pathId}` : '/dashboard');
 };
 
 const handleSessionCommand = (command: string) => {
@@ -990,25 +1075,33 @@ const resetAndRestart = async () => {
     return;
   }
 
-  stopTimer();
-  messages.value = [];
-  knowledgePoints.value = [];
-  activeCheckpoint.value = null;
-  showCompletionPrompt.value = false;
-  sessionWrapup.value = null;
-  sessionAdvisory.value = null;
-  completionDurationSeconds.value = 0;
+  resetSessionState();
   sessionActive.value = false;
-  sessionPaused.value = false;
   sessionInfo.value = { sessionId: '', subject: '', topic: '', difficulty: 5 };
-  elapsedTime.value = 0;
-  activeTime.value = 0;
-  peerChatMessages.value = [];
-  peerNotificationVisible.value = false;
-  peerChatWindowVisible.value = false;
 
-  toast.success('已重新开始本节课');
-  await startSession();
+  try {
+    const session = await aiTeachingAPI.startSession(task.value.id, { forceNew: true });
+    sessionInfo.value = {
+      sessionId: session.sessionId,
+      subject: session.subject,
+      topic: session.topic,
+      difficulty: 5,
+    };
+    sessionActive.value = true;
+    messages.value.push({
+      role: 'assistant',
+      content: session.opening?.message
+        ? `${session.opening.message}\n\n${session.opening.question}`
+        : session.welcomeMessage,
+      timestamp: new Date().toISOString(),
+      quickReplies: session.opening?.quickReplies || [],
+      quickRepliesUsed: false,
+    });
+    startTimer();
+    toast.success('已重新开始本节课，课程进度将在 48 小时内保留');
+  } catch (error: any) {
+    toast.error(error.message || '重新开始失败');
+  }
 };
 
 const goBack = () => {
@@ -1050,32 +1143,16 @@ const resumeSession = async (sessionId: string) => {
     showCompletionPrompt.value = false;
     completionDurationSeconds.value = 0;
     sessionAdvisory.value = null;
+    sessionPaused.value = false;
     
     sessionActive.value = true;
     sessionInitializing.value = false;
     startTimer();
     
-    toast.success('已恢复上次未完成的授课');
+    toast.success('已恢复你在 48 小时内未完成的课程进度');
   } catch (error: any) {
     sessionInitializing.value = false;
     toast.error(error.message || '恢复会话失败');
-  }
-};
-
-const checkActiveSession = async (): Promise<boolean> => {
-  try {
-    const activeSessions = await aiTeachingAPI.getActiveSessions(taskId.value);
-    
-    if (activeSessions && activeSessions.length > 0) {
-      const latest = activeSessions[0];
-      await resumeSession(latest.sessionId);
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('检查活跃会话失败:', error);
-    return false;
   }
 };
 
@@ -1090,15 +1167,17 @@ onMounted(async () => {
   }
 
   if (task.value && task.value.learningPath?.canStartLearning !== false) {
-    const resumed = await checkActiveSession();
-    if (!resumed) {
-      startSession();
-    }
+    await startSession();
   }
+
+  window.addEventListener('pagehide', persistPauseOnPageHide);
+  window.addEventListener('beforeunload', persistPauseOnPageHide);
 });
 
 onUnmounted(() => {
   stopTimer();
+  window.removeEventListener('pagehide', persistPauseOnPageHide);
+  window.removeEventListener('beforeunload', persistPauseOnPageHide);
 });
 </script>
 

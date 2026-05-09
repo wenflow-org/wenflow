@@ -6,6 +6,7 @@ export interface TeachingSession {
   topic: string;
   startTime: string;
   welcomeMessage: string;
+  mode?: 'new' | 'resumed';
   opening?: {
     message: string;
     question: string;
@@ -242,8 +243,8 @@ export interface TaskEvaluationDetail {
 }
 
 export const aiTeachingAPI = {
-  async startSession(taskId: string): Promise<TeachingSession> {
-    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, {});
+  async startSession(taskId: string, options?: { forceNew?: boolean }): Promise<TeachingSession> {
+    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, { forceNew: !!options?.forceNew });
     return result.data || result;
   },
 
@@ -263,6 +264,10 @@ export const aiTeachingAPI = {
   }> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/end`);
     return result.data || result;
+  },
+
+  async pauseSession(sessionId: string, reason: 'manual' | 'pagehide' = 'manual'): Promise<void> {
+    await api.post(`/ai-teaching/sessions/${sessionId}/pause`, { reason });
   },
 
   async resetSession(sessionId: string): Promise<void> {

@@ -842,7 +842,7 @@ async function startSession() {
 
   starting.value = true;
   try {
-    const session = await aiTeachingAPI.startSession(selectedTask.value.id);
+    const session = await aiTeachingAPI.startSession(selectedTask.value.id, { forceNew: true });
 
     sessionInfo.value = {
       sessionId: session.sessionId,

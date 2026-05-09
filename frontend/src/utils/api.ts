@@ -4,7 +4,7 @@ import axios from 'axios';
 // 使用 Vite 代理，通过 /api 前缀转发到后端
 // 开发环境下使用代理，生产环境可以使用环境变量
 const isDev = import.meta.env.DEV;
-const API_BASE_URL = isDev ? '/api' : (import.meta.env.VITE_API_URL || '/api');
+export const API_BASE_URL = isDev ? '/api' : (import.meta.env.VITE_API_URL || '/api');
 
 // 存储 pending 请求的 Map
 const pendingRequests = new Map<string, AbortController>();
