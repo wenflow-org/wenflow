@@ -117,6 +117,9 @@ export interface AgentOutput {
     confidence: number; // 0-1
     generatedAt: string; // ISO 8601
   };
+
+  // 调试信息（可选）
+  debug?: Record<string, any>;
 }
 
 // 里程碑输出
@@ -248,6 +251,7 @@ export interface AgentDefinition {
 export interface AgentContext {
   userId: string;
   sessionId?: string;
+  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab';
   conversationHistory?: Array<{
     role: 'user' | 'assistant' | 'system';
     content: string;

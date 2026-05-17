@@ -19,6 +19,14 @@ export interface AuthResponse {
   token: string;
 }
 
+const unwrapAuthPayload = <T>(response: any): T => {
+  const payload = response?.data ?? response;
+  if (payload?.data !== undefined && payload?.success !== undefined) {
+    return payload.data as T;
+  }
+  return payload as T;
+};
+
 export const authAPI = {
 
   // 鐧诲綍
@@ -27,7 +35,7 @@ export const authAPI = {
 
     const response = await api.post('/auth/login', data);
 
-    return response.data;
+    return unwrapAuthPayload<AuthResponse>(response);
 
   },
 
@@ -39,14 +47,14 @@ export const authAPI = {
 
     const response = await api.post('/auth/register', data);
 
-    return response.data;
+    return unwrapAuthPayload<AuthResponse>(response);
 
   },
 
   // 娉ㄥ唽鐘舵€?
   async getRegistrationStatus(): Promise<{ registrationEnabled: boolean }> {
     const response: any = await api.get('/auth/registration-status');
-    return response?.data || { registrationEnabled: true };
+    return unwrapAuthPayload<{ registrationEnabled: boolean }>(response) || { registrationEnabled: true };
   },
 
 
@@ -57,7 +65,7 @@ export const authAPI = {
 
     const response = await api.post('/auth/verify', { token });
 
-    return response.data;
+    return unwrapAuthPayload<any>(response);
 
   }
 

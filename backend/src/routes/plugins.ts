@@ -13,6 +13,7 @@ import {
   getAllPlugins
 } from '../agents';
 import { AgentContext } from '../agents/protocol';
+import { getRequestContext } from '../gateway/api-gateway/context';
 
 const router = Router();
 
@@ -102,6 +103,9 @@ router.post('/execute/:pluginId', authMiddleware, async (req: Request, res: Resp
     const { pluginId } = req.params;
     const { input, context } = req.body;
     
+    const requestContext = getRequestContext();
+    const sourceEntry = requestContext.sourceEntry || 'user';
+    
     const userId = (req as any).user?.userId;
     if (!userId) {
       return res.status(401).json({
@@ -119,17 +123,16 @@ router.post('/execute/:pluginId', authMiddleware, async (req: Request, res: Resp
       });
     }
     
-    // 构建上下文
     const agentContext: AgentContext = {
       userId,
       sessionId: context?.sessionId,
+      sourceEntry,
       metadata: {
         ...context?.metadata,
         taskId: context?.taskId
       }
     };
     
-    // 执行插件
     const result = await agentPluginRegistry.execute(pluginId, input, agentContext);
 
     res.json({
@@ -155,6 +158,9 @@ router.post('/execute-by-type/:type', authMiddleware, async (req: Request, res: 
     const { type } = req.params;
     const { input, context } = req.body;
     
+    const requestContext = getRequestContext();
+    const sourceEntry = requestContext.sourceEntry || 'user';
+    
     const userId = (req as any).user?.userId;
     if (!userId) {
       return res.status(401).json({
@@ -174,20 +180,18 @@ router.post('/execute-by-type/:type', authMiddleware, async (req: Request, res: 
     
     ensurePluginsInitialized();
     
-    // 根据配置获取插件 ID
     const pluginId = agentPluginConfig.getPluginId(type as any);
     
-    // 构建上下文
     const agentContext: AgentContext = {
       userId,
       sessionId: context?.sessionId,
+      sourceEntry,
       metadata: {
         ...context?.metadata,
         taskId: context?.taskId
       }
     };
     
-    // 执行插件
     const result = await agentPluginRegistry.execute(pluginId, input, agentContext);
 
     res.json({

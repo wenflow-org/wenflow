@@ -6,23 +6,25 @@ const ORCHESTRATOR_ID = 'requirement-orchestrator';
 class RequirementOrchestrator {
   readonly id = ORCHESTRATOR_ID;
 
-  async start(userId: string, goal: string) {
+  async start(userId: string, goal: string, options?: { contextMode?: 'recent' | 'full' }) {
     logger.info('[requirement-orchestrator] start', {
       orchestratorId: this.id,
       userId,
-      goalPreview: goal.slice(0, 120)
+      goalPreview: goal.slice(0, 120),
+      contextMode: options?.contextMode || 'recent'
     });
-    return goalConversationService.startConversation(userId, goal);
+    return goalConversationService.startConversation(userId, goal, options);
   }
 
-  async step(conversationId: string, reply: string, userId: string) {
+  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full' }) {
     logger.info('[requirement-orchestrator] step', {
       orchestratorId: this.id,
       userId,
       conversationId,
-      replyPreview: reply.slice(0, 120)
+      replyPreview: reply.slice(0, 120),
+      contextMode: options?.contextMode || 'recent'
     });
-    return goalConversationService.continueConversation(conversationId, reply, userId);
+    return goalConversationService.continueConversation(conversationId, reply, userId, options);
   }
 
   async regenerate(conversationId: string, userId: string, adjustments?: string) {

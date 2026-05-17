@@ -47,6 +47,10 @@ function getInputText(body: any): string {
   return String(body?.input?.text || '').trim();
 }
 
+function getContextMode(body: any): 'recent' | 'full' {
+  return body?.contextMode === 'full' ? 'full' : 'recent';
+}
+
 router.post('/start', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -60,13 +64,22 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: '学习目标不能为空' });
     }
 
-    const result = await requirementOrchestrator.start(userId, goal);
+    const result = await requirementOrchestrator.start(userId, goal, {
+      contextMode: getContextMode(req.body)
+    });
     return res.json({
       success: true,
       data: envelopeGoalConversation(result)
     });
   } catch (error: any) {
     logger.error('开始对话失败:', error);
+    if (error?.status === 422 && error?.code === 'STRUCTURED_OUTPUT_INVALID' && error?.result) {
+      return res.status(422).json({
+        success: false,
+        error: 'STRUCTURED_OUTPUT_INVALID',
+        data: envelopeGoalConversation(error.result)
+      });
+    }
     return res.status(500).json({ success: false, error: error.message || '开始对话失败' });
   }
 });
@@ -85,13 +98,22 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       return res.status(400).json({ success: false, error: '回复内容不能为空' });
     }
 
-    const result = await requirementOrchestrator.step(conversationId, reply, userId);
+    const result = await requirementOrchestrator.step(conversationId, reply, userId, {
+      contextMode: getContextMode(req.body)
+    });
     return res.json({
       success: true,
       data: envelopeGoalConversation(result, conversationId)
     });
   } catch (error: any) {
     logger.error('继续对话失败:', error);
+    if (error?.status === 422 && error?.code === 'STRUCTURED_OUTPUT_INVALID' && error?.result) {
+      return res.status(422).json({
+        success: false,
+        error: 'STRUCTURED_OUTPUT_INVALID',
+        data: envelopeGoalConversation(error.result)
+      });
+    }
     const status = error.message === '对话会话不存在' ? 404 : 500;
     return res.status(status).json({ success: false, error: error.message || '继续对话失败' });
   }

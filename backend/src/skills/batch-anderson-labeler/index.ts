@@ -97,7 +97,7 @@ export interface BatchLabelerOutput {
   overallConfidence: number;
 }
 
-const BATCH_ANDERSON_LABELER_MAX_TOKENS = 6000;
+const BATCH_ANDERSON_LABELER_MAX_TOKENS = 32000;
 
 const BATCH_LABELER_SYSTEM_PROMPT = `你是教育标注专家，使用安德森教育目标分类框架标注学习任务。
 

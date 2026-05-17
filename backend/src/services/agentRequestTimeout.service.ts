@@ -1,5 +1,5 @@
-const DEFAULT_AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 60_000);
-const PATH_AGENT_REQUEST_TIMEOUT_MS = Number(process.env.PATH_AGENT_REQUEST_TIMEOUT_MS || 180_000);
+const DEFAULT_AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 600_000);
+const PATH_AGENT_REQUEST_TIMEOUT_MS = Number(process.env.PATH_AGENT_REQUEST_TIMEOUT_MS || 600_000);
 
 export type AgentRequestTimeoutInfo = {
   requestTimeoutMs: number;

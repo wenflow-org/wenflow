@@ -9,30 +9,78 @@
       <div class="page-hero__row">
         <div>
           <span class="pill">Admin</span>
-          <h2 class="page-hero__title">
-            <el-icon class="page-title-icon"><Reading /></el-icon>
+          <h2 class="page-hero__title admin-page-title">
+            <el-icon class="admin-page-title__icon"><Reading /></el-icon>
             学习者模型详情
           </h2>
           <p class="page-hero__subtitle">查看用户详细的学习模型数据</p>
         </div>
         <div class="header-actions">
-          <el-button type="default" @click="goBack">返回</el-button>
-          <el-button type="primary" :loading="recomputing" @click="recompute">重算</el-button>
+          <el-button class="detail-btn detail-btn--ghost" @click="goBack">返回列表</el-button>
+          <el-button class="detail-btn detail-btn--primary" :loading="recomputing" @click="recompute">重算模型</el-button>
         </div>
       </div>
     </div>
 
-    <el-alert
-      v-if="snapshot"
-      type="info"
-      show-icon
-      :closable="false"
-      :title="`快照版本：${snapshot.snapshotVersion}`"
-      :description="`生成时间：${formatTime(snapshot.freshness.generatedAt)}；置信度：${(snapshot.freshness.confidence * 100).toFixed(0)}%`"
-      class="summary-alert"
-    />
+    <div v-if="snapshot" class="summary-meta">
+      <div class="summary-meta__item"><span>快照版本</span><strong>{{ snapshot.snapshotVersion || '--' }}</strong></div>
+      <div class="summary-meta__item"><span>生成时间</span><strong>{{ formatTime(snapshot.freshness?.generatedAt) }}</strong></div>
+      <div class="summary-meta__item"><span>置信度</span><strong>{{ confidenceText }}</strong></div>
+      <div class="summary-meta__item"><span>模式</span><strong>{{ pathId ? '路径模型' : '全局模型' }}</strong></div>
+    </div>
 
     <el-tabs v-if="snapshot" v-model="activeTab">
+      <el-tab-pane label="总览" name="overview">
+        <div class="grid overview-kpis">
+          <el-card shadow="never" class="kpi-card">
+            <span class="kpi-card__label">趋势</span>
+            <strong class="kpi-card__value">{{ trendText }}</strong>
+          </el-card>
+          <el-card shadow="never" class="kpi-card">
+            <span class="kpi-card__label">疲劳风险</span>
+            <strong class="kpi-card__value">{{ riskText }}</strong>
+          </el-card>
+          <el-card shadow="never" class="kpi-card">
+            <span class="kpi-card__label">当前阶段</span>
+            <strong class="kpi-card__value">{{ pathOverview.currentMilestone }}</strong>
+          </el-card>
+          <el-card shadow="never" class="kpi-card">
+            <span class="kpi-card__label">当前任务</span>
+            <strong class="kpi-card__value">{{ pathOverview.currentTask }}</strong>
+          </el-card>
+        </div>
+
+        <div class="grid two-col section-card-row">
+          <el-card shadow="never" class="overview-card">
+            <template #header>学习进度</template>
+            <div class="kv-list">
+              <div class="kv-item"><span>路径</span><strong>{{ pathOverview.pathTitle }}</strong></div>
+              <div class="kv-item"><span>里程碑进度</span><strong>{{ milestoneProgressText }}</strong></div>
+            </div>
+            <el-progress :percentage="milestoneProgress" :stroke-width="10" :show-text="false" class="overview-progress" />
+          </el-card>
+          <el-card shadow="never" class="overview-card">
+            <template #header>风险摘要</template>
+            <div class="risk-summary">
+              <el-tag size="small" type="danger">前置缺口 {{ prerequisiteGapCount }}</el-tag>
+              <el-tag size="small" type="info">脆弱 {{ fragileCount }}</el-tag>
+              <el-tag size="small" type="warning">挣扎 {{ strugglingCount }}</el-tag>
+            </div>
+            <div class="text-block">{{ riskQuickText }}</div>
+          </el-card>
+        </div>
+
+        <el-card shadow="never" class="section-card">
+          <template #header>教学动作建议</template>
+          <div class="action-grid">
+            <div class="action-item"><span>推荐节奏</span><strong>{{ snapshot.dynamicState?.recommendedPacing || '--' }}</strong></div>
+            <div class="action-item"><span>提示时机</span><strong>{{ snapshot.dynamicState?.recommendedInteraction?.hintTiming || '--' }}</strong></div>
+            <div class="action-item"><span>鼓励频率</span><strong>{{ snapshot.dynamicState?.recommendedInteraction?.encouragement || '--' }}</strong></div>
+            <div class="action-item"><span>挑战频率</span><strong>{{ snapshot.dynamicState?.recommendedInteraction?.challenge || '--' }}</strong></div>
+          </div>
+        </el-card>
+      </el-tab-pane>
+
       <el-tab-pane label="认知画像" name="profile">
         <div class="grid two-col">
           <el-card shadow="never">
@@ -76,7 +124,7 @@
       </el-tab-pane>
       <el-tab-pane label="知识记忆" name="memory">
         <div class="grid two-col" v-if="snapshot.knowledgeMemory.currentPath">
-          <el-card shadow="never">
+          <el-card shadow="never" class="path-card">
             <template #header>当前路径位置</template>
             <div class="kv-list">
               <div class="kv-item"><span>路径</span><strong>{{ snapshot.knowledgeMemory.currentPath.pathTitle }}</strong></div>
@@ -84,15 +132,22 @@
               <div class="kv-item"><span>当前任务</span><strong>{{ snapshot.knowledgeMemory.currentPath.currentPosition.taskTitle || '--' }}</strong></div>
               <div class="kv-item"><span>里程碑进度</span><strong>{{ snapshot.knowledgeMemory.currentPath.currentPosition.completedTasksInMilestone }}/{{ snapshot.knowledgeMemory.currentPath.currentPosition.totalTasksInMilestone }}</strong></div>
             </div>
+            <el-progress :percentage="milestoneProgress" :stroke-width="10" :show-text="false" class="overview-progress" />
           </el-card>
           <el-card shadow="never">
             <template #header>风险与前置缺口</template>
+            <div class="risk-summary risk-summary--memory">
+              <el-tag size="small" type="danger">前置缺口 {{ prerequisiteGapCount }}</el-tag>
+              <el-tag size="small" type="info">脆弱 {{ fragileCount }}</el-tag>
+              <el-tag size="small" type="warning">挣扎 {{ strugglingCount }}</el-tag>
+            </div>
             <div class="tag-list">
               <el-tag v-for="item in snapshot.knowledgeMemory.currentPath.prerequisiteGaps" :key="item.conceptKey" type="danger" effect="plain">
                 {{ item.label }}
               </el-tag>
               <span v-if="snapshot.knowledgeMemory.currentPath.prerequisiteGaps.length === 0" class="empty-text">无明显前置缺口</span>
             </div>
+            <div class="text-block risk-text">{{ riskQuickText }}</div>
           </el-card>
         </div>
 
@@ -144,6 +199,11 @@
         </div>
       </el-tab-pane>
       <el-tab-pane label="证据记录" name="evidence">
+        <div class="grid evidence-kpis">
+          <el-card shadow="never" class="kpi-card"><span class="kpi-card__label">证据总数</span><strong class="kpi-card__value">{{ evidence.length }}</strong></el-card>
+          <el-card shadow="never" class="kpi-card"><span class="kpi-card__label">高风险证据</span><strong class="kpi-card__value">{{ highRiskEvidenceCount }}</strong></el-card>
+          <el-card shadow="never" class="kpi-card"><span class="kpi-card__label">最近证据</span><strong class="kpi-card__value kpi-card__value--sm">{{ latestEvidenceAt }}</strong></el-card>
+        </div>
         <el-timeline>
           <el-timeline-item v-for="(item, index) in evidence" :key="`${item.type}-${index}`" :timestamp="formatTime(item.happenedAt)">
             <div class="evidence-item">
@@ -191,6 +251,61 @@ const stateCards = computed(() => {
     { label: '疲劳风险', value: snapshot.value.dynamicState.fatigueRisk },
   ];
 });
+
+const pathModel = computed(() => snapshot.value?.knowledgeMemory?.currentPath || null);
+
+const pathOverview = computed(() => ({
+  pathTitle: pathModel.value?.pathTitle || '--',
+  currentMilestone: pathModel.value?.currentPosition?.milestoneTitle || '--',
+  currentTask: pathModel.value?.currentPosition?.taskTitle || '--',
+}));
+
+const milestoneProgress = computed(() => {
+  const done = Number(pathModel.value?.currentPosition?.completedTasksInMilestone || 0);
+  const total = Number(pathModel.value?.currentPosition?.totalTasksInMilestone || 0);
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+});
+
+const milestoneProgressText = computed(() => {
+  const done = Number(pathModel.value?.currentPosition?.completedTasksInMilestone || 0);
+  const total = Number(pathModel.value?.currentPosition?.totalTasksInMilestone || 0);
+  if (!total) return '--';
+  return `${done}/${total}`;
+});
+
+const prerequisiteGapCount = computed(() => (pathModel.value?.prerequisiteGaps || []).length);
+const fragileCount = computed(() => (snapshot.value?.dynamicState?.fragileConcepts || []).length);
+const strugglingCount = computed(() => (snapshot.value?.dynamicState?.strugglingConcepts || []).length);
+
+const riskQuickText = computed(() => {
+  const merged = [
+    ...(snapshot.value?.dynamicState?.fragileConcepts || []),
+    ...(snapshot.value?.dynamicState?.strugglingConcepts || []),
+  ];
+  if (merged.length === 0) return '暂无明显风险知识点。';
+  if (merged.length <= 3) return `重点关注：${merged.join('，')}`;
+  return `重点关注：${merged.slice(0, 3).join('，')} 等 ${merged.length} 个知识点`;
+});
+
+const trendText = computed(() => {
+  const map: Record<string, string> = { improving: '上升', declining: '下降', stable: '稳定' };
+  return map[snapshot.value?.dynamicState?.recentTrend] || snapshot.value?.dynamicState?.recentTrend || '--';
+});
+
+const riskText = computed(() => {
+  const map: Record<string, string> = { high: '高', medium: '中', low: '低' };
+  return map[snapshot.value?.dynamicState?.fatigueRisk] || snapshot.value?.dynamicState?.fatigueRisk || '--';
+});
+
+const confidenceText = computed(() => {
+  const confidence = snapshot.value?.freshness?.confidence;
+  if (typeof confidence !== 'number') return '--';
+  return `${(confidence * 100).toFixed(0)}%`;
+});
+
+const highRiskEvidenceCount = computed(() => evidence.value.filter((item) => Number(item.score) >= 0.8).length);
+const latestEvidenceAt = computed(() => evidence.value[0]?.happenedAt ? formatTime(evidence.value[0].happenedAt) : '--');
 
 const conceptRows = computed(() => snapshot.value?.knowledgeMemory?.currentPath?.conceptStates || []);
 
@@ -248,10 +363,39 @@ onMounted(loadData);
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
 .header-actions { display: flex; gap: 12px; }
-.summary-alert { position: relative; z-index: 1; margin-bottom: 16px; }
+.summary-meta {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(244, 247, 252, 0.86));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-meta__item {
+  display: grid;
+  gap: 4px;
+}
+
+.summary-meta__item span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.summary-meta__item strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
 .grid { display: grid; gap: 16px; position: relative; z-index: 1; }
 .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
+.overview-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.evidence-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
 .metric-card { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
 .metric-label { color: var(--text-secondary); font-size: 12px; }
 .metric-value { font-size: 24px; }
@@ -265,23 +409,111 @@ onMounted(loadData);
 .text-block { white-space: pre-wrap; line-height: 1.7; }
 .evidence-item { display: grid; gap: 4px; }
 
+.kpi-card {
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(141, 107, 255, 0.05));
+}
+
+.kpi-card__label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.kpi-card__value {
+  font-size: 20px;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.kpi-card__value--sm {
+  font-size: 15px;
+}
+
+.overview-card {
+  border-radius: 16px;
+}
+
+.overview-progress {
+  margin-top: 12px;
+}
+
+.risk-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.risk-summary--memory {
+  margin-bottom: 14px;
+}
+
+.risk-text {
+  margin-top: 12px;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.action-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.action-item span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.action-item strong {
+  color: var(--text-primary);
+}
+
+.detail-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.detail-btn--ghost {
+  color: #335aa4;
+  border-color: rgba(52, 120, 246, 0.26);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.detail-btn--ghost:hover {
+  color: #22478f;
+  border-color: rgba(52, 120, 246, 0.4);
+  background: rgba(238, 245, 255, 0.92);
+}
+
+.detail-btn--primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3478f6, #3f86ff);
+  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24);
+}
+
+.detail-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.3);
+}
+
 .section-card :deep(.el-table) { border-radius: 12px; overflow: hidden; }
 .section-card :deep(.el-table th.el-table__cell) { background: rgba(52, 120, 246, 0.04); font-weight: 600; }
 
-[data-theme="dark"] .learner-model-detail-page {
-  --bg-elevated: var(--glass-bg-dark);
-}
-
-[data-theme="dark"] .summary-alert {
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
-}
-
-[data-theme="dark"] .metric-grid .el-card {
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.08), rgba(141, 107, 255, 0.06));
-}
-
 @media (max-width: 960px) {
-  .two-col, .metric-grid { grid-template-columns: 1fr; }
+  .summary-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two-col, .metric-grid, .overview-kpis, .evidence-kpis, .action-grid { grid-template-columns: 1fr; }
 }
 </style>

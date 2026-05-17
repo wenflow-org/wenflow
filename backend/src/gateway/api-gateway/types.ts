@@ -57,7 +57,7 @@ export interface ExecutionContext {
   userId?: string;
   sessionId?: string;
   traceId?: string;
-  sourceEntry?: 'lab' | 'platform' | 'arena' | 'test';
+  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab';
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
   requestPath?: string;

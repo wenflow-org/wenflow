@@ -1,32 +1,32 @@
 import { Request, Response, NextFunction } from 'express';
-import { RequestContext, requestContextStorage } from '../gateway/api-gateway/context';
+import { RequestContext, SourceEntry, requestContextStorage } from '../gateway/api-gateway/context';
 
 /**
  * ACP (Agent Call Protocol) 上下文中间件
  * 
  * 为每个请求设置溯源上下文，支持：
- * - sourceEntry: 请求来源（lab/platform/arena/test）
+ * - sourceEntry: 请求来源（user/test/admin/platform）
  * - traceId: 追踪ID
- * - X-Test-Mode header: 测试模式标记
+ * - X-Source-Entry header: 强制指定来源
  * 
  * 使用方式：
  * - 默认：app.use('/api/learning', authMiddleware, acpContextMiddleware('platform'), routes)
- * - Arena 测试模式：请求携带 Header `X-Test-Mode: arena`
+ * - 测试站点：请求携带 Header `X-Source-Entry: test`
+ * - Admin后台：路由使用 acpContextMiddleware('admin')
+ * 
+ * 分类说明：
+ * - user: 用户侧调用（用户界面发起）
+ * - test: 测试站点调用（admin/test 路由或 X-Source-Entry header）
+ * - admin: Admin 后台调用
+ * - platform: 平台内部服务调用
  */
-export const acpContextMiddleware = (defaultSourceEntry: 'lab' | 'platform' | 'arena' | 'test') => {
+export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    // 检测 X-Test-Mode header，优先使用它作为 sourceEntry
-    const testMode = req.headers['x-test-mode'] as string;
-    let sourceEntry: 'lab' | 'platform' | 'arena' | 'test' = defaultSourceEntry;
+    const headerSourceEntry = req.headers['x-source-entry'] as string;
+    let sourceEntry: SourceEntry = defaultSourceEntry;
     
-    if (testMode === 'arena') {
-      sourceEntry = 'arena';
-    } else if (testMode === 'lab') {
-      sourceEntry = 'lab';
-    } else if (testMode === 'test') {
-      sourceEntry = 'test';
-    } else if (testMode === 'platform') {
-      sourceEntry = 'platform';
+    if (headerSourceEntry === 'user' || headerSourceEntry === 'test' || headerSourceEntry === 'admin' || headerSourceEntry === 'platform') {
+      sourceEntry = headerSourceEntry;
     }
     
     const context: RequestContext = {
@@ -39,7 +39,6 @@ export const acpContextMiddleware = (defaultSourceEntry: 'lab' | 'platform' | 'a
       userRole: (req as any).user?.role || 'user',
     };
     
-    // 使用 AsyncLocalStorage 存储上下文
     requestContextStorage.run(context, () => {
       next();
     });

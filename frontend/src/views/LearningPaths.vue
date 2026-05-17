@@ -8,20 +8,20 @@
     <!-- 顶部导航栏 -->
     <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': scrolled }">
       <div class="header-container">
-        <button type="button" class="brand" @click="router.push('/dashboard')">
+<button type="button" class="brand" @click="router.push(dashboardPath)">
           <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
         </button>
 
         <nav class="header-nav" aria-label="应用导航">
-          <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
-          <router-link to="/learning-paths" class="nav-item nav-item--active">学习路径</router-link>
-          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
-          <router-link to="/achievements" class="nav-item">成就</router-link>
+          <router-link :to="dashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
+          <router-link :to="goalConversationPath" class="nav-item">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
+          <router-link :to="learningPathsBasePath" class="nav-item nav-item--active">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
+          <router-link :to="learningStatePath" class="nav-item">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
+          <router-link :to="achievementsPath" class="nav-item">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -58,6 +58,64 @@
           />
         </transition>
 
+        <section v-if="showGoalSceneBanner" class="paths-scene-banner glass-card" :class="`paths-scene-banner--${goalSceneState}`">
+          <div class="paths-scene-banner__copy">
+            <span class="pill">从目标生成</span>
+            <h2>{{ goalSceneTitle }}</h2>
+            <p>{{ goalSceneDescription }}</p>
+          </div>
+
+          <div v-if="showGoalSceneDebugMeta" class="paths-scene-banner__meta">
+            <div class="paths-scene-banner__steps">
+              <span
+                v-for="step in goalSceneSteps"
+                :key="step.key"
+                class="paths-scene-step"
+                :class="{
+                  'paths-scene-step--active': step.active,
+                  'paths-scene-step--done': step.done
+                }"
+              >
+                {{ step.label }}
+              </span>
+            </div>
+
+            <div v-if="goalSceneHighlights.length > 0" class="paths-scene-banner__chips">
+              <span v-for="item in goalSceneHighlights" :key="item" class="paths-scene-chip">{{ item }}</span>
+            </div>
+
+            <div class="paths-scene-banner__actions">
+              <button
+                v-if="goalScenePath.id && goalSceneState === 'ready'"
+                type="button"
+                class="btn btn-primary"
+                @click="goToPathDetail(goalScenePath.id)"
+              >查看这版路径</button>
+              <button
+                v-else
+                type="button"
+                class="btn btn-ghost"
+                @click="loadPaths"
+              >刷新状态</button>
+            </div>
+          </div>
+
+          <div v-else class="paths-scene-banner__actions paths-scene-banner__actions--single">
+            <button
+              v-if="goalScenePath?.id && goalSceneState === 'ready'"
+              type="button"
+              class="btn btn-primary"
+              @click="goToPathDetail(goalScenePath.id)"
+            >查看这版路径</button>
+            <button
+              v-else
+              type="button"
+              class="btn btn-ghost"
+              @click="loadPaths"
+            >刷新状态</button>
+          </div>
+        </section>
+
         <section class="paths-hero glass-card">
           <div class="paths-hero__copy">
             <span class="pill">路径总览</span>
@@ -66,7 +124,7 @@
           </div>
           <div class="paths-hero__actions">
             <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续学习</button>
-            <router-link to="/goal-conversation" class="btn btn-ghost">创建新目标</router-link>
+            <router-link :to="goalConversationPath" class="btn btn-ghost">创建新目标</router-link>
           </div>
         </section>
 
@@ -93,7 +151,10 @@
                 class="path-overview-card glass-card"
                 :class="[
                   `path-overview-card--${getPathDisplayState(path)}`,
-                  { 'path-overview-card--primary': primaryPath?.id === path.id }
+                  {
+                    'path-overview-card--primary': primaryPath?.id === path.id,
+                    'path-overview-card--scene': goalScenePath?.id === path.id
+                  }
                 ]"
               >
                 <template v-if="getPathDisplayState(path) === 'generating'">
@@ -148,6 +209,15 @@
                     </el-dropdown>
                   </div>
                   <p>{{ getPathSummary(path) }}</p>
+                  <div v-if="getPathInsightChips(path).length > 0" class="path-overview-card__chips">
+                    <span v-for="item in getPathInsightChips(path)" :key="item" class="path-overview-card__chip">{{ item }}</span>
+                  </div>
+                  <div v-if="getPathDesignBrief(path).length > 0" class="path-overview-card__brief">
+                    <article v-for="item in getPathDesignBrief(path)" :key="item.label" class="path-overview-card__brief-item">
+                      <span>{{ item.label }}</span>
+                      <strong>{{ item.value }}</strong>
+                    </article>
+                  </div>
                   <div class="path-overview-card__next-task">
                     <span>当前任务</span>
                     <strong>{{ getPathNextTaskLabel(path) }}</strong>
@@ -177,7 +247,7 @@
               <span class="pill">还没有学习路径</span>
               <h2>还没有学习路径。</h2>
               <p>先创建一个目标，生成第一条学习路径。</p>
-              <router-link to="/goal-conversation" class="btn btn-primary">创建新目标</router-link>
+              <router-link :to="goalConversationPath" class="btn btn-primary">创建新目标</router-link>
             </section>
           </div>
         </section>
@@ -265,6 +335,39 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 
+const isTestMode = computed(() => route.meta.isTestMode === true);
+const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const goalConversationPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/goal-full' : '/test/goal-full';
+  }
+  return '/goal-conversation';
+});
+const learningPathsBasePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-paths' : '/test/learning-paths';
+  }
+  return '/learning-paths';
+});
+const dashboardPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
+  }
+  return '/dashboard';
+});
+const learningStatePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-state' : '/learning-state';
+  }
+  return '/learning-state';
+});
+const achievementsPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/achievements' : '/achievements';
+  }
+  return '/achievements';
+});
+
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const scrolled = ref(false);
 const loading = ref(true);
@@ -315,6 +418,46 @@ const getPathTitle = (path: any) => path.name || path.title || '未命名路径'
 
 const getPathSummary = (path: any) => path.summary || path.description || '这里会显示这条学习路径的简要说明。';
 
+const getPathInsightChips = (path: any) => {
+  const chips: string[] = [];
+  const domain = typeof path?.cognitiveDesign?.cognitiveDomain === 'string'
+    ? path.cognitiveDesign.cognitiveDomain.trim()
+    : '';
+  const planningFocus = Array.isArray(path?.sceneSummary?.planningFocus)
+    ? path.sceneSummary.planningFocus.filter(Boolean)
+    : [];
+
+  if (domain) {
+    chips.push(`认知域：${domain}`);
+  }
+
+  planningFocus.slice(0, 2).forEach((item: string) => {
+    chips.push(`重点：${item}`);
+  });
+
+  return chips.slice(0, 3);
+};
+
+const getPathDesignBrief = (path: any) => {
+  const brief: Array<{ label: string; value: string }> = [];
+  const firstDeliverable = typeof path?.sceneSummary?.firstDeliverable === 'string'
+    ? path.sceneSummary.firstDeliverable.trim()
+    : '';
+  const targetState = typeof path?.sceneSummary?.targetState === 'string'
+    ? path.sceneSummary.targetState.trim()
+    : '';
+
+  if (firstDeliverable) {
+    brief.push({ label: '首个交付物', value: firstDeliverable });
+  }
+
+  if (targetState) {
+    brief.push({ label: '目标状态', value: targetState });
+  }
+
+  return brief.slice(0, 2);
+};
+
 const getPathStages = (path: any) => path?.milestones || path?.weeks || [];
 
 const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
@@ -341,7 +484,7 @@ const getPathContinueTarget = (path: any) => {
   if (nextTask?.id) {
     return `/learn/${nextTask.id}`;
   }
-  return `/learning-path/${path.id}`;
+  return isTestMode.value ? `/test/learning-path/${path.id}` : `/learning-path/${path.id}`;
 };
 
 const getPathNextTaskLabel = (path: any) => {
@@ -523,6 +666,118 @@ const handleCommand = (command: string, path: any) => {
 };
 
 const getEnrichmentStatus = (path: any) => path?.generationStatus?.enrichment || null;
+const goalSourceConversationId = computed(() => {
+  const raw = route.query.conversationId;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+});
+const showGoalSceneBanner = computed(() => isTestMode.value && Boolean(goalScenePath.value));
+const showGoalSceneDebugMeta = computed(() => isTestMode.value);
+
+const getCoreStepLabel = (path: any) => {
+  const step = path?.generationStatus?.coreStep;
+  if (step === 'framing') return '正在确认路径重点';
+  if (step === 'planning') return '正在拆解完整任务路径';
+  if (step === 'persist') return '正在整理并落库';
+  if (step === 'completed') return '路径主结构已完成';
+  return '正在生成路径';
+};
+
+const goalSceneCandidates = computed(() => {
+  if (!(route.query.from === 'goal' && route.query.auto === '1')) {
+    return [];
+  }
+
+  const exactConversationId = goalSourceConversationId.value;
+  const list = sortedPaths.value;
+
+  if (exactConversationId) {
+    const matched = list.filter((path: any) => path?.generationStatus?.sourceConversationId === exactConversationId);
+    if (matched.length > 0) {
+      return matched;
+    }
+  }
+
+  return list.filter((path: any) => {
+    const source = path?.generationStatus?.sourceConversationId;
+    return Boolean(source || path.status === 'generating');
+  });
+});
+
+const goalScenePath = computed(() => goalSceneCandidates.value[0] || null);
+
+const goalSceneState = computed<'processing' | 'ready' | 'attention'>(() => {
+  const path = goalScenePath.value;
+  if (!path) return 'processing';
+  const displayState = getPathDisplayState(path);
+  if (displayState === 'attention') return 'attention';
+  if (displayState === 'active' && getEnrichmentStatus(path) === 'succeeded') return 'ready';
+  if (displayState === 'active' && !path.canStartLearning) return 'processing';
+  if (displayState === 'active') return 'ready';
+  return 'processing';
+});
+
+const goalSceneTitle = computed(() => {
+  const path = goalScenePath.value;
+  if (!path) return isTestMode.value ? '正在生成你的第一版完整学习路径' : '学习路径正在生成';
+  if (goalSceneState.value === 'attention') {
+    return isTestMode.value ? '这版路径需要你重试或稍后刷新' : '这版路径暂时还没准备好';
+  }
+  if (goalSceneState.value === 'ready') {
+    return isTestMode.value ? '这版完整学习路径已经准备好了' : '已经可以查看这版路径';
+  }
+  return getCoreStepLabel(path);
+});
+
+const goalSceneDescription = computed(() => {
+  const path = goalScenePath.value;
+  if (!path) {
+    return isTestMode.value
+      ? '我们会先收敛路径重点，再生成完整任务级路径，最后准备学习内容。'
+      : '系统正在根据刚确认的目标生成第一版学习路径。';
+  }
+  if (goalSceneState.value === 'attention') {
+    return isTestMode.value
+      ? (path.learningBlockedReason || path.summary || '当前生成遇到问题，可以先刷新状态或直接重试。')
+      : '你可以先稍后再回来查看，系统会继续处理。';
+  }
+  if (goalSceneState.value === 'ready') {
+    return path.summary || '你现在可以直接查看路径结构，并按阶段开始推进。';
+  }
+  const scene = path.sceneSummary || path.generationStatus?.scene || {};
+  const firstDeliverable = scene.firstDeliverable ? `先拿到「${scene.firstDeliverable}」` : '先收敛第一版可交付结果';
+  return `${firstDeliverable}，期间会按你的时间投入拆成完整任务级路径。`;
+});
+
+const goalSceneHighlights = computed(() => {
+  const path = goalScenePath.value;
+  if (!path) return [];
+  const scene = path.sceneSummary || path.generationStatus?.scene || {};
+  return [
+    scene.timeBudget ? `时间投入：${scene.timeBudget}` : '',
+    scene.timeHorizon ? `周期：${scene.timeHorizon}` : '',
+    typeof scene.milestoneCount === 'number' && scene.milestoneCount > 0 ? `${scene.milestoneCount} 个阶段` : '',
+    typeof scene.taskCount === 'number' && scene.taskCount > 0 ? `${scene.taskCount} 个任务` : '',
+  ].filter(Boolean);
+});
+
+const goalSceneSteps = computed(() => {
+  const path = goalScenePath.value;
+  const coreStep = path?.generationStatus?.coreStep;
+  const coreStatus = path?.generationStatus?.core;
+  const enrichmentStatus = path?.generationStatus?.enrichment;
+
+  const framingDone = coreStep !== 'framing' && !!coreStep;
+  const planningDone = coreStep === 'persist' || coreStep === 'completed' || coreStatus === 'succeeded';
+  const persistDone = coreStatus === 'succeeded';
+  const enrichmentDone = enrichmentStatus === 'succeeded';
+
+  return [
+    { key: 'framing', label: '方向收敛', active: coreStep === 'framing', done: framingDone },
+    { key: 'planning', label: '任务拆解', active: coreStep === 'planning', done: planningDone },
+    { key: 'persist', label: '路径落成', active: coreStep === 'persist', done: persistDone },
+    { key: 'enrichment', label: '内容准备', active: enrichmentStatus === 'pending' || enrichmentStatus === 'processing', done: enrichmentDone }
+  ];
+});
 
 const confirmRegenerate = (path: any) => {
   pathToRegenerate.value = path;
@@ -586,7 +841,7 @@ const regeneratePath = async () => {
 };
 
 const goToPathDetail = (id: string) => {
-  router.push(`/learning-path/${id}`);
+  router.push(isTestMode.value ? `/test/learning-path/${id}` : `/learning-path/${id}`);
 };
 
 const continuePath = (path: any) => {
@@ -667,6 +922,104 @@ onUnmounted(() => {
   overflow-x: hidden;
   width: 100%;
   max-width: 100vw;
+}
+
+.paths-scene-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(120, 129, 255, 0.14);
+}
+
+.paths-scene-banner--processing {
+  background: linear-gradient(135deg, rgba(113, 128, 255, 0.08), rgba(86, 178, 255, 0.06));
+}
+
+.paths-scene-banner--ready {
+  background: linear-gradient(135deg, rgba(84, 199, 137, 0.12), rgba(113, 128, 255, 0.06));
+}
+
+.paths-scene-banner--attention {
+  background: linear-gradient(135deg, rgba(255, 170, 100, 0.14), rgba(255, 110, 110, 0.08));
+}
+
+.paths-scene-banner__copy h2 {
+  margin: 0.6rem 0 0.5rem;
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+.paths-scene-banner__copy p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.paths-scene-banner__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.paths-scene-banner__steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.paths-scene-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.7rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text-secondary);
+  font-size: 0.93rem;
+  font-weight: 600;
+}
+
+.paths-scene-step--active {
+  border-color: rgba(99, 102, 241, 0.35);
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-primary);
+}
+
+.paths-scene-step--done {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--text-primary);
+}
+
+.paths-scene-banner__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.paths-scene-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.paths-scene-banner__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.path-overview-card--scene {
+  border-color: rgba(99, 102, 241, 0.24);
+  box-shadow: 0 18px 50px rgba(99, 102, 241, 0.08);
 }
 
 .animated-bg {
@@ -1158,6 +1511,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1200px) {
+  .paths-scene-banner {
+    grid-template-columns: 1fr;
+  }
+
   .paths-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1787,6 +2144,49 @@ onUnmounted(() => {
   font-size: 22px;
 }
 
+.path-overview-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.path-overview-card__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: #49617f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.path-overview-card__brief {
+  display: grid;
+  gap: 10px;
+}
+
+.path-overview-card__brief-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(247, 249, 252, 0.9);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+}
+
+.path-overview-card__brief-item span {
+  font-size: 12px;
+  font-weight: 800;
+  color: #66758d;
+}
+
+.path-overview-card__brief-item strong {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #172033;
+}
+
 .path-overview-card__stats {
   display: flex;
   flex-wrap: wrap;
@@ -1919,6 +2319,17 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+[data-theme="dark"] .path-overview-card__chip {
+  background: rgba(96, 165, 250, 0.16);
+  color: #d6e6ff;
+}
+
+[data-theme="dark"] .path-overview-card__brief-item,
+[data-theme="dark"] .path-overview-card__next-task {
+  background: rgba(15, 23, 42, 0.46);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
 [data-theme="dark"] .paths-hero h1,
 [data-theme="dark"] .path-overview-card strong,
 [data-theme="dark"] .path-overview-card__next-task strong,
@@ -1971,6 +2382,14 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: flex-start;
     padding: 18px;
+  }
+
+  .paths-scene-banner {
+    padding: 18px;
+  }
+
+  .paths-scene-banner__steps {
+    grid-template-columns: 1fr;
   }
 
   .paths-hero h1,
@@ -2033,6 +2452,7 @@ onUnmounted(() => {
   }
 
   .paths-hero,
+  .paths-scene-banner,
   .path-overview-card,
   .paths-empty-state {
     border-radius: 20px;

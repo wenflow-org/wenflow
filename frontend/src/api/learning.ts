@@ -33,6 +33,7 @@ export interface LearningPath {
   updatedAt: string;
   generationStatus?: {
     core?: 'pending' | 'processing' | 'succeeded' | 'failed';
+    coreStep?: 'framing' | 'planning' | 'persist' | 'completed';
     enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
     lastError?: string | null;
     sourceConversationId?: string | null;
@@ -40,6 +41,40 @@ export interface LearningPath {
     updatedAt?: string | null;
     enrichmentRetryCount?: number;
     lastEnrichmentRetryAt?: string | null;
+    scene?: Record<string, any> | null;
+  } | null;
+  sceneSummary?: {
+    title?: string;
+    firstDeliverable?: string;
+    targetState?: string;
+    planningFocus?: string[];
+    excludedScope?: string[];
+    riskFlags?: string[];
+    timeBudget?: string | null;
+    timeHorizon?: string | null;
+    milestoneCount?: number;
+    taskCount?: number;
+  } | null;
+  cognitiveDesign?: {
+    cognitiveDomain?: string | null;
+    coreConcepts?: Array<{
+      id: string;
+      name: string;
+      role?: 'hub' | 'supporting';
+      description?: string;
+    }>;
+  } | null;
+  adjustmentPolicy?: {
+    allowedModes?: Array<'expand' | 'compress' | 'replan'>;
+    recommendedMode?: 'expand' | 'compress' | 'replan' | null;
+    triggerSource?: 'learn' | 'ai-teaching' | 'progress-agent' | 'system' | null;
+  } | null;
+  adjustmentEvidence?: {
+    stableConcepts?: string[];
+    fragileConcepts?: string[];
+    strugglingConcepts?: string[];
+    prerequisiteGaps?: string[];
+    pacingSignal?: 'fast' | 'slow' | 'balanced' | null;
   } | null;
   canStartLearning?: boolean;
   learningBlockedReason?: string | null;
@@ -78,10 +113,16 @@ export interface Task {
   status?: string;
   completionRate?: number;
   estimatedMinutes?: number;
+  acceptanceCriteria?: string;
   actualMinutes?: number;
   hasTeachingWrapup?: boolean;
   latestTeachingSessionAt?: string | null;
   latestWrapupStatus?: 'complete' | 'summary-only' | null;
+  displayLabel?: string | null;
+  knowledgeType?: string | null;
+  cognitiveLevel?: string | null;
+  learningObjectives?: string[] | string | null;
+  coreConcept?: string | null;
   learningPath?: {
     id: string;
     name: string;

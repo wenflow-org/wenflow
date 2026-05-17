@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../protocol';
 
@@ -172,7 +173,7 @@ export const sessionWrapupAgentDefinition: AgentDefinition = {
   }
 };
 
-const WRAPUP_PROMPT = `你是一位课后产出助手。请基于本节课的结构化证据，输出严格 JSON。
+export const WRAPUP_PROMPT = `你是一位课后产出助手。请基于本节课的结构化证据，输出严格 JSON。
 
 目标：
 1. summary：给学生看的课后总结
@@ -468,14 +469,17 @@ export class SessionWrapupAgent {
     try {
       const gateway = getAPIGateway();
       const caller: CallerInfo = { agentId: AGENT_ID };
+      const promptConfig = await agentConfigService.getActivePrompt(AGENT_ID);
       const response = await gateway.execute({
         messages: [
-          { role: 'system', content: WRAPUP_PROMPT },
+          { role: 'system', content: promptConfig?.systemPrompt || WRAPUP_PROMPT },
           {
             role: 'user',
             content: buildWrapupUserPrompt(input, 'primary')
           }
-        ]
+        ],
+        temperature: promptConfig?.temperature,
+        max_tokens: promptConfig?.maxTokens,
       }, caller, { userId: 'system' });
 
       const content = response.choices[0]?.message.content || '{}';
@@ -520,6 +524,7 @@ export class SessionWrapupAgent {
             id: uuidv4(),
             agentId: AGENT_ID,
             userId: 'system',
+            sourceEntry: 'platform',
             success: result !== null && error === null,
             durationMs,
             input: JSON.stringify(input).slice(0, 1000),

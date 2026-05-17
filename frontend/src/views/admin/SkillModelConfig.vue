@@ -10,12 +10,15 @@
         <el-icon><Operation /></el-icon>
         Skill 模型配置
       </span>
-      <h2 class="page-hero__title">Skill 模型配置</h2>
+      <h2 class="page-hero__title admin-page-title">
+        <el-icon class="admin-page-title__icon"><Operation /></el-icon>
+        Skill 模型配置
+      </h2>
       <p class="page-hero__subtitle">配置 Skill 使用的模型、思考模式、思考强度与超时</p>
     </div>
 
     <div class="action-bar">
-      <el-button @click="refresh">
+      <el-button class="action-btn action-btn--ghost" @click="refresh">
         <el-icon><Refresh /></el-icon>
         刷新
       </el-button>
@@ -23,44 +26,56 @@
 
     <div class="table-shell">
       <el-table :data="configs" v-loading="loading" stripe>
-        <el-table-column prop="skillId" label="Skill ID" min-width="180" />
-        <el-table-column prop="enabled" label="独立配置" width="90">
+        <el-table-column label="Skill" min-width="240">
+          <template #default="{ row }">
+            <div class="skill-cell">
+              <strong class="skill-cell__id">{{ row.skillId }}</strong>
+              <span class="skill-cell__tier">层级：{{ row.tier }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="配置策略" min-width="240">
+          <template #default="{ row }">
+            <div class="strategy-cell">
+              <span class="strategy-cell__model">{{ row.model || '继承 Agent / 平台默认' }}</span>
+              <div class="strategy-cell__tags">
+                <el-tag :type="thinkingTagType(row.thinkingMode)">{{ formatThinkingMode(row.thinkingMode) }}</el-tag>
+                <el-tag :type="effortTagType(row.reasoningEffort)">{{ formatReasoningEffort(row.reasoningEffort) }}</el-tag>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="参数摘要" min-width="220">
+          <template #default="{ row }">
+            <div class="params-cell">
+              <div class="params-cell__row">
+                <span>T={{ row.temperature ?? '--' }}</span>
+                <span>Max {{ row.maxTokens ?? '--' }}</span>
+              </div>
+              <div class="params-cell__row params-cell__row--sub">
+                <el-tag size="small" type="info">{{ formatTimeout(row.requestTimeoutMs) }}</el-tag>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="enabled" label="独立配置" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '继承' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="tier" label="模型层级" width="100" />
-        <el-table-column prop="model" label="模型" min-width="150">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            {{ row.model || '继承 Agent / 平台默认' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="thinkingMode" label="思考模式" width="120">
-          <template #default="{ row }">
-            <el-tag :type="thinkingTagType(row.thinkingMode)">{{ formatThinkingMode(row.thinkingMode) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="reasoningEffort" label="思考强度" width="120">
-          <template #default="{ row }">
-            <el-tag :type="effortTagType(row.reasoningEffort)">{{ formatReasoningEffort(row.reasoningEffort) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="requestTimeoutMs" label="请求超时" width="120">
-          <template #default="{ row }">
-            {{ formatTimeout(row.requestTimeoutMs) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150">
-          <template #default="{ row }">
-            <el-button size="small" @click="editConfig(row)">编辑</el-button>
-            <el-button size="small" type="danger" :disabled="!row.enabled" @click="deleteConfig(row)">重置</el-button>
+            <div class="row-actions">
+              <el-button class="row-action-btn row-action-btn--edit" @click="editConfig(row)">编辑</el-button>
+              <el-button class="row-action-btn row-action-btn--danger" :disabled="!row.enabled" @click="deleteConfig(row)">恢复默认</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="editDialogVisible" title="编辑 Skill 配置" width="620px" destroy-on-close>
-      <el-form ref="editFormRef" :model="editForm" :rules="editRules">
+    <el-dialog v-model="editDialogVisible" title="编辑 Skill 配置" width="620px" class="skill-config-dialog" destroy-on-close>
+      <el-form ref="editFormRef" class="skill-config-form" :model="editForm" :rules="editRules" label-width="110px">
         <el-form-item label="Skill ID">
           <el-input v-model="editForm.skillId" disabled />
         </el-form-item>
@@ -103,8 +118,10 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveConfig">保存</el-button>
+        <div class="skill-config-dialog__footer">
+          <el-button class="action-btn action-btn--ghost" @click="editDialogVisible = false">取消</el-button>
+          <el-button class="action-btn action-btn--primary" :loading="saving" @click="saveConfig">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -238,10 +255,10 @@ const saveConfig = async () => {
 const deleteConfig = async (row: SkillModelConfig) => {
   try {
     await ElMessageBox.confirm(
-      `确定要重置 ${row.skillId} 的模型配置吗？此操作不可撤销。`,
-      '确认重置',
+      `确定要恢复 ${row.skillId} 的默认模型配置吗？此操作不可撤销。`,
+      '确认恢复默认',
       {
-        confirmButtonText: '确认重置',
+        confirmButtonText: '确认恢复',
         cancelButtonText: '取消',
         type: 'warning',
       }
@@ -252,7 +269,7 @@ const deleteConfig = async (row: SkillModelConfig) => {
 
   try {
     await adminSkillsApi.deleteSkillModelConfig(row.skillId);
-    toast.success('配置已重置');
+    toast.success('配置已恢复默认');
     fetchConfigs();
   } catch {
     toast.error('删除失败');
@@ -289,6 +306,37 @@ onMounted(() => fetchConfigs());
   z-index: 1;
 }
 
+.action-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.action-btn--primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3478f6, #3f86ff);
+  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24);
+}
+
+.action-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.3);
+}
+
+.action-btn--ghost {
+  color: #335aa4;
+  border-color: rgba(52, 120, 246, 0.26);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.action-btn--ghost:hover {
+  color: #22478f;
+  border-color: rgba(52, 120, 246, 0.4);
+  background: rgba(238, 245, 255, 0.92);
+}
+
 .table-shell {
   border: 1px solid var(--border-light);
   border-radius: 20px;
@@ -315,6 +363,143 @@ onMounted(() => fetchConfigs());
 
 :deep(.el-table td.el-table__cell) {
   border-bottom-color: rgba(52, 120, 246, 0.04);
+}
+
+.skill-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.skill-cell__id {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.skill-cell__tier {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.strategy-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.strategy-cell__model {
+  color: var(--text-primary);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strategy-cell__tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.params-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.params-cell__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.params-cell__row--sub {
+  justify-content: flex-start;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-action-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.row-action-btn--edit {
+  color: #2d62cf;
+  border-color: rgba(52, 120, 246, 0.25);
+  background: rgba(52, 120, 246, 0.1);
+}
+
+.row-action-btn--edit:hover {
+  border-color: rgba(52, 120, 246, 0.45);
+  background: rgba(52, 120, 246, 0.16);
+}
+
+.row-action-btn--danger {
+  color: #9f2525;
+  border-color: rgba(216, 72, 72, 0.28);
+  background: rgba(255, 231, 231, 0.9);
+}
+
+.row-action-btn--danger:hover {
+  border-color: rgba(216, 72, 72, 0.45);
+  background: rgba(255, 217, 217, 0.95);
+}
+
+.skill-config-dialog :deep(.el-dialog) {
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  overflow: hidden;
+}
+
+.skill-config-dialog :deep(.el-dialog__header) {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 250, 255, 0.92));
+}
+
+.skill-config-dialog :deep(.el-dialog__title) {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.skill-config-dialog :deep(.el-dialog__body) {
+  padding: 18px 22px 12px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.skill-config-dialog :deep(.el-dialog__footer) {
+  padding: 12px 22px 18px;
+  border-top: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(251, 253, 255, 0.95), rgba(245, 248, 253, 0.95));
+}
+
+.skill-config-form {
+  display: grid;
+  gap: 4px;
+}
+
+.skill-config-form :deep(.el-form-item) {
+  margin-bottom: 14px;
+}
+
+.skill-config-form :deep(.el-form-item__label) {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.skill-config-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .field-hint {

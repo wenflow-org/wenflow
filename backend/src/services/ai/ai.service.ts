@@ -979,6 +979,7 @@ ${params.previousWeeks.map(w => `Week ${w.weekNumber}: ${w.title} (${w.completed
             id: `acl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
             agentId: 'course-design',
             userId: params.userId || 'system',
+            sourceEntry: 'platform',
             input: JSON.stringify({ weekNumber: params.weekNumber, prompt: userMessage.substring(0, 500) }),
             output: JSON.stringify({ reply: response.choices[0]?.message?.content?.substring(0, 500) }),
             success: true,

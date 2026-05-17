@@ -7,9 +7,27 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../utils/logger';
+import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
+import {
+  seedCoreAgentPrompts,
+  CORE_AGENT_PROMPT_SEEDS,
+  type CoreAgentPromptSeedResult,
+} from '../../scripts/seed-core-agent-prompts';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+function resolveAgentPromptIds(agentId: string): string[] {
+  const canonicalId = getCanonicalAgentId(agentId);
+  const manifest = getAgentManifest(agentId);
+  const ids = new Set<string>([agentId, canonicalId]);
+
+  for (const alias of manifest?.aliases || []) {
+    ids.add(alias);
+  }
+
+  return Array.from(ids);
+}
 
 // GET /api/admin/agent-prompts
 // 列出所有 Agent 的 Prompt 版本
@@ -19,7 +37,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const where: any = {};
     if (agentId) {
-      where.agentId = agentId as string;
+      where.agentId = { in: resolveAgentPromptIds(agentId as string) };
     }
     if (status) {
       where.status = status as string;
@@ -81,12 +99,18 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:agentId/active', async (req: Request, res: Response) => {
   try {
     const { agentId } = req.params;
+    const agentIds = resolveAgentPromptIds(agentId);
 
     const prompt = await prisma.agent_prompts.findFirst({
       where: {
-        agentId,
+        agentId: { in: agentIds },
         status: 'ACTIVE',
       },
+      orderBy: [
+        { publishedAt: 'desc' },
+        { updatedAt: 'desc' },
+        { version: 'desc' },
+      ],
     });
 
     if (!prompt) {
@@ -135,6 +159,28 @@ router.get('/detail/:id', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { message: '获取 Prompt 详情失败' },
+    });
+  }
+});
+
+router.post('/seed-core', async (_req: Request, res: Response) => {
+  try {
+    const result = await seedCoreAgentPrompts(prisma);
+    res.json({
+      success: true,
+      data: {
+        seeds: CORE_AGENT_PROMPT_SEEDS.map((seed) => ({
+          agentId: seed.agentId,
+          name: seed.name,
+        })),
+        result,
+      },
+    });
+  } catch (error) {
+    logger.error('初始化核心 Agent Prompt 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: '初始化核心 Agent Prompt 失败' },
     });
   }
 });
@@ -330,12 +376,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/admin/agent-prompts/:id
-// 删除草稿版本（只有 DRAFT 可以删除）
+// 删除 Prompt 版本
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // 查找版本
     const existing = await prisma.agent_prompts.findUnique({
       where: { id },
     });
@@ -347,14 +392,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    if (existing.status !== 'DRAFT') {
-      return res.status(400).json({
-        success: false,
-        error: { message: '只有 DRAFT 状态的版本可以删除' },
-      });
-    }
-
-    // 删除版本
     await prisma.agent_prompts.delete({
       where: { id },
     });

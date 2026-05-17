@@ -29,7 +29,7 @@ class APIExecutionError extends Error {
 
 export class APIExecutor {
   private readonly defaultTimeoutMs = getDefaultAIRequestTimeoutMs();
-  private readonly maxRetries = 3;
+  private readonly maxRetries = 1;
   private readonly retryDelay = 1000;
 
   private isQuotaOrBalanceError(status: number, body: string): boolean {

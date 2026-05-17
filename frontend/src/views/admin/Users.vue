@@ -7,13 +7,16 @@
 
     <div class="page-hero">
       <span class="pill">用户管理</span>
-      <h1 class="page-hero__title">管理系统用户账号</h1>
+      <h1 class="page-hero__title admin-page-title">
+        <el-icon class="admin-page-title__icon"><User /></el-icon>
+        管理系统用户账号
+      </h1>
       <p class="page-hero__subtitle">管理用户角色、权限和学习进度</p>
     </div>
 
     <!-- 筛选工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-left">
+    <div class="toolbar admin-list-toolbar">
+      <div class="toolbar-left admin-list-toolbar__group">
         <el-input
           v-model="filterForm.search"
           placeholder="搜索用户名称或邮箱"
@@ -39,18 +42,18 @@
         </el-select>
       </div>
 
-      <div class="toolbar-right">
-        <el-button type="primary" @click="openCreateDialog">
+      <div class="toolbar-right admin-list-toolbar__group">
+        <el-button type="primary" class="users-btn users-btn--primary" @click="openCreateDialog">
           新建用户
         </el-button>
-        <el-button type="danger" plain :disabled="selectedUserIds.length === 0" :loading="batchDeleting" @click="handleBatchDelete">
+        <el-button class="users-btn users-btn--danger-ghost" :disabled="selectedUserIds.length === 0" :loading="batchDeleting" @click="handleBatchDelete">
           批量删除 ({{ selectedUserIds.length }})
         </el-button>
-        <el-button type="primary" @click="handleFilter">
+        <el-button class="users-btn users-btn--neutral" @click="handleFilter">
           <el-icon><Search /></el-icon>
           查询
         </el-button>
-        <el-button @click="resetFilter">
+        <el-button class="users-btn users-btn--ghost" @click="resetFilter">
           <el-icon><Refresh /></el-icon>
           重置
         </el-button>
@@ -58,7 +61,7 @@
     </div>
 
     <!-- 用户列表 -->
-    <div class="table-container">
+    <div class="table-container admin-list-card">
       <el-table
         ref="tableRef"
         v-loading="loading"
@@ -108,16 +111,17 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openLearnerModel(row)">学习者模型</el-button>
-            <el-button type="primary" link @click="openEditDialog(row)">编辑</el-button>
-            <el-button type="danger" link @click="handleDeleteUser(row)">删除</el-button>
+            <div class="row-actions">
+              <el-button class="row-action-btn row-action-btn--info" @click="openLearnerModel(row)">学习者模型</el-button>
+              <el-button class="row-action-btn row-action-btn--edit" @click="openEditDialog(row)">编辑</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
     <!-- 分页 -->
-    <div class="pagination-container">
+    <div class="pagination-container admin-list-pagination">
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.limit"
@@ -133,13 +137,14 @@
       v-model="createVisible" 
       title="新建用户" 
       width="520px"
+      class="admin-user-dialog"
       :close-on-click-modal="false"
       :close-on-press-escape="true"
       destroy-on-close
       append-to-body
       @close="closeCreateDialog"
     >
-      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+      <el-form ref="createFormRef" class="admin-user-form" :model="createForm" :rules="createRules" label-width="100px">
         <el-form-item label="昵称" prop="name">
           <el-input v-model="createForm.name" placeholder="请输入昵称" />
         </el-form-item>
@@ -154,8 +159,10 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="closeCreateDialog">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreateUser">创建</el-button>
+        <div class="admin-user-dialog__footer">
+          <el-button class="users-btn users-btn--ghost" @click="closeCreateDialog">取消</el-button>
+          <el-button type="primary" class="users-btn users-btn--primary" :loading="creating" @click="handleCreateUser">创建</el-button>
+        </div>
       </template>
     </el-dialog>
 
@@ -163,13 +170,14 @@
       v-model="editVisible" 
       title="编辑用户" 
       width="520px"
+      class="admin-user-dialog"
       :close-on-click-modal="false"
       :close-on-press-escape="true"
       destroy-on-close
       append-to-body
       @close="closeEditDialog"
     >
-      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="100px">
+      <el-form ref="editFormRef" class="admin-user-form" :model="editForm" :rules="editRules" label-width="100px">
         <el-form-item label="昵称" prop="name">
           <el-input v-model="editForm.name" placeholder="请输入昵称" />
         </el-form-item>
@@ -184,8 +192,11 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="closeEditDialog">取消</el-button>
-        <el-button type="primary" :loading="updating" @click="handleUpdateUser">保存</el-button>
+        <div class="admin-user-dialog__footer">
+          <el-button class="users-btn users-btn--danger-ghost" @click="handleDeleteFromEdit">删除用户</el-button>
+          <el-button class="users-btn users-btn--ghost" @click="closeEditDialog">取消</el-button>
+          <el-button type="primary" class="users-btn users-btn--primary" :loading="updating" @click="handleUpdateUser">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -407,10 +418,27 @@ const handleDeleteUser = async (row: any) => {
     await adminUsersApi.deleteUser(row.id);
     toast.success('删除成功');
     loadUsers();
+    return true;
   } catch (error: any) {
     if (error !== 'cancel') {
       toast.error(error?.response?.data?.error?.message || '删除用户失败');
     }
+    return false;
+  }
+};
+
+const handleDeleteFromEdit = async () => {
+  if (!editForm.id) {
+    toast.warning('未选择可删除的用户');
+    return;
+  }
+  const deleted = await handleDeleteUser({
+    id: editForm.id,
+    name: editForm.name,
+    email: editForm.email
+  });
+  if (deleted) {
+    closeEditDialog();
   }
 };
 
@@ -585,6 +613,56 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
+.users-btn {
+  min-height: 38px;
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.users-btn--primary {
+  border-color: transparent;
+}
+
+.users-btn--neutral {
+  border: 1px solid rgba(52, 120, 246, 0.2);
+  background: color-mix(in srgb, var(--color-primary) 8%, white);
+  color: var(--color-primary-dark, #1f57cc);
+}
+
+.users-btn--neutral:hover {
+  border-color: rgba(52, 120, 246, 0.32);
+  background: color-mix(in srgb, var(--color-primary) 12%, white);
+}
+
+.users-btn--ghost {
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-surface) 80%, white);
+  color: var(--text-primary);
+}
+
+.users-btn--ghost:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--border-light));
+  background: color-mix(in srgb, var(--color-primary) 6%, white);
+}
+
+.users-btn--danger-ghost {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 36%, white);
+  background: color-mix(in srgb, var(--color-danger) 8%, white);
+  color: var(--color-danger-dark, #d95054);
+}
+
+.users-btn--danger-ghost:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 52%, white);
+  background: color-mix(in srgb, var(--color-danger) 12%, white);
+}
+
+.users-btn--danger-ghost.is-disabled,
+.users-btn--danger-ghost.is-disabled:hover {
+  border-color: var(--border-light);
+  background: var(--bg-subtle);
+  color: var(--text-disabled);
+}
+
 /* 表格 */
 .table-container {
   overflow-x: auto;
@@ -622,6 +700,50 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-action-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: 1px solid var(--border-light);
+  background: #fff;
+  color: var(--text-primary);
+}
+
+.row-action-btn:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--border-light));
+  background: color-mix(in srgb, var(--color-primary) 5%, white);
+}
+
+.row-action-btn--info {
+  color: var(--color-primary-dark, #1f57cc);
+  border-color: color-mix(in srgb, var(--color-primary) 28%, white);
+  background: color-mix(in srgb, var(--color-primary) 8%, white);
+}
+
+.row-action-btn--edit {
+  color: var(--text-primary);
+}
+
+.row-action-btn--danger {
+  color: var(--color-danger-dark, #d95054);
+  border-color: color-mix(in srgb, var(--color-danger) 40%, white);
+  background: color-mix(in srgb, var(--color-danger) 10%, white);
+}
+
+.row-action-btn--danger:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 56%, white);
+  background: color-mix(in srgb, var(--color-danger) 14%, white);
+}
+
 :deep(.el-table th.el-table__cell) {
   background: rgba(52, 120, 246, 0.03);
   font-weight: 700;
@@ -637,9 +759,48 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-[data-theme="dark"] .toolbar,
-[data-theme="dark"] .table-container {
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+:deep(.admin-user-dialog .el-dialog) {
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 248, 252, 0.96));
+  box-shadow: 0 20px 44px rgba(24, 36, 72, 0.18);
+}
+
+:deep(.admin-user-dialog .el-dialog__header) {
+  margin: 0;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+:deep(.admin-user-dialog .el-dialog__title) {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+:deep(.admin-user-dialog .el-dialog__body) {
+  padding: 18px 22px 8px;
+}
+
+:deep(.admin-user-dialog .el-dialog__footer) {
+  padding: 12px 22px 18px;
+}
+
+.admin-user-form {
+  padding-top: 2px;
+}
+
+:deep(.admin-user-form .el-form-item) {
+  margin-bottom: 18px;
+}
+
+:deep(.admin-user-form .el-input__wrapper),
+:deep(.admin-user-form .el-select__wrapper) {
+  border-radius: 12px;
+}
+
+.admin-user-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>

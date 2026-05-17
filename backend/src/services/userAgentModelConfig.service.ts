@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface UserAgentModelConfig {
   userId: string;
@@ -38,7 +39,7 @@ class UserAgentModelConfigService {
       return await prisma.user_agent_model_configs.upsert({
         where: { userId_agentId: { userId, agentId } },
         update: { ...config, updatedAt: new Date() },
-        create: { userId, agentId, ...config }
+        create: { id: uuidv4(), userId, agentId, ...config, updatedAt: new Date() }
       });
     } catch (error) {
       logger.error(`Failed to upsert user config: ${userId}/${agentId}`, error);

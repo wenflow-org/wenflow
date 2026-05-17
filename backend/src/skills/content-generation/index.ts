@@ -261,11 +261,12 @@ export async function contentGeneration(
             id: `acl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
             agentId: input.agentId,
             userId: input.userId,
+            sourceEntry: 'platform',
             input: JSON.stringify({ topic: input.topic, type: input.type, targetLevel: input.targetLevel }),
             output: result ? JSON.stringify(result.output) : null,
             success: !error,
             durationMs,
-            tokensUsed: undefined, // content-generation skill 没有 token 信息
+            tokensUsed: undefined,
             error: error?.message,
             errorCode: error?.code,
             calledAt: new Date(),
@@ -273,7 +274,7 @@ export async function contentGeneration(
               action: input.action || 'content-generation',
               style: input.style,
               length: input.length,
-context: input.context?.substring(0, 200) // 限制长度
+              context: input.context?.substring(0, 200)
             })
           }
         });

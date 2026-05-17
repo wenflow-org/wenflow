@@ -1,30 +1,24 @@
 ﻿// Axios API 客户端
 import axios from 'axios';
 
-// 使用 Vite 代理，通过 /api 前缀转发到后端
-// 开发环境下使用代理，生产环境可以使用环境变量
 const isDev = import.meta.env.DEV;
 export const API_BASE_URL = isDev ? '/api' : (import.meta.env.VITE_API_URL || '/api');
 
-// 存储 pending 请求的 Map
 const pendingRequests = new Map<string, AbortController>();
 
-// 生成请求唯一标识
 const generateRequestKey = (config: any): string => {
   const { method, url, params, data } = config;
   return `${method?.toUpperCase() || 'GET'}_${url}_${JSON.stringify(params || {})}_${JSON.stringify(data || {})}`;
 };
 
-// 创建 axios 实例
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 增加到 5 分钟，适应 DeepSeek Think 模型
+  timeout: 300000,
   headers: {
     'Content-Type': 'application/json; charset=utf-8'
   }
 });
 
-// 请求拦截器 - 自动添加token和取消控制器
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -33,11 +27,14 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // 为每个请求创建 AbortController
+    const isTestMode = localStorage.getItem('testMode') === 'true';
+    if (isTestMode) {
+      config.headers['X-Source-Entry'] = 'test';
+    }
+
     const controller = new AbortController();
     config.signal = controller.signal;
 
-    // 存储控制器
     const requestKey = generateRequestKey(config);
     pendingRequests.set(requestKey, controller);
 
@@ -138,6 +135,25 @@ export const cancelAgentRequests = (): number => {
  */
 export const getPendingRequestCount = (): number => {
   return pendingRequests.size;
+};
+
+/**
+ * 设置测试模式（影响 X-Source-Entry header）
+ * 测试站点页面在挂载时调用 setTestMode(true)，卸载时调用 setTestMode(false)
+ */
+export const setTestMode = (enabled: boolean): void => {
+  if (enabled) {
+    localStorage.setItem('testMode', 'true');
+  } else {
+    localStorage.removeItem('testMode');
+  }
+};
+
+/**
+ * 获取当前是否为测试模式
+ */
+export const isTestModeEnabled = (): boolean => {
+  return localStorage.getItem('testMode') === 'true';
 };
 
 export default api;

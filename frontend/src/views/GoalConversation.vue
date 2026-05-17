@@ -7,20 +7,20 @@
 
     <header class="dashboard-header planning-header" :class="{ 'dashboard-header--scrolled': headerScrolled }">
       <div class="header-container planning-header__inner">
-        <button type="button" class="brand planning-brand" @click="router.push('/dashboard')">
+<button type="button" class="brand planning-brand" @click="router.push(navDashboardPath)">
           <img src="/logo.png" alt="问流 WenFlow" class="brand-logo planning-brand__logo" />
         </button>
 
         <nav class="header-nav planning-nav" aria-label="应用导航">
-          <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item nav-item--active">目标规划</router-link>
-          <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
-          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
-          <router-link to="/achievements" class="nav-item">成就</router-link>
+          <router-link :to="navDashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
+          <router-link :to="conversationBasePath" class="nav-item nav-item--active">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
+          <router-link :to="navLearningPathsPath" class="nav-item">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
+          <router-link :to="navLearningStatePath" class="nav-item">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
+          <router-link :to="navAchievementsPath" class="nav-item">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
         </nav>
 
         <div class="header-right planning-header__actions">
-          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
+          <router-link :to="conversationBasePath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
           <el-dropdown>
             <button type="button" class="user-chip planning-user-chip">
               <span>{{ userInitial }}</span>
@@ -80,12 +80,73 @@
             </div>
           </section>
 
+          <section v-if="isTestMode" class="planning-card-group planning-debug-block">
+            <div class="planning-debug-block__head">
+              <span class="planning-block-label">调试面板</span>
+              <strong>{{ testDebugSummary }}</strong>
+            </div>
+
+            <div class="planning-debug-metrics">
+              <article v-for="item in testDebugCards" :key="item.label" class="planning-debug-metric">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </article>
+            </div>
+
+            <div v-if="testRequestTraces.length > 0" class="planning-debug-traces">
+              <details v-for="trace in testRequestTraces" :key="trace.id" class="planning-debug-trace">
+                <summary class="planning-debug-trace__summary">
+                  <div>
+                    <strong>{{ trace.title }}</strong>
+                    <span>{{ trace.subtitle }}</span>
+                    <span>{{ trace.statusLabel }}</span>
+                  </div>
+                  <div class="planning-debug-trace__meta">
+                    <em>{{ trace.badge }}</em>
+                    <span>{{ trace.badgeNote }}</span>
+                  </div>
+                </summary>
+
+                <div class="planning-debug-trace__body">
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">本轮用户输入</span>
+                    <pre>{{ trace.input }}</pre>
+                  </section>
+
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">请求状态快照</span>
+                    <pre>{{ trace.stateSnapshot }}</pre>
+                  </section>
+
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">发送给模型的完整 messages</span>
+                    <pre>{{ trace.requestMessages }}</pre>
+                  </section>
+
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">本轮尝试详情</span>
+                    <pre>{{ trace.attempts }}</pre>
+                  </section>
+
+                  <section v-if="trace.rawUserVisible" class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">最后一次原始文本输出</span>
+                    <pre>{{ trace.rawUserVisible }}</pre>
+                  </section>
+                </div>
+              </details>
+            </div>
+
+            <div v-else class="planning-status-empty">
+              发起测试对话后，这里会显示每轮请求实际发送给模型的全部内容。
+            </div>
+          </section>
+
         </aside>
 
         <section class="planning-chat-card glass-card">
 <div class="planning-chat-card__head planning-chat-card__head--workbench">
             <div class="planning-chat-card__copy">
-              <h2 v-if="!hasConversationStarted">说一件你最近卡住的事。</h2>
+              <h2 v-if="!hasConversationStarted">{{ isTestMode ? '说一件你想测试的目标表达。' : '说一件你最近卡住的事。' }}</h2>
               <p v-if="!hasConversationStarted" class="planning-chat-card__intro">想到哪说到哪，先不用整理。</p>
             </div>
 
@@ -105,7 +166,7 @@
                 <span>查看学习路径</span>
                 <el-icon><ArrowRight /></el-icon>
               </button>
-              <button class="proposal-btn proposal-btn-secondary" @click="showRegenerateDialog = true">重新规划</button>
+              <button v-if="!isTestMode" class="proposal-btn proposal-btn-secondary" @click="showRegenerateDialog = true">重新规划</button>
             </div>
           </div>
 
@@ -133,9 +194,83 @@
               <article v-for="msg in sortedMessages" :key="msg.id" class="planning-msg" :class="`planning-msg--${msg.role}`">
                 <div class="planning-msg__meta">
                   <span class="planning-msg__role">{{ msg.role === 'ai' ? '问流' : '你' }}</span>
+                  <span v-if="isTestMode && getTraceStatusBadge(msg)" class="planning-msg__debug-badge" :class="`planning-msg__debug-badge--${getTraceStatusBadge(msg)?.tone || 'info'}`">
+                    {{ getTraceStatusBadge(msg)?.label }}
+                  </span>
                   <small>{{ formatTime(msg.time) }}</small>
                 </div>
                 <p v-html="msg.role === 'ai' ? formatMessage(msg.content) : msg.content"></p>
+
+                <details
+                  v-if="isTestMode && getTraceCardForMessage(msg)"
+                  class="planning-msg-trace"
+                  :open="isTraceExpanded(msg.id)"
+                  @toggle="handleTraceDetailsToggle(msg.id, ($event.currentTarget as HTMLDetailsElement).open)"
+                >
+                  <summary class="planning-msg-trace__summary" @click.prevent="toggleTraceForMessage(msg.id)">
+                    {{ msg.role === 'user' ? '查看本轮请求详情' : '查看本轮请求与输出' }}
+                  </summary>
+
+                  <template v-if="getTraceCardForMessage(msg)">
+                    <div class="planning-msg-trace__meta">
+                      <span>{{ getTraceCardForMessage(msg)?.statusLabel }}</span>
+                      <span>{{ getTraceCardForMessage(msg)?.stageBeforeLabel }}</span>
+                      <span>{{ getTraceCardForMessage(msg)?.promptVersionLabel }}</span>
+                      <span>{{ getTraceCardForMessage(msg)?.parseModeLabel }}</span>
+                      <span>{{ getTraceCardForMessage(msg)?.attemptLabel }}</span>
+                    </div>
+
+                    <div class="planning-msg-trace__section">
+                      <span class="planning-msg-trace__label">本轮用户输入</span>
+                      <pre>{{ getTraceCardForMessage(msg)?.input }}</pre>
+                    </div>
+
+                    <div class="planning-msg-trace__section">
+                      <span class="planning-msg-trace__label">请求状态快照</span>
+                      <pre>{{ getTraceCardForMessage(msg)?.stateSnapshot }}</pre>
+                    </div>
+
+                    <div class="planning-msg-trace__section">
+                      <span class="planning-msg-trace__label">发送给模型的完整 messages</span>
+                      <pre>{{ getTraceCardForMessage(msg)?.requestMessages }}</pre>
+                    </div>
+
+                    <div class="planning-msg-trace__section">
+                      <span class="planning-msg-trace__label">可见回复</span>
+                      <pre>{{ getTraceCardForMessage(msg)?.visibleReply }}</pre>
+                    </div>
+
+                    <details class="planning-msg-trace__raw-details">
+                      <summary>展开原始输出</summary>
+
+                      <div class="planning-msg-trace__section">
+                        <span class="planning-msg-trace__label">最后一次原始文本</span>
+                        <pre>{{ getTraceCardForMessage(msg)?.rawUserVisible }}</pre>
+                      </div>
+
+                      <div v-if="(getTraceCardForMessage(msg)?.attempts.length || 0) > 0" class="planning-msg-trace__attempts">
+                        <article
+                          v-for="attempt in getTraceCardForMessage(msg)?.attempts || []"
+                          :key="`${msg.id}-attempt-${attempt.attemptIndex}`"
+                          class="planning-msg-trace__attempt"
+                        >
+                          <div class="planning-msg-trace__attempt-head">
+                            <strong>Attempt {{ attempt.attemptIndex }}</strong>
+                            <span>{{ attempt.parseMode }}</span>
+                            <em>{{ attempt.structuredOutputValid ? '结构化成功' : '结构化失败' }}</em>
+                          </div>
+                          <div v-if="attempt.failureType !== 'none'" class="planning-msg-trace__failure">
+                            Failure: {{ attempt.failureType }}
+                          </div>
+                          <div v-if="attempt.violations.length > 0" class="planning-msg-trace__violations">
+                            <span v-for="(violation, index) in attempt.violations" :key="`${msg.id}-${attempt.attemptIndex}-${index}`">{{ violation }}</span>
+                          </div>
+                          <pre>{{ attempt.rawContent }}</pre>
+                        </article>
+                      </div>
+                    </details>
+                  </template>
+                </details>
 
                 <div v-if="msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && !msg.quickRepliesUsed && currentStage !== 'proposing'" class="planning-replies">
                   <span
@@ -169,40 +304,71 @@
               </div>
             </div>
 
-            <div class="planning-composer" :class="{ 'planning-composer--entry': !hasConversationStarted }">
+<div class="planning-composer" :class="{ 'planning-composer--entry': !hasConversationStarted }">
               <transition name="slide-up">
-                <div v-if="showProposalActionPanel" class="planning-proposal planning-proposal--pending">
-                  <div class="planning-proposal__head">
-                    <span class="planning-proposal__eyebrow">请确认方向</span>
-                    <strong>确认并生成路径</strong>
+                <div v-if="showProposalActionPanel && !loading" class="planning-proposal" :class="{ 'planning-proposal--pending': !supplementMode, 'planning-proposal--supplement': supplementMode }">
+                  <span class="planning-proposal__eyebrow">{{ supplementMode ? '补充信息，重新整理方向' : '确认并生成路径' }}</span>
+
+                  <div v-if="!supplementMode" class="planning-proposal__list">
+                    <div v-if="proposalProblemText" class="planning-proposal__item">
+                      <strong>核心问题</strong>
+                      <p>{{ proposalProblemText }}</p>
+                    </div>
+
+                    <div v-if="proposalOutcomeText" class="planning-proposal__item">
+                      <strong>预计产出</strong>
+                      <p>{{ proposalOutcomeText }}</p>
+                    </div>
+
+                    <div v-if="proposalStageHighlights.length > 0" class="planning-proposal__item">
+                      <strong>路径大纲</strong>
+                      <ol class="planning-proposal__path-list">
+                        <li
+                          v-for="(item, index) in proposalStageHighlights"
+                          :key="`${index}-${item}`"
+                        >
+                          <span class="planning-proposal__path-index">{{ index + 1 }}</span>
+                          <span>{{ item }}</span>
+                        </li>
+                      </ol>
+                    </div>
                   </div>
 
-                  <div class="planning-proposal__stages planning-proposal__stages--summary">
-                    <article class="planning-proposal__stage planning-proposal__stage--summary">
-                      <strong>核心问题：</strong>
-                      <p>{{ realProblemText || surfaceGoalText || '还在确认中' }}</p>
-                    </article>
-                    <article v-if="proposalStageHighlights.length > 0" class="planning-proposal__stage planning-proposal__stage--summary">
-                      <strong>阶段建议：</strong>
-                      <div class="planning-proposal__hint-list">
-                        <p v-for="item in proposalStageHighlights" :key="item">{{ item }}</p>
-                      </div>
-                    </article>
+                  <div v-if="supplementMode" class="planning-proposal__supplement-input">
+                    <div class="planning-proposal__supplement-field">
+                      <textarea
+                        ref="inputField"
+                        v-model="userInput"
+                        @keydown.enter.exact.prevent="sendMessage"
+                        @keydown.enter.shift.exact="inputNewLine"
+                        placeholder="补充背景、限制或偏好..."
+                        :disabled="loading"
+                        rows="1"
+                        @input="autoResize"
+                      ></textarea>
+                      <button @click="sendMessage" :disabled="loading || !userInput.trim()" class="planning-proposal__supplement-send">
+                        <el-icon v-if="loading"><Loading /></el-icon>
+                        <el-icon v-else><Promotion /></el-icon>
+                      </button>
+                    </div>
                   </div>
 
                   <div class="planning-proposal__actions">
-                    <button class="proposal-btn proposal-btn-primary" @click="handleConfirmProposal" :disabled="loading">
-                      <el-icon v-if="loading"><Loading /></el-icon>
-                      <span>确认并生成路径</span>
-                    </button>
-                    <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">继续补充信息</button>
+                    <template v-if="!supplementMode">
+                      <button class="proposal-btn proposal-btn-primary" @click="handleConfirmProposal" :disabled="loading">
+                        <el-icon v-if="loading"><Loading /></el-icon>
+                        <span>确认并生成路径</span>
+                      </button>
+                      <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">还想补充</button>
+                    </template>
+                    <template v-else>
+                      <button class="proposal-btn proposal-btn-secondary" @click="handleCancelSupplement">取消</button>
+                    </template>
                   </div>
                 </div>
               </transition>
 
-              <!-- 上传入口已临时下线 -->
-
-              <div class="planning-composer__box planning-composer__box--final">
+              <div v-if="!showProposalActionPanel" class="planning-composer__box planning-composer__box--final">
                 <div class="planning-composer__field">
                   <div v-if="selectedQuickReplies.length > 0" class="planning-composer__selected-tags">
                     <button
@@ -224,11 +390,10 @@
                     :placeholder="hasConversationStarted ? '回答上面的问题，或补充你的基础、时间和限制…' : '先说说你最近想解决什么，或现在卡在哪里...'"
                     :disabled="loading"
                     rows="1"
-                     @input="autoResize"
-                   ></textarea>
-                 </div>
+                    @input="autoResize"
+                  ></textarea>
+                </div>
                 <div class="planning-composer__row">
-                  <!-- 上传资料按钮已临时下线 -->
                   <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
                     <el-icon v-if="loading"><Loading /></el-icon>
                     <el-icon v-else><Promotion /></el-icon>
@@ -244,6 +409,7 @@
 
       <!-- 重新规划对话框 -->
       <el-dialog
+        v-if="!isTestMode"
         v-model="showRegenerateDialog"
         title="重新规划学习路径"
         width="500px"
@@ -308,10 +474,17 @@ import type { GoalConversationEnvelope } from '@/api/goalConversation';
 import {
   deleteGoalConversation,
   getGoalConversation,
+  type GoalConversationContextMode,
   regenerateGoalConversation,
   replyGoalConversation,
   startGoalConversation
 } from '@/api/goalConversation';
+import {
+  deleteTestGoalConversation,
+  getTestGoalConversation,
+  replyTestGoalConversation,
+  startTestGoalConversation
+} from '@/api/testGoalConversation';
 
 const md = new MarkdownIt({
   html: true,
@@ -320,12 +493,28 @@ const md = new MarkdownIt({
 });
 
 const ACTIVE_GOAL_CONVERSATION_KEY = 'active_goal_conversation_id';
+const ACTIVE_TEST_GOAL_CONVERSATION_KEY = 'active_test_goal_conversation_id';
 
 const headerScrolled = ref(false);
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
+const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const contextMode = computed<GoalConversationContextMode>(() => route.meta.contextMode === 'full' ? 'full' : 'recent');
+const isTestMode = computed(() => route.meta.isTestMode === true);
+const testGoalConversationBasePath = computed(() => (isAdminRoute.value ? '/admin/test/goal-full' : '/test/goal-full'));
+const testLearningPathsBasePath = computed(() => (isAdminRoute.value ? '/admin/test/learning-paths' : '/test/learning-paths'));
+const testLearningPathDetailBasePath = computed(() => (isAdminRoute.value ? '/admin/test/learning-path' : '/test/learning-path'));
+const testDashboardBasePath = computed(() => (isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard'));
+const testLearningStateBasePath = computed(() => (isAdminRoute.value ? '/admin/test/learning-state' : '/learning-state'));
+const testAchievementsBasePath = computed(() => (isAdminRoute.value ? '/admin/test/achievements' : '/achievements'));
+const conversationBasePath = computed(() => (isTestMode.value ? testGoalConversationBasePath.value : '/goal-conversation'));
+const navDashboardPath = computed(() => (isTestMode.value ? testDashboardBasePath.value : '/dashboard'));
+const navLearningPathsPath = computed(() => (isTestMode.value ? testLearningPathsBasePath.value : '/learning-paths'));
+const navLearningStatePath = computed(() => (isTestMode.value ? testLearningStateBasePath.value : '/learning-state'));
+const navAchievementsPath = computed(() => (isTestMode.value ? testAchievementsBasePath.value : '/achievements'));
+const conversationStorageKey = computed(() => isTestMode.value ? ACTIVE_TEST_GOAL_CONVERSATION_KEY : ACTIVE_GOAL_CONVERSATION_KEY);
 
 const handleLogout = async () => {
   try {
@@ -610,6 +799,8 @@ interface Message {
   role: 'ai' | 'user';
   content: string;
   time: Date;
+  traceId?: string;
+  isObservationFailure?: boolean;
   quickReplies?: QuickReply[];
   quickRepliesUsed?: boolean;
 }
@@ -633,6 +824,50 @@ interface ConversationRound {
   time: string;
 }
 
+interface TestRequestTraceView {
+  id: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  badgeNote: string;
+  statusLabel: string;
+  input: string;
+  stateSnapshot: string;
+  requestMessages: string;
+  attempts: string;
+  rawUserVisible: string;
+}
+
+interface TestLatestTraceAttemptView {
+  attemptIndex: number;
+  parseMode: string;
+  structuredOutputValid: boolean;
+  failureType: string;
+  violations: string[];
+  rawContent: string;
+}
+
+interface TestLatestTraceCardView {
+  statusLabel: string;
+  stageBeforeLabel: string;
+  promptVersionLabel: string;
+  parseModeLabel: string;
+  attemptLabel: string;
+  input: string;
+  stateSnapshot: string;
+  requestMessages: string;
+  visibleReply: string;
+  rawUserVisible: string;
+  attempts: TestLatestTraceAttemptView[];
+}
+
+interface TraceStatusBadgeView {
+  label: string;
+  tone: 'warning' | 'success' | 'info';
+}
+
+const expandedTraceMessageId = ref<string | null>(null);
+
 const aiMessages = ref<Message[]>([]);
 const userMessages = ref<Message[]>([]);
 const nextQuestions = ref<string[]>([]);
@@ -640,6 +875,7 @@ const collectedData = ref<Record<string, any>>({});
 const structuredData = ref<Record<string, any> | null>(null);
 const confirmedProposal = ref<Record<string, any> | null>(null);
 const confidenceScores = ref<Record<string, any> | null>(null);
+const testDebug = ref<Record<string, any>>({});
 
 const sortedMessages = computed(() => {
   const allMessages = [...aiMessages.value, ...userMessages.value];
@@ -832,6 +1068,10 @@ const currentBaselineText = computed(() => getValidText(
 
 const baselineEvidenceText = computed(() => getValidText(understanding.value.current_baseline?.evidence));
 
+const backgroundExperienceText = computed(() => [currentBaselineText.value, baselineEvidenceText.value]
+  .filter((item, index, array) => item && array.indexOf(item) === index)
+  .join(' · '));
+
 const availableTimeText = computed(() => getValidText(
   understanding.value.background?.available_time,
   understanding.value.available_resources?.time_budget,
@@ -876,69 +1116,41 @@ const outOfScopeTexts = computed(() => {
 
 const proposalKeyStages = computed(() => uniqueTextList(toTextArray(confirmedProposal.value?.key_stages)));
 
-const confirmedSignals = computed<WorkbenchInfoItem[]>(() => {
-  const items: WorkbenchInfoItem[] = [
-    {
-      label: '核心问题',
-      value: realProblemText.value || surfaceGoalText.value,
-      note: '路径会围绕这件真实问题展开，不再停留在泛泛目标。'
-    },
-    {
-      label: '当前基础',
-      value: [currentBaselineText.value, baselineEvidenceText.value].filter(Boolean).join(' · '),
-      note: '这会决定第一步是补基础还是直接做最小实践。'
-    },
-    {
-      label: '可用时间',
-      value: [availableTimeText.value, expectedTimeText.value]
-        .filter((item, index, array) => item && array.indexOf(item) === index)
-        .join(' · '),
-      note: '时间窗口会直接影响任务颗粒度和路径长度。'
-    },
-    {
-      label: '为什么现在要学',
-      value: motivationText.value,
-      note: '先保留最值得现在就推进的部分。'
-    },
-    {
-      label: '成功标志',
-      value: successCriteriaTexts.value[0] || firstDeliverableText.value,
-      note: '第一版路径会围绕这个可观察结果来生成。'
-    }
-  ].filter((item) => item.value);
+const proposalDirectionText = computed(() => getValidText(
+  confirmedProposal.value?.learning_direction,
+  currentAiSummaryText.value
+));
 
-  if (items.length === 0) {
-    return [{
-      label: '当前状态',
-      value: '先说最近卡住的一件事，我会从中提取目标、基础、时间和边界。',
-      note: '开始后，每一轮确认的内容都会沉淀到这里。'
-    }];
-  }
+const proposalDeliverableText = computed(() => getValidText(
+  confirmedProposal.value?.first_deliverable,
+  firstDeliverableText.value
+));
 
-  return items.slice(0, 5);
+const proposalProblemText = computed(() => getValidText(
+  realProblemText.value,
+  painPointText.value,
+  surfaceGoalText.value,
+  proposalDirectionText.value,
+  currentAiSummaryText.value
+));
+
+const proposalOutcomeText = computed(() => getValidText(
+  proposalDeliverableText.value,
+  successCriteriaTexts.value[0],
+  firstDeliverableText.value,
+  proposalDirectionText.value
+));
+
+const proposalCommitmentText = computed(() => {
+  return [availableTimeText.value, expectedTimeText.value]
+    .filter((item, index, array) => item && array.indexOf(item) === index)
+    .join(' · ');
 });
 
-const collectedInfoItems = computed<WorkbenchInfoItem[]>(() => {
-  const items: WorkbenchInfoItem[] = [];
-
-  if (realProblemText.value) {
-    items.push({ label: '核心问题', value: realProblemText.value });
-  }
-
-  if (motivationText.value) {
-    items.push({ label: '为什么现在要学', value: motivationText.value });
-  }
-
-  if (currentBaselineText.value) {
-    items.push({ label: '当前基础', value: currentBaselineText.value });
-  }
-
-  if (availableTimeText.value) {
-    items.push({ label: '可用时间', value: availableTimeText.value });
-  }
-
-  return items;
-});
+const proposalMetaPills = computed(() => uniqueTextList([
+  availableTimeText.value,
+  expectedTimeText.value
+]));
 
 const normalizedUrgencyText = computed(() => {
   const value = urgencyText.value;
@@ -949,17 +1161,276 @@ const normalizedUrgencyText = computed(() => {
   return value;
 });
 
-const understandingSummaryCards = computed(() => {
-  return [
+const proposalStageOverviewText = computed(() => {
+  return proposalStageHighlights.value.join(' / ');
+});
+
+const pitfallExperienceText = computed(() => getValidText(
+  baselineEvidenceText.value,
+  painPointText.value
+));
+
+const understandingSummaryCards = computed<WorkbenchInfoItem[]>(() => {
+  const items: WorkbenchInfoItem[] = [
     { label: '真实问题', value: realProblemText.value || surfaceGoalText.value },
+    { label: '核心痛点', value: painPointText.value },
+    { label: '学习动机', value: motivationText.value },
     { label: '当前水平', value: currentBaselineText.value },
+    { label: '过往卡点', value: pitfallExperienceText.value },
     { label: '期望周期', value: expectedTimeText.value },
     { label: '可用时间', value: availableTimeText.value },
-    { label: '核心痛点', value: painPointText.value },
-    { label: '紧迫程度', value: normalizedUrgencyText.value },
-    { label: '学习动机', value: motivationText.value }
-  ].filter((item) => item.value);
+    { label: '紧迫程度', value: normalizedUrgencyText.value }
+  ];
+
+  return items.filter((item) => item.value);
 });
+
+const toPrettyJson = (value: any) => {
+  if (value === null || value === undefined) return '{}';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const testDebugCards = computed(() => {
+  if (!isTestMode.value) return [] as Array<{ label: string; value: string }>;
+
+  const conversationContextCount = testDebug.value.conversationContextCount
+    ?? testDebug.value.historyCount
+    ?? 0;
+
+  return [
+    { label: '上下文策略', value: String(testDebug.value.contextStrategy || 'n/a') },
+    { label: '上下文证据数', value: String(conversationContextCount) },
+    { label: '可见消息数', value: String(testDebug.value.visibleMessageCount ?? sortedMessages.value.length) },
+    { label: '状态字段数', value: String(testDebug.value.stateFieldCount ?? 0) },
+    { label: 'Prompt 版本', value: String(testDebug.value.promptVersion ?? 0) },
+    { label: '解析模式', value: String(testDebug.value.parseMode || 'n/a') },
+    { label: '尝试次数', value: String(testDebug.value.attemptCount ?? 0) },
+    { label: '实际重试', value: String(testDebug.value.actualRetryCount ?? 0) },
+    { label: '格式失败', value: String(testDebug.value.formatFailureCount ?? 0) },
+    { label: '状态已应用', value: testDebug.value.stateApplied === false ? '否' : '是' }
+  ];
+});
+
+const testDebugSummary = computed(() => {
+  if (!isTestMode.value) return '';
+  const traceCount = Array.isArray(testDebug.value.requestLog) ? testDebug.value.requestLog.length : 0;
+  return `${traceCount} 次请求`;
+});
+
+const testRequestTraces = computed<TestRequestTraceView[]>(() => {
+  if (!isTestMode.value || !Array.isArray(testDebug.value.requestLog)) {
+    return [];
+  }
+
+  return [...testDebug.value.requestLog]
+    .map((trace: any, index: number) => {
+      const messageCount = Array.isArray(trace?.requestMessages) ? trace.requestMessages.length : 0;
+      const systemCount = Array.isArray(trace?.requestMessages)
+        ? trace.requestMessages.filter((item: any) => item?.role === 'system').length
+        : 0;
+      const userCount = Array.isArray(trace?.requestMessages)
+        ? trace.requestMessages.filter((item: any) => item?.role === 'user').length
+        : 0;
+      const timestamp = trace?.timestamp
+        ? new Date(trace.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : '--:--:--';
+      const conversationContextCount = Number(
+        trace?.conversationContextCount
+        ?? (messageCount >= 2 ? Math.max(0, messageCount - 2) : 0)
+      );
+
+      return {
+        id: String(trace?.id || `trace-${index}`),
+        title: `第 ${index + 1} 轮 · ${timestamp}`,
+        subtitle: `stageBefore=${trace?.stageBefore || 'unknown'} · prompt=v${trace?.promptVersion || 0}`,
+        badge: `${messageCount} 条请求消息`,
+        badgeNote: `包含 ${systemCount} 条 system、${userCount} 条 user，以及 ${conversationContextCount} 条 conversationContext 证据`,
+        statusLabel: trace?.stateApplied === false ? '结构化失败，状态未更新' : '结构化成功，状态已更新',
+        input: String(trace?.input || ''),
+        stateSnapshot: toPrettyJson(trace?.stateSnapshot || {}),
+        requestMessages: toPrettyJson(trace?.requestMessages || []),
+        attempts: toPrettyJson(trace?.attempts || []),
+        rawUserVisible: String(trace?.rawUserVisible || '')
+      };
+    })
+    .reverse();
+});
+
+const latestTestTraceCard = computed<TestLatestTraceCardView | null>(() => {
+  if (!isTestMode.value || !Array.isArray(testDebug.value.requestLog) || testDebug.value.requestLog.length === 0) {
+    return null;
+  }
+
+  const trace = testDebug.value.requestLog[testDebug.value.requestLog.length - 1] || {};
+  const attempts = Array.isArray(trace?.attempts)
+    ? trace.attempts.map((item: any) => ({
+        attemptIndex: Number(item?.attemptIndex || 0),
+        parseMode: String(item?.parseMode || 'none'),
+        structuredOutputValid: item?.structuredOutputValid === true,
+        failureType: String(item?.failureType || 'none'),
+        violations: Array.isArray(item?.violations) ? item.violations.map((violation: any) => String(violation)) : [],
+        rawContent: String(item?.rawContent || '')
+      }))
+    : [];
+
+  const latestAiContent = currentAiMessage.value?.content || '';
+  const visibleReply = latestAiContent.trim() || String(trace?.rawUserVisible || '').trim() || '本轮没有写入可见回复。';
+  const rawUserVisible = String(trace?.rawUserVisible || '').trim() || '本轮没有单独返回 rawUserVisible。';
+  const parseMode = String(trace?.parseMode || 'none');
+  const attemptCount = Number(trace?.attemptCount || attempts.length || 0);
+  const stateApplied = trace?.stateApplied === true;
+
+  return {
+    statusLabel: stateApplied ? '结构化成功，状态已更新' : '结构化失败，状态未更新',
+    parseModeLabel: `解析模式：${parseMode}`,
+    attemptLabel: `尝试 ${attemptCount} 次`,
+    visibleReply,
+    rawUserVisible,
+    attempts
+  };
+});
+
+const testTraceById = computed<Record<string, any>>(() => {
+  if (!isTestMode.value || !Array.isArray(testDebug.value.requestLog)) {
+    return {};
+  }
+
+  return testDebug.value.requestLog.reduce((acc: Record<string, any>, trace: any) => {
+    const id = String(trace?.id || '');
+    if (id) {
+      acc[id] = trace;
+    }
+    return acc;
+  }, {});
+});
+
+const buildTraceCardFromTrace = (trace: any, visibleReply: string): TestLatestTraceCardView | null => {
+  if (!trace) return null;
+
+  const attempts = Array.isArray(trace?.attempts)
+    ? trace.attempts.map((item: any) => ({
+        attemptIndex: Number(item?.attemptIndex || 0),
+        parseMode: String(item?.parseMode || 'none'),
+        structuredOutputValid: item?.structuredOutputValid === true,
+        failureType: String(item?.failureType || 'none'),
+        violations: Array.isArray(item?.violations) ? item.violations.map((violation: any) => String(violation)) : [],
+        rawContent: String(item?.rawContent || '')
+      }))
+    : [];
+
+  const parseMode = String(trace?.parseMode || 'none');
+  const attemptCount = Number(trace?.attemptCount || attempts.length || 0);
+  const stateApplied = trace?.stateApplied === true;
+
+  return {
+    statusLabel: stateApplied ? '结构化成功，状态已更新' : '结构化失败，状态未更新',
+    stageBeforeLabel: `请求前阶段：${String(trace?.stageBefore || 'unknown')}`,
+    promptVersionLabel: `Prompt：v${Number(trace?.promptVersion || 0)}`,
+    parseModeLabel: `解析模式：${parseMode}`,
+    attemptLabel: `尝试 ${attemptCount} 次`,
+    input: String(trace?.input || '').trim() || '本轮没有记录输入。',
+    stateSnapshot: toPrettyJson(trace?.stateSnapshot || {}),
+    requestMessages: toPrettyJson(trace?.requestMessages || []),
+    visibleReply: visibleReply.trim() || String(trace?.rawUserVisible || '').trim() || '本轮没有写入可见回复。',
+    rawUserVisible: String(trace?.rawUserVisible || '').trim() || '本轮没有单独返回 rawUserVisible。',
+    attempts
+  };
+};
+
+const getTraceCardForMessage = (message: Message): TestLatestTraceCardView | null => {
+  if (!isTestMode.value || !message.traceId) return null;
+  return buildTraceCardFromTrace(testTraceById.value[message.traceId], message.content || '');
+};
+
+const getTraceStatusBadge = (message: Message): TraceStatusBadgeView | null => {
+  if (!isTestMode.value || !message.traceId) {
+    return null;
+  }
+
+  const trace = testTraceById.value[message.traceId];
+  if (!trace) {
+    return null;
+  }
+
+  if (trace?.stateApplied === false) {
+    return {
+      label: trace?.structuredOutputValid === false ? '结构失败，已记录原始输出' : '状态未应用',
+      tone: 'warning'
+    };
+  }
+
+  return {
+    label: '状态已应用',
+    tone: 'success'
+  };
+};
+
+const toggleTraceForMessage = (messageId: string) => {
+  expandedTraceMessageId.value = expandedTraceMessageId.value === messageId ? null : messageId;
+};
+
+const isTraceExpanded = (messageId: string) => expandedTraceMessageId.value === messageId;
+
+const handleTraceDetailsToggle = (messageId: string, isOpen: boolean) => {
+  expandedTraceMessageId.value = isOpen ? messageId : (expandedTraceMessageId.value === messageId ? null : expandedTraceMessageId.value);
+};
+
+const attachTraceIdToLatestUserMessage = () => {
+  if (!isTestMode.value || userMessages.value.length === 0 || !Array.isArray(testDebug.value.requestLog)) {
+    return;
+  }
+
+  const latestTrace = testDebug.value.requestLog[testDebug.value.requestLog.length - 1];
+  if (!latestTrace?.id) return;
+
+  const latestUserMessage = userMessages.value[userMessages.value.length - 1];
+  if (latestUserMessage) {
+    latestUserMessage.traceId = String(latestTrace.id);
+    latestUserMessage.isObservationFailure = latestTrace?.stateApplied === false;
+  }
+};
+
+const attachTraceIdToLatestAiMessage = () => {
+  if (!isTestMode.value || aiMessages.value.length === 0 || !Array.isArray(testDebug.value.requestLog)) {
+    return;
+  }
+
+  const latestTrace = testDebug.value.requestLog[testDebug.value.requestLog.length - 1];
+  if (!latestTrace?.id) return;
+
+  const latestAiMessage = aiMessages.value[aiMessages.value.length - 1];
+  if (latestAiMessage) {
+    latestAiMessage.traceId = String(latestTrace.id);
+    latestAiMessage.isObservationFailure = latestTrace?.stateApplied === false;
+  }
+};
+
+const reconcileMessageTraceIds = () => {
+  if (!isTestMode.value || !Array.isArray(testDebug.value.requestLog)) {
+    return;
+  }
+
+  const traces = testDebug.value.requestLog;
+  userMessages.value.forEach((message, index) => {
+    const trace = traces[index];
+    if (trace?.id) {
+      message.traceId = String(trace.id);
+      message.isObservationFailure = trace?.stateApplied === false;
+    }
+  });
+
+  aiMessages.value.forEach((message, index) => {
+    const trace = traces[index];
+    if (trace?.id) {
+      message.traceId = String(trace.id);
+      message.isObservationFailure = trace?.stateApplied === false;
+    }
+  });
+};
 
 const pendingClarificationItems = computed<WorkbenchPendingItem[]>(() => {
   const items: WorkbenchPendingItem[] = [];
@@ -1035,33 +1506,6 @@ const pendingClarificationItems = computed<WorkbenchPendingItem[]>(() => {
   return deduped;
 });
 
-const pathBoundaryItems = computed<WorkbenchInfoItem[]>(() => [
-  {
-    label: '核心问题',
-    value: realProblemText.value || '还在继续澄清中'
-  },
-  {
-    label: '当前基础',
-    value: [currentBaselineText.value, baselineEvidenceText.value].filter(Boolean).join(' · ') || '还在确认中'
-  },
-  {
-    label: '可用时间',
-    value: [availableTimeText.value, expectedTimeText.value]
-      .filter((item, index, array) => item && array.indexOf(item) === index)
-      .join(' · ') || '还在确认中'
-  },
-  {
-    label: '第一版交付目标',
-    value: firstDeliverableText.value || '先确认第一次最小结果，再进入路径生成'
-  },
-  {
-    label: '暂不处理的内容',
-    value: outOfScopeTexts.value[0] || '先不把目标扩成完整系统，优先围绕最小可用结果生成第一版路径。'
-  }
-]);
-
-const proposalConfirmationItems = computed(() => pathBoundaryItems.value);
-
 const currentAiPlainText = computed(() => currentAiMessage.value ? toPlainText(currentAiMessage.value.content) : '');
 const currentQuestionText = computed(() => {
   const nextQuestion = nextQuestions.value.find((question) => question.trim().length > 0);
@@ -1095,6 +1539,8 @@ const showProposalActionPanel = computed(() => {
   return currentStage.value === 'proposing' && !isCompleted.value;
 });
 
+const supplementMode = ref(false);
+
 const proposalSuggestions = computed(() => {
   const suggestions: string[] = [];
   if (understanding.value.background?.expected_time) {
@@ -1107,8 +1553,7 @@ const proposalSuggestions = computed(() => {
 });
 
 const proposalStageHighlights = computed(() => uniqueTextList([
-  ...proposalKeyStages.value,
-  ...proposalSuggestions.value
+  ...proposalKeyStages.value
 ]).slice(0, 4));
 
 const handleConfirmProposal = async () => {
@@ -1116,10 +1561,15 @@ const handleConfirmProposal = async () => {
 };
 
 const handleContinueSupplement = () => {
+  supplementMode.value = true;
   nextTick(() => {
     inputField.value?.focus();
     autoResize();
   });
+};
+
+const handleCancelSupplement = () => {
+  supplementMode.value = false;
 };
 
 const inputHint = computed(() => {
@@ -1136,7 +1586,7 @@ const topbarDescription = computed(() => {
   }
 
   if (currentStage.value === 'proposing') {
-    return '先把问题说清楚，再决定第一步怎么开始。';
+    return '方向已经初步收敛，先确认第一版切入点是否正确。';
   }
 
   return '先把混乱说出来，再把问题理清楚。';
@@ -1161,21 +1611,21 @@ const planningConfidencePercent = computed(() => Math.max(0, Math.min(100, Math.
 
 const activePlanningStageLabel = computed(() => {
   if (isCompleted.value || currentStage.value === 'completed' || currentStage.value === 'ready') return '可生成路径';
-  if (currentStage.value === 'proposing') return '继续澄清中';
+  if (currentStage.value === 'proposing') return '方案确认中';
   return '继续澄清中';
 });
 
 const readStoredConversationId = () => {
-  return localStorage.getItem(ACTIVE_GOAL_CONVERSATION_KEY) || '';
+  return localStorage.getItem(conversationStorageKey.value) || '';
 };
 
 const writeStoredConversationId = (id: string) => {
   if (!id) {
-    localStorage.removeItem(ACTIVE_GOAL_CONVERSATION_KEY);
+    localStorage.removeItem(conversationStorageKey.value);
     return;
   }
 
-  localStorage.setItem(ACTIVE_GOAL_CONVERSATION_KEY, id);
+  localStorage.setItem(conversationStorageKey.value, id);
 };
 
 const syncConversationRoute = (id: string) => {
@@ -1186,7 +1636,7 @@ const syncConversationRoute = (id: string) => {
     return;
   }
 
-  router.replace(normalized ? `/goal-conversation/${normalized}` : '/goal-conversation');
+  router.replace(normalized ? `${conversationBasePath.value}/${normalized}` : conversationBasePath.value);
 };
 
 const mapStoredMessage = (message: any, index: number): Message | null => {
@@ -1237,6 +1687,10 @@ const syncConversationState = (response: GoalConversationEnvelope) => {
     generatedPathStatus.value = core.learningPath.status || null;
   }
 
+  if (response.meta?.debug) {
+    testDebug.value = response.meta.debug;
+  }
+
   if (conversationId.value) {
     writeStoredConversationId(conversationId.value);
     syncConversationRoute(conversationId.value);
@@ -1250,6 +1704,8 @@ const syncConversationHistory = (messages: any[] = []) => {
 
   aiMessages.value = mappedMessages.filter((message) => message.role === 'ai');
   userMessages.value = mappedMessages.filter((message) => message.role === 'user');
+
+  reconcileMessageTraceIds();
 
 };
 
@@ -1268,7 +1724,9 @@ const restoreConversation = async (targetConversationId?: string) => {
 
   loading.value = true;
   try {
-    const response = await getGoalConversation(storedId);
+    const response = isTestMode.value
+      ? await getTestGoalConversation(storedId)
+      : await getGoalConversation(storedId);
     hydrateConversation(response, {
       messages: response.meta.messages
     });
@@ -1290,6 +1748,7 @@ const resetLocalConversationState = () => {
   structuredData.value = null;
   confirmedProposal.value = null;
   confidenceScores.value = null;
+  testDebug.value = {};
   showUnderstandingExpanded.value = false;
   showAllSuggestions.value = false;
   realProblemConfirmed.value = false;
@@ -1326,17 +1785,20 @@ const isFailedMessage = (content: string) => {
 
 // 导航到学习路径
 const navigateToLearningPath = () => {
-    if (generatedPathStatus.value === 'generating') {
-      router.push('/learning-paths');
-    } else if (generatedPathId.value) {
-      router.push(`/learning-path/${generatedPathId.value}`);
-    } else {
-      router.push('/learning-paths');
-    }
-  };
+  const learningPathsRoute = isTestMode.value ? testLearningPathsBasePath.value : '/learning-paths';
+  const learningPathDetailBase = isTestMode.value ? testLearningPathDetailBasePath.value : '/learning-path';
+  if (generatedPathStatus.value === 'generating') {
+    router.push(learningPathsRoute);
+  } else if (generatedPathId.value) {
+    router.push(`${learningPathDetailBase}/${generatedPathId.value}`);
+  } else {
+    router.push(learningPathsRoute);
+  }
+};
 
   // 重新生成学习路径
   const regeneratePath = async () => {
+    if (isTestMode.value) return;
     if (!conversationId.value || regenerating.value) return;
 
     regenerating.value = true;
@@ -1371,7 +1833,11 @@ const navigateToLearningPath = () => {
       );
 
       if (conversationId.value) {
-        await deleteGoalConversation(conversationId.value);
+        if (isTestMode.value) {
+          await deleteTestGoalConversation(conversationId.value);
+        } else {
+          await deleteGoalConversation(conversationId.value);
+        }
       }
 
       resetLocalConversationState();
@@ -1414,9 +1880,17 @@ const retryLastMessage = async () => {
         type: 'warning'
       });
 
+      if (conversationId.value) {
+        if (isTestMode.value) {
+          await deleteTestGoalConversation(conversationId.value);
+        } else {
+          await deleteGoalConversation(conversationId.value);
+        }
+      }
+
       resetLocalConversationState();
       
-      toast.info('已清空，请重新描述你的学习目标');
+      toast.info(isTestMode.value ? '已清空测试会话，请重新描述你的目标' : '已清空，请重新描述你的学习目标');
     } catch {
       // 用户取消
     }
@@ -1455,11 +1929,36 @@ const scrollToBottom = async () => {
   }
 };
 
+const isStructuredOutputInvalidError = (error: any) => {
+  return error?.response?.status === 422 && error?.response?.data?.error === 'STRUCTURED_OUTPUT_INVALID';
+};
+
+const getStructuredFailureEnvelope = (error: any): GoalConversationEnvelope | null => {
+  if (!isStructuredOutputInvalidError(error)) return null;
+  return error?.response?.data?.data || null;
+};
+
+const isObservationFailureResponse = (response: GoalConversationEnvelope | null | undefined) => {
+  if (!isTestMode.value || !response?.meta?.debug) return false;
+  return response.meta.debug.observationMode === true && response.meta.debug.stateApplied === false;
+};
+
 const startConversation = async (goal: string) => {
   loading.value = true;
   try {
-    const response = await startGoalConversation(goal);
+    const response = isTestMode.value
+      ? await startTestGoalConversation(goal)
+      : await startGoalConversation(goal, {
+          contextMode: contextMode.value
+        });
     syncConversationState(response);
+    attachTraceIdToLatestUserMessage();
+
+    if (isObservationFailureResponse(response)) {
+      scrollToBottom();
+      toast.warning('本轮结构化失败，已保留请求并记录原始输出。');
+      return;
+    }
 
     aiMessages.value.push({
       id: Date.now().toString(),
@@ -1469,10 +1968,18 @@ const startConversation = async (goal: string) => {
       quickReplies: response.renderHints.quickReplies,
       quickRepliesUsed: false
     });
+    attachTraceIdToLatestAiMessage();
     scrollToBottom();
   } catch (error: any) {
     console.error('开始对话失败:', error);
-    toast.error(error.message || '开始对话失败，请稍后重试');
+    const failureEnvelope = getStructuredFailureEnvelope(error);
+    if (failureEnvelope) {
+      syncConversationState(failureEnvelope);
+      attachTraceIdToLatestUserMessage();
+      toast.warning('本轮结构化输出连续失败，状态未更新。可点击重试再试一次。');
+    } else {
+      toast.error(error.message || '开始对话失败，请稍后重试');
+    }
   } finally {
     loading.value = false;
   }
@@ -1495,6 +2002,10 @@ const sendMessage = async () => {
   
   if (!trimmedInput && !hasSelections) return;
   if (loading.value) return;
+  
+  if (supplementMode.value) {
+    supplementMode.value = false;
+  }
   
   const content = hasSelections ? composeQuickReplyPayload() : trimmedInput;
   
@@ -1541,8 +2052,19 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
     }
 
     loading.value = true;
-    const response = await replyGoalConversation(conversationId.value, confirmText);
+      const response = isTestMode.value
+        ? await replyTestGoalConversation(conversationId.value, confirmText)
+        : await replyGoalConversation(conversationId.value, confirmText, {
+            contextMode: contextMode.value
+          });
     syncConversationState(response);
+    attachTraceIdToLatestUserMessage();
+
+    if (isObservationFailureResponse(response)) {
+      scrollToBottom();
+      toast.warning('本轮结构化失败，已保留请求并记录原始输出。');
+      return;
+    }
 
     aiMessages.value.push({
       id: Date.now().toString(),
@@ -1552,14 +2074,34 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
       quickReplies: response.renderHints.quickReplies,
       quickRepliesUsed: false
     });
+    attachTraceIdToLatestAiMessage();
 
     scrollToBottom();
 
     // 确认按钮点击后必定跳转学习路径页（强兜底，不依赖 stage/learningPath）
-    router.push('/learning-paths?from=goal&auto=1');
+    const nextConversationId = conversationId.value || response.internal.core.conversationId || '';
+    const targetBase = isTestMode.value ? testLearningPathsBasePath.value : '/learning-paths';
+    const query = new URLSearchParams({
+      from: 'goal',
+      auto: '1'
+    });
+    if (nextConversationId) {
+      query.set('conversationId', nextConversationId);
+    }
+    router.push(`${targetBase}?${query.toString()}`);
   } catch (error: any) {
     console.error('确认方案失败:', error);
-    toast.error(error.message || '确认失败，请重试');
+    const failureEnvelope = getStructuredFailureEnvelope(error);
+    if (failureEnvelope) {
+      syncConversationState(failureEnvelope);
+      attachTraceIdToLatestUserMessage();
+      if (!isTestMode.value && userMessages.value.length > 0) {
+        userMessages.value.pop();
+      }
+      toast.warning('本轮结构化输出连续失败，状态未更新。请重试确认。');
+    } else {
+      toast.error(error.message || '确认失败，请重试');
+    }
   } finally {
     loading.value = false;
   }
@@ -1568,8 +2110,20 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
 const sendMessageInternal = async (content: string) => {
   loading.value = true;
   try {
-    const response = await replyGoalConversation(conversationId.value, content);
+    const response = isTestMode.value
+      ? await replyTestGoalConversation(conversationId.value, content)
+      : await replyGoalConversation(conversationId.value, content, {
+          contextMode: contextMode.value
+        });
     syncConversationState(response);
+    attachTraceIdToLatestUserMessage();
+
+    if (isObservationFailureResponse(response)) {
+      scrollToBottom();
+      toast.warning('本轮结构化失败，已保留请求并记录原始输出。');
+      return;
+    }
+
     aiMessages.value.push({
       id: Date.now().toString(),
       role: 'ai',
@@ -1578,6 +2132,7 @@ const sendMessageInternal = async (content: string) => {
       quickReplies: response.renderHints.quickReplies,
       quickRepliesUsed: false
     });
+    attachTraceIdToLatestAiMessage();
 
     if (response.internal.core.isCompleted) {
       toast.success('问题理解完成！');
@@ -1586,7 +2141,17 @@ const sendMessageInternal = async (content: string) => {
     scrollToBottom();
   } catch (error: any) {
     console.error('回复失败:', error);
-    toast.error(error.message || '回复失败，请稍后重试');
+    const failureEnvelope = getStructuredFailureEnvelope(error);
+    if (failureEnvelope) {
+      syncConversationState(failureEnvelope);
+      attachTraceIdToLatestUserMessage();
+      if (!isTestMode.value && userMessages.value.length > 0) {
+        userMessages.value.pop();
+      }
+      toast.warning('本轮结构化输出连续失败，状态未更新。请点击重试再试一次。');
+    } else {
+      toast.error(error.message || '回复失败，请稍后重试');
+    }
   } finally {
     loading.value = false;
   }
@@ -1629,11 +2194,11 @@ onUnmounted(() => {
 <style scoped>
 /* ========== 基础布局 ========== */
 .goal-conversation-page {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   background: var(--bg-body);
   position: relative;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -2200,6 +2765,7 @@ onUnmounted(() => {
   gap: 8px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .planning-messages {
@@ -2210,6 +2776,7 @@ onUnmounted(() => {
   min-height: 0;
   max-height: none;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .planning-conversation-layout--entry .planning-messages {
@@ -2274,6 +2841,36 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--planning-blue-deep);
   letter-spacing: 0.04em;
+}
+
+.planning-msg__debug-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.planning-msg__debug-badge--warning {
+  color: #9a3412;
+  background: rgba(251, 191, 36, 0.18);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.planning-msg__debug-badge--success {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.planning-msg__debug-badge--info {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.24);
 }
 
 .planning-msg p {
@@ -2350,6 +2947,24 @@ onUnmounted(() => {
 
 [data-theme="dark"] .planning-msg__role {
   color: rgba(96, 165, 250, 0.95);
+}
+
+[data-theme="dark"] .planning-msg__debug-badge--warning {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.24);
+}
+
+[data-theme="dark"] .planning-msg__debug-badge--success {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(134, 239, 172, 0.2);
+}
+
+[data-theme="dark"] .planning-msg__debug-badge--info {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(147, 197, 253, 0.22);
 }
 
 [data-theme="dark"] .planning-msg p :deep(code) {
@@ -2689,6 +3304,130 @@ onUnmounted(() => {
 .planning-composer {
   display: grid;
   gap: 12px;
+}
+
+.planning-msg-trace {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.88);
+  border: 1px solid rgba(23, 32, 51, 0.08);
+}
+
+.planning-msg-trace__summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--planning-blue-deep);
+  list-style: none;
+}
+
+.planning-msg-trace__summary::-webkit-details-marker {
+  display: none;
+}
+
+.planning-msg-trace__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-msg-trace__meta span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.planning-msg-trace__section {
+  display: grid;
+  gap: 8px;
+}
+
+.planning-msg-trace__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--planning-muted);
+}
+
+.planning-msg-trace pre,
+.planning-msg-trace__attempt pre {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.95);
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+.planning-msg-trace__raw-details {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-msg-trace__raw-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--planning-ink);
+}
+
+.planning-msg-trace__attempts {
+  display: grid;
+  gap: 12px;
+}
+
+.planning-msg-trace__attempt {
+  display: grid;
+  gap: 8px;
+}
+
+.planning-msg-trace__attempt-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: var(--planning-muted);
+  font-size: 12px;
+}
+
+.planning-msg-trace__attempt-head strong {
+  color: var(--planning-ink);
+  font-size: 13px;
+}
+
+.planning-msg-trace__attempt-head em {
+  font-style: normal;
+  color: var(--planning-blue-deep);
+}
+
+.planning-msg-trace__failure {
+  color: #c23b3b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.planning-msg-trace__violations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-msg-trace__violations span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #c23b3b;
+  font-size: 12px;
 }
 
 .planning-composer--entry {
@@ -3153,24 +3892,8 @@ onUnmounted(() => {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-textarea {
-  flex: 1;
-  display: block;
-  border: none;
-  outline: none;
-  resize: none;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: var(--text-primary);
-  background: transparent;
-  min-height: 1.6em;
-  max-height: 120px;
-  padding: 0.2rem 0;
-}
-
-textarea::placeholder {
-  color: var(--text-muted);
+.planning-composer textarea {
+  scrollbar-gutter: stable;
 }
 
 .input-actions {
@@ -3605,10 +4328,10 @@ textarea::placeholder {
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
   padding: 28px 0 8px;
-  min-height: calc(100vh - 72px);
-  min-height: calc(100dvh - 72px);
-  height: calc(100vh - 72px);
-  height: calc(100dvh - 72px);
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  height: auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3705,7 +4428,7 @@ textarea::placeholder {
   display: grid;
   grid-template-columns: minmax(255px, 290px) minmax(0, 1fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
   margin-top: 0;
   min-height: 0;
   flex: 1;
@@ -3729,8 +4452,11 @@ textarea::placeholder {
   display: grid;
   gap: 20px;
   padding: 22px 20px;
-  min-height: auto;
-  align-self: start;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .planning-status-stack {
@@ -3878,6 +4604,151 @@ textarea::placeholder {
   gap: 10px;
 }
 
+.planning-debug-block {
+  display: grid;
+  gap: 12px;
+}
+
+.planning-debug-block__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.planning-debug-block__head strong {
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planning-debug-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.planning-debug-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.planning-debug-metric span {
+  color: var(--planning-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.planning-debug-metric strong {
+  color: var(--planning-ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.planning-debug-traces {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-debug-trace {
+  border-radius: 18px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+  overflow: hidden;
+}
+
+.planning-debug-trace[open] {
+  border-color: rgba(52, 120, 246, 0.2);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+.planning-debug-trace__summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.planning-debug-trace__summary::-webkit-details-marker {
+  display: none;
+}
+
+.planning-debug-trace__summary strong {
+  display: block;
+  color: var(--planning-ink);
+  font-size: 13px;
+}
+
+.planning-debug-trace__summary span {
+  display: block;
+  margin-top: 4px;
+  color: var(--planning-muted);
+  font-size: 11px;
+}
+
+.planning-debug-trace__summary div span:last-child {
+  color: #b45309;
+}
+
+.planning-debug-trace__summary em {
+  color: var(--planning-blue-deep);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.planning-debug-trace__meta {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.planning-debug-trace__meta span {
+  color: var(--planning-muted);
+  font-size: 10px;
+  text-align: right;
+}
+
+.planning-debug-trace__body {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.planning-debug-trace__section {
+  display: grid;
+  gap: 6px;
+}
+
+.planning-debug-trace__label {
+  color: var(--planning-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.planning-debug-trace__section pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #dbeafe;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
 .planning-confirmed-block--compact {
   gap: 0;
 }
@@ -4023,13 +4894,12 @@ textarea::placeholder {
 }
 
 .planning-chat-card {
-  min-height: calc(100vh - 92px);
-  min-height: calc(100dvh - 92px);
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(260px, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 14px;
   padding: 22px;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
 }
@@ -4038,6 +4908,7 @@ textarea::placeholder {
   min-height: 0;
   height: 100%;
   padding-bottom: 12px;
+  align-self: stretch;
 }
 
 .planning-conversation-layout--entry .planning-chat-card {
@@ -4047,6 +4918,7 @@ textarea::placeholder {
   flex-direction: column;
   gap: 14px;
   padding: 22px;
+  align-self: stretch;
   overflow: hidden;
 }
 
@@ -4158,6 +5030,8 @@ textarea::placeholder {
 .planning-status-card {
   display: grid;
   gap: 14px;
+  min-height: 0;
+  align-content: start;
 }
 
 .planning-proposal-detail span {
@@ -4305,12 +5179,12 @@ font-weight: 800;
 }
 
 .planning-proposal {
-  padding: 24px;
+  padding: 18px 20px;
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(255, 255, 255, 0.92));
   border: 1px solid rgba(52, 120, 246, 0.12);
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .planning-proposal--pending {
@@ -4319,83 +5193,148 @@ font-weight: 800;
 }
 
 .planning-proposal__head {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.planning-proposal__head strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--planning-ink);
 }
 
 .planning-proposal__eyebrow {
+  display: block;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.planning-proposal__lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--planning-ink);
+}
+
+.planning-proposal__problem-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 247, 255, 0.98));
+  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.08);
+}
+
+.planning-proposal__problem-kicker {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
-  padding: 4px 10px;
+  padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
+  background: rgba(52, 120, 246, 0.1);
   color: var(--planning-blue-deep);
   font-size: 11px;
   font-weight: 800;
 }
 
-.planning-proposal__head strong {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--planning-ink);
-}
-
-.planning-proposal__head span {
-  font-size: 13px;
-  color: var(--planning-muted);
-}
-
-.planning-proposal__transition {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--planning-blue-deep);
-  font-weight: 600;
-}
-
-.planning-proposal__stages {
+.planning-proposal__contract {
   display: grid;
   gap: 10px;
 }
 
-.planning-proposal__stage {
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: rgba(243, 246, 251, 0.84);
+.planning-proposal.planning-proposal--pending {
   display: grid;
-  gap: 6px;
-  border: 1px solid rgba(23, 32, 51, 0.05);
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.12), rgba(255, 255, 255, 0.96));
+  border: 1px solid rgba(52, 120, 246, 0.12);
 }
 
-.planning-proposal__stage strong {
-  font-size: 14px;
-  color: var(--planning-ink);
-  line-height: 1.45;
-}
-
-.planning-proposal__stage p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--planning-muted);
-}
-
-.planning-proposal__stages--summary {
+.planning-proposal__list {
+  display: grid;
   gap: 12px;
 }
 
-.planning-proposal__stage--summary strong {
-  font-size: 14px;
-  font-weight: 700;
+.planning-proposal__item {
+  display: grid;
+  gap: 4px;
 }
 
-.planning-proposal__stage--summary p {
+.planning-proposal__item + .planning-proposal__item {
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 32, 51, 0.08);
+}
+
+.planning-proposal__item strong {
+  color: var(--planning-blue-deep);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.planning-proposal__item p {
+  margin: 0;
   color: var(--planning-ink);
+  font-size: 15px;
+  line-height: 1.65;
 }
 
-.planning-proposal__hint-list {
+.planning-proposal__path-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: grid;
   gap: 6px;
+}
+
+.planning-proposal__path-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--planning-blue-deep);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.planning-proposal__path-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--planning-ink);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.planning-proposal__pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-proposal__pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  color: var(--planning-blue-deep);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .planning-proposal__actions {
@@ -4403,6 +5342,71 @@ font-weight: 800;
   flex-wrap: wrap;
   gap: 12px;
   padding-top: 2px;
+}
+
+.planning-proposal--supplement {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.94));
+  border-color: rgba(245, 158, 11, 0.18);
+}
+
+.planning-proposal--supplement .planning-proposal__eyebrow {
+  color: #b45309;
+}
+
+.planning-proposal__supplement-input {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(245, 158, 11, 0.04);
+  border: 1px solid rgba(245, 158, 11, 0.1);
+}
+
+.planning-proposal__supplement-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  padding: 10px 14px;
+}
+
+.planning-proposal__supplement-field textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--planning-ink);
+  outline: none;
+  min-height: 1.6em;
+  max-height: 80px;
+}
+
+.planning-proposal__supplement-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--planning-blue);
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.planning-proposal__supplement-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.planning-proposal__supplement-send .el-icon {
+  font-size: 18px;
 }
 
 .planning-pending-card--compact {
@@ -4688,9 +5692,16 @@ font-weight: 800;
   color: var(--planning-ink);
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 820px) {
   .planning-conversation-layout {
     grid-template-columns: 1fr;
+  }
+
+  .planning-side-card {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    align-self: start;
   }
 
   .planning-main {
@@ -4750,15 +5761,15 @@ font-weight: 800;
     border-radius: 24px;
   }
 
+  .planning-debug-metrics {
+    grid-template-columns: 1fr;
+  }
+
   .planning-conversation-layout--entry .planning-chat-card,
   .planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
     padding: 20px;
     height: auto;
     overflow: visible;
-  }
-
-  .planning-proposal__stages {
-    grid-template-columns: 1fr;
   }
 
   .planning-chat-main,
@@ -4847,6 +5858,14 @@ font-weight: 800;
     padding: 16px;
   }
 
+  .planning-proposal {
+    padding: 16px;
+  }
+
+  .planning-proposal__head {
+    align-items: flex-start;
+  }
+
   .planning-chat-content {
     padding-inline: 0;
   }
@@ -4868,6 +5887,19 @@ font-weight: 800;
 
   .planning-composer__selected-tags {
     width: 100%;
+  }
+
+  .planning-debug-trace__summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planning-debug-trace__meta {
+    justify-items: start;
+  }
+
+  .planning-debug-trace__meta span {
+    text-align: left;
   }
 
   .planning-composer__box textarea {

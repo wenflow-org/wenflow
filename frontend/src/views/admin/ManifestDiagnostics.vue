@@ -3,12 +3,12 @@
     <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
 
     <div class="page-hero">
-      <span class="pill">Admin</span>
+      <span class="pill">高级诊断</span>
       <h2 class="page-hero__title">
         <el-icon class="page-hero__icon"><WarningFilled /></el-icon>
-        架构诊断
+        Agent 架构诊断
       </h2>
-      <p class="page-hero__subtitle">检查 Agent 架构完整性和潜在问题</p>
+      <p class="page-hero__subtitle">用于排查 manifest、注册表、模型配置与日志协议漂移（工程治理）</p>
     </div>
 
     <div class="toolbar">
@@ -160,7 +160,6 @@ const summaryItems = computed(() => {
     { label: '日志 Agent 数', value: s.calledAgentTotal },
     { label: '目录条目', value: s.catalogTotal },
     { label: '日志输出样本', value: s.outputContractSampleSize ?? 0 },
-    { label: 'Arena 输出样本', value: s.arenaOutputContractSampleSize ?? 0 },
     { label: '漂移总数', value: s.driftCount }
   ];
 });
@@ -171,10 +170,6 @@ const outputContractRows = computed(() => {
     {
       source: 'agent_call_logs',
       ...diagnostics.value.outputContracts.agentCallLogs
-    },
-    {
-      source: 'arena_agent_logs',
-      ...diagnostics.value.outputContracts.arenaAgentLogs
     }
   ];
 });
@@ -386,13 +381,4 @@ onMounted(loadData);
   }
 }
 
-[data-theme="dark"] .page-hero {
-  background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%), linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(20, 20, 30, 0.92));
-  border-color: rgba(52, 120, 246, 0.12);
-}
-
-[data-theme="dark"] .panel-card {
-  background: linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(20, 20, 30, 0.92));
-  border-color: rgba(52, 120, 246, 0.12);
-}
 </style>

@@ -39,7 +39,7 @@ router.get('/:agentId', async (req, res) => {
   try {
     const config = await agentModelConfigService.get(req.params.agentId);
     if (!config) {
-      return res.status(404).json({ success: false, error: '配置不存在' });
+      return res.json({ success: true, data: null });
     }
     res.json({ success: true, data: toResponseShape(config) });
   } catch (error: any) {

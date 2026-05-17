@@ -12,9 +12,9 @@
       <div class="overview-hero__glow"></div>
       <div class="overview-hero__content">
         <div class="overview-hero__left">
-          <span class="pill">数据概览</span>
+          <span class="pill">后台概览</span>
           <h1 class="overview-hero__title">平台运行状态</h1>
-          <p class="overview-hero__subtitle">实时监控用户增长、学习路径推进和 Agent 调用情况</p>
+          <p class="overview-hero__subtitle">查看用户、路径、Agent 和系统状态</p>
         </div>
         <div class="overview-hero__right">
           <el-button class="hero-refresh-btn" @click="refreshAll" :loading="refreshing">
@@ -111,13 +111,11 @@
             <span class="trend-label">今日调用</span>
           </div>
           <div class="stat-card__meta">
-            <span>24h 活跃 Agent：{{ stats.agents?.activeAgents24h || 0 }}</span>
+            <span>24h 活跃：{{ stats.agents?.activeAgents24h || 0 }}</span>
             <span>今日超时：{{ stats.agents?.todayTimeouts || 0 }}</span>
           </div>
-          <div v-if="stats.agents?.wrapup?.sampleSize" class="stat-card__meta stat-card__meta--detail">
+          <div v-if="stats.agents?.wrapup?.sampleSize" class="stat-card__meta">
             <span>Wrapup 样本：{{ stats.agents.wrapup.sampleSize }}</span>
-            <span>总结(model/fallback)：{{ stats.agents.wrapup.summaryModel || 0 }}/{{ stats.agents.wrapup.summaryFallback || 0 }}</span>
-            <span>评估(model/ai-fallback/failed)：{{ stats.agents.wrapup.evaluationModel || 0 }}/{{ stats.agents.wrapup.evaluationAiFallback || 0 }}/{{ stats.agents.wrapup.evaluationFailed || 0 }}</span>
           </div>
         </div>
       </div>
@@ -194,13 +192,16 @@
 
     <!-- 最近活动 -->
     <div class="section">
-      <h3 class="section-title">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-        最近活动
-      </h3>
+      <div class="section-head">
+        <h3 class="section-title">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+          最近活动
+        </h3>
+        <router-link class="section-link" to="/admin/activity-stream">查看全部活动</router-link>
+      </div>
       <el-timeline>
         <el-timeline-item
-          v-for="activity in recentActivities"
+          v-for="activity in recentActivitySummary"
           :key="activity.id"
           :timestamp="formatTime(activity.createdAt)"
           placement="top"
@@ -226,6 +227,8 @@ const stats = ref<any>({});
 const agentStatuses = ref<any[]>([]);
 const recentActivities = ref<any[]>([]);
 const refreshing = ref(false);
+
+const recentActivitySummary = computed(() => recentActivities.value.slice(0, 5));
 
 const trendPoints = computed(() => {
   const points = stats.value?.agents?.last24h || [];
@@ -318,7 +321,7 @@ const loadActivity = async () => {
     }
     
     activities.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    recentActivities.value = activities.slice(0, 20);
+    recentActivities.value = activities.slice(0, 50);
   } catch (error: any) {
     console.error('加载活动日志失败:', error);
   }
@@ -438,9 +441,9 @@ onMounted(() => {
 .overview-hero {
   position: relative;
   z-index: 1;
-  margin-bottom: 2rem;
-  padding: 28px 32px;
-  border-radius: 20px;
+  margin-bottom: 1.5rem;
+  padding: 20px 24px;
+  border-radius: 16px;
   border: 1px solid rgba(52, 120, 246, 0.08);
   background:
     radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%),
@@ -495,21 +498,21 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  padding: 0 18px;
-  border-radius: 12px;
+  padding: 0 16px;
+  border-radius: 14px;
   border: 1px solid rgba(52, 120, 246, 0.12);
-  background: rgba(255, 255, 255, 0.8);
+  background: color-mix(in srgb, var(--bg-surface) 84%, white);
   color: var(--color-primary);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 180ms ease;
 }
 
 .hero-refresh-btn:hover {
   background: color-mix(in srgb, var(--color-primary) 8%, white);
-  border-color: rgba(52, 120, 246, 0.2);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 16%, rgba(52, 120, 246, 0.2));
+  color: var(--color-primary-dark);
 }
 
 /* pill 标签 */
@@ -542,17 +545,22 @@ onMounted(() => {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 2rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.stats-grid > .stat-card--conversations,
+.stats-grid > .stat-card--agents {
+  grid-column: span 2;
 }
 
 .stat-card {
   display: flex;
   align-items: flex-start;
-  gap: 1.25rem;
-  padding: 1.5rem;
-  border-radius: 20px;
+  gap: 0.75rem;
+  padding: 1.125rem;
+  border-radius: 16px;
   border: 1px solid rgba(52, 120, 246, 0.08);
   background: rgba(255, 255, 255, 0.84);
   backdrop-filter: blur(12px);
@@ -560,41 +568,24 @@ onMounted(() => {
 }
 
 .stat-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
   border-color: rgba(52, 120, 246, 0.14);
 }
 
 /* 卡片渐变底色 */
-.stat-card--users {
-  background: linear-gradient(180deg, rgba(52, 120, 246, 0.04), rgba(255, 255, 255, 0.88));
-}
-
-.stat-card--active {
-  background: linear-gradient(180deg, rgba(244, 170, 70, 0.05), rgba(255, 255, 255, 0.88));
-}
-
-.stat-card--paths {
-  background: linear-gradient(180deg, rgba(49, 177, 111, 0.04), rgba(255, 255, 255, 0.88));
-}
-
-.stat-card--tasks {
-  background: linear-gradient(180deg, rgba(49, 177, 111, 0.05), rgba(255, 255, 255, 0.88));
-}
-
-.stat-card--conversations {
-  background: linear-gradient(180deg, rgba(141, 107, 255, 0.05), rgba(255, 255, 255, 0.88));
-}
-
-.stat-card--agents {
-  background: linear-gradient(180deg, rgba(67, 176, 216, 0.05), rgba(255, 255, 255, 0.88));
-}
+.stat-card--users { background: linear-gradient(180deg, rgba(52, 120, 246, 0.04), rgba(255, 255, 255, 0.88)); }
+.stat-card--active { background: linear-gradient(180deg, rgba(244, 170, 70, 0.05), rgba(255, 255, 255, 0.88)); }
+.stat-card--paths { background: linear-gradient(180deg, rgba(49, 177, 111, 0.04), rgba(255, 255, 255, 0.88)); }
+.stat-card--tasks { background: linear-gradient(180deg, rgba(49, 177, 111, 0.05), rgba(255, 255, 255, 0.88)); }
+.stat-card--conversations { background: linear-gradient(180deg, rgba(141, 107, 255, 0.05), rgba(255, 255, 255, 0.88)); }
+.stat-card--agents { background: linear-gradient(180deg, rgba(67, 176, 216, 0.05), rgba(255, 255, 255, 0.88)); }
 
 /* Icon 容器 */
 .stat-card__icon-wrap {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -602,8 +593,8 @@ onMounted(() => {
 }
 
 .stat-card__icon-wrap svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .stat-card__icon-wrap--users {
@@ -651,13 +642,13 @@ onMounted(() => {
 
 .stat-card__value {
   display: block;
-  font-family: 'Inter', sans-serif;
-  font-size: 2rem;
+  font-family: var(--font-sans);
+  font-size: 1.625rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.04em;
   line-height: 1.1;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .stat-card__trend {
@@ -722,11 +713,9 @@ onMounted(() => {
    Section 面板
    ========================================== */
 .section {
-  position: relative;
-  z-index: 1;
-  margin-top: 2rem;
-  padding: 1.5rem;
-  border-radius: 20px;
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border-radius: 16px;
   border: 1px solid rgba(52, 120, 246, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72));
   backdrop-filter: blur(12px);
@@ -734,13 +723,32 @@ onMounted(() => {
 }
 
 .section-title {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-link {
+  color: #2d62cf;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.section-link:hover {
+  color: #1f4da8;
+  text-decoration: underline;
 }
 
 /* ==========================================
@@ -977,188 +985,18 @@ onMounted(() => {
 }
 
 /* ==========================================
-   暗色模式
-   ========================================== */
-[data-theme="dark"] .overview-hero {
-  background:
-    radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%),
-    linear-gradient(180deg, rgba(30, 45, 58, 0.8), rgba(26, 37, 47, 0.85));
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] .stat-card {
-  background: rgba(30, 45, 58, 0.74);
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] .stat-card--users {
-  background: linear-gradient(180deg, rgba(52, 120, 246, 0.06), rgba(30, 45, 58, 0.78));
-}
-
-[data-theme="dark"] .stat-card--active {
-  background: linear-gradient(180deg, rgba(244, 170, 70, 0.06), rgba(30, 45, 58, 0.78));
-}
-
-[data-theme="dark"] .stat-card--paths {
-  background: linear-gradient(180deg, rgba(49, 177, 111, 0.06), rgba(30, 45, 58, 0.78));
-}
-
-[data-theme="dark"] .stat-card--tasks {
-  background: linear-gradient(180deg, rgba(49, 177, 111, 0.06), rgba(30, 45, 58, 0.78));
-}
-
-[data-theme="dark"] .stat-card--conversations {
-  background: linear-gradient(180deg, rgba(141, 107, 255, 0.06), rgba(30, 45, 58, 0.78));
-}
-
-[data-theme="dark"] .stat-card--agents {
-  background: linear-gradient(180deg, rgba(67, 176, 216, 0.06), rgba(30, 45, 58, 0.78));
-}
-
-[data-theme="dark"] .stat-card:hover {
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-}
-
-[data-theme="dark"] .section {
-  background: linear-gradient(180deg, rgba(30, 45, 58, 0.6), rgba(26, 37, 47, 0.72));
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] .trend-panel {
-  background: rgba(30, 45, 58, 0.5);
-}
-
-[data-theme="dark"] .activity-card {
-  background: rgba(30, 45, 58, 0.6);
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] .activity-card:hover {
-  background: rgba(30, 45, 58, 0.8);
-}
-
-[data-theme="dark"] .pill {
-  background: rgba(52, 120, 246, 0.15);
-  color: #8db3fa;
-}
-
-[data-theme="dark"] .hero-refresh-btn {
-  background: rgba(52, 120, 246, 0.1);
-  border-color: rgba(52, 120, 246, 0.2);
-  color: #5a94f8;
-}
-
-[data-theme="dark"] .hero-refresh-btn:hover {
-  background: rgba(52, 120, 246, 0.18);
-}
-
-[data-theme="dark"] .trend-badge--success {
-  background: rgba(49, 177, 111, 0.15);
-  color: #5cc98b;
-}
-
-[data-theme="dark"] .trend-badge--primary {
-  background: rgba(52, 120, 246, 0.15);
-  color: #8db3fa;
-}
-
-[data-theme="dark"] .trend-badge--accent {
-  background: rgba(141, 107, 255, 0.15);
-  color: #a98fff;
-}
-
-[data-theme="dark"] .trend-badge--subtle {
-  background: rgba(148, 163, 184, 0.15);
-}
-
-[data-theme="dark"] .overview-hero__title {
-  color: var(--text-primary);
-}
-
-[data-theme="dark"] .overview-hero__subtitle {
-  color: var(--text-secondary);
-}
-
-[data-theme="dark"] .stat-card__label {
-  color: var(--text-secondary);
-}
-
-[data-theme="dark"] .stat-card__value {
-  color: var(--text-primary);
-}
-
-[data-theme="dark"] .section-title {
-  color: var(--text-primary);
-}
-
-[data-theme="dark"] :deep(.el-table) {
-  --el-table-bg-color: transparent;
-  --el-bg-color: transparent;
-  --el-fill-color-blank: transparent;
-  --el-text-color-primary: var(--text-primary);
-  --el-text-color-regular: var(--text-secondary);
-  --el-border-color-lighter: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] :deep(.el-table th.el-table__cell) {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-[data-theme="dark"] :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
-  background: rgba(255, 255, 255, 0.015);
-}
-
-[data-theme="dark"] :deep(.el-table .el-table__row:hover > td.el-table__cell) {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-[data-theme="dark"] :deep(.el-progress-bar__outer) {
-  background-color: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] :deep(.el-timeline-item__tail) {
-  border-left-color: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] :deep(.el-timeline-item__timestamp) {
-  color: var(--text-muted);
-}
-
-[data-theme="dark"] :deep(.el-card) {
-  background: rgba(30, 45, 58, 0.74) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-[data-theme="dark"] .stat-card__icon-wrap--users {
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.2), rgba(52, 120, 246, 0.08));
-  color: #5a94f8;
-}
-
-[data-theme="dark"] .stat-card__icon-wrap--active {
-  background: linear-gradient(135deg, rgba(244, 170, 70, 0.2), rgba(244, 170, 70, 0.08));
-  color: #f7c07a;
-}
-
-[data-theme="dark"] .stat-card__icon-wrap--paths,
-[data-theme="dark"] .stat-card__icon-wrap--tasks {
-  background: linear-gradient(135deg, rgba(49, 177, 111, 0.2), rgba(49, 177, 111, 0.08));
-  color: #5cc98b;
-}
-
-[data-theme="dark"] .stat-card__icon-wrap--conversations {
-  background: linear-gradient(135deg, rgba(141, 107, 255, 0.2), rgba(141, 107, 255, 0.08));
-  color: #a98fff;
-}
-
-[data-theme="dark"] .stat-card__icon-wrap--agents {
-  background: linear-gradient(135deg, rgba(67, 176, 216, 0.2), rgba(67, 176, 216, 0.08));
-  color: #6ec5e3;
-}
-
-/* ==========================================
-   响应式
+    响应式
    ========================================== */
 @media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stats-grid > .stat-card--conversations,
+  .stats-grid > .stat-card--agents {
+    grid-column: span 2;
+  }
+
   .overview-hero__content {
     flex-direction: column;
     align-items: flex-start;
@@ -1170,8 +1008,13 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .stats-grid > .stat-card--conversations,
+  .stats-grid > .stat-card--agents {
+    grid-column: span 1;
+  }
+
   .overview-hero {
-    padding: 20px;
+    padding: 16px;
   }
 
   .section {

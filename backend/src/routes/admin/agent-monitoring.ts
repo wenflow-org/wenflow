@@ -99,7 +99,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
  */
 router.get('/metrics/detail', async (req: Request, res: Response) => {
   try {
-    const { agentId, startTime, endTime, page = '1', limit = '50' } = req.query;
+    const { agentId, startTime, endTime, sourceEntry, page = '1', limit = '50' } = req.query;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -111,13 +111,19 @@ router.get('/metrics/detail', async (req: Request, res: Response) => {
       where.agentId = agentId;
     }
 
+    if (sourceEntry) {
+      where.sourceEntry = sourceEntry;
+    }
+
     if (startTime || endTime) {
       where.calledAt = {};
       if (startTime) where.calledAt.gte = new Date(startTime as string);
       if (endTime) where.calledAt.lte = new Date(endTime as string);
     }
 
-    const [logs, total] = await Promise.all([
+    const baseWhere = { ...where };
+
+    const [logs, total, successCount, errorCount, timeoutCount, sourceStats] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where,
         orderBy: { calledAt: 'desc' },
@@ -131,22 +137,44 @@ router.get('/metrics/detail', async (req: Request, res: Response) => {
           durationMs: true,
           tokensUsed: true,
           error: true,
+          errorCode: true,
           calledAt: true,
-          metadata: true
+          metadata: true,
+          sourceEntry: true
         }
       }),
-      prisma.agent_call_logs.count({ where })
+      prisma.agent_call_logs.count({ where }),
+      prisma.agent_call_logs.count({ where: { ...where, success: true } }),
+      prisma.agent_call_logs.count({ where: { ...where, success: false } }),
+      prisma.agent_call_logs.count({ where: { ...where, errorCode: 'TIMEOUT' } }),
+      prisma.agent_call_logs.groupBy({
+        by: ['sourceEntry'],
+        where: baseWhere,
+        _count: true
+      })
     ]);
 
     res.json({
       success: true,
       data: {
-        logs,
+        logs: logs.map(l => ({ ...l, sourceEntry: l.sourceEntry || 'platform' })),
         pagination: {
           page: pageNum,
           limit: limitNum,
           total,
           totalPages: Math.ceil(total / limitNum)
+        },
+        stats: {
+          total,
+          success: successCount,
+          error: errorCount,
+          timeout: timeoutCount,
+          bySource: {
+            user: sourceStats.find(s => s.sourceEntry === 'user')?._count || 0,
+            test: sourceStats.find(s => s.sourceEntry === 'test')?._count || 0,
+            admin: sourceStats.find(s => s.sourceEntry === 'admin')?._count || 0,
+            platform: sourceStats.find(s => s.sourceEntry === 'platform')?._count || 0
+          }
         }
       }
     });
@@ -260,7 +288,7 @@ router.get('/strategies/stats', async (req: Request, res: Response) => {
  */
 router.get('/errors', async (req: Request, res: Response) => {
   try {
-    const { agentId, page = '1', limit = '50' } = req.query;
+    const { agentId, sourceEntry, page = '1', limit = '50' } = req.query;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -272,7 +300,13 @@ router.get('/errors', async (req: Request, res: Response) => {
       where.agentId = agentId;
     }
 
-    const [errors, total] = await Promise.all([
+    if (sourceEntry) {
+      where.sourceEntry = sourceEntry;
+    }
+
+    const baseWhere = { ...where };
+
+    const [errors, total, sourceStats] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where,
         orderBy: { calledAt: 'desc' },
@@ -288,21 +322,36 @@ router.get('/errors', async (req: Request, res: Response) => {
           errorCode: true,
           durationMs: true,
           calledAt: true,
-          metadata: true
+          metadata: true,
+          sourceEntry: true
         }
       }),
-      prisma.agent_call_logs.count({ where })
+      prisma.agent_call_logs.count({ where }),
+      prisma.agent_call_logs.groupBy({
+        by: ['sourceEntry'],
+        where: baseWhere,
+        _count: true
+      })
     ]);
 
     res.json({
       success: true,
       data: {
-        errors,
+        errors: errors.map(e => ({ ...e, sourceEntry: e.sourceEntry || 'platform' })),
         pagination: {
           page: pageNum,
           limit: limitNum,
           total,
           totalPages: Math.ceil(total / limitNum)
+        },
+        stats: {
+          total,
+          bySource: {
+            user: sourceStats.find(s => s.sourceEntry === 'user')?._count || 0,
+            test: sourceStats.find(s => s.sourceEntry === 'test')?._count || 0,
+            admin: sourceStats.find(s => s.sourceEntry === 'admin')?._count || 0,
+            platform: sourceStats.find(s => s.sourceEntry === 'platform')?._count || 0
+          }
         }
       }
     });

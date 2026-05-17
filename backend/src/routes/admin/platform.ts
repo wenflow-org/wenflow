@@ -845,7 +845,19 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
           userVisible: manifest?.userVisible ?? false,
           monitoringGroup: manifest?.monitoringGroup || null,
           ioContractVersion: manifest?.ioContractVersion || 'legacy',
-          aliases: manifest?.aliases || []
+          aliases: manifest?.aliases || [],
+          promptManagement: {
+            mode: canonicalAgentId === 'ai-teaching-agent'
+              ? 'orchestrator-no-direct-prompt'
+              : canonicalAgentId === 'tutor-agent'
+                ? 'legacy-service'
+                : 'agent-prompt',
+            note: canonicalAgentId === 'ai-teaching-agent'
+              ? '该编排器本身不直接持有单一 System Prompt，教学主输出由 teaching-turn-agent、peer-agent、session-wrapup-agent 等成员 agent 提供。'
+              : canonicalAgentId === 'tutor-agent'
+                ? '该名称当前更像旧服务概念，不是已注册的独立 runtime agent。若需要 Prompt 管理，应先确认真实运行 ID。'
+                : null
+          }
         },
         definition: {
           capabilities: registration?.definition.capabilities || [],

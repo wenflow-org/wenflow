@@ -32,13 +32,37 @@
         <span class="stat-percent">({{ calculatePercent(stats.error, stats.total) }}%)</span>
       </div>
       <div class="stat-divider"></div>
-      <div class="stat-item warning" @click="setFilter('status', 'timeout')">
-        <span class="stat-dot warning"></span>
-        <span class="stat-label">超时</span>
-        <span class="stat-value">{{ formatNumber(stats.timeout) }}</span>
-        <span class="stat-percent">({{ calculatePercent(stats.timeout, stats.total) }}%)</span>
+<div class="stat-item warning" @click="setFilter('status', 'timeout')">
+          <span class="stat-dot warning"></span>
+          <span class="stat-label">超时</span>
+          <span class="stat-value">{{ formatNumber(stats.timeout) }}</span>
+          <span class="stat-percent">({{ calculatePercent(stats.timeout, stats.total) }}%)</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item user" @click="setFilter('sourceEntry', 'user')">
+          <span class="stat-dot user"></span>
+          <span class="stat-label">用户侧</span>
+          <span class="stat-value">{{ stats.bySource?.user || 0 }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item test" @click="setFilter('sourceEntry', 'test')">
+          <span class="stat-dot test"></span>
+          <span class="stat-label">测试站点</span>
+          <span class="stat-value">{{ stats.bySource?.test || 0 }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item admin" @click="setFilter('sourceEntry', 'admin')">
+          <span class="stat-dot admin"></span>
+          <span class="stat-label">Admin</span>
+          <span class="stat-value">{{ stats.bySource?.admin || 0 }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item platform" @click="setFilter('sourceEntry', 'platform')">
+          <span class="stat-dot platform"></span>
+          <span class="stat-label">平台</span>
+          <span class="stat-value">{{ stats.bySource?.platform || 0 }}</span>
+        </div>
       </div>
-    </div>
 
     <!-- 筛选器 -->
     <div class="filter-section">
@@ -111,18 +135,29 @@
         </div>
 
         <div class="filter-item">
-          <label>时间范围</label>
-          <el-select
-            v-model="filters.timeRange"
-            placeholder="时间范围"
-            class="filter-select"
-          >
-            <el-option label="今天" value="today" />
-            <el-option label="昨天" value="yesterday" />
-            <el-option label="最近7天" value="week" />
-            <el-option label="最近30天" value="month" />
-            <el-option label="全部" value="all" />
+          <label>来源</label>
+          <el-select v-model="filters.sourceEntry" placeholder="全部来源" clearable class="filter-select">
+            <el-option label="用户侧" value="user" />
+            <el-option label="测试站点" value="test" />
+            <el-option label="Admin 后台" value="admin" />
+            <el-option label="平台内部" value="platform" />
           </el-select>
+        </div>
+
+        <div class="filter-item">
+          <label>精确时间</label>
+          <el-date-picker
+            v-model="filters.timeRangeExact"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            format="YYYY-MM-DD HH:mm"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            :shortcuts="timeShortcuts"
+            clearable
+            class="time-picker"
+          />
         </div>
 
         <div class="filter-item search-item">
@@ -178,10 +213,19 @@
         <div class="log-header">
           <div class="log-meta">
             <span class="log-time">{{ formatDateTime(log.createdAt) }}</span>
+            <el-tag size="small" :type="getSourceTagType(log.sourceEntry)" effect="plain">
+              {{ getSourceLabel(log.sourceEntry) }}
+            </el-tag>
             <el-tag size="small" :type="getAgentTagType(log.agentName)">
               {{ getAgentDisplayName(log.agentName) }}
             </el-tag>
             <el-tag size="small" :type="getLogStatusType(log.status)">
+              <el-icon class="status-icon" v-if="log.status === 'success'"><SuccessFilled /></el-icon>
+              <el-icon class="status-icon" v-if="log.status === 'timeout'"><Timer /></el-icon>
+              <el-icon class="status-icon" v-if="log.status === 'error' && !log.errorCode"><CircleCloseFilled /></el-icon>
+              <el-icon class="status-icon" v-if="log.errorCode === 'NETWORK_ERROR'"><Link /></el-icon>
+              <el-icon class="status-icon" v-if="log.errorCode === 'VALIDATION_ERROR'"><WarningFilled /></el-icon>
+              <el-icon class="status-icon" v-if="log.errorCode === 'MODEL_ERROR'"><Service /></el-icon>
               {{ getLogStatusText(log.status) }}
             </el-tag>
             <span class="log-action">{{ log.action }}</span>
@@ -207,7 +251,9 @@
           </div>
           <div class="preview-row" v-if="log.traceId">
             <span class="preview-label">Trace:</span>
-            <span class="preview-content">{{ log.traceId }}</span>
+            <el-button type="primary" link size="small" class="trace-link" @click="filterByTraceId(log.traceId)">
+              {{ log.traceId }}
+            </el-button>
           </div>
           <div class="preview-row" v-if="log.sessionId">
             <span class="preview-label">Session:</span>
@@ -301,7 +347,7 @@
               复制
             </el-button>
           </div>
-          <pre class="json-block">{{ formatJson(selectedLog.input) }}</pre>
+          <pre class="json-block" v-html="highlightJson(formatJson(selectedLog.input))"></pre>
         </div>
 
         <!-- 输出 -->
@@ -313,7 +359,7 @@
               复制
             </el-button>
           </div>
-          <pre class="json-block">{{ formatJson(selectedLog.output) }}</pre>
+          <pre class="json-block" v-html="highlightJson(formatJson(selectedLog.output))"></pre>
         </div>
 
         <!-- 错误 -->
@@ -349,7 +395,12 @@ import {
   DocumentCopy,
   Download,
   Timer,
-  Cpu
+  Cpu,
+  SuccessFilled,
+  CircleCloseFilled,
+  Link,
+  WarningFilled,
+  Service
 } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
 import { adminAxios } from '@/api/adminApi';
@@ -364,6 +415,7 @@ interface Log {
   input?: string;
   output?: string;
   error?: string;
+  errorCode?: string;
   traceId?: string;
   sessionId?: string;
   durationMs: number;
@@ -388,7 +440,8 @@ const stats = reactive({
   total: 0,
   success: 0,
   error: 0,
-  timeout: 0
+  timeout: 0,
+  bySource: { user: 0, test: 0, admin: 0, platform: 0 }
 });
 
 // 筛选器
@@ -398,9 +451,19 @@ const filters = reactive({
   traceId: '',
   sessionId: '',
   status: '',
+  sourceEntry: '',
   timeRange: 'today',
+  timeRangeExact: null as [string, string] | null,
   keyword: ''
 });
+
+// 时间快捷选项
+const timeShortcuts = [
+  { text: '最近15分钟', value: () => [new Date(Date.now() - 15 * 60 * 1000), new Date()] },
+  { text: '最近1小时', value: () => [new Date(Date.now() - 60 * 60 * 1000), new Date()] },
+  { text: '最近3小时', value: () => [new Date(Date.now() - 3 * 60 * 60 * 1000), new Date()] },
+  { text: '今天', value: () => [new Date(new Date().setHours(0,0,0,0)), new Date()] },
+];
 
 // 选项
 const agentOptions = ref<Array<{ label: string; value: string }>>([
@@ -431,12 +494,18 @@ const loadLogs = async () => {
       limit: pagination.limit
     };
 
-    if (filters.agentName) params.agentName = filters.agentName;
+if (filters.agentName) params.agentName = filters.agentName;
     if (filters.agentId) params.agentId = filters.agentId;
     if (filters.traceId) params.traceId = filters.traceId;
     if (filters.sessionId) params.sessionId = filters.sessionId;
     if (filters.status) params.status = filters.status;
-    if (filters.timeRange) params.timeRange = filters.timeRange;
+    if (filters.sourceEntry) params.sourceEntry = filters.sourceEntry;
+    if (filters.timeRangeExact && filters.timeRangeExact[0]) {
+      params.startTime = filters.timeRangeExact[0];
+      params.endTime = filters.timeRangeExact[1];
+    } else if (filters.timeRange) {
+      params.timeRange = filters.timeRange;
+    }
     if (filters.keyword) params.keyword = filters.keyword;
 
     const response: any = await adminAxios.get('/admin/agents/logs', { params });
@@ -451,6 +520,9 @@ const loadLogs = async () => {
         stats.success = serverStats.success || 0;
         stats.error = serverStats.error || 0;
         stats.timeout = serverStats.timeout || 0;
+        if (serverStats.bySource) {
+          stats.bySource = serverStats.bySource;
+        }
       } else {
         stats.total = pagination.total;
         stats.success = logs.value.filter(l => l.status === 'success').length;
@@ -468,14 +540,21 @@ const loadLogs = async () => {
 
 const getAgentDisplayName = (name: string) => {
   const map: Record<string, string> = {
-    RequirementCollection: '需求收集',
-    PathPlanning: '路径规划',
-    Teaching: '教学执行',
-    TeachingOrchestration: '教学编排',
-    'ai-teaching': '教学编排',
-    'ai-teaching-agent': '教学编排',
-    LearningCompanion: '伴学介入',
-    SessionWrapup: '课后产出'
+    'goal-conversation-agent': '目标对话',
+    'path-agent': '学习路径规划',
+    'ai-teaching-agent': 'AI 授课',
+    'learner-model-agent': '学习者模型',
+    'progress-agent': '进度追踪',
+    'content-generator': '内容生成',
+    'peer-agent': '伴学介入',
+    'session-wrapup-agent': '课后产出',
+    'RequirementCollection': '需求收集',
+    'PathPlanning': '路径规划',
+    'Teaching': '教学执行',
+    'TeachingOrchestration': '教学编排',
+    'LearningCompanion': '伴学介入',
+    'SessionWrapup': '课后产出',
+    'ai-teaching': '教学编排'
   };
   return map[name] || name;
 };
@@ -483,6 +562,12 @@ const getAgentDisplayName = (name: string) => {
 // 设置筛选
 const setFilter = (key: string, value: string) => {
   (filters as any)[key] = value;
+  handleSearch();
+};
+
+// 通过 Trace ID 筛选
+const filterByTraceId = (traceId: string) => {
+  filters.traceId = traceId;
   handleSearch();
 };
 
@@ -499,7 +584,9 @@ const handleReset = () => {
   filters.traceId = '';
   filters.sessionId = '';
   filters.status = '';
+  filters.sourceEntry = '';
   filters.timeRange = 'today';
+  filters.timeRangeExact = null;
   filters.keyword = '';
   pagination.page = 1;
   loadLogs();
@@ -617,6 +704,15 @@ const formatJson = (json: string) => {
   }
 };
 
+const highlightJson = (json: string): string => {
+  if (!json) return '';
+  return json
+    .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+    .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
+    .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+    .replace(/: (true|false|null)/g, ': <span class="json-bool">$1</span>');
+};
+
 // 日志状态样式
 const getLogStatusType = (status: string) => {
   const map: Record<string, any> = {
@@ -649,6 +745,26 @@ const getAgentTagType = (agentName: string) => {
     Summary: 'success'
   };
   return map[agentName] || 'info';
+};
+
+const getSourceTagType = (source: string) => {
+  const map: Record<string, any> = {
+    user: 'primary',
+    test: '',
+    admin: 'warning',
+    platform: 'info'
+  };
+  return map[source] || 'info';
+};
+
+const getSourceLabel = (source: string) => {
+  const map: Record<string, string> = {
+    user: '用户侧',
+    test: '测试站点',
+    admin: 'Admin',
+    platform: '平台'
+  };
+  return map[source] || '平台';
 };
 
 // 自动刷新
@@ -776,6 +892,38 @@ onUnmounted(() => {
 
 .stat-dot.warning {
   background: var(--color-accent);
+}
+
+.stat-dot.user {
+  background: #3b82f6;
+}
+
+.stat-dot.test {
+  background: #8b5cf6;
+}
+
+.stat-dot.admin {
+  background: #f59e0b;
+}
+
+.stat-dot.platform {
+  background: #6b7280;
+}
+
+.stat-item.user:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.stat-item.test:hover {
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.stat-item.admin:hover {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.stat-item.platform:hover {
+  background: rgba(107, 114, 128, 0.1);
 }
 
 /* 筛选器 */
@@ -1053,20 +1201,34 @@ onUnmounted(() => {
   background: var(--color-accent);
 }
 
-[data-theme="dark"] .page-hero {
-  background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%), linear-gradient(180deg, rgba(30, 30, 40, 0.92), rgba(20, 20, 30, 0.92));
-  border-color: rgba(52, 120, 246, 0.12);
+.status-icon {
+  margin-right: 4px;
+  font-size: 12px;
 }
 
-[data-theme="dark"] .stats-bar,
-[data-theme="dark"] .filter-section,
-[data-theme="dark"] .log-card {
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
+.trace-link {
+  font-family: monospace;
+  font-size: 0.75rem;
 }
 
-[data-theme="dark"] .stats-bar {
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(141, 107, 255, 0.04), var(--glass-bg-dark));
+.time-picker {
+  width: 280px;
+}
+
+.json-key {
+  color: #9cdcfe;
+}
+
+.json-string {
+  color: #ce9178;
+}
+
+.json-number {
+  color: #b5cea8;
+}
+
+.json-bool {
+  color: #569cd6;
 }
 
 /* Responsive breakpoints */

@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { getGateway } from '../gateway';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface SkillModelConfig {
   skillId: string;
@@ -86,7 +87,7 @@ class SkillModelConfigService {
       return await prisma.skill_model_configs.upsert({
         where: { skillId },
         update: { ...config, updatedAt: new Date() },
-        create: { skillId, ...config },
+        create: { id: uuidv4(), skillId, ...config, updatedAt: new Date() },
       });
     } catch (error) {
       logger.error(`Failed to upsert skill config: ${skillId}`, error);

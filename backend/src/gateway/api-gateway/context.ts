@@ -1,11 +1,13 @@
 import { AsyncLocalStorage } from 'async_hooks';
 
+export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab';
+
 export interface RequestContext {
   userId?: string;
   agentId?: string;
   action?: string;
   skillId?: string;
-  sourceEntry?: 'lab' | 'platform' | 'arena' | 'test';
+  sourceEntry?: SourceEntry;
   traceId?: string;
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';

@@ -3,18 +3,37 @@
     <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
     <div class="page-hero">
       <span class="pill">平台配置</span>
-      <h2 class="page-hero__title">
-        <el-icon><Setting /></el-icon>
+      <h2 class="page-hero__title admin-page-title">
+        <el-icon class="admin-page-title__icon"><Setting /></el-icon>
         API 管理
       </h2>
-      <p class="page-hero__subtitle">配置和管理外部 API 密钥与服务</p>
+      <p class="page-hero__subtitle">输入地址和 Key，拉取端点模型并快速配置默认模型</p>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-item">
+        <span class="summary-label">默认模型</span>
+        <strong class="summary-value">{{ form.defaultModel || '未设置' }}</strong>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">可用模型数</span>
+        <strong class="summary-value">{{ form.availableModels.length }}</strong>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">API Key</span>
+        <strong class="summary-value">{{ form.apiKeyConfigured ? '已配置' : '未配置' }}</strong>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">模型列表来源</span>
+        <strong class="summary-value">{{ lastFetchAt ? '已拉取' : '未拉取' }}</strong>
+      </div>
     </div>
 
     <div class="config-shell">
       <el-card class="config-card" shadow="never">
         <template #header>
           <div class="card-header">
-            <span class="card-title">平台 API 配置</span>
+            <span class="card-title">连接与模型配置</span>
             <div class="card-actions">
               <el-button @click="loadConfig" :loading="loading">刷新</el-button>
               <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
@@ -23,6 +42,7 @@
         </template>
 
         <el-form :model="form" label-width="160px" class="config-form">
+          <div class="form-section-title">连接配置</div>
           <el-form-item label="服务地址">
             <el-input v-model="form.apiUrl" placeholder="http://localhost:3000" />
           </el-form-item>
@@ -37,33 +57,83 @@
             <div class="hint-text">不会回显明文 Key；留空表示沿用当前 Key。</div>
           </el-form-item>
 
-          <el-form-item label="可用模型">
-            <el-input
-              v-model="modelsInput"
-              placeholder="多个模型用英文逗号分隔，如 deepseek-chat,deepseek-think"
-            />
-          </el-form-item>
-
-          <el-form-item label="默认模型">
-            <el-input v-model="form.defaultModel" placeholder="deepseek-chat" />
-          </el-form-item>
-
-          <el-form-item label="默认推理模型">
-            <el-input v-model="form.defaultReasoningModel" placeholder="deepseek-think" />
-          </el-form-item>
-
-          <el-form-item label="默认评估模型">
-            <el-input v-model="form.defaultEvaluationModel" placeholder="deepseek-think" />
-          </el-form-item>
-
           <el-form-item>
             <div class="form-actions">
-              <el-button type="primary" @click="testConnection" :loading="testing">测试连接</el-button>
+              <el-button type="primary" @click="fetchModels" :loading="testing">获取模型列表</el-button>
               <span v-if="testResult" class="test-result" :class="{ success: testResult.connected, error: !testResult.connected }">
                 {{ testResult.message }}
               </span>
             </div>
           </el-form-item>
+
+          <div class="form-section-title">模型选择</div>
+          <el-form-item label="可用模型">
+            <el-select
+              v-model="form.availableModels"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="先获取模型列表，也可手动补充"
+              style="width: 100%"
+            >
+              <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="手动补充模型">
+            <el-input
+              v-model="manualModelInput"
+              placeholder="输入模型名，多个用英文逗号分隔"
+            >
+              <template #append>
+                <el-button @click="appendManualModels">添加</el-button>
+              </template>
+            </el-input>
+          </el-form-item>
+
+          <el-form-item label="默认模型">
+            <el-select
+              v-model="form.defaultModel"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择或输入默认模型"
+              style="width: 100%"
+            >
+              <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+
+          <el-collapse class="advanced-collapse">
+            <el-collapse-item title="高级配置" name="advanced">
+              <el-form-item label="默认推理模型">
+                <el-select
+                  v-model="form.defaultReasoningModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择或输入默认推理模型"
+                  style="width: 100%"
+                >
+                  <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="默认评估模型">
+                <el-select
+                  v-model="form.defaultEvaluationModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择或输入默认评估模型"
+                  style="width: 100%"
+                >
+                  <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+            </el-collapse-item>
+          </el-collapse>
         </el-form>
       </el-card>
 
@@ -76,14 +146,8 @@
 
         <div class="registration-control">
           <div>
-            <div class="status-label">平台注册开关</div>
-            <div class="status-value">{{ registrationEnabled ? '允许注册' : '关闭注册' }}</div>
-          </div>
-          <div class="registration-actions">
-            <el-switch v-model="registrationEnabled" />
-            <el-button size="small" type="primary" :loading="registrationSaving" @click="saveRegistrationSetting">
-              保存
-            </el-button>
+            <div class="status-label">最近拉取</div>
+            <div class="status-value">{{ lastFetchAt || '尚未拉取模型列表' }}</div>
           </div>
         </div>
 
@@ -94,7 +158,7 @@
           </div>
           <div class="status-item">
             <div class="status-label">API Key</div>
-            <div class="status-value">{{ form.apiKey || '未配置' }}</div>
+            <div class="status-value">{{ form.apiKeyConfigured ? '已配置（已脱敏）' : '未配置' }}</div>
           </div>
           <div class="status-item">
             <div class="status-label">模型数量</div>
@@ -113,16 +177,16 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { Setting } from '@element-plus/icons-vue';
-import { adminApiConfigApi, adminPlatformSettingsApi } from '@/api/adminApi';
+import { adminApiConfigApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 
 const loading = ref(false);
 const saving = ref(false);
 const testing = ref(false);
-const registrationSaving = ref(false);
-const registrationEnabled = ref(true);
-const modelsInput = ref('');
+const manualModelInput = ref('');
+const lastFetchAt = ref('');
 const testResult = ref<{ connected: boolean; message: string } | null>(null);
+const modelOptions = ref<string[]>([]);
 
 const form = reactive({
   apiUrl: '',
@@ -148,32 +212,11 @@ async function loadConfig() {
     form.defaultModel = data.defaultModel || '';
     form.defaultReasoningModel = data.defaultReasoningModel || '';
     form.defaultEvaluationModel = data.defaultEvaluationModel || '';
-    modelsInput.value = form.availableModels.join(', ');
+    modelOptions.value = Array.from(new Set(form.availableModels.filter(Boolean)));
   } catch (error: any) {
     toast.error(error.message || '加载 API 配置失败');
   } finally {
     loading.value = false;
-  }
-}
-
-async function loadRegistrationSetting() {
-  try {
-    const response: any = await adminPlatformSettingsApi.getRegistrationSetting();
-    registrationEnabled.value = !!response.data?.data?.registrationEnabled;
-  } catch (error: any) {
-    toast.error(error?.response?.data?.error?.message || '加载平台注册设置失败');
-  }
-}
-
-async function saveRegistrationSetting() {
-  registrationSaving.value = true;
-  try {
-    await adminPlatformSettingsApi.updateRegistrationSetting(registrationEnabled.value);
-    toast.success(`平台注册已${registrationEnabled.value ? '开启' : '关闭'}`);
-  } catch (error: any) {
-    toast.error(error?.response?.data?.error?.message || '保存平台注册设置失败');
-  } finally {
-    registrationSaving.value = false;
   }
 }
 
@@ -183,7 +226,7 @@ async function saveConfig() {
     await adminApiConfigApi.updateConfig({
       apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput,
-      availableModels: modelsInput.value,
+      availableModels: form.availableModels,
       defaultModel: form.defaultModel,
       defaultReasoningModel: form.defaultReasoningModel,
       defaultEvaluationModel: form.defaultEvaluationModel
@@ -197,7 +240,13 @@ async function saveConfig() {
   }
 }
 
-async function testConnection() {
+const mergeModelOptions = (models: string[]) => {
+  const merged = Array.from(new Set([...(form.availableModels || []), ...models].filter(Boolean)));
+  form.availableModels = merged;
+  modelOptions.value = Array.from(new Set([...(modelOptions.value || []), ...merged]));
+};
+
+async function fetchModels() {
   testing.value = true;
   testResult.value = null;
   try {
@@ -205,25 +254,45 @@ async function testConnection() {
       apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput
     });
+
+    const models = response.data?.data?.models || response.data?.data?.availableModels || [];
+    if (Array.isArray(models) && models.length > 0) {
+      mergeModelOptions(models.map((m: any) => String(m)));
+    }
+
+    lastFetchAt.value = new Date().toLocaleString();
     testResult.value = {
       connected: true,
-      message: `连接成功，发现 ${response.data.data.modelsCount} 个模型`
+      message: Array.isArray(models) && models.length > 0
+        ? `已获取 ${models.length} 个模型`
+        : `连接成功，发现 ${response.data?.data?.modelsCount ?? 0} 个模型（接口未返回具体列表）`
     };
-    toast.success('连接测试成功');
+    toast.success('模型列表获取成功');
   } catch (error: any) {
     testResult.value = {
       connected: false,
       message: error.response?.data?.error || error.message || '连接测试失败'
     };
-    toast.error('连接测试失败');
+    toast.error('模型列表获取失败');
   } finally {
     testing.value = false;
   }
 }
 
+function appendManualModels() {
+  const value = manualModelInput.value.trim();
+  if (!value) return;
+  const models = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (models.length === 0) return;
+  mergeModelOptions(models);
+  manualModelInput.value = '';
+}
+
 onMounted(() => {
   loadConfig();
-  loadRegistrationSetting();
 });
 </script>
 
@@ -246,6 +315,35 @@ onMounted(() => {
 .page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: flex; align-items: center; gap: 0.5rem; }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+
+.summary-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-item {
+  border-radius: 14px;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(244, 247, 252, 0.88));
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.summary-value {
+  font-size: 18px;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
 
 .config-shell {
   position: relative;
@@ -285,6 +383,27 @@ onMounted(() => {
 
 .config-form {
   max-width: 100%;
+}
+
+.form-section-title {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: rgba(52, 120, 246, 0.05);
+  color: #335aa4;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.advanced-collapse {
+  margin: 6px 0 2px;
+}
+
+.advanced-collapse :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .status-grid {
@@ -351,17 +470,11 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
-[data-theme="dark"] .page-hero { background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.1), transparent 34%), linear-gradient(180deg, rgba(30, 33, 42, 0.92), rgba(24, 27, 35, 0.92)); border-color: rgba(52, 120, 246, 0.12); }
-[data-theme="dark"] .pill { background: color-mix(in srgb, var(--color-primary) 18%, transparent); }
-
-[data-theme="dark"] .config-card,
-[data-theme="dark"] .status-item,
-[data-theme="dark"] .registration-control {
-  background: var(--glass-bg-dark);
-  border-color: var(--glass-border-dark);
-}
-
 @media (max-width: 1024px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .config-shell {
     grid-template-columns: 1fr;
   }

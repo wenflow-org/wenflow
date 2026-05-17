@@ -9,20 +9,20 @@
     <!-- 顶部导航栏 -->
     <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': scrolled }">
       <div class="header-container">
-        <button type="button" class="brand" @click="router.push('/dashboard')">
+        <button type="button" class="brand" @click="router.push(dashboardPath)">
           <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
         </button>
 
         <nav class="header-nav" aria-label="应用导航">
-          <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
-          <router-link to="/learning-paths" class="nav-item">学习路径</router-link>
-          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
-          <router-link to="/achievements" class="nav-item nav-item--active">成就</router-link>
+          <router-link :to="dashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
+          <router-link :to="goalConversationPath" class="nav-item">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
+          <router-link :to="learningPathsPath" class="nav-item">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
+          <router-link :to="learningStatePath" class="nav-item">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
+          <router-link :to="achievementsPath" class="nav-item nav-item--active">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -130,7 +130,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import request from '../utils/request';
@@ -141,7 +141,41 @@ import {
 } from '@element-plus/icons-vue';
 
 const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
+
+const isTestMode = computed(() => route.meta.isTestMode === true);
+const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const dashboardPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
+  }
+  return '/dashboard';
+});
+const goalConversationPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/goal-full' : '/test/goal-full';
+  }
+  return '/goal-conversation';
+});
+const learningPathsPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-paths' : '/test/learning-paths';
+  }
+  return '/learning-paths';
+});
+const learningStatePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-state' : '/learning-state';
+  }
+  return '/learning-state';
+});
+const achievementsPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/achievements' : '/achievements';
+  }
+  return '/achievements';
+});
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const scrolled = ref(false);

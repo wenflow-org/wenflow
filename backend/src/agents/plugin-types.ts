@@ -17,6 +17,7 @@ export interface AgentContext {
   userId?: string;
   taskId?: string;
   sessionId?: string;
+  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab';
   metadata?: Record<string, any>;
   history?: any[];
 }

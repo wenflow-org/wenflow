@@ -4,11 +4,10 @@
     <header class="admin-header">
       <div class="admin-header__brand">
         <img src="/logo.png" alt="" class="admin-header__logo" />
-        <span class="admin-header__title">WenFlow 管理平台</span>
+        <span class="admin-header__title">管理后台</span>
       </div>
 
       <div class="admin-header__right">
-        <ThemeSwitcher />
         <el-dropdown trigger="click">
           <div class="admin-header__user">
             <el-avatar :size="32" :src="currentUser?.avatarUrl">
@@ -32,6 +31,10 @@
     <div class="admin-layout">
       <!-- 侧边栏 -->
       <aside class="admin-sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="admin-sidebar__brand" v-show="!sidebarCollapsed">
+          <span>Admin Console</span>
+        </div>
+
         <nav class="admin-sidebar__nav">
           <!-- 分组 1: 内容管理 -->
           <div class="admin-sidebar__group">
@@ -77,6 +80,21 @@
               <span v-show="!sidebarCollapsed">{{ item.label }}</span>
             </router-link>
           </div>
+
+          <!-- 分组 4: 调试站点 -->
+          <div class="admin-sidebar__group">
+            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">调试站点</span>
+            <router-link
+              v-for="item in devDebugNav"
+              :key="item.to"
+              :to="item.to"
+              class="admin-sidebar__item"
+              :class="{ active: isActiveRoute(item.to) }"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
+            </router-link>
+          </div>
         </nav>
 
         <!-- 折叠按钮 -->
@@ -108,13 +126,16 @@ import {
   Connection,
   Grid,
   WarningFilled,
+  Clock,
   Setting,
   ArrowDown,
   SwitchButton,
   Expand,
   Fold,
+  PictureRounded,
+  Tickets,
+  MagicStick,
 } from '@element-plus/icons-vue';
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue';
 
 interface NavItem {
   to: string;
@@ -158,21 +179,26 @@ const isActiveRoute = (path: string) => {
 const contentNav: NavItem[] = [
   { to: '/admin/dashboard', label: '概览', icon: DataAnalysis },
   { to: '/admin/users', label: '用户管理', icon: User },
-  { to: '/admin/learner-models', label: '学习模型', icon: Reading },
+  { to: '/admin/learner-models', label: '学习者模型', icon: Reading },
   { to: '/admin/teaching-sessions', label: '教学会话', icon: Reading },
 ];
 
 const systemNav: NavItem[] = [
   { to: '/admin/api-config', label: 'API 管理', icon: Setting },
-  { to: '/admin/agent-registry', label: 'Agent 注册', icon: Grid },
-  { to: '/admin/agent-model-configs', label: '模型配置', icon: Cpu },
-  { to: '/admin/skill-model-configs', label: 'Skill 模型', icon: Operation },
+  { to: '/admin/agent-registry', label: 'Agent 管理', icon: Grid },
+  { to: '/admin/skill-model-configs', label: 'Skill 模型配置', icon: Operation },
 ];
 
 const monitorNav: NavItem[] = [
+  { to: '/admin/activity-stream', label: '活动流', icon: Clock },
   { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
   { to: '/admin/orchestrators', label: '编排视图', icon: Connection },
-  { to: '/admin/manifest-diagnostics', label: '诊断', icon: WarningFilled },
+];
+
+const devDebugNav: NavItem[] = [
+  { to: '/admin/ui-lab', label: 'UI Lab', icon: PictureRounded },
+  { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets },
+  { to: '/admin/test/prompt-stability', label: 'Prompt 稳定性', icon: MagicStick },
 ];
 
 const handleLogout = () => {
@@ -201,7 +227,7 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 24px;
   background: var(--glass-bg-light);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -212,11 +238,6 @@ const handleLogout = () => {
   transition: background var(--transition-normal), border-color var(--transition-normal);
 }
 
-[data-theme="dark"] .admin-header {
-  background: var(--glass-bg-dark);
-  border-bottom-color: var(--glass-border-dark);
-}
-
 .admin-header__brand {
   display: flex;
   align-items: center;
@@ -225,15 +246,16 @@ const handleLogout = () => {
 }
 
 .admin-header__logo {
-  height: 28px;
+  height: 48px;
   width: auto;
   object-fit: contain;
 }
 
 .admin-header__title {
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 
@@ -248,19 +270,23 @@ const handleLogout = () => {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  padding: 6px 12px;
-  border-radius: var(--fluent-radius-lg);
+  padding: 8px 14px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--bg-surface) 84%, white);
   color: var(--text-secondary);
-  transition: background var(--fluent-duration-fast) var(--fluent-easing);
+  transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
 .admin-header__user:hover {
-  background: var(--bg-muted);
+  background: color-mix(in srgb, var(--color-primary) 6%, white);
+  border-color: color-mix(in srgb, var(--color-primary) 14%, var(--border-default));
+  color: var(--text-primary);
 }
 
 .admin-header__user-name {
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -270,13 +296,13 @@ const handleLogout = () => {
   grid-template-columns: var(--sidebar-width, 240px) 1fr;
   height: calc(100vh - 56px);
   overflow: hidden;
-  transition: grid-template-columns var(--fluent-duration-normal) var(--fluent-easing);
+  transition: grid-template-columns 0.25s ease;
 }
 
 /* ========== 侧边栏 ========== */
 .admin-sidebar {
   width: var(--sidebar-width, 240px);
-  height: 100vh;
+  height: 100%;
   position: sticky;
   top: 0;
   align-self: flex-start;
@@ -288,16 +314,26 @@ const handleLogout = () => {
   flex-direction: column;
   padding: 16px 0;
   overflow: hidden;
-  transition: width var(--fluent-duration-normal) var(--fluent-easing), background var(--transition-normal);
+  transition: width 0.25s ease;
+}
+
+.admin-sidebar__brand {
+  padding: 0 20px 16px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border-light);
+}
+
+.admin-sidebar__brand span {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .admin-sidebar.collapsed {
   width: var(--sidebar-collapsed-width, 64px);
-}
-
-[data-theme="dark"] .admin-sidebar {
-  background: var(--glass-bg-dark);
-  border-right-color: var(--glass-border-dark);
 }
 
 .admin-sidebar__nav {
@@ -322,13 +358,13 @@ const handleLogout = () => {
 
 .admin-sidebar__group-title {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--text-muted);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 0 12px;
-  margin-bottom: 8px;
+  padding: 0 14px;
+  margin-bottom: 10px;
   white-space: nowrap;
 }
 
@@ -336,38 +372,34 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--fluent-radius-md);
+  padding: 11px 14px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
   text-decoration: none;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   position: relative;
-  transition: all var(--fluent-duration-fast) var(--fluent-easing);
+  transition: all 180ms ease;
 }
 
 .admin-sidebar__item:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-surface) 82%, white);
+  border-color: var(--border-default);
   color: var(--text-primary);
 }
 
 .admin-sidebar__item.active {
-  background: var(--sidebar-active-bg, color-mix(in srgb, var(--color-primary) 12%, transparent));
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
+  border-color: color-mix(in srgb, var(--color-primary) 16%, var(--border-default));
   color: var(--color-primary);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .admin-sidebar__item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: var(--color-primary);
-  border-radius: 0 2px 2px 0;
+  display: none;
 }
 
 .admin-sidebar__item .el-icon {
@@ -375,23 +407,24 @@ const handleLogout = () => {
   flex-shrink: 0;
 }
 
-/* 折叠按钮 */
 .admin-sidebar__toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 40px;
-  border: none;
+  width: calc(100% - 24px);
+  margin: 0 12px;
+  height: 42px;
+  border: 1px solid transparent;
+  border-radius: 14px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  border-top: 1px solid var(--border-default);
-  transition: all var(--fluent-duration-fast) var(--fluent-easing);
+  transition: all 180ms ease;
 }
 
 .admin-sidebar__toggle:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-surface) 82%, white);
+  border-color: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -431,6 +464,7 @@ const handleLogout = () => {
     width: var(--sidebar-collapsed-width, 64px);
   }
 
+  .admin-sidebar .admin-sidebar__brand,
   .admin-sidebar .admin-sidebar__group-title,
   .admin-sidebar .admin-sidebar__item span {
     display: none;

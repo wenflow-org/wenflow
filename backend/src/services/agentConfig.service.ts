@@ -68,6 +68,7 @@ export class AgentConfigService {
           id: `acl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           agentId: metrics.agentId,
           userId: metrics.userId,
+          sourceEntry: 'platform',
           input: metrics.input ? JSON.stringify(metrics.input) : null,
           output: metrics.output ? JSON.stringify(metrics.output) : null,
           success: metrics.success,

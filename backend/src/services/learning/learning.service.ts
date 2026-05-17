@@ -57,6 +57,7 @@ interface GeneratePathData {
     confirmedProposal?: any;
     confidenceScores?: any;
     conversationHistory?: Array<{ role: string; content: string }>;
+    pathSceneFraming?: any;
     replan?: {
       mode?: 'new_version' | 'overwrite';
       triggerSource?: string;
@@ -81,6 +82,7 @@ const ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES = [1, 5, 15] as const;
 const ENRICHMENT_AUTO_RETRY_SCAN_LIMIT = 200;
 
 type PathGenerationPhase = 'core' | 'enrichment';
+type PathCoreStep = 'framing' | 'planning' | 'persist' | 'completed';
 
 interface PathGenerationLogPayload {
   userId: string;
@@ -98,6 +100,7 @@ interface PathGenerationLogPayload {
 
 interface PathGenerationStatusPatch {
   core?: 'pending' | 'processing' | 'succeeded' | 'failed';
+  coreStep?: PathCoreStep;
   enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
   lastError?: string | null;
   sourceConversationId?: string | null;
@@ -105,10 +108,12 @@ interface PathGenerationStatusPatch {
   updatedAt?: string;
   enrichmentRetryCount?: number;
   lastEnrichmentRetryAt?: string | null;
+  scene?: Record<string, any> | null;
 }
 
 interface ParsedPathGenerationStatus {
   core?: 'pending' | 'processing' | 'succeeded' | 'failed';
+  coreStep?: PathCoreStep;
   enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
   lastError?: string | null;
   sourceConversationId?: string | null;
@@ -116,6 +121,64 @@ interface ParsedPathGenerationStatus {
   updatedAt?: string | null;
   enrichmentRetryCount?: number;
   lastEnrichmentRetryAt?: string | null;
+  scene?: Record<string, any> | null;
+}
+
+interface PathSceneFraming {
+  version: 'goal-path-scene-v1';
+  intent: string;
+  targetState: string;
+  firstDeliverable: string;
+  cognitiveDomain?: string;
+  planningFocus: string[];
+  excludedScope: string[];
+  resourceProfile: {
+    timeBudget?: string;
+    timeHorizon?: string;
+    pace?: string;
+  };
+  riskFlags: string[];
+  sourceGoal: {
+    surfaceGoal?: string;
+    realProblem?: string;
+    motivation?: string;
+    urgency?: string;
+  };
+}
+
+interface PathCognitiveConcept {
+  id: string;
+  name: string;
+  role: 'hub' | 'supporting';
+  description?: string;
+}
+
+interface PathCognitiveDesign {
+  cognitiveDomain?: string | null;
+  coreConcepts?: PathCognitiveConcept[];
+}
+
+interface PathAdjustmentPolicy {
+  allowedModes: Array<'expand' | 'compress' | 'replan'>;
+  recommendedMode?: 'expand' | 'compress' | 'replan' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'progress-agent' | 'system' | null;
+}
+
+interface PathAdjustmentEvidence {
+  stableConcepts?: string[];
+  fragileConcepts?: string[];
+  strugglingConcepts?: string[];
+  prerequisiteGaps?: string[];
+  pacingSignal?: 'fast' | 'slow' | 'balanced' | null;
+}
+
+interface NormalizedPathTask {
+  title: string;
+  description?: string;
+  type?: string;
+  estimatedMinutes?: number;
+  acceptanceCriteria?: string;
+  linkedConcept?: string;
 }
 
 function parsePathSummary(raw: string | null): string | null {
@@ -127,6 +190,171 @@ function parsePathSummary(raw: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeStringArray(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean);
+}
+
+function parsePathCognitiveDesign(raw: string | null): PathCognitiveDesign | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const candidate = parsed?.cognitiveDesign;
+
+    if (!candidate || typeof candidate !== 'object') {
+      return null;
+    }
+
+    const cognitiveDomain = typeof candidate.cognitiveDomain === 'string' && candidate.cognitiveDomain.trim()
+      ? candidate.cognitiveDomain.trim()
+      : null;
+    const coreConcepts = Array.isArray(candidate.coreConcepts)
+      ? candidate.coreConcepts
+          .map((concept: any, index: number) => {
+            const name = typeof concept?.name === 'string' ? concept.name.trim() : '';
+            if (!name) return null;
+            const role = concept?.role === 'hub' ? 'hub' : 'supporting';
+            const description = typeof concept?.description === 'string' && concept.description.trim()
+              ? concept.description.trim()
+              : undefined;
+            return {
+              id: typeof concept?.id === 'string' && concept.id.trim() ? concept.id.trim() : `concept-${index + 1}`,
+              name,
+              role,
+              description,
+            } as PathCognitiveConcept;
+          })
+          .filter(Boolean) as PathCognitiveConcept[]
+      : [];
+
+    if (!cognitiveDomain && coreConcepts.length === 0) {
+      return null;
+    }
+
+    return {
+      cognitiveDomain,
+      coreConcepts,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parsePathAdjustmentPolicy(raw: string | null): PathAdjustmentPolicy | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const candidate = parsed?.adjustmentPolicy;
+
+    if (!candidate || typeof candidate !== 'object') {
+      return null;
+    }
+
+    const allowedModes = Array.isArray(candidate.allowedModes)
+      ? candidate.allowedModes.filter((mode: any) => mode === 'expand' || mode === 'compress' || mode === 'replan')
+      : [];
+    const recommendedMode = candidate.recommendedMode === 'expand'
+      || candidate.recommendedMode === 'compress'
+      || candidate.recommendedMode === 'replan'
+      ? candidate.recommendedMode
+      : null;
+    const triggerSource = candidate.triggerSource === 'learn'
+      || candidate.triggerSource === 'ai-teaching'
+      || candidate.triggerSource === 'progress-agent'
+      || candidate.triggerSource === 'system'
+      ? candidate.triggerSource
+      : null;
+
+    if (allowedModes.length === 0 && !recommendedMode && !triggerSource) {
+      return null;
+    }
+
+    return {
+      allowedModes,
+      recommendedMode,
+      triggerSource,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parsePathAdjustmentEvidence(raw: string | null): PathAdjustmentEvidence | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const candidate = parsed?.adjustmentEvidence;
+
+    if (!candidate || typeof candidate !== 'object') {
+      return null;
+    }
+
+    const pacingSignal = candidate.pacingSignal === 'fast'
+      || candidate.pacingSignal === 'slow'
+      || candidate.pacingSignal === 'balanced'
+      ? candidate.pacingSignal
+      : null;
+
+    const evidence: PathAdjustmentEvidence = {
+      stableConcepts: normalizeStringArray(candidate.stableConcepts),
+      fragileConcepts: normalizeStringArray(candidate.fragileConcepts),
+      strugglingConcepts: normalizeStringArray(candidate.strugglingConcepts),
+      prerequisiteGaps: normalizeStringArray(candidate.prerequisiteGaps),
+      pacingSignal,
+    };
+
+    if (
+      evidence.stableConcepts?.length === 0
+      && evidence.fragileConcepts?.length === 0
+      && evidence.strugglingConcepts?.length === 0
+      && evidence.prerequisiteGaps?.length === 0
+      && !evidence.pacingSignal
+    ) {
+      return null;
+    }
+
+    return evidence;
+  } catch {
+    return null;
+  }
+}
+
+function buildSceneSummaryFromFraming(
+  sceneFraming: PathSceneFraming | null | undefined,
+  milestoneCount?: number,
+  taskCount?: number,
+) {
+  if (!sceneFraming) return null;
+
+  return {
+    title: sceneFraming.intent,
+    firstDeliverable: sceneFraming.firstDeliverable,
+    targetState: sceneFraming.targetState,
+    planningFocus: sceneFraming.planningFocus || [],
+    excludedScope: sceneFraming.excludedScope || [],
+    riskFlags: sceneFraming.riskFlags || [],
+    timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
+    timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
+    milestoneCount: typeof milestoneCount === 'number' ? milestoneCount : undefined,
+    taskCount: typeof taskCount === 'number' ? taskCount : undefined,
+  };
+}
+
+function slugifyConceptId(value: string, fallbackIndex: number): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .trim();
+
+  return normalized ? `concept-${normalized}` : `concept-${fallbackIndex + 1}`;
 }
 
 function parsePathGenerationStatus(raw: string | null): ParsedPathGenerationStatus | null {
@@ -146,8 +374,15 @@ function parsePathGenerationStatus(raw: string | null): ParsedPathGenerationStat
         : undefined;
     };
 
+    const normalizeCoreStep = (value: any): PathCoreStep | undefined => {
+      return value === 'framing' || value === 'planning' || value === 'persist' || value === 'completed'
+        ? value
+        : undefined;
+    };
+
     return {
       core: normalizeStageStatus(generation.core),
+      coreStep: normalizeCoreStep(generation.coreStep),
       enrichment: normalizeStageStatus(generation.enrichment),
       lastError: typeof generation.lastError === 'string' && generation.lastError.trim()
         ? generation.lastError.trim()
@@ -164,6 +399,9 @@ function parsePathGenerationStatus(raw: string | null): ParsedPathGenerationStat
         : 0,
       lastEnrichmentRetryAt: typeof generation.lastEnrichmentRetryAt === 'string'
         ? generation.lastEnrichmentRetryAt
+        : null,
+      scene: generation.scene && typeof generation.scene === 'object'
+        ? generation.scene
         : null
     };
   } catch {
@@ -225,6 +463,105 @@ function parseJsonSafe(raw: any): any {
 }
 
 class LearningService {
+  private normalizeCognitiveDesign(
+    candidate: PathCognitiveDesign | null | undefined,
+    fallbackDomain: string,
+    fallbackConceptNames: string[] = []
+  ): PathCognitiveDesign {
+    const rawConcepts = Array.isArray(candidate?.coreConcepts) ? candidate!.coreConcepts! : [];
+    const seenIds = new Set<string>();
+    const normalizedConcepts: PathCognitiveConcept[] = [];
+
+    for (let index = 0; index < rawConcepts.length; index += 1) {
+      const concept = rawConcepts[index];
+      const name = typeof concept?.name === 'string' ? concept.name.trim() : '';
+      if (!name) continue;
+
+      let id = typeof concept?.id === 'string' && concept.id.trim()
+        ? concept.id.trim()
+        : slugifyConceptId(name, index);
+      if (seenIds.has(id)) {
+        id = `${id}-${index + 1}`;
+      }
+      seenIds.add(id);
+
+      normalizedConcepts.push({
+        id,
+        name,
+        role: concept?.role === 'hub' ? 'hub' : 'supporting',
+        description: typeof concept?.description === 'string' && concept.description.trim()
+          ? concept.description.trim()
+          : undefined,
+      });
+    }
+
+    if (normalizedConcepts.length === 0) {
+      fallbackConceptNames.slice(0, 4).forEach((name, index) => {
+        normalizedConcepts.push({
+          id: `concept-${index + 1}`,
+          name,
+          role: index === 0 ? 'hub' : 'supporting',
+          description: index === 0
+            ? `优先围绕「${name}」建立第一层可迁移能力。`
+            : `作为后续阶段补充，用来支撑「${name}」相关任务推进。`
+        });
+      });
+    }
+
+    const hubIndex = normalizedConcepts.findIndex((concept) => concept.role === 'hub');
+    normalizedConcepts.forEach((concept, index) => {
+      concept.role = hubIndex === -1
+        ? (index === 0 ? 'hub' : 'supporting')
+        : (index === hubIndex ? 'hub' : 'supporting');
+    });
+
+    return {
+      cognitiveDomain: typeof candidate?.cognitiveDomain === 'string' && candidate.cognitiveDomain.trim()
+        ? candidate.cognitiveDomain.trim()
+        : fallbackDomain,
+      coreConcepts: normalizedConcepts,
+    };
+  }
+
+  private normalizeMilestoneTasks(
+    tasks: any[],
+    conceptIds: string[]
+  ): NormalizedPathTask[] {
+    const fallbackConceptId = conceptIds[0];
+
+    return (Array.isArray(tasks) ? tasks : []).map((task: any) => {
+      const requestedConceptId = typeof task?.linkedConcept === 'string' ? task.linkedConcept.trim() : '';
+      const linkedConcept = requestedConceptId && conceptIds.includes(requestedConceptId)
+        ? requestedConceptId
+        : fallbackConceptId;
+
+      return {
+        title: task?.title || '',
+        description: task?.description || '',
+        type: task?.type || 'practice',
+        estimatedMinutes: task?.estimatedMinutes || 30,
+        acceptanceCriteria: task?.acceptanceCriteria || '',
+        linkedConcept,
+      };
+    });
+  }
+
+  private normalizeMilestonesWithConcepts(milestonesData: any[], cognitiveDesign: PathCognitiveDesign) {
+    const conceptIds = Array.isArray(cognitiveDesign.coreConcepts)
+      ? cognitiveDesign.coreConcepts.map((concept) => concept.id)
+      : [];
+
+    return (Array.isArray(milestonesData) ? milestonesData : []).map((milestone: any, index: number) => ({
+      ...milestone,
+      stage: milestone?.stage || index + 1,
+      name: milestone?.name || milestone?.title || `里程碑${index + 1}`,
+      description: milestone?.description || '',
+      goal: milestone?.goal || '',
+      estimatedHours: milestone?.estimatedHours || 0,
+      tasks: this.normalizeMilestoneTasks(milestone?.tasks || [], conceptIds)
+    }));
+  }
+
   private getPathLearningAccessState(pathStatus: string | null | undefined, aiPromptTemplate: string | null) {
     const generationStatus = parsePathGenerationStatus(aiPromptTemplate);
     const enrichmentStatus = generationStatus?.enrichment;
@@ -359,6 +696,116 @@ class LearningService {
     } catch {
       return {};
     }
+  }
+
+  private buildPathCognitiveDesign(data: GeneratePathData, analysis: any): PathCognitiveDesign {
+    const sceneFraming = data.userProfile?.pathSceneFraming as PathSceneFraming | undefined;
+    const generatedCognitiveDesign = analysis?.cognitiveDesign && typeof analysis.cognitiveDesign === 'object'
+      ? analysis.cognitiveDesign
+      : null;
+    const confirmedStages = Array.isArray(data.userProfile?.confirmedProposal?.key_stages)
+      ? data.userProfile.confirmedProposal.key_stages.filter((item: any) => typeof item === 'string' && item.trim())
+      : [];
+    const milestoneNames = Array.isArray(analysis?.suggestedMilestones)
+      ? analysis.suggestedMilestones
+          .map((milestone: any) => milestone?.name || milestone?.title || milestone?.goal)
+          .filter((item: any) => typeof item === 'string' && item.trim())
+      : [];
+    const planningFocus = Array.isArray(sceneFraming?.planningFocus) ? sceneFraming.planningFocus : [];
+    const focusSource = planningFocus.length > 0
+      ? planningFocus
+      : confirmedStages.length > 0
+        ? confirmedStages
+        : milestoneNames;
+
+    const generatedCoreConcepts = Array.isArray(generatedCognitiveDesign?.coreConcepts)
+      ? generatedCognitiveDesign.coreConcepts
+          .map((concept: any, index: number) => {
+            const name = typeof concept?.name === 'string' ? concept.name.trim() : '';
+            if (!name) return null;
+            return {
+              id: typeof concept?.id === 'string' && concept.id.trim() ? concept.id.trim() : `concept-${index + 1}`,
+              name,
+              role: concept?.role === 'hub' ? 'hub' as const : 'supporting' as const,
+              description: typeof concept?.description === 'string' && concept.description.trim()
+                ? concept.description.trim()
+                : undefined,
+            };
+          })
+          .filter(Boolean) as PathCognitiveConcept[]
+      : [];
+
+    return this.normalizeCognitiveDesign(
+      {
+        cognitiveDomain: typeof generatedCognitiveDesign?.cognitiveDomain === 'string' && generatedCognitiveDesign.cognitiveDomain.trim()
+          ? generatedCognitiveDesign.cognitiveDomain.trim()
+          : sceneFraming?.cognitiveDomain || sceneFraming?.intent || analysis?.subject || data.description,
+        coreConcepts: generatedCoreConcepts,
+      },
+      sceneFraming?.cognitiveDomain || sceneFraming?.intent || analysis?.subject || data.description,
+      focusSource,
+    );
+  }
+
+  private buildPathAdjustmentPolicy(): PathAdjustmentPolicy {
+    return {
+      allowedModes: ['expand', 'compress', 'replan'],
+      recommendedMode: null,
+      triggerSource: null,
+    };
+  }
+
+  private buildPathAdjustmentEvidence(data: GeneratePathData): PathAdjustmentEvidence | null {
+    const learnerProjection = data.userProfile?.replan?.learnerReplanProjection;
+    if (!learnerProjection || typeof learnerProjection !== 'object') {
+      return null;
+    }
+
+    const stableConcepts = normalizeStringArray(learnerProjection?.mastery?.stableConcepts);
+    const fragileConcepts = normalizeStringArray(learnerProjection?.mastery?.fragileConcepts);
+    const strugglingConcepts = normalizeStringArray(learnerProjection?.mastery?.strugglingConcepts);
+    const prerequisiteGaps = Array.isArray(learnerProjection?.risk?.prerequisiteGaps)
+      ? learnerProjection.risk.prerequisiteGaps
+          .map((item: any) => typeof item?.label === 'string' ? item.label.trim() : '')
+          .filter(Boolean)
+      : [];
+
+    const evidence: PathAdjustmentEvidence = {
+      stableConcepts,
+      fragileConcepts,
+      strugglingConcepts,
+      prerequisiteGaps,
+      pacingSignal: null,
+    };
+
+    if (
+      stableConcepts.length === 0
+      && fragileConcepts.length === 0
+      && strugglingConcepts.length === 0
+      && prerequisiteGaps.length === 0
+    ) {
+      return null;
+    }
+
+    return evidence;
+  }
+
+  private getPathSceneSummary(raw: string | null, fallbackMilestones?: any[]): Record<string, any> | null {
+    const generationScene = parsePathGenerationStatus(raw)?.scene;
+    if (generationScene && typeof generationScene === 'object') {
+      return generationScene;
+    }
+
+    const parsed = this.parsePathPromptTemplate(raw);
+    const sceneFraming = parsed?.sceneFraming && typeof parsed.sceneFraming === 'object'
+      ? parsed.sceneFraming as PathSceneFraming
+      : null;
+    const milestoneCount = Array.isArray(fallbackMilestones) ? fallbackMilestones.length : undefined;
+    const taskCount = Array.isArray(fallbackMilestones)
+      ? fallbackMilestones.reduce((sum: number, milestone: any) => sum + ((milestone?.subtasks || []).length), 0)
+      : undefined;
+
+    return buildSceneSummaryFromFraming(sceneFraming, milestoneCount, taskCount);
   }
 
   private async updatePathGenerationStatus(pathId: string, patch: PathGenerationStatusPatch): Promise<void> {
@@ -744,16 +1191,29 @@ class LearningService {
         deadlineText: data.deadlineText,
         totalWeeks: data.userProfile?.totalWeeks,
         userId: data.userId,
-        replan: data.userProfile?.replan
+        replan: data.userProfile?.replan,
+        pathSceneFraming: data.userProfile?.pathSceneFraming
       }
     };
   }
 
   private async analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     try {
-      const { pathAgentHandler } = await import('../../agents/path-agent');
+      const { pathAgentHandler, buildPathSceneFramingWithAI } = await import('../../agents/path-agent');
       const agentInput = this.buildPathAgentInput(data);
       const agentContext = { userId: data.userId };
+
+      if (!data.userProfile?.pathSceneFraming) {
+        const sceneFraming = await buildPathSceneFramingWithAI(agentInput, agentContext);
+        data.userProfile = {
+          ...(data.userProfile || {}),
+          pathSceneFraming: sceneFraming
+        };
+        agentInput.metadata = {
+          ...(agentInput.metadata || {}),
+          pathSceneFraming: sceneFraming
+        };
+      }
 
       const agentResult = await runWithContext({
         userId: data.userId,
@@ -782,6 +1242,7 @@ class LearningService {
         subject: path.subject || '综合',
         difficulty: data.userProfile?.skillLevel || 'beginner',
         estimatedTotalHours: path.estimatedHours || 0,
+        sceneFraming: data.userProfile?.pathSceneFraming || null,
         suggestedMilestones: (path.milestones || []).map((m: any, idx: number) => ({
           stage: m.stageNumber || idx + 1,
           name: m.title,
@@ -793,9 +1254,11 @@ class LearningService {
             description: t.description || '',
             type: t.type || 'practice',
             estimatedMinutes: t.estimatedMinutes || 30,
-            acceptanceCriteria: t.acceptanceCriteria || ''
+            acceptanceCriteria: t.acceptanceCriteria || '',
+            linkedConcept: typeof t.linkedConcept === 'string' ? t.linkedConcept : undefined,
           }))
         })),
+        cognitiveDesign: path.cognitiveDesign,
         recommendations: [],
         feasibility: 'high'
       };
@@ -809,6 +1272,18 @@ class LearningService {
   }
 
   private async persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[]) {
+    const cognitiveDesign = this.buildPathCognitiveDesign(data, analysis);
+    const normalizedMilestonesData = this.normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
+    const adjustmentPolicy = this.buildPathAdjustmentPolicy();
+    const adjustmentEvidence = this.buildPathAdjustmentEvidence(data);
+    const promptTemplatePayload = {
+      ...analysis,
+      suggestedMilestones: normalizedMilestonesData,
+      cognitiveDesign,
+      adjustmentPolicy,
+      adjustmentEvidence,
+    };
+
     const learningPath = await prisma.$transaction(async (tx) => {
       let path;
       if (data.existingPathId) {
@@ -819,11 +1294,11 @@ class LearningService {
             name: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
-              : (milestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
+              : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
             subject: analysis.subject || '综合',
             status: 'active',
             difficulty: analysis.difficulty || 'beginner',
-            totalMilestones: milestonesData.length || 1,
+            totalMilestones: normalizedMilestonesData.length || 1,
             estimatedHours: analysis.estimatedTotalHours || 0,
             deadline: data.deadline || null,
             deadlineText: data.deadlineText || null,
@@ -832,7 +1307,7 @@ class LearningService {
             replanTriggerSource: (data.userProfile as any)?.replan?.triggerSource || null,
             replanReason: data.description || null,
             aiGenerated: true,
-            aiPromptTemplate: JSON.stringify(analysis),
+            aiPromptTemplate: JSON.stringify(promptTemplatePayload),
             updatedAt: new Date()
           }
         });
@@ -849,10 +1324,10 @@ class LearningService {
             name: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
-              : (milestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
+              : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
             subject: analysis.subject || '综合',
             difficulty: analysis.difficulty || 'beginner',
-            totalMilestones: milestonesData.length || 1,
+            totalMilestones: normalizedMilestonesData.length || 1,
             estimatedHours: analysis.estimatedTotalHours || 0,
             deadline: data.deadline || null,
             deadlineText: data.deadlineText || null,
@@ -861,7 +1336,7 @@ class LearningService {
             replanTriggerSource: (data.userProfile as any)?.replan?.triggerSource || null,
             replanReason: data.description || null,
             aiGenerated: true,
-            aiPromptTemplate: JSON.stringify(analysis),
+            aiPromptTemplate: JSON.stringify(promptTemplatePayload),
             status: 'active',
             updatedAt: new Date()
           }
@@ -873,9 +1348,9 @@ class LearningService {
           id: `pd_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           userId: data.userId,
           goal: data.description,
-          stages: JSON.stringify(milestonesData.map((m: any) => m.name) || []),
-          milestones: JSON.stringify(milestonesData),
-          subtasks: JSON.stringify(milestonesData.flatMap((m: any) => m.tasks || []) || []),
+          stages: JSON.stringify(normalizedMilestonesData.map((m: any) => m.name) || []),
+          milestones: JSON.stringify(normalizedMilestonesData),
+          subtasks: JSON.stringify(normalizedMilestonesData.flatMap((m: any) => m.tasks || []) || []),
           aiAnalysis: JSON.stringify(analysis),
           feasibility: analysis.feasibility,
           difficulty: analysis.difficulty,
@@ -883,8 +1358,8 @@ class LearningService {
         }
       });
 
-      for (let i = 0; i < milestonesData.length; i++) {
-        const milestoneData = milestonesData[i];
+      for (let i = 0; i < normalizedMilestonesData.length; i++) {
+        const milestoneData = normalizedMilestonesData[i];
         const stageNum = milestoneData.stage || i + 1;
 
         const milestone = await (tx.milestones as any).create({
@@ -915,6 +1390,7 @@ class LearningService {
                 taskType: taskData.type || 'practice',
                 estimatedMinutes: taskData.estimatedMinutes || 30,
                 acceptanceCriteria: taskData.acceptanceCriteria || '',
+                coreConcept: typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
                 order: j,
                 status: 'todo',
                 updatedAt: new Date()
@@ -926,7 +1402,7 @@ class LearningService {
 
       await tx.learning_paths.update({
         where: { id: path.id },
-        data: { totalMilestones: milestonesData.length }
+          data: { totalMilestones: normalizedMilestonesData.length }
       });
 
       return path;
@@ -1151,14 +1627,24 @@ class LearningService {
       }
 
       const milestonesData = analysis.suggestedMilestones || [];
-      const fullPath = await this.persistGeneratedPath(data, analysis, milestonesData);
+      const cognitiveDesign = this.buildPathCognitiveDesign(data, analysis);
+      const normalizedMilestonesData = this.normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
+      const fullPath = await this.persistGeneratedPath(data, {
+        ...analysis,
+        cognitiveDesign,
+      }, normalizedMilestonesData);
       const duration = Date.now() - startTime;
+      const sceneSummary = buildSceneSummaryFromFraming(
+        data.userProfile?.pathSceneFraming || null,
+        normalizedMilestonesData.length,
+        normalizedMilestonesData.reduce((sum: number, milestone: any) => sum + ((milestone?.tasks || []).length), 0)
+      );
 
-      logger.info(`学习路径核心生成完成：${fullPath.id}`, {
-        userId: data.userId,
-        milestoneCount: milestonesData.length,
-        durationMs: duration
-      });
+        logger.info(`学习路径核心生成完成：${fullPath.id}`, {
+          userId: data.userId,
+          milestoneCount: normalizedMilestonesData.length,
+          durationMs: duration
+        });
 
       await this.recordPathGenerationStageLog({
         userId: data.userId,
@@ -1170,7 +1656,7 @@ class LearningService {
         durationMs: duration,
         output: {
           pathId: fullPath.id,
-          milestoneCount: milestonesData.length,
+          milestoneCount: normalizedMilestonesData.length,
           estimatedHours: fullPath.estimatedHours || analysis.estimatedTotalHours || 0
         }
       });
@@ -1181,6 +1667,7 @@ class LearningService {
         lastError: null,
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
+        scene: sceneSummary,
         updatedAt: new Date().toISOString()
       });
 
@@ -1365,6 +1852,10 @@ const learningPath = await prisma.learning_paths.findUnique({
         ...pathWithActualMinutes,
         summary: parsePathSummary(path.aiPromptTemplate),
         generationStatus: accessState.generationStatus,
+        sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, pathWithActualMinutes.milestones),
+        cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
+        adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
+        adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
         canStartLearning: accessState.canStartLearning,
         learningBlockedReason: accessState.learningBlockedReason,
         replanLineage: {
@@ -1412,6 +1903,10 @@ const learningPath = await prisma.learning_paths.findUnique({
           name: path.title,
           summary: parsePathSummary(path.aiPromptTemplate),
           generationStatus: accessState.generationStatus,
+          sceneSummary: this.getPathSceneSummary(path.aiPromptTemplate, path.milestones),
+          cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
+          adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
+          adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
           canStartLearning: accessState.canStartLearning,
           learningBlockedReason: accessState.learningBlockedReason,
           replanLineage: {

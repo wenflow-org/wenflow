@@ -2,27 +2,42 @@
   <div class="teaching-sessions-page">
     <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
     <div class="page-hero">
-      <span class="pill">教学调试</span>
-      <h2 class="page-hero__title">
-        <el-icon class="page-title-icon"><Reading /></el-icon>
-        教学会话调试
-      </h2>
-      <p class="page-hero__subtitle">查看和调试 AI 教学会话记录</p>
+      <span class="pill">教学会话</span>
+      <h1 class="page-hero__title admin-page-title">
+        <el-icon class="admin-page-title__icon"><Reading /></el-icon>
+        教学会话巡检
+      </h1>
+      <p class="page-hero__subtitle">查看会话状态、产物质量与人工关注项</p>
     </div>
 
-    <div class="toolbar glass-toolbar">
-      <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
-      <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
-        <el-option label="进行中" value="active" />
-        <el-option label="已完成" value="completed" />
-        <el-option label="超时" value="timeout" />
-      </el-select>
-      <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
-      <el-button type="primary" @click="loadSessions">刷新</el-button>
+    <div class="stats-grid">
+      <div class="mini-stat"><span>总会话</span><strong>{{ sessions.length }}</strong></div>
+      <div class="mini-stat"><span>进行中</span><strong>{{ statusSummary.active }}</strong></div>
+      <div class="mini-stat"><span>已完成</span><strong>{{ statusSummary.completed }}</strong></div>
+      <div class="mini-stat"><span>超时/错误</span><strong>{{ statusSummary.timeout + statusSummary.error }}</strong></div>
+      <div class="mini-stat"><span>有建议</span><strong>{{ advisoryCount }}</strong></div>
     </div>
 
-    <div class="table-wrap"><el-table v-loading="loading" :data="sessions" stripe>
-      <el-table-column prop="subject" label="主题" min-width="220">
+    <div class="toolbar glass-toolbar admin-list-toolbar">
+      <div class="admin-list-toolbar__group">
+        <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
+        <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
+          <el-option label="进行中" value="active" />
+          <el-option label="已完成" value="completed" />
+          <el-option label="超时" value="timeout" />
+          <el-option label="错误" value="error" />
+        </el-select>
+        <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
+        <el-checkbox v-model="filters.onlyAttention">仅看待关注</el-checkbox>
+        <el-checkbox v-model="filters.onlyMissingWrapup">仅看缺少 Wrapup</el-checkbox>
+      </div>
+      <div class="admin-list-toolbar__group">
+        <el-button type="primary" @click="loadSessions">刷新</el-button>
+      </div>
+    </div>
+
+    <div class="table-wrap admin-list-card"><el-table v-loading="loading" :data="sessions" stripe>
+      <el-table-column label="会话" min-width="260">
         <template #default="{ row }">
           <div class="topic-cell">
             <strong>{{ row.topic }}</strong>
@@ -43,37 +58,43 @@
           <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="duration" label="时长" width="90" align="center" />
-      <el-table-column prop="messageCount" label="消息" width="90" align="center" />
-      <el-table-column label="Wrapup" min-width="260" show-overflow-tooltip>
+      <el-table-column label="互动规模" width="150" align="center">
         <template #default="{ row }">
-          <div v-if="row.wrapup" class="summary-cell">
-            <el-tag size="small" :type="row.wrapup.status === 'complete' ? 'success' : 'warning'">{{ row.wrapup.status }}</el-tag>
-            <span class="wrapup-text">总结：{{ row.wrapup.sources?.summary || '-' }}</span>
-            <span class="wrapup-text">评估：{{ row.wrapup.sources?.evaluation || '-' }}</span>
-            <span class="truncate">{{ row.wrapup.summary?.topicSummary || '暂无总结' }}</span>
+          <div class="scale-cell">
+            <strong>{{ formatDuration(row.duration) }}</strong>
+            <span>{{ row.messageCount || 0 }} 条消息</span>
           </div>
-          <span v-else class="muted">暂无</span>
         </template>
       </el-table-column>
-      <el-table-column label="建议" min-width="240">
+      <el-table-column label="产物状态" min-width="220">
         <template #default="{ row }">
-          <div v-if="row.advisory?.shouldSuggest" class="summary-cell">
-            <el-tag size="small" :type="priorityTag(row.advisory.priority)">{{ row.advisory.priority }}</el-tag>
-            <span>{{ row.advisory.recommendation }}</span>
-            <span class="truncate">{{ row.advisory.ui?.title }}</span>
+          <div class="summary-cell">
+            <div class="artifact-tags">
+              <el-tag size="small" :type="getWrapupStatusTag(row)">Wrapup {{ getWrapupStatusText(row) }}</el-tag>
+              <el-tag size="small" :type="getAdvisoryStatusTag(row)">Advisory {{ getAdvisoryStatusText(row) }}</el-tag>
+            </div>
+            <span class="truncate">{{ getArtifactSummary(row) }}</span>
           </div>
-          <span v-else class="muted">无建议</span>
         </template>
       </el-table-column>
-      <el-table-column label="详情" width="100" align="center">
+      <el-table-column label="关注提示" min-width="200">
+        <template #default="{ row }">
+          <div class="summary-cell">
+            <div>
+              <el-tag size="small" :type="getAttentionTag(row)">{{ getAttentionLevel(row) }}</el-tag>
+            </div>
+            <span class="truncate">{{ getAttentionText(row) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="100" align="center">
         <template #default="{ row }">
           <el-button text @click="selectSession(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table></div>
 
-    <div class="pager">
+    <div class="pager admin-list-pagination">
       <el-pagination
         v-model:current-page="page"
         v-model:page-size="limit"
@@ -86,16 +107,44 @@
       />
     </div>
 
-    <el-drawer v-model="detailVisible" size="min(60%, 720px)" :title="selectedSession ? `教学会话 · ${selectedSession.topic}` : '会话详情'" destroy-on-close>
+    <el-drawer v-model="detailVisible" size="min(60%, 760px)" :title="selectedSession ? `教学会话 · ${selectedSession.topic}` : '会话详情'" destroy-on-close>
       <div v-if="selectedSession" class="detail-grid">
         <el-card shadow="never">
+          <template #header>会话概况</template>
+          <div class="kv-list">
+            <div class="kv-item"><span>用户</span><strong>{{ selectedSession.userName || selectedSession.userId }}</strong></div>
+            <div class="kv-item"><span>状态</span><strong>{{ getStatusLabel(selectedSession.status) }}</strong></div>
+            <div class="kv-item"><span>时长</span><strong>{{ formatDuration(selectedSession.duration) }}</strong></div>
+            <div class="kv-item"><span>消息数</span><strong>{{ selectedSession.messageCount || 0 }}</strong></div>
+            <div class="kv-item"><span>关注等级</span><strong>{{ getAttentionLevel(selectedSession) }}</strong></div>
+          </div>
+        </el-card>
+        <el-card shadow="never">
           <template #header>Wrapup 摘要</template>
-          <pre>{{ formatJson(selectedSession.wrapup) }}</pre>
+          <div class="kv-list">
+            <div class="kv-item"><span>状态</span><strong>{{ getWrapupStatusText(selectedSession) }}</strong></div>
+            <div class="kv-item"><span>总结来源</span><strong>{{ selectedSession.wrapup?.sources?.summary || '--' }}</strong></div>
+            <div class="kv-item"><span>评估来源</span><strong>{{ selectedSession.wrapup?.sources?.evaluation || '--' }}</strong></div>
+            <div class="kv-item"><span>摘要</span><strong>{{ selectedSession.wrapup?.summary?.topicSummary || '--' }}</strong></div>
+          </div>
         </el-card>
         <el-card shadow="never">
           <template #header>Advisory 摘要</template>
-          <pre>{{ formatJson(selectedSession.advisory) }}</pre>
+          <div class="kv-list">
+            <div class="kv-item"><span>是否触发</span><strong>{{ selectedSession.advisory?.shouldSuggest ? '是' : '否' }}</strong></div>
+            <div class="kv-item"><span>优先级</span><strong>{{ selectedSession.advisory?.priority || '--' }}</strong></div>
+            <div class="kv-item"><span>建议</span><strong>{{ selectedSession.advisory?.recommendation || '--' }}</strong></div>
+            <div class="kv-item"><span>UI 标题</span><strong>{{ selectedSession.advisory?.ui?.title || '--' }}</strong></div>
+          </div>
         </el-card>
+        <el-collapse>
+          <el-collapse-item title="查看原始 Wrapup JSON" name="wrapup">
+            <pre>{{ formatJson(selectedSession.wrapup) }}</pre>
+          </el-collapse-item>
+          <el-collapse-item title="查看原始 Advisory JSON" name="advisory">
+            <pre>{{ formatJson(selectedSession.advisory) }}</pre>
+          </el-collapse-item>
+        </el-collapse>
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
@@ -105,7 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { Reading } from '@element-plus/icons-vue';
 import { adminTeachingSessionsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
@@ -121,7 +170,21 @@ const filters = ref({
   userId: '',
   status: '',
   onlyWithAdvisory: false,
+  onlyAttention: false,
+  onlyMissingWrapup: false,
 });
+
+const statusSummary = computed(() => {
+  return sessions.value.reduce(
+    (acc, item) => {
+      acc[item.status] = (acc[item.status] || 0) + 1;
+      return acc;
+    },
+    { active: 0, completed: 0, timeout: 0, error: 0 } as Record<string, number>
+  );
+});
+
+const advisoryCount = computed(() => sessions.value.filter((item) => item.advisory?.shouldSuggest).length);
 
 const loadSessions = async () => {
   loading.value = true;
@@ -134,7 +197,14 @@ const loadSessions = async () => {
       onlyWithAdvisory: filters.value.onlyWithAdvisory || undefined,
     });
     const data = response.data?.data || response.data || {};
-    sessions.value = data.items || [];
+    let items = data.items || [];
+    if (filters.value.onlyMissingWrapup) {
+      items = items.filter((item: any) => !item.wrapup || !item.wrapup.summary?.topicSummary);
+    }
+    if (filters.value.onlyAttention) {
+      items = items.filter((item: any) => getAttentionLevel(item) !== '低关注');
+    }
+    sessions.value = items;
     total.value = data.total || 0;
   } catch (error: any) {
     toast.error(error.response?.data?.error?.message || error.message || '加载教学会话失败');
@@ -166,6 +236,68 @@ const priorityTag = (priority: string) => {
   return 'info';
 };
 
+const formatDuration = (duration: number | null | undefined) => {
+  if (duration === null || duration === undefined) return '--';
+  if (duration < 60) return `${duration}s`;
+  const min = Math.floor(duration / 60);
+  const sec = duration % 60;
+  return `${min}m ${sec}s`;
+};
+
+const getWrapupStatusText = (row: any) => {
+  if (!row.wrapup) return '缺失';
+  if (row.wrapup.status === 'complete') return '完成';
+  return row.wrapup.status || '处理中';
+};
+
+const getWrapupStatusTag = (row: any) => {
+  if (!row.wrapup) return 'danger';
+  if (row.wrapup.status === 'complete') return 'success';
+  return 'warning';
+};
+
+const getAdvisoryStatusText = (row: any) => {
+  return row.advisory?.shouldSuggest ? row.advisory?.priority || '触发' : '未触发';
+};
+
+const getAdvisoryStatusTag = (row: any) => {
+  if (!row.advisory?.shouldSuggest) return 'info';
+  return priorityTag(row.advisory.priority);
+};
+
+const getArtifactSummary = (row: any) => {
+  if (!row.wrapup && !row.advisory?.shouldSuggest) return '暂无产物';
+  if (row.wrapup && !row.wrapup.summary?.topicSummary) return 'Wrapup 缺少摘要';
+  if (row.advisory?.shouldSuggest) return row.advisory.recommendation || '有建议待处理';
+  return row.wrapup?.summary?.topicSummary || '产物正常';
+};
+
+const getAttentionLevel = (row: any) => {
+  if (row.status === 'timeout' || row.status === 'error') return '高关注';
+  if (row.status === 'completed' && !row.wrapup) return '高关注';
+  if (row.advisory?.priority === 'high') return '高关注';
+  if (row.advisory?.priority === 'medium') return '中关注';
+  if (row.wrapup && !row.wrapup.summary?.topicSummary) return '中关注';
+  return '低关注';
+};
+
+const getAttentionTag = (row: any) => {
+  const level = getAttentionLevel(row);
+  if (level === '高关注') return 'danger';
+  if (level === '中关注') return 'warning';
+  return 'success';
+};
+
+const getAttentionText = (row: any) => {
+  if (row.status === 'timeout') return '会话超时，建议人工复核';
+  if (row.status === 'error') return '会话错误，建议查看日志';
+  if (row.status === 'completed' && !row.wrapup) return '已完成但无 Wrapup';
+  if (row.advisory?.priority === 'high') return '高优先级建议，建议跟进';
+  if (row.advisory?.priority === 'medium') return '中优先级建议，可人工确认';
+  if (row.wrapup && !row.wrapup.summary?.topicSummary) return 'Wrapup 缺少摘要信息';
+  return '状态稳定';
+};
+
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
     active: 'success',
@@ -188,7 +320,12 @@ const getStatusLabel = (status: string) => {
 
 const formatJson = (value: any) => JSON.stringify(value || {}, null, 2);
 
-watch(() => [filters.value.status, filters.value.onlyWithAdvisory], () => {
+watch(() => [
+  filters.value.status,
+  filters.value.onlyWithAdvisory,
+  filters.value.onlyAttention,
+  filters.value.onlyMissingWrapup,
+], () => {
   page.value = 1;
   loadSessions();
 });
@@ -208,39 +345,51 @@ onMounted(loadSessions);
 
 /* Hero */
 .page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 0.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
-.page-title-icon { color: var(--color-primary); }
-
 /* Toolbar glass */
-.glass-toolbar { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 20px; border-radius: 18px; border: 1px solid rgba(52, 120, 246, 0.08); background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 247, 252, 0.88)); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .toolbar-item { width: 180px; }
 
+.stats-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mini-stat {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(244, 247, 252, 0.88));
+  display: grid;
+  gap: 6px;
+}
+
+.mini-stat span { color: var(--text-secondary); font-size: 12px; }
+.mini-stat strong { font-size: 20px; color: var(--text-primary); line-height: 1.2; }
+
 /* Content z-index */
-.table-wrap { position: relative; z-index: 1; overflow-x: auto; }
-.pager { position: relative; z-index: 1; display: flex; justify-content: flex-end; }
+.table-wrap { position: relative; z-index: 1; }
 
 /* Table overrides */
-.table-wrap :deep(.el-table) { border-radius: 18px; overflow: hidden; border: 1px solid rgba(52, 120, 246, 0.06); background: rgba(255, 255, 255, 0.82); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-.table-wrap :deep(.el-table th.el-table__cell) { background: rgba(244, 247, 252, 0.7); font-weight: 600; }
-.table-wrap :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) { background: rgba(244, 247, 252, 0.45); }
-.table-wrap :deep(.el-table td.el-table__cell) { border-bottom-color: rgba(52, 120, 246, 0.05); }
-
 .topic-cell, .user-cell, .summary-cell { display: grid; gap: 4px; overflow: hidden; }
 .topic-cell span, .user-cell span, .summary-cell span { color: var(--text-secondary); font-size: 12px; }
-.wrapup-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.scale-cell { display: grid; gap: 2px; line-height: 1.2; }
+.scale-cell span { color: var(--text-secondary); font-size: 12px; }
+.artifact-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .muted { color: var(--text-muted); }
 .detail-grid { display: grid; gap: 16px; }
 pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; }
+.kv-list { display: grid; gap: 10px; }
+.kv-item { display: flex; justify-content: space-between; gap: 12px; }
 
-[data-theme="dark"] .page-hero { background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.1), transparent 34%), linear-gradient(180deg, rgba(30, 33, 42, 0.92), rgba(24, 27, 35, 0.92)); border-color: rgba(52, 120, 246, 0.12); }
-[data-theme="dark"] .pill { background: color-mix(in srgb, var(--color-primary) 18%, transparent); }
-[data-theme="dark"] .glass-toolbar { background: linear-gradient(180deg, rgba(30, 33, 42, 0.88), rgba(24, 27, 35, 0.88)); border-color: rgba(52, 120, 246, 0.12); }
-[data-theme="dark"] .table-wrap :deep(.el-table) { background: rgba(30, 33, 42, 0.82); border-color: rgba(52, 120, 246, 0.1); }
-[data-theme="dark"] .table-wrap :deep(.el-table th.el-table__cell) { background: rgba(36, 39, 49, 0.7); }
-[data-theme="dark"] .table-wrap :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) { background: rgba(36, 39, 49, 0.45); }
-[data-theme="dark"] .table-wrap :deep(.el-table td.el-table__cell) { border-bottom-color: rgba(52, 120, 246, 0.07); }
+@media (max-width: 1100px) {
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 </style>

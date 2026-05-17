@@ -192,12 +192,12 @@ export class EduClawGateway {
       // 执行 Agent（带超时控制）
       const TIMEOUT_MS = 5 * 60 * 1000; // 5分钟超时（Content Agent 需要多个 AI 调用）
       
-      // 设置请求上下文，使所有 AI 调用自动记录到 AgentCallLog
       const rawOutput = await Promise.race([
         runWithContext({
           userId: request.context.userId,
           agentId: request.agentId,
-          action: 'execute'
+          action: 'execute',
+          sourceEntry: request.context.sourceEntry || 'platform'
         }, () => registration.handler(request.input, request.context)),
         new Promise<never>((_, reject) => {
           setTimeout(() => {

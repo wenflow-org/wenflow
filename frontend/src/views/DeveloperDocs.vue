@@ -491,7 +491,7 @@ export default MyAgent;</code></pre>
           <h3>6. 验证 Agent</h3>
           <p>访问管理平台查看 Agent 是否已注册：</p>
           <div class="code-block">
-            <pre><code>http://localhost:5173/admin/agent-lab</code></pre>
+            <pre><code>http://localhost:5173/admin/agent-registry</code></pre>
           </div>
         </section>
 
@@ -730,81 +730,6 @@ console.log(response.content);</code></pre>
               </tbody>
             </table>
           </div>
-        </section>
-
-        <!-- Arena 竞技场 -->
-        <section id="arena-system" class="content-section">
-          <h2 class="section-title">🏟️ Arena 竞技场系统</h2>
-          
-          <div class="info-box info-primary">
-            <p><strong>Arena</strong> 是多 Agent 对比评估系统，用于科学评估不同 Agent 的表现。</p>
-          </div>
-
-          <h3>核心功能</h3>
-          <ul class="feature-list">
-            <li>
-              <span class="feature-icon">🎯</span>
-              <div>
-                <strong>创建 Arena 会话</strong>
-                <p>定义对比测试场景和评估标准</p>
-              </div>
-            </li>
-            <li>
-              <span class="feature-icon">🤖</span>
-              <div>
-                <strong>多 Agent 并行执行</strong>
-                <p>同时调用多个 Agent 处理相同输入</p>
-              </div>
-            </li>
-            <li>
-              <span class="feature-icon">📊</span>
-              <div>
-                <strong>对比评估</strong>
-                <p>收集用户反馈和自动评估结果</p>
-              </div>
-            </li>
-            <li>
-              <span class="feature-icon">📈</span>
-              <div>
-                <strong>数据分析</strong>
-                <p>生成评估报告和 optimization 建议</p>
-              </div>
-            </li>
-          </ul>
-
-          <h3>使用示例</h3>
-          <div class="code-block">
-            <div class="code-header">
-              <span class="code-title">创建 Arena 会话</span>
-              <button class="copy-btn" @click="copyCode('arena-session')">复制</button>
-            </div>
-            <pre><code>// API 端点
-POST /api/admin/arena/sessions
-
-// 请求体
-{
-  "name": "Content Agent 对比测试",
-  "description": "测试 v3 和 v5 版本的内容生成质量",
-  "agents": ["ai-teaching-agent"],
-  "testCases": [
-    {
-      "input": "生成 Python 入门教程",
-      "expectedOutput": "包含基础语法、变量、循环等内容"
-    }
-  ]
-}</code></pre>
-          </div>
-
-          <h3>数据模型</h3>
-          <ul class="simple-list">
-            <li><code>arena_sessions</code> - Arena 会话</li>
-            <li><code>arena_personas</code> - Agent 角色</li>
-            <li><code>arena_dialogues</code> - 对话记录</li>
-            <li><code>arena_evaluations</code> - 评估结果</li>
-            <li><code>arena_extractions</code> - 提取内容</li>
-            <li><code>arena_generations</code> - 生成内容</li>
-            <li><code>arena_optimizations</code> - 优化建议</li>
-          </ul>
         </section>
 
         <!-- 示例代码 -->

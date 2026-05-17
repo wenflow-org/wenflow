@@ -99,26 +99,25 @@ const rules: FormRules = {
 const handleLogin = async () => {
   if (!formRef.value) return;
 
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return;
+  const valid = await formRef.value.validate().catch(() => false);
+  if (!valid) return;
 
-    loading.value = true;
-    try {
-      await userStore.login(loginForm.name, loginForm.password);
-      toast.success('登录成功');
+  loading.value = true;
+  try {
+    await userStore.login(loginForm.name, loginForm.password);
+    toast.success('登录成功');
 
-      if (loginForm.remember) {
-        localStorage.setItem('rememberMe', 'true');
-      }
-
-      router.push('/dashboard');
-    } catch (error: any) {
-      console.error('登录失败:', error);
-      toast.error(error.message || '登录失败，请检查用户名和密码');
-    } finally {
-      loading.value = false;
+    if (loginForm.remember) {
+      localStorage.setItem('rememberMe', 'true');
     }
-  });
+
+    router.push('/dashboard');
+  } catch (error: any) {
+    console.error('登录失败:', error);
+    toast.error(error.message || '登录失败，请检查用户名和密码');
+  } finally {
+    loading.value = false;
+  }
 };
 
 const handleGoRegister = async () => {

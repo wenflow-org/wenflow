@@ -1,66 +1,66 @@
 <template>
-  <div class="admin-auth-page">
-    <div class="admin-auth-bg">
-      <div class="admin-auth-orb admin-auth-orb--1"></div>
-      <div class="admin-auth-orb admin-auth-orb--2"></div>
-      <div class="admin-auth-grid"></div>
+  <div class="auth-page auth-page--admin">
+    <div class="auth-bg-layer">
+      <div class="auth-bg-orb auth-bg-orb--1"></div>
+      <div class="auth-bg-orb auth-bg-orb--2"></div>
+      <div class="auth-bg-grid"></div>
     </div>
 
-    <router-link to="/" class="admin-auth-logo">
+    <router-link to="/" class="auth-home-link" aria-label="返回问流首页">
       <img src="/logo.png" alt="问流 WenFlow" />
     </router-link>
 
-    <main class="admin-auth-shell">
-      <aside class="admin-auth-brand">
-        <span class="admin-auth-kicker">Admin Console</span>
-        <h1>管理学习系统的真实运行状态。</h1>
-        <p>集中查看用户、路径、对话与学习数据，把平台运维动作落在可追踪的管理面板里。</p>
+    <main class="auth-shell">
+      <aside class="auth-brand">
+        <div class="auth-brand__content">
+          <span class="auth-brand__eyebrow">WenFlow Admin</span>
+          <h1>统一查看后台数据和系统状态。</h1>
+          <p>登录后管理用户、查看日志、调整模型与系统配置。</p>
 
-        <div class="admin-auth-metrics">
-          <article v-for="item in adminPoints" :key="item.title" class="admin-auth-metric">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.desc }}</p>
-          </article>
+          <div class="auth-brand__points">
+            <article v-for="item in adminPoints" :key="item.title" class="auth-point">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.desc }}</span>
+            </article>
+          </div>
         </div>
       </aside>
 
-      <section class="admin-auth-panel">
-        <div class="admin-auth-card">
-          <div class="admin-auth-card__top">
-            <span>受限入口</span>
-            <ThemeSwitcher />
+      <section class="auth-panel">
+        <div class="auth-card">
+          <div class="auth-card__top">
+            <span class="auth-card__pill">管理员登录</span>
+            <router-link to="/" class="auth-back-link">← 返回用户平台</router-link>
           </div>
 
-          <div class="admin-auth-card__header">
-            <h2>管理员登录</h2>
-            <p>使用管理员账号进入 WenFlow 管理平台。</p>
+          <div class="auth-card__header">
+            <h2>进入后台</h2>
+            <p>使用管理员账号登录，进入后台管理页面。</p>
           </div>
 
-          <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="admin-auth-form" @keyup.enter="handleLogin">
-            <el-form-item label="用户名" prop="name">
-              <el-input v-model="loginForm.name" placeholder="请输入管理员用户名" prefix-icon="User" clearable autocomplete="username" />
+          <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="auth-form" @keyup.enter="handleLogin">
+            <el-form-item label="管理员账号" prop="name">
+              <el-input v-model="loginForm.name" type="text" placeholder="请输入管理员账号" prefix-icon="User" clearable autocomplete="username" />
             </el-form-item>
 
             <el-form-item label="密码" prop="password">
-              <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" prefix-icon="Lock" show-password autocomplete="current-password" />
+              <el-input v-model="loginForm.password" type="password" placeholder="请输入登录密码" prefix-icon="Lock" show-password autocomplete="current-password" />
             </el-form-item>
 
-            <div class="admin-auth-meta">
-              <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
+            <div class="auth-meta">
+              <el-checkbox v-model="loginForm.remember">记住本机登录状态</el-checkbox>
             </div>
 
-            <el-button type="primary" :loading="loading" class="admin-auth-submit" @click="handleLogin">
-              {{ loading ? '登录中...' : '进入管理平台' }}
+            <el-button type="primary" :loading="loading" class="auth-submit" @click="handleLogin">
+              {{ loading ? '登录中...' : '登录后台' }}
             </el-button>
+
+            <div class="auth-switch auth-switch--admin">
+              <span>没有账号或无法登录？</span>
+              <strong>请联系管理员</strong>
+            </div>
           </el-form>
-
-          <div class="admin-auth-note">
-            管理员账号由系统管理员统一分配。首次登录或权限异常时，请联系平台维护人员。
-          </div>
         </div>
-
-        <router-link to="/" class="admin-auth-footer">返回用户平台</router-link>
       </section>
     </main>
   </div>
@@ -71,7 +71,6 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { type FormInstance, type FormRules } from 'element-plus';
 import { adminAuthApi } from '@/api/adminApi';
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue';
 import { toast } from '../../utils/toast';
 
 const router = useRouter();
@@ -79,9 +78,9 @@ const formRef = ref<FormInstance>();
 const loading = ref(false);
 
 const adminPoints = [
-  { label: '01', title: '运行概览', desc: '观察用户、路径和教学会话的整体状态。' },
-  { label: '02', title: '数据追踪', desc: '定位学习行为、Agent 输出与系统事件。' },
-  { label: '03', title: '权限管理', desc: '围绕用户、配置和后台能力进行集中维护。' }
+  { title: '用户管理', desc: '查看用户账号、学习路径和学习数据。' },
+  { title: '日志诊断', desc: '查看教学会话、执行日志和系统异常。' },
+  { title: '系统配置', desc: '管理 Agent、模型和后台参数。' }
 ];
 
 const loginForm = reactive({
@@ -127,57 +126,58 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
-.admin-auth-page {
-  --admin-ink: #14181f;
-  --admin-muted: #667085;
-  --admin-gold: #bd8d3a;
-  --admin-green: #14433b;
+.auth-page {
+  --auth-ink: #172033;
+  --auth-muted: #66758d;
+  --auth-blue: #3478f6;
+  --auth-blue-deep: #1f57cc;
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
   overflow: hidden;
-  background: #ece7dc;
-  color: var(--admin-ink);
+  background: #f3f6fb;
+  color: var(--auth-ink);
 }
 
-.admin-auth-bg {
+.auth-bg-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
 }
 
-.admin-auth-orb {
+.auth-bg-orb {
   position: absolute;
   border-radius: 50%;
   filter: blur(110px);
-  opacity: 0.24;
+  opacity: 0.22;
 }
 
-.admin-auth-orb--1 {
-  width: 560px;
-  height: 560px;
-  top: -160px;
-  left: -120px;
-  background: radial-gradient(circle, rgba(20, 67, 59, 0.3), transparent 70%);
-}
-
-.admin-auth-orb--2 {
+.auth-bg-orb--1 {
   width: 520px;
   height: 520px;
-  right: -150px;
-  bottom: -150px;
-  background: radial-gradient(circle, rgba(189, 141, 58, 0.32), transparent 70%);
+  top: -120px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.28), transparent 70%);
 }
 
-.admin-auth-grid {
+.auth-bg-orb--2 {
+  width: 460px;
+  height: 460px;
+  right: -120px;
+  bottom: -120px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+}
+
+.auth-bg-grid {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(20, 24, 31, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(20, 24, 31, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(circle at center, black 48%, transparent 86%);
+  background-image: linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black 48%, transparent 88%);
 }
 
-.admin-auth-logo {
+.auth-home-link {
   position: absolute;
   z-index: 2;
   top: 28px;
@@ -185,216 +185,200 @@ const handleLogin = async () => {
   display: inline-flex;
 }
 
-.admin-auth-logo img {
+.auth-home-link img {
   height: 54px;
   width: auto;
 }
 
-.admin-auth-shell {
+.auth-shell {
   position: relative;
   z-index: 1;
   width: min(1240px, calc(100% - 72px));
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 98px 0 72px;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+  grid-template-columns: minmax(0, 0.94fr) minmax(440px, 1.06fr);
   gap: 28px;
   align-items: center;
 }
 
-.admin-auth-brand {
-  min-height: 640px;
-  border-radius: 34px;
-  padding: 46px;
+.auth-brand {
+  min-height: 584px;
+  border-radius: 32px;
+  padding: 40px;
+  background: linear-gradient(180deg, #1a2740, #121b2d);
   color: #fff;
-  background: linear-gradient(145deg, #101d1b, #19312e 54%, #201b13);
-  box-shadow: 0 28px 80px rgba(20, 24, 31, 0.28);
-  display: grid;
-  align-content: space-between;
-  gap: 32px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
 }
 
-.admin-auth-brand::before {
+.auth-brand::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 16% 20%, rgba(189, 141, 58, 0.18), transparent 34%), radial-gradient(circle at 82% 76%, rgba(93, 145, 132, 0.16), transparent 38%);
+  background: radial-gradient(circle at 18% 18%, rgba(52, 120, 246, 0.18), transparent 36%), radial-gradient(circle at 82% 78%, rgba(141, 107, 255, 0.14), transparent 38%);
 }
 
-.admin-auth-brand > * {
+.auth-brand__content {
   position: relative;
   z-index: 1;
+  min-height: 100%;
+  display: grid;
+  gap: 28px;
+  align-content: space-between;
 }
 
-.admin-auth-kicker,
-.admin-auth-card__top span {
+.auth-brand__eyebrow,
+.auth-card__pill {
   width: fit-content;
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
-.admin-auth-kicker {
-  color: rgba(245, 238, 220, 0.72);
+.auth-brand__eyebrow {
+  color: rgba(203, 213, 225, 0.72);
 }
 
-.admin-auth-brand h1,
-.admin-auth-card__header h2 {
+.auth-brand h1,
+.auth-card__header h2 {
   margin: 0;
   line-height: 1.08;
   letter-spacing: -0.045em;
 }
 
-.admin-auth-brand h1 {
+.auth-brand h1 {
   max-width: 12ch;
-  font-size: clamp(40px, 4.5vw, 62px);
+  font-size: clamp(34px, 3.8vw, 52px);
 }
 
-.admin-auth-brand > p {
-  max-width: 36ch;
+.auth-brand p {
+  max-width: 34ch;
   margin: 0;
-  color: rgba(245, 238, 220, 0.74);
+  color: rgba(203, 213, 225, 0.72);
   font-size: 18px;
   line-height: 1.8;
 }
 
-.admin-auth-metrics {
+.auth-brand__points {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
-.admin-auth-metric {
-  min-height: 168px;
-  padding: 18px;
-  border-radius: 20px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.auth-point {
   display: grid;
-  align-content: start;
-  gap: 9px;
-  transition: background 0.3s ease;
+  gap: 5px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.admin-auth-metric:hover {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
-}
-
-.admin-auth-metric span {
-  color: var(--admin-gold);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.admin-auth-metric strong {
+.auth-point strong {
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
 }
 
-.admin-auth-metric p {
-  margin: 0;
-  color: rgba(245, 238, 220, 0.72);
-  font-size: 13px;
+.auth-point span {
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 14px;
   line-height: 1.65;
 }
 
-.admin-auth-panel {
+.auth-panel {
   display: grid;
   justify-items: center;
-  gap: 18px;
+  gap: 0;
 }
 
-.admin-auth-card {
+.auth-card {
   width: min(100%, 520px);
   padding: 36px;
   border-radius: 30px;
-  background: rgba(255, 252, 246, 0.92);
-  border: 1px solid rgba(20, 67, 59, 0.1);
-  box-shadow: 0 24px 60px rgba(20, 24, 31, 0.14);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  box-shadow: 0 34px 88px rgba(15, 23, 42, 0.16);
   display: grid;
   gap: 28px;
   backdrop-filter: blur(18px);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-.admin-auth-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 28px 68px rgba(20, 24, 31, 0.2);
-}
-
-.admin-auth-card__top {
+.auth-card__top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
 }
 
-.admin-auth-card__top span {
+.auth-card__pill {
   padding: 7px 12px;
   border-radius: 999px;
-  color: var(--admin-green);
-  background: rgba(20, 67, 59, 0.1);
+  color: var(--auth-blue-deep);
+  background: rgba(52, 120, 246, 0.1);
 }
 
-.admin-auth-card__header {
+.auth-card__header {
   display: grid;
   gap: 10px;
 }
 
-.admin-auth-card__header h2 {
+.auth-card__header h2 {
   font-size: clamp(30px, 3vw, 42px);
 }
 
-.admin-auth-card__header p {
+.auth-card__header p {
   margin: 0;
-  color: var(--admin-muted);
+  color: var(--auth-muted);
   line-height: 1.7;
 }
 
-.admin-auth-form {
+.auth-form {
   display: grid;
   gap: 18px;
 }
 
-.admin-auth-meta {
+.auth-meta {
   margin-top: -6px;
 }
 
-.admin-auth-submit {
+.auth-submit {
   width: 100%;
   min-height: 50px;
   border: none;
   border-radius: 999px;
   font-size: 15px;
   font-weight: 900;
-  background: linear-gradient(135deg, var(--admin-green), color-mix(in srgb, var(--admin-green) 80%, black));
-  box-shadow: 0 16px 34px color-mix(in srgb, var(--admin-green) 22%, transparent);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  background: linear-gradient(135deg, var(--auth-blue), var(--auth-blue-deep));
+  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
 }
 
-.admin-auth-submit:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 20px 40px color-mix(in srgb, var(--admin-green) 30%, transparent);
+.auth-switch {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: var(--auth-muted);
+  font-size: 14px;
 }
 
-.admin-auth-note {
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: rgba(20, 67, 59, 0.06);
-  color: var(--admin-muted);
-  font-size: 13px;
-  line-height: 1.7;
+.auth-switch--admin strong {
+  color: var(--auth-ink);
+  font-size: inherit;
+  font-weight: 900;
 }
 
-.admin-auth-footer {
-  color: color-mix(in srgb, var(--admin-ink) 68%, white);
+.auth-back-link {
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--auth-ink) 68%, white);
+  font: inherit;
   font-size: 14px;
   font-weight: 900;
   text-decoration: none;
+  cursor: pointer;
 }
 
 :deep(.el-form-item) {
@@ -402,58 +386,66 @@ const handleLogin = async () => {
 }
 
 :deep(.el-form-item__label) {
-  color: var(--admin-ink);
+  color: var(--auth-ink);
   font-weight: 800;
 }
 
 :deep(.el-input__wrapper) {
   min-height: 52px;
   border-radius: 16px;
-  box-shadow: 0 0 0 1px rgba(120, 113, 108, 0.2) inset;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.18) inset;
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px rgba(20, 67, 59, 0.42) inset, 0 0 0 4px rgba(20, 67, 59, 0.12);
-}
-
-@media (max-width: 1080px) {
-  .admin-auth-metrics {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-auth-metric {
-    min-height: auto;
-  }
+  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.4) inset, 0 0 0 4px rgba(52, 120, 246, 0.12);
 }
 
 @media (max-width: 920px) {
-  .admin-auth-shell {
+  .auth-shell {
     grid-template-columns: 1fr;
     width: min(100% - 36px, 620px);
   }
 
-  .admin-auth-brand {
+  .auth-brand {
     display: none;
   }
 }
 
 @media (max-width: 560px) {
-  .admin-auth-logo {
+  .auth-home-link {
     left: 18px;
     top: 18px;
   }
 
-  .admin-auth-logo img {
+  .auth-home-link img {
     height: 46px;
   }
 
-  .admin-auth-shell {
+  .auth-shell {
     width: min(100% - 28px, 620px);
     padding-top: 88px;
   }
 
-  .admin-auth-card {
+  .auth-card {
     padding: 24px;
+  }
+}
+
+@media (max-width: 420px) {
+  .auth-shell {
+    width: min(100% - 20px, 620px);
+    padding-bottom: calc(28px + var(--safe-area-bottom));
+  }
+
+  .auth-card {
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .auth-card__top,
+  .auth-switch {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

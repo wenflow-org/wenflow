@@ -9,6 +9,9 @@
 /* 核心设计系统 */
 @import './design-system.css';
 
+/* Admin 列表壳子 */
+@import './admin-list.css';
+
 /* 学习平台组件样式 */
 @import './learning-components.css';
 

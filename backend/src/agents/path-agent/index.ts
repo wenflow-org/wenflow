@@ -27,9 +27,9 @@ import { textStructureAnalyzer } from '../../skills/text-structure-analyzer';
 import { timeEstimator } from '../../skills/time-estimator';
 import { logger } from '../../utils/logger';
 
-const PATH_AGENT_MAX_TOKENS = 10000;
+const PATH_AGENT_MAX_TOKENS = 32000;
 
-const DEFAULT_PATH_GENERATION_PROMPT = `你是一位专业的课程设计师，负责创建里程碑式的学习路径。
+export const DEFAULT_PATH_GENERATION_PROMPT = `你是一位专业的课程设计师，负责创建里程碑式的学习路径。
 
 请创建一个包含里程碑的学习路径，每个里程碑代表一个关键学习阶段。
 
@@ -43,6 +43,9 @@ const DEFAULT_PATH_GENERATION_PROMPT = `你是一位专业的课程设计师，�
 7. 如输入有 totalWeeks，整体规划不要超过 totalWeeks；若 totalWeeks > 52，则按52周规划
 8. 如果提供了"具体应用场景"，所有里程碑标题、任务标题、任务描述、案例都必须紧密围绕该场景，不可使用泛泛的通用示例
 9. 路径名称必须直接反映用户的原始学习目标和具体应用场景，不可使用通用模板名称
+10. 在输出用户可见任务链的同时，必须补充一份简洁的认知设计说明，告诉系统这条路径在训练什么底层能力
+11. 第一个里程碑必须尽量服务于首个最小交付物，优先给学习者一个 30-60 分钟内能看见成果的早期胜利
+12. 每个任务都要标注它主要服务的隐藏概念，用于后续 Learn 层教学承接
 
 请以JSON格式输出学习路径：
 {
@@ -51,6 +54,17 @@ const DEFAULT_PATH_GENERATION_PROMPT = `你是一位专业的课程设计师，�
   "totalMilestones": 3,
   "estimatedHours": 12,
   "estimatedWeeks": 12,
+  "cognitiveDesign": {
+    "cognitiveDomain": "这条路径主要训练的底层认知域",
+    "coreConcepts": [
+      {
+        "id": "concept-1",
+        "name": "概念名称",
+        "role": "hub|supporting",
+        "description": "这个概念为什么重要，以及它在路径中的作用"
+      }
+    ]
+  },
   "milestones": [
     {
       "stageNumber": 1,
@@ -64,11 +78,57 @@ const DEFAULT_PATH_GENERATION_PROMPT = `你是一位专业的课程设计师，�
           "type": "reading|practice|project|quiz",
           "estimatedMinutes": 60,
           "description": "任务描述",
-          "acceptanceCriteria": "完成标准"
+          "acceptanceCriteria": "完成标准",
+          "linkedConcept": "concept-1"
         }
       ]
     }
   ]
+  }
+
+额外规则：
+1. cognitiveDomain 必须是抽象后的底层能力表述，不要只是重复学科名，例如“结构化问题求解”“证据驱动分析”“任务自动化抽象”
+2. coreConcepts 保持 2-4 个即可，其中必须有且仅有 1 个 role = "hub"
+3. linkedConcept 必须引用 coreConcepts 中已有的 id，不允许悬空
+4. 如果输入提供了路径场景 framing，cognitiveDesign 必须与 framing 的 intent / planningFocus / firstDeliverable 保持一致`;
+
+export const DEFAULT_PATH_FRAMING_PROMPT = `你是一个学习路径场景编排器中的 framing 规划器。
+
+你的任务不是直接输出完整学习路径，而是先把已确认的目标信息压缩成一份稳定的路径 framing，供后续完整任务级路径生成使用。
+
+输入会包含：
+- 原始学习目标
+- goal conversation 沉淀的 structuredData
+- 用户已确认的 confirmedProposal
+- 时间/资源/边界信息
+
+要求：
+1. 不要重新质疑用户已确认的方向。
+2. 不要输出完整路径、周计划或任务清单。
+3. 只输出 1 个 JSON 对象。
+4. framing 必须明确：这版路径先解决什么、首个最小产出是什么、暂不展开什么、时间投入如何影响任务颗粒度。
+5. framing 必须额外指出：这条路径要优先训练的底层认知域是什么。它不是学科名，而是更抽象的能力锚点。
+
+请输出：
+{
+  "intent": "这版路径先聚焦解决什么",
+  "targetState": "用户将达到的可观察状态",
+  "firstDeliverable": "第一个最小可交付结果",
+  "cognitiveDomain": "这条路径优先训练的底层认知域",
+  "planningFocus": ["重点1", "重点2"],
+  "excludedScope": ["暂不展开1"],
+  "resourceProfile": {
+    "timeBudget": "每天/每周可投入时间",
+    "timeHorizon": "整体时间窗",
+    "pace": "任务颗粒度判断"
+  },
+  "riskFlags": ["风险1"],
+  "sourceGoal": {
+    "surfaceGoal": "",
+    "realProblem": "",
+    "motivation": "",
+    "urgency": ""
+  }
 }`;
 
 interface PathOutput {
@@ -78,6 +138,15 @@ interface PathOutput {
   subject: string;
   totalMilestones: number;
   estimatedHours?: number;
+  cognitiveDesign?: {
+    cognitiveDomain?: string;
+    coreConcepts?: Array<{
+      id?: string;
+      name?: string;
+      role?: string;
+      description?: string;
+    }>;
+  };
   milestones: MilestoneOutput[];
 }
 
@@ -264,6 +333,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   context: string;
   confidence: number;
   replan?: any;
+  pathSceneFraming?: any;
 }> {
   const gateway = getAPIGateway();
   const caller: CallerInfo = { agentId: 'path-agent' };
@@ -272,6 +342,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   const confirmedProposal = input.confirmedProposal as any;
   const conversationHistory = input.conversationHistory as any[] || [];
   const replan = input.metadata?.replan as any;
+  const pathSceneFraming = input.metadata?.pathSceneFraming as any;
   
   if (structuredData) {
     logger.info('使用结构化数据', {
@@ -304,7 +375,9 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       // @ts-ignore
       conversationHistory,
       // @ts-ignore
-      replan
+      replan,
+      // @ts-ignore
+      pathSceneFraming
     };
   }
   
@@ -379,6 +452,7 @@ async function generatePath(
     confirmedProposal?: any;
     conversationHistory?: any[];
     replan?: any;
+    pathSceneFraming?: any;
   }
 ): Promise<PathOutput> {
   const gateway = getAPIGateway();
@@ -388,6 +462,7 @@ async function generatePath(
   const confirmedProposal = analysis.confirmedProposal;
   const conversationHistory = analysis.conversationHistory;
   const replan = analysis.replan;
+  const pathSceneFraming = analysis.pathSceneFraming;
   const confirmedStages = Array.isArray(confirmedProposal?.key_stages)
     ? confirmedProposal.key_stages.filter(Boolean)
     : [];
@@ -406,10 +481,20 @@ ${input.metadata?.totalWeeks ? `总学习周期（周）：${input.metadata.tota
 
 ${confirmedProposal ? `用户确认的方案轮廓：
 - 学习方向：${confirmedProposal.learning_direction}
+- 首个产出：${confirmedProposal.first_deliverable}
 - 关键阶段：${confirmedStages.join('、')}
 - 学习方式：${confirmedProposal.learning_style}
 
 【重要】请基于用户确认的方案轮廓设计路径阶段，保持方向一致。` : ''}
+
+${pathSceneFraming ? `路径场景 framing（高优先级）：
+${JSON.stringify(pathSceneFraming, null, 2)}
+
+【重要】完整任务级路径必须优先服从这份 framing：
+- 第一阶段和第一批任务必须直接服务于 firstDeliverable
+- planningFocus 决定这版路径的主轴
+- excludedScope 中的内容不要提前展开成主任务
+- resourceProfile.pace 决定任务颗粒度与节奏` : ''}
 
 ${conversationHistory && conversationHistory.length > 0 ? `
 完整对话历史（用于验证关键信息）：
@@ -478,6 +563,56 @@ const userId = context?.userId || input?.metadata?.userId;
   }
 
   throw new Error('PATH_AGENT_OUTPUT_INVALID: response does not contain valid JSON');
+}
+
+export async function buildPathSceneFramingWithAI(
+  input: AgentInput,
+  context: AgentContext
+): Promise<any> {
+  const gateway = getAPIGateway();
+  const caller: CallerInfo = { agentId: 'path-agent' };
+
+  const structuredData = input.structuredData as any;
+  const confirmedProposal = input.confirmedProposal as any;
+  const promptConfig = await agentConfigService.getActivePrompt('path-agent');
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: DEFAULT_PATH_FRAMING_PROMPT },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        goal: input.goal,
+        currentLevel: input.currentLevel,
+        timePerDay: input.timePerDay,
+        structuredData,
+        confirmedProposal,
+        metadata: input.metadata || {}
+      }, null, 2)
+    }
+  ];
+
+  const userId = context?.userId || input?.metadata?.userId;
+  const response = await gateway.execute(
+    {
+      messages,
+      max_tokens: promptConfig?.maxTokens || PATH_AGENT_MAX_TOKENS,
+      temperature: promptConfig?.temperature
+    },
+    caller,
+    { userId }
+  );
+
+  const content = response.choices[0]?.message.content || '';
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('PATH_SCENE_FRAMING_INVALID: response does not contain valid JSON');
+  }
+
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (error: any) {
+    throw new Error(`PATH_SCENE_FRAMING_INVALID: ${error?.message || 'JSON parse failed'}`);
+  }
 }
 
 /**

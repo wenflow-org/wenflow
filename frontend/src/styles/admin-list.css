@@ -1,0 +1,112 @@
+/* ==========================================
+   Admin List Shell
+   ========================================== */
+
+.admin-list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 247, 252, 0.88));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  z-index: 1;
+}
+
+.admin-list-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.admin-list-card {
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.25rem;
+  border-radius: 20px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(244, 247, 252, 0.82));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  z-index: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-list-card .el-table {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  --el-table-bg-color: transparent;
+  --el-bg-color: transparent;
+  --el-fill-color-blank: transparent;
+}
+
+.admin-list-card .el-table__body-wrapper {
+  overflow-x: auto;
+}
+
+.admin-list-card .el-table th.el-table__cell {
+  background: rgba(52, 120, 246, 0.04);
+  font-weight: 700;
+}
+
+.admin-list-card .el-table .el-table__row:hover > td.el-table__cell {
+  background: rgba(52, 120, 246, 0.03);
+}
+
+.admin-list-card .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: rgba(244, 247, 252, 0.5);
+}
+
+.admin-list-card .el-table td.el-table__cell {
+  border-bottom-color: rgba(52, 120, 246, 0.05);
+}
+
+.admin-list-pagination {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  z-index: 1;
+}
+
+.admin-page-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-page-title__icon {
+  color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .admin-list-toolbar {
+    padding: 14px;
+  }
+
+  .admin-list-toolbar__group {
+    width: 100%;
+  }
+
+  .admin-list-pagination {
+    justify-content: stretch;
+  }
+
+  .admin-list-pagination .el-pagination {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

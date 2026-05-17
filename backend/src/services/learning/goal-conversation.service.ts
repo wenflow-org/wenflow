@@ -15,6 +15,9 @@ import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefresh
  * 4. 用户参与：方案轮廓先确认，再生成详细路径
  */
 class GoalConversationService {
+  private readonly RECENT_CONTEXT_LIMIT = 20;
+  private readonly MAX_FORMAT_RETRIES = 2;
+
 
 
 
@@ -50,10 +53,54 @@ class GoalConversationService {
     };
   }
 
+  private getStructuredOutputValid(aiResponse: any): boolean {
+    return aiResponse?.debug?.structuredOutputValid === true;
+  }
+
+  private buildPreviousState(data: any, fallbackStage: string) {
+    return {
+      stage: data?.stage || fallbackStage || 'understanding',
+      confidence: typeof data?.confidence === 'number' ? data.confidence : 0,
+      understanding: data?.understanding || {},
+      collected: data?.collected || {},
+      structuredData: data?.structuredData ?? null,
+      confirmedProposal: data?.confirmedProposal ?? null,
+      confidenceScores: data?.confidenceScores ?? null
+    };
+  }
+
+  private withConversationId(result: any, conversationId: string) {
+    return {
+      ...result,
+      internal: {
+        ...(result?.internal || {}),
+        core: {
+          ...(result?.internal?.core || {}),
+          conversationId
+        },
+        ext: result?.internal?.ext || {
+          goalConversation: {
+            understanding: {},
+            nextQuestions: [],
+            collected: {}
+          }
+        }
+      }
+    };
+  }
+
+  private throwStructuredOutputInvalid(result: any): never {
+    const error: any = new Error('STRUCTURED_OUTPUT_INVALID');
+    error.status = 422;
+    error.code = 'STRUCTURED_OUTPUT_INVALID';
+    error.result = result;
+    throw error;
+  }
+
   /**
    * 开始新的对话会话（新格式：分离 userVisible 和 internal）
    */
-  async startConversation(userId: string, initialGoal: string) {
+  async startConversation(userId: string, initialGoal: string, options?: { contextMode?: 'recent' | 'full' }) {
     try {
       logger.info('开始问题穿透对话会话', { userId, initialGoal });
 
@@ -79,10 +126,21 @@ class GoalConversationService {
       });
 
       // 让AI生成第一个回复
-      const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId);
+      const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
+      const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
-      // 保存对话历史（保存 userVisible 内容）
+      // 首轮用户输入始终保留，便于用户重试；只有结构化成功才写入 AI 回复和状态
       await this.saveMessage(conversation.id, 'user', initialGoal);
+
+      if (!this.getStructuredOutputValid(aiResponse)) {
+        logger.warn('开始对话结构化输出失败，状态未更新', {
+          conversationId: conversation.id,
+          userId,
+          attemptCount: aiResponse?.debug?.attemptCount || 0
+        });
+        this.throwStructuredOutputInvalid(responseWithConversationId);
+      }
+
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
       // 更新收集的数据
@@ -94,8 +152,8 @@ class GoalConversationService {
         confidence: this.getCore(aiResponse.internal).confidence
       });
 
-      const core = this.getCore(aiResponse.internal);
-      const goalExt = this.getGoalExt(aiResponse.internal);
+      const core = this.getCore(responseWithConversationId.internal);
+      const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
       return {
         userVisible: aiResponse.userVisible,
@@ -120,7 +178,12 @@ class GoalConversationService {
   /**
    * 用户回复，推进对话（新格式：分离 userVisible 和 internal）
    */
-async continueConversation(conversationId: string, userReply: string, userId: string) {
+async continueConversation(
+    conversationId: string,
+    userReply: string,
+    userId: string,
+    options?: { contextMode?: 'recent' | 'full' }
+  ) {
       try {
         // 获取当前对话状态
         const conversation = await prisma.goal_conversations.findFirst({
@@ -259,13 +322,23 @@ async continueConversation(conversationId: string, userReply: string, userId: st
           }
         }
 
-        // 保存用户消息
-        await this.saveMessage(conversation.id, 'user', userReply);
+      // 调用AI生成回复。先不写当前用户消息，避免本轮输入重复进入上下文。
+      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options);
+      const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
-      // 调用AI生成回复
-      const aiResponse = await this.callAI(conversation.id, userReply, false, userId);
+      // 用户输入保留，结构化失败时仅保留用户消息，不推进状态/AI历史。
+      await this.saveMessage(conversation.id, 'user', userReply);
 
-      // 保存AI回复（保存 userVisible 内容）
+      if (!this.getStructuredOutputValid(aiResponse)) {
+        logger.warn('继续对话结构化输出失败，状态未更新', {
+          conversationId,
+          userId,
+          attemptCount: aiResponse?.debug?.attemptCount || 0,
+          previousStage: conversation.stage
+        });
+        this.throwStructuredOutputInvalid(responseWithConversationId);
+      }
+
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
       // 更新收集的数据
@@ -274,16 +347,16 @@ async continueConversation(conversationId: string, userReply: string, userId: st
         userId,
         scope: 'global'
       });
-      const core = this.getCore(aiResponse.internal);
-      const goalExt = this.getGoalExt(aiResponse.internal);
+      const core = this.getCore(responseWithConversationId.internal);
+      const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
       // 如果对话完成，先生成学习路径
       if (core.stage === 'ready') {
         try {
-          const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, aiResponse);
+            const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, responseWithConversationId);
 
-          pathOrchestrator.runAsync(
-            this.buildPathGenerationInput(conversation, aiResponse, placeholderPath.id),
+            pathOrchestrator.runAsync(
+            this.buildPathGenerationInput(conversation, responseWithConversationId, placeholderPath.id),
             {
               onSuccess: () => {
                 logger.info('异步学习路径生成成功', {
@@ -332,7 +405,7 @@ async continueConversation(conversationId: string, userReply: string, userId: st
 
           // 新格式返回：completed 状态
           return {
-            userVisible: `${aiResponse.userVisible}\n\n⏳ 学习路径已开始生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。`,
+            userVisible: `${responseWithConversationId.userVisible}\n\n⏳ 学习路径已开始生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。`,
             internal: {
               core: {
                 conversationId,
@@ -384,7 +457,7 @@ async continueConversation(conversationId: string, userReply: string, userId: st
 
       // 新格式返回：正常对话状态
       return {
-        userVisible: aiResponse.userVisible,
+        userVisible: responseWithConversationId.userVisible,
         internal: {
           core: {
             conversationId,
@@ -432,7 +505,13 @@ async continueConversation(conversationId: string, userReply: string, userId: st
   /**
    * 调用AI生成回复
    */
-  private async callAI(conversationId: string, userInput: string, isFirst: boolean, userId?: string) {
+  private async callAI(
+    conversationId: string,
+    userInput: string,
+    isFirst: boolean,
+    userId?: string,
+    options?: { contextMode?: 'recent' | 'full' }
+  ) {
     const startTime = Date.now();
 
     try {
@@ -444,50 +523,47 @@ async continueConversation(conversationId: string, userReply: string, userId: st
       const data = JSON.parse(conversation.collectedData);
       const history = data.messages || [];
       const previousUnderstanding = data.understanding || {};
+      const previousState = this.buildPreviousState(data, conversation.stage);
 
-      const recentHistory = history.slice(-20);
+      // 正式链路固定使用完整可见历史 + state-first，与测试模式保持一致。
+      const contextMode = 'full';
+      const selectedHistory = history;
 
       // 调用专用 GoalConversationAgent
       const aiResponse = await runGoalConversationAgent({
         input: userInput,
         userId: userId || 'anonymous',
-        conversationHistory: recentHistory.map((msg: any) => ({
+        conversationHistory: selectedHistory.map((msg: any) => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: msg.content
         })),
         previousUnderstanding,
-        previousStage: data.stage || conversation.stage
+        previousStage: data.stage || conversation.stage,
+        previousState,
+        maxFormatRetries: this.MAX_FORMAT_RETRIES
       });
 
-      logger.info('AI响应', {
+        logger.info('AI响应', {
+        contextMode,
+        historyCount: selectedHistory.length,
         stage: this.getCore(aiResponse.internal).stage,
         confidence: this.getCore(aiResponse.internal).confidence,
         responseLength: aiResponse.userVisible.length,
-        promptVersion: 'agent-managed'
+        promptVersion: aiResponse?.debug?.promptVersion || 'agent-managed',
+        attemptCount: aiResponse?.debug?.attemptCount || 0,
+        actualRetryCount: aiResponse?.debug?.actualRetryCount || 0,
+        formatFailureCount: aiResponse?.debug?.formatFailureCount || 0,
+        structuredOutputValid: this.getStructuredOutputValid(aiResponse)
       });
 
       return aiResponse;
 
     } catch (error: any) {
+      if (error?.message === 'STRUCTURED_OUTPUT_INVALID' || error?.code === 'STRUCTURED_OUTPUT_INVALID') {
+        throw error;
+      }
       logger.error('AI调用失败:', error);
-      // 降级回复（新格式）
-      return {
-        userVisible: '抱歉，我刚才走神了，能再说一遍吗？',
-        internal: {
-          core: {
-            stage: 'understanding',
-            confidence: 0,
-            isCompleted: false
-          },
-          ext: {
-            goalConversation: {
-              understanding: {},
-              nextQuestions: [],
-              collected: {}
-            }
-          }
-        }
-      };
+      throw error;
     }
   }
 

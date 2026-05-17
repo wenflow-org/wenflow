@@ -145,12 +145,15 @@ import achievementsRoutes from './routes/achievements';
 import reportRoutes from './routes/reports';
 import metricsRoutes from './routes/metrics';
 import goalConversationRoutes from './routes/goal-conversation';
+import testGoalConversationRoutes from './routes/test-goal-conversation';
 import agentsRoutes from './routes/agents';
 import skillsRoutes from './routes/skills';
 import pluginRoutes from './routes/plugins';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
+import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
+import adminPromptStabilityRoutes from './routes/admin/prompt-stability';
 import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
@@ -183,6 +186,7 @@ app.get('/api', (req, res) => {
       users: '/api/users',
       learning: '/api/learning',
       goalConversation: '/api/goal-conversation',
+      testGoalConversation: '/api/test/goal-conversation',
       state: '/api/state',
       achievements: '/api/achievements',
       reports: '/api/reports',
@@ -224,45 +228,48 @@ agents: {
 });
 
 // 路由注册
-// Platform 层路由 - 核心学习功能
+// Platform 层路由 - 核心学习功能（平台内部调用）
 app.use('/api/learning', authMiddleware, acpContextMiddleware('platform'), learningRoutes);
 app.use('/api/state', authMiddleware, acpContextMiddleware('platform'), stateTrackingRoutes);
 app.use('/api/achievements', authMiddleware, acpContextMiddleware('platform'), achievementsRoutes);
 app.use('/api/reports', authMiddleware, acpContextMiddleware('platform'), reportRoutes);
 app.use('/api/metrics', authMiddleware, acpContextMiddleware('platform'), metricsRoutes);
 
-// goal-conversation 路由（需要认证）
-app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('platform'), goalConversationRoutes);
+// goal-conversation 路由（用户侧调用）
+app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('user'), goalConversationRoutes);
+app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('test'), testGoalConversationRoutes);
 
 // 其他路由（保持原有认证）
 // 注意：具体路由必须在通用路由之前注册！
 app.use('/api/auth', authRoutes);
 app.use('/api/admin-auth/login', adminAccessRestrictMiddleware, adminAuthRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
-app.use('/api/admin/api-config', authMiddleware, adminApiConfigRoutes);
-app.use('/api/admin/agent-model-configs', authMiddleware, adminAgentModelConfigsRoutes);
-app.use('/api/admin/skill-model-configs', authMiddleware, adminSkillModelConfigsRoutes);
-app.use('/api/admin/users', authMiddleware, adminUsersRoutes);
-app.use('/api/admin/learner-models', authMiddleware, adminLearnerModelsRoutes);
-app.use('/api/admin/goal-conversations', authMiddleware, adminGoalConversationsRoutes);  // 具体路由
-app.use('/api/admin', authMiddleware, adminPlatformRoutes);  // 通用路由 - 必须在最后
-app.use('/api/users', authMiddleware, userRoutes);
-app.use('/api/agents', authMiddleware, agentsRoutes);
-app.use('/api/skills', authMiddleware, skillsRoutes);
-app.use('/api/plugins', authMiddleware, pluginRoutes);
-app.use('/api/ai-teaching', authMiddleware, aiTeachingRoutes);
-app.use('/api/feedback', authMiddleware, feedbackRoutes);
-app.use('/api/ab-testing', authMiddleware, abTestingRoutes);
+app.use('/api/admin/api-config', authMiddleware, acpContextMiddleware('admin'), adminApiConfigRoutes);
+app.use('/api/admin/agent-model-configs', authMiddleware, acpContextMiddleware('admin'), adminAgentModelConfigsRoutes);
+app.use('/api/admin/agent-prompts', authMiddleware, acpContextMiddleware('admin'), adminAgentPromptsRoutes);
+app.use('/api/admin/prompt-stability', authMiddleware, acpContextMiddleware('admin'), adminPromptStabilityRoutes);
+app.use('/api/admin/skill-model-configs', authMiddleware, acpContextMiddleware('admin'), adminSkillModelConfigsRoutes);
+app.use('/api/admin/users', authMiddleware, acpContextMiddleware('admin'), adminUsersRoutes);
+app.use('/api/admin/learner-models', authMiddleware, acpContextMiddleware('admin'), adminLearnerModelsRoutes);
+app.use('/api/admin/goal-conversations', authMiddleware, acpContextMiddleware('admin'), adminGoalConversationsRoutes);
+app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminPlatformRoutes);
+app.use('/api/users', authMiddleware, acpContextMiddleware('user'), userRoutes);
+app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
+app.use('/api/skills', authMiddleware, acpContextMiddleware('user'), skillsRoutes);
+app.use('/api/plugins', authMiddleware, acpContextMiddleware('user'), pluginRoutes);
+app.use('/api/ai-teaching', authMiddleware, acpContextMiddleware('user'), aiTeachingRoutes);
+app.use('/api/feedback', authMiddleware, acpContextMiddleware('user'), feedbackRoutes);
+app.use('/api/ab-testing', authMiddleware, acpContextMiddleware('user'), abTestingRoutes);
 
 
 // 用户自定义路由
-app.use('/api/user/code-repo', authMiddleware, userCodeRepoRoutes);
-app.use('/api/user/agents', authMiddleware, userAgentsRoutes);
-app.use('/api/user/skills', authMiddleware, userSkillsRoutes);
-app.use('/api/user/api-config', authMiddleware, userApiConfigRoutes);
-app.use('/api/user/agent-model-configs', authMiddleware, userAgentModelConfigsRoutes);
-app.use('/api/user/mcp', authMiddleware, userMcpRoutes);
-app.use('/api/user/developer', authMiddleware, userDeveloperRoutes);
+app.use('/api/user/code-repo', authMiddleware, acpContextMiddleware('user'), userCodeRepoRoutes);
+app.use('/api/user/agents', authMiddleware, acpContextMiddleware('user'), userAgentsRoutes);
+app.use('/api/user/skills', authMiddleware, acpContextMiddleware('user'), userSkillsRoutes);
+app.use('/api/user/api-config', authMiddleware, acpContextMiddleware('user'), userApiConfigRoutes);
+app.use('/api/user/agent-model-configs', authMiddleware, acpContextMiddleware('user'), userAgentModelConfigsRoutes);
+app.use('/api/user/mcp', authMiddleware, acpContextMiddleware('user'), userMcpRoutes);
+app.use('/api/user/developer', authMiddleware, acpContextMiddleware('user'), userDeveloperRoutes);
 
 // 错误处理中间件
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

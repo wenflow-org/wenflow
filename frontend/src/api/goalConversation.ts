@@ -32,6 +32,7 @@ export interface GoalConversationEnvelope {
   meta: {
     source: string;
     timestamp: string;
+    debug?: Record<string, any>;
     messages?: Array<{
       role: 'user' | 'ai';
       content: string;
@@ -45,17 +46,32 @@ interface GoalConversationApiResponse {
   data: GoalConversationEnvelope;
 }
 
-export async function startGoalConversation(text: string): Promise<GoalConversationEnvelope> {
+export type GoalConversationContextMode = 'recent' | 'full';
+
+interface GoalConversationRequestOptions {
+  contextMode?: GoalConversationContextMode;
+}
+
+export async function startGoalConversation(
+  text: string,
+  options: GoalConversationRequestOptions = {}
+): Promise<GoalConversationEnvelope> {
   const response = await api.post('/goal-conversation/start', {
-    input: { text }
+    input: { text },
+    contextMode: options.contextMode || 'recent'
   }) as GoalConversationApiResponse;
 
   return response.data;
 }
 
-export async function replyGoalConversation(conversationId: string, text: string): Promise<GoalConversationEnvelope> {
+export async function replyGoalConversation(
+  conversationId: string,
+  text: string,
+  options: GoalConversationRequestOptions = {}
+): Promise<GoalConversationEnvelope> {
   const response = await api.post(`/goal-conversation/${conversationId}/reply`, {
-    input: { text }
+    input: { text },
+    contextMode: options.contextMode || 'recent'
   }) as GoalConversationApiResponse;
 
   return response.data;

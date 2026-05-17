@@ -59,6 +59,27 @@ const router = useRouter();
 const taskId = computed(() => route.params.taskId as string);
 const sessionId = computed(() => route.params.sessionId as string);
 
+const isTestMode = computed(() => route.meta.isTestMode === true);
+const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const learningPathDetailBasePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-path' : '/learning-path';
+  }
+  return '/learning-path';
+});
+const learningPathsPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-paths' : '/learning-paths';
+  }
+  return '/learning-paths';
+});
+const learnBasePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learn' : '/learn';
+  }
+  return '/learn';
+});
+
 const loading = ref(true);
 const error = ref('');
 const sessionDetail = ref<SessionDetail | null>(null);
@@ -161,15 +182,15 @@ const goBackToPath = (forceRefresh?: boolean) => {
   if (pathId) {
     const query: Record<string, string> = {};
     if (forceRefresh) query.t = String(Date.now());
-    router.push({ path: `/learning-path/${pathId}`, query });
+    router.push({ path: `${learningPathDetailBasePath.value}/${pathId}`, query });
     return;
   }
-  router.push('/learning-paths');
+  router.push(learningPathsPath.value);
 };
 
 const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
   if (action === 'continue-task') {
-    router.push(`/learn/${taskId.value}`);
+    router.push(`${learnBasePath.value}/${taskId.value}`);
     return;
   }
 

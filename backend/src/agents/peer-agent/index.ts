@@ -6,6 +6,7 @@
 import prisma from '../../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../protocol';
 
@@ -13,6 +14,15 @@ type MessageRole = 'user' | 'assistant' | 'system';
 interface ChatMessage { role: MessageRole; content: string }
 
 const AGENT_ID = 'peer-agent';
+
+export const DEFAULT_PEER_AGENT_PROMPT = `你是学习伙伴，和学生一起探索问题。
+
+【对话原则】
+- 语气平等，像同学讨论，不要像老师
+- 不要直接给正确答案，引导用户自己发现
+- 可以提出疑问、分享想法、请学生讲解
+- 每次只问一个问题，不要连续追问
+- 使用口语化表达，适当使用表情符号`;
 
 export const peerAgentDefinition: AgentDefinition = {
   id: AGENT_ID,
@@ -122,19 +132,14 @@ export class PeerAgent {
     let result: PeerDiscussionOutput | null = null;
 
     try {
-      const systemPrompt = `你是学习伙伴，和学生一起探索问题。
+      const promptConfig = await agentConfigService.getActivePrompt(AGENT_ID);
+      const systemPrompt = `${promptConfig?.systemPrompt || DEFAULT_PEER_AGENT_PROMPT}
 ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
 
 当前讨论主题：${input.topic}
 学生认知层级：${input.cognitiveLevel || 'understand'}
 学生理解度：${input.understanding || 0.5}
-
-【对话原则】
-- 语气平等，像同学讨论，不要像老师
-- 不要直接给正确答案，引导用户自己发现
-- 可以提出疑问、分享想法、请学生讲解
-- 每次只问一个问题，不要连续追问
-- 使用口语化表达，适当使用表情符号`;
+`;
 
       const contextSection = input.tutorContext.length > 0
         ? `\n【最近对话】\n${input.tutorContext.slice(-5).map(m => `${m.role}: ${m.content.substring(0, 100)}`).join('\n')}`
@@ -152,7 +157,9 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
-        ]
+        ],
+        temperature: promptConfig?.temperature,
+        max_tokens: promptConfig?.maxTokens,
       }, caller, { userId: 'system' });
 
       const message = response.choices[0]?.message?.content || '';
@@ -182,6 +189,7 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
             id: uuidv4(),
             agentId: AGENT_ID,
             userId: 'system',
+            sourceEntry: 'platform',
             success: error === null,
             durationMs,
             input: JSON.stringify(input).slice(0, 1000),

@@ -134,21 +134,20 @@ const rules: FormRules = {
 const handleRegister = async () => {
   if (!formRef.value) return;
 
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return;
+  const valid = await formRef.value.validate().catch(() => false);
+  if (!valid) return;
 
-    loading.value = true;
+  loading.value = true;
 
-    try {
-      await userStore.register(registerForm.name, registerForm.password);
-      toast.success('注册成功');
-      router.push('/dashboard');
-    } catch (error: any) {
-      toast.error(error.message || '注册失败，请稍后重试');
-    } finally {
-      loading.value = false;
-    }
-  });
+  try {
+    await userStore.register(registerForm.name, registerForm.password);
+    toast.success('注册成功');
+    router.push('/dashboard');
+  } catch (error: any) {
+    toast.error(error.message || '注册失败，请稍后重试');
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 

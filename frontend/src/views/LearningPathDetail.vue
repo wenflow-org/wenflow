@@ -9,20 +9,20 @@
     <!-- 顶部导航栏 -->
     <header class="dashboard-header" :class="{ 'dashboard-header--scrolled': headerScrolled }">
       <div class="header-container">
-        <button type="button" class="brand" @click="router.push('/dashboard')">
+<button type="button" class="brand" @click="router.push(dashboardPath)">
           <img src="/logo.png" alt="问流 WenFlow" class="brand-logo" />
         </button>
 
         <nav class="header-nav" aria-label="应用导航">
-          <router-link to="/dashboard" class="nav-item">学习台</router-link>
-          <router-link to="/goal-conversation" class="nav-item">目标规划</router-link>
-          <router-link to="/learning-paths" class="nav-item nav-item--active">学习路径</router-link>
-          <router-link to="/learning-state" class="nav-item">学习状态</router-link>
-          <router-link to="/achievements" class="nav-item">成就</router-link>
+          <router-link :to="dashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
+          <router-link :to="goalConversationPath" class="nav-item">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
+          <router-link :to="learningPathsBasePath" class="nav-item nav-item--active">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
+          <router-link :to="learningStatePath" class="nav-item">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
+          <router-link :to="achievementsPath" class="nav-item">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link to="/goal-conversation" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -51,7 +51,7 @@
         <!-- 面包屑导航 -->
         <div class="breadcrumb-section">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item @click="$router.push('/learning-paths')" class="breadcrumb-link">学习路径</el-breadcrumb-item>
+            <el-breadcrumb-item @click="$router.push(learningPathsBasePath)" class="breadcrumb-link">学习路径</el-breadcrumb-item>
             <el-breadcrumb-item>{{ path?.name || '加载中...' }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -223,9 +223,15 @@
                               <span v-if="task.displayLabel" class="display-label">
                                 {{ task.displayLabel }}
                               </span>
+                              <span v-if="getTaskConceptLabel(task)" class="display-label display-label--concept">
+                                {{ getTaskConceptLabel(task) }}
+                              </span>
                             </div>
                           </div>
                           <p class="task-desc">{{ task.description }}</p>
+                          <p v-if="task.acceptanceCriteria" class="task-acceptance">
+                            完成标准：{{ task.acceptanceCriteria }}
+                          </p>
                           <div class="task-footer">
                             <div class="task-time">
                               <el-icon><Clock /></el-icon>
@@ -315,13 +321,46 @@
                   </article>
                 </div>
               </article>
+
+              <article v-if="pathSceneCards.length > 0" class="glass-card path-detail-side-card">
+                <div class="path-detail-side-card__head">
+                  <span class="section-kicker">路径设计意图</span>
+                  <h2>这条路径先解决什么</h2>
+                </div>
+                <div class="path-detail-plan-list">
+                  <article v-for="item in pathSceneCards" :key="item.title" class="path-detail-plan-item">
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.desc }}</p>
+                  </article>
+                </div>
+                <div v-if="pathSceneMetaChips.length > 0" class="path-detail-chip-row path-detail-chip-row--wrap">
+                  <span v-for="item in pathSceneMetaChips" :key="item" class="path-detail-chip">{{ item }}</span>
+                </div>
+              </article>
+
+              <article v-if="cognitiveConceptCards.length > 0 || path?.cognitiveDesign?.cognitiveDomain" class="glass-card path-detail-side-card">
+                <div class="path-detail-side-card__head">
+                  <span class="section-kicker">认知骨架</span>
+                  <h2>这条路径在训练什么</h2>
+                </div>
+                <div v-if="path?.cognitiveDesign?.cognitiveDomain" class="path-detail-domain-block">
+                  <span>认知域</span>
+                  <strong>{{ path.cognitiveDesign.cognitiveDomain }}</strong>
+                </div>
+                <div v-if="cognitiveConceptCards.length > 0" class="path-detail-plan-list">
+                  <article v-for="item in cognitiveConceptCards" :key="item.title" class="path-detail-plan-item">
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.desc }}</p>
+                  </article>
+                </div>
+              </article>
             </aside>
           </section>
         </div>
 
         <div v-else class="empty-state glass-card">
           <el-empty description="未找到学习路径" />
-          <button class="btn btn-primary" @click="$router.push('/learning-paths')">
+          <button class="btn btn-primary" @click="$router.push(learningPathsBasePath)">
             返回学习路径列表
           </button>
         </div>
@@ -379,6 +418,38 @@ const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const pathId = route.params.id as string;
+const isTestMode = computed(() => route.meta.isTestMode === true);
+const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const goalConversationPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/goal-full' : '/test/goal-full';
+  }
+  return '/goal-conversation';
+});
+const learningPathsBasePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-paths' : '/test/learning-paths';
+  }
+  return '/learning-paths';
+});
+const dashboardPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
+  }
+  return '/dashboard';
+});
+const learningStatePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-state' : '/learning-state';
+  }
+  return '/learning-state';
+});
+const achievementsPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/achievements' : '/achievements';
+  }
+  return '/achievements';
+});
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerScrolled = ref(false);
@@ -550,6 +621,58 @@ const pathDetailNotes = computed(() => {
 
   return notes.slice(0, 3);
 });
+
+const pathSceneCards = computed(() => {
+  const scene = path.value?.sceneSummary;
+  if (!scene) return [];
+
+  return [
+    scene.firstDeliverable
+      ? { title: '首个最小交付物', desc: scene.firstDeliverable }
+      : null,
+    scene.targetState
+      ? { title: '目标状态', desc: scene.targetState }
+      : null,
+    Array.isArray(scene.planningFocus) && scene.planningFocus.length > 0
+      ? { title: '当前规划重点', desc: scene.planningFocus.join('、') }
+      : null,
+  ].filter(Boolean) as Array<{ title: string; desc: string }>;
+});
+
+const pathSceneMetaChips = computed(() => {
+  const scene = path.value?.sceneSummary;
+  if (!scene) return [];
+
+  return [
+    ...(Array.isArray(scene.excludedScope) ? scene.excludedScope.map((item: string) => `暂不展开：${item}`) : []),
+    ...(Array.isArray(scene.riskFlags) ? scene.riskFlags.map((item: string) => `风险：${item}`) : []),
+  ].slice(0, 6);
+});
+
+const cognitiveConceptCards = computed(() => {
+  const concepts = Array.isArray(path.value?.cognitiveDesign?.coreConcepts)
+    ? path.value.cognitiveDesign.coreConcepts
+    : [];
+
+  return concepts.map((concept: any, index: number) => ({
+    title: `${concept.role === 'hub' || index === 0 ? '枢纽概念' : '支撑概念'} · ${concept.name}`,
+    desc: concept.description || '作为后续教学和任务推进时的隐性认知锚点。'
+  }));
+});
+
+const conceptLabelMap = computed(() => {
+  const concepts = Array.isArray(path.value?.cognitiveDesign?.coreConcepts)
+    ? path.value.cognitiveDesign.coreConcepts
+    : [];
+  return new Map(concepts.map((concept: any) => [concept.id, concept.name]));
+});
+
+const getTaskConceptLabel = (task: any) => {
+  const conceptId = typeof task?.coreConcept === 'string' ? task.coreConcept : '';
+  if (!conceptId) return '';
+  const conceptName = conceptLabelMap.value.get(conceptId);
+  return conceptName ? `关联概念：${conceptName}` : '';
+};
 
 const pathDetailPlan = computed(() => {
   const items = nextActionTasks.value.map((task: any, index: number) => ({
@@ -1913,11 +2036,65 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
+.display-label--concept {
+  background: rgba(141, 107, 255, 0.1);
+  color: #6d4fd6;
+}
+
+.path-detail-chip-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.path-detail-chip-row--wrap {
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.path-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.42rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.path-detail-domain-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(141, 107, 255, 0.08);
+  border: 1px solid rgba(141, 107, 255, 0.14);
+  margin-bottom: 0.9rem;
+}
+
+.path-detail-domain-block span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.path-detail-domain-block strong {
+  font-size: 0.98rem;
+  color: var(--text-primary);
+}
+
 .task-desc {
   margin: 0 0 0.875rem 0;
   color: var(--text-secondary);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.task-acceptance {
+  margin: -0.2rem 0 0.875rem 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
 
 .task-footer {

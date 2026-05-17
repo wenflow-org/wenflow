@@ -21,8 +21,8 @@ model ab_test {
   updatedAt      DateTime
   ab_test_result ab_test_result[]
 
-  @@index([testType])
   @@index([status])
+  @@index([testType])
 }
 
 model ab_test_result {
@@ -44,9 +44,9 @@ model ab_test_result {
   createdAt      DateTime @default(now())
   ab_test        ab_test  @relation(fields: [testId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([variantId])
   @@index([testId])
+  @@index([variantId])
+  @@index([userId])
 }
 
 model achievements {
@@ -84,13 +84,13 @@ model agent_call_logs {
   calledAt    DateTime @default(now())
   metadata    String?
 
-  @@index([agentId])
-  @@index([userId])
-  @@index([sourceEntry])
-  @@index([traceId])
-  @@index([success])
-  @@index([calledAt])
   @@index([agentId, calledAt])
+  @@index([calledAt])
+  @@index([success])
+  @@index([traceId])
+  @@index([sourceEntry])
+  @@index([userId])
+  @@index([agentId])
 }
 
 model agent_execution_logs {
@@ -105,9 +105,9 @@ model agent_execution_logs {
   durationMs Int
   timestamp  DateTime @default(now())
 
-  @@index([instanceId])
-  @@index([agentName])
   @@index([timestamp])
+  @@index([agentName])
+  @@index([instanceId])
 }
 
 model agent_instances {
@@ -153,8 +153,25 @@ model agent_logs {
   durationMs Int
   timestamp  DateTime @default(now())
 
-  @@index([agentName])
   @@index([timestamp])
+  @@index([agentName])
+}
+
+model agent_model_configs {
+  id              String   @id
+  agentId         String   @unique
+  tier            String   @default("chat")
+  model           String?
+  endpoint        String?
+  apiKey          String?
+  temperature     Float    @default(0.7)
+  maxTokens       Int      @default(2000)
+  priority        Int      @default(0)
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  reasoningEffort String?
+  thinkingMode    String?
 }
 
 model agent_prompts {
@@ -178,8 +195,8 @@ model agent_prompts {
   publishedAt  DateTime?
 
   @@unique([agentId, version])
-  @@index([status])
   @@index([agentId])
+  @@index([status])
 }
 
 model agent_registrations {
@@ -221,10 +238,10 @@ model arena_agent_logs {
   createdAt        DateTime       @default(now())
   arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([startTime])
-  @@index([status])
-  @@index([agentName])
   @@index([sessionId])
+  @@index([agentName])
+  @@index([status])
+  @@index([startTime])
 }
 
 model arena_dialogues {
@@ -375,9 +392,9 @@ model content_feedback {
   updatedAt      DateTime
   users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([agentId])
-  @@index([sessionId])
   @@index([userId])
+  @@index([sessionId])
+  @@index([agentId])
 }
 
 model debug_learning_paths {
@@ -393,8 +410,8 @@ model debug_learning_paths {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @default(now())
   proposalId      String?
-  debug_proposals debug_proposals? @relation(fields: [proposalId], references: [id])
   debug_snapshots debug_snapshots  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  debug_proposals debug_proposals? @relation(fields: [proposalId], references: [id])
 }
 
 model debug_proposals {
@@ -485,8 +502,8 @@ model learningContents {
   version     Int      @default(1)
   subtasks    subtasks @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
 
-  @@index([contentType])
   @@index([subtaskId])
+  @@index([contentType])
 }
 
 model learning_goals {
@@ -527,61 +544,32 @@ model learning_metrics {
 }
 
 model learning_paths {
-  id                   String                 @id
-  userId               String
-  sourcePathId         String?
-  replanMode           String?
-  replanTriggerSource  String?
-  replanReason         String?
-  title                String
-  name                 String?
-  description          String?
-  subject              String?
-  status               String                 @default("active")
-  difficulty           String                 @default("beginner")
-  estimatedHours       Float?
-  totalMilestones      Int                    @default(0)
-  completedMilestones  Int                    @default(0)
-  aiGenerated          Boolean                @default(false)
-  aiPromptTemplate     String?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime
-  deadline             DateTime?
-  deadlineText         String?
-  users                users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  milestones           milestones[]
-
-  @@index([status])
-  @@index([userId])
-}
-
-model teaching_sessions {
-  id             String   @id
-  userId         String
-  taskId         String
-  learningPathId String?
-  milestoneId    String?
-  subject        String
-  topic          String
-  taskType       String   @default("practice")
-  mode           String   @default("tutor")
-  status         String   @default("active")
-  messages       String?
-  knowledgeState String?
-  teachingState  String?
-  wrapup         String?
-  advisory       String?
-  startTime      DateTime @default(now())
-  endTime        DateTime?
-  duration       Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now())
-  users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String       @id
+  userId              String
+  title               String
+  name                String?
+  description         String?
+  subject             String?
+  status              String       @default("active")
+  difficulty          String       @default("beginner")
+  estimatedHours      Float?
+  totalMilestones     Int          @default(0)
+  completedMilestones Int          @default(0)
+  aiGenerated         Boolean      @default(false)
+  aiPromptTemplate    String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime
+  deadline            DateTime?
+  deadlineText        String?
+  replanMode          String?
+  replanReason        String?
+  replanTriggerSource String?
+  sourcePathId        String?
+  users               users        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones          milestones[]
 
   @@index([userId])
-  @@index([taskId])
   @@index([status])
-  @@index([userId, taskId, status])
 }
 
 model milestones {
@@ -603,8 +591,8 @@ model milestones {
   subtasks       subtasks[]
 
   @@unique([learningPathId, stageNumber])
-  @@index([status])
   @@index([learningPathId])
+  @@index([status])
 }
 
 model path_decompositions {
@@ -622,6 +610,27 @@ model path_decompositions {
   users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model platform_api_configs {
+  id                     String    @id @default("platform")
+  apiUrl                 String?
+  apiKey                 String?
+  availableModels        String?
+  defaultModel           String?
+  defaultReasoningModel  String?
+  defaultEvaluationModel String?
+  connectionStatus       String    @default("unknown")
+  lastCheckedAt          DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now())
+  defaultTemperature     Float     @default(0.7)
+  defaultMaxTokens       Int       @default(2000)
+  reasoningEndpoint      String?
+  lightEndpoint          String?
+  chatModels             String?
+  reasoningModels        String?
+  lightModels            String?
+}
+
 model platform_stats {
   id             String   @id
   date           DateTime @default(now())
@@ -632,6 +641,23 @@ model platform_stats {
   totalTasks     Int      @default(0)
   completedTasks Int      @default(0)
   metadata       String?
+}
+
+model skill_model_configs {
+  id               String   @id
+  skillId          String   @unique
+  tier             String   @default("chat")
+  model            String?
+  thinkingMode     String?
+  reasoningEffort  String?
+  endpoint         String?
+  apiKey           String?
+  temperature      Float    @default(0.7)
+  maxTokens        Int      @default(2000)
+  requestTimeoutMs Int?
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
 }
 
 model skill_registrations {
@@ -674,21 +700,21 @@ model student_baselines {
 }
 
 model subtasks {
-  id                   String                 @id
+  id                   String             @id
   milestoneId          String
   userId               String
   title                String
   description          String?
-  taskType             String                 @default("practice")
-  estimatedMinutes     Int                    @default(30)
+  taskType             String             @default("practice")
+  estimatedMinutes     Int                @default(30)
   acceptanceCriteria   String?
-  order                Int                    @default(0)
-  status               String                 @default("todo")
+  order                Int                @default(0)
+  status               String             @default("todo")
   completedAt          DateTime?
   rating               Int?
   feedback             String?
-  cognitiveLoad        String                 @default("medium")
-  createdAt            DateTime               @default(now())
+  cognitiveLoad        String             @default("medium")
+  createdAt            DateTime           @default(now())
   updatedAt            DateTime
   usersId              String?
   annotationConfidence Float?
@@ -697,16 +723,16 @@ model subtasks {
   displayLabel         String?
   knowledgeType        String?
   learningObjectives   String?
-  transferable         Boolean?               @default(false)
+  transferable         Boolean?           @default(false)
   learningContents     learningContents[]
-  milestones           milestones             @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
-  users                users?                 @relation(fields: [usersId], references: [id])
+  users                users?             @relation(fields: [usersId], references: [id])
+  milestones           milestones         @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
-  @@index([cognitiveLevel])
-  @@index([knowledgeType])
-  @@index([milestoneId])
-  @@index([userId])
   @@index([status])
+  @@index([userId])
+  @@index([milestoneId])
+  @@index([knowledgeType])
+  @@index([cognitiveLevel])
 }
 
 model system_announcements {
@@ -717,6 +743,35 @@ model system_announcements {
   active    Boolean   @default(true)
   createdAt DateTime  @default(now())
   expiresAt DateTime?
+}
+
+model teaching_sessions {
+  id             String    @id
+  userId         String
+  taskId         String
+  learningPathId String?
+  milestoneId    String?
+  subject        String
+  topic          String
+  taskType       String    @default("practice")
+  mode           String    @default("tutor")
+  status         String    @default("active")
+  messages       String?
+  knowledgeState String?
+  teachingState  String?
+  wrapup         String?
+  advisory       String?
+  startTime      DateTime  @default(now())
+  endTime        DateTime?
+  duration       Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now())
+  users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskId, status])
+  @@index([status])
+  @@index([taskId])
+  @@index([userId])
 }
 
 model user_agent_configs {
@@ -740,17 +795,34 @@ model user_agent_configs {
   @@unique([userId, agentName])
 }
 
+model user_agent_model_configs {
+  id          String   @id
+  userId      String
+  agentId     String
+  model       String?
+  endpoint    String?
+  apiKey      String?
+  temperature Float?
+  maxTokens   Int?
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  users       users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentId])
+}
+
 model user_api_configs {
-  id              String   @id
-  userId          String   @unique
-  endpoint        String?  // 用户自定义端点
-  apiKey          String?  // 用户自定义 API Key
-  chatModel       String?  // 对话模型名称
-  reasoningModel  String?  // 推理模型名称
-  enabled         Boolean  @default(false)  // 是否启用用户配置
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now())
-  users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id
+  userId         String   @unique
+  endpoint       String?
+  apiKey         String?
+  chatModel      String?
+  reasoningModel String?
+  enabled        Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+  users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model user_code_repositories {
@@ -769,8 +841,8 @@ model user_code_repositories {
   updatedAt    DateTime
   users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([status])
   @@index([userId, type])
+  @@index([status])
 }
 
 model user_mcp_configs {
@@ -805,15 +877,15 @@ model user_skill_configs {
 }
 
 model users {
-  id                       String                    @id
-  email                    String                    @unique
+  id                       String                     @id
+  email                    String                     @unique
   name                     String
   password                 String
-  role                     String                    @default("user")
-  currentLevel             String                    @default("beginner")
-  xp                       Int                       @default(0)
-  isAdmin                  Boolean                   @default(false)
-  createdAt                DateTime                  @default(now())
+  role                     String                     @default("user")
+  currentLevel             String                     @default("beginner")
+  xp                       Int                        @default(0)
+  isAdmin                  Boolean                    @default(false)
+  createdAt                DateTime                   @default(now())
   updatedAt                DateTime
   lastLoginAt              DateTime?
   achievements             achievements[]
@@ -823,86 +895,14 @@ model users {
   learning_goals           learning_goals[]
   learning_metrics         learning_metrics[]
   learning_paths           learning_paths[]
-  teaching_sessions        teaching_sessions[]
   path_decompositions      path_decompositions[]
   student_baselines        student_baselines?
   subtasks                 subtasks[]
+  teaching_sessions        teaching_sessions[]
   user_agent_configs       user_agent_configs[]
+  user_agent_model_configs user_agent_model_configs[]
   user_api_configs         user_api_configs?
   user_code_repositories   user_code_repositories[]
   user_mcp_configs         user_mcp_configs?
   user_skill_configs       user_skill_configs[]
-  agentModelConfigs        user_agent_model_configs[]
-}
-
-model platform_api_configs {
-  id                      String    @id @default("platform")
-  apiUrl                  String?
-  apiKey                  String?
-  availableModels         String?
-  defaultModel            String?
-  defaultReasoningModel   String?
-  defaultEvaluationModel  String?
-  connectionStatus        String    @default("unknown")
-  lastCheckedAt           DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @default(now())
-  defaultTemperature      Float     @default(0.7)
-  defaultMaxTokens        Int       @default(2000)
-  reasoningEndpoint       String?
-  lightEndpoint           String?
-  chatModels              String?
-  reasoningModels         String?
-  lightModels             String?
-}
-
-model agent_model_configs {
-  id          String    @id @default(cuid())
-  agentId     String    @unique
-  tier        String    @default("chat")
-  model       String?
-  thinkingMode String?
-  reasoningEffort String?
-  endpoint    String?
-  apiKey      String?
-  temperature Float     @default(0.7)
-  maxTokens   Int       @default(2000)
-  priority    Int       @default(0)
-  enabled     Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
-model skill_model_configs {
-  id               String    @id @default(cuid())
-  skillId          String    @unique
-  tier             String    @default("chat")
-  model            String?
-  thinkingMode     String?
-  reasoningEffort  String?
-  endpoint         String?
-  apiKey           String?
-  temperature      Float     @default(0.7)
-  maxTokens        Int       @default(2000)
-  requestTimeoutMs Int?
-  enabled          Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-}
-
-model user_agent_model_configs {
-  id          String    @id @default(cuid())
-  userId      String
-  agentId     String
-  model       String?
-  endpoint    String?
-  apiKey      String?
-  temperature Float?
-  maxTokens   Int?
-  enabled     Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  users       users     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, agentId])
 }

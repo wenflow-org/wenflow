@@ -335,6 +335,7 @@ router.post('/agents/:name/test', async (req, res) => {
         input,
         {
           userId: context?.userId || 'test-user',
+          sourceEntry: 'admin',
           metadata: context?.metadata || {}
         }
       );
@@ -345,8 +346,8 @@ router.post('/agents/:name/test', async (req, res) => {
           agentName: name,
           agentType: 'plugin',
           input,
-          output: result.internal,  // 改为 internal
-          userVisible: result.userVisible,  // 添加 userVisible
+          output: result.internal,
+          userVisible: result.userVisible,
           error: result.error,
           metadata: result.metadata,
           duration: Date.now() - startTime

@@ -55,7 +55,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.4,
-      maxTokens: 10000
+      maxTokens: 32000
     }
   },
   {

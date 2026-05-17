@@ -3,7 +3,7 @@
     <header v-if="!isAppScene" class="demo-site__header">
       <div class="site-nav-shell">
         <div class="site-nav__brand">
-          <router-link to="/ui-lab" class="site-brand">
+          <router-link :to="uiLabBasePath" class="site-brand">
             <img src="/ui-lab-logo.png" alt="问流 WenFlow" class="site-brand__logo" />
           </router-link>
         </div>
@@ -24,7 +24,7 @@
 
     <header v-else class="app-site__header">
       <div class="app-nav-shell">
-        <router-link to="/ui-lab/dashboard" class="app-brand">
+        <router-link :to="uiLabDashboardPath" class="app-brand">
           <img src="/ui-lab-logo.png" alt="问流 WenFlow" class="app-brand__logo" />
           <div class="app-brand__copy">
             <strong>学习台</strong>
@@ -39,7 +39,7 @@
         </nav>
 
         <div class="app-header__actions">
-          <router-link to="/ui-lab/planning" class="app-header__cta">开始新规划</router-link>
+          <router-link :to="uiLabPlanningPath" class="app-header__cta">开始新规划</router-link>
           <div class="app-user-chip">
             <span>{{ appUserHint }}</span>
             <strong>{{ appUserName }}</strong>
@@ -67,8 +67,8 @@
             </h1>
             <p class="home-hero__sub">普通 AI 给你答案。问流从你的真实困扰出发，先澄清目标，再生成路径，通过对话、输出和反馈持续推进。</p>
             <div class="home-hero__cta">
-              <router-link to="/ui-lab/login" class="btn btn--primary btn--lg">开始体验</router-link>
-              <router-link to="/ui-lab/vision" class="btn btn--ghost">了解愿景</router-link>
+              <router-link :to="uiLabLoginPath" class="btn btn--primary btn--lg">开始体验</router-link>
+              <router-link :to="uiLabVisionPath" class="btn btn--ghost">了解愿景</router-link>
             </div>
           </div>
 
@@ -182,8 +182,8 @@
             <h2>先体验一次完整学习闭环。</h2>
             <p>从一个模糊目标开始，看看 WenFlow 如何帮你澄清、规划，并进入真正的学习过程。</p>
             <div class="home-final-cta__actions">
-              <router-link to="/ui-lab/login" class="btn btn--primary btn--lg">开始体验</router-link>
-              <router-link to="/ui-lab/vision" class="btn btn--ghost btn--ghost-light">查看愿景</router-link>
+              <router-link :to="uiLabLoginPath" class="btn btn--primary btn--lg">开始体验</router-link>
+              <router-link :to="uiLabVisionPath" class="btn btn--ghost btn--ghost-light">查看愿景</router-link>
             </div>
           </div>
         </section>
@@ -376,8 +376,8 @@
             <h2>如果你认同这套学习观，<br />下一步就是亲自试一次。</h2>
             <p>从一个模糊目标开始，看看 WenFlow 如何帮你澄清、规划，并进入真正的学习过程。</p>
             <div class="vision-cta__actions">
-              <router-link to="/ui-lab/login" class="btn btn--primary btn--lg">开始体验</router-link>
-              <router-link to="/ui-lab/paths" class="btn btn--ghost btn--ghost-light">查看学习路径</router-link>
+              <router-link :to="uiLabLoginPath" class="btn btn--primary btn--lg">开始体验</router-link>
+              <router-link :to="uiLabPathsPath" class="btn btn--ghost btn--ghost-light">查看学习路径</router-link>
             </div>
           </div>
         </section>
@@ -399,7 +399,7 @@
 
               <div class="dashboard-hero__actions">
                 <router-link :to="dashboardPrimaryAction.to" class="btn btn--primary btn--lg">{{ dashboardPrimaryAction.label }}</router-link>
-                <router-link to="/ui-lab/paths" class="btn btn--ghost">查看学习路径</router-link>
+                <router-link :to="uiLabPathsPath" class="btn btn--ghost">查看学习路径</router-link>
               </div>
 
               <div class="dashboard-starter">
@@ -415,7 +415,7 @@
                       <strong>{{ item.title }}</strong>
                       <p>{{ item.desc }}</p>
                     </div>
-                    <router-link :to="item.to" class="dashboard-inline-link">前往</router-link>
+                 <router-link :to="toAdminLabPath(item.to)" class="dashboard-inline-link">前往</router-link>
                   </article>
                 </div>
               </div>
@@ -449,7 +449,7 @@
               </div>
 
               <div class="dashboard-focus-card__actions">
-                <router-link to="/ui-lab/paths/1" class="btn btn--primary">查看路径详情</router-link>
+                <router-link :to="toAdminLabPath('/ui-lab/paths/1')" class="btn btn--primary">查看路径详情</router-link>
               </div>
             </aside>
           </section>
@@ -460,7 +460,7 @@
                 <span class="section-kicker">学习状态摘要</span>
                 <h2>先看状态，再决定今天适不适合继续</h2>
               </div>
-              <router-link to="/ui-lab/state" class="dashboard-inline-link">查看完整状态分析</router-link>
+              <router-link :to="uiLabStatePath" class="dashboard-inline-link">查看完整状态分析</router-link>
             </div>
 
             <div class="dashboard-overview-grid">
@@ -483,7 +483,7 @@
                   <span class="section-kicker">流程摩擦与建议</span>
                   <h2>今天最需要留意的地方</h2>
                 </div>
-                <router-link to="/ui-lab/state" class="dashboard-inline-link">查看状态详情</router-link>
+                <router-link :to="uiLabStatePath" class="dashboard-inline-link">查看状态详情</router-link>
               </div>
 
               <div class="dashboard-friction-list">
@@ -510,7 +510,7 @@
                   <span class="section-kicker">成就激励</span>
                   <h2>最近成就与下一步</h2>
                 </div>
-                <router-link to="/ui-lab/achievements" class="dashboard-inline-link">查看全部成就</router-link>
+                <router-link :to="uiLabAchievementsPath" class="dashboard-inline-link">查看全部成就</router-link>
               </div>
 
               <div class="dashboard-achievement-summary">
@@ -605,12 +605,12 @@
                 <div v-if="sceneId === 'register'" class="auth-hint">密码至少 8 位，建议同时包含字母和数字。</div>
 
                 <div class="auth-actions">
-                  <router-link to="/ui-lab/dashboard" class="btn btn--primary btn--lg auth-submit" @click="setAuthPreviewState('registered')">{{ sceneId === 'login' ? '登录并继续' : '注册并开始' }}</router-link>
+                  <router-link :to="uiLabDashboardPath" class="btn btn--primary btn--lg auth-submit" @click="setAuthPreviewState('registered')">{{ sceneId === 'login' ? '登录并继续' : '注册并开始' }}</router-link>
                 </div>
 
                 <div class="auth-switch">
                   <span>{{ sceneId === 'login' ? '还没有账号？' : '已有账号？' }}</span>
-                  <router-link :to="sceneId === 'login' ? '/ui-lab/register' : '/ui-lab/login'">{{ sceneId === 'login' ? '立即注册' : '立即登录' }}</router-link>
+                  <router-link :to="sceneId === 'login' ? uiLabRegisterPath : uiLabLoginPath">{{ sceneId === 'login' ? '立即注册' : '立即登录' }}</router-link>
                 </div>
               </form>
             </div>
@@ -921,8 +921,8 @@
               <p>推进中的继续走，生成中的等待完成，失败的及时重试，优先从最近在学的那条继续。</p>
             </div>
             <div class="paths-hero__actions">
-              <router-link to="/ui-lab/paths/1" class="btn btn--primary">继续上次学习</router-link>
-              <router-link to="/ui-lab/planning" class="btn btn--ghost">开始新规划</router-link>
+              <router-link :to="toAdminLabPath('/ui-lab/paths/1')" class="btn btn--primary">继续上次学习</router-link>
+              <router-link :to="uiLabPlanningPath" class="btn btn--ghost">开始新规划</router-link>
             </div>
           </section>
         </section>
@@ -966,7 +966,7 @@
               <p>{{ path.error }}</p>
               <div class="path-card__actions-row">
                 <button class="btn btn--ghost">重试</button>
-                <router-link to="/ui-lab/planning" class="btn btn--ghost">回到规划</router-link>
+                <router-link :to="uiLabPlanningPath" class="btn btn--ghost">回到规划</router-link>
               </div>
             </div>
 
@@ -993,8 +993,8 @@
                 </div>
               </div>
               <div class="path-card__actions-row">
-                <router-link to="/ui-lab/paths/1" class="btn btn--primary">继续推进</router-link>
-                <router-link to="/ui-lab/paths/1" class="btn btn--ghost">查看详情</router-link>
+                <router-link :to="toAdminLabPath('/ui-lab/paths/1')" class="btn btn--primary">继续推进</router-link>
+                <router-link :to="toAdminLabPath('/ui-lab/paths/1')" class="btn btn--ghost">查看详情</router-link>
               </div>
             </div>
           </article>
@@ -1041,7 +1041,7 @@
                   <span>总进度</span>
                 </div>
               </div>
-              <router-link to="/ui-lab/learn/task-1" class="btn btn--primary btn--lg">继续学习</router-link>
+              <router-link :to="toAdminLabPath('/ui-lab/learn/task-1')" class="btn btn--primary btn--lg">继续学习</router-link>
             </div>
           </section>
         </section>
@@ -1077,7 +1077,7 @@
 
                   <div class="path-stage-task__foot">
                     <span class="path-stage-task__status">{{ task.statusLabel }}</span>
-                    <router-link v-if="task.actionTo" :to="task.actionTo" class="btn btn--ghost">{{ task.actionLabel }}</router-link>
+                    <router-link v-if="task.actionTo" :to="toAdminLabPath(task.actionTo)" class="btn btn--ghost">{{ task.actionLabel }}</router-link>
                     <button v-else class="btn btn--ghost" :disabled="task.badge === '锁定'">{{ task.actionLabel }}</button>
                   </div>
                 </article>
@@ -1108,7 +1108,7 @@
                   <p>{{ item.desc }}</p>
                 </article>
               </div>
-              <router-link to="/ui-lab/learn/task-1" class="btn btn--primary btn--full">开始学习</router-link>
+              <router-link :to="toAdminLabPath('/ui-lab/learn/task-1')" class="btn btn--primary btn--full">开始学习</router-link>
             </article>
 
             <article class="surface-card path-detail-side-card path-detail-side-card--light">
@@ -1137,8 +1137,8 @@
             <div class="app-page-head__top">
               <span class="pill">学习状态</span>
               <div class="app-page-head__actions">
-                <router-link to="/ui-lab/learn/task-1" class="btn btn--primary">继续当前任务</router-link>
-                <router-link to="/ui-lab/dashboard" class="btn btn--ghost">回到学习台</router-link>
+                <router-link :to="toAdminLabPath('/ui-lab/learn/task-1')" class="btn btn--primary">继续当前任务</router-link>
+                <router-link :to="uiLabDashboardPath" class="btn btn--ghost">回到学习台</router-link>
               </div>
             </div>
 
@@ -1194,8 +1194,8 @@
             <div class="app-page-head__top">
               <span class="pill">成就</span>
               <div class="app-page-head__actions">
-                <router-link to="/ui-lab/dashboard" class="btn btn--primary">回到学习台</router-link>
-                <router-link to="/ui-lab/paths" class="btn btn--ghost">查看学习路径</router-link>
+                <router-link :to="uiLabDashboardPath" class="btn btn--primary">回到学习台</router-link>
+                <router-link :to="uiLabPathsPath" class="btn btn--ghost">查看学习路径</router-link>
               </div>
             </div>
 
@@ -1243,7 +1243,7 @@
             <p>{{ achievementSpotlight.next.desc }}</p>
             <div class="achievement-spotlight-card__foot">
               <span>{{ achievementSpotlight.next.progress }}</span>
-              <router-link :to="achievementSpotlight.next.actionTo" class="btn btn--ghost">{{ achievementSpotlight.next.actionLabel }}</router-link>
+              <router-link :to="toAdminLabPath(achievementSpotlight.next.actionTo)" class="btn btn--ghost">{{ achievementSpotlight.next.actionLabel }}</router-link>
             </div>
           </article>
         </section>
@@ -1296,7 +1296,7 @@
                 <small>{{ item.category }}</small>
                 <small>{{ item.progress }}</small>
               </div>
-              <router-link :to="item.actionTo" class="btn btn--ghost achievement-card-new__action">{{ item.actionLabel }}</router-link>
+              <router-link :to="toAdminLabPath(item.actionTo)" class="btn btn--ghost achievement-card-new__action">{{ item.actionLabel }}</router-link>
             </article>
           </section>
         </section>
@@ -1311,8 +1311,8 @@
                 <h1>异常处理与日志记录</h1>
               </div>
               <div class="learning-hero__actions">
-                <router-link to="/ui-lab/feedback" class="btn btn--primary">结束后查看反馈</router-link>
-                <router-link to="/ui-lab/paths/1" class="btn btn--ghost">返回路径详情</router-link>
+                <router-link :to="uiLabFeedbackPath" class="btn btn--primary">结束后查看反馈</router-link>
+                <router-link :to="toAdminLabPath('/ui-lab/paths/1')" class="btn btn--ghost">返回路径详情</router-link>
               </div>
             </div>
 
@@ -1410,7 +1410,7 @@
             <div class="learning-completion">
               <span>✅ 已达到课程完成条件</span>
               <div class="learning-completion__actions">
-                <router-link to="/ui-lab/feedback" class="btn btn--primary">结束并评估</router-link>
+                <router-link :to="uiLabFeedbackPath" class="btn btn--primary">结束并评估</router-link>
                 <button class="btn btn--ghost">继续学习</button>
               </div>
             </div>
@@ -1508,6 +1508,21 @@ type UILabSceneId = SceneId | 'vision' | 'login' | 'register' | 'state' | 'achie
 
 const route = useRoute();
 const theme = themes[0];
+const toAdminLabPath = (path: string) => {
+  if (path.startsWith('/admin/')) return path;
+  if (path.startsWith('/ui-lab')) return `/admin${path}`;
+  return path;
+};
+const uiLabBasePath = '/admin/ui-lab';
+const uiLabVisionPath = '/admin/ui-lab/vision';
+const uiLabLoginPath = '/admin/ui-lab/login';
+const uiLabRegisterPath = '/admin/ui-lab/register';
+const uiLabDashboardPath = '/admin/ui-lab/dashboard';
+const uiLabPlanningPath = '/admin/ui-lab/planning';
+const uiLabPathsPath = '/admin/ui-lab/paths';
+const uiLabStatePath = '/admin/ui-lab/state';
+const uiLabAchievementsPath = '/admin/ui-lab/achievements';
+const uiLabFeedbackPath = '/admin/ui-lab/feedback';
 const device = ref<DeviceId>('desktop');
 const authPreviewState = ref<'guest' | 'registered'>('guest');
 const labPanelOpen = ref(false);
@@ -1522,8 +1537,8 @@ let homeHowObserver: IntersectionObserver | null = null;
 let visionProblemsObserver: IntersectionObserver | null = null;
 
 const demoNav: Array<{ to: string; label: string; sceneId: UILabSceneId }> = [
-  { to: '/ui-lab', label: '首页', sceneId: 'home' },
-  { to: '/ui-lab/vision', label: '愿景', sceneId: 'vision' }
+  { to: uiLabBasePath, label: '首页', sceneId: 'home' },
+  { to: uiLabVisionPath, label: '愿景', sceneId: 'vision' }
 ];
 
 const sceneId = computed<UILabSceneId>(() => (route.meta.uiLabSceneId as UILabSceneId | undefined) ?? 'home');
@@ -1552,17 +1567,17 @@ const activeAppNavSceneId = computed<UILabSceneId>(() => {
   return sceneId.value;
 });
 const deviceLabel = computed(() => (device.value === 'mobile' ? '移动版预览' : '桌面版预览'));
-const navPrimaryPath = computed(() => (authPreviewState.value === 'registered' ? '/ui-lab/planning' : '/ui-lab/register'));
-const navSecondaryPath = computed(() => (authPreviewState.value === 'registered' ? '/ui-lab/dashboard' : '/ui-lab/login'));
+const navPrimaryPath = computed(() => (authPreviewState.value === 'registered' ? uiLabPlanningPath : uiLabRegisterPath));
+const navSecondaryPath = computed(() => (authPreviewState.value === 'registered' ? uiLabDashboardPath : uiLabLoginPath));
 const navSecondaryLabel = computed(() => (authPreviewState.value === 'registered' ? '学习台预览' : '登录'));
 const isRegisteredPreview = computed(() => authPreviewState.value === 'registered');
 const dashboardAppNav = [
-  { to: '/ui-lab/dashboard', label: '学习台', sceneId: 'dashboard' as const },
-  { to: '/ui-lab/planning', label: '目标规划', sceneId: 'requirement' as const },
-  { to: '/ui-lab/paths', label: '学习路径', sceneId: 'paths' as const },
-  { to: '/ui-lab/state', label: '学习状态', sceneId: 'state' as const },
-  { to: '/ui-lab/achievements', label: '成就', sceneId: 'achievements' as const },
-  { to: '/ui-lab/feedback', label: '学习反馈', sceneId: 'evaluation' as const }
+  { to: uiLabDashboardPath, label: '学习台', sceneId: 'dashboard' as const },
+  { to: uiLabPlanningPath, label: '目标规划', sceneId: 'requirement' as const },
+  { to: uiLabPathsPath, label: '学习路径', sceneId: 'paths' as const },
+  { to: uiLabStatePath, label: '学习状态', sceneId: 'state' as const },
+  { to: uiLabAchievementsPath, label: '成就', sceneId: 'achievements' as const },
+  { to: uiLabFeedbackPath, label: '学习反馈', sceneId: 'evaluation' as const }
 ];
 const appHeaderSubtitle = computed(() => {
   if (sceneId.value === 'dashboard') return '当前重点';
@@ -1585,13 +1600,13 @@ const dashboardHeroSubtitle = computed(() => (
 ));
 const dashboardPrimaryAction = computed(() => (
   isRegisteredPreview.value
-    ? { to: '/ui-lab/learn/task-1', label: '继续当前任务' }
-    : { to: '/ui-lab/register', label: '注册并进入学习台' }
+    ? { to: toAdminLabPath('/ui-lab/learn/task-1'), label: '继续当前任务' }
+    : { to: uiLabRegisterPath, label: '注册并进入学习台' }
 ));
 const dashboardSecondaryAction = computed(() => (
   isRegisteredPreview.value
-    ? { to: '/ui-lab/planning', label: '开始目标规划' }
-    : { to: '/ui-lab/login', label: '已有账号，先登录' }
+    ? { to: uiLabPlanningPath, label: '开始目标规划' }
+    : { to: uiLabLoginPath, label: '已有账号，先登录' }
 ));
 const dashboardStarterProgress = computed(() => (isRegisteredPreview.value ? 1 : 0));
 const dashboardStarterSteps = computed(() => [
@@ -1913,8 +1928,8 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
       pill: '最近学习详情',
       title: '真正有用的路径，不是排满课程，而是每一步都能落回真实任务。',
       desc: '这条路径围绕每周 Excel 周报自动化展开。你现在需要的不是再开一条新路线，而是把当前阶段的异常处理和日志闭环做稳。',
-      primaryAction: { to: '/ui-lab/learn/task-1', label: '进入当前任务' },
-      secondaryAction: { to: '/ui-lab/paths', label: '回到路径列表' },
+      primaryAction: { to: toAdminLabPath('/ui-lab/learn/task-1'), label: '进入当前任务' },
+      secondaryAction: { to: uiLabPathsPath, label: '回到路径列表' },
       summaryTitle: '当前路径状态',
       summaryDesc: '先看当前阶段、投入估计和完成比例，再决定本周学习窗口怎么排。',
       summaryItems: [
@@ -1932,8 +1947,8 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
       pill: '授课进行中',
       title: '围绕一个具体任务，边学边问，直到它能迁移回真实场景。',
       desc: '当前主题是异常处理与日志记录。目标不是记住语法，而是知道为什么要这样设计，以及出了问题时如何回溯。',
-      primaryAction: { to: '/ui-lab/feedback', label: '结束后查看反馈' },
-      secondaryAction: { to: '/ui-lab/paths/1', label: '回到路径详情' },
+      primaryAction: { to: uiLabFeedbackPath, label: '结束后查看反馈' },
+      secondaryAction: { to: toAdminLabPath('/ui-lab/paths/1'), label: '回到路径详情' },
       summaryTitle: '课堂状态',
       summaryDesc: '关注当前知识点进度、课堂节奏和是否已经达到收口条件。',
       summaryItems: learningSessionStats.slice(0, 3).map((item) => ({
@@ -1951,8 +1966,8 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
       pill: '规划中',
       title: '先把问题收敛清楚，再生成真正能开始的学习路径。',
       desc: 'AI 规划师会围绕真实场景、当前基础和时间窗口持续追问，让路径拆解贴近你真正要解决的事。',
-      primaryAction: { to: '/ui-lab/paths', label: '查看生成路径' },
-      secondaryAction: { to: '/ui-lab/dashboard', label: '回到学习台' },
+      primaryAction: { to: uiLabPathsPath, label: '查看生成路径' },
+      secondaryAction: { to: uiLabDashboardPath, label: '回到学习台' },
       summaryTitle: '当前理解摘要',
       summaryDesc: '这些信号会直接影响路径阶段、任务轻重和学习节奏。',
       summaryItems: [
@@ -1974,8 +1989,8 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
       pill: '路径总览',
       title: '不同状态的路径都应该被看见，这样学习流程才不会断。',
       desc: '列表页不只是用来展示成功生成的结果，它也要承载生成中、失败重试和主次路径取舍，让你知道现在最该推进哪一条。',
-      primaryAction: { to: '/ui-lab/paths/1', label: '继续上次学习' },
-      secondaryAction: { to: '/ui-lab/planning', label: '开始新规划' },
+      primaryAction: { to: toAdminLabPath('/ui-lab/paths/1'), label: '继续上次学习' },
+      secondaryAction: { to: uiLabPlanningPath, label: '开始新规划' },
       summaryTitle: '当前路径分布',
       summaryDesc: '优先从最近在学的位置继续，其余保持轻量推进，注意力才不会被切碎。',
       summaryItems: [
@@ -1992,8 +2007,8 @@ const workbenchSceneMeta = computed<WorkbenchSceneMeta>(() => {
     pill: '课后总结',
     title: '本次学习已经结束，接下来该把总结接回下一步行动。',
     desc: '这里展示的是这节课刚结束后的总结：你学到了什么、哪些点还不稳、下一节最值得继续什么。',
-    primaryAction: { to: '/ui-lab/learn/task-1', label: '继续当前任务' },
-    secondaryAction: { to: '/ui-lab/dashboard', label: '回到学习台' },
+    primaryAction: { to: toAdminLabPath('/ui-lab/learn/task-1'), label: '继续当前任务' },
+    secondaryAction: { to: uiLabDashboardPath, label: '回到学习台' },
     summaryTitle: '本节摘要',
     summaryDesc: '先看主题、知识点、用时和消息数，再进入本节总结。',
     summaryItems: evaluationSummaryCards.slice(0, 3).map((item) => ({

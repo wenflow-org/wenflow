@@ -1,4 +1,5 @@
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../protocol';
 
@@ -160,7 +161,7 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
   }
 };
 
-const TEACHING_TURN_SYSTEM_PROMPT = `你是一位结构化教学回合生成器。
+export const TEACHING_TURN_SYSTEM_PROMPT = `你是一位结构化教学回合生成器。
 
 请根据课堂上下文，输出严格 JSON，字段必须完整：
 {
@@ -276,14 +277,17 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
   try {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { agentId: AGENT_ID };
+    const promptConfig = await agentConfigService.getActivePrompt(AGENT_ID);
     const response = await gateway.execute({
       messages: [
-        { role: 'system', content: TEACHING_TURN_SYSTEM_PROMPT },
+        { role: 'system', content: promptConfig?.systemPrompt || TEACHING_TURN_SYSTEM_PROMPT },
         {
           role: 'user',
           content: JSON.stringify(input)
         }
-      ]
+      ],
+      temperature: promptConfig?.temperature,
+      max_tokens: promptConfig?.maxTokens,
     }, caller, { userId: 'system' });
 
     const raw = response.choices[0]?.message.content || '{}';

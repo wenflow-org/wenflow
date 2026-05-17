@@ -10,6 +10,7 @@ import { getGateway } from '../gateway';
 import { agentHandlers, allAgentDefinitions } from '../agents';
 import { AgentExecutionRequest, AgentContext } from '../agents/protocol';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
+import { getRequestContext } from '../gateway/api-gateway/context';
 
 const router = Router();
 
@@ -100,12 +101,9 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
   const { agentId } = req.params;
   const { input, context } = req.body;
   
-  // 调试日志
-  console.log('[Agent Route] 接收到的请求体:', JSON.stringify(req.body, null, 2));
-  console.log('[Agent Route] input:', JSON.stringify(input, null, 2));
-  console.log('[Agent Route] input.metadata:', JSON.stringify(input?.metadata, null, 2));
+  const requestContext = getRequestContext();
+  const sourceEntry = requestContext.sourceEntry || 'user';
   
-  // 从请求中获取用户信息
   const userId = (req as any).user?.userId;
   if (!userId) {
     return res.status(401).json({
@@ -120,13 +118,13 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
   try {
     const gateway = getGateway();
     
-    // 构建执行请求
     const executionRequest: AgentExecutionRequest = {
       agentId,
       input,
       context: {
         userId,
         sessionId: context?.sessionId,
+        sourceEntry,
         conversationHistory: context?.conversationHistory,
         userProfile: context?.userProfile,
         currentState: context?.currentState
@@ -176,7 +174,6 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
       error: errorInfo.message
     });
   } finally {
-    // 持久化 Agent 调用日志
     try {
       const durationMs = Date.now() - startTime;
       const normalizedOutputForLog = result?.output
@@ -188,6 +185,8 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
           id: uuidv4(),
           agentId,
           userId,
+          sourceEntry,
+          traceId: requestContext.traceId,
           input: input ? JSON.stringify(input) : null,
           output: normalizedOutputForLog ? JSON.stringify(normalizedOutputForLog) : null,
           success: result?.success ?? false,
@@ -220,7 +219,6 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
         }
       });
     } catch (logError) {
-      // 日志记录失败不应影响主流程
       console.error('[Agent Route] Failed to persist agent call log:', logError);
     }
   }

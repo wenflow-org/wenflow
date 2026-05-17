@@ -262,6 +262,21 @@ const route = useRoute();
 const router = useRouter();
 const taskId = computed(() => route.params.taskId as string);
 
+const isTestMode = computed(() => route.meta.isTestMode === true);
+const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const dashboardPath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
+  }
+  return '/dashboard';
+});
+const learningPathDetailBasePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learning-path' : '/learning-path';
+  }
+  return '/learning-path';
+});
+
 const pageLoading = ref(true);
 const task = ref<any>(null);
 
@@ -918,11 +933,11 @@ const closeEvaluationAndReturn = () => {
   showEvaluationDialog.value = false;
   if (task.value?.learningPath?.id) {
     router.push({
-      path: `/learning-path/${task.value.learningPath.id}`,
+      path: `${learningPathDetailBasePath.value}/${task.value.learningPath.id}`,
       query: { t: String(Date.now()) }
     });
   } else {
-    router.push('/dashboard');
+    router.push(dashboardPath.value);
   }
 };
 
@@ -1038,7 +1053,7 @@ const pauseAndLeave = async () => {
     }
   }
   const pathId = task.value?.learningPath?.id;
-  await router.push(pathId ? `/learning-path/${pathId}` : '/dashboard');
+  await router.push(pathId ? `${learningPathDetailBasePath.value}/${pathId}` : dashboardPath.value);
 };
 
 const handleSessionCommand = (command: string) => {
@@ -1109,7 +1124,7 @@ const goBack = () => {
     pauseAndLeave();
   } else {
     const pathId = task.value?.learningPath?.id;
-    router.push(pathId ? `/learning-path/${pathId}` : '/dashboard');
+    router.push(pathId ? `${learningPathDetailBasePath.value}/${pathId}` : dashboardPath.value);
   }
 };
 
@@ -1162,7 +1177,7 @@ onMounted(async () => {
   if (task.value?.status === 'completed') {
     toast.info('本任务已完成，请返回学习路径查看评估');
     const pathId = task.value?.learningPath?.id;
-    router.replace(pathId ? `/learning-path/${pathId}` : '/dashboard');
+    router.replace(pathId ? `${learningPathDetailBasePath.value}/${pathId}` : dashboardPath.value);
     return;
   }
 
