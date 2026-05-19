@@ -1312,6 +1312,78 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       }
     };
 
+    const parseMetadata = (metadata: string | null): Record<string, any> => {
+      if (!metadata) return {};
+      try {
+        return JSON.parse(metadata);
+      } catch {
+        return {};
+      }
+    };
+
+    const inferExecutionIdentity = (log: {
+      agentId: string;
+      callerAgent: string | null;
+      metadata: string | null;
+    }) => {
+      const parsed = parseMetadata(log.metadata);
+      const providerId = typeof parsed.providerId === 'string' ? parsed.providerId : null;
+      const metadataActorType = typeof parsed.actorType === 'string' ? parsed.actorType : null;
+      const metadataActorId = typeof parsed.actorId === 'string' ? parsed.actorId : null;
+      const skillId = typeof parsed.skillId === 'string' ? parsed.skillId : null;
+      const agentId = typeof parsed.agentId === 'string' ? parsed.agentId : null;
+      const layer = typeof parsed.executionLayer === 'string'
+        ? parsed.executionLayer
+        : (typeof parsed.layer === 'string' ? parsed.layer : null);
+
+      const providerActorType = providerId?.startsWith('skill:')
+        ? 'skill'
+        : providerId?.startsWith('agent:')
+          ? 'agent'
+          : null;
+      const providerActorId = providerId?.includes(':') ? providerId.split(':').slice(1).join(':') : null;
+
+      const actorType = metadataActorType
+        || (skillId ? 'skill' : null)
+        || providerActorType
+        || (agentId && agentId !== 'api-gateway' ? 'agent' : null)
+        || (log.agentId !== 'api-gateway' ? 'agent' : 'system');
+
+      const actorId = metadataActorId
+        || skillId
+        || providerActorId
+        || agentId
+        || log.agentId;
+
+      const executionLayer = layer === 'api-gateway-v2'
+        ? 'api-gateway'
+        : (layer || (actorType === 'skill' ? 'skill' : actorType === 'agent' ? 'agent' : 'system'));
+
+      const invokerId = typeof parsed.invokerId === 'string'
+        ? parsed.invokerId
+        : (log.callerAgent || null);
+      const invokerType = typeof parsed.invokerType === 'string'
+        ? parsed.invokerType
+        : (log.callerAgent ? 'agent' : null);
+
+      return {
+        parsed,
+        executionLayer,
+        actorType,
+        actorId,
+        invokerId,
+        invokerType,
+        providerId,
+        providerType: typeof parsed.providerType === 'string' ? parsed.providerType : null,
+        routeSource: typeof parsed.routeSource === 'string' ? parsed.routeSource : null,
+        statusCode: typeof parsed.statusCode === 'number' ? parsed.statusCode : null,
+        attempts: typeof parsed.attempts === 'number' ? parsed.attempts : null,
+        maxRetries: typeof parsed.maxRetries === 'number' ? parsed.maxRetries : null,
+        messageCount: typeof parsed.messageCount === 'number' ? parsed.messageCount : null,
+        finishReason: typeof parsed.finishReason === 'string' ? parsed.finishReason : null,
+      };
+    };
+
     const [logs, total, successCount, timeoutCount, errorCount] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where,
@@ -1351,10 +1423,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     // 转换日志格式以兼容前端
     const formattedLogs = logs.map(log => {
       const phaseInfo = extractPathPhaseInfo(log.metadata);
+      const identity = inferExecutionIdentity(log);
       return {
         id: log.id,
         agentName: AGENT_ID_TO_NAME[log.agentId] || log.agentId,
         agentId: log.agentId,
+        sourceEntry: log.sourceEntry || 'platform',
+        callerAgent: log.callerAgent,
         action: 'invoke',
         status: buildStatusLabel(log),
         input: log.input,
@@ -1365,6 +1440,19 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         durationMs: log.durationMs,
         createdAt: log.calledAt,
         metadata: log.metadata,
+        executionLayer: identity.executionLayer,
+        actorType: identity.actorType,
+        actorId: identity.actorId,
+        invokerId: identity.invokerId,
+        invokerType: identity.invokerType,
+        providerId: identity.providerId,
+        providerType: identity.providerType,
+        routeSource: identity.routeSource,
+        statusCode: identity.statusCode,
+        attempts: identity.attempts,
+        maxRetries: identity.maxRetries,
+        messageCount: identity.messageCount,
+        finishReason: identity.finishReason,
         phase: phaseInfo.phase,
         phaseStatus: phaseInfo.phaseStatus,
         pathId: phaseInfo.pathId,

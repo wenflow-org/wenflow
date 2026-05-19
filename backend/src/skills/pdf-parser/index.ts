@@ -16,9 +16,11 @@ import {
  */
 export const pdfParserDefinition: SkillDefinition = {
   name: 'pdf-parser',
+  displayName: 'PDF 解析器',
   version: '1.0.0',
   category: 'parsing',
   description: '解析PDF文件，提取文本内容、结构和元数据',
+  status: 'placeholder',
   
   inputSchema: {
     type: 'object',

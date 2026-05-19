@@ -70,10 +70,12 @@ export interface ImageAnalyzerOutput {
  */
 export const imageAnalyzerDefinition: SkillDefinition = {
   name: 'image-analyzer',
+  displayName: '图片分析器',
   version: '1.0.0',
   category: 'analysis',
   description: '分析图片内容，支持代码截图识别、报错分析、架构图解析、OCR文字提取等',
-
+  status: 'mock',
+  
   inputSchema: {
     type: 'object',
     properties: {

@@ -16,9 +16,11 @@ import {
  */
 export const textStructureAnalyzerDefinition: SkillDefinition = {
   name: 'text-structure-analyzer',
+  displayName: '文本结构分析器',
   version: '1.0.0',
-  category: 'analysis',
+  category: 'parsing',
   description: '分析文本结构，提取大纲、章节、关键词等',
+  status: 'simplified',
   
   inputSchema: {
     type: 'object',

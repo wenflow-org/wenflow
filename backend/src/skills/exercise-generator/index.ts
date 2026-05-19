@@ -15,9 +15,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
  */
 export const exerciseGeneratorDefinition: SkillDefinition = {
   name: 'exercise-generator',
+  displayName: '练习生成器',
   version: '1.0.0',
   category: 'generation',
   description: '生成多样化的练习题，包括填空、选择、编程、简答等题型',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

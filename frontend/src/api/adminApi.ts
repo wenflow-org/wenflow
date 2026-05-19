@@ -112,7 +112,7 @@ export const adminUsersApi = {
   /**
    * 获取用户列表
    */
-  getUsers: async (params?: { page?: number; limit?: number; search?: string }) => {
+  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
@@ -265,6 +265,10 @@ export interface AgentDesignDetail {
     monitoringGroup: string | null;
     ioContractVersion: 'legacy' | 'agent-output-v1';
     aliases: string[];
+    orchestratorFlow?: {
+      description?: string;
+      steps?: Array<{ agentId: string; action?: string; condition?: string }>;
+    };
     promptManagement?: {
       mode: 'agent-prompt' | 'orchestrator-no-direct-prompt' | 'legacy-service';
       note: string | null;

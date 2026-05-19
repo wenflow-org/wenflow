@@ -16,9 +16,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
 
 export const labelGeneratorDefinition: SkillDefinition = {
   name: 'label-generator',
+  displayName: '动态标签生成器',
   version: '1.0.0',
   category: 'generation',
   description: '生成用户友好的学习标签（白话标签）',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

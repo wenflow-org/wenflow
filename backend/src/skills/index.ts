@@ -75,6 +75,10 @@ import { batchAndersonLabeler as batchAndersonLabelerFn } from './batch-anderson
 export { labelGeneratorDefinition } from './label-generator';
 import { labelGenerator as labelGeneratorFn } from './label-generator';
 
+// 路径场景 framing (PathAgent v3.2)
+export { pathSceneFramingDefinition } from './path-scene-framing';
+import { pathSceneFraming as pathSceneFramingFn } from './path-scene-framing';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -97,6 +101,7 @@ import { smartSearchDefinition } from './smart-search';
 import { goalTypeIdentifierDefinition } from './goal-type-identifier';
 import { batchAndersonLabelerDefinition } from './batch-anderson-labeler';
 import { labelGeneratorDefinition } from './label-generator';
+import { pathSceneFramingDefinition } from './path-scene-framing';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   pdfParserDefinition,
@@ -115,7 +120,8 @@ export const allSkillDefinitions: SkillDefinition[] = [
   smartSearchDefinition,
   goalTypeIdentifierDefinition,
   batchAndersonLabelerDefinition,
-  labelGeneratorDefinition
+  labelGeneratorDefinition,
+  pathSceneFramingDefinition
 ];
 
 // Skill 名称映射
@@ -136,7 +142,8 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'smart-search': smartSearchFn,
   'goal-type-identifier': goalTypeIdentifierFn,
   'batch-anderson-labeler': batchAndersonLabelerFn,
-  'label-generator': labelGeneratorFn
+  'label-generator': labelGeneratorFn,
+  'path-scene-framing': pathSceneFramingFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';

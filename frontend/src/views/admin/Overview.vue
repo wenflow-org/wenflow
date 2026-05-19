@@ -4,6 +4,7 @@
     <div class="overview-bg-layer">
       <div class="overview-bg-orb overview-bg-orb--1"></div>
       <div class="overview-bg-orb overview-bg-orb--2"></div>
+      <div class="overview-bg-orb overview-bg-orb--3"></div>
       <div class="overview-bg-grid"></div>
     </div>
 
@@ -396,27 +397,36 @@ onMounted(() => {
 
 .overview-bg-orb {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(110px);
-  opacity: 0.2;
+  border-radius: 999px;
+  filter: blur(52px);
+  opacity: 0.42;
 }
 
 .overview-bg-orb--1 {
-  width: 500px;
-  height: 500px;
-  top: -180px;
-  right: -120px;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%);
+  width: 380px;
+  height: 380px;
+  top: -120px;
+  left: -80px;
+  background: color-mix(in srgb, var(--color-primary) 30%, white);
   animation: admin-orb-drift 26s ease-in-out infinite;
 }
 
 .overview-bg-orb--2 {
-  width: 400px;
-  height: 400px;
-  left: -100px;
-  bottom: 120px;
-  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+  width: 320px;
+  height: 320px;
+  top: 12%;
+  right: -80px;
+  background: color-mix(in srgb, var(--color-accent) 22%, white);
   animation: admin-orb-drift 30s ease-in-out infinite reverse;
+}
+
+.overview-bg-orb--3 {
+  width: 260px;
+  height: 260px;
+  bottom: -70px;
+  left: 24%;
+  background: color-mix(in srgb, var(--color-secondary) 22%, white);
+  animation: admin-orb-drift 28s ease-in-out infinite alternate;
 }
 
 .overview-bg-grid {
@@ -443,12 +453,13 @@ onMounted(() => {
   z-index: 1;
   margin-bottom: 1.5rem;
   padding: 20px 24px;
-  border-radius: 16px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
+  border-radius: 28px;
+  border: 1px solid #d2dbf3;
   background:
     radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92));
-  backdrop-filter: blur(16px);
+    color-mix(in srgb, #ffffff 90%, white);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
   overflow: hidden;
 }
 
@@ -532,10 +543,11 @@ onMounted(() => {
 
 /* surface-card 基础 */
 .surface-card {
-  border: 1px solid rgba(37, 99, 235, 0.08);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(244, 247, 252, 0.72));
-  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.04);
+  border: 1px solid #d2dbf3;
+  border-radius: 28px;
+  background: color-mix(in srgb, #ffffff 90%, white);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  backdrop-filter: blur(20px);
 }
 
 /* ==========================================
@@ -555,312 +567,34 @@ onMounted(() => {
   grid-column: span 2;
 }
 
+.stats-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.stats-grid > .stat-card--conversations,
+.stats-grid > .stat-card--agents {
+  grid-column: span 2;
+}
+
 .stat-card {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 1.125rem;
-  border-radius: 16px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: rgba(255, 255, 255, 0.84);
-  backdrop-filter: blur(12px);
-  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
-  border-color: rgba(52, 120, 246, 0.14);
-}
-
-/* 卡片渐变底色 */
-.stat-card--users { background: linear-gradient(180deg, rgba(52, 120, 246, 0.04), rgba(255, 255, 255, 0.88)); }
-.stat-card--active { background: linear-gradient(180deg, rgba(244, 170, 70, 0.05), rgba(255, 255, 255, 0.88)); }
-.stat-card--paths { background: linear-gradient(180deg, rgba(49, 177, 111, 0.04), rgba(255, 255, 255, 0.88)); }
-.stat-card--tasks { background: linear-gradient(180deg, rgba(49, 177, 111, 0.05), rgba(255, 255, 255, 0.88)); }
-.stat-card--conversations { background: linear-gradient(180deg, rgba(141, 107, 255, 0.05), rgba(255, 255, 255, 0.88)); }
-.stat-card--agents { background: linear-gradient(180deg, rgba(67, 176, 216, 0.05), rgba(255, 255, 255, 0.88)); }
-
-/* Icon 容器 */
-.stat-card__icon-wrap {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-card__icon-wrap svg {
-  width: 20px;
-  height: 20px;
-}
-
-.stat-card__icon-wrap--users {
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.12), rgba(52, 120, 246, 0.04));
-  color: #3478f6;
-}
-
-.stat-card__icon-wrap--active {
-  background: linear-gradient(135deg, rgba(244, 170, 70, 0.15), rgba(244, 170, 70, 0.05));
-  color: #f4aa46;
-}
-
-.stat-card__icon-wrap--paths {
-  background: linear-gradient(135deg, rgba(49, 177, 111, 0.14), rgba(49, 177, 111, 0.04));
-  color: #31b16f;
-}
-
-.stat-card__icon-wrap--tasks {
-  background: linear-gradient(135deg, rgba(49, 177, 111, 0.14), rgba(49, 177, 111, 0.04));
-  color: #31b16f;
-}
-
-.stat-card__icon-wrap--conversations {
-  background: linear-gradient(135deg, rgba(141, 107, 255, 0.14), rgba(141, 107, 255, 0.04));
-  color: #8d6bff;
-}
-
-.stat-card__icon-wrap--agents {
-  background: linear-gradient(135deg, rgba(67, 176, 216, 0.14), rgba(67, 176, 216, 0.04));
-  color: #43b0d8;
-}
-
-/* 卡片内容 */
-.stat-card__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-card__label {
-  display: block;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.stat-card__value {
-  display: block;
-  font-family: var(--font-sans);
-  font-size: 1.625rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-  margin-bottom: 8px;
-}
-
-.stat-card__trend {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 0.8125rem;
-}
-
-.trend-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.trend-badge--success {
-  background: rgba(49, 177, 111, 0.1);
-  color: #28965a;
-}
-
-.trend-badge--primary {
-  background: rgba(52, 120, 246, 0.1);
-  color: #1f57cc;
-}
-
-.trend-badge--accent {
-  background: rgba(141, 107, 255, 0.1);
-  color: #6b4ae0;
-}
-
-.trend-badge--subtle {
-  background: rgba(148, 163, 184, 0.12);
-  color: var(--text-secondary);
-}
-
-.trend-label {
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-}
-
-.stat-card__meta {
-  margin-top: 8px;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-.stat-card__meta--detail {
-  margin-top: 6px;
-  display: grid;
-  gap: 2px;
-}
-
-/* ==========================================
-   Section 面板
-   ========================================== */
-.section {
-  margin-top: 1.5rem;
-  padding: 1.25rem;
-  border-radius: 16px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72));
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.03);
-}
-
-.section-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.section-link {
-  color: #2d62cf;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.section-link:hover {
-  color: #1f4da8;
-  text-decoration: underline;
-}
-
-/* ==========================================
-   Agent 表格
-   ========================================== */
-.agent-status-table {
-  min-width: 100%;
-}
-
-.agent-tag {
-  border-radius: 999px !important;
-  font-weight: 600;
-}
-
-.agent-name {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.agent-name-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
-
-.success-count {
-  color: var(--color-success);
-  font-weight: 600;
-}
-
-.error-count {
-  color: var(--color-danger);
-  font-weight: 600;
-}
-
-/* :deep 覆盖 el-table */
-:deep(.el-table) {
-  width: 100%;
-  --el-table-bg-color: transparent;
-  --el-bg-color: transparent;
-  --el-fill-color-blank: transparent;
-  --el-table-border-color: rgba(52, 120, 246, 0.06);
-}
-
-:deep(.el-table__body-wrapper) {
-  overflow-x: visible;
-}
-
-:deep(.el-table th.el-table__cell) {
-  background: rgba(52, 120, 246, 0.03);
-  font-weight: 700;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
-  background: rgba(52, 120, 246, 0.015);
-}
-
-:deep(.el-table .el-table__row:hover > td.el-table__cell) {
-  background: rgba(52, 120, 246, 0.03);
-}
-
-:deep(.el-table .el-table__row) {
-  position: relative;
-}
-
-:deep(.el-table .el-table__row:hover > td.el-table__cell:first-child::before) {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, #3478f6, #8d6bff);
-}
-
-:deep(.el-progress) {
-  --el-color-success: #31b16f;
-  --el-color-warning: #f4aa46;
-}
-
-:deep(.el-progress-bar__inner) {
-  border-radius: 999px;
-}
-
-:deep(.el-progress-bar__outer) {
-  border-radius: 999px;
-  background-color: rgba(52, 120, 246, 0.06);
-}
-
-/* ==========================================
-   趋势图
-   ========================================== */
-.trend-panel {
-  position: relative;
+  border-radius: 28px;
   border: 1px solid rgba(52, 120, 246, 0.06);
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at 90% 20%, rgba(52, 120, 246, 0.03), transparent 40%),
-    color-mix(in srgb, var(--glass-bg-light) 94%, transparent);
-  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px);
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  transition: transform 0.2s ease;
+  position: relative;
   overflow: hidden;
 }
-
-.trend-row {
-  display: grid;
-  grid-template-columns: 72px 1fr 90px;
-  gap: 0.75rem;
   align-items: center;
   padding: 0.5rem 0;
   border-bottom: 1px dashed rgba(52, 120, 246, 0.06);

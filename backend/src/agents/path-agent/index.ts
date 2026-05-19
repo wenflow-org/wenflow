@@ -565,56 +565,6 @@ const userId = context?.userId || input?.metadata?.userId;
   throw new Error('PATH_AGENT_OUTPUT_INVALID: response does not contain valid JSON');
 }
 
-export async function buildPathSceneFramingWithAI(
-  input: AgentInput,
-  context: AgentContext
-): Promise<any> {
-  const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'path-agent' };
-
-  const structuredData = input.structuredData as any;
-  const confirmedProposal = input.confirmedProposal as any;
-  const promptConfig = await agentConfigService.getActivePrompt('path-agent');
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: DEFAULT_PATH_FRAMING_PROMPT },
-    {
-      role: 'user',
-      content: JSON.stringify({
-        goal: input.goal,
-        currentLevel: input.currentLevel,
-        timePerDay: input.timePerDay,
-        structuredData,
-        confirmedProposal,
-        metadata: input.metadata || {}
-      }, null, 2)
-    }
-  ];
-
-  const userId = context?.userId || input?.metadata?.userId;
-  const response = await gateway.execute(
-    {
-      messages,
-      max_tokens: promptConfig?.maxTokens || PATH_AGENT_MAX_TOKENS,
-      temperature: promptConfig?.temperature
-    },
-    caller,
-    { userId }
-  );
-
-  const content = response.choices[0]?.message.content || '';
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('PATH_SCENE_FRAMING_INVALID: response does not contain valid JSON');
-  }
-
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch (error: any) {
-    throw new Error(`PATH_SCENE_FRAMING_INVALID: ${error?.message || 'JSON parse failed'}`);
-  }
-}
-
 /**
  * 动态重规划路径（里程碑模式）
  */

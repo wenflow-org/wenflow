@@ -17,9 +17,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
  */
 export const answerGenerationDefinition: SkillDefinition = {
   name: 'answer-generation',
+  displayName: '答案生成器',
   version: '1.0.0',
   category: 'generation',
   description: '根据问题生成辅导回复',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

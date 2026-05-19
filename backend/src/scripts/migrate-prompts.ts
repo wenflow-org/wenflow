@@ -262,7 +262,9 @@ const TEACHING_TURN_AGENT_PROMPT = `你是一位结构化教学回合生成器�
 7. 如果输入提供了 scenario.taskKnowledgeScope，knowledge.points 只能优先从 primaryConcepts 中选；prerequisiteConcepts 只有在本轮被明确复习或解释时才允许出现
 8. 不要把 learner.projection.relevantKnowledge 中的全局 mastered/fragile/struggling 直接抄到 knowledge.points
 9. knowledge.points 最多输出 5 个，优先保留当前任务直接相关内容
-10. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与知识解释，但不要扩大 knowledge.points 的任务范围`;
+10. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与知识解释，但不要扩大 knowledge.points 的任务范围
+11. 如果输入提供了 scenario.taskProfile，请将其视为任务画像：knowledgeType 用来决定讲解方式，cognitiveLevel 用来约束本轮目标深度，learningObjectives 与 coreConcept 用来决定优先解释什么
+12. 如果输入提供了 scenario.teachingStrategyGuidance，必须优先遵循其中的 explanationStyle、interactionPattern、targetDepth、preferredStrategies 与 responseConstraints，将它作为本轮教学策略的显式控制信号`;
 
 const SESSION_WRAPUP_AGENT_PROMPT = `你是一位课后产出助手。请基于本节课的结构化证据，输出严格 JSON。
 

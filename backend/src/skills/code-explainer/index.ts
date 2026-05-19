@@ -15,9 +15,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
  */
 export const codeExplainerDefinition: SkillDefinition = {
   name: 'code-explainer',
+  displayName: '代码解释器',
   version: '1.0.0',
   category: 'analysis',
   description: '逐行解释代码，帮助初学者理解代码逻辑和语法',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

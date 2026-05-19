@@ -258,6 +258,41 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   
+  /* ==========================================
+     UI Lab 设计系统变量
+     ========================================== */
+  
+  /* UI Lab 圆角系统 */
+  --lab-radius-card: 34px;
+  --lab-radius-nav: 28px;
+  --lab-radius-button: 16px;
+  --lab-radius-button-small: 14px;
+  --lab-radius-nav-item: 18px;
+  --lab-radius-pill: 999px;
+  
+  /* UI Lab 阴影系统 */
+  --lab-shadow-lg: 0 30px 90px rgba(58, 101, 197, 0.16);
+  --lab-shadow-md: 0 10px 22px rgba(52, 120, 246, 0.3);
+  --lab-shadow-sm: 0 8px 18px rgba(52, 120, 246, 0.24);
+  
+  /* UI Lab 背景模糊 */
+  --lab-blur-card: blur(20px);
+  --lab-blur-orb: blur(52px);
+  
+  /* UI Lab 光晕透明度 */
+  --lab-orb-opacity: 0.42;
+  
+  /* UI Lab 颜色系统 */
+  --lab-color-canvas: #edf4ff;
+  --lab-color-surface: #ffffff;
+  --lab-color-surface-alt: #f7f9ff;
+  --lab-color-border: #d2dbf3;
+  --lab-color-border-strong: #b7c7ea;
+  --lab-color-text: #1d3150;
+  --lab-color-muted: #7085a6;
+  --lab-color-nav-bg: rgba(255, 255, 255, 0.9);
+  --lab-color-chip: rgba(141, 107, 255, 0.12);
+  
   /* Fluent 圆角（Admin 专用，比全局更紧凑） */
   --fluent-radius-sm: 4px;
   --fluent-radius-md: 6px;

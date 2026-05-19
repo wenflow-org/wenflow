@@ -86,9 +86,11 @@ export interface SmartSearchOutput {
  */
 export const smartSearchDefinition: SkillDefinition = {
   name: 'smart-search',
+  displayName: '智能搜索器',
   version: '1.0.0',
   category: 'retrieval',
   description: '智能搜索技能，支持语义搜索、关键词匹配、多源聚合和智能排序',
+  status: 'working',
 
   inputSchema: {
     type: 'object',

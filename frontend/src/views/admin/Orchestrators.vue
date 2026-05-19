@@ -86,6 +86,21 @@
           </div>
         </div>
 
+        <div v-if="item.id === 'path-orchestrator'" class="member-row member-row--pipeline">
+          <div class="member-head">
+            <span class="member-title">Path Pipeline</span>
+          </div>
+          <div class="pipeline-tags">
+            <el-tag size="small" effect="plain" class="member-tag">Goal source</el-tag>
+            <span class="pipeline-arrow">→</span>
+            <el-tag size="small" effect="plain" class="member-tag">path-scene-framing</el-tag>
+            <span class="pipeline-arrow">→</span>
+            <el-tag size="small" effect="plain" class="member-tag">path-agent</el-tag>
+            <span class="pipeline-arrow">→</span>
+            <el-tag size="small" effect="plain" class="member-tag">task-profile-builder</el-tag>
+          </div>
+        </div>
+
         <div class="trend-title">最近调用趋势</div>
         <div class="trend-list" v-if="item.trend.length > 0">
           <div class="trend-row" v-for="point in item.trend" :key="`${item.id}-${point.label}`">
@@ -397,6 +412,10 @@ onMounted(loadData);
   margin-bottom: 0.8rem;
 }
 
+.member-row--pipeline {
+  margin-top: -0.2rem;
+}
+
 .member-head {
   display: flex;
   justify-content: space-between;
@@ -422,6 +441,19 @@ onMounted(loadData);
 
 .member-tag {
   cursor: pointer;
+}
+
+.pipeline-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.pipeline-arrow {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .trend-title {

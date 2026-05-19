@@ -1,7 +1,7 @@
 /**
- * BatchAndersonLabeler Skill - 批量安德森标注
+ * BatchAndersonLabeler Skill - 批量任务画像
  * 
- * 一次 LLM 调用标注所有任务，包括：
+ * 一次 LLM 调用为所有任务补教学画像，包括：
  * - knowledgeType: 知识类型（factual/conceptual/procedural/metacognitive）
  * - cognitiveLevel: 认知层级（remember/understand/apply/analyze/evaluate/create）
  * - learningObjectives: 学习目标
@@ -17,9 +17,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
 
 export const batchAndersonLabelerDefinition: SkillDefinition = {
   name: 'batch-anderson-labeler',
+  displayName: '任务画像构建器',
   version: '1.0.0',
   category: 'analysis',
-  description: '批量标注任务的安德森框架属性',
+  description: '为 Path 子任务批量补知识维度、认知层次与学习目标画像',
+  status: 'working',
   
   inputSchema: {
     type: 'object',
@@ -58,7 +60,7 @@ export const batchAndersonLabelerDefinition: SkillDefinition = {
     }
   },
   
-  capabilities: ['batch-annotation', 'anderson-framework', 'educational-tagging'],
+  capabilities: ['task-profiling', 'anderson-framework', 'educational-tagging'],
   
   stats: {
     callCount: 0,

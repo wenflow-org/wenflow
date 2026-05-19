@@ -53,10 +53,12 @@ export interface MemorySearchOutput {
  */
 export const memorySearchDefinition: SkillDefinition = {
   name: 'memory-search',
+  displayName: '学习记忆搜索器',
   version: '1.0.0',
   category: 'retrieval',
   description: '检索用户学习历史、对话记录、成就、进度等记忆数据，支持智能分析和洞察生成',
-
+  status: 'mock',
+  
   inputSchema: {
     type: 'object',
     properties: {

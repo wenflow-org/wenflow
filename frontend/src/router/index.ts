@@ -328,11 +328,17 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/ApiConfig.vue'),
         meta: { title: 'API 管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
-      {
+{
         path: 'agent-registry',
         name: 'AdminAgentRegistry',
         component: () => import('@/views/admin/AgentRegistry.vue'),
         meta: { title: 'Agent 注册管理', requiresAdminAuth: true, adminGroup: 'system' }
+      },
+      {
+        path: 'orchestrator-registry',
+        name: 'AdminOrchestratorRegistry',
+        component: () => import('@/views/admin/OrchestratorRegistry.vue'),
+        meta: { title: '编排器管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'ui-lab',

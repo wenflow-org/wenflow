@@ -63,10 +63,12 @@ export interface WebExtractorOutput {
  */
 export const webExtractorDefinition: SkillDefinition = {
   name: 'web-extractor',
+  displayName: '网页内容提取器',
   version: '1.0.0',
   category: 'parsing',
   description: '从网页URL提取结构化学习内容，包括标题、大纲、代码块、表格等',
-
+  status: 'working',
+  
   inputSchema: {
     type: 'object',
     properties: {

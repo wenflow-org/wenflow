@@ -13,13 +13,18 @@ export type SkillCategory =
   | 'retrieval'    // 检索类
   | 'computation'; // 计算类
 
+// Skill 工作状态
+export type SkillStatus = 'working' | 'placeholder' | 'simplified' | 'mock';
+
 // Skill 定义
 export interface SkillDefinition {
   id?: string;
   name: string;
+  displayName?: string;
   version: string;
   category: SkillCategory;
   description: string;
+  status?: SkillStatus;
   
   // 输入 Schema
   inputSchema: {

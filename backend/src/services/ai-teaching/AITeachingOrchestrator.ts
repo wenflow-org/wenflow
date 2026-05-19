@@ -231,6 +231,8 @@ function buildTeachingTurnInput(
       taskTitle: context.taskTitle,
       taskDescription: context.taskDescription,
       taskType: context.taskType,
+      taskProfile: context.taskProfile,
+      teachingStrategyGuidance: context.teachingStrategyGuidance,
       pathTitle: context.teachingProjection.pathContext.pathTitle,
       pathSummary: context.teachingProjection.pathContext.pathSummary,
       currentMilestoneTitle: context.teachingProjection.pathContext.currentMilestoneTitle,

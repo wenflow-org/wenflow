@@ -17,9 +17,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
  */
 export const contentGenerationDefinition: SkillDefinition = {
   name: 'content-generation',
+  displayName: '内容生成器',
   version: '1.0.0',
   category: 'generation',
   description: '生成教学内容，包括讲解、教程、练习等',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

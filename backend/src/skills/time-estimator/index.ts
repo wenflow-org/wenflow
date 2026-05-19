@@ -16,9 +16,11 @@ import {
  */
 export const timeEstimatorDefinition: SkillDefinition = {
   name: 'time-estimator',
+  displayName: '时间估算器',
   version: '1.0.0',
   category: 'computation',
   description: '根据内容类型、难度和用户水平估算学习时长',
+  status: 'simplified',
   
   inputSchema: {
     type: 'object',

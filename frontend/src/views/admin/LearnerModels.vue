@@ -16,20 +16,19 @@
 
     <div class="toolbar admin-list-toolbar">
       <div class="toolbar-left admin-list-toolbar__group">
-        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 240px" />
-        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 240px" />
-        <el-checkbox v-model="filters.riskOnly">仅风险用户</el-checkbox>
-        <el-checkbox v-model="filters.staleOnly">仅过期快照</el-checkbox>
+        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 180px" @input="handleSearch" />
+        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 180px" @input="handleSearch" />
+        <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
+        <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
       </div>
       <div class="toolbar-right admin-list-toolbar__group">
-        <el-button class="learner-btn learner-btn--primary" @click="loadData"><el-icon><Search /></el-icon>查询</el-button>
         <el-button class="learner-btn learner-btn--ghost" @click="resetFilters"><el-icon><Refresh /></el-icon>重置</el-button>
       </div>
     </div>
 
     <div class="table-container admin-list-card">
       <el-table :data="items" stripe v-loading="loading">
-        <el-table-column label="用户" min-width="220">
+        <el-table-column label="用户" min-width="140">
           <template #default="{ row }">
             <div class="user-cell">
               <strong>{{ row.userName || row.userId || '--' }}</strong>
@@ -37,30 +36,28 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="学习进度" min-width="300" show-overflow-tooltip>
+        <el-table-column label="学习进度" min-width="260" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="progress-cell">
-              <div class="progress-cell__line" :title="row.pathTitle || '--'">路径：{{ row.pathTitle || '--' }}</div>
-              <div class="progress-cell__line" :title="row.currentMilestone || '--'">阶段：{{ row.currentMilestone || '--' }}</div>
-              <div class="progress-cell__line" :title="row.currentTask || '--'">任务：{{ row.currentTask || '--' }}</div>
+              <div class="progress-cell__line" :title="row.pathTitle || '--'">路径：{{ truncateText(row.pathTitle, 20) }}</div>
+              <div class="progress-cell__line" :title="row.currentMilestone || '--'">阶段：{{ truncateText(row.currentMilestone, 20) }}</div>
+              <div class="progress-cell__line" :title="row.currentTask || '--'">任务：{{ truncateText(row.currentTask, 20) }}</div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="趋势" width="100" align="center">
+        <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.recentTrend === 'improving' ? 'success' : row.recentTrend === 'declining' ? 'danger' : 'info'">
-              {{ trendLabel(row.recentTrend) }}
-            </el-tag>
+            <div class="status-cell">
+              <el-tag size="small" :type="row.recentTrend === 'improving' ? 'success' : row.recentTrend === 'declining' ? 'danger' : 'info'">
+                {{ trendLabel(row.recentTrend) }}
+              </el-tag>
+              <el-tag size="small" :type="row.fatigueRisk === 'high' ? 'danger' : row.fatigueRisk === 'medium' ? 'warning' : 'success'">
+                {{ riskLabel(row.fatigueRisk) }}
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="疲劳风险" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.fatigueRisk === 'high' ? 'danger' : row.fatigueRisk === 'medium' ? 'warning' : 'success'">
-              {{ riskLabel(row.fatigueRisk) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="风险摘要" min-width="240" show-overflow-tooltip>
+        <el-table-column label="风险摘要" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="risk-cell">
               <div class="risk-cell__tags">
@@ -71,25 +68,16 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="生成时间" width="136">
+        <el-table-column label="更新时间" width="80">
           <template #default="{ row }">
-            {{ formatTime(row.generatedAt) }}
+            {{ formatRelativeTime(row.generatedAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130" fixed="right" align="center">
+        <el-table-column label="操作" width="100" fixed="right" align="center">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button class="row-action-btn row-action-btn--info" @click="openDetail(row)">详情</el-button>
-              <el-dropdown trigger="click" @command="handleOperationCommand($event, row)">
-                <el-button class="row-action-btn row-action-btn--more" aria-label="更多操作">
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="recompute">重算模型</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+              <el-button type="primary" link @click="openDetail(row)">详情</el-button>
+              <el-button type="primary" link @click="recompute(row)">重算</el-button>
             </div>
           </template>
         </el-table-column>
@@ -113,7 +101,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Reading, Search, Refresh, MoreFilled } from '@element-plus/icons-vue';
+import { Reading, Refresh } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 
@@ -134,17 +122,38 @@ const pagination = reactive({
   total: 0,
 });
 
-const trendLabel = (value: string) => value === 'improving' ? '上升' : value === 'declining' ? '下降' : '稳定';
-const riskLabel = (value: string) => value === 'high' ? '高' : value === 'medium' ? '中' : '低';
-const formatTime = (value: string) => {
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+const handleSearch = () => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    pagination.page = 1;
+    loadData();
+  }, 300);
+};
+
+const trendLabel = (value?: string) => value === 'improving' ? '上升' : value === 'declining' ? '下降' : '稳定';
+const riskLabel = (value?: string) => value === 'high' ? '高' : value === 'medium' ? '中' : '低';
+
+const truncateText = (text: string | undefined, maxLen: number) => {
+  if (!text) return '--';
+  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
+};
+
+const formatRelativeTime = (value: string) => {
   if (!value) return '--';
+  const now = new Date();
   const date = new Date(value);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  return `${y}-${m}-${d} ${hh}:${mm}`;
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins} 分钟前`;
+  if (diffHours < 24) return `${diffHours} 小时前`;
+  if (diffDays < 7) return `${diffDays} 天前`;
+  return date.toLocaleDateString('zh-CN');
 };
 
 const riskSummary = (row: any) => {
@@ -154,12 +163,6 @@ const riskSummary = (row: any) => {
   if (merged.length === 0) return '无明显风险知识点';
   if (merged.length <= 2) return merged.join('，');
   return `${merged.slice(0, 2).join('，')} +${merged.length - 2}`;
-};
-
-const handleOperationCommand = async (command: string, row: any) => {
-  if (command === 'recompute') {
-    await recompute(row);
-  }
 };
 
 const handleSizeChange = () => {
@@ -255,17 +258,6 @@ onMounted(loadData);
   border: 1px solid transparent;
 }
 
-.learner-btn--primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #3478f6, #3f86ff);
-  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24);
-}
-
-.learner-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.3);
-}
-
 .learner-btn--ghost {
   color: #335aa4;
   border-color: rgba(52, 120, 246, 0.26);
@@ -279,9 +271,17 @@ onMounted(loadData);
 }
 
 .row-actions {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .user-cell {
@@ -337,51 +337,5 @@ onMounted(loadData);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.row-action-btn {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.row-action-btn--info {
-  color: #2d62cf;
-  border-color: rgba(52, 120, 246, 0.25);
-  background: rgba(52, 120, 246, 0.1);
-}
-
-.row-action-btn--info:hover {
-  border-color: rgba(52, 120, 246, 0.45);
-  background: rgba(52, 120, 246, 0.16);
-}
-
-.row-action-btn--warning {
-  color: #8a4f00;
-  border-color: rgba(212, 140, 18, 0.28);
-  background: rgba(255, 208, 112, 0.24);
-}
-
-.row-action-btn--warning:hover {
-  border-color: rgba(198, 128, 8, 0.45);
-  background: rgba(255, 201, 88, 0.32);
-}
-
-.row-action-btn--more {
-  min-width: 30px;
-  width: 30px;
-  padding: 0;
-  color: #4d5f86;
-  border-color: rgba(77, 95, 134, 0.2);
-  background: rgba(246, 248, 253, 0.95);
-}
-
-.row-action-btn--more:hover {
-  color: #2c3f68;
-  border-color: rgba(52, 120, 246, 0.35);
-  background: rgba(235, 243, 255, 0.95);
 }
 </style>

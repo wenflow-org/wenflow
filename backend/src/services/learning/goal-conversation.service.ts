@@ -3,7 +3,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { runGoalConversationAgent } from '../../agents/goal-conversation-agent';
-import pathOrchestrator, { PathGenerationInput } from '../../orchestrators/path.orchestrator';
+import pathOrchestrator, { GoalPathRequest } from '../../orchestrators/path.orchestrator';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 
 /**
@@ -266,8 +266,8 @@ async continueConversation(
 
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
 
-            pathOrchestrator.runAsync(
-              this.buildPathGenerationInput(conversation, seedResult, placeholderPath.id),
+            pathOrchestrator.runGoalAsync(
+              this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id),
               {
                 onSuccess: () => {
                   logger.info('硬规则触发：异步学习路径生成成功', { conversationId, pathId: placeholderPath.id });
@@ -355,8 +355,8 @@ async continueConversation(
         try {
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, responseWithConversationId);
 
-            pathOrchestrator.runAsync(
-            this.buildPathGenerationInput(conversation, responseWithConversationId, placeholderPath.id),
+            pathOrchestrator.runGoalAsync(
+            this.buildGoalPathRequest(conversation, responseWithConversationId, placeholderPath.id),
             {
               onSuccess: () => {
                 logger.info('异步学习路径生成成功', {
@@ -654,69 +654,30 @@ async continueConversation(
     }
   }
 
-  private buildPathGenerationInput(
+  private buildGoalPathRequest(
     conversation: any,
     aiResponse: any,
     existingPathId?: string
-  ): PathGenerationInput {
+  ): GoalPathRequest {
     const data = JSON.parse(conversation.collectedData);
-    const collected = data.collected || {};
     const goalExt = this.getGoalExt(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
-
-    const realGoal = understanding.real_problem || collected.real_problem || conversation.description;
     const structuredData = goalExt.structuredData || null;
     const confirmedProposal = goalExt.confirmedProposal || null;
     const confidenceScores = goalExt.confidenceScores || null;
-
-    const skillLevel = understanding.background?.current_level || collected.level || 'beginner';
-    const availableTime = understanding.background?.available_time || collected.timePerDay || '1 小时';
-
-    let deadline: Date | undefined;
-    let deadlineText: string | undefined;
-    const deadlineRaw = understanding.background?.deadline || collected.expected_time || understanding.background?.expected_time;
-    if (deadlineRaw) {
-      if (deadlineRaw instanceof Date) {
-        deadline = deadlineRaw;
-      } else if (typeof deadlineRaw === 'string') {
-        if (/^\d{4}-\d{2}-\d{2}/.test(deadlineRaw)) {
-          deadline = new Date(deadlineRaw);
-        } else {
-          const monthsMatch = deadlineRaw.match(/(\d+)\s*个？月/);
-          const weeksMatch = deadlineRaw.match(/(\d+)\s*周/);
-          if (monthsMatch) {
-            deadline = new Date();
-            deadline.setMonth(deadline.getMonth() + parseInt(monthsMatch[1]));
-          } else if (weeksMatch) {
-            deadline = new Date();
-            deadline.setDate(deadline.getDate() + parseInt(weeksMatch[1]) * 7);
-          }
-        }
-        deadlineText = deadlineRaw;
-      }
-    }
-
-    if (!deadlineText) {
-      deadlineText = understanding.deadline_text || understanding.background?.deadline_text || collected.expected_time;
-    }
 
     return {
       userId: conversation.userId,
       sourceConversationId: conversation.id,
       existingPathId: existingPathId || conversation.learningPathId || undefined,
-      description: realGoal,
-      deadline,
-      deadlineText,
-      userProfile: {
-        skillLevel,
-        currentSkillLevel: skillLevel,
-        timePerDay: availableTime,
-        daysPerWeek: collected.daysPerWeek || 5,
-        structuredData,
-        confirmedProposal,
-        confidenceScores,
-        conversationHistory: JSON.parse(conversation.messages || '[]')
-      }
+      source: 'goal',
+      mode: 'generate',
+      rawGoal: conversation.description,
+      understanding,
+      structuredData,
+      confirmedProposal,
+      confidenceScores,
+      conversationHistory: JSON.parse(conversation.messages || '[]')
     };
   }
 
@@ -725,8 +686,8 @@ async continueConversation(
    */
   private async generateLearningPath(conversation: any, aiResponse: any) {
     try {
-      const learningPath = await pathOrchestrator.generate(
-        this.buildPathGenerationInput(conversation, aiResponse, conversation.learningPathId || undefined)
+      const learningPath = await pathOrchestrator.generateFromGoal(
+        this.buildGoalPathRequest(conversation, aiResponse, conversation.learningPathId || undefined)
       );
 
       const goalExt = this.getGoalExt(aiResponse.internal);

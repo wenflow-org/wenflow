@@ -186,6 +186,7 @@ const contentNav: NavItem[] = [
 const systemNav: NavItem[] = [
   { to: '/admin/api-config', label: 'API 管理', icon: Setting },
   { to: '/admin/agent-registry', label: 'Agent 管理', icon: Grid },
+  { to: '/admin/orchestrator-registry', label: '编排器管理', icon: Connection },
   { to: '/admin/skill-model-configs', label: 'Skill 模型配置', icon: Operation },
 ];
 

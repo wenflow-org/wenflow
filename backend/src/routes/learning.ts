@@ -10,6 +10,32 @@ import pathOrchestrator from '../orchestrators/path.orchestrator';
 
 const router = express.Router();
 
+const extractStoredSourceConversationId = (aiPromptTemplate?: string | null): string | undefined => {
+  if (!aiPromptTemplate) return undefined;
+
+  try {
+    const parsed = JSON.parse(aiPromptTemplate);
+    const processInputId = typeof parsed?.processInput?.sourceConversationId === 'string'
+      ? parsed.processInput.sourceConversationId
+      : null;
+    if (processInputId) return processInputId;
+
+    const generationStatusId = typeof parsed?.generationStatus?.sourceConversationId === 'string'
+      ? parsed.generationStatus.sourceConversationId
+      : null;
+    if (generationStatusId) return generationStatusId;
+
+    const directId = typeof parsed?.sourceConversationId === 'string'
+      ? parsed.sourceConversationId
+      : null;
+    if (directId) return directId;
+  } catch {
+    // Ignore malformed historical prompt templates.
+  }
+
+  return undefined;
+};
+
 // 所有学习路由都需要认证
 router.use(authMiddleware);
 
@@ -349,6 +375,9 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       }
     });
 
+    // 保留原始 Goal 对话关联，避免重试后丢失来源链路。
+    const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+
     // 异步重新生成路径
     pathOrchestrator.runAsync({
       userId,
@@ -356,6 +385,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       subject: path.subject,
       deadline: path.deadline || undefined,
       deadlineText: path.deadlineText || undefined,
+      sourceConversationId,
       existingPathId: pathId,
       userProfile: {}
     }, {
@@ -406,12 +436,15 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       }
     });
 
+    const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+
     pathOrchestrator.runAsync({
       userId,
       description: path.description || path.title || path.name || '个性化学习路径',
       subject: path.subject || undefined,
       deadline: path.deadline || undefined,
       deadlineText: path.deadlineText || undefined,
+      sourceConversationId,
       existingPathId: pathId,
       userProfile: {}
     }, {

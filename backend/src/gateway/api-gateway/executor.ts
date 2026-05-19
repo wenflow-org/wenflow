@@ -303,6 +303,10 @@ export class APIExecutor {
     }
 
     try {
+      const metadataSkillId = typeof context.skillId === 'string' ? context.skillId : null;
+      const metadataAgentId = typeof context.agentId === 'string' ? context.agentId : null;
+      const actorType = metadataSkillId ? 'skill' : (metadataAgentId ? 'agent' : 'system');
+      const actorId = metadataSkillId || metadataAgentId || context.callerAgent || 'api-gateway';
       const requestPreview = JSON.stringify(this.sanitizeRequest(request)).slice(0, 1000);
       const responsePreview = response?.choices?.[0]?.message?.content
         ? response.choices[0].message.content.slice(0, 1000)
@@ -327,6 +331,13 @@ export class APIExecutor {
           calledAt: new Date(),
           metadata: JSON.stringify({
             layer: 'api-gateway-v2',
+            executionLayer: 'api-gateway',
+            actorType,
+            actorId,
+            agentId: metadataAgentId,
+            skillId: metadataSkillId,
+            invokerId: context.callerAgent || null,
+            invokerType: context.callerAgent ? 'agent' : null,
             model: route.model,
             providerId: route.providerId,
             providerType: route.providerType,

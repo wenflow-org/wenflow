@@ -18,9 +18,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
 
 export const goalTypeIdentifierDefinition: SkillDefinition = {
   name: 'goal-type-identifier',
+  displayName: '目标类型识别器',
   version: '1.0.0',
   category: 'analysis',
   description: '分析用户学习目标类型，输出知识分布建议',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

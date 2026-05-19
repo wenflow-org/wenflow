@@ -3,6 +3,7 @@
     <div class="bg-layer" aria-hidden="true">
       <div class="bg-orb bg-orb--1"></div>
       <div class="bg-orb bg-orb--2"></div>
+      <div class="bg-orb bg-orb--3"></div>
     </div>
 
 <div class="page-hero">
@@ -71,7 +72,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" min-width="220">
+      <el-table-column label="状态" min-width="140">
         <template #default="{ row }">
           <div class="status-cell">
             <el-tag :type="getRuntimeRoleTagType(row)" size="small">{{ getRuntimeRoleLabel(row) }}</el-tag>
@@ -80,7 +81,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="运行指标" min-width="230">
+      <el-table-column label="运行指标" min-width="180">
         <template #default="{ row }">
           <div class="metrics-cell">
             <div class="metrics-cell__row">
@@ -94,7 +95,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="Prompt" min-width="160">
+      <el-table-column label="Prompt版本" min-width="120">
         <template #default="{ row }">
           <div class="prompt-cell">
             <template v-if="getPromptSummary(row.agentId)?.loading">
@@ -114,7 +115,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="100" fixed="right" align="center">
+      <el-table-column label="操作" width="120" fixed="right" align="center">
         <template #default="{ row }">
           <el-button type="primary" link @click="openDesign(row)">查看设计</el-button>
         </template>
@@ -1092,7 +1093,7 @@ const visiblePromptText = computed(() => {
 const openCreatePromptDialog = () => {
   editMode.value = false;
   editingPromptId.value = null;
-  const nextVersion = (currentPromptVersions.value[0]?.version || 0) + 1;
+  const nextVersion = (Number(currentPromptVersions.value[0]?.version) || 0) + 1;
   newPromptForm.value = {
     name: `v${nextVersion}`,
     description: '',
@@ -1107,7 +1108,7 @@ const openForkFromActive = () => {
   if (!currentPromptActive.value) return;
   editMode.value = false;
   editingPromptId.value = null;
-  const nextVersion = (currentPromptVersions.value[0]?.version || 0) + 1;
+  const nextVersion = (Number(currentPromptVersions.value[0]?.version) || 0) + 1;
   newPromptForm.value = {
     name: `v${nextVersion}-fork`,
     description: `基于 ${formatPromptVersion(currentPromptActive.value)} 修改`,
@@ -1125,7 +1126,7 @@ const editPromptVersion = async (version: PromptVersionSummary) => {
     const res: any = await adminAgentPromptsApi.getPromptDetail(version.id);
     const prompt = res.data?.data;
     
-    if (version.status === 'DRAFT') {
+    if ((version.status || '').toUpperCase() === 'DRAFT') {
       editMode.value = true;
       editingPromptId.value = version.id;
       newPromptForm.value = {
@@ -1138,7 +1139,7 @@ const editPromptVersion = async (version: PromptVersionSummary) => {
     } else {
       editMode.value = false;
       editingPromptId.value = null;
-      const nextVersion = (currentPromptVersions.value[0]?.version || 0) + 1;
+      const nextVersion = (Number(currentPromptVersions.value[0]?.version) || 0) + 1;
       newPromptForm.value = {
         name: `v${nextVersion}-修改`,
         description: `基于 ${formatPromptVersion(version)} 修改`,
@@ -1234,6 +1235,8 @@ const createAndPublishPrompt = async () => {
       toast.success('已创建并发布');
       createPromptDialogVisible.value = false;
       await loadPromptDetails(currentDesign.value.agentId);
+    } else {
+      toast.error('创建失败，未获取到 Prompt ID');
     }
   } catch (error) {
     toast.error('创建或发布失败');
@@ -1284,13 +1287,14 @@ onMounted(loadRegistry);
 
 /* Background orbs */
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+.bg-orb { position: absolute; border-radius: 999px; filter: blur(52px); opacity: 0.42; }
+.bg-orb--1 { width: 380px; height: 380px; top: -120px; left: -80px; background: color-mix(in srgb, var(--color-primary) 30%, white); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 320px; height: 320px; top: 12%; right: -80px; background: color-mix(in srgb, var(--color-accent) 22%, white); animation: orb-d 30s ease-in-out infinite reverse; }
+.bg-orb--3 { width: 260px; height: 260px; bottom: -70px; left: 24%; background: color-mix(in srgb, var(--color-secondary) 22%, white); animation: orb-d 28s ease-in-out infinite alternate; }
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 28px; border: 1px solid #d2dbf3; background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), color-mix(in srgb, #ffffff 90%, white); backdrop-filter: blur(20px); margin-bottom: 1.5rem; box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16); }
 .page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
@@ -1319,10 +1323,61 @@ onMounted(loadRegistry);
 }
 
 /* Summary card gradient variants */
-.summary-card--blue { border-radius: 16px; background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(52, 120, 246, 0.02)); border: 1px solid rgba(52, 120, 246, 0.1); }
-.summary-card--green { border-radius: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(16, 185, 129, 0.02)); border: 1px solid rgba(16, 185, 129, 0.1); }
-.summary-card--orange { border-radius: 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(245, 158, 11, 0.02)); border: 1px solid rgba(245, 158, 11, 0.1); }
-.summary-card--red { border-radius: 16px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(239, 68, 68, 0.02)); border: 1px solid rgba(239, 68, 68, 0.1); }
+.summary-card--blue { border-radius: 28px; background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(52, 120, 246, 0.02)); border: 1px solid rgba(52, 120, 246, 0.1); }
+.summary-card--green { border-radius: 28px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(16, 185, 129, 0.02)); border: 1px solid rgba(16, 185, 129, 0.1); }
+.summary-card--orange { border-radius: 28px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(245, 158, 11, 0.02)); border: 1px solid rgba(245, 158, 11, 0.1); }
+.summary-card--red { border-radius: 28px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(239, 68, 68, 0.02)); border: 1px solid rgba(239, 68, 68, 0.1); }
+
+.admin-list-card {
+  width: 100%;
+  background: color-mix(in srgb, #ffffff 90%, white);
+  border: 1px solid #d2dbf3;
+  border-radius: 28px;
+  padding: 1rem;
+  position: relative;
+  z-index: 1;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+}
+
+.admin-list-card :deep(.el-table) {
+  --el-table-border-color: rgba(52, 120, 246, 0.06);
+  background: transparent;
+}
+
+.admin-list-card :deep(.el-table th.el-table__cell) {
+  background: rgba(52, 120, 246, 0.03);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: #7085a6;
+}
+
+.admin-list-card :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+  background: rgba(52, 120, 246, 0.015);
+}
+
+.admin-list-card :deep(.el-table .el-table__row:hover > td.el-table__cell) {
+  background: rgba(52, 120, 246, 0.03);
+}
+
+.admin-list-card :deep(.el-table .el-table__row) {
+  position: relative;
+}
+
+.admin-list-card :deep(.el-table .el-table__row:hover > td.el-table__cell:first-child::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #3478f6, #8d6bff);
+}
+
+.admin-list-card :deep(.el-table td.el-table__cell) {
+  border-bottom-color: rgba(52, 120, 246, 0.04);
+}
 
 .filters {
   margin-bottom: 1rem;
@@ -1374,8 +1429,9 @@ onMounted(loadRegistry);
 
 .status-cell {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  justify-content: center;
 }
 
 .metrics-cell {

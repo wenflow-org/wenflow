@@ -12,10 +12,11 @@ import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 
-// Anderson 框架 Skills
+// Path 任务画像 Skills
 import { executeSkill } from '../../skills';
 import { goalTypeIdentifierDefinition } from '../../skills/goal-type-identifier';
 import { batchAndersonLabelerDefinition } from '../../skills/batch-anderson-labeler';
+import { pathSceneFramingDefinition } from '../../skills/path-scene-framing';
 
 interface CreateGoalData {
   userId: string;
@@ -24,6 +25,8 @@ interface CreateGoalData {
 }
 
 interface GeneratePathData {
+  source?: 'goal' | 'learn' | 'replan' | 'api';
+  mode?: 'generate' | 'expand' | 'compress' | 'replan';
   userId: string;
   description: string;
   subject?: string;
@@ -179,6 +182,38 @@ interface NormalizedPathTask {
   estimatedMinutes?: number;
   acceptanceCriteria?: string;
   linkedConcept?: string;
+}
+
+interface PathProcessInputSnapshot {
+  source: 'goal' | 'learn' | 'replan' | 'api';
+  mode: 'generate' | 'expand' | 'compress' | 'replan';
+  description: string;
+  subject: string | null;
+  deadlineText: string | null;
+  sourceConversationId: string | null;
+  existingPathId: string | null;
+  skillLevel: string | null;
+  timePerDay: string | null;
+  structuredData: any;
+  confirmedProposal: any;
+  confidenceScores: any;
+  conversationHistoryPreview: Array<{ role: string; content: string }>;
+}
+
+interface PathStageTraceItem {
+  id: string;
+  phase: PathGenerationPhase | null;
+  status: 'started' | 'succeeded' | 'failed' | null;
+  success: boolean;
+  pathId: string | null;
+  sourceConversationId: string | null;
+  triggerSource: string | null;
+  durationMs: number;
+  error: string | null;
+  errorCode: string | null;
+  input: Record<string, any> | null;
+  output: Record<string, any> | null;
+  calledAt: string;
 }
 
 function parsePathSummary(raw: string | null): string | null {
@@ -462,7 +497,211 @@ function parseJsonSafe(raw: any): any {
   }
 }
 
+function parseTaskLearningObjectives(raw: string | null | undefined): string[] {
+  if (!raw || typeof raw !== 'string') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => typeof item === 'string' ? item.trim() : '')
+        .filter(Boolean);
+    }
+    if (typeof parsed === 'string' && parsed.trim()) {
+      return [parsed.trim()];
+    }
+  } catch {
+    if (raw.trim()) return [raw.trim()];
+  }
+  return [];
+}
+
+function buildProcessInputSnapshot(data: GeneratePathData): PathProcessInputSnapshot {
+  const previewHistory = Array.isArray(data.userProfile?.conversationHistory)
+    ? data.userProfile.conversationHistory
+        .slice(-6)
+        .map((message: any) => ({
+          role: typeof message?.role === 'string' ? message.role : 'user',
+          content: typeof message?.content === 'string' ? message.content.slice(0, 500) : '',
+        }))
+        .filter((message: { role: string; content: string }) => message.content)
+    : [];
+
+  return {
+    source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
+    mode: data.mode || 'generate',
+    description: data.description,
+    subject: data.subject || null,
+    deadlineText: data.deadlineText || null,
+    sourceConversationId: data.sourceConversationId || null,
+    existingPathId: data.existingPathId || null,
+    skillLevel: data.userProfile?.skillLevel || data.userProfile?.currentSkillLevel || null,
+    timePerDay: data.userProfile?.timePerDay || null,
+    structuredData: data.userProfile?.structuredData || null,
+    confirmedProposal: data.userProfile?.confirmedProposal || null,
+    confidenceScores: data.userProfile?.confidenceScores || null,
+    conversationHistoryPreview: previewHistory,
+  };
+}
+
+function normalizeStageTraceStatus(value: any): 'started' | 'succeeded' | 'failed' | null {
+  return value === 'started' || value === 'succeeded' || value === 'failed' ? value : null;
+}
+
+function normalizeStageTracePhase(value: any): PathGenerationPhase | null {
+  return value === 'core' || value === 'enrichment' ? value : null;
+}
+
 class LearningService {
+  private buildPathProcessDetail(path: any) {
+    const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
+    const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate || null);
+    const processInput = parsedTemplate?.processInput && typeof parsedTemplate.processInput === 'object'
+      ? parsedTemplate.processInput
+      : null;
+    const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
+      ? parsedTemplate.sceneFraming
+      : null;
+    const fallbackSourceGoal = sceneFraming?.sourceGoal && typeof sceneFraming.sourceGoal === 'object'
+      ? sceneFraming.sourceGoal
+      : null;
+    const fallbackDescription = processInput?.description
+      || path.description
+      || fallbackSourceGoal?.surfaceGoal
+      || fallbackSourceGoal?.realProblem
+      || null;
+    const fallbackSubject = processInput?.subject
+      || path.subject
+      || null;
+    const fallbackSkillLevel = processInput?.skillLevel
+      || parsedTemplate?.difficulty
+      || path.difficulty
+      || null;
+    const taskProfiles = (path.milestones || []).flatMap((milestone: any) =>
+      (milestone.subtasks || []).map((task: any) => ({
+        taskId: task.id,
+        milestoneId: milestone.id,
+        milestoneTitle: milestone.title || milestone.goal || null,
+        title: task.title,
+        status: task.status,
+        knowledgeType: task.knowledgeType || null,
+        cognitiveLevel: task.cognitiveLevel || null,
+        displayLabel: task.displayLabel || null,
+        learningObjectives: parseTaskLearningObjectives(task.learningObjectives),
+        coreConcept: task.coreConcept || null,
+        transferable: task.transferable ?? false,
+        annotationConfidence: task.annotationConfidence ?? null,
+      }))
+    );
+
+    return {
+      source: typeof processInput?.source === 'string'
+        ? processInput.source
+        : (typeof parsedTemplate?.source === 'string' ? parsedTemplate.source : null),
+      mode: typeof processInput?.mode === 'string'
+        ? processInput.mode
+        : (typeof parsedTemplate?.mode === 'string' ? parsedTemplate.mode : null),
+      sourceConversationId: processInput?.sourceConversationId || generationStatus?.sourceConversationId || null,
+      goalInput: {
+        description: fallbackDescription,
+        subject: fallbackSubject,
+        deadlineText: processInput?.deadlineText || path.deadlineText || null,
+        sourceGoal: fallbackSourceGoal,
+        skillLevel: fallbackSkillLevel,
+        timePerDay: processInput?.timePerDay || null,
+        structuredData: processInput?.structuredData || null,
+        confirmedProposal: processInput?.confirmedProposal || null,
+        confidenceScores: processInput?.confidenceScores || null,
+        conversationHistoryPreview: Array.isArray(processInput?.conversationHistoryPreview)
+          ? processInput.conversationHistoryPreview
+          : [],
+      },
+      framing: sceneFraming ? {
+        version: sceneFraming.version || null,
+        intent: sceneFraming.intent || null,
+        targetState: sceneFraming.targetState || null,
+        firstDeliverable: sceneFraming.firstDeliverable || null,
+        cognitiveDomain: sceneFraming.cognitiveDomain || null,
+        planningFocus: normalizeStringArray(sceneFraming.planningFocus),
+        excludedScope: normalizeStringArray(sceneFraming.excludedScope),
+        riskFlags: normalizeStringArray(sceneFraming.riskFlags),
+        resourceProfile: {
+          timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
+          timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
+          pace: sceneFraming.resourceProfile?.pace || null,
+        },
+        sourceGoal: sceneFraming.sourceGoal && typeof sceneFraming.sourceGoal === 'object'
+          ? sceneFraming.sourceGoal
+          : null,
+      } : null,
+      cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate || null),
+      adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate || null),
+      adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate || null),
+      generationTimeline: generationStatus ? {
+        core: generationStatus.core || null,
+        coreStep: generationStatus.coreStep || null,
+        enrichment: generationStatus.enrichment || null,
+        lastError: generationStatus.lastError || null,
+        triggerSource: generationStatus.triggerSource || null,
+        updatedAt: generationStatus.updatedAt || null,
+        enrichmentRetryCount: generationStatus.enrichmentRetryCount || 0,
+        lastEnrichmentRetryAt: generationStatus.lastEnrichmentRetryAt || null,
+      } : null,
+      taskProfiles,
+      raw: {
+        processInput,
+        promptTemplate: parsedTemplate,
+        generationStatus,
+      },
+    };
+  }
+
+  private async getPathStageTraces(pathId: string, sourceConversationId?: string | null): Promise<PathStageTraceItem[]> {
+    const logs = await prisma.agent_call_logs.findMany({
+      where: {
+        agentId: 'path-orchestrator',
+        sourceEntry: 'platform',
+        OR: [
+          { metadata: { contains: pathId } },
+          ...(sourceConversationId ? [{ metadata: { contains: sourceConversationId } }] : []),
+        ],
+      },
+      orderBy: { calledAt: 'asc' },
+      take: 20,
+    });
+
+    return logs
+      .map((log) => {
+        const metadata = parseJsonSafe(log.metadata);
+        const input = parseJsonSafe(log.input);
+        const output = parseJsonSafe(log.output);
+        const phase = normalizeStageTracePhase(metadata?.phase || input?.phase);
+        const status = normalizeStageTraceStatus(metadata?.status || input?.status);
+        const tracePathId = metadata?.pathId || input?.pathId || null;
+        const traceSourceConversationId = metadata?.sourceConversationId || input?.sourceConversationId || null;
+
+        if (tracePathId !== pathId && (!sourceConversationId || traceSourceConversationId !== sourceConversationId)) {
+          return null;
+        }
+
+        return {
+          id: log.id,
+          phase,
+          status,
+          success: !!log.success,
+          pathId: tracePathId,
+          sourceConversationId: traceSourceConversationId,
+          triggerSource: metadata?.triggerSource || input?.triggerSource || null,
+          durationMs: log.durationMs || 0,
+          error: log.error || null,
+          errorCode: log.errorCode || null,
+          input,
+          output,
+          calledAt: log.calledAt.toISOString(),
+        } as PathStageTraceItem;
+      })
+      .filter(Boolean) as PathStageTraceItem[];
+  }
+
   private normalizeCognitiveDesign(
     candidate: PathCognitiveDesign | null | undefined,
     fallbackDomain: string,
@@ -1199,12 +1438,19 @@ class LearningService {
 
   private async analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     try {
-      const { pathAgentHandler, buildPathSceneFramingWithAI } = await import('../../agents/path-agent');
+      const { pathAgentHandler } = await import('../../agents/path-agent');
       const agentInput = this.buildPathAgentInput(data);
       const agentContext = { userId: data.userId };
 
       if (!data.userProfile?.pathSceneFraming) {
-        const sceneFraming = await buildPathSceneFramingWithAI(agentInput, agentContext);
+        const sceneFraming = await executeSkill(pathSceneFramingDefinition, {
+          goal: agentInput.goal,
+          currentLevel: agentInput.currentLevel,
+          timePerDay: agentInput.timePerDay,
+          structuredData: agentInput.structuredData,
+          confirmedProposal: agentInput.confirmedProposal,
+          metadata: agentInput.metadata || {},
+        });
         data.userProfile = {
           ...(data.userProfile || {}),
           pathSceneFraming: sceneFraming
@@ -1278,6 +1524,9 @@ class LearningService {
     const adjustmentEvidence = this.buildPathAdjustmentEvidence(data);
     const promptTemplatePayload = {
       ...analysis,
+      source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
+      mode: data.mode || 'generate',
+      processInput: buildProcessInputSnapshot(data),
       suggestedMilestones: normalizedMilestonesData,
       cognitiveDesign,
       adjustmentPolicy,
@@ -1434,7 +1683,7 @@ class LearningService {
     });
 
     try {
-      logger.info('开始 Anderson 后处理...', { userId: data.userId, pathId });
+      logger.info('开始任务画像后处理...', { userId: data.userId, pathId });
 
       const learningPath = await prisma.learning_paths.findUnique({
         where: { id: pathId },
@@ -1530,7 +1779,7 @@ class LearningService {
         }
       });
 
-      logger.info('Anderson 后处理完成', {
+      logger.info('任务画像后处理完成', {
         pathId,
         userId: data.userId,
         taskCount: allTasks.length,
@@ -1559,7 +1808,7 @@ class LearningService {
         updatedAt: new Date().toISOString()
       });
     } catch (andersonError: any) {
-      logger.warn('Anderson 后处理失败，路径保持可用', {
+      logger.warn('任务画像后处理失败，路径保持可用', {
         pathId,
         userId: data.userId,
         error: andersonError?.message || String(andersonError)
@@ -1588,7 +1837,13 @@ class LearningService {
 
   private async generateLearningPathCore(data: GeneratePathData) {
     const startTime = Date.now();
-    const triggerSource = data.sourceConversationId ? 'goal-conversation' : 'api';
+    const triggerSource = data.sourceConversationId
+      ? 'goal-conversation'
+      : data.source === 'learn'
+        ? 'ai-teaching'
+        : data.source === 'replan'
+          ? 'system'
+          : 'api';
 
     await this.recordPathGenerationStageLog({
       userId: data.userId,
@@ -1597,11 +1852,13 @@ class LearningService {
       triggerSource,
       phase: 'core',
       status: 'started',
-      input: {
-        goal: data.description,
-        existingPathId: data.existingPathId || null
-      }
-    });
+        input: {
+          goal: data.description,
+          existingPathId: data.existingPathId || null,
+          source: data.source || null,
+          mode: data.mode || 'generate',
+        }
+      });
 
     if (data.existingPathId) {
       await this.updatePathGenerationStatus(data.existingPathId, {
@@ -1847,6 +2104,8 @@ const learningPath = await prisma.learning_paths.findUnique({
 
       const pathWithActualMinutes = await this.attachActualMinutesToPath(path);
       const accessState = this.getPathLearningAccessState(path.status, path.aiPromptTemplate);
+      const processDetail = this.buildPathProcessDetail(pathWithActualMinutes);
+      const stageTraces = await this.getPathStageTraces(path.id, processDetail.sourceConversationId || null);
 
       return {
         ...pathWithActualMinutes,
@@ -1856,6 +2115,10 @@ const learningPath = await prisma.learning_paths.findUnique({
         cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
         adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
         adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
+        processDetail: {
+          ...processDetail,
+          stageTraces,
+        },
         canStartLearning: accessState.canStartLearning,
         learningBlockedReason: accessState.learningBlockedReason,
         replanLineage: {

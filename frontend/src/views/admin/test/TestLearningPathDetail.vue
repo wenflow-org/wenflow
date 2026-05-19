@@ -51,41 +51,180 @@
           </div>
         </section>
 
-        <section class="test-path-detail-grid">
-          <aside class="test-path-detail-sidebar">
-            <section class="test-path-detail-card">
-              <span class="test-path-detail-eyebrow">生成状态</span>
-              <div class="test-path-detail-kv-list">
-                <div class="test-path-detail-kv"><span>core</span><strong>{{ generationStatus?.core || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>coreStep</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>enrichment</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>sourceConversationId</span><strong>{{ generationStatus?.sourceConversationId || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>canStartLearning</span><strong>{{ canStartLearning ? 'true' : 'false' }}</strong></div>
+        <section v-if="processDetail" class="test-path-detail-card test-path-detail-card--process test-path-detail-process-section">
+          <div class="test-path-detail-section-head">
+            <div>
+              <span class="test-path-detail-eyebrow">Path Process</span>
+              <h2>过程可视化</h2>
+              <p class="test-path-detail-section-desc">这是开发视角调试卡片，放在学习路径总览和阶段结构之间。</p>
+            </div>
+          </div>
+
+          <div class="test-path-process-overview-grid">
+            <article class="test-path-process-overview-card">
+              <span>输入来源</span>
+              <strong>{{ processDetail.source || '--' }}</strong>
+              <p>{{ processDetail.mode || '--' }} · {{ processDetail.goalInput?.skillLevel || '未标注水平' }}</p>
+            </article>
+            <article class="test-path-process-overview-card">
+              <span>当前阶段</span>
+              <strong>{{ generationStatus?.coreStep || generationStatus?.core || '--' }}</strong>
+              <p>{{ enrichmentStatus || '--' }} · {{ canStartLearning ? '可学习' : '等待内容准备' }}</p>
+            </article>
+            <article class="test-path-process-overview-card">
+              <span>任务画像</span>
+              <strong>{{ profiledTaskCount }}/{{ totalTasks }}</strong>
+              <p>已有任务画像的子任务数量</p>
+            </article>
+            <article class="test-path-process-overview-card">
+              <span>运行轨迹</span>
+              <strong>已隐藏</strong>
+              <p>默认不展示历史运行轨迹，避免干扰正式阅读路径</p>
+            </article>
+          </div>
+
+          <div class="test-path-process-section-grid">
+            <section class="test-path-process-section-card">
+              <div class="test-path-process-section-card__head test-path-process-section-card__head--stacked">
+                <div>
+                  <span class="test-path-detail-eyebrow">Goal Input</span>
+                  <strong>真实输入快照</strong>
+                </div>
+                <div class="test-path-detail-chip-row test-path-detail-chip-row--compact">
+                  <span class="test-path-detail-chip test-path-detail-chip--accent">{{ processDetail.goalInput?.subject || '--' }}</span>
+                  <span class="test-path-detail-chip">{{ processDetail.goalInput?.timePerDay || '未记录时间投入' }}</span>
+                </div>
               </div>
+
+              <div class="test-path-process-kv-grid">
+                <div class="test-path-detail-kv"><span>source</span><strong>{{ processDetail.source || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>mode</span><strong>{{ processDetail.mode || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>deadline</span><strong>{{ processDetail.goalInput?.deadlineText || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>skillLevel</span><strong>{{ processDetail.goalInput?.skillLevel || '未标注水平' }}</strong></div>
+              </div>
+
+              <div class="test-path-process-lead-block">
+                <span class="test-path-detail-copy-block__label">description</span>
+                <p>{{ processDetail.goalInput?.description || processDetail.goalInput?.sourceGoal?.surfaceGoal || processDetail.goalInput?.sourceGoal?.realProblem || '暂无可回显输入' }}</p>
+              </div>
+
+              <details class="test-path-detail-raw-panel test-path-detail-raw-panel--compact">
+                <summary>展开结构化输入</summary>
+                <div class="test-path-detail-process-grid test-path-detail-process-grid--two">
+                  <article v-if="processDetail.goalInput?.sourceGoal" class="test-path-detail-process-card test-path-detail-process-card--source-goal">
+                    <span class="test-path-detail-copy-block__label">sourceGoal</span>
+                    <div class="test-path-process-bullet-group">
+                      <div class="test-path-process-bullet-item"><span>surfaceGoal</span><strong>{{ processDetail.goalInput.sourceGoal.surfaceGoal || '--' }}</strong></div>
+                      <div class="test-path-process-bullet-item"><span>realProblem</span><strong>{{ processDetail.goalInput.sourceGoal.realProblem || '--' }}</strong></div>
+                      <div class="test-path-process-bullet-item"><span>motivation</span><strong>{{ processDetail.goalInput.sourceGoal.motivation || '--' }}</strong></div>
+                      <div class="test-path-process-bullet-item"><span>urgency</span><strong>{{ processDetail.goalInput.sourceGoal.urgency || '--' }}</strong></div>
+                    </div>
+                  </article>
+                  <article v-if="processDetail.goalInput?.structuredData" class="test-path-detail-process-card">
+                    <span class="test-path-detail-copy-block__label">structuredData</span>
+                    <pre>{{ JSON.stringify(processDetail.goalInput.structuredData, null, 2) }}</pre>
+                  </article>
+                  <article v-if="processDetail.goalInput?.confirmedProposal" class="test-path-detail-process-card">
+                    <span class="test-path-detail-copy-block__label">confirmedProposal</span>
+                    <pre>{{ JSON.stringify(processDetail.goalInput.confirmedProposal, null, 2) }}</pre>
+                  </article>
+                  <article v-if="processDetail.goalInput?.confidenceScores" class="test-path-detail-process-card">
+                    <span class="test-path-detail-copy-block__label">confidenceScores</span>
+                    <pre>{{ JSON.stringify(processDetail.goalInput.confidenceScores, null, 2) }}</pre>
+                  </article>
+                  <article v-if="processDetail.goalInput?.conversationHistoryPreview?.length" class="test-path-detail-process-card">
+                    <span class="test-path-detail-copy-block__label">conversationHistoryPreview</span>
+                    <pre>{{ JSON.stringify(processDetail.goalInput.conversationHistoryPreview, null, 2) }}</pre>
+                  </article>
+                </div>
+              </details>
             </section>
 
-            <section v-if="path.sceneSummary" class="test-path-detail-card">
-              <span class="test-path-detail-eyebrow">Scene Summary</span>
-              <div class="test-path-detail-kv-list">
-                <div class="test-path-detail-kv"><span>firstDeliverable</span><strong>{{ path.sceneSummary.firstDeliverable || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>targetState</span><strong>{{ path.sceneSummary.targetState || '--' }}</strong></div>
+            <section v-if="processDetail?.framing" class="test-path-process-section-card">
+              <div class="test-path-process-section-card__head">
+                <div>
+                  <span class="test-path-detail-eyebrow">Framing</span>
+                  <strong>{{ processDetail.framing.intent || '未命名 framing' }}</strong>
+                </div>
+                <span class="test-path-detail-chip test-path-detail-chip--accent">{{ processDetail.framing.cognitiveDomain || '--' }}</span>
               </div>
-              <div v-if="Array.isArray(path.sceneSummary.planningFocus) && path.sceneSummary.planningFocus.length > 0" class="test-path-detail-chip-row">
-                <span v-for="item in path.sceneSummary.planningFocus" :key="item" class="test-path-detail-chip">{{ item }}</span>
-              </div>
-            </section>
 
-            <section class="test-path-detail-card">
-              <span class="test-path-detail-eyebrow">当前建议</span>
-              <div class="test-path-detail-plan-list">
-                <article v-for="item in pathDetailPlan" :key="item.title" class="test-path-detail-plan-item">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.desc }}</p>
-                </article>
+              <div class="test-path-process-lead-block test-path-process-lead-block--framing">
+                <span class="test-path-detail-copy-block__label">intent</span>
+                <p>{{ processDetail.framing.intent || '暂无 framing intent' }}</p>
               </div>
-            </section>
-          </aside>
 
+              <div class="test-path-process-kv-grid">
+                <div class="test-path-detail-kv"><span>firstDeliverable</span><strong>{{ processDetail.framing.firstDeliverable || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>targetState</span><strong>{{ processDetail.framing.targetState || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>timeBudget</span><strong>{{ processDetail.framing.resourceProfile?.timeBudget || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>pace</span><strong>{{ processDetail.framing.resourceProfile?.pace || '--' }}</strong></div>
+              </div>
+
+              <div v-if="processDetail.framing.planningFocus?.length" class="test-path-detail-copy-group">
+                <span class="test-path-detail-copy-block__label">planningFocus</span>
+                <div class="test-path-process-pill-stack">
+                  <span v-for="item in processDetail.framing.planningFocus" :key="item" class="test-path-process-pill test-path-process-pill--focus">{{ item }}</span>
+                </div>
+              </div>
+              <div class="test-path-process-inline-grid">
+                <div v-if="processDetail.framing.excludedScope?.length" class="test-path-detail-copy-group">
+                  <span class="test-path-detail-copy-block__label">excludedScope</span>
+                  <div class="test-path-process-pill-stack">
+                    <span v-for="item in processDetail.framing.excludedScope" :key="item" class="test-path-process-pill test-path-process-pill--muted">{{ item }}</span>
+                  </div>
+                </div>
+                <div v-if="processDetail.framing.riskFlags?.length" class="test-path-detail-copy-group">
+                  <span class="test-path-detail-copy-block__label">riskFlags</span>
+                  <div class="test-path-process-pill-stack">
+                    <span v-for="item in processDetail.framing.riskFlags" :key="item" class="test-path-process-pill test-path-process-pill--warning">{{ item }}</span>
+                  </div>
+                </div>
+              </div>
+              <details v-if="processDetail.framing.sourceGoal" class="test-path-detail-raw-panel test-path-detail-raw-panel--compact">
+                <summary>展开 sourceGoal</summary>
+                <pre>{{ JSON.stringify(processDetail.framing.sourceGoal, null, 2) }}</pre>
+              </details>
+            </section>
+          </div>
+
+          <details class="test-path-detail-raw-panel">
+            <summary>展开原始过程 JSON</summary>
+            <div class="test-path-detail-process-grid test-path-detail-process-grid--three">
+              <article class="test-path-detail-process-card">
+                <span class="test-path-detail-copy-block__label">processInput</span>
+                <pre>{{ JSON.stringify(processDetail.raw?.processInput, null, 2) }}</pre>
+              </article>
+              <article class="test-path-detail-process-card">
+                <span class="test-path-detail-copy-block__label">promptTemplate</span>
+                <pre>{{ JSON.stringify(processDetail.raw?.promptTemplate, null, 2) }}</pre>
+              </article>
+              <article class="test-path-detail-process-card">
+                <span class="test-path-detail-copy-block__label">generationStatus</span>
+                <pre>{{ JSON.stringify(processDetail.raw?.generationStatus, null, 2) }}</pre>
+              </article>
+            </div>
+          </details>
+
+          <details class="test-path-detail-raw-panel">
+            <summary>展开 Goal 阶段原始数据</summary>
+            <div v-if="goalConversationRaw" class="test-path-detail-process-grid test-path-detail-process-grid--two">
+              <article class="test-path-detail-process-card">
+                <span class="test-path-detail-copy-block__label">goalConversation</span>
+                <pre>{{ JSON.stringify(goalConversationRaw, null, 2) }}</pre>
+              </article>
+              <article class="test-path-detail-process-card">
+                <span class="test-path-detail-copy-block__label">goalSummary</span>
+                <pre>{{ JSON.stringify(goalConversationSummary, null, 2) }}</pre>
+              </article>
+            </div>
+            <div v-else class="test-path-detail-empty-state test-path-detail-empty-state--inline">
+              {{ goalConversationRawHint }}
+            </div>
+          </details>
+        </section>
+
+        <section class="test-path-detail-grid test-path-detail-grid--content">
           <section class="test-path-detail-main">
             <section v-if="showEnrichmentBanner" class="test-path-detail-banner" :class="`test-path-detail-banner--${enrichmentStatus || 'unknown'}`">
               <div>
@@ -129,11 +268,18 @@
                           <div>
                             <strong>{{ task.title }}</strong>
                             <p>{{ task.description }}</p>
+                            <div v-if="task.displayLabel || task.coreConcept || normalizedTaskObjectives(task).length" class="test-path-task__profile-copy">
+                              <span v-if="task.displayLabel" class="test-path-task__profile-line">任务画像：{{ task.displayLabel }}</span>
+                              <span v-if="task.coreConcept" class="test-path-task__profile-line">核心概念：{{ task.coreConcept }}</span>
+                              <span v-if="normalizedTaskObjectives(task).length">学习目标：{{ normalizedTaskObjectives(task).join(' / ') }}</span>
+                            </div>
                           </div>
                           <div class="test-path-detail-chip-row">
                             <span class="test-path-detail-chip">{{ getStatusText(task.status) }}</span>
                             <span class="test-path-detail-chip">{{ getTaskTypeText(task.taskType) }}</span>
                             <span class="test-path-detail-chip">{{ task.estimatedMinutes || 0 }} 分钟</span>
+                            <span v-if="task.knowledgeType" class="test-path-detail-chip test-path-detail-chip--accent">{{ task.knowledgeType }}</span>
+                            <span v-if="task.cognitiveLevel" class="test-path-detail-chip test-path-detail-chip--accent">{{ task.cognitiveLevel }}</span>
                           </div>
                         </div>
 
@@ -149,7 +295,31 @@
                 </article>
               </div>
             </section>
+
           </section>
+
+          <aside class="test-path-detail-sidebar">
+            <section class="test-path-detail-card">
+              <span class="test-path-detail-eyebrow">生成状态</span>
+              <div class="test-path-detail-kv-list">
+                <div class="test-path-detail-kv"><span>core</span><strong>{{ generationStatus?.core || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>coreStep</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>enrichment</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>sourceConversationId</span><strong>{{ generationStatus?.sourceConversationId || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>canStartLearning</span><strong>{{ canStartLearning ? 'true' : 'false' }}</strong></div>
+              </div>
+            </section>
+
+            <section class="test-path-detail-card">
+              <span class="test-path-detail-eyebrow">当前建议</span>
+              <div class="test-path-detail-plan-list">
+                <article v-for="item in pathDetailPlan" :key="item.title" class="test-path-detail-plan-item">
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.desc }}</p>
+                </article>
+              </div>
+            </section>
+          </aside>
         </section>
       </template>
     </main>
@@ -200,6 +370,8 @@ const completedTasks = computed(() => pathStages.value.reduce((sum: number, stag
 const completionRate = computed(() => totalTasks.value === 0 ? 0 : Math.round((completedTasks.value / totalTasks.value) * 100));
 const pathStatusLabel = computed(() => {
   const status = path.value?.status;
+  const generation = path.value?.generationStatus;
+  if (status === 'active' && (generation?.enrichment === 'pending' || generation?.enrichment === 'processing')) return '内容准备中';
   if (status === 'active') return '进行中';
   if (status === 'completed') return '已完成';
   if (status === 'draft' || status === 'generating') return '生成中';
@@ -229,6 +401,27 @@ const enrichmentBannerMessage = computed(() => {
   return path.value?.learningBlockedReason || '学习内容状态暂不可用，请稍后刷新页面。';
 });
 const pathStages = computed(() => path.value?.milestones || path.value?.weeks || []);
+const processDetail = computed(() => path.value?.processDetail || null);
+const goalConversationRaw = ref<any | null>(null);
+const goalConversationSummary = computed(() => {
+  if (!goalConversationRaw.value) return null;
+  return {
+    id: goalConversationRaw.value.id || null,
+    stage: goalConversationRaw.value.stage || null,
+    status: goalConversationRaw.value.status || null,
+    description: goalConversationRaw.value.description || null,
+    understanding: goalConversationRaw.value.understanding || goalConversationRaw.value.collected?.understanding || null,
+    confirmedProposal: goalConversationRaw.value.confirmedProposal || goalConversationRaw.value.collected?.confirmedProposal || null,
+    collected: goalConversationRaw.value.collected || null,
+  };
+});
+const goalConversationRawHint = computed(() => {
+  const conversationId = processDetail.value?.sourceConversationId || generationStatus.value?.sourceConversationId;
+  if (!conversationId) {
+    return '当前这次路径运行没有带回 Goal 对话关联，所以这里暂时无法还原 Goal 阶段原始数据。';
+  }
+  return '当前未加载到 Goal 对话原始数据。';
+});
 const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
 const activeStage = computed(() => pathStages.value.find((stage: any) => normalizeTaskList(stage).some((task: any) => task.status !== 'completed')) || pathStages.value[0] || null);
 const activeStageTasks = computed(() => normalizeTaskList(activeStage.value));
@@ -245,8 +438,28 @@ const pathDetailPlan = computed(() => {
   }));
   return items.length > 0 ? items : [{ title: '当前暂无待推进任务', desc: '等学习内容准备完成后，这里会出现最值得先开始的任务。' }];
 });
+const profiledTaskCount = computed(() => pathStages.value.reduce(
+  (sum: number, stage: any) => sum + normalizeTaskList(stage).filter((task: any) => task.knowledgeType || task.cognitiveLevel || task.displayLabel).length,
+  0,
+));
 
 const handleScroll = () => { headerScrolled.value = window.scrollY > 50; };
+const loadGoalConversationRaw = async () => {
+  const conversationId = processDetail.value?.sourceConversationId || generationStatus.value?.sourceConversationId;
+  if (!conversationId) {
+    goalConversationRaw.value = null;
+    return;
+  }
+
+  try {
+    const response = await api.get(`/goal-conversation/${conversationId}`);
+    goalConversationRaw.value = response.data;
+  } catch (error: any) {
+    goalConversationRaw.value = null;
+    console.error('加载 Goal 阶段原始数据失败:', error);
+  }
+};
+
 const loadPathData = async () => {
   if (!path.value) loading.value = true;
   try {
@@ -260,8 +473,14 @@ const loadPathData = async () => {
         if (week.learningObjectives) {
           try { week.learningObjectives = JSON.parse(week.learningObjectives); } catch { week.learningObjectives = []; }
         }
+        normalizeTaskList(week).forEach((task: any) => {
+          if (typeof task.learningObjectives === 'string' && task.learningObjectives.trim()) {
+            try { task.learningObjectives = JSON.parse(task.learningObjectives); } catch {}
+          }
+        });
       });
     }
+    await loadGoalConversationRaw();
     if (path.value?.generationStatus?.enrichment === 'processing' || path.value?.generationStatus?.enrichment === 'pending') startEnrichmentPolling();
     else stopEnrichmentPolling();
   } catch (error: any) {
@@ -348,6 +567,18 @@ const viewTaskEvaluation = async (task: any) => {
 const getWeekCompletedCount = (week: any) => normalizeTaskList(week).filter((t: any) => t.status === 'completed').length;
 const getStatusText = (status: string) => ({ todo: '待开始', in_progress: '进行中', completed: '已完成', skipped: '已跳过' }[status] || status);
 const getTaskTypeText = (type: string) => ({ reading: '阅读', practice: '练习', project: '项目', quiz: '测验' }[type] || type || '任务');
+const normalizedTaskObjectives = (task: any) => {
+  if (Array.isArray(task?.learningObjectives)) return task.learningObjectives.filter((item: any) => typeof item === 'string' && item.trim());
+  if (typeof task?.learningObjectives === 'string' && task.learningObjectives.trim()) {
+    try {
+      const parsed = JSON.parse(task.learningObjectives);
+      return Array.isArray(parsed) ? parsed.filter((item: any) => typeof item === 'string' && item.trim()) : [task.learningObjectives.trim()];
+    } catch {
+      return [task.learningObjectives.trim()];
+    }
+  }
+  return [];
+};
 
 onMounted(() => {
   void loadPathData();
@@ -486,7 +717,8 @@ onUnmounted(() => {
 .test-path-stage__head p,
 .test-path-task__head p,
 .test-path-detail-plan-item p,
-.test-path-detail-banner p {
+.test-path-detail-banner p,
+.test-path-detail-section-desc {
   margin: 0;
   color: #66758d;
   line-height: 1.7;
@@ -499,6 +731,11 @@ onUnmounted(() => {
   gap: 20px;
 }
 
+.test-path-detail-grid--content {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  align-items: start;
+}
+
 .test-path-detail-sidebar,
 .test-path-detail-main,
 .test-path-detail-kv-list,
@@ -509,8 +746,28 @@ onUnmounted(() => {
   gap: 16px;
 }
 
+.test-path-detail-kv-list--dense {
+  gap: 10px;
+}
+
+.test-path-process-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
 .test-path-detail-card {
   padding: 20px;
+}
+
+.test-path-detail-card--process {
+  background:
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 28%),
+    rgba(255, 255, 255, 0.92);
+}
+
+.test-path-detail-process-section {
+  margin-bottom: 20px;
 }
 
 .test-path-detail-kv {
@@ -547,6 +804,411 @@ onUnmounted(() => {
   color: #4d5b72;
   font-size: 12px;
   font-weight: 700;
+}
+
+.test-path-detail-chip--accent {
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+}
+
+.test-path-detail-chip--muted {
+  background: rgba(102, 117, 141, 0.12);
+  color: #66758d;
+}
+
+.test-path-detail-chip--warning {
+  background: rgba(255, 170, 100, 0.16);
+  color: #a35b06;
+}
+
+.test-path-detail-copy-block,
+.test-path-detail-copy-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.test-path-process-lead-block {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(255, 255, 255, 0.7));
+  border: 1px solid rgba(52, 120, 246, 0.1);
+}
+
+.test-path-process-lead-block--framing {
+  background: linear-gradient(180deg, rgba(141, 107, 255, 0.06), rgba(255, 255, 255, 0.7));
+  border-color: rgba(141, 107, 255, 0.12);
+}
+
+.test-path-process-lead-block p {
+  margin: 0;
+  color: #22304a;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.test-path-detail-copy-block__label {
+  color: #66758d;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.test-path-detail-copy-block pre,
+.test-path-detail-copy-group pre,
+.test-path-detail-process-card pre {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #22304a;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+.test-path-task__profile-copy {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: #4d5b72;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.test-path-task__profile-line {
+  display: block;
+}
+
+.test-path-process-pill-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.test-path-process-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 700;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(255, 255, 255, 0.88);
+  color: #334155;
+}
+
+.test-path-process-pill--focus {
+  background: rgba(52, 120, 246, 0.08);
+  border-color: rgba(52, 120, 246, 0.12);
+  color: #1f57cc;
+}
+
+.test-path-process-pill--muted {
+  background: rgba(102, 117, 141, 0.08);
+  color: #66758d;
+}
+
+.test-path-process-pill--warning {
+  background: rgba(255, 170, 100, 0.14);
+  border-color: rgba(255, 170, 100, 0.18);
+  color: #a35b06;
+}
+
+.test-path-process-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.test-path-process-overview-card,
+.test-path-process-section-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.92));
+}
+
+.test-path-process-overview-card span {
+  color: #66758d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.test-path-process-overview-card strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.test-path-process-overview-card p {
+  margin: 0;
+  color: #66758d;
+  font-size: 12px;
+}
+
+.test-path-process-section-grid,
+.test-path-process-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.test-path-process-section-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.test-path-process-section-card__head strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 18px;
+}
+
+.test-path-process-section-card__head--stacked {
+  align-items: flex-start;
+}
+
+.test-path-detail-chip-row--compact {
+  margin-top: 0;
+}
+
+.test-path-detail-process-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.test-path-detail-process-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.test-path-detail-process-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.test-path-detail-process-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(15, 23, 42, 0.02);
+  align-self: start;
+}
+
+.test-path-detail-process-card--source-goal {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 255, 0.92));
+}
+
+.test-path-process-bullet-group {
+  display: grid;
+  gap: 10px;
+}
+
+.test-path-process-bullet-item {
+  display: grid;
+  gap: 4px;
+  padding-left: 14px;
+  position: relative;
+}
+
+.test-path-process-bullet-item::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #3478f6;
+}
+
+.test-path-process-bullet-item span {
+  color: #66758d;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.test-path-process-bullet-item strong {
+  color: #22304a;
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 600;
+}
+
+.test-path-detail-stage-trace-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.test-path-detail-section-head--compact h2 {
+  font-size: 22px;
+}
+
+.test-path-detail-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.test-path-detail-timeline-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.test-path-detail-timeline-item__rail {
+  position: relative;
+}
+
+.test-path-detail-timeline-item__rail::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #3478f6;
+  box-shadow: 0 0 0 6px rgba(52, 120, 246, 0.12);
+}
+
+.test-path-detail-timeline-item__rail::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: -18px;
+  left: 8px;
+  width: 2px;
+  background: rgba(52, 120, 246, 0.12);
+}
+
+.test-path-detail-timeline-item:last-child .test-path-detail-timeline-item__rail::after {
+  display: none;
+}
+
+.test-path-detail-timeline-item__body {
+  display: grid;
+  gap: 10px;
+}
+
+.test-path-detail-timeline-item--failed {
+  background: rgba(255, 110, 110, 0.05);
+  border-color: rgba(255, 110, 110, 0.18);
+}
+
+.test-path-detail-timeline-item--succeeded {
+  background: rgba(82, 196, 26, 0.05);
+  border-color: rgba(82, 196, 26, 0.18);
+}
+
+.test-path-detail-timeline-item--started {
+  background: rgba(52, 120, 246, 0.05);
+  border-color: rgba(52, 120, 246, 0.18);
+}
+
+.test-path-detail-timeline-item__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.test-path-detail-timeline-item__head p {
+  margin: 4px 0 0;
+  color: #66758d;
+  font-size: 12px;
+}
+
+.test-path-detail-timeline-item__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.test-path-detail-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.test-path-detail-status-badge--started {
+  background: rgba(52, 120, 246, 0.12);
+  color: #1f57cc;
+}
+
+.test-path-detail-status-badge--succeeded {
+  background: rgba(82, 196, 26, 0.14);
+  color: #2f7d17;
+}
+
+.test-path-detail-status-badge--failed {
+  background: rgba(255, 110, 110, 0.14);
+  color: #bb3434;
+}
+
+.test-path-detail-trace-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.test-path-detail-raw-panel {
+  margin-top: 16px;
+}
+
+.test-path-detail-raw-panel--compact {
+  margin-top: 10px;
+}
+
+.test-path-detail-raw-panel summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: #172033;
+}
+
+.test-path-detail-empty-state {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.04);
+  color: #66758d;
+  text-align: center;
+}
+
+.test-path-detail-empty-state--inline {
+  margin-top: 12px;
+  text-align: left;
 }
 
 .test-path-detail-banner {
@@ -632,22 +1294,36 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 40px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(23, 32, 51, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-  color: #172033;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(52, 120, 246, 0.15);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text-primary, #172033);
   text-decoration: none;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
+  transition: 180ms ease;
+}
+
+.test-path-detail-btn:hover {
+  border-color: rgba(52, 120, 246, 0.4);
+  background: rgba(52, 120, 246, 0.06);
+  color: var(--color-primary, #3478f6);
 }
 
 .test-path-detail-btn--primary {
-  border-color: transparent;
-  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  border: none;
+  background: linear-gradient(135deg, #3478f6, color-mix(in srgb, #3478f6 68%, #8d6bff));
   color: #fff;
+  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.24);
+}
+
+.test-path-detail-btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
 }
 
 .test-path-detail-evaluation-dialog pre {
@@ -674,7 +1350,21 @@ onUnmounted(() => {
     width: min(100% - 32px, 1280px);
   }
 
-  .test-path-detail-grid {
+  .test-path-detail-grid,
+  .test-path-detail-grid--content {
+    grid-template-columns: 1fr;
+  }
+
+  .test-path-detail-process-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .test-path-process-overview-grid,
+  .test-path-process-section-grid,
+  .test-path-process-inline-grid,
+  .test-path-process-kv-grid,
+  .test-path-detail-process-grid--two,
+  .test-path-detail-process-grid--three {
     grid-template-columns: 1fr;
   }
 }
@@ -684,6 +1374,11 @@ onUnmounted(() => {
   .test-path-detail-hero {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .test-path-detail-hero__actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .test-path-detail-nav {

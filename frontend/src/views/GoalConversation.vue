@@ -4411,17 +4411,25 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 40px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(23, 32, 51, 0.08);
-  background: rgba(255, 255, 255, 0.76);
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(52, 120, 246, 0.15);
+  background: rgba(255, 255, 255, 0.82);
   color: var(--planning-ink);
   text-decoration: none;
   font: inherit;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
+  transition: 180ms ease;
+}
+
+.planning-secondary-btn:hover {
+  border-color: rgba(52, 120, 246, 0.4);
+  background: rgba(52, 120, 246, 0.06);
+  color: var(--planning-blue);
 }
 
 .planning-conversation-layout {

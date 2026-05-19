@@ -15,9 +15,11 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gatewa
  */
 export const errorPatternDefinition: SkillDefinition = {
   name: 'error-pattern',
+  displayName: '错误模式分析器',
   version: '1.0.0',
   category: 'analysis',
   description: '分析常见错误模式，提供错误诊断和改正建议',
+  status: 'working',
   
   inputSchema: {
     type: 'object',

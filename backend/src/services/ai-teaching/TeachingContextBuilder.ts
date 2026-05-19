@@ -19,6 +19,24 @@ export interface TeachingScenarioContext {
     primaryConcepts: string[];
     prerequisiteConcepts: string[];
   };
+  taskProfile: {
+    knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
+    cognitiveLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;
+    displayLabel: string | null;
+    learningObjectives: string[];
+    coreConcept: string | null;
+  };
+  teachingStrategyGuidance: {
+    knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
+    cognitiveLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;
+    objectiveFocus: string[];
+    coreConcept: string | null;
+    explanationStyle: string;
+    interactionPattern: string;
+    targetDepth: string;
+    preferredStrategies: string[];
+    responseConstraints: string[];
+  };
   canStartLearning: boolean;
   learningBlockedReason: string | null;
   learnerSnapshot: LearnerSnapshot;
@@ -83,6 +101,102 @@ function parseLearningObjectives(raw: string | null | undefined): string[] {
   return [];
 }
 
+function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['taskProfile']) {
+  const knowledgeType = taskProfile.knowledgeType;
+  const cognitiveLevel = taskProfile.cognitiveLevel;
+  const objectiveFocus = taskProfile.learningObjectives.slice(0, 4);
+  const coreConcept = taskProfile.coreConcept;
+
+  const byKnowledgeType: Record<NonNullable<TeachingScenarioContext['taskProfile']['knowledgeType']>, {
+    explanationStyle: string;
+    interactionPattern: string;
+    preferredStrategies: string[];
+    responseConstraints: string[];
+  }> = {
+    factual: {
+      explanationStyle: 'Give concise, concrete explanations that emphasize precise definitions, key facts, and recognition cues.',
+      interactionPattern: 'Use quick recall checks, contrast similar terms, and verify exact understanding before moving on.',
+      preferredStrategies: ['retrieval-practice', 'definition-check', 'contrastive-example'],
+      responseConstraints: ['Avoid over-expanding into theory not needed for the current fact set.'],
+    },
+    conceptual: {
+      explanationStyle: 'Explain underlying ideas, relationships, and why the concept works, using analogies only when they sharpen understanding.',
+      interactionPattern: 'Prompt the learner to compare, classify, and explain connections in their own words.',
+      preferredStrategies: ['conceptual-scaffolding', 'compare-and-contrast', 'why-explanation'],
+      responseConstraints: ['Do not reduce the lesson to memorized definitions without showing relationships.'],
+    },
+    procedural: {
+      explanationStyle: 'Teach as a sequence of steps with decision points, examples, and common failure cases.',
+      interactionPattern: 'Guide the learner through doing the task step by step, then fade support as they gain traction.',
+      preferredStrategies: ['worked-example', 'step-by-step-coaching', 'error-correction'],
+      responseConstraints: ['Do not stay only at abstract explanation; anchor the reply in execution.'],
+    },
+    metacognitive: {
+      explanationStyle: 'Focus on planning, self-monitoring, reflection, and how to choose an approach.',
+      interactionPattern: 'Ask the learner to justify choices, inspect mistakes, and decide what to try next.',
+      preferredStrategies: ['self-explanation', 'reflection-prompt', 'strategy-selection'],
+      responseConstraints: ['Do not answer everything directly; preserve space for learner reflection and self-correction.'],
+    },
+  };
+
+  const byCognitiveLevel: Record<NonNullable<TeachingScenarioContext['taskProfile']['cognitiveLevel']>, {
+    targetDepth: string;
+    responseConstraints: string[];
+  }> = {
+    remember: {
+      targetDepth: 'Target recognition and accurate recall only; do not force deeper transfer in the same turn.',
+      responseConstraints: ['Keep the goal at recall depth unless the learner clearly shows readiness for more.'],
+    },
+    understand: {
+      targetDepth: 'Target comprehension, paraphrasing, and basic explanation of meaning.',
+      responseConstraints: ['Prefer explanation and interpretation over complex production tasks.'],
+    },
+    apply: {
+      targetDepth: 'Target use of the concept or process on a concrete example or small task.',
+      responseConstraints: ['Include at least one concrete application or execution cue.'],
+    },
+    analyze: {
+      targetDepth: 'Target breakdown of structure, comparison of parts, and diagnosis of why something works or fails.',
+      responseConstraints: ['Ask the learner to inspect structure, assumptions, or error sources.'],
+    },
+    evaluate: {
+      targetDepth: 'Target judgment with criteria, tradeoff analysis, and reasoned justification.',
+      responseConstraints: ['Require explicit reasoning or criteria when comparing alternatives.'],
+    },
+    create: {
+      targetDepth: 'Target synthesis into a new artifact, plan, or original solution.',
+      responseConstraints: ['Push toward producing something new, not only explaining existing material.'],
+    },
+  };
+
+  const knowledgeGuidance = knowledgeType ? byKnowledgeType[knowledgeType] : {
+    explanationStyle: 'Explain clearly with concrete examples matched to the current task.',
+    interactionPattern: 'Use a guided back-and-forth that checks understanding before adding complexity.',
+    preferredStrategies: ['scaffolding', 'example'],
+    responseConstraints: [] as string[],
+  };
+
+  const levelGuidance = cognitiveLevel ? byCognitiveLevel[cognitiveLevel] : {
+    targetDepth: 'Target a practical next step without exceeding the learner’s demonstrated readiness.',
+    responseConstraints: [] as string[],
+  };
+
+  return {
+    knowledgeType,
+    cognitiveLevel,
+    objectiveFocus,
+    coreConcept,
+    explanationStyle: knowledgeGuidance.explanationStyle,
+    interactionPattern: knowledgeGuidance.interactionPattern,
+    targetDepth: levelGuidance.targetDepth,
+    preferredStrategies: knowledgeGuidance.preferredStrategies,
+    responseConstraints: [
+      ...knowledgeGuidance.responseConstraints,
+      ...levelGuidance.responseConstraints,
+    ],
+  };
+}
+
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
@@ -131,6 +245,13 @@ export async function buildTeachingScenarioContext(
   const canStartLearning = previousSession?.status === 'active'
     ? true
     : path.status === 'active';
+  const taskProfile = {
+    knowledgeType: (task as any).knowledgeType || null,
+    cognitiveLevel: (task as any).cognitiveLevel || null,
+    displayLabel: (task as any).displayLabel || null,
+    learningObjectives: parseLearningObjectives((task as any).learningObjectives),
+    coreConcept: normalizeConcept((task as any).coreConcept),
+  } as TeachingScenarioContext['taskProfile'];
 
   return {
     userId,
@@ -146,6 +267,8 @@ export async function buildTeachingScenarioContext(
       primaryConcepts,
       prerequisiteConcepts,
     },
+    taskProfile,
+    teachingStrategyGuidance: buildTeachingStrategyGuidance(taskProfile),
     canStartLearning,
     learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习。',
     learnerSnapshot,

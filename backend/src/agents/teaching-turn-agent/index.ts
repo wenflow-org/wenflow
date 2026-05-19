@@ -15,6 +15,24 @@ export interface TeachingTurnInput {
     taskTitle: string;
     taskDescription: string;
     taskType: string;
+    taskProfile?: {
+      knowledgeType?: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
+      cognitiveLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;
+      displayLabel?: string | null;
+      learningObjectives?: string[];
+      coreConcept?: string | null;
+    };
+    teachingStrategyGuidance?: {
+      knowledgeType?: string | null;
+      cognitiveLevel?: string | null;
+      objectiveFocus: string[];
+      coreConcept?: string | null;
+      explanationStyle: string;
+      interactionPattern: string;
+      targetDepth: string;
+      preferredStrategies: string[];
+      responseConstraints: string[];
+    };
     taskKnowledgeScope?: {
       primaryConcepts: string[];
       prerequisiteConcepts: string[];
@@ -199,7 +217,29 @@ export const TEACHING_TURN_SYSTEM_PROMPT = `你是一位结构化教学回合生
 7. 如果输入提供了 scenario.taskKnowledgeScope，knowledge.points 只能优先从 primaryConcepts 中选；prerequisiteConcepts 只有在本轮被明确复习或解释时才允许出现
 8. 不要把 learner.projection.relevantKnowledge 中的全局 mastered/fragile/struggling 直接抄到 knowledge.points
 9. knowledge.points 最多输出 5 个，优先保留当前任务直接相关内容
-10. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与知识解释，但不要扩大 knowledge.points 的任务范围`;
+10. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与知识解释，但不要扩大 knowledge.points 的任务范围
+11. 如果输入提供了 scenario.taskProfile，请将其视为任务画像：knowledgeType 用来决定讲解方式，cognitiveLevel 用来约束本轮目标深度，learningObjectives 与 coreConcept 用来决定优先解释什么
+12. 如果输入提供了 scenario.teachingStrategyGuidance，必须优先遵循其中的 explanationStyle、interactionPattern、targetDepth、preferredStrategies 与 responseConstraints，将它作为本轮教学策略的显式控制信号`;
+
+function buildStrategyGuidancePrompt(input: TeachingTurnInput): string | null {
+  const guidance = input.scenario.teachingStrategyGuidance;
+  if (!guidance) return null;
+
+  const lines = [
+    '以下是本轮教学策略显式约束，优先级高于一般风格偏好：',
+    `- knowledgeType: ${guidance.knowledgeType || 'unknown'}`,
+    `- cognitiveLevel: ${guidance.cognitiveLevel || 'unknown'}`,
+    `- explanationStyle: ${guidance.explanationStyle}`,
+    `- interactionPattern: ${guidance.interactionPattern}`,
+    `- targetDepth: ${guidance.targetDepth}`,
+    `- coreConcept: ${guidance.coreConcept || 'none'}`,
+    `- objectiveFocus: ${(guidance.objectiveFocus || []).join(' | ') || 'none'}`,
+    `- preferredStrategies: ${(guidance.preferredStrategies || []).join(' | ') || 'none'}`,
+    `- responseConstraints: ${(guidance.responseConstraints || []).join(' | ') || 'none'}`,
+  ];
+
+  return lines.join('\n');
+}
 
 function extractJsonObject(content: string): Record<string, any> | null {
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
@@ -278,9 +318,11 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
     const gateway = getAPIGateway();
     const caller: CallerInfo = { agentId: AGENT_ID };
     const promptConfig = await agentConfigService.getActivePrompt(AGENT_ID);
+    const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
     const response = await gateway.execute({
       messages: [
         { role: 'system', content: promptConfig?.systemPrompt || TEACHING_TURN_SYSTEM_PROMPT },
+        ...(strategyGuidancePrompt ? [{ role: 'system' as const, content: strategyGuidancePrompt }] : []),
         {
           role: 'user',
           content: JSON.stringify(input)

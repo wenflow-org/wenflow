@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export interface SkillModelConfig {
   skillId: string;
+  displayName?: string;
+  status?: 'working' | 'placeholder' | 'simplified' | 'mock';
   tier: string;
   model?: string;
   thinkingMode?: string;
@@ -27,11 +29,15 @@ class SkillModelConfigService {
 
       const mergedConfigs = skills.map((skill: any) => {
         const skillId = skill.definition.name;
+        const displayName = skill.definition.displayName;
+        const status = skill.definition.status;
         const persisted = persistedMap.get(skillId);
 
         if (!persisted) {
           return {
             skillId,
+            displayName,
+            status,
             tier: 'chat',
             thinkingMode: 'default',
             reasoningEffort: 'default',
@@ -44,6 +50,8 @@ class SkillModelConfigService {
 
         return {
           ...persisted,
+          displayName,
+          status,
           thinkingMode: persisted.thinkingMode || 'default',
           reasoningEffort: persisted.reasoningEffort || 'default',
         };

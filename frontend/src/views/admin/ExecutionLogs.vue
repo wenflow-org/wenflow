@@ -1,6 +1,6 @@
 <template>
   <div class="execution-logs-page">
-    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
+    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div><div class="bg-orb bg-orb--3"></div></div>
 
     <div class="page-hero">
       <span class="pill">Admin</span>
@@ -216,8 +216,17 @@
             <el-tag size="small" :type="getSourceTagType(log.sourceEntry)" effect="plain">
               {{ getSourceLabel(log.sourceEntry) }}
             </el-tag>
+            <el-tag size="small" :type="getExecutionLayerTagType(log.executionLayer)" effect="plain">
+              {{ getExecutionLayerLabel(log.executionLayer) }}
+            </el-tag>
+            <el-tag size="small" :type="getActorTypeTagType(log.actorType)" effect="plain">
+              {{ getActorTypeLabel(log.actorType) }}
+            </el-tag>
             <el-tag size="small" :type="getAgentTagType(log.agentName)">
               {{ getAgentDisplayName(log.agentName) }}
+            </el-tag>
+            <el-tag v-if="log.actorId && log.actorId !== log.agentId" size="small" type="info" effect="plain">
+              {{ log.actorId }}
             </el-tag>
             <el-tag size="small" :type="getLogStatusType(log.status)">
               <el-icon class="status-icon" v-if="log.status === 'success'"><SuccessFilled /></el-icon>
@@ -228,7 +237,7 @@
               <el-icon class="status-icon" v-if="log.errorCode === 'MODEL_ERROR'"><Service /></el-icon>
               {{ getLogStatusText(log.status) }}
             </el-tag>
-            <span class="log-action">{{ log.action }}</span>
+            <span class="log-action" :class="getActionClass(log.action, log.status)">{{ log.action }}</span>
           </div>
           <div class="log-duration">
             <el-icon><Timer /></el-icon>
@@ -239,11 +248,11 @@
         <div class="log-preview">
           <div class="preview-row" v-if="log.input">
             <span class="preview-label">输入:</span>
-            <span class="preview-content">{{ truncateJson(log.input, 100) }}</span>
+            <pre class="preview-content">{{ truncateJson(log.input, 250) }}</pre>
           </div>
           <div class="preview-row" v-if="log.output && log.status === 'success'">
             <span class="preview-label">输出:</span>
-            <span class="preview-content">{{ truncateJson(log.output, 100) }}</span>
+            <pre class="preview-content">{{ truncateJson(log.output, 250) }}</pre>
           </div>
           <div class="preview-row error" v-if="log.error">
             <span class="preview-label">错误:</span>
@@ -255,11 +264,19 @@
               {{ log.traceId }}
             </el-button>
           </div>
-          <div class="preview-row" v-if="log.sessionId">
-            <span class="preview-label">Session:</span>
-            <span class="preview-content">{{ log.sessionId }}</span>
+            <div class="preview-row" v-if="log.sessionId">
+              <span class="preview-label">Session:</span>
+              <span class="preview-content">{{ log.sessionId }}</span>
+            </div>
+            <div class="preview-row" v-if="log.invokerId">
+              <span class="preview-label">发起:</span>
+              <span class="preview-content">{{ getInvokerLabel(log) }}</span>
+            </div>
+            <div class="preview-row" v-if="log.providerId">
+              <span class="preview-label">Provider:</span>
+              <span class="preview-content">{{ log.providerId }}</span>
+            </div>
           </div>
-        </div>
 
         <div class="log-actions">
           <el-button type="primary" size="small" @click="showDetail(log)">
@@ -338,35 +355,110 @@
           </div>
         </div>
 
+        <div class="detail-section">
+          <h4>链路信息</h4>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>入口来源:</label>
+              <span>{{ getSourceLabel(selectedLog.sourceEntry) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>执行层:</label>
+              <span>{{ getExecutionLayerLabel(selectedLog.executionLayer) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>主体类型:</label>
+              <span>{{ getActorTypeLabel(selectedLog.actorType) }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.actorId">
+              <label>主体 ID:</label>
+              <span>{{ selectedLog.actorId }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.invokerId">
+              <label>发起者:</label>
+              <span>{{ getInvokerLabel(selectedLog) }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.providerId">
+              <label>Provider:</label>
+              <span>{{ selectedLog.providerId }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.routeSource">
+              <label>路由来源:</label>
+              <span>{{ selectedLog.routeSource }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.statusCode !== null && selectedLog.statusCode !== undefined">
+              <label>状态码:</label>
+              <span>{{ selectedLog.statusCode }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.attempts !== null && selectedLog.attempts !== undefined">
+              <label>尝试次数:</label>
+              <span>{{ selectedLog.attempts }}<template v-if="selectedLog.maxRetries"> / {{ selectedLog.maxRetries }}</template></span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.messageCount !== null && selectedLog.messageCount !== undefined">
+              <label>消息数:</label>
+              <span>{{ selectedLog.messageCount }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.finishReason">
+              <label>Finish Reason:</label>
+              <span>{{ selectedLog.finishReason }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.phase">
+              <label>阶段:</label>
+              <span>{{ selectedLog.phase }}<template v-if="selectedLog.phaseStatus"> / {{ selectedLog.phaseStatus }}</template></span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.pathId">
+              <label>Path ID:</label>
+              <span>{{ selectedLog.pathId }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.sourceConversationId">
+              <label>Source Conversation:</label>
+              <span>{{ selectedLog.sourceConversationId }}</span>
+            </div>
+            <div class="detail-item" v-if="selectedLog.triggerSource">
+              <label>Trigger Source:</label>
+              <span>{{ selectedLog.triggerSource }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 输入 -->
-        <div class="detail-section" v-if="selectedLog.input">
+        <div class="detail-section detail-section--input" v-if="selectedLog.input">
           <div class="section-header">
-            <h4>📥 输入</h4>
-            <el-button type="default" size="small" @click="copyToClipboard(selectedLog.input)">
+            <h4>
+              <el-icon class="section-icon"><DocumentCopy /></el-icon>
+              输入数据
+            </h4>
+            <el-button type="primary" link size="small" @click="copyToClipboard(selectedLog.input)">
               <el-icon><DocumentCopy /></el-icon>
               复制
             </el-button>
           </div>
-          <pre class="json-block" v-html="highlightJson(formatJson(selectedLog.input))"></pre>
+          <pre class="json-block json-block--input" v-html="highlightJson(formatJson(selectedLog.input))"></pre>
         </div>
 
         <!-- 输出 -->
-        <div class="detail-section" v-if="selectedLog.output && selectedLog.status === 'success'">
+        <div class="detail-section detail-section--output" v-if="selectedLog.output && selectedLog.status === 'success'">
           <div class="section-header">
-            <h4>📤 输出</h4>
-            <el-button type="default" size="small" @click="copyToClipboard(selectedLog.output)">
+            <h4>
+              <el-icon class="section-icon"><SuccessFilled /></el-icon>
+              输出结果
+            </h4>
+            <el-button type="primary" link size="small" @click="copyToClipboard(selectedLog.output)">
               <el-icon><DocumentCopy /></el-icon>
               复制
             </el-button>
           </div>
-          <pre class="json-block" v-html="highlightJson(formatJson(selectedLog.output))"></pre>
+          <pre class="json-block json-block--output" v-html="highlightJson(formatJson(selectedLog.output))"></pre>
         </div>
 
         <!-- 错误 -->
-        <div class="detail-section error" v-if="selectedLog.error">
+        <div class="detail-section detail-section--error" v-if="selectedLog.error">
           <div class="section-header">
-            <h4>❌ 错误</h4>
-            <el-button type="default" size="small" @click="copyToClipboard(selectedLog.error)">
+            <h4>
+              <el-icon class="section-icon"><CircleCloseFilled /></el-icon>
+              错误信息
+            </h4>
+            <el-button type="danger" link size="small" @click="copyToClipboard(selectedLog.error)">
               <el-icon><DocumentCopy /></el-icon>
               复制
             </el-button>
@@ -410,6 +502,7 @@ interface Log {
   id: string;
   agentName: string;
   agentId?: string;
+  callerAgent?: string | null;
   action: string;
   status: 'success' | 'error' | 'timeout';
   input?: string;
@@ -418,6 +511,26 @@ interface Log {
   errorCode?: string;
   traceId?: string;
   sessionId?: string;
+  sourceEntry?: string;
+  executionLayer?: string | null;
+  actorType?: string | null;
+  actorId?: string | null;
+  invokerId?: string | null;
+  invokerType?: string | null;
+  providerId?: string | null;
+  providerType?: string | null;
+  routeSource?: string | null;
+  statusCode?: number | null;
+  attempts?: number | null;
+  maxRetries?: number | null;
+  messageCount?: number | null;
+  finishReason?: string | null;
+  phase?: string | null;
+  phaseStatus?: string | null;
+  pathId?: string | null;
+  sourceConversationId?: string | null;
+  triggerSource?: string | null;
+  metadata?: string;
   durationMs: number;
   createdAt: string;
 }
@@ -459,10 +572,10 @@ const filters = reactive({
 
 // 时间快捷选项
 const timeShortcuts = [
-  { text: '最近15分钟', value: () => [new Date(Date.now() - 15 * 60 * 1000), new Date()] },
-  { text: '最近1小时', value: () => [new Date(Date.now() - 60 * 60 * 1000), new Date()] },
-  { text: '最近3小时', value: () => [new Date(Date.now() - 3 * 60 * 60 * 1000), new Date()] },
-  { text: '今天', value: () => [new Date(new Date().setHours(0,0,0,0)), new Date()] },
+  { text: '最近15分钟', value: () => { const now = new Date(); return [new Date(now.getTime() - 15 * 60 * 1000).toISOString(), now.toISOString()]; } },
+  { text: '最近1小时', value: () => { const now = new Date(); return [new Date(now.getTime() - 60 * 60 * 1000).toISOString(), now.toISOString()]; } },
+  { text: '最近3小时', value: () => { const now = new Date(); return [new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString(), now.toISOString()]; } },
+  { text: '今天', value: () => { const now = new Date(); const start = new Date(now.setHours(0,0,0,0)); return [start.toISOString(), now.toISOString()]; } },
 ];
 
 // 选项
@@ -478,7 +591,7 @@ const agentOptions = ref<Array<{ label: string; value: string }>>([
 // 自动刷新
 const autoRefresh = ref(false);
 const refreshInterval = ref(5);
-let refreshTimer: NodeJS.Timeout | null = null;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 // 详情弹窗
 const detailVisible = ref(false);
@@ -542,12 +655,16 @@ const getAgentDisplayName = (name: string) => {
   const map: Record<string, string> = {
     'goal-conversation-agent': '目标对话',
     'path-agent': '学习路径规划',
+    'path-orchestrator': '路径编排',
     'ai-teaching-agent': 'AI 授课',
     'learner-model-agent': '学习者模型',
     'progress-agent': '进度追踪',
     'content-generator': '内容生成',
     'peer-agent': '伴学介入',
     'session-wrapup-agent': '课后产出',
+    'path-scene-framing': '路径场景收敛',
+    'batch-anderson-labeler': '任务画像构建器',
+    'goal-type-identifier': '目标类型识别',
     'RequirementCollection': '需求收集',
     'PathPlanning': '路径规划',
     'Teaching': '教学执行',
@@ -688,9 +805,17 @@ const formatDuration = (ms: number) => {
 const truncateJson = (json: string, maxLength: number) => {
   try {
     const obj = JSON.parse(json);
-    const str = JSON.stringify(obj);
+    const str = JSON.stringify(obj, null, 2);
     if (str.length <= maxLength) return str;
-    return str.substring(0, maxLength) + '...';
+    const lines = str.split('\n');
+    let result = '';
+    let currentLength = 0;
+    for (const line of lines) {
+      if (currentLength + line.length + 1 > maxLength) break;
+      result += line + '\n';
+      currentLength += line.length + 1;
+    }
+    return result.trim() + '...';
   } catch {
     return json.substring(0, maxLength) + '...';
   }
@@ -736,6 +861,10 @@ const getAgentTagType = (agentName: string) => {
   const map: Record<string, any> = {
     RequirementCollection: 'success',
     PathPlanning: 'primary',
+    'path-orchestrator': 'warning',
+    'path-scene-framing': 'success',
+    'batch-anderson-labeler': 'success',
+    'goal-type-identifier': 'success',
     Teaching: 'warning',
     TeachingOrchestration: 'warning',
     'ai-teaching': 'warning',
@@ -747,24 +876,90 @@ const getAgentTagType = (agentName: string) => {
   return map[agentName] || 'info';
 };
 
-const getSourceTagType = (source: string) => {
+const getSourceTagType = (source?: string) => {
   const map: Record<string, any> = {
     user: 'primary',
     test: '',
     admin: 'warning',
     platform: 'info'
   };
-  return map[source] || 'info';
+  return map[source || ''] || 'info';
 };
 
-const getSourceLabel = (source: string) => {
+const getSourceLabel = (source?: string) => {
   const map: Record<string, string> = {
     user: '用户侧',
     test: '测试站点',
     admin: 'Admin',
-    platform: '平台'
+    platform: '平台',
+    arena: 'Arena',
+    lab: '实验室'
   };
-  return map[source] || '平台';
+  return map[source || ''] || '平台';
+};
+
+const getExecutionLayerLabel = (layer?: string | null) => {
+  const map: Record<string, string> = {
+    orchestrator: 'Orchestrator',
+    agent: 'Agent',
+    skill: 'Skill',
+    'api-gateway': 'Gateway',
+    service: 'Service',
+    system: 'System'
+  };
+  return map[layer || ''] || (layer || '未知层');
+};
+
+const getExecutionLayerTagType = (layer?: string | null) => {
+  const map: Record<string, any> = {
+    orchestrator: 'warning',
+    agent: 'primary',
+    skill: 'success',
+    'api-gateway': 'info',
+    service: '',
+    system: 'info'
+  };
+  return map[layer || ''] || 'info';
+};
+
+const getActorTypeLabel = (actorType?: string | null) => {
+  const map: Record<string, string> = {
+    agent: 'Agent',
+    skill: 'Skill',
+    orchestrator: 'Orchestrator',
+    system: 'System'
+  };
+  return map[actorType || ''] || (actorType || '未知主体');
+};
+
+const getActorTypeTagType = (actorType?: string | null) => {
+  const map: Record<string, any> = {
+    agent: 'primary',
+    skill: 'success',
+    orchestrator: 'warning',
+    system: 'info'
+  };
+  return map[actorType || ''] || 'info';
+};
+
+const getInvokerLabel = (log: Pick<Log, 'invokerType' | 'invokerId'>) => {
+  if (!log.invokerId) return '直接触发';
+  const prefix = log.invokerType === 'agent'
+    ? 'Agent'
+    : log.invokerType === 'skill'
+      ? 'Skill'
+      : log.invokerType === 'orchestrator'
+        ? 'Orchestrator'
+        : 'Invoker';
+  return `${prefix}: ${log.invokerId}`;
+};
+
+const getActionClass = (action: string, status?: string) => {
+  if (status === 'error') return 'log-action--error';
+  if (status === 'timeout') return 'log-action--timeout';
+  if (action === 'invoke' || action.includes('invoke')) return 'log-action--invoke';
+  if (action.includes('plan') || action.includes('generate')) return 'log-action--create';
+  return '';
 };
 
 // 自动刷新
@@ -808,9 +1003,10 @@ onUnmounted(() => {
 
 /* Background orbs */
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
+.bg-orb { position: absolute; border-radius: 999px; filter: blur(52px); opacity: 0.42; }
+.bg-orb--1 { width: 380px; height: 380px; top: -120px; left: -80px; background: color-mix(in srgb, var(--color-primary) 30%, white); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 320px; height: 320px; top: 12%; right: -80px; background: color-mix(in srgb, var(--color-accent) 22%, white); animation: orb-d 30s ease-in-out infinite reverse; }
+.bg-orb--3 { width: 260px; height: 260px; bottom: -70px; left: 24%; background: color-mix(in srgb, var(--color-secondary) 22%, white); animation: orb-d 28s ease-in-out infinite alternate; }
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */
@@ -829,13 +1025,13 @@ onUnmounted(() => {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.04), rgba(141, 107, 255, 0.03), var(--glass-bg-light));
-  border-radius: var(--fluent-radius-lg);
-  border: 1px solid var(--glass-border-light);
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.04), rgba(141, 107, 255, 0.03), color-mix(in srgb, #ffffff 90%, white));
+  border-radius: 28px;
+  border: 1px solid #d2dbf3;
   margin-bottom: 1.25rem;
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   position: relative;
   z-index: 1;
 }
@@ -928,14 +1124,14 @@ onUnmounted(() => {
 
 /* 筛选器 */
 .filter-section {
-  background: var(--glass-bg-light);
+  background: color-mix(in srgb, #ffffff 90%, white);
   padding: 1.25rem;
-  border-radius: var(--fluent-radius-lg);
-  border: 1px solid var(--glass-border-light);
+  border-radius: 28px;
+  border: 1px solid #d2dbf3;
   margin-bottom: 1.25rem;
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   position: relative;
   z-index: 1;
 }
@@ -1007,19 +1203,19 @@ onUnmounted(() => {
 }
 
 .log-card {
-  background: var(--glass-bg-light);
-  border-radius: var(--fluent-radius-lg);
+  background: color-mix(in srgb, #ffffff 90%, white);
+  border-radius: 28px;
   padding: 1rem;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--glass-border-light);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  border: 1px solid #d2dbf3;
   border-left: 4px solid transparent;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
 .log-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.22);
 }
 
 .log-card.log-error {
@@ -1042,7 +1238,7 @@ onUnmounted(() => {
 .log-meta {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .log-time {
@@ -1057,6 +1253,32 @@ onUnmounted(() => {
   background: var(--bg-muted);
   padding: 0.125rem 0.5rem;
   border-radius: 4px;
+  font-weight: 500;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+}
+
+.log-action--invoke {
+  color: var(--color-primary);
+  background: rgba(52, 120, 246, 0.08);
+  border-color: rgba(52, 120, 246, 0.2);
+}
+
+.log-action--error {
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.log-action--timeout {
+  color: var(--color-accent);
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.log-action--create {
+  color: var(--color-success);
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.2);
 }
 
 .log-duration {
@@ -1078,6 +1300,17 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   font-size: 0.8125rem;
+  align-items: flex-start;
+}
+
+.preview-row .preview-label {
+  flex-shrink: 0;
+  padding-top: 0.5rem;
+}
+
+.preview-row .preview-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .preview-row.error {
@@ -1092,10 +1325,16 @@ onUnmounted(() => {
 
 .preview-content {
   color: var(--text-primary);
-  font-family: monospace;
-  white-space: nowrap;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  word-break: break-word;
   overflow: hidden;
-  text-overflow: ellipsis;
+  max-height: 100px;
+  background: var(--bg-subtle);
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin: 0;
 }
 
 .log-actions {
@@ -1122,23 +1361,57 @@ onUnmounted(() => {
 
 .detail-section {
   margin-bottom: 1.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.detail-section--input {
+  background: rgba(52, 120, 246, 0.03);
+  border: 1px solid rgba(52, 120, 246, 0.1);
+}
+
+.detail-section--output {
+  background: rgba(16, 185, 129, 0.03);
+  border: 1px solid rgba(16, 185, 129, 0.1);
+}
+
+.detail-section--error {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .detail-section h4 {
-  margin: 0 0 0.75rem 0;
-  font-size: 0.9375rem;
+  margin: 0;
+  font-size: 1rem;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.detail-section.error h4 {
+.detail-section--input h4 {
+  color: var(--color-primary);
+}
+
+.detail-section--output h4 {
+  color: var(--color-success);
+}
+
+.detail-section--error h4 {
   color: var(--color-danger);
+}
+
+.section-icon {
+  font-size: 1.125rem;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid rgba(52, 120, 246, 0.06);
 }
 
 .detail-grid {
@@ -1163,21 +1436,31 @@ onUnmounted(() => {
 
 .json-block,
 .error-block {
-  background: color-mix(in srgb, var(--bg-elevated) 82%, #0f172a 18%);
-  color: var(--text-inverse);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
   padding: 1rem;
-  border-radius: 6px;
-  font-family: monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.8125rem;
+  line-height: 1.5;
   overflow-x: auto;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
+}
+
+.json-block--input {
+  background: rgba(52, 120, 246, 0.02);
+  border-top: 1px solid rgba(52, 120, 246, 0.06);
+}
+
+.json-block--output {
+  background: rgba(16, 185, 129, 0.02);
+  border-top: 1px solid rgba(16, 185, 129, 0.06);
 }
 
 .error-block {
-  background: color-mix(in srgb, var(--color-danger) 12%, var(--bg-surface) 88%);
+  background: rgba(239, 68, 68, 0.08);
   color: var(--color-danger-dark);
-  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--bg-surface) 65%);
+  border-top: 1px solid rgba(239, 68, 68, 0.15);
 }
 
 /* 状态点 */
@@ -1204,6 +1487,9 @@ onUnmounted(() => {
 .status-icon {
   margin-right: 4px;
   font-size: 12px;
+  vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
 }
 
 .trace-link {
@@ -1216,19 +1502,20 @@ onUnmounted(() => {
 }
 
 .json-key {
-  color: #9cdcfe;
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 .json-string {
-  color: #ce9178;
+  color: var(--color-success-dark);
 }
 
 .json-number {
-  color: #b5cea8;
+  color: #8b5cf6;
 }
 
 .json-bool {
-  color: #569cd6;
+  color: var(--color-accent);
 }
 
 /* Responsive breakpoints */

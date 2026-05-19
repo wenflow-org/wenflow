@@ -16,9 +16,11 @@ import {
  */
 export const retrievalDefinition: SkillDefinition = {
   name: 'retrieval',
+  displayName: '内容检索器',
   version: '1.0.0',
   category: 'retrieval',
   description: '从提供的资料中检索相关内容',
+  status: 'simplified',
   
   inputSchema: {
     type: 'object',
