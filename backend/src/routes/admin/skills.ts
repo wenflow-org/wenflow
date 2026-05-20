@@ -7,8 +7,14 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import { getGateway } from '../../gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
+import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 
 const router = Router();
+
+const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
+  'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
+};
 
 /**
  * 获取所有 Skill 列表（含统计）
@@ -201,6 +207,64 @@ router.post('/:name/test', async (req: Request, res: Response) => {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
+    });
+  }
+});
+
+/**
+ * 获取 Skill 当前生效 Prompt
+ */
+router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const promptService = new AgentConfigService();
+    const agentId = `skill:${name}`;
+    const activePrompt = await promptService.getActivePrompt(agentId);
+    const fallbackPrompt = SKILL_FALLBACK_PROMPTS[name] || null;
+
+    if (activePrompt) {
+      return res.json({
+        success: true,
+        data: {
+          source: 'db-active',
+          agentId,
+          prompt: activePrompt,
+          fallbackPrompt,
+        },
+      });
+    }
+
+    if (fallbackPrompt) {
+      return res.json({
+        success: true,
+        data: {
+          source: 'code-fallback',
+          agentId,
+          prompt: {
+            id: null,
+            agentId,
+            version: null,
+            name: `${name} fallback prompt`,
+            description: '代码内置默认 Prompt',
+            systemPrompt: fallbackPrompt,
+            model: null,
+            temperature: null,
+            maxTokens: null,
+            status: 'FALLBACK',
+          },
+          fallbackPrompt,
+        },
+      });
+    }
+
+    res.status(404).json({
+      success: false,
+      error: 'No effective prompt found',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

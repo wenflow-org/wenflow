@@ -484,10 +484,12 @@ async continueConversation(
     const title = realGoal && String(realGoal).trim()
       ? `${String(realGoal).trim().slice(0, 28)}学习路径`
       : '个性化学习路径';
+    const pathId = `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const promptTemplatePayload = this.buildPlaceholderPromptTemplatePayload(conversation, aiResponse, pathId);
 
     return prisma.learning_paths.create({
       data: {
-        id: `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: pathId,
         userId: conversation.userId,
         title,
         name: title,
@@ -497,6 +499,7 @@ async continueConversation(
         difficulty: 'beginner',
         estimatedHours: 0,
         aiGenerated: true,
+        aiPromptTemplate: JSON.stringify(promptTemplatePayload),
         updatedAt: new Date()
       }
     });
@@ -661,10 +664,19 @@ async continueConversation(
   ): GoalPathRequest {
     const data = JSON.parse(conversation.collectedData);
     const goalExt = this.getGoalExt(aiResponse.internal);
+    const core = this.getCore(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
-    const structuredData = goalExt.structuredData || null;
-    const confirmedProposal = goalExt.confirmedProposal || null;
-    const confidenceScores = goalExt.confidenceScores || null;
+    const structuredData = goalExt.structuredData ?? data.structuredData ?? null;
+    const confirmedProposal = goalExt.confirmedProposal ?? data.confirmedProposal ?? null;
+    const confidenceScores = goalExt.confidenceScores ?? data.confidenceScores ?? null;
+    const conversationHistory = Array.isArray(data.messages)
+      ? data.messages
+          .map((message: any) => ({
+            role: message?.role === 'user' ? 'user' : 'assistant',
+            content: typeof message?.content === 'string' ? message.content : ''
+          }))
+          .filter((message: { role: string; content: string }) => message.content)
+      : [];
 
     return {
       userId: conversation.userId,
@@ -674,10 +686,36 @@ async continueConversation(
       mode: 'generate',
       rawGoal: conversation.description,
       understanding,
+      collected: data.collected || {},
       structuredData,
       confirmedProposal,
       confidenceScores,
-      conversationHistory: JSON.parse(conversation.messages || '[]')
+      conversationHistory,
+      finalUserVisible: aiResponse.userVisible || null,
+      stage: core.stage,
+      confidence: core.confidence,
+    };
+  }
+
+  private buildPlaceholderPromptTemplatePayload(conversation: any, aiResponse: any, existingPathId: string) {
+    const goalPathRequest = this.buildGoalPathRequest(conversation, aiResponse, existingPathId);
+
+    return {
+      source: 'goal',
+      mode: 'generate',
+      goalFinalPayload: goalPathRequest,
+      normalizedInput: null,
+      sceneFraming: null,
+      suggestedMilestones: [],
+      cognitiveDesign: null,
+      adjustmentPolicy: null,
+      adjustmentEvidence: null,
+      generationStatus: {
+        sourceConversationId: goalPathRequest.sourceConversationId || null,
+        phase: 'core',
+        status: 'started',
+        message: 'Goal 占位路径已创建，等待 Path 主生成写入正式结果。'
+      }
     };
   }
 

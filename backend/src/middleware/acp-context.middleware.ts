@@ -25,7 +25,7 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
     const headerSourceEntry = req.headers['x-source-entry'] as string;
     let sourceEntry: SourceEntry = defaultSourceEntry;
     
-    if (headerSourceEntry === 'user' || headerSourceEntry === 'test' || headerSourceEntry === 'admin' || headerSourceEntry === 'platform') {
+    if (headerSourceEntry === 'user' || headerSourceEntry === 'test' || headerSourceEntry === 'admin' || headerSourceEntry === 'platform' || headerSourceEntry === 'arena' || headerSourceEntry === 'lab' || headerSourceEntry === 'simulation') {
       sourceEntry = headerSourceEntry;
     }
     

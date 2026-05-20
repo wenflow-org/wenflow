@@ -454,11 +454,23 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         component: () => import('@/views/LearningState.vue'),
         meta: { title: '测试学习状态', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
       },
-      {
+{
         path: 'test/achievements',
         name: 'AdminTestAchievements',
         component: () => import('@/views/Achievements.vue'),
         meta: { title: '测试成就', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+      },
+      {
+        path: 'virtual-learners',
+        name: 'AdminVirtualLearners',
+        component: () => import('@/views/admin/VirtualLearners.vue'),
+        meta: { title: '虚拟用户模拟', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
+        path: 'virtual-session/:sessionId',
+        name: 'AdminVirtualSession',
+        component: () => import('@/views/admin/VirtualSession.vue'),
+        meta: { title: '模拟会话控制台', requiresAdminAuth: true, adminGroup: 'devDebug' }
       },
       {
         path: 'test/learn/:taskId',

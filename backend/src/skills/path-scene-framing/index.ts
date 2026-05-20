@@ -3,46 +3,88 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
 
 export const PATH_SCENE_FRAMING_MAX_TOKENS = 32000;
 export const PATH_SCENE_FRAMING_TEMPERATURE = 0.2;
 
-export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径场景编排器中的 framing 规划器。
+export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗器。
 
-你的任务不是直接输出完整学习路径，而是先把已确认的目标信息压缩成一份稳定的路径 framing，供后续完整任务级路径生成使用。
+你的任务不是生成学习路径，也不是补充认知判断，而是把上游已存在的目标信息清洗成一份稳定、统一、可下游直接消费的结构化输入。
 
 输入会包含：
-- 原始学习目标
-- goal conversation 沉淀的 structuredData
-- 用户已确认的 confirmedProposal
-- 时间/资源/边界信息
+- 原始学习目标 goal
+- currentLevel
+- timePerDay
+- structuredData
+- confirmedProposal
+- metadata
 
-要求：
-1. 不要重新质疑用户已确认的方向。
-2. 不要输出完整路径、周计划或任务清单。
-3. 只输出 1 个 JSON 对象。
-4. framing 必须明确：这版路径先解决什么、首个最小产出是什么、暂不展开什么、时间投入如何影响任务颗粒度。
-5. framing 必须额外指出：这条路径要优先训练的底层认知域是什么。它不是学科名，而是更抽象的能力锚点。
+清洗原则：
+1. 只做字段收敛、命名统一、缺失保留，不做推理扩写。
+2. 不要重新解释用户的真实问题，不要补动机，不要补风险，不要补认知域。
+3. 输入里没有的信息，输出中保留为 null、空数组或空对象，不要猜。
+4. confirmedProposal 是已确认信息，直接结构化保留，不要改写语义。
+5. qualityFlags 只能做确定性映射：
+   - lowConfidenceFields 只能依据上游已提供的 confidenceScores 映射，不能自行判断。
+   - 如果某个 confidence score < 0.5，则把对应字段名放入 lowConfidenceFields。
+   - 如果没有 confidenceScores，就返回空的 lowConfidenceFields。
+   - missingFields 只标记字段不存在。
+   - missingOrEmptyFields 只标记字段存在但值为 null、空字符串、空数组或空对象。
+6. conversationHistory 等原始上下文如果在 metadata 中出现，只能降级放入 supportingEvidence，不作为主输入事实改写来源。
+7. supportingEvidence 必须使用固定子字段，不要自由发明额外结构。
+8. 不要在 normalizedInput 中输出 source、mode 这类编排控制字段。
+9. 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解释。
 
 请输出：
 {
-  "intent": "这版路径先聚焦解决什么",
-  "targetState": "用户将达到的可观察状态",
-  "firstDeliverable": "第一个最小可交付结果",
-  "cognitiveDomain": "这条路径优先训练的底层认知域",
-  "planningFocus": ["重点1", "重点2"],
-  "excludedScope": ["暂不展开1"],
-  "resourceProfile": {
-    "timeBudget": "每天/每周可投入时间",
-    "timeHorizon": "整体时间窗",
-    "pace": "任务颗粒度判断"
+  "normalizedInput": {
+    "version": "1.0",
+    "learnerProfile": {
+      "surfaceGoal": "",
+      "currentBaseline": {
+        "level": null,
+        "evidence": null
+      },
+      "motivation": null,
+      "urgency": null,
+      "painPoints": [],
+      "learningSignal": null
+    },
+    "problemSpace": {
+      "realProblem": "",
+      "scenario": null,
+      "currentPainPoint": null
+    },
+    "resources": {
+      "timePerWeek": null,
+      "timePerSession": null,
+      "timeHorizon": null,
+      "deadlineText": null
+    },
+    "successCriteria": {
+      "observableResult": null,
+      "acceptanceCheck": null
+    },
+    "confirmedProposal": {
+      "learningDirection": null,
+      "firstDeliverable": null,
+      "keyStages": [],
+      "outOfScope": []
+    },
+    "qualityFlags": {
+      "confidenceScores": {},
+      "missingFields": [],
+      "lowConfidenceFields": [],
+      "missingOrEmptyFields": []
+    }
   },
-  "riskFlags": ["风险1"],
-  "sourceGoal": {
-    "surfaceGoal": "",
-    "realProblem": "",
-    "motivation": "",
-    "urgency": ""
+  "supportingEvidence": {
+    "usagePolicy": "reference_only",
+    "conversationHistory": [],
+    "learnerQA": [],
+    "behaviorLog": [],
+    "notes": []
   }
 }`;
 
@@ -50,7 +92,7 @@ export const pathSceneFramingDefinition: SkillDefinition = {
   name: 'path-scene-framing',
   version: '1.0.0',
   category: 'analysis',
-  description: '为学习路径生成方向 framing 与约束框架',
+  description: '为学习路径生成前统一清洗输入结构',
   inputSchema: {
     type: 'object',
     properties: {
@@ -65,18 +107,11 @@ export const pathSceneFramingDefinition: SkillDefinition = {
   outputSchema: {
     type: 'object',
     properties: {
-      intent: { type: 'string' },
-      targetState: { type: 'string' },
-      firstDeliverable: { type: 'string' },
-      cognitiveDomain: { type: 'string' },
-      planningFocus: { type: 'array' },
-      excludedScope: { type: 'array' },
-      resourceProfile: { type: 'object' },
-      riskFlags: { type: 'array' },
-      sourceGoal: { type: 'object' },
+      normalizedInput: { type: 'object' },
+      supportingEvidence: { type: 'object' },
     }
   },
-  capabilities: ['path-framing', 'planning-focus', 'cognitive-domain'],
+  capabilities: ['path-input-normalization', 'path-input-cleaning'],
   stats: {
     callCount: 0,
     successRate: 0,
@@ -99,8 +134,10 @@ export async function pathSceneFraming(
   const startTime = Date.now();
 
   try {
+    const promptConfig = await new AgentConfigService().getActivePrompt('skill:path-scene-framing');
+    const systemPrompt = promptConfig?.systemPrompt || PATH_SCENE_FRAMING_PROMPT;
     const messages: ChatMessage[] = [
-      { role: 'system', content: PATH_SCENE_FRAMING_PROMPT },
+      { role: 'system', content: systemPrompt },
       {
         role: 'user',
         content: JSON.stringify({

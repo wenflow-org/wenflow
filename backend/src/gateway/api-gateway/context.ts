@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
 
-export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab';
+export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
 
 export interface RequestContext {
   userId?: string;

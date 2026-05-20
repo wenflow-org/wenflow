@@ -2,10 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
 import { logger } from './utils/logger';
 import prisma from './config/database';
 import { initializeAdmin } from './services/auth/init-admin.service';
+import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
 
 // EduClaw Gateway
 import { createGateway } from './gateway';
@@ -65,18 +65,6 @@ if (trustProxyEnv === 'true') {
   app.set('trust proxy', 1);
 }
 
-// 全局 API 限流
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: {
-    success: false,
-    error: { message: '请求过于频繁，请稍后重试' }
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
 // 中间件
 app.use(helmet.contentSecurityPolicy({
   directives: {
@@ -116,7 +104,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 应用全局限流到 API 路由
-app.use('/api/', globalLimiter);
+app.use('/api/', globalApiLimiter);
 
 // 应用 CSRF 保护
 app.use('/api/', csrfMiddleware);
@@ -159,6 +147,7 @@ import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
+import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import abTestingRoutes from './routes/ab-testing';
@@ -252,6 +241,7 @@ app.use('/api/admin/skill-model-configs', authMiddleware, acpContextMiddleware('
 app.use('/api/admin/users', authMiddleware, acpContextMiddleware('admin'), adminUsersRoutes);
 app.use('/api/admin/learner-models', authMiddleware, acpContextMiddleware('admin'), adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', authMiddleware, acpContextMiddleware('admin'), adminGoalConversationsRoutes);
+app.use('/api/admin/virtual-learners', authMiddleware, acpContextMiddleware('admin'), adminVirtualLearnersRoutes);
 app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminPlatformRoutes);
 app.use('/api/users', authMiddleware, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);

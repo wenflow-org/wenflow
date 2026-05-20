@@ -685,7 +685,7 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
       studentState?: StudentStateAssessment;  // 学生当前状态（可选，如果提供则直接使用）
     }
   ) {
-    let studentState = context?.studentState;
+    const studentState = context?.studentState;
 
     // 根据学生状态生成辅导策略
     let strategyPrompt = '';

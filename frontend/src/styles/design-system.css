@@ -572,3 +572,182 @@ pre code {
 .transition { transition: all var(--transition-normal); }
 .transition-fast { transition: all var(--transition-fast); }
 .transition-slow { transition: all var(--transition-slow); }
+
+/* ==========================================
+   Admin 管理页面组件规范
+   ========================================== */
+
+/* Dialog/Drawer 尺寸规范 */
+:root {
+  --admin-dialog-sm: 400px;
+  --admin-dialog-md: 720px;
+  --admin-dialog-lg: min(90vw, 960px);
+
+  --admin-drawer-sm: min(50%, 600px);
+  --admin-drawer-md: min(60%, 800px);
+  --admin-drawer-lg: min(68%, 980px);
+}
+
+/* Admin 按钮组件 - UI Lab 渐变风格 */
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  border-radius: var(--lab-radius-button);
+  transition: all 180ms ease;
+  min-height: 40px;
+  padding: 0 16px;
+  border: none;
+  cursor: pointer;
+}
+
+.admin-btn--primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  color: white;
+  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.24);
+}
+
+.admin-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.3);
+}
+
+.admin-btn--ghost {
+  border: 1px solid var(--lab-color-border);
+  background: color-mix(in srgb, var(--lab-color-surface-alt) 80%, white);
+  color: var(--lab-color-text);
+}
+
+.admin-btn--ghost:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.admin-btn--danger {
+  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark));
+  color: white;
+}
+
+.admin-btn--danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(239, 117, 120, 0.3);
+}
+
+.admin-btn--success {
+  background: linear-gradient(135deg, var(--color-success), #248a53);
+  color: white;
+}
+
+.admin-btn--success:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(49, 177, 111, 0.3);
+}
+
+.admin-btn--small {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--lab-radius-button-small);
+  font-size: 14px;
+}
+
+/* Admin 卡片组件 - 34px 圆角 */
+.admin-card {
+  border-radius: var(--lab-radius-card);
+  border: 1px solid var(--lab-color-border);
+  background: color-mix(in srgb, var(--lab-color-surface) 90%, white);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--lab-shadow-lg);
+  padding: 1.25rem;
+}
+
+/* Admin 输入框组件 */
+.admin-input {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--lab-color-border);
+  border-radius: var(--lab-radius-button);
+  background: var(--lab-color-surface);
+  font-size: 15px;
+  transition: all 180ms ease;
+}
+
+.admin-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.1);
+}
+
+/* ==========================================
+   Element Plus 按钮样式覆盖
+   ========================================== */
+
+/* 覆盖所有 primary 按钮为渐变风格 */
+.el-button--primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.24);
+}
+
+.el-button--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.3);
+}
+
+/* 覆盖 success 按钮 */
+.el-button--success {
+  background: linear-gradient(135deg, var(--color-success), #248a53) !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 28px rgba(49, 177, 111, 0.24);
+}
+
+.el-button--success:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(49, 177, 111, 0.3);
+}
+
+/* 覆盖 danger 按钮 */
+.el-button--danger {
+  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 28px rgba(239, 117, 120, 0.24);
+}
+
+.el-button--danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(239, 117, 120, 0.3);
+}
+
+/* 覆盖 warning 按钮为 danger 风格（统一危险操作） */
+.el-button--warning {
+  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 28px rgba(239, 117, 120, 0.24);
+}
+
+/* 覆盖 plain/ghost 按钮 */
+.el-button--default:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning) {
+  border-color: var(--lab-color-border);
+  background: color-mix(in srgb, var(--lab-color-surface-alt) 80%, white);
+  color: var(--lab-color-text);
+}
+
+.el-button--default:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning):hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* 链接按钮样式统一 */
+.el-button.is-link {
+  font-weight: 600;
+}
+
+/* 按钮动画 */
+.el-button {
+  transition: all 180ms ease;
+}
+
+/* 小按钮圆角 */
+.el-button--small {
+  border-radius: var(--lab-radius-button-small);
+}

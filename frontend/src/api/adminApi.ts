@@ -304,6 +304,52 @@ export interface OrchestratorRelationItem {
   }>;
 }
 
+export interface PathOrchestratorInputConfig {
+  version: string;
+  normalizedInput: {
+    descriptionSources: string[];
+    subjectSources: string[];
+    skillLevelSources: string[];
+    timePerDaySources: string[];
+    deadlineTextSources: string[];
+    includeStructuredData: boolean;
+    includeConfirmedProposal: boolean;
+    includeConfidenceScores: boolean;
+    includeConversationHistory: boolean;
+  };
+}
+
+export interface OrchestratorDataContractSection {
+  name: string;
+  description: string;
+  fields: Array<{
+    key: string;
+    description: string;
+  }>;
+}
+
+export interface PathOrchestratorNormalizedInputPreview {
+  description: string | null;
+  subject: string | null;
+  deadlineText: string | null;
+  sourceConversationId: string | null;
+  existingPathId: string | null;
+  skillLevel: string | null;
+  timePerDay: string | null;
+  structuredData: any;
+  confirmedProposal: any;
+  confidenceScores: any;
+  conversationHistory: Array<{ role: string; content: string }>;
+}
+
+export interface PathOrchestratorSupportingEvidencePreview {
+  usagePolicy: 'reference_only';
+  conversationHistory: Array<{ role: string; content: string }>;
+  learnerQA: any[];
+  behaviorLog: any[];
+  notes: string[];
+}
+
 export interface ManifestDiagnosticsData {
   summary: {
     manifestTotal: number;
@@ -396,8 +442,49 @@ export const adminAgentsApi = {
     return adminAxios.get<{ data: { orchestrators: OrchestratorRelationItem[] } }>('/admin/orchestrators/relations');
   },
 
-  getManifestDiagnostics: async () => {
+  getOrchestratorConfig: async (orchestratorId: string) => {
+    return adminAxios.get<{ data: {
+      orchestratorId: string;
+      config: PathOrchestratorInputConfig;
+      defaults: PathOrchestratorInputConfig;
+      availableSourcePaths: Record<string, string[]>;
+    } }>(`/admin/orchestrators/${encodeURIComponent(orchestratorId)}/config`);
+  },
+
+  getOrchestratorDataContract: async (orchestratorId: string) => {
+    return adminAxios.get<{ data: {
+      orchestratorId: string;
+      entryPayload: OrchestratorDataContractSection;
+      derivedInput: OrchestratorDataContractSection;
+      outputContract: OrchestratorDataContractSection;
+    } }>(`/admin/orchestrators/${encodeURIComponent(orchestratorId)}/data-contract`);
+  },
+
+  previewOrchestratorConfig: async (orchestratorId: string, sampleGoalFinalPayload: Record<string, any>) => {
+    return adminAxios.post<{ data: {
+      orchestratorId: string;
+      normalizedInput: PathOrchestratorNormalizedInputPreview;
+    } }>(`/admin/orchestrators/${encodeURIComponent(orchestratorId)}/config-preview`, {
+      sampleGoalFinalPayload
+    });
+  },
+
+  updateOrchestratorConfig: async (orchestratorId: string, config: PathOrchestratorInputConfig) => {
+    return adminAxios.put<{ data: { orchestratorId: string; config: PathOrchestratorInputConfig } }>(
+      `/admin/orchestrators/${encodeURIComponent(orchestratorId)}/config`,
+      config
+    );
+  },
+
+getManifestDiagnostics: async () => {
     return adminAxios.get<{ data: ManifestDiagnosticsData }>('/admin/manifest/diagnostics');
+  },
+
+  testAgent: async (agentId: string, input: any, context?: any) => {
+    return adminAxios.post<{ success: boolean; data: { agentName: string; agentType: string; input: any; output: any; duration: number } }>(
+      `/admin/agent-lab/agents/${encodeURIComponent(agentId)}/test`,
+      { input, context }
+    );
   },
 };
 
@@ -595,6 +682,95 @@ export const adminSkillsApi = {
   deleteSkillModelConfig: async (skillId: string) => {
     return adminAxios.delete(`/admin/skill-model-configs/${skillId}`);
   },
+
+  testSkill: async (skillId: string, input: any) => {
+    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
+  },
+
+  getEffectiveSkillPrompt: async (skillId: string) => {
+    return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);
+  },
+};
+
+export const adminVirtualLearnersApi = {
+  generateProfile: async (data: {
+    learningGoal: string;
+    knowledgeLevel: string;
+    simulationMode?: string;
+    personalityTraits?: {
+      verbosity?: string;
+      enthusiasm?: string;
+      confusionStyle?: string;
+    };
+  }) => {
+    return adminAxios.post('/admin/virtual-learners/generate-profile', data);
+  },
+
+  getVirtualLearners: async (params?: { page?: number; limit?: number }) => {
+    return adminAxios.get('/admin/virtual-learners', { params });
+  },
+
+  getVirtualLearner: async (id: string) => {
+    return adminAxios.get(`/admin/virtual-learners/${id}`);
+  },
+
+  createVirtualLearner: async (data: {
+    name: string;
+    learningGoal: string;
+    knowledgeLevel?: string;
+    profile?: {
+      age?: number;
+      occupation?: string;
+      education?: string;
+      background?: string;
+    };
+    simulationMode?: string;
+    simulationTemperature?: number;
+    personalityTraits?: {
+      verbosity?: string;
+      enthusiasm?: string;
+      confusionStyle?: string;
+    };
+    notes?: string;
+  }) => {
+    return adminAxios.post('/admin/virtual-learners', data);
+  },
+
+  updateVirtualLearner: async (id: string, data: any) => {
+    return adminAxios.put(`/admin/virtual-learners/${id}`, data);
+  },
+
+  deleteVirtualLearner: async (id: string) => {
+    return adminAxios.delete(`/admin/virtual-learners/${id}`);
+  },
+
+  startVirtualSession: async (profileId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/${profileId}/start-session`);
+  },
+
+  getVirtualSession: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}`);
+  },
+
+  virtualSessionStep: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/step`);
+  },
+
+  virtualSessionAuto: async (sessionId: string, data?: { maxRounds?: number }) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/auto`, data);
+  },
+
+  virtualSessionAdvancePath: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/advance-path`);
+  },
+
+  getVirtualSessionLogs: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/logs`);
+  },
+
+  deleteVirtualSession: async (sessionId: string) => {
+    return adminAxios.delete(`/admin/virtual-learners/sessions/${sessionId}`);
+  },
 };
 
   // ========== 统一导出 ==========
@@ -629,4 +805,7 @@ export const adminApi = {
   
   // Skill Model Configs
   ...adminSkillsApi,
+
+  // Virtual Learners
+  ...adminVirtualLearnersApi,
 };

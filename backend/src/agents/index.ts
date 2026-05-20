@@ -67,6 +67,22 @@ export {
   sessionWrapupAgentHandler,
 } from './session-wrapup-agent';
 
+// Virtual Learner Simulation Agent
+export {
+  virtualLearnerSimulationAgentDefinition,
+  virtualLearnerSimulationAgentHandler,
+  type SimulationAgentInput,
+  type SimulationAgentOutput,
+  type SimulationContext
+} from './virtual-learner-simulation-agent';
+
+// Simulation Orchestrator Agent
+export {
+  simulationOrchestratorAgentDefinition,
+  simulationOrchestratorAgentHandler,
+  simulationOrchestrator
+} from './simulation-orchestrator-agent';
+
 // Path Adjustment
 export {
   pathAdjustmentEngine,
@@ -108,6 +124,8 @@ import { goalConversationAgentDefinition, goalConversationAgentHandler } from '.
 import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from './teaching-turn-agent';
 import { peerAgentDefinition, peerAgentHandler } from './peer-agent';
 import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from './session-wrapup-agent';
+import { virtualLearnerSimulationAgentDefinition, virtualLearnerSimulationAgentHandler } from './virtual-learner-simulation-agent';
+import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-orchestrator-agent';
 import { getAgentManifest } from '../services/agent-manifest.service';
 
 export const allAgentDefinitions: AgentDefinition[] = [
@@ -117,7 +135,9 @@ export const allAgentDefinitions: AgentDefinition[] = [
   goalConversationAgentDefinition,
   teachingTurnAgentDefinition,
   peerAgentDefinition,
-  sessionWrapupAgentDefinition
+  sessionWrapupAgentDefinition,
+  virtualLearnerSimulationAgentDefinition,
+  simulationOrchestratorAgentDefinition
 ];
 
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
@@ -127,7 +147,9 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
   'goal-conversation-agent': goalConversationAgentHandler,
   'teaching-turn-agent': teachingTurnAgentHandler,
   'peer-agent': peerAgentHandler,
-  'session-wrapup-agent': sessionWrapupAgentHandler
+  'session-wrapup-agent': sessionWrapupAgentHandler,
+  'virtual-learner-simulation-agent': virtualLearnerSimulationAgentHandler,
+  'simulation-orchestrator': simulationOrchestratorAgentHandler
 };
 
 /**

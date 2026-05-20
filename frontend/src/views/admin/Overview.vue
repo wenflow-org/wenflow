@@ -567,20 +567,6 @@ onMounted(() => {
   grid-column: span 2;
 }
 
-.stats-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.875rem;
-  margin-bottom: 1.5rem;
-}
-
-.stats-grid > .stat-card--conversations,
-.stats-grid > .stat-card--agents {
-  grid-column: span 2;
-}
-
 .stat-card {
   display: flex;
   align-items: flex-start;
@@ -595,7 +581,12 @@ onMounted(() => {
   position: relative;
   overflow: hidden;
 }
+
+.trend-row {
   align-items: center;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 82px;
+  gap: 12px;
   padding: 0.5rem 0;
   border-bottom: 1px dashed rgba(52, 120, 246, 0.06);
 }

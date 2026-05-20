@@ -311,7 +311,7 @@
     <el-dialog
       v-model="detailVisible"
       title="执行详情"
-      width="min(800px, 90vw)"
+      width="min(90vw, 960px)"
       class="detail-dialog"
       destroy-on-close
     >

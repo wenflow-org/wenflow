@@ -60,6 +60,7 @@ interface GeneratePathData {
     confirmedProposal?: any;
     confidenceScores?: any;
     conversationHistory?: Array<{ role: string; content: string }>;
+    goalFinalPayload?: GoalToPathHandoffSnapshot;
     pathSceneFraming?: any;
     replan?: {
       mode?: 'new_version' | 'overwrite';
@@ -127,26 +128,94 @@ interface ParsedPathGenerationStatus {
   scene?: Record<string, any> | null;
 }
 
+interface PathSceneFramingNormalizedInput {
+  version?: string | null;
+  learnerProfile?: {
+    surfaceGoal?: string | null;
+    currentBaseline?: {
+      level?: string | null;
+      evidence?: string | null;
+    };
+    motivation?: string | null;
+    urgency?: string | null;
+    painPoints?: string[];
+    learningSignal?: string | null;
+  };
+  problemSpace?: {
+    realProblem?: string | null;
+    scenario?: string | null;
+    currentPainPoint?: string | null;
+  };
+  resources?: {
+    timePerWeek?: string | null;
+    timePerSession?: string | null;
+    timeHorizon?: string | null;
+    deadlineText?: string | null;
+  };
+  successCriteria?: {
+    observableResult?: string | null;
+    acceptanceCheck?: string | null;
+  };
+  confirmedProposal?: {
+    learningDirection?: string | null;
+    firstDeliverable?: string | null;
+    keyStages?: string[];
+    outOfScope?: string[];
+  } | null;
+  qualityFlags?: {
+    confidenceScores?: Record<string, number | null>;
+    missingFields?: string[];
+    lowConfidenceFields?: string[];
+    missingOrEmptyFields?: string[];
+  };
+}
+
+interface PathSceneFramingSupportingEvidence {
+  usagePolicy?: 'reference_only' | string;
+  conversationHistory?: Array<{ role: string; content: string }>;
+  learnerQA?: any[];
+  behaviorLog?: any[];
+  notes?: string[];
+}
+
 interface PathSceneFraming {
-  version: 'goal-path-scene-v1';
-  intent: string;
-  targetState: string;
-  firstDeliverable: string;
+  normalizedInput?: PathSceneFramingNormalizedInput;
+  supportingEvidence?: PathSceneFramingSupportingEvidence;
+  intent?: string;
+  targetState?: string;
+  firstDeliverable?: string;
   cognitiveDomain?: string;
-  planningFocus: string[];
-  excludedScope: string[];
-  resourceProfile: {
+  planningFocus?: string[];
+  excludedScope?: string[];
+  resourceProfile?: {
     timeBudget?: string;
     timeHorizon?: string;
     pace?: string;
   };
-  riskFlags: string[];
-  sourceGoal: {
+  riskFlags?: string[];
+  sourceGoal?: {
     surfaceGoal?: string;
     realProblem?: string;
     motivation?: string;
     urgency?: string;
   };
+}
+
+interface GoalToPathHandoffSnapshot {
+  source: 'goal';
+  mode: 'generate';
+  sourceConversationId: string | null;
+  existingPathId: string | null;
+  rawGoal: string;
+  finalUserVisible: string | null;
+  stage: string | null;
+  confidence: number | null;
+  understanding: any;
+  collected: any;
+  structuredData: any;
+  confirmedProposal: any;
+  confidenceScores: any;
+  conversationHistory: Array<{ role: string; content: string }>;
 }
 
 interface PathCognitiveConcept {
@@ -160,6 +229,9 @@ interface PathCognitiveDesign {
   cognitiveDomain?: string | null;
   coreConcepts?: PathCognitiveConcept[];
 }
+
+const NEW_PATH_TASK_TYPES = ['acquire', 'deconstruct', 'model', 'execute', 'diagnose', 'refine', 'consolidate'] as const;
+type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 
 interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
@@ -184,7 +256,7 @@ interface NormalizedPathTask {
   linkedConcept?: string;
 }
 
-interface PathProcessInputSnapshot {
+interface PathNormalizedInputSnapshot {
   source: 'goal' | 'learn' | 'replan' | 'api';
   mode: 'generate' | 'expand' | 'compress' | 'replan';
   description: string;
@@ -197,7 +269,7 @@ interface PathProcessInputSnapshot {
   structuredData: any;
   confirmedProposal: any;
   confidenceScores: any;
-  conversationHistoryPreview: Array<{ role: string; content: string }>;
+  conversationHistory: Array<{ role: string; content: string }>;
 }
 
 interface PathStageTraceItem {
@@ -234,12 +306,134 @@ function normalizeStringArray(value: any): string[] {
     .filter(Boolean);
 }
 
+function normalizeConversationHistory(value: any): Array<{ role: string; content: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((message: any) => ({
+      role: typeof message?.role === 'string' ? message.role : 'user',
+      content: typeof message?.content === 'string' ? message.content : ''
+    }))
+    .filter((message: { role: string; content: string }) => message.content);
+}
+
+function normalizeConceptText(value: any): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function buildConceptMap(cognitiveDesign: PathCognitiveDesign | null | undefined): Map<string, PathCognitiveConcept> {
+  const map = new Map<string, PathCognitiveConcept>();
+  const concepts = Array.isArray(cognitiveDesign?.coreConcepts) ? cognitiveDesign!.coreConcepts! : [];
+  for (const concept of concepts) {
+    if (!concept?.id || !concept?.name) continue;
+    map.set(concept.id, concept);
+  }
+  return map;
+}
+
+function resolveTaskConcept(
+  linkedConceptId: string | null | undefined,
+  cognitiveDesign: PathCognitiveDesign | null | undefined,
+  fallbackText?: string | null | undefined
+): {
+  linkedConceptId: string | null;
+  linkedConceptName: string | null;
+  linkedConceptDescription: string | null;
+  conceptSource: 'linked-concept' | 'fallback-text' | 'missing';
+} {
+  const conceptId = normalizeConceptText(linkedConceptId);
+  const conceptMap = buildConceptMap(cognitiveDesign);
+  const concept = conceptId ? conceptMap.get(conceptId) : null;
+
+  if (concept) {
+    return {
+      linkedConceptId: concept.id,
+      linkedConceptName: concept.name,
+      linkedConceptDescription: concept.description || null,
+      conceptSource: 'linked-concept'
+    };
+  }
+
+  const fallback = normalizeConceptText(fallbackText);
+  if (fallback) {
+    return {
+      linkedConceptId: conceptId,
+      linkedConceptName: fallback,
+      linkedConceptDescription: null,
+      conceptSource: 'fallback-text'
+    };
+  }
+
+  return {
+    linkedConceptId: conceptId,
+    linkedConceptName: null,
+    linkedConceptDescription: null,
+    conceptSource: 'missing'
+  };
+}
+
+function getSceneFramingNormalizedInput(sceneFraming: PathSceneFraming | null | undefined): PathSceneFramingNormalizedInput | null {
+  if (!sceneFraming || !sceneFraming.normalizedInput || typeof sceneFraming.normalizedInput !== 'object') {
+    return null;
+  }
+  return sceneFraming.normalizedInput;
+}
+
+function getSceneFramingSupportingEvidence(sceneFraming: PathSceneFraming | null | undefined): PathSceneFramingSupportingEvidence | null {
+  if (!sceneFraming || !sceneFraming.supportingEvidence || typeof sceneFraming.supportingEvidence !== 'object') {
+    return null;
+  }
+  return sceneFraming.supportingEvidence;
+}
+
+function getSceneFramingFirstDeliverable(sceneFraming: PathSceneFraming | null | undefined): string | null {
+  const normalizedInput = getSceneFramingNormalizedInput(sceneFraming);
+  const confirmedProposalDeliverable = typeof normalizedInput?.confirmedProposal?.firstDeliverable === 'string'
+    ? normalizedInput.confirmedProposal.firstDeliverable.trim()
+    : '';
+  if (confirmedProposalDeliverable) return confirmedProposalDeliverable;
+
+  return typeof sceneFraming?.firstDeliverable === 'string' && sceneFraming.firstDeliverable.trim()
+    ? sceneFraming.firstDeliverable.trim()
+    : null;
+}
+
+function getSceneFramingFocusSource(sceneFraming: PathSceneFraming | null | undefined): string[] {
+  const normalizedInput = getSceneFramingNormalizedInput(sceneFraming);
+  const keyStages = normalizeStringArray(normalizedInput?.confirmedProposal?.keyStages);
+  if (keyStages.length > 0) return keyStages;
+
+  return normalizeStringArray(sceneFraming?.planningFocus);
+}
+
+function getSceneFramingFallbackDomain(sceneFraming: PathSceneFraming | null | undefined): string | null {
+  const normalizedInput = getSceneFramingNormalizedInput(sceneFraming);
+  const surfaceGoal = typeof normalizedInput?.learnerProfile?.surfaceGoal === 'string'
+    ? normalizedInput.learnerProfile.surfaceGoal.trim()
+    : '';
+  if (surfaceGoal) return surfaceGoal;
+
+  const realProblem = typeof normalizedInput?.problemSpace?.realProblem === 'string'
+    ? normalizedInput.problemSpace.realProblem.trim()
+    : '';
+  if (realProblem) return realProblem;
+
+  if (typeof sceneFraming?.cognitiveDomain === 'string' && sceneFraming.cognitiveDomain.trim()) {
+    return sceneFraming.cognitiveDomain.trim();
+  }
+
+  if (typeof sceneFraming?.intent === 'string' && sceneFraming.intent.trim()) {
+    return sceneFraming.intent.trim();
+  }
+
+  return null;
+}
+
 function parsePathCognitiveDesign(raw: string | null): PathCognitiveDesign | null {
   if (!raw) return null;
 
   try {
     const parsed = JSON.parse(raw);
-    const candidate = parsed?.cognitiveDesign;
+    const candidate = parsed?.cognitiveCore || parsed?.cognitiveDesign;
 
     if (!candidate || typeof candidate !== 'object') {
       return null;
@@ -368,15 +562,24 @@ function buildSceneSummaryFromFraming(
 ) {
   if (!sceneFraming) return null;
 
+  const normalizedInput = getSceneFramingNormalizedInput(sceneFraming);
+  const firstDeliverable = getSceneFramingFirstDeliverable(sceneFraming);
+  const focusSource = getSceneFramingFocusSource(sceneFraming);
+  const outOfScope = normalizeStringArray(normalizedInput?.confirmedProposal?.outOfScope);
+  const legacyExcludedScope = normalizeStringArray(sceneFraming.excludedScope);
+
   return {
-    title: sceneFraming.intent,
-    firstDeliverable: sceneFraming.firstDeliverable,
-    targetState: sceneFraming.targetState,
-    planningFocus: sceneFraming.planningFocus || [],
-    excludedScope: sceneFraming.excludedScope || [],
-    riskFlags: sceneFraming.riskFlags || [],
-    timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
-    timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
+    title: normalizedInput?.problemSpace?.realProblem
+      || normalizedInput?.learnerProfile?.surfaceGoal
+      || sceneFraming.intent
+      || null,
+    firstDeliverable,
+    targetState: normalizedInput?.successCriteria?.observableResult || sceneFraming.targetState || null,
+    planningFocus: focusSource,
+    excludedScope: outOfScope.length > 0 ? outOfScope : legacyExcludedScope,
+    riskFlags: normalizeStringArray(sceneFraming.riskFlags),
+    timeBudget: normalizedInput?.resources?.timePerWeek || sceneFraming.resourceProfile?.timeBudget || null,
+    timeHorizon: normalizedInput?.resources?.timeHorizon || sceneFraming.resourceProfile?.timeHorizon || null,
     milestoneCount: typeof milestoneCount === 'number' ? milestoneCount : undefined,
     taskCount: typeof taskCount === 'number' ? taskCount : undefined,
   };
@@ -515,13 +718,23 @@ function parseTaskLearningObjectives(raw: string | null | undefined): string[] {
   return [];
 }
 
-function buildProcessInputSnapshot(data: GeneratePathData): PathProcessInputSnapshot {
-  const previewHistory = Array.isArray(data.userProfile?.conversationHistory)
+function normalizePathTaskType(value: any): NewPathTaskType | 'reading' | 'practice' | 'project' | 'quiz' {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if ((NEW_PATH_TASK_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as NewPathTaskType;
+  }
+  if (normalized === 'reading' || normalized === 'practice' || normalized === 'project' || normalized === 'quiz') {
+    return normalized;
+  }
+  return 'execute';
+}
+
+function buildNormalizedPathInputSnapshot(data: GeneratePathData): PathNormalizedInputSnapshot {
+  const conversationHistory = Array.isArray(data.userProfile?.conversationHistory)
     ? data.userProfile.conversationHistory
-        .slice(-6)
         .map((message: any) => ({
           role: typeof message?.role === 'string' ? message.role : 'user',
-          content: typeof message?.content === 'string' ? message.content.slice(0, 500) : '',
+          content: typeof message?.content === 'string' ? message.content : '',
         }))
         .filter((message: { role: string; content: string }) => message.content)
     : [];
@@ -539,7 +752,54 @@ function buildProcessInputSnapshot(data: GeneratePathData): PathProcessInputSnap
     structuredData: data.userProfile?.structuredData || null,
     confirmedProposal: data.userProfile?.confirmedProposal || null,
     confidenceScores: data.userProfile?.confidenceScores || null,
-    conversationHistoryPreview: previewHistory,
+    conversationHistory,
+  };
+}
+
+function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPathHandoffSnapshot | null {
+  if (data.source !== 'goal' && !data.sourceConversationId) {
+    return null;
+  }
+
+  const handoff = data.userProfile?.goalFinalPayload;
+  if (handoff && typeof handoff === 'object') {
+    return {
+      source: 'goal',
+      mode: 'generate',
+      sourceConversationId: handoff.sourceConversationId || data.sourceConversationId || null,
+      existingPathId: handoff.existingPathId || data.existingPathId || null,
+      rawGoal: typeof handoff.rawGoal === 'string' ? handoff.rawGoal : data.description,
+      finalUserVisible: typeof handoff.finalUserVisible === 'string' ? handoff.finalUserVisible : null,
+      stage: typeof handoff.stage === 'string' ? handoff.stage : null,
+      confidence: typeof handoff.confidence === 'number' ? handoff.confidence : null,
+      understanding: handoff.understanding || {},
+      collected: handoff.collected || {},
+      structuredData: handoff.structuredData ?? data.userProfile?.structuredData ?? null,
+      confirmedProposal: handoff.confirmedProposal ?? data.userProfile?.confirmedProposal ?? null,
+      confidenceScores: handoff.confidenceScores ?? data.userProfile?.confidenceScores ?? null,
+      conversationHistory: Array.isArray(handoff.conversationHistory)
+        ? handoff.conversationHistory
+        : Array.isArray(data.userProfile?.conversationHistory)
+          ? data.userProfile.conversationHistory
+          : [],
+    };
+  }
+
+  return {
+    source: 'goal',
+    mode: 'generate',
+    sourceConversationId: data.sourceConversationId || null,
+    existingPathId: data.existingPathId || null,
+    rawGoal: data.description,
+    finalUserVisible: null,
+    stage: null,
+    confidence: null,
+    understanding: {},
+    collected: {},
+    structuredData: data.userProfile?.structuredData ?? null,
+    confirmedProposal: data.userProfile?.confirmedProposal ?? null,
+    confidenceScores: data.userProfile?.confidenceScores ?? null,
+    conversationHistory: Array.isArray(data.userProfile?.conversationHistory) ? data.userProfile.conversationHistory : [],
   };
 }
 
@@ -555,29 +815,21 @@ class LearningService {
   private buildPathProcessDetail(path: any) {
     const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate || null);
-    const processInput = parsedTemplate?.processInput && typeof parsedTemplate.processInput === 'object'
-      ? parsedTemplate.processInput
-      : null;
     const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
       ? parsedTemplate.sceneFraming
       : null;
-    const fallbackSourceGoal = sceneFraming?.sourceGoal && typeof sceneFraming.sourceGoal === 'object'
-      ? sceneFraming.sourceGoal
+    const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
+      ? parsedTemplate.normalizedInput
       : null;
-    const fallbackDescription = processInput?.description
-      || path.description
-      || fallbackSourceGoal?.surfaceGoal
-      || fallbackSourceGoal?.realProblem
-      || null;
-    const fallbackSubject = processInput?.subject
-      || path.subject
-      || null;
-    const fallbackSkillLevel = processInput?.skillLevel
-      || parsedTemplate?.difficulty
-      || path.difficulty
-      || null;
+    const goalFinalPayload = parsedTemplate?.goalFinalPayload && typeof parsedTemplate.goalFinalPayload === 'object'
+      ? parsedTemplate.goalFinalPayload
+      : null;
+    const sceneFramingNormalizedInput = getSceneFramingNormalizedInput(sceneFraming);
+    const sceneFramingSupportingEvidence = getSceneFramingSupportingEvidence(sceneFraming);
+    const cognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
     const taskProfiles = (path.milestones || []).flatMap((milestone: any) =>
       (milestone.subtasks || []).map((task: any) => ({
+        ...resolveTaskConcept(task.coreConcept, cognitiveDesign, task.coreConcept),
         taskId: task.id,
         milestoneId: milestone.id,
         milestoneTitle: milestone.title || milestone.goal || null,
@@ -587,53 +839,104 @@ class LearningService {
         cognitiveLevel: task.cognitiveLevel || null,
         displayLabel: task.displayLabel || null,
         learningObjectives: parseTaskLearningObjectives(task.learningObjectives),
-        coreConcept: task.coreConcept || null,
+        coreConcept: normalizeConceptText(task.coreConcept),
         transferable: task.transferable ?? false,
         annotationConfidence: task.annotationConfidence ?? null,
       }))
     );
 
     return {
-      source: typeof processInput?.source === 'string'
-        ? processInput.source
+      source: typeof normalizedInput?.source === 'string'
+        ? normalizedInput.source
         : (typeof parsedTemplate?.source === 'string' ? parsedTemplate.source : null),
-      mode: typeof processInput?.mode === 'string'
-        ? processInput.mode
+      mode: typeof normalizedInput?.mode === 'string'
+        ? normalizedInput.mode
         : (typeof parsedTemplate?.mode === 'string' ? parsedTemplate.mode : null),
-      sourceConversationId: processInput?.sourceConversationId || generationStatus?.sourceConversationId || null,
-      goalInput: {
-        description: fallbackDescription,
-        subject: fallbackSubject,
-        deadlineText: processInput?.deadlineText || path.deadlineText || null,
-        sourceGoal: fallbackSourceGoal,
-        skillLevel: fallbackSkillLevel,
-        timePerDay: processInput?.timePerDay || null,
-        structuredData: processInput?.structuredData || null,
-        confirmedProposal: processInput?.confirmedProposal || null,
-        confidenceScores: processInput?.confidenceScores || null,
-        conversationHistoryPreview: Array.isArray(processInput?.conversationHistoryPreview)
-          ? processInput.conversationHistoryPreview
+      sourceConversationId: goalFinalPayload?.sourceConversationId || normalizedInput?.sourceConversationId || generationStatus?.sourceConversationId || null,
+      goalFinalPayload: {
+        provenance: {
+          source: goalFinalPayload ? 'persisted-goal-final-payload' : 'missing',
+          isBackfilled: false,
+          summary: goalFinalPayload
+            ? '这份数据是 Goal 阶段最终产出并正式保存的 Path 入口 payload。'
+            : '当前路径没有保存 Goal Final Payload。'
+        },
+        display: {
+          description: goalFinalPayload?.rawGoal || null,
+          subject: normalizedInput?.subject || null,
+          deadlineText: normalizedInput?.deadlineText || null,
+          sourceGoal: null,
+          skillLevel: normalizedInput?.skillLevel || null,
+          timePerDay: normalizedInput?.timePerDay || null,
+        },
+        rawGoal: goalFinalPayload?.rawGoal || null,
+        finalUserVisible: goalFinalPayload?.finalUserVisible || null,
+        stage: goalFinalPayload?.stage || null,
+        confidence: typeof goalFinalPayload?.confidence === 'number' ? goalFinalPayload.confidence : null,
+        understanding: goalFinalPayload?.understanding || null,
+        collected: goalFinalPayload?.collected || null,
+        structuredData: goalFinalPayload?.structuredData || null,
+        confirmedProposal: goalFinalPayload?.confirmedProposal || null,
+        confidenceScores: goalFinalPayload?.confidenceScores || null,
+        conversationHistory: Array.isArray(goalFinalPayload?.conversationHistory)
+          ? goalFinalPayload.conversationHistory
+          : [],
+      },
+      normalizedInput: {
+        provenance: {
+          source: normalizedInput
+            ? 'persisted-normalized-input'
+            : 'missing',
+          isBackfilled: false,
+          summary: normalizedInput
+            ? '这份数据是 orchestrator 归一化后正式保存的 Path 内部输入。'
+            : '当前路径没有保存可用的 normalized input。'
+        },
+        description: normalizedInput?.description || null,
+        subject: normalizedInput?.subject || null,
+        deadlineText: normalizedInput?.deadlineText || null,
+        sourceConversationId: normalizedInput?.sourceConversationId || null,
+        existingPathId: normalizedInput?.existingPathId || null,
+        skillLevel: normalizedInput?.skillLevel || null,
+        timePerDay: normalizedInput?.timePerDay || null,
+        structuredData: normalizedInput?.structuredData || null,
+        confirmedProposal: normalizedInput?.confirmedProposal || null,
+        confidenceScores: normalizedInput?.confidenceScores || null,
+        conversationHistory: Array.isArray(normalizedInput?.conversationHistory)
+          ? normalizedInput.conversationHistory
           : [],
       },
       framing: sceneFraming ? {
-        version: sceneFraming.version || null,
-        intent: sceneFraming.intent || null,
-        targetState: sceneFraming.targetState || null,
-        firstDeliverable: sceneFraming.firstDeliverable || null,
-        cognitiveDomain: sceneFraming.cognitiveDomain || null,
-        planningFocus: normalizeStringArray(sceneFraming.planningFocus),
-        excludedScope: normalizeStringArray(sceneFraming.excludedScope),
-        riskFlags: normalizeStringArray(sceneFraming.riskFlags),
-        resourceProfile: {
-          timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
-          timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
-          pace: sceneFraming.resourceProfile?.pace || null,
-        },
-        sourceGoal: sceneFraming.sourceGoal && typeof sceneFraming.sourceGoal === 'object'
-          ? sceneFraming.sourceGoal
+        normalizedInput: sceneFramingNormalizedInput || null,
+        supportingEvidence: sceneFramingSupportingEvidence
+          ? {
+              usagePolicy: sceneFramingSupportingEvidence.usagePolicy || 'reference_only',
+              conversationHistory: normalizeConversationHistory(sceneFramingSupportingEvidence.conversationHistory),
+              learnerQA: Array.isArray(sceneFramingSupportingEvidence.learnerQA) ? sceneFramingSupportingEvidence.learnerQA : [],
+              behaviorLog: Array.isArray(sceneFramingSupportingEvidence.behaviorLog) ? sceneFramingSupportingEvidence.behaviorLog : [],
+              notes: normalizeStringArray(sceneFramingSupportingEvidence.notes),
+            }
           : null,
+        legacyFrame: {
+          version: sceneFraming.version || null,
+          intent: sceneFraming.intent || null,
+          targetState: sceneFraming.targetState || null,
+          firstDeliverable: sceneFraming.firstDeliverable || null,
+          cognitiveDomain: sceneFraming.cognitiveDomain || null,
+          planningFocus: normalizeStringArray(sceneFraming.planningFocus),
+          excludedScope: normalizeStringArray(sceneFraming.excludedScope),
+          riskFlags: normalizeStringArray(sceneFraming.riskFlags),
+          resourceProfile: {
+            timeBudget: sceneFraming.resourceProfile?.timeBudget || null,
+            timeHorizon: sceneFraming.resourceProfile?.timeHorizon || null,
+            pace: sceneFraming.resourceProfile?.pace || null,
+          },
+          sourceGoal: sceneFraming.sourceGoal && typeof sceneFraming.sourceGoal === 'object'
+            ? sceneFraming.sourceGoal
+            : null,
+        }
       } : null,
-      cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate || null),
+      cognitiveDesign,
       adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate || null),
       adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate || null),
       generationTimeline: generationStatus ? {
@@ -648,7 +951,8 @@ class LearningService {
       } : null,
       taskProfiles,
       raw: {
-        processInput,
+        goalFinalPayload,
+        normalizedInput,
         promptTemplate: parsedTemplate,
         generationStatus,
       },
@@ -777,7 +1081,7 @@ class LearningService {
       return {
         title: task?.title || '',
         description: task?.description || '',
-        type: task?.type || 'practice',
+        type: normalizePathTaskType(task?.type),
         estimatedMinutes: task?.estimatedMinutes || 30,
         acceptanceCriteria: task?.acceptanceCriteria || '',
         linkedConcept,
@@ -950,9 +1254,10 @@ class LearningService {
           .map((milestone: any) => milestone?.name || milestone?.title || milestone?.goal)
           .filter((item: any) => typeof item === 'string' && item.trim())
       : [];
-    const planningFocus = Array.isArray(sceneFraming?.planningFocus) ? sceneFraming.planningFocus : [];
-    const focusSource = planningFocus.length > 0
-      ? planningFocus
+    const normalizedSceneInput = getSceneFramingNormalizedInput(sceneFraming);
+    const normalizedSceneStages = normalizeStringArray(normalizedSceneInput?.confirmedProposal?.keyStages);
+    const focusSource = normalizedSceneStages.length > 0
+      ? normalizedSceneStages
       : confirmedStages.length > 0
         ? confirmedStages
         : milestoneNames;
@@ -978,10 +1283,10 @@ class LearningService {
       {
         cognitiveDomain: typeof generatedCognitiveDesign?.cognitiveDomain === 'string' && generatedCognitiveDesign.cognitiveDomain.trim()
           ? generatedCognitiveDesign.cognitiveDomain.trim()
-          : sceneFraming?.cognitiveDomain || sceneFraming?.intent || analysis?.subject || data.description,
+          : getSceneFramingFallbackDomain(sceneFraming) || analysis?.subject || data.description,
         coreConcepts: generatedCoreConcepts,
       },
-      sceneFraming?.cognitiveDomain || sceneFraming?.intent || analysis?.subject || data.description,
+      getSceneFramingFallbackDomain(sceneFraming) || analysis?.subject || data.description,
       focusSource,
     );
   }
@@ -1481,6 +1786,11 @@ class LearningService {
       }
 
       const path = pathPayload;
+      const taskChainMilestones = Array.isArray(path.taskChain?.milestones)
+        ? path.taskChain.milestones
+        : Array.isArray(path.milestones)
+          ? path.milestones
+          : [];
       logger.info('PathAgent 调用成功', { userId: data.userId, pathId: path.id });
 
       return {
@@ -1489,7 +1799,7 @@ class LearningService {
         difficulty: data.userProfile?.skillLevel || 'beginner',
         estimatedTotalHours: path.estimatedHours || 0,
         sceneFraming: data.userProfile?.pathSceneFraming || null,
-        suggestedMilestones: (path.milestones || []).map((m: any, idx: number) => ({
+        suggestedMilestones: taskChainMilestones.map((m: any, idx: number) => ({
           stage: m.stageNumber || idx + 1,
           name: m.title,
           description: m.description,
@@ -1498,13 +1808,13 @@ class LearningService {
           tasks: (m.subtasks || []).map((t: any) => ({
             title: t.title,
             description: t.description || '',
-            type: t.type || 'practice',
+            type: normalizePathTaskType(t.type),
             estimatedMinutes: t.estimatedMinutes || 30,
             acceptanceCriteria: t.acceptanceCriteria || '',
             linkedConcept: typeof t.linkedConcept === 'string' ? t.linkedConcept : undefined,
           }))
         })),
-        cognitiveDesign: path.cognitiveDesign,
+        cognitiveDesign: path.cognitiveCore || path.cognitiveDesign,
         recommendations: [],
         feasibility: 'high'
       };
@@ -1522,15 +1832,16 @@ class LearningService {
     const normalizedMilestonesData = this.normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
     const adjustmentPolicy = this.buildPathAdjustmentPolicy();
     const adjustmentEvidence = this.buildPathAdjustmentEvidence(data);
-    const promptTemplatePayload = {
-      ...analysis,
-      source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
-      mode: data.mode || 'generate',
-      processInput: buildProcessInputSnapshot(data),
-      suggestedMilestones: normalizedMilestonesData,
-      cognitiveDesign,
-      adjustmentPolicy,
-      adjustmentEvidence,
+      const promptTemplatePayload = {
+        ...analysis,
+        source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
+        mode: data.mode || 'generate',
+        goalFinalPayload: buildGoalToPathHandoffSnapshot(data),
+        normalizedInput: buildNormalizedPathInputSnapshot(data),
+        suggestedMilestones: normalizedMilestonesData,
+        cognitiveDesign,
+        adjustmentPolicy,
+        adjustmentEvidence,
     };
 
     const learningPath = await prisma.$transaction(async (tx) => {
@@ -1636,7 +1947,7 @@ class LearningService {
                 userId: data.userId,
                 title: taskData.title || `任务${j + 1}`,
                 description: taskData.description || '',
-                taskType: taskData.type || 'practice',
+                taskType: normalizePathTaskType(taskData.type),
                 estimatedMinutes: taskData.estimatedMinutes || 30,
                 acceptanceCriteria: taskData.acceptanceCriteria || '',
                 coreConcept: typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
@@ -1717,10 +2028,13 @@ class LearningService {
           taskIndex,
           title: task.title,
           description: task.description || '',
-          type: task.taskType || 'practice',
-          stageGoal: milestone.goal || milestone.title
+          type: normalizePathTaskType(task.taskType),
+          stageGoal: milestone.goal || milestone.title,
+          linkedConcept: task.coreConcept || null
         }))
       );
+
+      const pathCognitiveDesign = parsePathCognitiveDesign(learningPath.aiPromptTemplate || null);
 
       if (allTasks.length === 0) {
         await this.recordPathGenerationStageLog({
@@ -1747,7 +2061,8 @@ class LearningService {
         tasks: allTasks,
         goalType: goalAnalysisResult.goalType,
         knowledgeDistribution: goalAnalysisResult.knowledgeDistribution,
-        cognitiveFocus: goalAnalysisResult.cognitiveFocus
+        cognitiveFocus: goalAnalysisResult.cognitiveFocus,
+        cognitiveCore: pathCognitiveDesign
       });
 
       const taskLabels = labelerResult.labels || [];
@@ -1770,7 +2085,7 @@ class LearningService {
               cognitiveLevel: label.cognitiveLevel || null,
               displayLabel: label.displayLabel || null,
               learningObjectives: label.learningObjectives ? JSON.stringify(label.learningObjectives) : null,
-              coreConcept: label.coreConcept || null,
+              coreConcept: label.resolvedConceptName || label.coreConcept || null,
               transferable: label.transferable ?? false,
               annotationConfidence: label.confidence || null,
               updatedAt: new Date()
@@ -2030,7 +2345,7 @@ const learningPath = await prisma.learning_paths.findUnique({
                   userId: data.userId,
                   title: task.title,
                   description: task.description,
-                  taskType: task.type || 'practice',
+                  taskType: normalizePathTaskType(task.type),
                   estimatedMinutes: task.estimatedMinutes || 30,
                   acceptanceCriteria: task.acceptanceCriteria || '',
                   status: 'todo',
@@ -2048,7 +2363,7 @@ const learningPath = await prisma.learning_paths.findUnique({
                 userId: data.userId,
                 title: milestone.title || `里程碑${stageNum}学习任务`,
                 description: milestone.description || milestone.goal || '完成本里程碑学习内容',
-                taskType: 'practice',
+                taskType: 'execute',
                 estimatedMinutes: 30,
                 status: 'todo',
                 updatedAt: new Date()
@@ -2064,7 +2379,7 @@ const learningPath = await prisma.learning_paths.findUnique({
               userId: data.userId,
               title: milestone.title || `里程碑${stageNum}学习任务`,
               description: milestone.description || milestone.goal || '完成本里程碑学习内容',
-              taskType: 'practice',
+              taskType: 'execute',
               estimatedMinutes: 30,
               status: 'todo',
               updatedAt: new Date()

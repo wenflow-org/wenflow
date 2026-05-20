@@ -75,6 +75,17 @@ export interface TaskToLabel {
   description?: string;
   week?: number;
   order?: number;
+  linkedConcept?: string | null;
+}
+
+export interface CognitiveCoreInput {
+  cognitiveDomain?: string;
+  coreConcepts?: Array<{
+    id?: string;
+    name?: string;
+    role?: string;
+    description?: string;
+  }>;
 }
 
 export interface AndersonLabel {
@@ -82,7 +93,10 @@ export interface AndersonLabel {
   knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive';
   cognitiveLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
   learningObjectives: string[];
-  coreConcept: string;
+  coreConcept: string | null;
+  resolvedConceptId?: string | null;
+  resolvedConceptName?: string | null;
+  conceptValidationStatus?: 'resolved' | 'missing' | 'invalid';
   transferable: boolean;
   confidence: number;
 }
@@ -92,6 +106,7 @@ export interface BatchLabelerInput {
   goalType?: string;
   knowledgeDistribution?: Record<string, number>;
   cognitiveFocus?: Record<string, number>;
+  cognitiveCore?: CognitiveCoreInput | null;
 }
 
 export interface BatchLabelerOutput {
@@ -121,6 +136,11 @@ const BATCH_LABELER_SYSTEM_PROMPT = `你是教育标注专家，使用安德森�
 - transferable=true: 该能力可以迁移到其他领域或场景，如"问题分解思维"
 - transferable=false: 该能力仅限于当前领域，如"特定软件的快捷键"
 
+【概念约束】
+- 不要自由发明 coreConcept
+- 如果任务提供了 linkedConcept，请只围绕该概念引用做教学画像判断
+- coreConcept 只是兼容展示字段，应复用已给定概念名；如果无法解析，则置空
+
 【输出格式】
 请严格按照以下 JSON 数组格式输出，不要添加任何其他内容：
 [
@@ -129,7 +149,6 @@ const BATCH_LABELER_SYSTEM_PROMPT = `你是教育标注专家，使用安德森�
     "knowledgeType": "知识类型",
     "cognitiveLevel": "认知层级",
     "learningObjectives": ["目标1", "目标2"],
-    "coreConcept": "核心概念一句话",
     "transferable": true/false,
     "confidence": 0-1
   }
@@ -138,7 +157,7 @@ const BATCH_LABELER_SYSTEM_PROMPT = `你是教育标注专家，使用安德森�
 注意：
 1. 每个任务必须标注
 2. learningObjectives 应具体、可衡量
-3. coreConcept 应简洁明了
+3. 不要输出自由概念命名；概念解析由平台根据 linkedConcept 与 cognitiveCore 完成
 4. confidence 反映标注的确定性`;
 
 export async function batchAndersonLabeler(
@@ -147,7 +166,7 @@ export async function batchAndersonLabeler(
   const startTime = Date.now();
   
   try {
-    const { tasks, goalType, knowledgeDistribution, cognitiveFocus } = input;
+    const { tasks, goalType, knowledgeDistribution, cognitiveFocus, cognitiveCore } = input;
     
     if (!tasks || tasks.length === 0) {
       return {
@@ -166,6 +185,9 @@ export async function batchAndersonLabeler(
 【目标类型】${goalType || '未指定'}
 【建议知识分布】${knowledgeDistribution ? JSON.stringify(knowledgeDistribution) : '未指定'}
 【建议认知层级分布】${cognitiveFocus ? JSON.stringify(cognitiveFocus) : '未指定'}
+
+【概念图谱】
+${cognitiveCore ? JSON.stringify(cognitiveCore, null, 2) : '未提供'}
 
 【待标注任务列表】（共 ${tasks.length} 个）
 ${tasksJson}
@@ -205,7 +227,7 @@ ${tasksJson}
     const content = response.choices[0].message.content || '';
     console.log('[BatchAndersonLabeler] 内容长度:', content.length);
     
-    const labels = parseLabels(content, tasks);
+    const labels = parseLabels(content, tasks, cognitiveCore);
     const overallConfidence = calculateOverallConfidence(labels);
     
     return {
@@ -229,7 +251,51 @@ ${tasksJson}
   }
 }
 
-function parseLabels(content: string, tasks: TaskToLabel[]): AndersonLabel[] {
+function buildConceptMap(cognitiveCore?: CognitiveCoreInput | null): Map<string, { id: string; name: string }> {
+  const map = new Map<string, { id: string; name: string }>();
+  const concepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore!.coreConcepts! : [];
+  for (const concept of concepts) {
+    const id = typeof concept?.id === 'string' ? concept.id.trim() : '';
+    const name = typeof concept?.name === 'string' ? concept.name.trim() : '';
+    if (!id || !name) continue;
+    map.set(id, { id, name });
+  }
+  return map;
+}
+
+function resolveConceptForTask(
+  task: TaskToLabel,
+  conceptMap: Map<string, { id: string; name: string }>
+): Pick<AndersonLabel, 'coreConcept' | 'resolvedConceptId' | 'resolvedConceptName' | 'conceptValidationStatus'> {
+  const linkedConceptId = typeof task.linkedConcept === 'string' ? task.linkedConcept.trim() : '';
+  if (!linkedConceptId) {
+    return {
+      coreConcept: null,
+      resolvedConceptId: null,
+      resolvedConceptName: null,
+      conceptValidationStatus: 'missing'
+    };
+  }
+
+  const concept = conceptMap.get(linkedConceptId);
+  if (!concept) {
+    return {
+      coreConcept: null,
+      resolvedConceptId: linkedConceptId,
+      resolvedConceptName: null,
+      conceptValidationStatus: 'invalid'
+    };
+  }
+
+  return {
+    coreConcept: concept.name,
+    resolvedConceptId: concept.id,
+    resolvedConceptName: concept.name,
+    conceptValidationStatus: 'resolved'
+  };
+}
+
+function parseLabels(content: string, tasks: TaskToLabel[], cognitiveCore?: CognitiveCoreInput | null): AndersonLabel[] {
   try {
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
@@ -240,6 +306,7 @@ function parseLabels(content: string, tasks: TaskToLabel[]): AndersonLabel[] {
     
     const validKnowledgeTypes = ['factual', 'conceptual', 'procedural', 'metacognitive'];
     const validCognitiveLevels = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
+    const conceptMap = buildConceptMap(cognitiveCore);
     
     const labels: AndersonLabel[] = [];
     
@@ -260,7 +327,7 @@ function parseLabels(content: string, tasks: TaskToLabel[]): AndersonLabel[] {
         learningObjectives: Array.isArray(item.learningObjectives) 
           ? item.learningObjectives 
           : [task.title],
-        coreConcept: item.coreConcept || task.title,
+        ...resolveConceptForTask(task, conceptMap),
         transferable: Boolean(item.transferable),
         confidence: Math.min(1, Math.max(0, item.confidence || 0.7))
       });
@@ -273,7 +340,7 @@ function parseLabels(content: string, tasks: TaskToLabel[]): AndersonLabel[] {
           knowledgeType: inferKnowledgeType(task),
           cognitiveLevel: inferCognitiveLevel(task),
           learningObjectives: [task.title],
-          coreConcept: task.title,
+          ...resolveConceptForTask(task, conceptMap),
           transferable: false,
           confidence: 0.5
         });
@@ -283,13 +350,14 @@ function parseLabels(content: string, tasks: TaskToLabel[]): AndersonLabel[] {
     return labels;
   } catch (parseError) {
     console.warn('[BatchAndersonLabeler] 解析失败，使用推断值:', parseError);
+    const conceptMap = buildConceptMap(cognitiveCore);
     
     return tasks.map(task => ({
       taskId: task.id,
       knowledgeType: inferKnowledgeType(task),
       cognitiveLevel: inferCognitiveLevel(task),
       learningObjectives: [task.title],
-      coreConcept: task.title,
+      ...resolveConceptForTask(task, conceptMap),
       transferable: false,
       confidence: 0.5
     }));

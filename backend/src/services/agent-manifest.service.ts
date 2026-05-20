@@ -6,7 +6,8 @@ export type MonitoringGroupName =
   | 'Teaching'
   | 'TeachingOrchestration'
   | 'LearningCompanion'
-  | 'SessionWrapup';
+  | 'SessionWrapup'
+  | 'Simulation';
 
 export interface AgentManifestEntry {
   id: string;
@@ -129,6 +130,21 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: {
       temperature: 0.2,
       maxTokens: 2200
+    }
+  },
+  {
+    id: 'virtual-learner-simulation-agent',
+    name: '虚拟学习者模拟 Agent',
+    description: '扮演虚拟用户，模拟真实学习者对话行为',
+    category: 'simulation',
+    kind: 'agent',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Simulation',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: {
+      temperature: 0.8,
+      maxTokens: 500
     }
   },
   {

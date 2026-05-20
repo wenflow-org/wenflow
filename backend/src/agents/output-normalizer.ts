@@ -13,6 +13,16 @@ export function normalizeAgentOutput(agentId: string, raw: any): AgentOutput {
     schemaVersion: raw?.schemaVersion || 'agent-output-v1'
   };
 
+  // 保留 generatedProfile 字段（虚拟用户画像生成）
+  if (raw?.generatedProfile) {
+    return {
+      ...base,
+      userVisible: base.userVisible || '画像已生成',
+      internal: base.internal || { generatedProfile: raw.generatedProfile },
+      generatedProfile: raw.generatedProfile
+    };
+  }
+
   if (base.userVisible && base.internal) {
     return base;
   }

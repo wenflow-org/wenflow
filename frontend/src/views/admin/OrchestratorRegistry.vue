@@ -259,6 +259,160 @@
                 <el-empty v-else description="暂无编排流程配置" />
               </div>
             </el-tab-pane>
+            <el-tab-pane v-if="currentDesign?.agentId === 'path-orchestrator'" label="输入接入配置">
+              <div class="flow-panel">
+                <div class="flow-description">
+                  <p>配置 Path orchestrator 从 Goal Final Payload 接入哪些字段到 normalized input。当前版本会将可见对话消息全部透传为运行上下文。</p>
+                </div>
+
+                <template v-if="orchestratorConfig">
+                  <el-form label-position="top" class="orchestrator-config-form">
+                    <el-form-item label="descriptionSources">
+                      <el-select v-model="orchestratorConfig.normalizedInput.descriptionSources" multiple filterable allow-create default-first-option style="width: 100%">
+                        <el-option v-for="item in orchestratorConfigSourcePaths.descriptionSources || []" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="subjectSources">
+                      <el-select v-model="orchestratorConfig.normalizedInput.subjectSources" multiple filterable allow-create default-first-option style="width: 100%">
+                        <el-option v-for="item in orchestratorConfigSourcePaths.subjectSources || []" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="skillLevelSources">
+                      <el-select v-model="orchestratorConfig.normalizedInput.skillLevelSources" multiple filterable allow-create default-first-option style="width: 100%">
+                        <el-option v-for="item in orchestratorConfigSourcePaths.skillLevelSources || []" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="timePerDaySources">
+                      <el-select v-model="orchestratorConfig.normalizedInput.timePerDaySources" multiple filterable allow-create default-first-option style="width: 100%">
+                        <el-option v-for="item in orchestratorConfigSourcePaths.timePerDaySources || []" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="deadlineTextSources">
+                      <el-select v-model="orchestratorConfig.normalizedInput.deadlineTextSources" multiple filterable allow-create default-first-option style="width: 100%">
+                        <el-option v-for="item in orchestratorConfigSourcePaths.deadlineTextSources || []" :key="item" :label="item" :value="item" />
+                      </el-select>
+                    </el-form-item>
+
+                    <div class="chip-section">
+                      <div class="chip-row chip-row--switches">
+                        <span class="chip-label">includeStructuredData</span>
+                        <el-switch v-model="orchestratorConfig.normalizedInput.includeStructuredData" />
+                      </div>
+                      <div class="chip-row chip-row--switches">
+                        <span class="chip-label">includeConfirmedProposal</span>
+                        <el-switch v-model="orchestratorConfig.normalizedInput.includeConfirmedProposal" />
+                      </div>
+                      <div class="chip-row chip-row--switches">
+                        <span class="chip-label">includeConfidenceScores</span>
+                        <el-switch v-model="orchestratorConfig.normalizedInput.includeConfidenceScores" />
+                      </div>
+                      <div class="chip-row chip-row--switches">
+                        <span class="chip-label">includeConversationHistory</span>
+                        <el-switch v-model="orchestratorConfig.normalizedInput.includeConversationHistory" />
+                      </div>
+                    </div>
+
+                    <div class="member-config-actions">
+                      <el-button @click="loadOrchestratorPreview(currentDesign?.agentId)">刷新预览</el-button>
+                      <el-button @click="resetOrchestratorConfigToDefault">恢复默认</el-button>
+                      <el-button type="primary" @click="saveOrchestratorConfig" :loading="savingOrchestratorConfig">保存配置</el-button>
+                    </div>
+                  </el-form>
+
+                  <div class="contract-grid contract-grid--preview">
+                    <section class="contract-card">
+                      <span class="chip-label">样例 Goal 最终输入</span>
+                      <p>编辑一份样例 Goal 最终输入，用当前配置预览标准化运行输入。</p>
+                      <el-input :model-value="previewSampleGoalFinalPayloadText" type="textarea" :rows="18" readonly />
+                    </section>
+                    <section class="contract-card">
+                      <span class="chip-label">预览标准化运行输入</span>
+                      <p>这里显示当前输入接入配置生成的兼容运行输入，其中包含新的 `normalizedInput` 主结构。</p>
+                      <div v-loading="previewLoading">
+                        <pre class="sample-json">{{ prettyJson(previewNormalizedInput) }}</pre>
+                      </div>
+                    </section>
+                    <section class="contract-card">
+                      <span class="chip-label">预览辅助证据</span>
+                      <p>这里显示编排层传给下游的辅助证据结构，仅供 `reference_only` 使用。</p>
+                      <div v-loading="previewLoading">
+                        <pre class="sample-json">{{ prettyJson(previewSupportingEvidence) }}</pre>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div class="orchestrator-run-preview">
+                    <div class="preview-run-header">
+                      <h4>编排器运行 Preview</h4>
+                      <el-button type="primary" :loading="runPreviewLoading" @click="runOrchestratorPreview">运行编排器</el-button>
+                    </div>
+                    <div class="contract-grid contract-grid--preview">
+                      <section class="contract-card">
+                        <span class="chip-label">运行输入</span>
+                        <el-input
+                          v-model="runPreviewInputText"
+                          type="textarea"
+                          :rows="14"
+                          class="preview-textarea"
+                        />
+                        <div class="preview-hint">可编辑输入，或从上方“预览标准化运行输入”复制</div>
+                      </section>
+                      <section class="contract-card">
+                        <span class="chip-label">编排器输出</span>
+                        <pre v-if="runPreviewOutput" class="sample-json">{{ prettyJson(runPreviewOutput) }}</pre>
+                        <el-empty v-else description="点击运行编排器查看输出" />
+                      </section>
+                    </div>
+                  </div>
+                </template>
+                <el-empty v-else description="暂无输入接入配置" />
+              </div>
+            </el-tab-pane>
+            <el-tab-pane v-if="currentDesign?.agentId === 'path-orchestrator'" label="数据契约">
+              <div class="flow-panel">
+                <div class="flow-description">
+                  <p>查看 Path orchestrator 的正式入口对象、派生运行输入，以及最终输出契约。</p>
+                </div>
+                <template v-if="orchestratorDataContract">
+                  <div class="contract-grid">
+                    <section class="contract-card">
+                      <span class="chip-label">正式入口对象</span>
+                      <h4>{{ orchestratorDataContract.entryPayload.name }}</h4>
+                      <p>{{ orchestratorDataContract.entryPayload.description }}</p>
+                      <div class="contract-field-list">
+                        <div v-for="field in orchestratorDataContract.entryPayload.fields" :key="field.key" class="contract-field-item">
+                          <strong>{{ field.key }}</strong>
+                          <span>{{ field.description }}</span>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="contract-card">
+                      <span class="chip-label">派生运行输入</span>
+                      <h4>{{ orchestratorDataContract.derivedInput.name }}</h4>
+                      <p>{{ orchestratorDataContract.derivedInput.description }}</p>
+                      <div class="contract-field-list">
+                        <div v-for="field in orchestratorDataContract.derivedInput.fields" :key="field.key" class="contract-field-item">
+                          <strong>{{ field.key }}</strong>
+                          <span>{{ field.description }}</span>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="contract-card">
+                      <span class="chip-label">输出契约</span>
+                      <h4>{{ orchestratorDataContract.outputContract.name }}</h4>
+                      <p>{{ orchestratorDataContract.outputContract.description }}</p>
+                      <div class="contract-field-list">
+                        <div v-for="field in orchestratorDataContract.outputContract.fields" :key="field.key" class="contract-field-item">
+                          <strong>{{ field.key }}</strong>
+                          <span>{{ field.description }}</span>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </template>
+                <el-empty v-else description="暂无数据契约信息" />
+              </div>
+            </el-tab-pane>
             <el-tab-pane label="Recent Samples">
               <div class="sample-block">
                 <h4>orchestrator_call_logs</h4>
@@ -319,7 +473,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Connection, Refresh, Plus } from '@element-plus/icons-vue';
-import { adminAgentsApi, adminAxios, type AdminRegistryAgent, type AgentDesignDetail } from '@/api/adminApi';
+import {
+  adminAgentsApi,
+  adminAxios,
+  type AdminRegistryAgent,
+  type AgentDesignDetail,
+  type PathOrchestratorInputConfig,
+  type OrchestratorDataContractSection,
+  type PathOrchestratorNormalizedInputPreview
+} from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 
 const loading = ref(false);
@@ -344,6 +506,23 @@ const currentDesign = ref<AgentDesignDetail | null>(null);
 
 const orchestratorMembers = ref<any[]>([]);
 const savingMembers = ref(false);
+const orchestratorConfig = ref<PathOrchestratorInputConfig | null>(null);
+const orchestratorConfigDefaults = ref<PathOrchestratorInputConfig | null>(null);
+const orchestratorConfigSourcePaths = ref<Record<string, string[]>>({});
+const savingOrchestratorConfig = ref(false);
+const orchestratorDataContract = ref<{
+  entryPayload: OrchestratorDataContractSection;
+  derivedInput: OrchestratorDataContractSection;
+  outputContract: OrchestratorDataContractSection;
+} | null>(null);
+const previewSampleGoalFinalPayload = ref<Record<string, any> | null>(null);
+const previewNormalizedInput = ref<PathOrchestratorNormalizedInputPreview | null>(null);
+const previewSupportingEvidence = ref<any | null>(null);
+const previewLoading = ref(false);
+
+const runPreviewLoading = ref(false);
+const runPreviewInputText = ref('');
+const runPreviewOutput = ref<any>(null);
 
 const addMemberDialogVisible = ref(false);
 const newMemberForm = ref({
@@ -359,7 +538,8 @@ const orchestratorIds = new Set([
   'ai-teaching-agent',
   'requirement-orchestrator',
   'path-orchestrator',
-  'goal-conversation-orchestrator'
+  'goal-conversation-orchestrator',
+  'simulation-orchestrator'
 ]);
 
 const isOrchestrator = (agent: AdminRegistryAgent) => {
@@ -386,7 +566,8 @@ const getMemberCount = (orchestratorId: string) => {
     'ai-teaching-agent': 4,
     'requirement-orchestrator': 2,
     'path-orchestrator': 3,
-    'goal-conversation-orchestrator': 2
+    'goal-conversation-orchestrator': 2,
+    'simulation-orchestrator': 1
   };
   return countMap[orchestratorId] || 0;
 };
@@ -441,6 +622,9 @@ const openMemberDrawer = async (orchestrator: AdminRegistryAgent) => {
         { agentId: 'path-agent', name: '路径生成 Agent', role: 'leader', enabled: true, callCount: 120 },
         { agentId: 'content-agent', name: '内容准备 Agent', role: 'worker', enabled: true, callCount: 80 },
         { agentId: 'validation-agent', name: '路径验证 Agent', role: 'validator', enabled: false, callCount: 0 }
+      ],
+      'simulation-orchestrator': [
+        { agentId: 'virtual-learner-simulation-agent', name: '虚拟学习者模拟 Agent', role: 'worker', enabled: true, callCount: 0 }
       ]
     };
     memberAgents.value = mockMembers[orchestrator.agentId] || [];
@@ -454,18 +638,146 @@ const openDesign = async (orchestrator: AdminRegistryAgent) => {
   designLoading.value = true;
   currentDesign.value = null;
   orchestratorMembers.value = [];
+  orchestratorConfig.value = null;
+  orchestratorConfigDefaults.value = null;
+  orchestratorConfigSourcePaths.value = {};
+  orchestratorDataContract.value = null;
+  previewSampleGoalFinalPayload.value = null;
+  previewNormalizedInput.value = null;
+  runPreviewOutput.value = null;
+  runPreviewInputText.value = '';
 
   try {
     const designResponse = await adminAgentsApi.getAgentDesign(orchestrator.agentId);
     currentDesign.value = (designResponse as any).data.data;
-
-    const membersResponse = await adminAxios.get(`/admin/orchestrator-members/${orchestrator.agentId}`);
-    orchestratorMembers.value = membersResponse.data?.data?.members || [];
   } catch (error) {
     console.error('加载编排器详情失败:', error);
     toast.error('加载编排器详情失败');
   } finally {
+    try {
+      const membersResponse = await adminAxios.get(`/admin/orchestrator-members/${orchestrator.agentId}`);
+      orchestratorMembers.value = membersResponse.data?.data?.members || [];
+    } catch (memberError) {
+      console.error('加载编排器成员失败:', memberError);
+      orchestratorMembers.value = [];
+    }
+
+    if (orchestrator.agentId === 'path-orchestrator') {
+      try {
+        const configResponse = await adminAgentsApi.getOrchestratorConfig(orchestrator.agentId);
+        orchestratorConfig.value = JSON.parse(JSON.stringify((configResponse as any).data.data.config));
+        orchestratorConfigDefaults.value = JSON.parse(JSON.stringify((configResponse as any).data.data.defaults));
+        orchestratorConfigSourcePaths.value = (configResponse as any).data.data.availableSourcePaths || {};
+      } catch (configError) {
+        console.error('加载编排器输入接入配置失败:', configError);
+        orchestratorConfig.value = null;
+        orchestratorConfigDefaults.value = null;
+        orchestratorConfigSourcePaths.value = {};
+      }
+
+      try {
+        const contractResponse = await adminAgentsApi.getOrchestratorDataContract(orchestrator.agentId);
+        orchestratorDataContract.value = (contractResponse as any).data.data;
+      } catch (contractError) {
+        console.error('加载编排器数据契约失败:', contractError);
+        orchestratorDataContract.value = null;
+      }
+
+      previewSampleGoalFinalPayload.value = {
+        sourceConversationId: 'gc_preview',
+        existingPathId: 'lp_preview',
+        rawGoal: '作为辅导者，面对一名初中生上课发呆、不做练习，不知道如何系统诊断行为背后的障碍。',
+        stage: 'ready',
+        confidence: 0.92,
+        finalUserVisible: '建议先建立一个行为观察与原因分类框架，再去真实学生身上试用。',
+        understanding: {
+          real_problem: '作为辅导者，面对一名初中生上课发呆、不做练习，不知道如何系统诊断行为背后的障碍。',
+          background: {
+            current_level: 'beginner',
+            available_time: '1 小时'
+          },
+          available_resources: {
+            time_budget: '每周半天',
+            time_horizon: '2 周'
+          }
+        },
+        collected: {
+          level: 'beginner',
+          timePerDay: '1 小时'
+        },
+        structuredData: null,
+        confirmedProposal: {
+          learning_direction: '先学会一个系统化的行为观察与原因分类框架。'
+        },
+        confidenceScores: null,
+        conversationHistory: [
+          { role: 'user', content: '我想提升辅导学生的能力。' },
+          { role: 'assistant', content: '你具体卡在哪个场景？' },
+          { role: 'user', content: '一个初中生上课发呆，不做练习，我不知道怎么判断原因。' }
+        ]
+      };
+      await loadOrchestratorPreview(orchestrator.agentId);
+    }
+
     designLoading.value = false;
+  }
+};
+
+const loadOrchestratorPreview = async (orchestratorId?: string) => {
+  if (!orchestratorId || !previewSampleGoalFinalPayload.value) return;
+  previewLoading.value = true;
+  try {
+    const response = await adminAgentsApi.previewOrchestratorConfig(orchestratorId, previewSampleGoalFinalPayload.value);
+    previewNormalizedInput.value = (response as any).data.data.normalizedInput || null;
+    previewSupportingEvidence.value = (response as any).data.data.supportingEvidence || null;
+  } catch (error) {
+    console.error('加载编排器配置预览失败:', error);
+    previewNormalizedInput.value = null;
+    previewSupportingEvidence.value = null;
+  } finally {
+    previewLoading.value = false;
+  }
+};
+
+const runOrchestratorPreview = async () => {
+  if (!currentDesign.value?.agentId || !runPreviewInputText.value.trim()) return;
+
+  let parsedInput: any;
+  try {
+    parsedInput = JSON.parse(runPreviewInputText.value);
+  } catch {
+    toast.error('运行输入不是合法 JSON');
+    return;
+  }
+
+  runPreviewLoading.value = true;
+  try {
+    const res = await adminAgentsApi.testAgent(currentDesign.value.agentId, parsedInput);
+    runPreviewOutput.value = res.data?.data?.output ?? null;
+  } catch (error: any) {
+    toast.error(error?.response?.data?.error || '编排器预览失败');
+    runPreviewOutput.value = { error: error?.response?.data?.error || '编排器预览失败' };
+  } finally {
+    runPreviewLoading.value = false;
+  }
+};
+
+const resetOrchestratorConfigToDefault = () => {
+  if (!orchestratorConfigDefaults.value) return;
+  orchestratorConfig.value = JSON.parse(JSON.stringify(orchestratorConfigDefaults.value));
+};
+
+const saveOrchestratorConfig = async () => {
+  if (!currentDesign.value?.agentId || !orchestratorConfig.value) return;
+  savingOrchestratorConfig.value = true;
+  try {
+    await adminAgentsApi.updateOrchestratorConfig(currentDesign.value.agentId, orchestratorConfig.value);
+    toast.success('输入接入配置已保存');
+  } catch (error) {
+    console.error('保存编排器配置失败:', error);
+    toast.error('保存输入接入配置失败');
+  } finally {
+    savingOrchestratorConfig.value = false;
   }
 };
 
@@ -555,6 +867,8 @@ const prettyJson = (value: any) => {
   return JSON.stringify(value, null, 2);
 };
 
+const previewSampleGoalFinalPayloadText = computed(() => prettyJson(previewSampleGoalFinalPayload.value));
+
 onMounted(loadRegistry);
 </script>
 
@@ -637,6 +951,17 @@ onMounted(loadRegistry);
 .member-config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .member-config-header h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
 .member-config-actions { margin-top: 1rem; display: flex; justify-content: flex-end; }
+.orchestrator-config-form { display: grid; gap: 0.5rem; }
+.chip-row--switches { justify-content: space-between; }
+.contract-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.contract-card { padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--glass-bg-light); display: grid; gap: 0.75rem; }
+.contract-card h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.contract-card p { font-size: 0.8125rem; color: var(--text-secondary); margin: 0; line-height: 1.6; }
+.contract-grid--preview { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
+.contract-field-list { display: grid; gap: 0.75rem; }
+.contract-field-item { display: grid; gap: 0.25rem; padding: 0.75rem; border-radius: 12px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(52, 120, 246, 0.08); }
+.contract-field-item strong { font-size: 0.8125rem; color: var(--text-primary); }
+.contract-field-item span { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.5; }
 
 .flow-panel { padding: 1rem; }
 .flow-description { margin-bottom: 1rem; font-size: 0.875rem; color: var(--text-secondary); }
@@ -652,9 +977,17 @@ onMounted(loadRegistry);
 .sample-block h4 { font-size: 0.875rem; font-weight: 700; margin-bottom: 0.75rem; }
 .sample-json { font-family: monospace; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: var(--radius-md); overflow: auto; max-height: 300px; }
 
+.orchestrator-run-preview { margin-top: 2rem; border-top: 1px solid rgba(52, 120, 246, 0.08); padding-top: 1.5rem; }
+.preview-run-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.preview-run-header h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.preview-textarea :deep(.el-textarea__inner) { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.875rem; border-radius: 16px; background: rgba(52, 120, 246, 0.03); border-color: rgba(52, 120, 246, 0.08); }
+.preview-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+
 @media (max-width: 768px) {
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .admin-list-toolbar { flex-direction: column; align-items: stretch; }
   .admin-list-toolbar__group { justify-content: space-between; }
+  .contract-grid,
+  .contract-grid--preview { grid-template-columns: 1fr; }
 }
 </style>

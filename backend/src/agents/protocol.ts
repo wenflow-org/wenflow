@@ -6,18 +6,18 @@
  */
 
 // Agent 类型
-export type AgentType = 'path' | 'content' | 'tutor' | 'progress' | 'profile' | 'custom' | 'teaching' | 'evaluation';
+export type AgentType = 'path' | 'content' | 'tutor' | 'progress' | 'profile' | 'custom' | 'teaching' | 'evaluation' | 'orchestrator';
 
 // Agent 分类
-export type AgentCategory = 'standard' | 'custom';
+export type AgentCategory = 'standard' | 'custom' | 'simulation';
 
 // Agent 输入 Schema
 export interface AgentInput {
   // 需求类型
-  type: 'standard' | 'custom';
+  type?: 'standard' | 'custom';
   
   // 学习目标
-  goal: string;
+  goal?: string;
   
   // 非标准化场景描述（可选）
   scenario?: string;
@@ -102,6 +102,14 @@ export interface AgentOutput {
     suggestedActions?: string[];
   };
   
+  // 反应输出（virtual-learner-simulation-agent）
+  reactionOutput?: {
+    reaction: string;
+    decision: 'accept' | 'modify' | 'reject';
+    modifyRequest?: string;
+    confidence: number;
+  };
+  
   // 进度输出（progress-agent）
   progress?: {
     signal: LearningSignal;
@@ -118,8 +126,20 @@ export interface AgentOutput {
     generatedAt: string; // ISO 8601
   };
 
-  // 调试信息（可选）
+  // 虚拟学习者画像输出（virtual-learner-simulation-agent）
+  generatedProfile?: Record<string, any>;
+
+  // 虚拟学习者回复（virtual-learner-simulation-agent）
+  userReply?: string;
+
+// 调试信息（可选）
   debug?: Record<string, any>;
+}
+
+// 对话消息
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
 }
 
 // 里程碑输出
@@ -251,7 +271,7 @@ export interface AgentDefinition {
 export interface AgentContext {
   userId: string;
   sessionId?: string;
-  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab';
+  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
   conversationHistory?: Array<{
     role: 'user' | 'assistant' | 'system';
     content: string;

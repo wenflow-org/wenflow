@@ -12,6 +12,12 @@ import {
   listAgentManifest
 } from '../../services/agent-manifest.service';
 import { getGateway } from '../../gateway';
+import {
+  DEFAULT_PATH_ORCHESTRATOR_INPUT_CONFIG,
+  getPathOrchestratorInputConfig,
+  savePathOrchestratorInputConfig
+} from '../../services/orchestratorConfig.service';
+import pathOrchestrator from '../../orchestrators/path.orchestrator';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -961,6 +967,259 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
         status: 500
       }
     });
+  }
+});
+
+router.get('/orchestrator-members/:orchestratorId', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '需要管理员权限' }
+      });
+    }
+
+    const { orchestratorId } = req.params;
+    const relation = ORCHESTRATOR_RELATIONS.find((item) => item.orchestratorId === orchestratorId);
+
+    if (!relation) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '编排器不存在' }
+      });
+    }
+
+    const manifestMap = new Map(listAgentManifest().map(item => [item.id, item]));
+    const memberIds = Array.from(new Set((relation.members || []).map(getCanonicalAgentId)));
+    const registrations = await prisma.agent_registrations.findMany({
+      where: { id: { in: memberIds } },
+      select: { id: true, name: true, type: true }
+    });
+    const registrationMap = new Map(registrations.map(item => [item.id, item]));
+
+    const members = memberIds.map((memberId, index) => {
+      const registration = registrationMap.get(memberId);
+      const manifest = manifestMap.get(memberId);
+      return {
+        agentId: memberId,
+        name: registration?.name || manifest?.name || memberId,
+        role: inferRuntimeRole(memberId, registration?.type),
+        enabled: true,
+        order: index,
+        callCount: 0
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        orchestratorId,
+        members
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: {
+        message: error.message || '获取编排器成员失败',
+        status: 500
+      }
+    });
+  }
+});
+
+router.get('/orchestrators/:orchestratorId/config', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const { orchestratorId } = req.params;
+    if (orchestratorId !== 'path-orchestrator') {
+      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器配置' } });
+    }
+
+    const config = await getPathOrchestratorInputConfig();
+
+    res.json({
+      success: true,
+      data: {
+        orchestratorId,
+        config,
+        defaults: DEFAULT_PATH_ORCHESTRATOR_INPUT_CONFIG,
+        availableSourcePaths: {
+          descriptionSources: ['understanding.real_problem', 'rawGoal'],
+          subjectSources: ['structuredData.subject', 'collected.subject'],
+          skillLevelSources: ['understanding.background.current_level', 'collected.level'],
+          timePerDaySources: ['understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
+          deadlineTextSources: ['understanding.available_resources.time_horizon', 'understanding.deadline_text'],
+          flags: ['includeStructuredData', 'includeConfirmedProposal', 'includeConfidenceScores', 'includeConversationHistory']
+        }
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '获取编排器配置失败', status: 500 } });
+  }
+});
+
+router.put('/orchestrators/:orchestratorId/config', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const { orchestratorId } = req.params;
+    if (orchestratorId !== 'path-orchestrator') {
+      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器配置' } });
+    }
+
+    const config = await savePathOrchestratorInputConfig(req.body || {});
+    res.json({ success: true, data: { orchestratorId, config } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '保存编排器配置失败', status: 500 } });
+  }
+});
+
+router.get('/orchestrators/:orchestratorId/data-contract', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const { orchestratorId } = req.params;
+    if (orchestratorId !== 'path-orchestrator') {
+      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器数据契约' } });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        orchestratorId,
+        entryPayload: {
+          name: 'goalFinalPayload',
+          description: 'Goal 阶段最终产出并正式交给 Path 的入口对象。',
+          fields: [
+            { key: 'sourceConversationId', description: 'Goal 会话关联 ID。' },
+            { key: 'rawGoal', description: '用户原始目标表述。' },
+            { key: 'stage', description: 'Goal 最终确认时的阶段。' },
+            { key: 'confidence', description: 'Goal 阶段对当前收敛结果的置信度。' },
+            { key: 'finalUserVisible', description: 'Goal 最后一次面向用户的确认文本。' },
+            { key: 'understanding', description: 'Goal 阶段结构化理解结果。' },
+            { key: 'collected', description: 'Goal 聚合后的补充收集信息。' },
+            { key: 'structuredData', description: 'Goal 附带的更强结构化数据。' },
+            { key: 'confirmedProposal', description: '用户已确认的方向、交付物和阶段。' },
+            { key: 'confidenceScores', description: '关键维度的置信分数。' },
+            { key: 'conversationHistory', description: '全部可见消息，上下文辅助证据。' }
+          ]
+        },
+        derivedInput: {
+          name: 'normalizedInput',
+          description: 'Path orchestrator 基于字段接入配置生成的运行输入。',
+          fields: [
+            { key: 'description', description: '供 Path 规划使用的主问题描述。' },
+            { key: 'subject', description: '如能识别则接入的主题字段。' },
+            { key: 'deadlineText', description: '时间窗口的文本表达。' },
+            { key: 'sourceConversationId', description: '保留 Goal 会话关联。' },
+            { key: 'existingPathId', description: '重试或覆盖时沿用的路径 ID。' },
+            { key: 'skillLevel', description: '当前水平信号。' },
+            { key: 'timePerDay', description: '时间投入信号。' },
+            { key: 'structuredData', description: '按开关决定是否透传。' },
+            { key: 'confirmedProposal', description: '按开关决定是否透传。' },
+            { key: 'confidenceScores', description: '按开关决定是否透传。' },
+            { key: 'conversationHistory', description: '全部可见消息，上下文运行证据。' }
+          ]
+        },
+        framingContract: {
+          name: 'pathSceneFraming',
+          description: 'Path 清洗层输出的标准结构，供下游以 normalizedInput 为主、supportingEvidence 为辅消费。',
+          fields: [
+            { key: 'normalizedInput', description: '清洗后的主输入结构，不含编排控制字段。' },
+            { key: 'supportingEvidence', description: '固定结构的辅助证据，只作参考，不作主真相源。' }
+          ]
+        },
+        outputContract: {
+          name: 'Path Output',
+          description: 'Path 主流程最终持久化输出的核心结构。',
+          fields: [
+            { key: 'pathName', description: '最终路径名称。' },
+            { key: 'subject', description: '最终路径主题。' },
+            { key: 'taskChain', description: '用户可见的阶段与任务主体结构。' },
+            { key: 'cognitiveCore', description: '隐藏认知结构与核心概念。' },
+            { key: 'suggestedMilestones', description: '兼容现有系统的阶段与任务结构快照。' },
+            { key: 'cognitiveDesign', description: '兼容现有系统的认知设计镜像。' },
+            { key: 'adjustmentPolicy', description: '后续 expand/compress/replan 策略。' },
+            { key: 'adjustmentEvidence', description: '支持后续调整的证据字段。' }
+          ]
+        }
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '获取编排器数据契约失败', status: 500 } });
+  }
+});
+
+router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const { orchestratorId } = req.params;
+    if (orchestratorId !== 'path-orchestrator') {
+      return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器预览' } });
+    }
+
+    const sample = req.body?.sampleGoalFinalPayload;
+    if (!sample || typeof sample !== 'object') {
+      return res.status(400).json({ success: false, error: { message: '缺少 sampleGoalFinalPayload' } });
+    }
+
+    const normalized = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: req.user?.userId || 'admin-preview',
+      source: 'goal',
+      mode: 'generate',
+      sourceConversationId: sample.sourceConversationId,
+      existingPathId: sample.existingPathId,
+      rawGoal: sample.rawGoal || '',
+      understanding: sample.understanding || {},
+      collected: sample.collected || {},
+      structuredData: sample.structuredData || null,
+      confirmedProposal: sample.confirmedProposal || null,
+      confidenceScores: sample.confidenceScores || null,
+      conversationHistory: Array.isArray(sample.conversationHistory) ? sample.conversationHistory : [],
+      finalUserVisible: sample.finalUserVisible || null,
+      stage: sample.stage || null,
+      confidence: typeof sample.confidence === 'number' ? sample.confidence : undefined,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        orchestratorId,
+        normalizedInput: {
+          description: normalized.description,
+          subject: normalized.subject || null,
+          deadlineText: normalized.deadlineText || null,
+          sourceConversationId: normalized.sourceConversationId || null,
+          existingPathId: normalized.existingPathId || null,
+          skillLevel: normalized.userProfile?.skillLevel || null,
+          timePerDay: normalized.userProfile?.timePerDay || null,
+          structuredData: normalized.userProfile?.structuredData || null,
+          confirmedProposal: normalized.userProfile?.confirmedProposal || null,
+          confidenceScores: normalized.userProfile?.confidenceScores || null,
+          conversationHistory: normalized.userProfile?.conversationHistory || [],
+          normalizedInput: normalized.userProfile?.normalizedInput || null
+        },
+        supportingEvidence: normalized.userProfile?.supportingEvidence || null
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '生成配置预览失败', status: 500 } });
   }
 });
 

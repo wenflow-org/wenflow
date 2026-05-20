@@ -905,4 +905,64 @@ model users {
   user_code_repositories   user_code_repositories[]
   user_mcp_configs         user_mcp_configs?
   user_skill_configs       user_skill_configs[]
+  virtual_learner_profiles virtual_learner_profiles?
+  virtual_sessions         virtual_sessions[]
+}
+
+model virtual_learner_profiles {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  
+  profile              String            // JSON: { age, occupation, education, background }
+  learningGoal         String            // 学习目标描述
+  knowledgeLevel       String            // beginner/intermediate/advanced
+  knownConcepts        String?           // JSON: 已掌握概念列表
+  struggleConcepts     String?           // JSON: 困难概念列表
+  
+  simulationMode       String  @default("manual")  // ai/manual
+  simulationPrompt     String?           // 自定义扮演Prompt
+  simulationModel      String?           // 指定模型
+  simulationTemperature Float? @default(0.8)
+  personalityTraits    String?           // JSON: { verbosity, enthusiasm, confusionStyle }
+  
+  tags                 String?           // JSON: ["测试", "演示"]
+  notes                String?           // 管理员备注
+  
+  sessions             virtual_sessions[]
+  users                users @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([userId])
+}
+
+model virtual_sessions {
+  id                   String   @id @default(uuid())
+  virtualProfileId     String
+  userId               String            // 虚拟用户账号ID
+  
+  status               String  @default("created")  // created/running/completed/failed
+  currentStage         String  @default("goal")     // goal/path/learning
+  
+  goalConversationId   String?
+  learningPathId       String?
+  currentTaskId        String?
+  
+  completedTasks       Int     @default(0)
+  totalTasks           Int     @default(0)
+  
+  stageResults         String?           // JSON: 各阶段结果
+  logs                 String?           // JSON: 事件日志
+  
+  virtual_learner_profiles virtual_learner_profiles @relation(fields: [virtualProfileId], references: [id], onDelete: Cascade)
+  users                   users @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  completedAt          DateTime?
+  
+  @@index([virtualProfileId])
+  @@index([userId])
+  @@index([status])
 }

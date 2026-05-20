@@ -108,6 +108,19 @@
           </button>
         </section>
 
+        <section v-if="visiblePaths.length > 0" class="paths-bulk-toolbar glass-card">
+          <div class="paths-bulk-toolbar__meta">
+            <span class="pill">批量操作</span>
+            <strong>已选择 {{ selectedPathIds.length }} 条路径</strong>
+          </div>
+          <div class="paths-bulk-toolbar__actions">
+            <button type="button" class="btn btn-ghost" :disabled="selectedPathIds.length === 0" @click="clearSelection">清空选择</button>
+            <button type="button" class="btn btn-primary" :disabled="selectedReadyPathIds.length === 0 || batchRegenerating" @click="confirmBatchRegenerate">
+              {{ batchRegenerating ? '批量重新生成中...' : `批量重新生成（${selectedReadyPathIds.length}）` }}
+            </button>
+          </div>
+        </section>
+
         <section class="paths-section">
           <div v-loading="loading" class="paths-content">
             <div v-if="visiblePaths.length > 0" class="paths-grid paths-grid--upgraded">
@@ -120,6 +133,10 @@
                   { 'path-overview-card--scene': goalScenePath?.id === path.id }
                 ]"
               >
+                <label class="path-overview-card__select" @click.stop>
+                  <input v-model="selectedPathIds" type="checkbox" :value="path.id" />
+                  <span>选择</span>
+                </label>
                 <template v-if="getPathDisplayState(path) === 'generating'">
                   <div class="path-overview-card__status-row">
                     <span class="path-state-pill path-state-pill--generating">生成中</span>
@@ -376,7 +393,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import {
@@ -404,6 +421,8 @@ const showRegenerateDialog = ref(false);
 const pathToRegenerate = ref<any>(null);
 const retryingPathId = ref<string | null>(null);
 const showGeneratingAlert = ref(false);
+const batchRegenerating = ref(false);
+const selectedPathIds = ref<string[]>([]);
 const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
 const goalDataCache = ref<Record<string, any>>({});
 const loadingGoalId = ref<string | null>(null);
@@ -450,6 +469,17 @@ const isEnrichmentStale = (path: any) => {
   if (!Number.isFinite(timestamp)) return false;
 
   return (Date.now() - timestamp) / 1000 > GENERATION_TIMEOUT_SECONDS;
+};
+
+const canRetryEnrichment = (path: any) => {
+  if (path?.status !== 'active') return false;
+
+  const enrichmentStatus = path?.generationStatus?.enrichment;
+  if (enrichmentStatus === 'failed') return true;
+  if ((enrichmentStatus === 'pending' || enrichmentStatus === 'processing') && isEnrichmentStale(path)) {
+    return true;
+  }
+  return false;
 };
 
 const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
@@ -570,7 +600,7 @@ const getFailureCopy = (path: any) => {
 };
 
 const getRetryActionLabel = (path: any) => {
-  if (path?.generationStatus?.enrichment === 'failed' || isEnrichmentStale(path)) {
+  if (canRetryEnrichment(path)) {
     return '继续完善';
   }
   return '重试';
@@ -604,6 +634,12 @@ const pathFilterChips = computed(() => {
   ];
 });
 const visiblePaths = computed(() => activePathFilter.value === 'all' ? sortedPaths.value : sortedPaths.value.filter((path: any) => getPathDisplayState(path) === activePathFilter.value));
+const selectedPaths = computed(() => visiblePaths.value.filter((path: any) => selectedPathIds.value.includes(path.id)));
+const selectedReadyPathIds = computed(() => selectedPaths.value.filter((path: any) => getPathDisplayState(path) === 'active').map((path: any) => path.id));
+watch(visiblePaths, (list) => {
+  const visibleIds = new Set(list.map((path: any) => path.id));
+  selectedPathIds.value = selectedPathIds.value.filter((id) => visibleIds.has(id));
+});
 
 const goalSourceConversationId = computed(() => {
   const raw = route.query.conversationId;
@@ -679,7 +715,9 @@ let hasShownRateLimitWarning = false;
 const hasPollingTargets = (pathList: any[]) => pathList.some((p: any) => {
   const enrichmentStatus = p?.generationStatus?.enrichment;
   return p.status === 'generating'
-    || (p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing'));
+    || (p.status === 'active'
+      && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing')
+      && !isEnrichmentStale(p));
 });
 
 const schedulePolling = (delayMs = POLLING_INTERVAL_MS) => {
@@ -782,6 +820,44 @@ const confirmDelete = (path: any) => {
   pathToDelete.value = path;
   showDeleteDialog.value = true;
 };
+const clearSelection = () => {
+  selectedPathIds.value = [];
+};
+const confirmBatchRegenerate = async () => {
+  if (selectedReadyPathIds.value.length === 0) return;
+  try {
+    await ElMessageBox.confirm(
+      `将批量重新生成 ${selectedReadyPathIds.value.length} 条测试学习路径。已完成任务和学习记录不会被删除，但路径结构可能变化。`,
+      '批量重新生成测试学习路径',
+      {
+        type: 'warning',
+        confirmButtonText: '确认重新生成',
+        cancelButtonText: '取消',
+      }
+    );
+  } catch {
+    return;
+  }
+
+  batchRegenerating.value = true;
+  try {
+    for (const pathId of selectedReadyPathIds.value) {
+      await learningAPI.regeneratePath(pathId);
+    }
+    toast.success(`已开始重新生成 ${selectedReadyPathIds.value.length} 条测试学习路径`);
+    clearSelection();
+    if (!pollingTimer) startPolling();
+    schedulePolling(1500);
+  } catch (error: any) {
+    console.error('批量重新生成测试学习路径失败:', error);
+    if (error?.response?.status === 429) {
+      stopPolling();
+    }
+    toast.error(error.response?.data?.error?.message || '批量重新生成测试学习路径失败');
+  } finally {
+    batchRegenerating.value = false;
+  }
+};
 const deletePath = async () => {
   if (!pathToDelete.value) return;
   deleting.value = true;
@@ -833,7 +909,7 @@ const retryPathGeneration = async (path: any) => {
   }
   retryingPathId.value = path.id;
   try {
-    const shouldRetryEnrichment = path?.generationStatus?.enrichment === 'failed' || isEnrichmentStale(path);
+    const shouldRetryEnrichment = canRetryEnrichment(path);
     if (shouldRetryEnrichment) {
       await request.post(`/learning/paths/${path.id}/retry-enrichment`);
       toast.success('已在后台继续完善学习内容');
@@ -879,7 +955,7 @@ onMounted(() => {
     setTimeout(() => { showGeneratingAlert.value = false; }, 5000);
   }
   loadPaths().then(() => {
-    if (generatingPaths.value.length > 0 || enrichingPaths.value.length > 0) {
+    if (hasPollingTargets(paths.value)) {
       startPolling();
     }
   });

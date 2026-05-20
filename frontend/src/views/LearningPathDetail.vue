@@ -932,7 +932,14 @@ const getTaskTypeText = (type: string) => {
     reading: '阅读',
     practice: '练习',
     project: '项目',
-    quiz: '测验'
+    quiz: '测验',
+    acquire: '获取',
+    deconstruct: '拆解',
+    model: '建模',
+    execute: '执行',
+    diagnose: '诊断',
+    refine: '优化',
+    consolidate: '巩固'
   };
   return typeMap[type] || type;
 };

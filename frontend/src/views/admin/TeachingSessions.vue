@@ -41,7 +41,7 @@
         <template #default="{ row }">
           <div class="topic-cell">
             <strong>{{ row.topic }}</strong>
-            <span>{{ row.subject }} · {{ row.taskType }}</span>
+            <span>{{ row.subject }} · {{ getTaskTypeLabel(row.taskType) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -185,6 +185,20 @@ const statusSummary = computed(() => {
 });
 
 const advisoryCount = computed(() => sessions.value.filter((item) => item.advisory?.shouldSuggest).length);
+
+const getTaskTypeLabel = (type: string) => ({
+  reading: '阅读',
+  practice: '练习',
+  project: '项目',
+  quiz: '测验',
+  acquire: '获取',
+  deconstruct: '拆解',
+  model: '建模',
+  execute: '执行',
+  diagnose: '诊断',
+  refine: '优化',
+  consolidate: '巩固'
+}[type] || type || '任务');
 
 const loadSessions = async () => {
   loading.value = true;

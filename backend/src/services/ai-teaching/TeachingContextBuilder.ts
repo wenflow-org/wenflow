@@ -75,6 +75,16 @@ function parsePathSummary(raw: string | null | undefined): string | null {
   return typeof summary === 'string' && summary.trim() ? summary.trim() : null;
 }
 
+function parsePathPromptTemplate(raw: string | null | undefined): any {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeConcept(value: string | null | undefined): string | null {
   if (!value || typeof value !== 'string') return null;
   const normalized = value.trim().replace(/\s+/g, ' ');
@@ -83,6 +93,30 @@ function normalizeConcept(value: string | null | undefined): string | null {
 
 function dedupeConcepts(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => normalizeConcept(value)).filter(Boolean) as string[]));
+}
+
+function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; name: string | null; description: string | null } {
+  const linkedConceptId = normalizeConcept((task as any).coreConcept);
+  const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
+  const cognitiveCore = promptTemplate?.cognitiveCore || promptTemplate?.cognitiveDesign;
+  const concepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore.coreConcepts : [];
+
+  if (linkedConceptId) {
+    const matched = concepts.find((concept: any) => normalizeConcept(concept?.id) === linkedConceptId);
+    if (matched) {
+      return {
+        id: normalizeConcept(matched.id),
+        name: normalizeConcept(matched.name),
+        description: normalizeConcept(matched.description)
+      };
+    }
+  }
+
+  return {
+    id: linkedConceptId,
+    name: linkedConceptId,
+    description: null
+  };
 }
 
 function parseLearningObjectives(raw: string | null | undefined): string[] {
@@ -232,8 +266,9 @@ export async function buildTeachingScenarioContext(
   });
   const learnerSnapshot = learnerResult.snapshot;
   const teachingProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
+  const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const primaryConcepts = dedupeConcepts([
-    (task as any).coreConcept,
+    resolvedConcept.name,
     (task as any).displayLabel,
     ...parseLearningObjectives((task as any).learningObjectives),
   ]);
@@ -250,7 +285,7 @@ export async function buildTeachingScenarioContext(
     cognitiveLevel: (task as any).cognitiveLevel || null,
     displayLabel: (task as any).displayLabel || null,
     learningObjectives: parseLearningObjectives((task as any).learningObjectives),
-    coreConcept: normalizeConcept((task as any).coreConcept),
+    coreConcept: resolvedConcept.name,
   } as TeachingScenarioContext['taskProfile'];
 
   return {

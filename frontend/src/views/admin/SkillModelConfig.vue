@@ -48,14 +48,14 @@
         <el-checkbox v-model="onlyEnabled">仅看独立配置</el-checkbox>
       </div>
       <div class="admin-list-toolbar__group">
-        <el-button class="action-btn action-btn--ghost" @click="refresh">
+        <el-button @click="refresh">
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
       </div>
     </div>
 
-    <div class="table-shell">
+    <div class="admin-list-card">
       <el-table :data="filteredConfigs" v-loading="loading" stripe>
         <el-table-column label="Skill" min-width="280">
           <template #default="{ row }">
@@ -105,72 +105,267 @@
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link @click="editConfig(row)">编辑</el-button>
-            <el-button type="warning" link :disabled="!row.enabled" @click="deleteConfig(row)">恢复</el-button>
+            <el-button type="primary" link @click="openSkillWorkbench(row)">查看设计</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="editDialogVisible" title="编辑 Skill 配置" width="620px" class="skill-config-dialog" destroy-on-close>
-      <el-form ref="editFormRef" class="skill-config-form" :model="editForm" :rules="editRules" label-width="110px">
-        <el-form-item label="Skill ID">
-          <el-input v-model="editForm.skillId" disabled />
+    <el-drawer v-model="skillWorkbenchVisible" :title="`Skill 设计详情 · ${currentSkill?.skillId || ''}`" size="min(68%, 980px)" destroy-on-close>
+      <div class="skill-workbench" v-loading="skillWorkbenchLoading">
+        <template v-if="currentSkill">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="名称">{{ currentSkill.displayName || currentSkill.skillId }}</el-descriptions-item>
+            <el-descriptions-item label="Skill ID">{{ currentSkill.skillId }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag v-if="currentSkill.status" :type="getStatusTagType(currentSkill.status)" size="small">
+                {{ getStatusLabel(currentSkill.status) }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="配置模式">
+              <el-tag :type="currentSkill.enabled ? 'success' : 'info'" size="small">
+                {{ currentSkill.enabled ? '独立配置' : '继承' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="模型层级">{{ currentSkill.tier || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="模型">{{ currentSkill.model || '平台默认' }}</el-descriptions-item>
+            <el-descriptions-item label="说明" :span="2">{{ getSkillHint(currentSkill.skillId) || '-' }}</el-descriptions-item>
+          </el-descriptions>
+
+          <div class="chip-section">
+            <div class="chip-row">
+              <span class="chip-label">thinking</span>
+              <el-tag size="small" effect="plain" :type="thinkingTagType(currentSkill.thinkingMode)">
+                {{ formatThinkingMode(currentSkill.thinkingMode) }}
+              </el-tag>
+              <el-tag size="small" effect="plain" :type="effortTagType(currentSkill.reasoningEffort)">
+                {{ formatReasoningEffort(currentSkill.reasoningEffort) }}
+              </el-tag>
+            </div>
+            <div class="chip-row">
+              <span class="chip-label">runtime</span>
+              <el-tag size="small" effect="plain">T={{ currentSkill.temperature ?? '--' }}</el-tag>
+              <el-tag size="small" effect="plain">Max={{ currentSkill.maxTokens ?? '--' }}</el-tag>
+              <el-tag size="small" effect="plain">{{ formatTimeout(currentSkill.requestTimeoutMs) }}</el-tag>
+            </div>
+          </div>
+
+          <el-tabs class="skill-workbench__tabs">
+            <el-tab-pane label="Prompt 配置">
+              <div class="skill-prompt-drawer">
+                <div class="prompt-actions">
+                  <el-button type="primary" size="small" @click="openCreatePromptDialog">创建新版本</el-button>
+                  <el-button v-if="effectivePrompt" size="small" @click="openForkFromActive">基于当前版本修改</el-button>
+                  <el-button @click="loadPromptManager">刷新</el-button>
+                </div>
+
+                <div v-if="supportsPromptManagement(currentSkill.skillId) && effectivePrompt" class="prompt-active-card">
+                  <div class="prompt-summary-card">
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">当前版本</span>
+                      <strong>{{ effectivePrompt.version !== null && effectivePrompt.version !== undefined ? `v${effectivePrompt.version}` : '-' }}</strong>
+                    </div>
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">状态</span>
+                      <el-tag size="small" :type="getPromptStatusTagType(effectivePrompt.status)">
+                        {{ getPromptStatusLabel(effectivePrompt.status) }}
+                      </el-tag>
+                    </div>
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">名称</span>
+                      <span>{{ effectivePrompt.name || '-' }}</span>
+                    </div>
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">来源</span>
+                      <el-tag size="small" :type="promptSourceTagType(effectivePromptSource)">
+                        {{ promptSourceLabel(effectivePromptSource) }}
+                      </el-tag>
+                    </div>
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">运行参数</span>
+                      <span>T={{ effectivePrompt.temperature ?? '--' }} | Max={{ effectivePrompt.maxTokens ?? '--' }}</span>
+                    </div>
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">模型</span>
+                      <span>{{ effectivePrompt.model || '--' }}</span>
+                    </div>
+                    <div class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">发布时间</span>
+                      <span>{{ formatDateTime(effectivePrompt.publishedAt || effectivePrompt.updatedAt || effectivePrompt.createdAt) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="prompt-text-card">
+                    <div class="prompt-text-card__header">
+                      <h4>System Prompt</h4>
+                      <el-button v-if="promptPreviewText" type="primary" link @click="promptExpanded = !promptExpanded">
+                        {{ promptExpanded ? '收起全文' : '展开全文' }}
+                      </el-button>
+                    </div>
+                    <pre class="sample-json prompt-text-card__content">{{ visiblePromptText }}</pre>
+                  </div>
+                </div>
+
+                <el-empty v-else-if="supportsPromptManagement(currentSkill.skillId)" description="当前没有可展示的 Prompt。" />
+                <el-empty v-else description="该 Skill 当前未开放独立 Prompt 管理" />
+
+                <div v-if="supportsPromptManagement(currentSkill.skillId)" class="prompt-versions-card">
+                  <div class="prompt-versions-card__header">
+                    <h4>最近版本</h4>
+                    <span class="prompt-versions-card__meta">{{ promptVersions.length }} 条</span>
+                  </div>
+                  <div v-if="promptVersions.length" class="prompt-versions-table">
+                    <el-table :data="promptVersions" size="small" border>
+                      <el-table-column prop="version" label="版本" width="80" />
+                      <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+                      <el-table-column label="参数" min-width="120">
+                        <template #default="{ row }">
+                          <span class="params-inline">T={{ row.temperature ?? '--' }} | {{ row.maxTokens ?? '--' }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="状态" width="100">
+                        <template #default="{ row }">
+                          <el-tag size="small" effect="plain" :type="getPromptStatusTagType(row.status)">
+                            {{ getPromptStatusLabel(row.status) }}
+                          </el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="model" label="模型" min-width="140" show-overflow-tooltip />
+                      <el-table-column label="更新时间" min-width="140">
+                        <template #default="{ row }">
+                          {{ formatDateTime(row.updatedAt || row.createdAt) }}
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="操作" width="180">
+                        <template #default="{ row }">
+                          <el-tag v-if="row.status === 'ACTIVE'" type="success" size="small" effect="plain">当前生效</el-tag>
+                          <el-button type="primary" link size="small" @click="editPromptVersion(row)">编辑</el-button>
+                          <el-button v-if="row.status !== 'ACTIVE'" type="success" link size="small" :loading="publishingId === row.id" @click="publishPrompt(row.id)">发布</el-button>
+                          <el-button v-if="row.status === 'DRAFT'" type="danger" link size="small" @click="deletePromptDraft(row.id)">删除</el-button>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
+                  <el-empty v-else description="暂无 Prompt 版本" />
+                </div>
+
+                <div v-if="supportsPromptManagement(currentSkill.skillId)" class="prompt-versions-card">
+                  <div class="prompt-versions-card__header">
+                    <h4>Preview</h4>
+                    <el-button @click="runSkillPreview" :loading="previewLoading">运行预览</el-button>
+                  </div>
+                  <div class="contract-grid contract-grid--preview">
+                    <section class="contract-card">
+                      <span class="chip-label">Sample Input</span>
+                      <el-input
+                        v-model="skillPreviewInputText"
+                        type="textarea"
+                        :rows="16"
+                        class="preview-textarea"
+                      />
+                    </section>
+                    <section class="contract-card">
+                      <span class="chip-label">Sample Output</span>
+                      <pre v-if="skillPreviewOutput !== null" class="sample-json">{{ prettyJson(skillPreviewOutput) }}</pre>
+                      <el-empty v-else description="点击“运行预览”查看输出" />
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="模型运行时">
+              <div class="skill-config-form">
+                <el-alert
+                  v-if="getSkillHint(editForm.skillId)"
+                  :title="getSkillHint(editForm.skillId)"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  class="skill-config-form__notice"
+                />
+                <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="110px">
+                  <el-form-item label="Skill ID">
+                    <el-input v-model="editForm.skillId" disabled />
+                  </el-form-item>
+                  <el-form-item label="中文名称">
+                    <el-input v-model="editForm.displayName" disabled placeholder="无" />
+                  </el-form-item>
+                  <el-form-item label="独立配置">
+                    <el-switch v-model="editForm.enabled" />
+                    <div class="field-hint">关闭后将继承当前调用 Agent 的配置；若无 Agent 上下文，则回落平台默认</div>
+                  </el-form-item>
+                  <el-form-item label="模型层级">
+                    <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%" :disabled="!editForm.enabled">
+                      <el-option label="chat" value="chat" />
+                      <el-option label="reasoning" value="reasoning" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="模型">
+                    <el-input v-model="editForm.model" :disabled="!editForm.enabled" placeholder="留空继承 Agent / 平台默认" />
+                  </el-form-item>
+                  <el-form-item label="思考模式">
+                    <el-select v-model="editForm.thinkingMode" placeholder="选择思考模式" style="width: 100%" :disabled="!editForm.enabled">
+                      <el-option label="跟随继承值 / 模型默认" value="default" />
+                      <el-option label="开启" value="enabled" />
+                      <el-option label="关闭" value="disabled" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="思考强度">
+                    <el-select v-model="editForm.reasoningEffort" placeholder="选择思考强度" style="width: 100%" :disabled="!editForm.enabled || editForm.thinkingMode === 'disabled'">
+                      <el-option label="跟随继承值 / 模型默认" value="default" />
+                      <el-option label="high" value="high" />
+                      <el-option label="max" value="max" />
+                    </el-select>
+                    <div class="field-hint">仅在模型启用思考时生效</div>
+                  </el-form-item>
+                  <el-form-item label="温度">
+                    <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input :disabled="!editForm.enabled" />
+                  </el-form-item>
+                  <el-form-item label="Max Tokens">
+                    <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" :disabled="!editForm.enabled" />
+                  </el-form-item>
+                  <el-form-item label="请求超时(ms)">
+                    <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="600000" :step="10000" :disabled="!editForm.enabled" />
+                  </el-form-item>
+                </el-form>
+
+                <div class="skill-config-dialog__footer">
+                  <el-button type="warning" :disabled="!currentSkill.enabled" @click="deleteConfig(currentSkill)">恢复默认</el-button>
+                  <el-button type="primary" :loading="saving" @click="saveConfig">保存配置</el-button>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </template>
+      </div>
+    </el-drawer>
+
+    <el-dialog v-model="promptEditDialogVisible" :title="`${currentPromptDraftId ? '编辑' : '创建'} Skill Prompt · ${currentPromptSkillId}`" width="720px" destroy-on-close>
+      <el-form :model="promptEditForm" label-width="110px" v-loading="promptDetailLoading">
+        <el-form-item label="名称">
+          <el-input v-model="promptEditForm.name" />
         </el-form-item>
-        <el-alert
-          v-if="getSkillHint(editForm.skillId)"
-          :title="getSkillHint(editForm.skillId)"
-          type="info"
-          :closable="false"
-          show-icon
-          class="skill-config-form__notice"
-        />
-        <el-form-item label="中文名称">
-          <el-input v-model="editForm.displayName" disabled placeholder="无" />
-        </el-form-item>
-        <el-form-item label="独立配置">
-          <el-switch v-model="editForm.enabled" />
-          <div class="field-hint">关闭后将继承当前调用 Agent 的配置；若无 Agent 上下文，则回落平台默认</div>
-        </el-form-item>
-        <el-form-item label="模型层级">
-          <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%" :disabled="!editForm.enabled">
-            <el-option label="chat" value="chat" />
-            <el-option label="reasoning" value="reasoning" />
-          </el-select>
+        <el-form-item label="描述">
+          <el-input v-model="promptEditForm.description" type="textarea" :rows="2" />
         </el-form-item>
         <el-form-item label="模型">
-          <el-input v-model="editForm.model" :disabled="!editForm.enabled" placeholder="留空继承 Agent / 平台默认" />
-        </el-form-item>
-        <el-form-item label="思考模式">
-          <el-select v-model="editForm.thinkingMode" placeholder="选择思考模式" style="width: 100%" :disabled="!editForm.enabled">
-            <el-option label="跟随继承值 / 模型默认" value="default" />
-            <el-option label="开启" value="enabled" />
-            <el-option label="关闭" value="disabled" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="思考强度">
-          <el-select v-model="editForm.reasoningEffort" placeholder="选择思考强度" style="width: 100%" :disabled="!editForm.enabled || editForm.thinkingMode === 'disabled'">
-            <el-option label="跟随继承值 / 模型默认" value="default" />
-            <el-option label="high" value="high" />
-            <el-option label="max" value="max" />
-          </el-select>
-          <div class="field-hint">仅在模型启用思考时生效</div>
+          <el-input v-model="promptEditForm.model" />
         </el-form-item>
         <el-form-item label="温度">
-          <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input :disabled="!editForm.enabled" />
+          <el-slider v-model="promptEditForm.temperature" :min="0" :max="1" :step="0.1" show-input />
         </el-form-item>
         <el-form-item label="Max Tokens">
-          <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" :disabled="!editForm.enabled" />
+          <el-input-number v-model="promptEditForm.maxTokens" :min="100" :max="40000" />
         </el-form-item>
-        <el-form-item label="请求超时(ms)">
-          <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="600000" :step="10000" :disabled="!editForm.enabled" />
+        <el-form-item label="System Prompt">
+          <el-input v-model="promptEditForm.systemPrompt" type="textarea" :rows="18" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <div class="skill-config-dialog__footer">
-          <el-button class="action-btn action-btn--ghost" @click="editDialogVisible = false">取消</el-button>
-          <el-button class="action-btn action-btn--primary" :loading="saving" @click="saveConfig">保存</el-button>
-        </div>
+        <el-button @click="promptEditDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="promptSaving" @click="savePromptDraft">{{ currentPromptDraftId ? '保存修改' : '创建草稿' }}</el-button>
+        <el-button v-if="!currentPromptDraftId" type="success" :loading="promptSaving" @click="createAndPublishPrompt">创建并发布</el-button>
       </template>
     </el-dialog>
   </div>
@@ -179,7 +374,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { Operation, Refresh } from '@element-plus/icons-vue';
-import { adminSkillsApi } from '@/api/adminApi';
+import { adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 import { ElMessageBox } from 'element-plus';
 import type { FormInstance } from 'element-plus';
@@ -205,8 +400,34 @@ const statusFilter = ref('');
 const onlyEnabled = ref(false);
 const summary = ref<{ total: number; working: number; simplified: number; needsAttention: number } | null>(null);
 
-const editDialogVisible = ref(false);
+const skillWorkbenchVisible = ref(false);
+const skillWorkbenchLoading = ref(false);
+const currentSkill = ref<SkillModelConfig | null>(null);
 const saving = ref(false);
+const promptDrawerLoading = ref(false);
+const currentPromptSkillId = ref('');
+const promptVersions = ref<any[]>([]);
+const activePrompt = ref<any | null>(null);
+const effectivePrompt = ref<any | null>(null);
+const effectivePromptSource = ref<'db-active' | 'code-fallback' | ''>('');
+const promptExpanded = ref(false);
+const promptEditDialogVisible = ref(false);
+const promptSaving = ref(false);
+const currentPromptDraftId = ref('');
+const publishingId = ref<string | null>(null);
+const promptDetailLoading = ref(false);
+const previewLoading = ref(false);
+const skillPreviewInput = ref<any>(null);
+const skillPreviewInputText = ref('');
+const skillPreviewOutput = ref<any>(null);
+const promptEditForm = ref<any>({
+  name: '',
+  description: '',
+  systemPrompt: '',
+  temperature: 0.2,
+  maxTokens: 32000,
+  model: 'deepseek-v4-pro'
+});
 const editFormRef = ref<FormInstance>();
 const editRules = {
   temperature: [{ required: true, message: '请设置温度', trigger: 'change' }],
@@ -234,10 +455,13 @@ const filteredConfigs = computed(() => {
 });
 
 const SKILL_HINTS: Record<string, string> = {
-  'path-scene-framing': 'Path 冷启动前处理：先定义认知域、首个交付物和范围边界，再交给 path-agent 主生成。',
+  'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput）与辅助证据（supportingEvidence），再交给 path-agent 主生成。',
   'batch-anderson-labeler': 'Path 任务画像层：为所有任务统一补知识维度、认知层次、学习目标与核心概念标签。',
   'goal-type-identifier': 'Path 任务画像辅助：先判断目标类型与知识分布建议，再喂给任务画像构建器。',
 };
+
+const supportsPromptManagement = (skillId?: string) => skillId === 'path-scene-framing';
+const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`;
 
 const getSkillHint = (skillId?: string) => {
   if (!skillId) return '';
@@ -318,6 +542,60 @@ const getStatusLabel = (status?: 'working' | 'placeholder' | 'simplified' | 'moc
   return '';
 };
 
+const getPromptStatusLabel = (status?: string | null) => {
+  if (!status) return '未知';
+  const normalized = status.toUpperCase();
+  if (normalized === 'ACTIVE') return '已生效';
+  if (normalized === 'BUILT_IN' || normalized === 'FALLBACK') return '代码内置';
+  if (normalized === 'ARCHIVED') return '已归档';
+  if (normalized === 'DRAFT') return '草稿';
+  if (normalized === 'PUBLISHED') return '已发布';
+  if (normalized === 'STAGING') return '预发布';
+  return '未知';
+};
+
+const getPromptStatusTagType = (status?: string | null) => {
+  if (!status) return 'info';
+  const normalized = status.toUpperCase();
+  if (normalized === 'ACTIVE' || normalized === 'PUBLISHED') return 'success';
+  if (normalized === 'BUILT_IN' || normalized === 'FALLBACK') return 'info';
+  if (normalized === 'STAGING') return 'warning';
+  if (normalized === 'ARCHIVED') return 'info';
+  if (normalized === 'DRAFT') return 'info';
+  return 'info';
+};
+
+const promptSourceLabel = (source: 'db-active' | 'code-fallback' | '') => {
+  if (source === 'db-active') return 'DB Active';
+  if (source === 'code-fallback') return 'Code Fallback';
+  return 'Unknown';
+};
+
+const promptSourceTagType = (source: 'db-active' | 'code-fallback' | '') => {
+  if (source === 'db-active') return 'success';
+  if (source === 'code-fallback') return 'info';
+  return 'info';
+};
+
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('zh-CN');
+};
+
+const promptPreviewText = computed(() => effectivePrompt.value?.systemPrompt?.trim() || '');
+
+const visiblePromptText = computed(() => {
+  const text = promptPreviewText.value;
+  if (!text) return '暂无 Prompt 内容';
+  if (promptExpanded.value) return text;
+
+  const lines = text.split('\n');
+  if (lines.length <= 8) return text;
+  return `${lines.slice(0, 8).join('\n')}\n\n...`;
+});
+
 const toEditablePayload = (config: SkillModelConfig) => ({
   tier: config.tier,
   model: config.model,
@@ -336,7 +614,65 @@ const editConfig = (row: SkillModelConfig) => {
     thinkingMode: row.thinkingMode || 'default',
     reasoningEffort: row.reasoningEffort || 'default',
   };
-  editDialogVisible.value = true;
+};
+
+const openSkillWorkbench = async (row: SkillModelConfig) => {
+  skillWorkbenchVisible.value = true;
+  skillWorkbenchLoading.value = true;
+  currentSkill.value = row;
+  currentPromptSkillId.value = row.skillId;
+  promptExpanded.value = false;
+  skillPreviewOutput.value = null;
+  effectivePrompt.value = null;
+  effectivePromptSource.value = '';
+
+  editConfig(row);
+
+  skillPreviewInput.value = row.skillId === 'path-scene-framing'
+    ? {
+        goal: '用 Python 自动化处理销售数据报表中的图表样式调整环节。',
+        currentLevel: 'beginner',
+        timePerDay: '1 小时/周',
+        structuredData: {
+          subject: '销售数据报表处理'
+        },
+        confirmedProposal: {
+          learning_direction: '先聚焦图表样式自动化的可复用模板，而不是一次性覆盖整个报表流程。',
+          first_deliverable: '一个基于 matplotlib/seaborn 的可复用图表样式函数。',
+          key_stages: [
+            '学习基本图表库语法并复现当前手动调整的图表样式',
+            '将样式参数封装成可复用的函数或样式模板',
+            '集成到现有报表脚本中，确保一键运行即可输出标准图表'
+          ],
+          out_of_scope: [
+            '暂时不处理数据清洗、汇总计算等其他自动化环节'
+          ]
+        },
+        metadata: {
+          source: 'admin-preview',
+          conversationHistory: [
+            {
+              role: 'user',
+              content: '我现在最痛苦的是每次图表出完以后还要手动调颜色、标签和布局。'
+            }
+          ]
+        }
+      }
+    : null;
+  skillPreviewInputText.value = skillPreviewInput.value ? JSON.stringify(skillPreviewInput.value, null, 2) : '';
+
+  try {
+    if (supportsPromptManagement(row.skillId)) {
+      await loadPromptManager();
+    } else {
+      promptVersions.value = [];
+      activePrompt.value = null;
+      effectivePrompt.value = null;
+      effectivePromptSource.value = '';
+    }
+  } finally {
+    skillWorkbenchLoading.value = false;
+  }
 };
 
 const saveConfig = async () => {
@@ -346,7 +682,12 @@ const saveConfig = async () => {
   try {
     await adminSkillsApi.updateSkillModelConfig(editForm.value.skillId, toEditablePayload(editForm.value));
     toast.success('Skill 配置已更新');
-    editDialogVisible.value = false;
+    if (currentSkill.value?.skillId === editForm.value.skillId) {
+      currentSkill.value = {
+        ...currentSkill.value,
+        ...editForm.value,
+      };
+    }
     fetchConfigs();
   } catch {
     toast.error('保存失败');
@@ -380,6 +721,227 @@ const deleteConfig = async (row: SkillModelConfig) => {
 };
 
 const refresh = () => fetchConfigs();
+
+const loadPromptManager = async () => {
+  if (!currentPromptSkillId.value) return;
+  promptDrawerLoading.value = true;
+  const agentId = toSkillPromptAgentId(currentPromptSkillId.value);
+  try {
+    const [versionsRes, activeRes, effectiveRes] = await Promise.allSettled([
+      adminAgentPromptsApi.getPromptVersions({ agentId }),
+      adminAgentPromptsApi.getActivePrompt(agentId),
+      adminSkillsApi.getEffectiveSkillPrompt(currentPromptSkillId.value)
+    ]);
+
+    promptVersions.value = versionsRes.status === 'fulfilled'
+      ? (versionsRes.value.data?.data?.list || [])
+      : [];
+    activePrompt.value = activeRes.status === 'fulfilled'
+      ? activeRes.value.data?.data || null
+      : null;
+    effectivePrompt.value = effectiveRes.status === 'fulfilled'
+      ? effectiveRes.value.data?.data?.prompt || activePrompt.value
+      : activePrompt.value;
+    effectivePromptSource.value = effectiveRes.status === 'fulfilled'
+      ? (effectiveRes.value.data?.data?.source || '')
+      : (activePrompt.value ? 'db-active' : '');
+
+  } catch (error) {
+    toast.error('加载 Skill Prompt 失败');
+  } finally {
+    promptDrawerLoading.value = false;
+  }
+};
+
+const openForkFromActive = () => {
+  if (!effectivePrompt.value) return;
+  currentPromptDraftId.value = '';
+  const nextVersion = (Number(promptVersions.value[0]?.version) || 0) + 1;
+  promptEditForm.value = {
+    name: `v${nextVersion}-fork`,
+    description: `基于 ${effectivePrompt.value.version ? `v${effectivePrompt.value.version}` : '当前版本'} 修改`,
+    systemPrompt: effectivePrompt.value.systemPrompt || '',
+    temperature: effectivePrompt.value.temperature ?? 0.2,
+    maxTokens: effectivePrompt.value.maxTokens ?? 32000,
+    model: effectivePrompt.value.model || 'deepseek-v4-pro'
+  };
+  promptEditDialogVisible.value = true;
+};
+
+const editPromptVersion = async (version: any) => {
+  promptDetailLoading.value = true;
+  try {
+    const res = await adminAgentPromptsApi.getPromptDetail(version.id);
+    const detail = res.data?.data;
+
+    if ((version.status || '').toUpperCase() === 'DRAFT') {
+      currentPromptDraftId.value = version.id;
+      promptEditForm.value = {
+        name: detail?.name || '',
+        description: detail?.description || '',
+        systemPrompt: detail?.systemPrompt || '',
+        temperature: detail?.temperature ?? 0.2,
+        maxTokens: detail?.maxTokens ?? 32000,
+        model: detail?.model || 'deepseek-v4-pro'
+      };
+    } else {
+      currentPromptDraftId.value = '';
+      const nextVersion = (Number(promptVersions.value[0]?.version) || 0) + 1;
+      promptEditForm.value = {
+        name: `v${nextVersion}-修改`,
+        description: `基于 v${version.version || '?'} 修改`,
+        systemPrompt: detail?.systemPrompt || '',
+        temperature: detail?.temperature ?? 0.2,
+        maxTokens: detail?.maxTokens ?? 32000,
+        model: detail?.model || 'deepseek-v4-pro'
+      };
+    }
+
+    promptEditDialogVisible.value = true;
+  } catch {
+    toast.error('加载 Prompt 详情失败');
+  } finally {
+    promptDetailLoading.value = false;
+  }
+};
+
+const openCreatePromptDialog = () => {
+  currentPromptDraftId.value = '';
+  const nextVersion = (Number(promptVersions.value[0]?.version) || 0) + 1;
+  promptEditForm.value = {
+    name: `v${nextVersion}`,
+    description: '',
+    systemPrompt: effectivePrompt.value?.systemPrompt || '',
+    temperature: 0.2,
+    maxTokens: 32000,
+    model: 'deepseek-v4-pro'
+  };
+  promptEditDialogVisible.value = true;
+};
+
+const savePromptDraft = async () => {
+  if (!currentPromptSkillId.value || !promptEditForm.value.systemPrompt?.trim()) {
+    toast.error('请填写 Prompt 内容');
+    return;
+  }
+  promptSaving.value = true;
+  try {
+    if (currentPromptDraftId.value) {
+      await adminAgentPromptsApi.updatePrompt(currentPromptDraftId.value, promptEditForm.value);
+    } else {
+      await adminAgentPromptsApi.createPrompt({
+        agentId: toSkillPromptAgentId(currentPromptSkillId.value),
+        name: promptEditForm.value.name,
+        description: promptEditForm.value.description,
+        systemPrompt: promptEditForm.value.systemPrompt,
+        temperature: promptEditForm.value.temperature,
+        maxTokens: promptEditForm.value.maxTokens,
+        model: promptEditForm.value.model,
+      });
+    }
+    toast.success('Skill Prompt 草稿已保存');
+    promptEditDialogVisible.value = false;
+    await loadPromptManager();
+  } catch {
+    toast.error('保存 Skill Prompt 失败');
+  } finally {
+    promptSaving.value = false;
+  }
+};
+
+const createAndPublishPrompt = async () => {
+  if (!currentPromptSkillId.value || !promptEditForm.value.systemPrompt?.trim()) {
+    toast.error('请填写 Prompt 内容');
+    return;
+  }
+
+  promptSaving.value = true;
+  try {
+    const createRes = await adminAgentPromptsApi.createPrompt({
+      agentId: toSkillPromptAgentId(currentPromptSkillId.value),
+      name: promptEditForm.value.name,
+      description: promptEditForm.value.description,
+      systemPrompt: promptEditForm.value.systemPrompt,
+      temperature: promptEditForm.value.temperature,
+      maxTokens: promptEditForm.value.maxTokens,
+      model: promptEditForm.value.model,
+    });
+
+    const newPromptId = createRes.data?.id || createRes.data?.data?.id;
+    if (!newPromptId) {
+      toast.error('创建失败，未获取到 Prompt ID');
+      return;
+    }
+
+    await adminAgentPromptsApi.publishPrompt(newPromptId);
+    toast.success('Skill Prompt 已创建并发布');
+    promptEditDialogVisible.value = false;
+    await loadPromptManager();
+  } catch {
+    toast.error('创建或发布 Skill Prompt 失败');
+  } finally {
+    promptSaving.value = false;
+  }
+};
+
+const deletePromptDraft = async (id: string) => {
+  try {
+    await ElMessageBox.confirm('确定删除此版本？此操作不可恢复。', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+
+    await adminAgentPromptsApi.deletePrompt(id);
+    toast.success('Skill Prompt 草稿已删除');
+    await loadPromptManager();
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      toast.error('删除 Skill Prompt 失败');
+    }
+  }
+};
+
+const publishPrompt = async (id: string) => {
+  publishingId.value = id;
+  try {
+    await adminAgentPromptsApi.publishPrompt(id);
+    toast.success('Skill Prompt 已发布');
+    await loadPromptManager();
+  } catch {
+    toast.error('发布 Skill Prompt 失败');
+  } finally {
+    publishingId.value = null;
+  }
+};
+
+const prettyJson = (value: any) => {
+  if (value === null || value === undefined) return '-';
+  return JSON.stringify(value, null, 2);
+};
+
+const runSkillPreview = async () => {
+  if (!currentPromptSkillId.value || !skillPreviewInputText.value.trim()) return;
+
+  let parsedInput: any;
+  try {
+    parsedInput = JSON.parse(skillPreviewInputText.value);
+  } catch {
+    toast.error('Sample Input 不是合法 JSON');
+    return;
+  }
+
+  skillPreviewInput.value = parsedInput;
+  previewLoading.value = true;
+  try {
+    const res = await adminSkillsApi.testSkill(currentPromptSkillId.value, parsedInput);
+    skillPreviewOutput.value = res.data?.data?.output ?? null;
+  } catch (error: any) {
+    toast.error(error?.response?.data?.error || 'Skill 预览失败');
+  } finally {
+    previewLoading.value = false;
+  }
+};
 
 onMounted(() => fetchConfigs());
 </script>
@@ -415,45 +977,7 @@ onMounted(() => fetchConfigs());
 .admin-list-toolbar .search { width: 220px; }
 .admin-list-toolbar .select { width: 120px; }
 
-.action-btn {
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 16px;
-  border: 1px solid transparent;
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: 180ms ease;
-}
-
-.action-btn--primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #3478f6, color-mix(in srgb, #3478f6 68%, #8d6bff));
-  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.24);
-}
-
-.action-btn--primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
-}
-
-.action-btn--ghost {
-  color: var(--text-primary, #1a1a1a);
-  border-color: rgba(52, 120, 246, 0.15);
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.action-btn--ghost:hover {
-  border-color: rgba(52, 120, 246, 0.4);
-  background: rgba(238, 245, 255, 0.92);
-  color: var(--color-primary, #3478f6);
-}
-
-.table-shell {
+.admin-list-card {
   border: 1px solid #d2dbf3;
   border-radius: 28px;
   overflow-x: auto;
@@ -465,27 +989,27 @@ onMounted(() => fetchConfigs());
   box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
 }
 
-:deep(.el-table) {
+.admin-list-card :deep(.el-table) {
   --el-table-border-color: rgba(52, 120, 246, 0.06);
   background: transparent;
 }
 
-:deep(.el-table th.el-table__cell) {
+.admin-list-card :deep(.el-table th.el-table__cell) {
   background: rgba(52, 120, 246, 0.03);
   font-weight: 700;
   font-size: 0.8125rem;
   color: #7085a6;
 }
 
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+.admin-list-card :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
   background: rgba(52, 120, 246, 0.015);
 }
 
-:deep(.el-table .el-table__row:hover > td.el-table__cell) {
+.admin-list-card :deep(.el-table .el-table__row:hover > td.el-table__cell) {
   background: rgba(52, 120, 246, 0.03);
 }
 
-:deep(.el-table td.el-table__cell) {
+.admin-list-card :deep(.el-table td.el-table__cell) {
   border-bottom-color: rgba(52, 120, 246, 0.04);
 }
 
@@ -593,6 +1117,53 @@ onMounted(() => fetchConfigs());
   gap: 4px;
 }
 
+.skill-workbench {
+  display: grid;
+  gap: 1rem;
+  min-height: 240px;
+  padding-right: 4px;
+  min-width: 0;
+}
+
+.skill-workbench__tabs {
+  min-width: 0;
+}
+
+.skill-workbench :deep(.el-tabs__content) {
+  padding-top: 0.25rem;
+}
+
+.skill-workbench :deep(.el-descriptions) {
+  width: 100%;
+  min-width: 0;
+}
+
+.skill-workbench :deep(.el-descriptions__body) {
+  overflow-x: auto;
+}
+
+.skill-workbench :deep(.el-descriptions__table) {
+  min-width: 680px;
+}
+
+.chip-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.chip-label {
+  min-width: 72px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
 .skill-config-form :deep(.el-form-item) {
   margin-bottom: 14px;
 }
@@ -612,6 +1183,136 @@ onMounted(() => fetchConfigs());
   margin-top: 6px;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.skill-prompt-drawer {
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.prompt-summary-card,
+.prompt-text-card,
+.prompt-versions-card {
+  border: 1px solid var(--border-light, var(--border-default));
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.9rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.prompt-summary-card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.prompt-summary-card__row,
+.prompt-text-card__header,
+.prompt-versions-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.prompt-summary-card__label,
+.prompt-versions-card__meta,
+.params-inline {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.prompt-text-card__header h4,
+.prompt-versions-card__header h4 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.sample-json {
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1rem;
+  border-radius: 12px;
+  overflow: auto;
+  max-height: 360px;
+}
+
+.prompt-text-card__content {
+  margin-top: 0.75rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.prompt-versions-table {
+  margin-top: 0.75rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.contract-grid {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.contract-grid--preview {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contract-card {
+  min-width: 0;
+}
+
+.preview-textarea :deep(.el-textarea__inner) {
+  font-family: monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+:deep(.prompt-versions-table .el-table) {
+  width: 100%;
+  min-width: 0;
+}
+
+:deep(.prompt-versions-table .el-table__inner-wrapper) {
+  min-width: 0;
+}
+
+:deep(.prompt-versions-table .el-table__body-wrapper) {
+  overflow-x: auto;
+}
+
+@media (max-width: 1100px) {
+  .contract-grid--preview {
+    grid-template-columns: 1fr;
+  }
+}
+
+:deep(.el-dialog) {
+  max-width: calc(100vw - 32px);
+}
+
+:deep(.el-dialog__body) {
+  overflow-x: hidden;
 }
 
 @media (max-width: 768px) {

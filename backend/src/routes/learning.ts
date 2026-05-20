@@ -5,6 +5,7 @@ import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
 import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
 import { logger } from '../utils/logger';
 import pathOrchestrator from '../orchestrators/path.orchestrator';
 
@@ -15,10 +16,15 @@ const extractStoredSourceConversationId = (aiPromptTemplate?: string | null): st
 
   try {
     const parsed = JSON.parse(aiPromptTemplate);
-    const processInputId = typeof parsed?.processInput?.sourceConversationId === 'string'
-      ? parsed.processInput.sourceConversationId
+    const handoffInputId = typeof parsed?.goalFinalPayload?.sourceConversationId === 'string'
+      ? parsed.goalFinalPayload.sourceConversationId
       : null;
-    if (processInputId) return processInputId;
+    if (handoffInputId) return handoffInputId;
+
+    const normalizedInputId = typeof parsed?.normalizedInput?.sourceConversationId === 'string'
+      ? parsed.normalizedInput.sourceConversationId
+      : null;
+    if (normalizedInputId) return normalizedInputId;
 
     const generationStatusId = typeof parsed?.generationStatus?.sourceConversationId === 'string'
       ? parsed.generationStatus.sourceConversationId
@@ -36,8 +42,127 @@ const extractStoredSourceConversationId = (aiPromptTemplate?: string | null): st
   return undefined;
 };
 
+const parsePromptTemplate = (aiPromptTemplate?: string | null): Record<string, any> | null => {
+  if (!aiPromptTemplate) return null;
+  try {
+    const parsed = JSON.parse(aiPromptTemplate);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildStoredGoalPathRequest = (path: {
+  id: string;
+  userId: string;
+  description?: string | null;
+  aiPromptTemplate?: string | null;
+}) => {
+  const parsed = parsePromptTemplate(path.aiPromptTemplate);
+  const goalFinalPayload = parsed?.goalFinalPayload && typeof parsed.goalFinalPayload === 'object'
+    ? parsed.goalFinalPayload
+    : null;
+
+  if (!goalFinalPayload) {
+    return null;
+  }
+
+  return {
+    userId: path.userId,
+    source: 'goal' as const,
+    mode: 'generate' as const,
+    sourceConversationId: typeof goalFinalPayload.sourceConversationId === 'string' ? goalFinalPayload.sourceConversationId : undefined,
+    existingPathId: path.id,
+    rawGoal: typeof goalFinalPayload.rawGoal === 'string' && goalFinalPayload.rawGoal.trim()
+      ? goalFinalPayload.rawGoal
+      : (path.description || ''),
+    understanding: goalFinalPayload.understanding || {},
+    collected: goalFinalPayload.collected || {},
+    structuredData: goalFinalPayload.structuredData ?? null,
+    confirmedProposal: goalFinalPayload.confirmedProposal ?? null,
+    confidenceScores: goalFinalPayload.confidenceScores ?? null,
+    conversationHistory: Array.isArray(goalFinalPayload.conversationHistory) ? goalFinalPayload.conversationHistory : [],
+    finalUserVisible: typeof goalFinalPayload.finalUserVisible === 'string' ? goalFinalPayload.finalUserVisible : undefined,
+    stage: typeof goalFinalPayload.stage === 'string' ? goalFinalPayload.stage : undefined,
+    confidence: typeof goalFinalPayload.confidence === 'number' ? goalFinalPayload.confidence : undefined,
+  };
+};
+
+const buildGoalPathRequestFromConversation = async (path: {
+  id: string;
+  userId: string;
+  description?: string | null;
+  aiPromptTemplate?: string | null;
+}) => {
+  const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+  const conversation = await prisma.goal_conversations.findFirst({
+    where: sourceConversationId
+      ? { id: sourceConversationId, userId: path.userId }
+      : { learningPathId: path.id, userId: path.userId },
+    select: {
+      id: true,
+      userId: true,
+      description: true,
+      stage: true,
+      collectedData: true
+    }
+  });
+
+  if (!conversation) {
+    return null;
+  }
+
+  let collectedData: Record<string, any> = {};
+  try {
+    collectedData = JSON.parse(conversation.collectedData || '{}');
+  } catch {
+    collectedData = {};
+  }
+
+  const messages = Array.isArray(collectedData.messages) ? collectedData.messages : [];
+
+  return {
+    userId: conversation.userId,
+    source: 'goal' as const,
+    mode: 'generate' as const,
+    sourceConversationId: conversation.id,
+    existingPathId: path.id,
+    rawGoal: conversation.description || path.description || '',
+    understanding: collectedData.understanding || {},
+    collected: collectedData.collected || {},
+    structuredData: collectedData.structuredData ?? null,
+    confirmedProposal: collectedData.confirmedProposal ?? null,
+    confidenceScores: collectedData.confidenceScores ?? null,
+    conversationHistory: messages
+      .map((message: any) => ({
+        role: message?.role === 'user' ? 'user' : 'assistant',
+        content: typeof message?.content === 'string' ? message.content : ''
+      }))
+      .filter((message: { role: string; content: string }) => message.content),
+    finalUserVisible: typeof collectedData.finalUserVisible === 'string' ? collectedData.finalUserVisible : undefined,
+    stage: typeof conversation.stage === 'string' ? conversation.stage : undefined,
+    confidence: typeof collectedData.confidence === 'number' ? collectedData.confidence : undefined,
+  };
+};
+
 // 所有学习路由都需要认证
 router.use(authMiddleware);
+
+// 学习路径列表会被前端轮询，单独放宽限流额度。
+router.get('/paths', learningPathsPollingLimiter, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+
+    const paths = await learningService.getUserLearningPaths(userId);
+
+    res.json({
+      success: true,
+      data: paths
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
 
 // 创建学习目标schema
 const createGoalSchema = z.object({
@@ -285,22 +410,6 @@ const result = await pathOrchestrator.generate({
   }
 });
 
-// 获取学习路径列表
-router.get('/paths', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-
-    const paths = await learningService.getUserLearningPaths(userId);
-
-    res.json({
-      success: true,
-      data: paths
-    });
-  } catch (error: any) {
-    next(error);
-  }
-});
-
 // 获取学习路径详情
 router.get('/paths/:pathId', async (req, res, next) => {
   try {
@@ -375,24 +484,33 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       }
     });
 
-    // 保留原始 Goal 对话关联，避免重试后丢失来源链路。
-    const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+    const storedGoalRequest = buildStoredGoalPathRequest(path)
+      || await buildGoalPathRequestFromConversation(path);
 
-    // 异步重新生成路径
-    pathOrchestrator.runAsync({
-      userId,
-      description: path.description,
-      subject: path.subject,
-      deadline: path.deadline || undefined,
-      deadlineText: path.deadlineText || undefined,
-      sourceConversationId,
-      existingPathId: pathId,
-      userProfile: {}
-    }, {
-      onError: (error) => {
-        logger.error(`重试生成路径失败：${pathId}`, error);
-      }
-    });
+    if (storedGoalRequest) {
+      pathOrchestrator.runGoalAsync(storedGoalRequest, {
+        onError: (error) => {
+          logger.error(`重试生成路径失败：${pathId}`, error);
+        }
+      });
+    } else {
+      // 兜底：非 Goal 来源或旧数据缺少正式入口时，退回裸 Path 输入重试。
+      const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+      pathOrchestrator.runAsync({
+        userId,
+        description: path.description,
+        subject: path.subject,
+        deadline: path.deadline || undefined,
+        deadlineText: path.deadlineText || undefined,
+        sourceConversationId,
+        existingPathId: pathId,
+        userProfile: {}
+      }, {
+        onError: (error) => {
+          logger.error(`重试生成路径失败：${pathId}`, error);
+        }
+      });
+    }
 
     res.json({
       success: true,
@@ -436,33 +554,54 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       }
     });
 
-    const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+    const storedGoalRequest = buildStoredGoalPathRequest(path)
+      || await buildGoalPathRequestFromConversation(path);
 
-    pathOrchestrator.runAsync({
-      userId,
-      description: path.description || path.title || path.name || '个性化学习路径',
-      subject: path.subject || undefined,
-      deadline: path.deadline || undefined,
-      deadlineText: path.deadlineText || undefined,
-      sourceConversationId,
-      existingPathId: pathId,
-      userProfile: {}
-    }, {
-      onError: async (error) => {
-        logger.error(`重新生成学习路径失败：${pathId}`, error);
-        try {
-          await prisma.learning_paths.update({
-            where: { id: pathId },
-            data: {
-              status: 'failed',
-              updatedAt: new Date()
-            }
-          });
-        } catch (updateError) {
-          logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
+    if (storedGoalRequest) {
+      pathOrchestrator.runGoalAsync(storedGoalRequest, {
+        onError: async (error) => {
+          logger.error(`重新生成学习路径失败：${pathId}`, error);
+          try {
+            await prisma.learning_paths.update({
+              where: { id: pathId },
+              data: {
+                status: 'failed',
+                updatedAt: new Date()
+              }
+            });
+          } catch (updateError) {
+            logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
+          }
         }
-      }
-    });
+      });
+    } else {
+      const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
+      pathOrchestrator.runAsync({
+        userId,
+        description: path.description || path.title || path.name || '个性化学习路径',
+        subject: path.subject || undefined,
+        deadline: path.deadline || undefined,
+        deadlineText: path.deadlineText || undefined,
+        sourceConversationId,
+        existingPathId: pathId,
+        userProfile: {}
+      }, {
+        onError: async (error) => {
+          logger.error(`重新生成学习路径失败：${pathId}`, error);
+          try {
+            await prisma.learning_paths.update({
+              where: { id: pathId },
+              data: {
+                status: 'failed',
+                updatedAt: new Date()
+              }
+            });
+          } catch (updateError) {
+            logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
+          }
+        }
+      });
+    }
 
     res.json({
       success: true,
@@ -776,7 +915,7 @@ router.post('/paths/:pathId/weeks/:weekNumber/generate-tasks', async (req, res, 
           userId,
           title: task.title,
           description: task.description,
-          taskType: task.type || 'practice',
+          taskType: task.type || 'execute',
           estimatedMinutes: task.estimatedMinutes || 30,
           contentJson: JSON.stringify({
             acceptanceCriteria: task.acceptanceCriteria,
@@ -900,7 +1039,7 @@ router.post('/paths/:pathId/generate-all-tasks', async (req, res, next) => {
                 userId,
                 title: task.title,
                 description: task.description,
-                taskType: task.type || 'practice',
+                taskType: task.type || 'execute',
                 estimatedMinutes: task.estimatedMinutes || 30,
                 contentJson: JSON.stringify({
                   acceptanceCriteria: task.acceptanceCriteria,

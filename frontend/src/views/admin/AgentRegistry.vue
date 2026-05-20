@@ -126,7 +126,7 @@
     <el-drawer
       v-model="designDrawerVisible"
       :title="`Agent 设计详情 · ${currentDesign?.agentId || ''}`"
-      size="min(58%, 800px)"
+      size="min(60%, 800px)"
       destroy-on-close
     >
       <div v-loading="designLoading" class="design-drawer">
@@ -315,6 +315,29 @@
                     </el-table>
                   </div>
                 </div>
+
+                <div class="prompt-versions-card">
+                  <div class="prompt-versions-card__header">
+                    <h4>运行 Preview</h4>
+                    <el-button type="primary" :loading="agentPreviewLoading" @click="runAgentPreview">运行预览</el-button>
+                  </div>
+                  <div class="contract-grid contract-grid--preview">
+                    <section class="contract-card">
+                      <span class="chip-label">Sample Input</span>
+                      <el-input
+                        v-model="agentPreviewInputText"
+                        type="textarea"
+                        :rows="16"
+                        class="preview-textarea"
+                      />
+                    </section>
+                    <section class="contract-card">
+                      <span class="chip-label">Sample Output</span>
+                      <pre v-if="agentPreviewOutput" class="sample-json">{{ prettyJson(agentPreviewOutput) }}</pre>
+                      <el-empty v-else description="点击运行预览查看输出" />
+                    </section>
+                  </div>
+                </div>
               </div>
             </el-tab-pane>
             <el-tab-pane label="模型运行时">
@@ -438,7 +461,7 @@
     <el-dialog
       v-model="modelConfigEditDialogVisible"
       title="编辑模型运行时配置"
-      width="500px"
+      width="400px"
       destroy-on-close
     >
       <el-form :model="modelConfigEditForm" label-width="100px">
@@ -549,6 +572,10 @@ const modelConfigEditForm = ref<AgentModelConfig>({
   enabled: true
 });
 const modelConfigSaving = ref(false);
+
+const agentPreviewLoading = ref(false);
+const agentPreviewInputText = ref('');
+const agentPreviewOutput = ref<any>(null);
 
 const createPromptDialogVisible = ref(false);
 const editMode = ref(false);
@@ -923,12 +950,21 @@ const openDesign = async (agent: AdminRegistryAgent) => {
   currentPromptVersions.value = [];
   currentModelConfig.value = null;
   promptExpanded.value = false;
+  agentPreviewOutput.value = null;
+  agentPreviewInputText.value = '';
 
   const agentId = agent.agentId;
 
   try {
     const designResponse = await adminAgentsApi.getAgentDesign(agentId);
     currentDesign.value = (designResponse as any).data.data;
+
+    if (currentDesign.value?.samples?.agentCallLogs?.length) {
+      const latestLog = currentDesign.value.samples.agentCallLogs[0];
+      if (latestLog.input) {
+        agentPreviewInputText.value = JSON.stringify(latestLog.input, null, 2);
+      }
+    }
 
     const [promptResult, modelConfigResult] = await Promise.allSettled([
       loadPromptDetails(agentId),
@@ -972,6 +1008,29 @@ const updateModelConfigEnabled = async () => {
   } catch (error) {
     toast.error('更新失败');
     currentModelConfig.value.enabled = !currentModelConfig.value.enabled;
+  }
+};
+
+const runAgentPreview = async () => {
+  if (!currentDesign.value?.agentId || !agentPreviewInputText.value.trim()) return;
+
+  let parsedInput: any;
+  try {
+    parsedInput = JSON.parse(agentPreviewInputText.value);
+  } catch {
+    toast.error('Sample Input 不是合法 JSON');
+    return;
+  }
+
+  agentPreviewLoading.value = true;
+  try {
+    const res = await adminAgentsApi.testAgent(currentDesign.value.agentId, parsedInput);
+    agentPreviewOutput.value = res.data?.data?.output ?? null;
+  } catch (error: any) {
+    toast.error(error?.response?.data?.error || 'Agent 预览失败');
+    agentPreviewOutput.value = { error: error?.response?.data?.error || 'Agent 预览失败' };
+  } finally {
+    agentPreviewLoading.value = false;
   }
 };
 
@@ -1644,6 +1703,52 @@ onMounted(loadRegistry);
 
 .model-config-edit-btn {
   margin-top: 0.5rem;
+}
+
+.contract-grid--preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.contract-card {
+  border-radius: 28px;
+  border: 1px solid #d2dbf3;
+  background: color-mix(in srgb, #ffffff 90%, white);
+  backdrop-filter: blur(20px);
+  padding: 1rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.contract-card .chip-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #7085a6;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.preview-textarea :deep(.el-textarea__inner) {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875rem;
+  border-radius: 16px;
+  background: rgba(52, 120, 246, 0.03);
+  border-color: rgba(52, 120, 246, 0.08);
+}
+
+.sample-json {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: rgba(52, 120, 246, 0.03);
+  border-radius: 16px;
+  padding: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 0;
 }
 
 </style>

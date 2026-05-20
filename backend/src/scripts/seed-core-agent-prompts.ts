@@ -3,6 +3,7 @@ import { DEFAULT_PATH_GENERATION_PROMPT } from '../agents/path-agent/index';
 import { TEACHING_TURN_SYSTEM_PROMPT } from '../agents/teaching-turn-agent/index';
 import { WRAPUP_PROMPT } from '../agents/session-wrapup-agent/index';
 import { DEFAULT_PEER_AGENT_PROMPT } from '../agents/peer-agent/index';
+import { PATH_SCENE_FRAMING_PROMPT, PATH_SCENE_FRAMING_MAX_TOKENS, PATH_SCENE_FRAMING_TEMPERATURE } from '../skills/path-scene-framing';
 
 const DEFAULT_MODEL = (process.env.AI_MODEL || '').trim();
 
@@ -52,6 +53,14 @@ export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
     systemPrompt: DEFAULT_PEER_AGENT_PROMPT,
     temperature: 0.7,
     maxTokens: 4000,
+  },
+  {
+    agentId: 'skill:path-scene-framing',
+    name: 'v1-default-path-scene-framing',
+    description: '从 path-scene-framing 当前代码默认 Prompt 初始化',
+    systemPrompt: PATH_SCENE_FRAMING_PROMPT,
+    temperature: PATH_SCENE_FRAMING_TEMPERATURE,
+    maxTokens: PATH_SCENE_FRAMING_MAX_TOKENS,
   },
 ];
 

@@ -2091,6 +2091,11 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
     router.push(`${targetBase}?${query.toString()}`);
   } catch (error: any) {
     console.error('确认方案失败:', error);
+    if (isTestMode.value && error?.status === 404) {
+      toast.error(error.message || '测试会话已失效，请重新开始测试目标对话');
+      resetLocalConversationState();
+      return;
+    }
     const failureEnvelope = getStructuredFailureEnvelope(error);
     if (failureEnvelope) {
       syncConversationState(failureEnvelope);
@@ -2141,6 +2146,11 @@ const sendMessageInternal = async (content: string) => {
     scrollToBottom();
   } catch (error: any) {
     console.error('回复失败:', error);
+    if (isTestMode.value && error?.status === 404) {
+      toast.error(error.message || '测试会话已失效，请重新开始测试目标对话');
+      resetLocalConversationState();
+      return;
+    }
     const failureEnvelope = getStructuredFailureEnvelope(error);
     if (failureEnvelope) {
       syncConversationState(failureEnvelope);
