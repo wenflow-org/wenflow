@@ -63,14 +63,6 @@ import { memorySearch as memorySearchFn } from './memory-search';
 export { smartSearchDefinition } from './smart-search';
 import { smartSearch as smartSearchFn } from './smart-search';
 
-// 目标类型识别 (PathAgent v3.1)
-export { goalTypeIdentifierDefinition } from './goal-type-identifier';
-import { goalTypeIdentifier as goalTypeIdentifierFn } from './goal-type-identifier';
-
-// 批量安德森标注 (PathAgent v3.1)
-export { batchAndersonLabelerDefinition } from './batch-anderson-labeler';
-import { batchAndersonLabeler as batchAndersonLabelerFn } from './batch-anderson-labeler';
-
 // 动态标签生成 (PathAgent v3.1)
 export { labelGeneratorDefinition } from './label-generator';
 import { labelGenerator as labelGeneratorFn } from './label-generator';
@@ -78,6 +70,10 @@ import { labelGenerator as labelGeneratorFn } from './label-generator';
 // 路径场景 framing (PathAgent v3.2)
 export { pathSceneFramingDefinition } from './path-scene-framing';
 import { pathSceneFraming as pathSceneFramingFn } from './path-scene-framing';
+
+// 阶段任务设计器
+export { stageDesignerDefinition } from './stage-designer';
+import { stageDesigner as stageDesignerFn } from './stage-designer';
 
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
@@ -98,10 +94,9 @@ import { webExtractorDefinition } from './web-extractor';
 import { imageAnalyzerDefinition } from './image-analyzer';
 import { memorySearchDefinition } from './memory-search';
 import { smartSearchDefinition } from './smart-search';
-import { goalTypeIdentifierDefinition } from './goal-type-identifier';
-import { batchAndersonLabelerDefinition } from './batch-anderson-labeler';
 import { labelGeneratorDefinition } from './label-generator';
 import { pathSceneFramingDefinition } from './path-scene-framing';
+import { stageDesignerDefinition } from './stage-designer';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   pdfParserDefinition,
@@ -118,10 +113,9 @@ export const allSkillDefinitions: SkillDefinition[] = [
   imageAnalyzerDefinition,
   memorySearchDefinition,
   smartSearchDefinition,
-  goalTypeIdentifierDefinition,
-  batchAndersonLabelerDefinition,
   labelGeneratorDefinition,
-  pathSceneFramingDefinition
+  pathSceneFramingDefinition,
+  stageDesignerDefinition
 ];
 
 // Skill 名称映射
@@ -140,10 +134,9 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'image-analyzer': imageAnalyzerFn,
   'memory-search': memorySearchFn,
   'smart-search': smartSearchFn,
-  'goal-type-identifier': goalTypeIdentifierFn,
-  'batch-anderson-labeler': batchAndersonLabelerFn,
   'label-generator': labelGeneratorFn,
-  'path-scene-framing': pathSceneFramingFn
+  'path-scene-framing': pathSceneFramingFn,
+  'stage-designer': stageDesignerFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';

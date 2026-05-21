@@ -456,8 +456,8 @@ onMounted(() => {
   border-radius: 28px;
   border: 1px solid #d2dbf3;
   background:
-    radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%),
-    color-mix(in srgb, #ffffff 90%, white);
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.03), transparent 40%),
+    color-mix(in srgb, #ffffff 95%, white);
   backdrop-filter: blur(20px);
   box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
   overflow: hidden;
@@ -470,7 +470,7 @@ onMounted(() => {
   width: 300px;
   height: 300px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.1), transparent 60%);
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.04), transparent 70%);
   pointer-events: none;
 }
 
@@ -495,6 +495,7 @@ onMounted(() => {
   color: var(--text-primary);
   letter-spacing: -0.03em;
   line-height: 1.15;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.4);
 }
 
 .overview-hero__subtitle {
@@ -502,6 +503,7 @@ onMounted(() => {
   font-size: 1rem;
   color: var(--text-secondary);
   line-height: 1.6;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .hero-refresh-btn {

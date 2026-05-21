@@ -336,7 +336,7 @@
                       <span class="chip-label">预览辅助证据</span>
                       <p>这里显示编排层传给下游的辅助证据结构，仅供 `reference_only` 使用。</p>
                       <div v-loading="previewLoading">
-                        <pre class="sample-json">{{ prettyJson(previewSupportingEvidence) }}</pre>
+                        <pre class="sample-json">{{ prettyJson(previewNormalizedInput?.normalizedInput) }}</pre>
                       </div>
                     </section>
                   </div>
@@ -517,7 +517,6 @@ const orchestratorDataContract = ref<{
 } | null>(null);
 const previewSampleGoalFinalPayload = ref<Record<string, any> | null>(null);
 const previewNormalizedInput = ref<PathOrchestratorNormalizedInputPreview | null>(null);
-const previewSupportingEvidence = ref<any | null>(null);
 const previewLoading = ref(false);
 
 const runPreviewLoading = ref(false);
@@ -729,11 +728,9 @@ const loadOrchestratorPreview = async (orchestratorId?: string) => {
   try {
     const response = await adminAgentsApi.previewOrchestratorConfig(orchestratorId, previewSampleGoalFinalPayload.value);
     previewNormalizedInput.value = (response as any).data.data.normalizedInput || null;
-    previewSupportingEvidence.value = (response as any).data.data.supportingEvidence || null;
   } catch (error) {
     console.error('加载编排器配置预览失败:', error);
     previewNormalizedInput.value = null;
-    previewSupportingEvidence.value = null;
   } finally {
     previewLoading.value = false;
   }

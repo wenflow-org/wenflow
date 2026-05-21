@@ -4,6 +4,7 @@ import { TEACHING_TURN_SYSTEM_PROMPT } from '../agents/teaching-turn-agent/index
 import { WRAPUP_PROMPT } from '../agents/session-wrapup-agent/index';
 import { DEFAULT_PEER_AGENT_PROMPT } from '../agents/peer-agent/index';
 import { PATH_SCENE_FRAMING_PROMPT, PATH_SCENE_FRAMING_MAX_TOKENS, PATH_SCENE_FRAMING_TEMPERATURE } from '../skills/path-scene-framing';
+import { STAGE_DESIGNER_PROMPT } from '../skills/stage-designer';
 
 const DEFAULT_MODEL = (process.env.AI_MODEL || '').trim();
 
@@ -61,6 +62,14 @@ export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
     systemPrompt: PATH_SCENE_FRAMING_PROMPT,
     temperature: PATH_SCENE_FRAMING_TEMPERATURE,
     maxTokens: PATH_SCENE_FRAMING_MAX_TOKENS,
+  },
+  {
+    agentId: 'skill:stage-designer',
+    name: 'v1-default-stage-designer',
+    description: '从 stage-designer 当前代码默认 Prompt 初始化',
+    systemPrompt: STAGE_DESIGNER_PROMPT,
+    temperature: 0.3,
+    maxTokens: 32000,
   },
 ];
 

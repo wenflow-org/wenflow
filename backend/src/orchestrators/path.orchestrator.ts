@@ -68,20 +68,7 @@ interface NormalizedPathInputV1 {
     firstDeliverable: string | null;
     keyStages: string[];
     outOfScope: string[];
-  } | null;
-  qualityFlags: {
-    confidenceScores: Record<string, number | null>;
-    missingFields: string[];
-    missingOrEmptyFields: string[];
   };
-}
-
-interface SupportingEvidenceV1 {
-  usagePolicy: 'reference_only';
-  conversationHistory: Array<{ role: string; content: string }>;
-  learnerQA: any[];
-  behaviorLog: any[];
-  notes: string[];
 }
 
 export interface GoalPathRequest {
@@ -145,61 +132,8 @@ class PathOrchestrator {
       .filter((item): item is string => !!item);
   }
 
-  private normalizeConfidenceScores(value: any): Record<string, number | null> {
-    if (!value || typeof value !== 'object') return {};
-
-    return Object.entries(value).reduce<Record<string, number | null>>((acc, [key, raw]) => {
-      acc[key] = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
-      return acc;
-    }, {});
-  }
-
-  private collectMissingFields(candidate: NormalizedPathInputV1): { missingFields: string[]; missingOrEmptyFields: string[] } {
-    const missingFields: string[] = [];
-    const missingOrEmptyFields: string[] = [];
-
-    const recordField = (path: string, value: any) => {
-      if (value === undefined) {
-        missingFields.push(path);
-        return;
-      }
-      if (
-        value === null
-        || (typeof value === 'string' && !value.trim())
-        || (Array.isArray(value) && value.length === 0)
-        || (typeof value === 'object' && !Array.isArray(value) && value !== null && Object.keys(value).length === 0)
-      ) {
-        missingOrEmptyFields.push(path);
-      }
-    };
-
-    recordField('learnerProfile.surfaceGoal', candidate.learnerProfile.surfaceGoal);
-    recordField('learnerProfile.currentBaseline.level', candidate.learnerProfile.currentBaseline.level);
-    recordField('learnerProfile.currentBaseline.evidence', candidate.learnerProfile.currentBaseline.evidence);
-    recordField('learnerProfile.motivation', candidate.learnerProfile.motivation);
-    recordField('learnerProfile.urgency', candidate.learnerProfile.urgency);
-    recordField('learnerProfile.painPoints', candidate.learnerProfile.painPoints);
-    recordField('learnerProfile.learningSignal', candidate.learnerProfile.learningSignal);
-    recordField('problemSpace.realProblem', candidate.problemSpace.realProblem);
-    recordField('problemSpace.scenario', candidate.problemSpace.scenario);
-    recordField('problemSpace.currentPainPoint', candidate.problemSpace.currentPainPoint);
-    recordField('resources.timePerWeek', candidate.resources.timePerWeek);
-    recordField('resources.timePerSession', candidate.resources.timePerSession);
-    recordField('resources.timeHorizon', candidate.resources.timeHorizon);
-    recordField('resources.deadlineText', candidate.resources.deadlineText);
-    recordField('successCriteria.observableResult', candidate.successCriteria.observableResult);
-    recordField('successCriteria.acceptanceCheck', candidate.successCriteria.acceptanceCheck);
-    recordField('confirmedProposal.learningDirection', candidate.confirmedProposal?.learningDirection);
-    recordField('confirmedProposal.firstDeliverable', candidate.confirmedProposal?.firstDeliverable);
-    recordField('confirmedProposal.keyStages', candidate.confirmedProposal?.keyStages);
-    recordField('confirmedProposal.outOfScope', candidate.confirmedProposal?.outOfScope);
-
-    return { missingFields, missingOrEmptyFields };
-  }
-
   private buildStructuredNormalizedInput(goalFinalPayload: GoalFinalPayload): {
     normalizedInputV1: NormalizedPathInputV1;
-    supportingEvidence: SupportingEvidenceV1;
   } {
     const understanding = goalFinalPayload.understanding && typeof goalFinalPayload.understanding === 'object'
       ? goalFinalPayload.understanding
@@ -210,7 +144,6 @@ class PathOrchestrator {
     const confirmedProposal = goalFinalPayload.confirmedProposal && typeof goalFinalPayload.confirmedProposal === 'object'
       ? goalFinalPayload.confirmedProposal
       : null;
-    const confidenceScores = this.normalizeConfidenceScores(goalFinalPayload.confidenceScores);
 
     const normalizedInputV1Base: NormalizedPathInputV1 = {
       version: '1.0',
@@ -246,41 +179,10 @@ class PathOrchestrator {
         keyStages: this.normalizeStringArray(confirmedProposal.key_stages),
         outOfScope: this.normalizeStringArray(confirmedProposal.out_of_scope),
       } : null,
-      qualityFlags: {
-        confidenceScores,
-        missingFields: [],
-        missingOrEmptyFields: [],
-      },
-    };
-
-    const missing = this.collectMissingFields(normalizedInputV1Base);
-    const normalizedInputV1: NormalizedPathInputV1 = {
-      ...normalizedInputV1Base,
-      qualityFlags: {
-        ...normalizedInputV1Base.qualityFlags,
-        missingFields: missing.missingFields,
-        missingOrEmptyFields: missing.missingOrEmptyFields,
-      },
-    };
-
-    const supportingEvidence: SupportingEvidenceV1 = {
-      usagePolicy: 'reference_only',
-      conversationHistory: Array.isArray(goalFinalPayload.conversationHistory)
-        ? goalFinalPayload.conversationHistory
-            .map((message) => ({
-              role: message?.role === 'assistant' ? 'assistant' : 'user',
-              content: typeof message?.content === 'string' ? message.content : ''
-            }))
-            .filter((message) => message.content)
-        : [],
-      learnerQA: [],
-      behaviorLog: [],
-      notes: [],
     };
 
     return {
-      normalizedInputV1,
-      supportingEvidence,
+      normalizedInputV1: normalizedInputV1Base,
     };
   }
 
@@ -310,7 +212,7 @@ class PathOrchestrator {
       conversationHistory: goalFinalPayload.conversationHistory || [],
     };
 
-    const { normalizedInputV1, supportingEvidence } = this.buildStructuredNormalizedInput(goalFinalPayload);
+    const { normalizedInputV1 } = this.buildStructuredNormalizedInput(goalFinalPayload);
 
     const description = this.pickFirstDefined(source, config.normalizedInput.descriptionSources)
       || normalizedInputV1.problemSpace.realProblem
@@ -366,7 +268,6 @@ class PathOrchestrator {
         confidenceScores: config.normalizedInput.includeConfidenceScores ? input.confidenceScores || null : null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: normalizedInputV1,
-        supportingEvidence,
         goalFinalPayload: {
           source: 'goal',
           mode: 'generate',

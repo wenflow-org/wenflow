@@ -25,16 +25,15 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
 2. 不要重新解释用户的真实问题，不要补动机，不要补风险，不要补认知域。
 3. 输入里没有的信息，输出中保留为 null、空数组或空对象，不要猜。
 4. confirmedProposal 是已确认信息，直接结构化保留，不要改写语义。
-5. qualityFlags 只能做确定性映射：
-   - lowConfidenceFields 只能依据上游已提供的 confidenceScores 映射，不能自行判断。
-   - 如果某个 confidence score < 0.5，则把对应字段名放入 lowConfidenceFields。
-   - 如果没有 confidenceScores，就返回空的 lowConfidenceFields。
-   - missingFields 只标记字段不存在。
-   - missingOrEmptyFields 只标记字段存在但值为 null、空字符串、空数组或空对象。
-6. conversationHistory 等原始上下文如果在 metadata 中出现，只能降级放入 supportingEvidence，不作为主输入事实改写来源。
-7. supportingEvidence 必须使用固定子字段，不要自由发明额外结构。
-8. 不要在 normalizedInput 中输出 source、mode 这类编排控制字段。
-9. 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解释。
+4.1 如果 learnerProfile.surfaceGoal 本身已经是明显的问题陈述，且 problemSpace.realProblem 缺失，不要继续留空；直接把这句问题陈述收敛到 problemSpace.realProblem。
+4.2 “明显的问题陈述”指包含不知道如何、不会、缺少、困难、痛点、卡住、没方向、无从下手等阻塞表达。
+4.3 problemSpace.realProblem 优先描述用户当前卡住的矛盾或阻塞，不要复述成任务计划。
+4.4 problemSpace.realProblem 允许等于 surfaceGoal，但不允许写成“第1步/先做A再做B/梳理-提炼-整合”这类步骤句。
+5. 不要在 normalizedInput 中输出 source、mode 这类编排控制字段。
+6. confirmedProposal.keyStages 只保留高层阶段提示，不要原样回声任务步骤句。
+6.1 如果上游 keyStages 更像执行步骤、检查清单、动作链、梳理/提炼/整合式操作语句，不要把它们继续放在 keyStages，留空数组即可。
+6.2 keyStages 是给 path 提供阶段方向提示，不是给隐藏概念层提供命名素材。
+7. 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解释。
 
 请输出：
 {
@@ -71,20 +70,7 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
       "firstDeliverable": null,
       "keyStages": [],
       "outOfScope": []
-    },
-    "qualityFlags": {
-      "confidenceScores": {},
-      "missingFields": [],
-      "lowConfidenceFields": [],
-      "missingOrEmptyFields": []
     }
-  },
-  "supportingEvidence": {
-    "usagePolicy": "reference_only",
-    "conversationHistory": [],
-    "learnerQA": [],
-    "behaviorLog": [],
-    "notes": []
   }
 }`;
 
@@ -108,7 +94,6 @@ export const pathSceneFramingDefinition: SkillDefinition = {
     type: 'object',
     properties: {
       normalizedInput: { type: 'object' },
-      supportingEvidence: { type: 'object' },
     }
   },
   capabilities: ['path-input-normalization', 'path-input-cleaning'],
@@ -126,6 +111,93 @@ export interface PathSceneFramingInput {
   structuredData?: any;
   confirmedProposal?: any;
   metadata?: any;
+}
+
+function normalizeString(value: any): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function normalizeStringArray(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeString(item))
+    .filter((item): item is string => !!item);
+}
+
+function isProblemLikeStatement(value: string | null): boolean {
+  if (!value) return false;
+  return /(不知道如何|不会|缺少|困难|痛点|卡住|没方向|无从下手)/.test(value);
+}
+
+function isOperationalStageLike(value: string | null): boolean {
+  if (!value) return false;
+  return /^(梳理|提炼|整合|记录|分析|学习|设计|绘制|撰写|汇总|复盘|验证|拆解|总结|产出|模拟|试用)/.test(value)
+    || /(3-5个|检查点|清单|试用验证|模拟场景|先.+再.+)/.test(value);
+}
+
+function normalizeSceneFramingOutput(output: any) {
+  if (!output || typeof output !== 'object') return output;
+
+  const normalizedInput = output.normalizedInput && typeof output.normalizedInput === 'object'
+    ? output.normalizedInput
+    : {};
+  const learnerProfile = normalizedInput.learnerProfile && typeof normalizedInput.learnerProfile === 'object'
+    ? normalizedInput.learnerProfile
+    : {};
+  const problemSpace = normalizedInput.problemSpace && typeof normalizedInput.problemSpace === 'object'
+    ? normalizedInput.problemSpace
+    : {};
+  const confirmedProposal = normalizedInput.confirmedProposal && typeof normalizedInput.confirmedProposal === 'object'
+    ? normalizedInput.confirmedProposal
+    : null;
+  const surfaceGoal = normalizeString(learnerProfile.surfaceGoal);
+  const explicitProblem = normalizeString(problemSpace.realProblem);
+  const realProblem = explicitProblem
+    || (isProblemLikeStatement(surfaceGoal) ? surfaceGoal : null);
+  const rawKeyStages = normalizeStringArray(confirmedProposal?.keyStages);
+  const keyStages = rawKeyStages.filter((item) => !isOperationalStageLike(item));
+
+  return {
+    normalizedInput: {
+      ...normalizedInput,
+      learnerProfile: {
+        ...learnerProfile,
+        surfaceGoal,
+        painPoints: normalizeStringArray(learnerProfile.painPoints),
+        motivation: normalizeString(learnerProfile.motivation),
+        urgency: normalizeString(learnerProfile.urgency),
+        learningSignal: normalizeString(learnerProfile.learningSignal),
+        currentBaseline: {
+          level: normalizeString(learnerProfile.currentBaseline?.level),
+          evidence: normalizeString(learnerProfile.currentBaseline?.evidence),
+        },
+      },
+      problemSpace: {
+        ...problemSpace,
+        realProblem,
+        scenario: normalizeString(problemSpace.scenario),
+        currentPainPoint: normalizeString(problemSpace.currentPainPoint),
+      },
+      resources: {
+        timePerWeek: normalizeString(normalizedInput.resources?.timePerWeek),
+        timePerSession: normalizeString(normalizedInput.resources?.timePerSession),
+        timeHorizon: normalizeString(normalizedInput.resources?.timeHorizon),
+        deadlineText: normalizeString(normalizedInput.resources?.deadlineText),
+      },
+      successCriteria: {
+        observableResult: normalizeString(normalizedInput.successCriteria?.observableResult),
+        acceptanceCheck: normalizeString(normalizedInput.successCriteria?.acceptanceCheck),
+      },
+      confirmedProposal: normalizedInput.confirmedProposal && typeof normalizedInput.confirmedProposal === 'object'
+        ? {
+            learningDirection: normalizeString(confirmedProposal?.learningDirection),
+            firstDeliverable: normalizeString(confirmedProposal?.firstDeliverable),
+            keyStages,
+            outOfScope: normalizeStringArray(confirmedProposal?.outOfScope),
+          }
+        : null,
+    },
+  };
 }
 
 export async function pathSceneFraming(
@@ -165,10 +237,16 @@ export async function pathSceneFraming(
       throw new Error('PATH_SCENE_FRAMING_INVALID: response does not contain valid JSON');
     }
 
-    const output = JSON.parse(jsonMatch[0]);
+    const output = normalizeSceneFramingOutput(JSON.parse(jsonMatch[0]));
     return {
       success: true,
-      output,
+      output: {
+        ...output,
+        _debug: {
+          rawModelOutput: content,
+          extractedJson: jsonMatch[0],
+        },
+      },
       duration: Date.now() - startTime,
     };
   } catch (error: any) {

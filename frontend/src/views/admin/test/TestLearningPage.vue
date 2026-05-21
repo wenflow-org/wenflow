@@ -27,7 +27,7 @@
       </div>
 
       <div v-else-if="task && task.learningPath?.canStartLearning === false" class="test-learn-card test-learn-blocked">
-        <h2>等待学习内容准备完成</h2>
+        <h2>等待阶段任务生成完成</h2>
         <p>{{ task.learningPath?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习。' }}</p>
         <button class="test-learn-btn test-learn-btn--primary" @click="goBack">返回路径详情</button>
       </div>

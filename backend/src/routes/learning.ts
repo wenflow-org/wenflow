@@ -218,6 +218,7 @@ const replanPathSchema = z.object({
   triggerSource: z.enum(['goal-conversation', 'progress-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
   reason: z.string().optional(),
   mode: z.enum(['new_version', 'overwrite']).optional(),
+  stageNumber: z.number().int().positive().optional(),
   evidence: z.record(z.any()).optional()
 });
 
@@ -625,6 +626,7 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
       triggerSource: payload.triggerSource,
       reason: payload.reason,
       mode: payload.mode,
+      stageNumber: payload.stageNumber,
       evidence: payload.evidence
     });
 
@@ -713,7 +715,7 @@ router.get('/tasks/:taskId', async (req, res, next) => {
   }
 });
 
-router.post('/paths/:pathId/retry-enrichment', async (req, res, next) => {
+router.post('/paths/:pathId/retry-stage-design', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { pathId } = req.params;
@@ -723,7 +725,7 @@ router.post('/paths/:pathId/retry-enrichment', async (req, res, next) => {
     res.json({
       success: true,
       data: result,
-      message: '正在继续准备学习内容'
+      message: '正在继续生成阶段任务'
     });
   } catch (error: any) {
     if (error.message === '学习路径不存在') {
@@ -741,8 +743,8 @@ router.post('/paths/:pathId/retry-enrichment', async (req, res, next) => {
     }
 
     if (
-      error.message === '学习路径主结构尚未完成，暂不能继续准备'
-      || error.message === '学习内容仍在准备中，请稍后查看'
+      error.message === '学习路径主结构尚未完成，暂不能继续生成阶段任务'
+      || error.message === '阶段任务仍在生成中，请稍后查看'
     ) {
       return res.status(400).json({
         success: false,

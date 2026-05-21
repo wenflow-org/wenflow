@@ -381,10 +381,10 @@ async function startServer() {
       // 回收因进程中断等原因遗留的 generating 路径
       await learningService.recoverStaleGeneratingPaths();
 
-      // 持续自动重试仍在准备失败中的路径
+      // 持续自动重试仍在阶段任务生成失败中的路径
       setInterval(() => {
         void learningService.retryEligibleFailedPathPreparations().catch((error) => {
-          logger.warn('自动继续准备学习内容轮询失败', {
+          logger.warn('自动继续生成阶段任务轮询失败', {
             error: error instanceof Error ? error.message : String(error)
           });
         });

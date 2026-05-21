@@ -1135,10 +1135,9 @@ router.get('/orchestrators/:orchestratorId/data-contract', async (req: Request, 
         },
         framingContract: {
           name: 'pathSceneFraming',
-          description: 'Path 清洗层输出的标准结构，供下游以 normalizedInput 为主、supportingEvidence 为辅消费。',
+          description: 'Path 清洗层输出的标准结构，供下游直接以 normalizedInput 作为主输入消费。',
           fields: [
-            { key: 'normalizedInput', description: '清洗后的主输入结构，不含编排控制字段。' },
-            { key: 'supportingEvidence', description: '固定结构的辅助证据，只作参考，不作主真相源。' }
+            { key: 'normalizedInput', description: '清洗后的主输入结构，不含编排控制字段。' }
           ]
         },
         outputContract: {
@@ -1214,8 +1213,7 @@ router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request
           confidenceScores: normalized.userProfile?.confidenceScores || null,
           conversationHistory: normalized.userProfile?.conversationHistory || [],
           normalizedInput: normalized.userProfile?.normalizedInput || null
-        },
-        supportingEvidence: normalized.userProfile?.supportingEvidence || null
+        }
       }
     });
   } catch (error: any) {

@@ -133,7 +133,7 @@ export class LearnerKnowledgeMemoryService {
     for (const { milestone, task } of allTasks) {
       const objectiveConcepts = parseLearningObjectives(task.learningObjectives);
       const conceptCandidates = dedupe([
-        task.coreConcept,
+        task.linkedConceptName || task.coreConcept,
         task.displayLabel,
         ...objectiveConcepts,
       ]);
@@ -303,7 +303,7 @@ export class LearnerKnowledgeMemoryService {
     const taskMastery: LearnerTaskMastery[] = allTasks.map(({ milestone, task }) => {
       const objectiveConcepts = parseLearningObjectives(task.learningObjectives);
       const conceptCandidates = dedupe([
-        task.coreConcept,
+        task.linkedConceptName || task.coreConcept,
         task.displayLabel,
         ...objectiveConcepts,
       ]);
@@ -405,7 +405,7 @@ export class LearnerKnowledgeMemoryService {
 
     const currentTaskConcepts = currentTask
       ? dedupe([
-          currentTask.coreConcept,
+          currentTask.linkedConceptName || currentTask.coreConcept,
           currentTask.displayLabel,
           ...parseLearningObjectives(currentTask.learningObjectives),
         ])

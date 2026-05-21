@@ -121,7 +121,7 @@
                   :loading="retryingEnrichment"
                   @click="retryEnrichment"
                 >
-                  继续完善
+                  继续生成阶段任务
                 </el-button>
               </div>
             </div>
@@ -159,7 +159,7 @@
                       v-if="enrichmentStatus !== 'succeeded'"
                       class="week-pending-note"
                     >
-                      {{ enrichmentPendingHint }}
+                        {{ enrichmentPendingHint }}
                     </div>
                     <div
                       v-if="week.learningObjectives && week.learningObjectives.length > 0"
@@ -256,7 +256,7 @@
                                 :disabled="!canStartLearning"
                                 @click.stop="startTask(task)"
                               >
-                                {{ canStartLearning ? '继续学习' : '等待标注完成' }}
+                                {{ canStartLearning ? '继续学习' : '等待阶段任务生成完成' }}
                                 <el-icon><ArrowRight /></el-icon>
                               </button>
                               <button v-if="task.hasTeachingWrapup" class="task-btn btn-review" @click.stop="viewTaskEvaluation(task)">
@@ -269,7 +269,7 @@
                               :disabled="!canStartLearning"
                               @click.stop="startTask(task)"
                             >
-                              {{ canStartLearning ? '开始学习' : '等待标注完成' }}
+                              {{ canStartLearning ? '开始学习' : '等待阶段任务生成完成' }}
                               <el-icon><ArrowRight /></el-icon>
                             </button>
                           </div>
@@ -506,37 +506,37 @@ const pathOverviewMetrics = computed(() => {
 });
 
 const generationStatus = computed(() => path.value?.generationStatus || null);
-const enrichmentStatus = computed(() => generationStatus.value?.enrichment || null);
+const enrichmentStatus = computed(() => generationStatus.value?.stageDesign || null);
 const canStartLearning = computed(() => path.value?.canStartLearning !== false);
 const showEnrichmentBanner = computed(() => path.value?.status === 'active' && enrichmentStatus.value && enrichmentStatus.value !== 'succeeded');
 const enrichmentBannerTitle = computed(() => {
   if (enrichmentStatus.value === 'processing' || enrichmentStatus.value === 'pending') {
-    return '学习内容准备中';
+    return '阶段任务生成中';
   }
 
   if (enrichmentStatus.value === 'failed') {
-    return '学习内容继续完善中';
+    return '阶段任务继续生成中';
   }
 
-  return '学习内容状态未知';
+  return '阶段任务状态未知';
 });
 const enrichmentBannerMessage = computed(() => {
   if (enrichmentStatus.value === 'processing' || enrichmentStatus.value === 'pending') {
-    return '路径已经生成，系统正在后台准备学习内容。完成前暂不能开始学习，你可以先离开当前页面，稍后再回来查看。';
+    return '路径骨架已经生成，系统正在后台展开当前阶段任务。完成前暂不能开始学习，你可以先离开当前页面，稍后再回来查看。';
   }
 
   if (enrichmentStatus.value === 'failed') {
-    return path.value?.learningBlockedReason || '系统正在继续完善学习内容。你也可以现在手动继续完善，无需停留在当前页面。';
+    return path.value?.learningBlockedReason || '系统正在继续生成阶段任务。你也可以现在手动继续生成，无需停留在当前页面。';
   }
 
-  return path.value?.learningBlockedReason || '学习内容状态暂不可用，请稍后刷新页面。';
+  return path.value?.learningBlockedReason || '阶段任务状态暂不可用，请稍后刷新页面。';
 });
 const enrichmentPendingHint = computed(() => {
   if (enrichmentStatus.value === 'failed') {
-    return '这一阶段的学习内容还没准备完整，请稍后再回来开始学习。';
+    return '这一阶段的任务还没生成完整，请稍后再回来开始学习。';
   }
 
-  return '这一阶段的学习内容仍在准备中，完成后就可以开始学习。';
+  return '这一阶段的任务仍在生成中，完成后就可以开始学习。';
 });
 
 const pathStages = computed(() => path.value?.milestones || path.value?.weeks || []);
@@ -562,7 +562,7 @@ const primaryActionTask = computed(() => {
 });
 
 const primaryActionLabel = computed(() => {
-  if (!canStartLearning.value) return '等待标注完成';
+  if (!canStartLearning.value) return '等待阶段任务生成完成';
   return primaryActionTask.value?.status === 'in_progress' ? '继续学习' : '开始学习';
 });
 
@@ -612,7 +612,7 @@ const pathDetailNotes = computed(() => {
   }
 
   if (!canStartLearning.value) {
-    notes.push('当前学习内容还在准备中，先浏览阶段目标与任务结构，稍后再回来开始。');
+    notes.push('当前阶段任务还在生成中，先浏览阶段目标与任务结构，稍后再回来开始。');
   }
 
   if (notes.length === 0) {
@@ -681,7 +681,7 @@ const pathDetailPlan = computed(() => {
   }));
 
   if (items.length === 0) {
-    return [{ title: '当前暂无待推进任务', desc: '等学习内容准备完成后，这里会出现最值得先开始的任务。' }];
+    return [{ title: '当前暂无待推进任务', desc: '等阶段任务生成完成后，这里会出现最值得先开始的任务。' }];
   }
 
   return items;
@@ -812,10 +812,10 @@ const retryEnrichment = async () => {
   retryingEnrichment.value = true;
   try {
     await learningAPI.retryPathEnrichment(path.value.id);
-    toast.success('已在后台继续完善学习内容，无需停留当前页面。');
+    toast.success('已在后台继续生成阶段任务，无需停留当前页面。');
     await loadPathData();
   } catch (error: any) {
-    toast.error(error.message || '继续完善学习内容失败');
+    toast.error(error.message || '继续生成阶段任务失败');
   } finally {
     retryingEnrichment.value = false;
   }

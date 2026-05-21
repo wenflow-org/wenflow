@@ -181,6 +181,10 @@
                         {{ promptSourceLabel(effectivePromptSource) }}
                       </el-tag>
                     </div>
+                    <div v-if="promptDriftWarning" class="prompt-summary-card__row">
+                      <span class="prompt-summary-card__label">代码同步</span>
+                      <el-tag size="small" type="danger">DB ACTIVE 与代码默认 Prompt 不一致</el-tag>
+                    </div>
                     <div class="prompt-summary-card__row">
                       <span class="prompt-summary-card__label">运行参数</span>
                       <span>T={{ effectivePrompt.temperature ?? '--' }} | Max={{ effectivePrompt.maxTokens ?? '--' }}</span>
@@ -410,6 +414,7 @@ const promptVersions = ref<any[]>([]);
 const activePrompt = ref<any | null>(null);
 const effectivePrompt = ref<any | null>(null);
 const effectivePromptSource = ref<'db-active' | 'code-fallback' | ''>('');
+const promptDriftWarning = ref(false);
 const promptExpanded = ref(false);
 const promptEditDialogVisible = ref(false);
 const promptSaving = ref(false);
@@ -455,12 +460,11 @@ const filteredConfigs = computed(() => {
 });
 
 const SKILL_HINTS: Record<string, string> = {
-  'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput）与辅助证据（supportingEvidence），再交给 path-agent 主生成。',
-  'batch-anderson-labeler': 'Path 任务画像层：为所有任务统一补知识维度、认知层次、学习目标与核心概念标签。',
-  'goal-type-identifier': 'Path 任务画像辅助：先判断目标类型与知识分布建议，再喂给任务画像构建器。',
+  'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput），再交给 path-agent 主生成。',
+  'stage-designer': 'Path 阶段任务设计层：围绕单个 milestone 生成 subtasks，并补轻量任务标签，不直接写 Learn 教案。',
 };
 
-const supportsPromptManagement = (skillId?: string) => skillId === 'path-scene-framing';
+const supportsPromptManagement = (skillId?: string) => skillId === 'path-scene-framing' || skillId === 'stage-designer';
 const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`;
 
 const getSkillHint = (skillId?: string) => {
@@ -625,6 +629,7 @@ const openSkillWorkbench = async (row: SkillModelConfig) => {
   skillPreviewOutput.value = null;
   effectivePrompt.value = null;
   effectivePromptSource.value = '';
+  promptDriftWarning.value = false;
 
   editConfig(row);
 
@@ -736,15 +741,16 @@ const loadPromptManager = async () => {
     promptVersions.value = versionsRes.status === 'fulfilled'
       ? (versionsRes.value.data?.data?.list || [])
       : [];
-    activePrompt.value = activeRes.status === 'fulfilled'
+      activePrompt.value = activeRes.status === 'fulfilled'
       ? activeRes.value.data?.data || null
       : null;
-    effectivePrompt.value = effectiveRes.status === 'fulfilled'
-      ? effectiveRes.value.data?.data?.prompt || activePrompt.value
-      : activePrompt.value;
-    effectivePromptSource.value = effectiveRes.status === 'fulfilled'
-      ? (effectiveRes.value.data?.data?.source || '')
-      : (activePrompt.value ? 'db-active' : '');
+      effectivePrompt.value = effectiveRes.status === 'fulfilled'
+        ? effectiveRes.value.data?.data?.prompt || activePrompt.value
+        : activePrompt.value;
+      effectivePromptSource.value = effectiveRes.status === 'fulfilled'
+        ? (effectiveRes.value.data?.data?.source || '')
+        : (activePrompt.value ? 'db-active' : '');
+      promptDriftWarning.value = !!(effectiveRes.status === 'fulfilled' && effectiveRes.value.data?.data?.promptDrift);
 
   } catch (error) {
     toast.error('加载 Skill Prompt 失败');

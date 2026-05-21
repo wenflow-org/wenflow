@@ -97,7 +97,7 @@
             <span class="pipeline-arrow">→</span>
             <el-tag size="small" effect="plain" class="member-tag">path-agent</el-tag>
             <span class="pipeline-arrow">→</span>
-            <el-tag size="small" effect="plain" class="member-tag">task-profile-builder</el-tag>
+            <el-tag size="small" effect="plain" class="member-tag">stage-designer</el-tag>
           </div>
         </div>
 

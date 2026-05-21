@@ -8,7 +8,7 @@
 
     <div v-else-if="task && task.learningPath?.canStartLearning === false" class="session-paused blocked-state">
       <el-icon :size="48" color="#e6a23c"><WarningFilled /></el-icon>
-      <h2>等待学习内容准备完成</h2>
+      <h2>等待阶段任务生成完成</h2>
       <p>{{ task.learningPath?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习。' }}</p>
       <el-button type="primary" @click="goBack">返回路径详情</el-button>
     </div>

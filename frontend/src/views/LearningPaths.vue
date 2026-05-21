@@ -404,7 +404,7 @@ const generatingPaths = computed(() =>
 
 const enrichingPaths = computed(() =>
   paths.value.filter((p: any) => {
-    const enrichmentStatus = p?.generationStatus?.enrichment;
+    const enrichmentStatus = p?.generationStatus?.stageDesign;
     return p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing');
   })
 );
@@ -605,7 +605,7 @@ const startPolling = () => {
         
         // 如果没有生成中的路径或准备中的路径了，停止轮询
         if (!newPaths.some((p: any) => {
-          const enrichmentStatus = p?.generationStatus?.enrichment;
+          const enrichmentStatus = p?.generationStatus?.stageDesign;
           return p.status === 'generating'
             || (p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing'));
         })) {
@@ -665,7 +665,7 @@ const handleCommand = (command: string, path: any) => {
   }
 };
 
-const getEnrichmentStatus = (path: any) => path?.generationStatus?.enrichment || null;
+const getEnrichmentStatus = (path: any) => path?.generationStatus?.stageDesign || null;
 const goalSourceConversationId = computed(() => {
   const raw = route.query.conversationId;
   return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
@@ -775,7 +775,7 @@ const goalSceneSteps = computed(() => {
     { key: 'framing', label: '方向收敛', active: coreStep === 'framing', done: framingDone },
     { key: 'planning', label: '任务拆解', active: coreStep === 'planning', done: planningDone },
     { key: 'persist', label: '路径落成', active: coreStep === 'persist', done: persistDone },
-    { key: 'enrichment', label: '内容准备', active: enrichmentStatus === 'pending' || enrichmentStatus === 'processing', done: enrichmentDone }
+    { key: 'enrichment', label: '阶段任务生成', active: enrichmentStatus === 'pending' || enrichmentStatus === 'processing', done: enrichmentDone }
   ];
 });
 

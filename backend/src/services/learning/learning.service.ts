@@ -14,9 +14,8 @@ import { learnerProjectionService } from '../learner/LearnerProjectionService';
 
 // Path 任务画像 Skills
 import { executeSkill } from '../../skills';
-import { goalTypeIdentifierDefinition } from '../../skills/goal-type-identifier';
-import { batchAndersonLabelerDefinition } from '../../skills/batch-anderson-labeler';
 import { pathSceneFramingDefinition } from '../../skills/path-scene-framing';
+import { stageDesignerDefinition } from '../../skills/stage-designer';
 
 interface CreateGoalData {
   userId: string;
@@ -62,6 +61,7 @@ interface GeneratePathData {
     conversationHistory?: Array<{ role: string; content: string }>;
     goalFinalPayload?: GoalToPathHandoffSnapshot;
     pathSceneFraming?: any;
+    pathSceneFramingRaw?: string | null;
     replan?: {
       mode?: 'new_version' | 'overwrite';
       triggerSource?: string;
@@ -78,6 +78,7 @@ interface PathReplanRequest {
   triggerSource?: 'goal-conversation' | 'progress-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
   reason?: string;
   mode?: 'new_version' | 'overwrite';
+  stageNumber?: number;
   evidence?: Record<string, any>;
 }
 
@@ -85,7 +86,7 @@ const STALE_GENERATING_PATH_MINUTES = 15;
 const ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES = [1, 5, 15] as const;
 const ENRICHMENT_AUTO_RETRY_SCAN_LIMIT = 200;
 
-type PathGenerationPhase = 'core' | 'enrichment';
+type PathGenerationPhase = 'core' | 'stageDesign';
 type PathCoreStep = 'framing' | 'planning' | 'persist' | 'completed';
 
 interface PathGenerationLogPayload {
@@ -105,26 +106,26 @@ interface PathGenerationLogPayload {
 interface PathGenerationStatusPatch {
   core?: 'pending' | 'processing' | 'succeeded' | 'failed';
   coreStep?: PathCoreStep;
-  enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
+  stageDesign?: 'pending' | 'processing' | 'succeeded' | 'failed';
   lastError?: string | null;
   sourceConversationId?: string | null;
   triggerSource?: string | null;
   updatedAt?: string;
-  enrichmentRetryCount?: number;
-  lastEnrichmentRetryAt?: string | null;
+  stageDesignRetryCount?: number;
+  lastStageDesignRetryAt?: string | null;
   scene?: Record<string, any> | null;
 }
 
 interface ParsedPathGenerationStatus {
   core?: 'pending' | 'processing' | 'succeeded' | 'failed';
   coreStep?: PathCoreStep;
-  enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
+  stageDesign?: 'pending' | 'processing' | 'succeeded' | 'failed';
   lastError?: string | null;
   sourceConversationId?: string | null;
   triggerSource?: string | null;
   updatedAt?: string | null;
-  enrichmentRetryCount?: number;
-  lastEnrichmentRetryAt?: string | null;
+  stageDesignRetryCount?: number;
+  lastStageDesignRetryAt?: string | null;
   scene?: Record<string, any> | null;
 }
 
@@ -162,25 +163,10 @@ interface PathSceneFramingNormalizedInput {
     keyStages?: string[];
     outOfScope?: string[];
   } | null;
-  qualityFlags?: {
-    confidenceScores?: Record<string, number | null>;
-    missingFields?: string[];
-    lowConfidenceFields?: string[];
-    missingOrEmptyFields?: string[];
-  };
-}
-
-interface PathSceneFramingSupportingEvidence {
-  usagePolicy?: 'reference_only' | string;
-  conversationHistory?: Array<{ role: string; content: string }>;
-  learnerQA?: any[];
-  behaviorLog?: any[];
-  notes?: string[];
 }
 
 interface PathSceneFraming {
   normalizedInput?: PathSceneFramingNormalizedInput;
-  supportingEvidence?: PathSceneFramingSupportingEvidence;
   intent?: string;
   targetState?: string;
   firstDeliverable?: string;
@@ -254,6 +240,16 @@ interface NormalizedPathTask {
   estimatedMinutes?: number;
   acceptanceCriteria?: string;
   linkedConcept?: string;
+}
+
+interface NormalizedPathMilestone {
+  stage: number;
+  name: string;
+  description?: string;
+  goal?: string;
+  estimatedHours?: number;
+  coreConcept?: string | null;
+  tasks: NormalizedPathTask[];
 }
 
 interface PathNormalizedInputSnapshot {
@@ -371,18 +367,51 @@ function resolveTaskConcept(
   };
 }
 
+function resolveMilestoneConcept(
+  conceptId: string | null | undefined,
+  cognitiveDesign: PathCognitiveDesign | null | undefined,
+  fallbackText?: string | null | undefined
+): {
+  coreConceptId: string | null;
+  coreConceptName: string | null;
+  coreConceptDescription: string | null;
+  conceptSource: 'linked-concept' | 'fallback-text' | 'missing';
+} {
+  const resolved = resolveTaskConcept(conceptId, cognitiveDesign, fallbackText);
+  return {
+    coreConceptId: resolved.linkedConceptId,
+    coreConceptName: resolved.linkedConceptName,
+    coreConceptDescription: resolved.linkedConceptDescription,
+    conceptSource: resolved.conceptSource,
+  };
+}
+
+function inferMilestoneConceptFromTasks(tasks: any[]): string | null {
+  const counts = new Map<string, number>();
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const conceptId = typeof task?.linkedConcept === 'string' && task.linkedConcept.trim()
+      ? task.linkedConcept.trim()
+      : null;
+    if (!conceptId) continue;
+    counts.set(conceptId, (counts.get(conceptId) || 0) + 1);
+  }
+
+  let winner: string | null = null;
+  let maxCount = 0;
+  counts.forEach((count, conceptId) => {
+    if (count > maxCount) {
+      winner = conceptId;
+      maxCount = count;
+    }
+  });
+  return winner;
+}
+
 function getSceneFramingNormalizedInput(sceneFraming: PathSceneFraming | null | undefined): PathSceneFramingNormalizedInput | null {
   if (!sceneFraming || !sceneFraming.normalizedInput || typeof sceneFraming.normalizedInput !== 'object') {
     return null;
   }
   return sceneFraming.normalizedInput;
-}
-
-function getSceneFramingSupportingEvidence(sceneFraming: PathSceneFraming | null | undefined): PathSceneFramingSupportingEvidence | null {
-  if (!sceneFraming || !sceneFraming.supportingEvidence || typeof sceneFraming.supportingEvidence !== 'object') {
-    return null;
-  }
-  return sceneFraming.supportingEvidence;
 }
 
 function getSceneFramingFirstDeliverable(sceneFraming: PathSceneFraming | null | undefined): string | null {
@@ -471,6 +500,27 @@ function parsePathCognitiveDesign(raw: string | null): PathCognitiveDesign | nul
     };
   } catch {
     return null;
+  }
+}
+
+function parsePathMilestoneConceptBindings(raw: string | null): Array<{ stageNumber: number; coreConcept: string | null; title?: string | null }> {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    const milestones = Array.isArray(parsed?.taskChain?.milestones)
+      ? parsed.taskChain.milestones
+      : Array.isArray(parsed?.milestones)
+        ? parsed.milestones
+        : [];
+
+    return milestones.map((milestone: any, index: number) => ({
+      stageNumber: Number.isFinite(Number(milestone?.stageNumber)) ? Number(milestone.stageNumber) : index + 1,
+      coreConcept: typeof milestone?.coreConcept === 'string' && milestone.coreConcept.trim() ? milestone.coreConcept.trim() : null,
+      title: typeof milestone?.title === 'string' && milestone.title.trim() ? milestone.title.trim() : null,
+    }));
+  } catch {
+    return [];
   }
 }
 
@@ -621,7 +671,7 @@ function parsePathGenerationStatus(raw: string | null): ParsedPathGenerationStat
     return {
       core: normalizeStageStatus(generation.core),
       coreStep: normalizeCoreStep(generation.coreStep),
-      enrichment: normalizeStageStatus(generation.enrichment),
+      stageDesign: normalizeStageStatus(generation.stageDesign),
       lastError: typeof generation.lastError === 'string' && generation.lastError.trim()
         ? generation.lastError.trim()
         : null,
@@ -632,11 +682,11 @@ function parsePathGenerationStatus(raw: string | null): ParsedPathGenerationStat
         ? generation.triggerSource
         : null,
       updatedAt: typeof generation.updatedAt === 'string' ? generation.updatedAt : null,
-      enrichmentRetryCount: typeof generation.enrichmentRetryCount === 'number'
-        ? generation.enrichmentRetryCount
+      stageDesignRetryCount: typeof generation.stageDesignRetryCount === 'number'
+        ? generation.stageDesignRetryCount
         : 0,
-      lastEnrichmentRetryAt: typeof generation.lastEnrichmentRetryAt === 'string'
-        ? generation.lastEnrichmentRetryAt
+      lastStageDesignRetryAt: typeof generation.lastStageDesignRetryAt === 'string'
+        ? generation.lastStageDesignRetryAt
         : null,
       scene: generation.scene && typeof generation.scene === 'object'
         ? generation.scene
@@ -698,6 +748,24 @@ function parseJsonSafe(raw: any): any {
   } catch {
     return null;
   }
+}
+
+function stripSceneFramingDebugMeta(sceneFraming: any) {
+  if (!sceneFraming || typeof sceneFraming !== 'object') return sceneFraming;
+  const { _debug, ...rest } = sceneFraming;
+  return rest;
+}
+
+function isSuspiciousCognitiveDomain(value: string | null | undefined): boolean {
+  const text = normalizeConceptText(value);
+  if (!text) return false;
+  return /(不会|不知道如何|缺少|问题|困难|痛点|恶化|缓解|解决|改善|针对.+功能|围绕.+模块)/.test(text);
+}
+
+function isSuspiciousCoreConceptName(value: string | null | undefined): boolean {
+  const text = normalizeConceptText(value);
+  if (!text) return false;
+  return /^(梳理|提炼|整合|记录|分析|学习|设计|绘制|撰写|汇总|复盘|验证)/.test(text);
 }
 
 function parseTaskLearningObjectives(raw: string | null | undefined): string[] {
@@ -808,7 +876,9 @@ function normalizeStageTraceStatus(value: any): 'started' | 'succeeded' | 'faile
 }
 
 function normalizeStageTracePhase(value: any): PathGenerationPhase | null {
-  return value === 'core' || value === 'enrichment' ? value : null;
+  if (value === 'core' || value === 'stageDesign') return value;
+  if (value === 'enrichment') return 'stageDesign';
+  return null;
 }
 
 class LearningService {
@@ -818,6 +888,15 @@ class LearningService {
     const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
       ? parsedTemplate.sceneFraming
       : null;
+    const sceneFramingRaw = typeof parsedTemplate?.sceneFramingRaw === 'string'
+      ? parsedTemplate.sceneFramingRaw
+      : null;
+    const pathAgentRaw = typeof parsedTemplate?.pathAgentRaw === 'string'
+      ? parsedTemplate.pathAgentRaw
+      : null;
+    const stageDesigns = parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object'
+      ? parsedTemplate.stageDesigns
+      : null;
     const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
       ? parsedTemplate.normalizedInput
       : null;
@@ -825,11 +904,33 @@ class LearningService {
       ? parsedTemplate.goalFinalPayload
       : null;
     const sceneFramingNormalizedInput = getSceneFramingNormalizedInput(sceneFraming);
-    const sceneFramingSupportingEvidence = getSceneFramingSupportingEvidence(sceneFraming);
     const cognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
+    const milestoneConceptBindings = parsePathMilestoneConceptBindings(path.aiPromptTemplate || null);
+    const milestoneConceptBindingMap = new Map<number, { coreConcept: string | null; title?: string | null }>();
+    milestoneConceptBindings.forEach((item) => {
+      milestoneConceptBindingMap.set(item.stageNumber, {
+        coreConcept: item.coreConcept,
+        title: item.title,
+      });
+    });
+    const milestoneConcepts = (path.milestones || []).map((milestone: any, index: number) => {
+      const stageNumber = Number.isFinite(Number(milestone?.stageNumber)) ? Number(milestone.stageNumber) : index + 1;
+      const binding = milestoneConceptBindingMap.get(stageNumber);
+      const resolvedMilestoneConcept = resolveMilestoneConcept(
+        milestone?.coreConceptId || binding?.coreConcept || null,
+        cognitiveDesign,
+        milestone?.coreConceptName || binding?.coreConcept || null,
+      );
+      return {
+        milestoneId: milestone.id,
+        stageNumber,
+        title: milestone.title || milestone.goal || binding?.title || null,
+        ...resolvedMilestoneConcept,
+      };
+    });
     const taskProfiles = (path.milestones || []).flatMap((milestone: any) =>
       (milestone.subtasks || []).map((task: any) => ({
-        ...resolveTaskConcept(task.coreConcept, cognitiveDesign, task.coreConcept),
+        ...resolveTaskConcept(task.linkedConceptId || task.coreConcept, cognitiveDesign, task.linkedConceptName || task.coreConcept),
         taskId: task.id,
         milestoneId: milestone.id,
         milestoneTitle: milestone.title || milestone.goal || null,
@@ -839,11 +940,19 @@ class LearningService {
         cognitiveLevel: task.cognitiveLevel || null,
         displayLabel: task.displayLabel || null,
         learningObjectives: parseTaskLearningObjectives(task.learningObjectives),
-        coreConcept: normalizeConceptText(task.coreConcept),
+        coreConcept: normalizeConceptText(task.linkedConceptName || task.coreConcept),
         transferable: task.transferable ?? false,
         annotationConfidence: task.annotationConfidence ?? null,
       }))
     );
+    const cognitiveDiagnostics = {
+      suspiciousDomain: isSuspiciousCognitiveDomain(cognitiveDesign?.cognitiveDomain),
+      suspiciousConcepts: Array.isArray(cognitiveDesign?.coreConcepts)
+        ? cognitiveDesign.coreConcepts
+            .filter((concept: any) => isSuspiciousCoreConceptName(concept?.name))
+            .map((concept: any) => ({ id: concept.id, name: concept.name }))
+        : [],
+    };
 
     return {
       source: typeof normalizedInput?.source === 'string'
@@ -908,15 +1017,6 @@ class LearningService {
       },
       framing: sceneFraming ? {
         normalizedInput: sceneFramingNormalizedInput || null,
-        supportingEvidence: sceneFramingSupportingEvidence
-          ? {
-              usagePolicy: sceneFramingSupportingEvidence.usagePolicy || 'reference_only',
-              conversationHistory: normalizeConversationHistory(sceneFramingSupportingEvidence.conversationHistory),
-              learnerQA: Array.isArray(sceneFramingSupportingEvidence.learnerQA) ? sceneFramingSupportingEvidence.learnerQA : [],
-              behaviorLog: Array.isArray(sceneFramingSupportingEvidence.behaviorLog) ? sceneFramingSupportingEvidence.behaviorLog : [],
-              notes: normalizeStringArray(sceneFramingSupportingEvidence.notes),
-            }
-          : null,
         legacyFrame: {
           version: sceneFraming.version || null,
           intent: sceneFraming.intent || null,
@@ -937,25 +1037,32 @@ class LearningService {
         }
       } : null,
       cognitiveDesign,
+      cognitiveDiagnostics,
       adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate || null),
       adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate || null),
       generationTimeline: generationStatus ? {
         core: generationStatus.core || null,
         coreStep: generationStatus.coreStep || null,
-        enrichment: generationStatus.enrichment || null,
+        stageDesign: generationStatus.stageDesign || null,
         lastError: generationStatus.lastError || null,
         triggerSource: generationStatus.triggerSource || null,
         updatedAt: generationStatus.updatedAt || null,
-        enrichmentRetryCount: generationStatus.enrichmentRetryCount || 0,
-        lastEnrichmentRetryAt: generationStatus.lastEnrichmentRetryAt || null,
+        stageDesignRetryCount: generationStatus.stageDesignRetryCount || 0,
+        lastStageDesignRetryAt: generationStatus.lastStageDesignRetryAt || null,
       } : null,
+      milestoneConcepts,
       taskProfiles,
-      raw: {
-        goalFinalPayload,
-        normalizedInput,
-        promptTemplate: parsedTemplate,
-        generationStatus,
-      },
+      stageDesigns,
+        raw: {
+          goalFinalPayload,
+          normalizedInput,
+          sceneFramingRaw,
+          pathAgentRaw,
+          sceneFraming,
+          stageDesigns,
+          promptTemplate: parsedTemplate,
+          generationStatus,
+        },
     };
   }
 
@@ -1089,25 +1196,41 @@ class LearningService {
     });
   }
 
-  private normalizeMilestonesWithConcepts(milestonesData: any[], cognitiveDesign: PathCognitiveDesign) {
+  private normalizeMilestonesWithConcepts(milestonesData: any[], cognitiveDesign: PathCognitiveDesign): NormalizedPathMilestone[] {
     const conceptIds = Array.isArray(cognitiveDesign.coreConcepts)
       ? cognitiveDesign.coreConcepts.map((concept) => concept.id)
       : [];
+    const fallbackConceptId = conceptIds[0] || null;
 
-    return (Array.isArray(milestonesData) ? milestonesData : []).map((milestone: any, index: number) => ({
-      ...milestone,
-      stage: milestone?.stage || index + 1,
-      name: milestone?.name || milestone?.title || `里程碑${index + 1}`,
-      description: milestone?.description || '',
-      goal: milestone?.goal || '',
-      estimatedHours: milestone?.estimatedHours || 0,
-      tasks: this.normalizeMilestoneTasks(milestone?.tasks || [], conceptIds)
-    }));
+    return (Array.isArray(milestonesData) ? milestonesData : []).map((milestone: any, index: number) => {
+      const requestedCoreConcept = typeof milestone?.coreConcept === 'string' ? milestone.coreConcept.trim() : '';
+      const inferredCoreConcept = inferMilestoneConceptFromTasks(milestone?.tasks || []);
+      const coreConcept = requestedCoreConcept && conceptIds.includes(requestedCoreConcept)
+        ? requestedCoreConcept
+        : inferredCoreConcept && conceptIds.includes(inferredCoreConcept)
+          ? inferredCoreConcept
+          : fallbackConceptId;
+      const tasks = this.normalizeMilestoneTasks(milestone?.tasks || [], conceptIds).map((task) => ({
+        ...task,
+        linkedConcept: task.linkedConcept || coreConcept || undefined,
+      }));
+
+      return {
+        ...milestone,
+        stage: milestone?.stage || index + 1,
+        name: milestone?.name || milestone?.title || `里程碑${index + 1}`,
+        description: milestone?.description || '',
+        goal: milestone?.goal || '',
+        estimatedHours: milestone?.estimatedHours || 0,
+        coreConcept,
+        tasks,
+      };
+    });
   }
 
   private getPathLearningAccessState(pathStatus: string | null | undefined, aiPromptTemplate: string | null) {
     const generationStatus = parsePathGenerationStatus(aiPromptTemplate);
-    const enrichmentStatus = generationStatus?.enrichment;
+    const enrichmentStatus = generationStatus?.stageDesign;
 
     if (pathStatus !== 'active') {
       if (pathStatus === 'generating') {
@@ -1149,14 +1272,14 @@ class LearningService {
       return {
         generationStatus,
         canStartLearning: false,
-        learningBlockedReason: '学习内容准备遇到问题，系统会继续尝试，请稍后再开始学习。'
+        learningBlockedReason: '阶段任务生成遇到问题，系统会继续尝试，请稍后再开始学习。'
       };
     }
 
     return {
       generationStatus,
       canStartLearning: false,
-      learningBlockedReason: '学习内容还在准备中，请稍候再开始学习。'
+      learningBlockedReason: '阶段任务还在生成中，请稍候再开始学习。'
     };
   }
 
@@ -1171,7 +1294,7 @@ class LearningService {
     generationStatus: ParsedPathGenerationStatus | null
   ): number {
     const rawTime = generationStatus?.updatedAt
-      || generationStatus?.lastEnrichmentRetryAt
+      || generationStatus?.lastStageDesignRetryAt
       || path.updatedAt?.toISOString?.()
       || path.updatedAt;
 
@@ -1193,14 +1316,14 @@ class LearningService {
     },
     generationStatus: ParsedPathGenerationStatus | null
   ): Promise<number> {
-    const retryCount = (generationStatus?.enrichmentRetryCount || 0) + 1;
+    const retryCount = (generationStatus?.stageDesignRetryCount || 0) + 1;
     const retryAt = new Date().toISOString();
 
     await this.updatePathGenerationStatus(path.id, {
-      enrichment: 'pending',
+      stageDesign: 'pending',
       lastError: null,
-      enrichmentRetryCount: retryCount,
-      lastEnrichmentRetryAt: retryAt,
+      stageDesignRetryCount: retryCount,
+      lastStageDesignRetryAt: retryAt,
       updatedAt: retryAt
     });
 
@@ -1460,7 +1583,7 @@ class LearningService {
 
       await Promise.all(stalePaths.map((path) => this.updatePathGenerationStatus(path.id, {
         core: 'failed',
-        enrichment: 'failed',
+        stageDesign: 'failed',
         lastError: 'GENERATION_TIMEOUT_ORPHANED'
       })));
     }
@@ -1495,11 +1618,11 @@ class LearningService {
     for (const path of candidatePaths) {
       const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
 
-      if (generationStatus?.enrichment !== 'failed') {
+      if (generationStatus?.stageDesign !== 'failed') {
         continue;
       }
 
-      const retryCount = generationStatus.enrichmentRetryCount || 0;
+      const retryCount = generationStatus.stageDesignRetryCount || 0;
       if (retryCount >= ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length) {
         continue;
       }
@@ -1514,7 +1637,7 @@ class LearningService {
         await this.queuePathEnrichmentRetry(path, generationStatus);
         retriedCount += 1;
       } catch (error) {
-        logger.warn('自动继续准备学习内容失败', {
+        logger.warn('自动继续生成阶段任务失败', {
           pathId: path.id,
           retryCount,
           error: error instanceof Error ? error.message : String(error)
@@ -1523,7 +1646,7 @@ class LearningService {
     }
 
     if (retriedCount > 0) {
-      logger.info('已触发学习内容自动继续准备', { retriedCount });
+      logger.info('已触发阶段任务自动继续生成', { retriedCount });
     }
 
     return retriedCount;
@@ -1553,6 +1676,15 @@ class LearningService {
 
   private async attachActualMinutesToPath(path: any): Promise<any> {
     const milestones = path?.milestones || [];
+    const cognitiveDesign = parsePathCognitiveDesign(path?.aiPromptTemplate || null);
+    const milestoneConceptBindings = parsePathMilestoneConceptBindings(path?.aiPromptTemplate || null);
+    const milestoneConceptBindingMap = new Map<number, { coreConcept: string | null; title?: string | null }>();
+    milestoneConceptBindings.forEach((item) => {
+      milestoneConceptBindingMap.set(item.stageNumber, {
+        coreConcept: item.coreConcept,
+        title: item.title,
+      });
+    });
     const allSubtasks = milestones.flatMap((milestone: any) => milestone.subtasks || []);
     const taskIds = allSubtasks.map((task: any) => task.id).filter(Boolean);
 
@@ -1600,16 +1732,29 @@ class LearningService {
 
     return {
       ...path,
-      milestones: milestones.map((milestone: any) => ({
-        ...milestone,
-        subtasks: (milestone.subtasks || []).map((task: any) => ({
-          ...task,
-          actualMinutes: actualMinutesMap.get(task.id) ?? null,
-          hasTeachingWrapup: latestSessionAtMap.has(task.id),
-          latestTeachingSessionAt: latestSessionAtMap.get(task.id) ?? null,
-          latestWrapupStatus: latestWrapupStatusMap.get(task.id) ?? null,
-        })),
-      })),
+      milestones: milestones.map((milestone: any, index: number) => {
+        const stageNumber = Number.isFinite(Number(milestone?.stageNumber)) ? Number(milestone.stageNumber) : index + 1;
+        const milestoneConcept = resolveMilestoneConcept(
+          milestone?.coreConceptId || milestoneConceptBindingMap.get(stageNumber)?.coreConcept || null,
+          cognitiveDesign,
+          milestone?.coreConceptName || milestoneConceptBindingMap.get(stageNumber)?.coreConcept || null,
+        );
+
+        return {
+          ...milestone,
+          coreConceptId: milestoneConcept.coreConceptId,
+          coreConceptName: milestoneConcept.coreConceptName,
+          coreConceptDescription: milestoneConcept.coreConceptDescription,
+          coreConceptSource: milestoneConcept.conceptSource,
+          subtasks: (milestone.subtasks || []).map((task: any) => ({
+            ...task,
+            actualMinutes: actualMinutesMap.get(task.id) ?? null,
+            hasTeachingWrapup: latestSessionAtMap.has(task.id),
+            latestTeachingSessionAt: latestSessionAtMap.get(task.id) ?? null,
+            latestWrapupStatus: latestWrapupStatusMap.get(task.id) ?? null,
+          })),
+        };
+      }),
     };
   }
 
@@ -1748,7 +1893,7 @@ class LearningService {
       const agentContext = { userId: data.userId };
 
       if (!data.userProfile?.pathSceneFraming) {
-        const sceneFraming = await executeSkill(pathSceneFramingDefinition, {
+        const sceneFramingResult = await executeSkill(pathSceneFramingDefinition, {
           goal: agentInput.goal,
           currentLevel: agentInput.currentLevel,
           timePerDay: agentInput.timePerDay,
@@ -1756,9 +1901,14 @@ class LearningService {
           confirmedProposal: agentInput.confirmedProposal,
           metadata: agentInput.metadata || {},
         });
+        const sceneFraming = stripSceneFramingDebugMeta(sceneFramingResult);
+        const sceneFramingRaw = typeof sceneFramingResult?._debug?.rawModelOutput === 'string'
+          ? sceneFramingResult._debug.rawModelOutput
+          : null;
         data.userProfile = {
           ...(data.userProfile || {}),
-          pathSceneFraming: sceneFraming
+          pathSceneFraming: sceneFraming,
+          pathSceneFramingRaw: sceneFramingRaw,
         };
         agentInput.metadata = {
           ...(agentInput.metadata || {}),
@@ -1786,11 +1936,12 @@ class LearningService {
       }
 
       const path = pathPayload;
-      const taskChainMilestones = Array.isArray(path.taskChain?.milestones)
-        ? path.taskChain.milestones
-        : Array.isArray(path.milestones)
-          ? path.milestones
-          : [];
+      const taskChainMilestones = Array.isArray(path.milestones)
+        ? path.milestones
+        : [];
+      const pathAgentRaw = typeof (path as any)?._debug?.rawModelOutput === 'string'
+        ? (path as any)._debug.rawModelOutput
+        : null;
       logger.info('PathAgent 调用成功', { userId: data.userId, pathId: path.id });
 
       return {
@@ -1799,20 +1950,16 @@ class LearningService {
         difficulty: data.userProfile?.skillLevel || 'beginner',
         estimatedTotalHours: path.estimatedHours || 0,
         sceneFraming: data.userProfile?.pathSceneFraming || null,
+        sceneFramingRaw: data.userProfile?.pathSceneFramingRaw || null,
+        pathAgentRaw,
         suggestedMilestones: taskChainMilestones.map((m: any, idx: number) => ({
           stage: m.stageNumber || idx + 1,
           name: m.title,
+          coreConcept: typeof m.coreConcept === 'string' ? m.coreConcept : undefined,
           description: m.description,
           goal: m.goal,
           estimatedHours: m.estimatedHours,
-          tasks: (m.subtasks || []).map((t: any) => ({
-            title: t.title,
-            description: t.description || '',
-            type: normalizePathTaskType(t.type),
-            estimatedMinutes: t.estimatedMinutes || 30,
-            acceptanceCriteria: t.acceptanceCriteria || '',
-            linkedConcept: typeof t.linkedConcept === 'string' ? t.linkedConcept : undefined,
-          }))
+          tasks: []
         })),
         cognitiveDesign: path.cognitiveCore || path.cognitiveDesign,
         recommendations: [],
@@ -1838,6 +1985,8 @@ class LearningService {
         mode: data.mode || 'generate',
         goalFinalPayload: buildGoalToPathHandoffSnapshot(data),
         normalizedInput: buildNormalizedPathInputSnapshot(data),
+        sceneFramingRaw: analysis.sceneFramingRaw || data.userProfile?.pathSceneFramingRaw || null,
+        pathAgentRaw: analysis.pathAgentRaw || null,
         suggestedMilestones: normalizedMilestonesData,
         cognitiveDesign,
         adjustmentPolicy,
@@ -1910,7 +2059,7 @@ class LearningService {
           goal: data.description,
           stages: JSON.stringify(normalizedMilestonesData.map((m: any) => m.name) || []),
           milestones: JSON.stringify(normalizedMilestonesData),
-          subtasks: JSON.stringify(normalizedMilestonesData.flatMap((m: any) => m.tasks || []) || []),
+          subtasks: JSON.stringify([]),
           aiAnalysis: JSON.stringify(analysis),
           feasibility: analysis.feasibility,
           difficulty: analysis.difficulty,
@@ -1930,6 +2079,12 @@ class LearningService {
             title: milestoneData.name || `里程碑${stageNum}`,
             description: milestoneData.description || '',
             goal: milestoneData.goal || '',
+            coreConceptId: typeof milestoneData.coreConcept === 'string' ? milestoneData.coreConcept : null,
+            coreConceptName: resolveMilestoneConcept(
+              typeof milestoneData.coreConcept === 'string' ? milestoneData.coreConcept : null,
+              cognitiveDesign,
+              typeof milestoneData.coreConcept === 'string' ? milestoneData.coreConcept : null,
+            ).coreConceptName,
             estimatedHours: milestoneData.estimatedHours || 0,
             status: stageNum === 1 ? 'active' : 'locked',
             order: i,
@@ -1937,27 +2092,6 @@ class LearningService {
           }
         });
 
-        if (milestoneData.tasks && milestoneData.tasks.length > 0) {
-          for (let j = 0; j < milestoneData.tasks.length; j++) {
-            const taskData = milestoneData.tasks[j];
-            await (tx.subtasks as any).create({
-              data: {
-                id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${i}_${j}`,
-                milestoneId: milestone.id,
-                userId: data.userId,
-                title: taskData.title || `任务${j + 1}`,
-                description: taskData.description || '',
-                taskType: normalizePathTaskType(taskData.type),
-                estimatedMinutes: taskData.estimatedMinutes || 30,
-                acceptanceCriteria: taskData.acceptanceCriteria || '',
-                coreConcept: typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-                order: j,
-                status: 'todo',
-                updatedAt: new Date()
-              }
-            });
-          }
-        }
       }
 
       await tx.learning_paths.update({
@@ -1975,26 +2109,26 @@ class LearningService {
     const startTime = Date.now();
     const triggerSource = data.sourceConversationId ? 'goal-conversation' : 'api';
 
-    await this.recordPathGenerationStageLog({
-      userId: data.userId,
-      pathId,
-      sourceConversationId: data.sourceConversationId,
-      triggerSource,
-      phase: 'enrichment',
-      status: 'started',
-      input: { goal: data.description }
-    });
+      await this.recordPathGenerationStageLog({
+        userId: data.userId,
+        pathId,
+        sourceConversationId: data.sourceConversationId,
+        triggerSource,
+        phase: 'stageDesign',
+        status: 'started',
+        input: { goal: data.description }
+      });
 
-    await this.updatePathGenerationStatus(pathId, {
-      enrichment: 'processing',
-      lastError: null,
-      sourceConversationId: data.sourceConversationId || null,
-      triggerSource,
+      await this.updatePathGenerationStatus(pathId, {
+        stageDesign: 'processing',
+        lastError: null,
+        sourceConversationId: data.sourceConversationId || null,
+        triggerSource,
       updatedAt: new Date().toISOString()
     });
 
     try {
-      logger.info('开始任务画像后处理...', { userId: data.userId, pathId });
+      logger.info('开始阶段任务设计...', { userId: data.userId, pathId });
 
       const learningPath = await prisma.learning_paths.findUnique({
         where: { id: pathId },
@@ -2014,91 +2148,113 @@ class LearningService {
         throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
       }
 
-      const goalAnalysisResult = await executeSkill(goalTypeIdentifierDefinition, {
-        goal: data.description,
-        context: JSON.stringify(data.userProfile || {}),
-        domain: analysis.subject
-      });
-
-      const allTasks = learningPath.milestones.flatMap((milestone: any, milestoneIndex: number) =>
-        (milestone.subtasks || []).map((task: any, taskIndex: number) => ({
-          id: task.id,
-          taskId: task.id,
-          milestoneIndex,
-          taskIndex,
-          title: task.title,
-          description: task.description || '',
-          type: normalizePathTaskType(task.taskType),
-          stageGoal: milestone.goal || milestone.title,
-          linkedConcept: task.coreConcept || null
-        }))
-      );
-
       const pathCognitiveDesign = parsePathCognitiveDesign(learningPath.aiPromptTemplate || null);
+      const parsedTemplate = this.parsePathPromptTemplate(learningPath.aiPromptTemplate || null);
+      const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
+        ? parsedTemplate.sceneFraming
+        : null;
+      const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
+        ? parsedTemplate.normalizedInput
+        : null;
+      const stageDesignRawOutputs: Record<string, any> = {};
+      const stageDesignOutputs: Array<{
+        milestoneId: string;
+        stageNumber: number;
+        subtasks: any[];
+      }> = [];
+      let designedTaskCount = 0;
 
-      if (allTasks.length === 0) {
-        await this.recordPathGenerationStageLog({
-          userId: data.userId,
-          pathId,
-          sourceConversationId: data.sourceConversationId,
-          triggerSource,
-          phase: 'enrichment',
-          status: 'succeeded',
-          durationMs: Date.now() - startTime,
-          output: { taskCount: 0, labeledCount: 0 }
+      for (const milestone of learningPath.milestones) {
+        const stageResult = await executeSkill(stageDesignerDefinition, {
+          milestone: {
+            stageNumber: milestone.stageNumber,
+            title: milestone.title,
+            coreConcept: milestone.coreConceptId || null,
+            description: milestone.description || null,
+            goal: milestone.goal || null,
+            estimatedHours: milestone.estimatedHours || null,
+          },
+          cognitiveCore: pathCognitiveDesign,
+          normalizedInput,
+          repairHints: null,
         });
-        await this.updatePathGenerationStatus(pathId, {
-          enrichment: 'succeeded',
-          lastError: null,
-          sourceConversationId: data.sourceConversationId || null,
-          triggerSource,
-          updatedAt: new Date().toISOString()
+
+        const stageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+        stageDesignRawOutputs[`stage-${milestone.stageNumber}`] = {
+          rawModelOutput: stageResult?._debug?.rawModelOutput || null,
+          extractedJson: stageResult?._debug?.extractedJson || null,
+          normalizedOutput: {
+            subtasks: stageTasks,
+          }
+        };
+        stageDesignOutputs.push({
+          milestoneId: milestone.id,
+          stageNumber: milestone.stageNumber,
+          subtasks: stageTasks,
         });
-        return;
-      }
-
-      const labelerResult = await executeSkill(batchAndersonLabelerDefinition, {
-        tasks: allTasks,
-        goalType: goalAnalysisResult.goalType,
-        knowledgeDistribution: goalAnalysisResult.knowledgeDistribution,
-        cognitiveFocus: goalAnalysisResult.cognitiveFocus,
-        cognitiveCore: pathCognitiveDesign
-      });
-
-      const taskLabels = labelerResult.labels || [];
-
-      for (const label of taskLabels) {
-        if (label.knowledgeType && label.cognitiveLevel) {
-          label.displayLabel = this.generateDisplayLabel(label.knowledgeType, label.cognitiveLevel)
-            || `${label.knowledgeType} + ${label.cognitiveLevel}`;
-        }
       }
 
       await prisma.$transaction(async (tx) => {
-        for (const label of taskLabels) {
-          const taskId = label.taskId || label.id;
-          if (!taskId) continue;
-          await tx.subtasks.update({
-            where: { id: taskId },
-            data: {
-              knowledgeType: label.knowledgeType || null,
-              cognitiveLevel: label.cognitiveLevel || null,
-              displayLabel: label.displayLabel || null,
-              learningObjectives: label.learningObjectives ? JSON.stringify(label.learningObjectives) : null,
-              coreConcept: label.resolvedConceptName || label.coreConcept || null,
-              transferable: label.transferable ?? false,
-              annotationConfidence: label.confidence || null,
-              updatedAt: new Date()
-            }
-          });
+        for (const milestone of learningPath.milestones) {
+          await tx.subtasks.deleteMany({ where: { milestoneId: milestone.id } });
+          const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
+          const stageTasks = stageOutput?.subtasks || [];
+
+          for (let j = 0; j < stageTasks.length; j++) {
+            const taskData = stageTasks[j];
+            const resolvedConcept = resolveTaskConcept(
+              typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+              pathCognitiveDesign,
+              typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+            );
+            const displayLabel = this.generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
+              || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
+
+            await tx.subtasks.create({
+              data: {
+                id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`,
+                milestoneId: milestone.id,
+                userId: data.userId,
+                title: taskData.title || `任务${j + 1}`,
+                description: taskData.description || '',
+                taskType: normalizePathTaskType(taskData.type),
+                estimatedMinutes: taskData.estimatedMinutes || 30,
+                acceptanceCriteria: taskData.acceptanceHint || '',
+                coreConcept: resolvedConcept.linkedConceptName || null,
+                linkedConceptId: resolvedConcept.linkedConceptId || null,
+                linkedConceptName: resolvedConcept.linkedConceptName || null,
+                knowledgeType: taskData.knowledgeType || null,
+                cognitiveLevel: taskData.cognitiveLevel || null,
+                displayLabel,
+                learningObjectives: null,
+                transferable: taskData.transferable ?? false,
+                annotationConfidence: null,
+                order: j,
+                status: 'todo',
+                updatedAt: new Date()
+              }
+            });
+            designedTaskCount += 1;
+          }
         }
+
+        await tx.learning_paths.update({
+          where: { id: learningPath.id },
+          data: {
+            aiPromptTemplate: JSON.stringify({
+              ...parsedTemplate,
+              stageDesigns: stageDesignRawOutputs,
+            }),
+            updatedAt: new Date(),
+          }
+        });
       });
 
-      logger.info('任务画像后处理完成', {
+      logger.info('阶段任务设计完成', {
         pathId,
         userId: data.userId,
-        taskCount: allTasks.length,
-        labeledCount: taskLabels.length
+        taskCount: designedTaskCount,
+        milestoneCount: learningPath.milestones.length,
       });
 
       await this.recordPathGenerationStageLog({
@@ -2106,24 +2262,23 @@ class LearningService {
         pathId,
         sourceConversationId: data.sourceConversationId,
         triggerSource,
-        phase: 'enrichment',
+        phase: 'stageDesign',
         status: 'succeeded',
         durationMs: Date.now() - startTime,
         output: {
-          taskCount: allTasks.length,
-          labeledCount: taskLabels.length,
-          goalType: goalAnalysisResult.goalType
+          taskCount: designedTaskCount,
+          designedStages: learningPath.milestones.length
         }
       });
       await this.updatePathGenerationStatus(pathId, {
-        enrichment: 'succeeded',
+        stageDesign: 'succeeded',
         lastError: null,
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
         updatedAt: new Date().toISOString()
       });
     } catch (andersonError: any) {
-      logger.warn('任务画像后处理失败，路径保持可用', {
+      logger.warn('阶段任务设计失败，路径保持骨架可用', {
         pathId,
         userId: data.userId,
         error: andersonError?.message || String(andersonError)
@@ -2134,14 +2289,14 @@ class LearningService {
         pathId,
         sourceConversationId: data.sourceConversationId,
         triggerSource,
-        phase: 'enrichment',
+        phase: 'stageDesign',
         status: 'failed',
         durationMs: Date.now() - startTime,
         error: andersonError?.message || String(andersonError),
         errorCode: 'PATH_ENRICHMENT_FAILED'
       });
       await this.updatePathGenerationStatus(pathId, {
-        enrichment: 'failed',
+        stageDesign: 'failed',
         lastError: andersonError?.message || String(andersonError),
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
@@ -2178,7 +2333,7 @@ class LearningService {
     if (data.existingPathId) {
       await this.updatePathGenerationStatus(data.existingPathId, {
         core: 'processing',
-        enrichment: 'pending',
+        stageDesign: 'pending',
         lastError: null,
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
@@ -2235,7 +2390,7 @@ class LearningService {
 
       await this.updatePathGenerationStatus(fullPath.id, {
         core: 'succeeded',
-        enrichment: 'pending',
+        stageDesign: 'pending',
         lastError: null,
         sourceConversationId: data.sourceConversationId || null,
         triggerSource,
@@ -2269,7 +2424,7 @@ class LearningService {
       if (data.existingPathId) {
         await this.updatePathGenerationStatus(data.existingPathId, {
           core: 'failed',
-          enrichment: 'failed',
+          stageDesign: 'failed',
           lastError: error?.message || String(error),
           sourceConversationId: data.sourceConversationId || null,
           triggerSource,
@@ -2604,13 +2759,13 @@ const learningPath = await prisma.learning_paths.findUnique({
     }
 
     if (path.status !== 'active') {
-      throw new Error('学习路径主结构尚未完成，暂不能继续准备');
+      throw new Error('学习路径主结构尚未完成，暂不能继续生成阶段任务');
     }
 
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
 
-    if (generationStatus?.enrichment === 'processing') {
-      throw new Error('学习内容仍在准备中，请稍后查看');
+    if (generationStatus?.stageDesign === 'processing') {
+      throw new Error('阶段任务仍在生成中，请稍后查看');
     }
 
     const retryCount = await this.queuePathEnrichmentRetry(path, generationStatus);
@@ -2690,6 +2845,134 @@ const learningPath = await prisma.learning_paths.findUnique({
   }
 
   // 预留：基于已学内容重调学习路径（默认 new_version）
+  private resolveStageReplanTarget(path: any, requestedStageNumber?: number | null) {
+    if (requestedStageNumber) {
+      return path.milestones.find((milestone: any) => milestone.stageNumber === requestedStageNumber) || null;
+    }
+
+    const activeMilestone = path.milestones.find((milestone: any) => {
+      const tasks = milestone.subtasks || [];
+      return tasks.length === 0 || tasks.some((task: any) => task.status !== 'completed');
+    });
+
+    return activeMilestone || path.milestones[0] || null;
+  }
+
+  private async redesignMilestoneTasks(path: any, milestone: any, data: PathReplanRequest, learnerReplanProjection: any) {
+    const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
+    const pathCognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
+    const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
+      ? parsedTemplate.normalizedInput
+      : null;
+    const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
+      ? parsedTemplate.sceneFraming
+      : null;
+    const completedTasks = (milestone.subtasks || []).filter((task: any) => task.status === 'completed');
+
+    const stageResult = await executeSkill(stageDesignerDefinition, {
+      milestone: {
+        stageNumber: milestone.stageNumber,
+        title: milestone.title,
+        coreConcept: milestone.coreConceptId || null,
+        description: milestone.description || null,
+        goal: milestone.goal || null,
+        estimatedHours: milestone.estimatedHours || null,
+      },
+      cognitiveCore: pathCognitiveDesign,
+      normalizedInput,
+      repairHints: {
+        reason: data.reason || null,
+        triggerSource: data.triggerSource || null,
+        evidence: data.evidence || null,
+        learnerReplanProjection,
+        preserveCompletedTasks: completedTasks.map((task: any) => ({ id: task.id, title: task.title })),
+      },
+    });
+
+    const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+
+    await prisma.$transaction(async (tx) => {
+      await tx.subtasks.deleteMany({
+        where: {
+          milestoneId: milestone.id,
+          status: { not: 'completed' },
+        }
+      });
+
+      for (let index = 0; index < newTasks.length; index += 1) {
+        const taskData = newTasks[index];
+        const resolvedConcept = resolveTaskConcept(
+          typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+          pathCognitiveDesign,
+          typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+        );
+        const displayLabel = this.generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
+          || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
+
+        await tx.subtasks.create({
+          data: {
+            id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${index}`,
+            milestoneId: milestone.id,
+            userId: data.userId,
+            title: taskData.title || `任务${index + 1}`,
+            description: taskData.description || '',
+            taskType: normalizePathTaskType(taskData.type),
+            estimatedMinutes: taskData.estimatedMinutes || 30,
+            acceptanceCriteria: taskData.acceptanceHint || '',
+            coreConcept: resolvedConcept.linkedConceptName || null,
+            linkedConceptId: resolvedConcept.linkedConceptId || null,
+            linkedConceptName: resolvedConcept.linkedConceptName || null,
+            knowledgeType: taskData.knowledgeType || null,
+            cognitiveLevel: taskData.cognitiveLevel || null,
+            displayLabel,
+            learningObjectives: null,
+            transferable: taskData.transferable ?? false,
+            annotationConfidence: null,
+            order: completedTasks.length + index,
+            status: 'todo',
+            updatedAt: new Date(),
+          }
+        });
+      }
+
+      await tx.learning_paths.update({
+        where: { id: path.id },
+        data: {
+          aiPromptTemplate: JSON.stringify({
+            ...parsedTemplate,
+            stageDesigns: {
+              ...(parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object' ? parsedTemplate.stageDesigns : {}),
+              [`stage-${milestone.stageNumber}`]: {
+                rawModelOutput: stageResult?._debug?.rawModelOutput || null,
+                extractedJson: stageResult?._debug?.extractedJson || null,
+                normalizedOutput: {
+                  subtasks: newTasks,
+                },
+                redesignedAt: new Date().toISOString(),
+                redesignReason: data.reason || null,
+              }
+            },
+            _generation: {
+              ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
+              enrichment: 'succeeded',
+              lastError: null,
+              triggerSource: data.triggerSource || 'api',
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+          updatedAt: new Date(),
+        }
+      });
+    });
+
+    return {
+      pathId: path.id,
+      redesignedStageNumber: milestone.stageNumber,
+      redesignedTaskCount: newTasks.length,
+      preservedCompletedTaskCount: completedTasks.length,
+    };
+  }
+
   async requestPathReplan(data: PathReplanRequest) {
     const mode = data.mode || 'new_version';
     const triggerSource = data.triggerSource || 'api';
@@ -2725,27 +3008,9 @@ const learningPath = await prisma.learning_paths.findUnique({
     });
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
 
-    if (mode === 'overwrite') {
-      return {
-        enabled: false,
-        status: 'not_enabled',
-        policy: {
-          immutableLearned: true,
-          freezeCompletedTaskIds: completedTaskIds,
-          defaultMode: 'new_version'
-        },
-        request: {
-          pathId: data.pathId,
-          userId: data.userId,
-          triggerSource,
-          mode,
-          reason: data.reason || '',
-          evidence: {
-            ...(data.evidence || {}),
-            learnerReplanProjection,
-          }
-        }
-      };
+    const targetMilestone = this.resolveStageReplanTarget(path, data.stageNumber || null);
+    if (!targetMilestone) {
+      throw new Error('当前路径没有可重设计的阶段');
     }
 
     const currentMilestoneTitle = learnerReplanProjection?.path.currentPosition.milestoneTitle || '';
@@ -2754,85 +3019,32 @@ const learningPath = await prisma.learning_paths.findUnique({
     const strugglingConcepts = learnerReplanProjection?.mastery.strugglingConcepts || [];
     const prerequisiteGaps = learnerReplanProjection?.risk.prerequisiteGaps?.map((item) => item.label) || [];
 
-    const replanDescriptionParts = [
-      path.description || path.title || path.name || '个性化学习路径',
-      data.reason ? `重调原因：${data.reason}` : null,
-      currentMilestoneTitle ? `当前推进阶段：${currentMilestoneTitle}` : null,
-      stableConcepts.length > 0 ? `已稳定掌握：${stableConcepts.join('、')}` : null,
-      fragileConcepts.length > 0 ? `掌握不稳：${fragileConcepts.join('、')}` : null,
-      strugglingConcepts.length > 0 ? `持续吃力：${strugglingConcepts.join('、')}` : null,
-      prerequisiteGaps.length > 0 ? `需补前置：${prerequisiteGaps.join('、')}` : null,
-    ].filter(Boolean);
-
-    const replanUserProfile = {
-      skillLevel: learnerSnapshot.profile.learning.ktl >= 6 ? 'advanced' : learnerSnapshot.profile.learning.ktl >= 3 ? 'intermediate' : 'beginner',
-      currentSkillLevel: learnerSnapshot.profile.learning.ktl >= 6 ? 'advanced' : learnerSnapshot.profile.learning.ktl >= 3 ? 'intermediate' : 'beginner',
-      timePerDay: path.deadlineText || undefined,
-      totalWeeks: undefined,
-      replan: {
-        mode,
-        triggerSource,
-        sourcePathId: data.pathId,
-        learnerReplanProjection,
+    const redesignResult = await this.redesignMilestoneTasks(path, targetMilestone, data, {
+      ...learnerReplanProjection,
+      summary: {
+        currentMilestoneTitle,
+        stableConcepts,
+        fragileConcepts,
+        strugglingConcepts,
+        prerequisiteGaps,
         freezeCompletedTaskIds: completedTaskIds,
-      },
-      structuredData: {
-        learner: {
-          thinkingStyle: learnerSnapshot.profile.cognitive.thinkingStyle,
-          preferredStyle: learnerSnapshot.profile.preferences.preferredStyle,
-          confidenceLevel: learnerSnapshot.profile.emotional.confidenceLevel,
-        },
-        replan: {
-          mode,
-          triggerSource,
-          currentPathId: data.pathId,
-          freezeCompletedTaskIds: completedTaskIds,
-          learnerReplanProjection,
-        }
-      },
-      confirmedProposal: {
-        learning_direction: path.title || path.name,
-        key_stages: path.milestones.map((milestone: any) => milestone.title).filter(Boolean),
-        learning_style: learnerSnapshot.profile.preferences.theoryVsPractice,
-      },
-      confidenceScores: {
-        understanding: learnerSnapshot.freshness.confidence,
-        learnerModel: learnerSnapshot.freshness.confidence,
-      },
-      conversationHistory: [
-        {
-          role: 'system',
-          content: `本次为基于学习者模型的路径重调。冻结已完成任务：${completedTaskIds.join(', ') || '无'}。`
-        },
-        {
-          role: 'user',
-          content: replanDescriptionParts.join('\n')
-        }
-      ]
-    };
-
-    const newPath = await this.generateLearningPath({
-      userId: data.userId,
-      description: replanDescriptionParts.join('\n'),
-      subject: path.subject || undefined,
-      deadline: path.deadline || undefined,
-      deadlineText: path.deadlineText || undefined,
-      userProfile: replanUserProfile,
+      }
     });
 
     return {
       enabled: true,
-      status: 'created',
+      status: 'redesigned-stage',
       policy: {
         immutableLearned: true,
         freezeCompletedTaskIds: completedTaskIds,
-        defaultMode: 'new_version'
+        defaultMode: 'overwrite'
       },
       request: {
         pathId: data.pathId,
         userId: data.userId,
         triggerSource,
         mode,
+        stageNumber: targetMilestone.stageNumber,
         reason: data.reason || '',
         evidence: {
           ...(data.evidence || {}),
@@ -2840,8 +3052,10 @@ const learningPath = await prisma.learning_paths.findUnique({
         }
       },
       result: {
-        newPathId: newPath.id,
-        sourcePathId: data.pathId,
+        pathId: data.pathId,
+        redesignedStageNumber: redesignResult.redesignedStageNumber,
+        redesignedTaskCount: redesignResult.redesignedTaskCount,
+        preservedCompletedTaskCount: redesignResult.preservedCompletedTaskCount,
         mode,
       }
     };

@@ -85,8 +85,8 @@
         <section class="paths-hero glass-card">
           <div class="paths-hero__copy">
             <span class="pill">测试工作台</span>
-            <h1>查看测试路径、scene 状态和内容准备情况。</h1>
-            <p>这里承接 goal -> path 的测试链路，重点观察路径主结构、内容准备和失败重试状态。</p>
+            <h1>查看测试路径、scene 状态和阶段任务生成情况。</h1>
+            <p>这里承接 goal -> path 的测试链路，重点观察路径主结构、阶段任务生成和失败重试状态。</p>
           </div>
           <div class="paths-hero__actions">
             <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续学习</button>
@@ -145,7 +145,15 @@
                   <strong>{{ getPathTitle(path) }}</strong>
                   <p>{{ getPathSummary(path) || '这条测试学习路径正在生成。' }}</p>
                   <div class="path-overview-card__progress-bar">
-                    <div class="path-overview-card__progress-fill path-overview-card__progress-fill--loading"></div>
+                    <div
+                      class="path-overview-card__progress-fill path-overview-card__progress-fill--loading"
+                      :class="`path-overview-card__progress-fill--${getGeneratingProgressStage(path)}`"
+                      :style="{ width: `${getGeneratingProgressWidth(path)}%` }"
+                    ></div>
+                  </div>
+                  <div class="path-overview-card__progress-copy">
+                    <span>{{ getGeneratingProgressText(path) }}</span>
+                    <strong>{{ getGeneratingProgressWidth(path) }}%</strong>
                   </div>
                   <div class="path-overview-card__actions-row">
                     <button type="button" class="btn btn-ghost" @click="loadPaths">刷新状态</button>
@@ -159,8 +167,8 @@
                   <strong>{{ getPathTitle(path) }}</strong>
                   <p>{{ getFailureCopy(path) }}</p>
                   <div class="path-overview-card__actions-row">
-                    <button type="button" class="btn btn-ghost" :disabled="retryingPathId === path.id" @click="retryPathGeneration(path)">{{ getRetryActionLabel(path) }}</button>
-                    <button type="button" class="btn btn-ghost" @click="confirmDelete(path)">删除</button>
+                    <button type="button" class="btn btn-ghost" :disabled="retryingPathId === path.id || batchRegenerating" @click="retryPathGeneration(path)">{{ getRetryButtonLabel(path) }}</button>
+                    <button type="button" class="btn btn-ghost" :disabled="batchRegenerating" @click="confirmDelete(path)">删除</button>
                   </div>
                 </template>
 
@@ -171,17 +179,17 @@
                   </div>
                   <div class="path-overview-card__head">
                     <strong>{{ getPathTitle(path) }}</strong>
-                    <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, path)">
-                      <button type="button" class="more-btn" @click.stop>
+                    <el-dropdown trigger="click" :disabled="batchRegenerating" @command="(cmd) => handleCommand(cmd, path)">
+                      <button type="button" class="more-btn" :disabled="batchRegenerating" @click.stop>
                         <el-icon><More /></el-icon>
                       </button>
                       <template #dropdown>
                         <el-dropdown-menu>
-                          <el-dropdown-item command="regenerate">
+                          <el-dropdown-item command="regenerate" :disabled="batchRegenerating">
                             <el-icon><Refresh /></el-icon>
                             <span>重新生成路径</span>
                           </el-dropdown-item>
-                          <el-dropdown-item command="delete" class="delete-item">
+                          <el-dropdown-item command="delete" class="delete-item" :disabled="batchRegenerating">
                             <el-icon><Delete /></el-icon>
                             <span>删除路径</span>
                           </el-dropdown-item>
@@ -426,6 +434,7 @@ const selectedPathIds = ref<string[]>([]);
 const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
 const goalDataCache = ref<Record<string, any>>({});
 const loadingGoalId = ref<string | null>(null);
+let generatingAlertTimer: number | null = null;
 
 const formatCreatedAt = (value: string | null | undefined) => {
   if (!value) return '--';
@@ -451,16 +460,16 @@ const isPathTimeout = (path: any) => {
 
 const generatingPaths = computed(() => paths.value.filter((p: any) => p.status === 'generating'));
 const enrichingPaths = computed(() => paths.value.filter((p: any) => {
-  const enrichmentStatus = p?.generationStatus?.enrichment;
+  const enrichmentStatus = p?.generationStatus?.stageDesign;
   return p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing');
 }));
 const timeoutPaths = computed(() => generatingPaths.value.filter((p: any) => isPathTimeout(p)));
 const isEnrichmentStale = (path: any) => {
-  const enrichmentStatus = path?.generationStatus?.enrichment;
+  const enrichmentStatus = path?.generationStatus?.stageDesign;
   if (!(enrichmentStatus === 'pending' || enrichmentStatus === 'processing')) return false;
 
   const rawTime = path?.generationStatus?.updatedAt
-    || path?.generationStatus?.lastEnrichmentRetryAt
+    || path?.generationStatus?.lastStageDesignRetryAt
     || path?.updatedAt
     || path?.createdAt;
   if (!rawTime) return false;
@@ -474,7 +483,7 @@ const isEnrichmentStale = (path: any) => {
 const canRetryEnrichment = (path: any) => {
   if (path?.status !== 'active') return false;
 
-  const enrichmentStatus = path?.generationStatus?.enrichment;
+  const enrichmentStatus = path?.generationStatus?.stageDesign;
   if (enrichmentStatus === 'failed') return true;
   if ((enrichmentStatus === 'pending' || enrichmentStatus === 'processing') && isEnrichmentStale(path)) {
     return true;
@@ -499,9 +508,9 @@ const getPathContinueTarget = (path: any) => {
 const getPathDisplayState = (path: any) => {
   if (path.status === 'failed') return 'attention';
   if (path.status === 'generating') return isPathTimeout(path) ? 'attention' : 'generating';
-  if (path?.generationStatus?.enrichment === 'failed') return 'attention';
+  if (path?.generationStatus?.stageDesign === 'failed') return 'attention';
   if (isEnrichmentStale(path)) return 'attention';
-  if (path?.generationStatus?.enrichment === 'processing' || path?.generationStatus?.enrichment === 'pending') return 'generating';
+  if (path?.generationStatus?.stageDesign === 'processing' || path?.generationStatus?.stageDesign === 'pending') return 'generating';
   return 'active';
 };
 const getPathStateLabel = (path: any) => {
@@ -517,6 +526,30 @@ const getCoreStepLabel = (path: any) => {
   if (step === 'persist') return '路径落成';
   if (step === 'completed') return '主结构完成';
   return '路径生成';
+};
+const getGeneratingProgressStage = (path: any) => {
+  const step = path?.generationStatus?.coreStep;
+  if (step === 'framing') return 'framing';
+  if (step === 'planning') return 'planning';
+  if (step === 'persist') return 'persist';
+  if (step === 'completed') return 'completed';
+  return 'default';
+};
+const getGeneratingProgressWidth = (path: any) => {
+  const step = path?.generationStatus?.coreStep;
+  if (step === 'framing') return 26;
+  if (step === 'planning') return 58;
+  if (step === 'persist') return 82;
+  if (step === 'completed') return 96;
+  return 38;
+};
+const getGeneratingProgressText = (path: any) => {
+  const step = path?.generationStatus?.coreStep;
+  if (step === 'framing') return '正在收敛目标、约束和首个交付物';
+  if (step === 'planning') return '正在生成认知骨架与任务链';
+  if (step === 'persist') return '正在写入路径结构并准备内容';
+  if (step === 'completed') return '主结构已完成，正在切换到阶段任务生成';
+  return '正在生成测试学习路径';
 };
 
 const getPathInsightChips = (path: any) => {
@@ -594,16 +627,22 @@ const getFailureCopy = (path: any) => {
     return path.description || '这条路径生成时间较长，可以稍后刷新，或直接重试。';
   }
   if (isEnrichmentStale(path)) {
-    return path.learningBlockedReason || path.description || '学习内容准备时间过长，建议手动重试或查看详情。';
+    return path.learningBlockedReason || path.description || '阶段任务生成时间过长，建议手动重试或查看详情。';
   }
   return path.description || path.summary || '这条路径暂时没有生成成功，可以直接重试。';
 };
 
 const getRetryActionLabel = (path: any) => {
   if (canRetryEnrichment(path)) {
-    return '继续完善';
+    return '继续生成阶段任务';
   }
   return '重试';
+};
+const getRetryButtonLabel = (path: any) => {
+  if (retryingPathId.value !== path.id) {
+    return getRetryActionLabel(path);
+  }
+  return canRetryEnrichment(path) ? '继续生成中...' : '重试中...';
 };
 
 const handleCommand = (command: string, path: any) => {
@@ -661,7 +700,7 @@ const goalSceneState = computed<'processing' | 'ready' | 'attention'>(() => {
   if (!path) return 'processing';
   const displayState = getPathDisplayState(path);
   if (displayState === 'attention') return 'attention';
-  if (displayState === 'active' && path?.generationStatus?.enrichment === 'succeeded') return 'ready';
+  if (displayState === 'active' && path?.generationStatus?.stageDesign === 'succeeded') return 'ready';
   if (displayState === 'active') return 'processing';
   return 'processing';
 });
@@ -674,9 +713,9 @@ const goalSceneTitle = computed(() => {
 });
 const goalSceneDescription = computed(() => {
   const path = goalScenePath.value;
-  if (!path) return '这里会显示 goal -> path 场景状态、阶段和内容准备情况。';
+  if (!path) return '这里会显示 goal -> path 场景状态、阶段和任务生成情况。';
   if (goalSceneState.value === 'attention') return path.learningBlockedReason || path.summary || '当前生成遇到问题，可以刷新状态或直接重试。';
-  if (goalSceneState.value === 'ready') return path.summary || '你现在可以直接查看完整任务级路径。';
+  if (goalSceneState.value === 'ready') return path.summary || '你现在可以直接查看完整阶段任务路径。';
   const scene = path.sceneSummary || path.generationStatus?.scene || {};
   const firstDeliverable = scene.firstDeliverable ? `先拿到「${scene.firstDeliverable}」` : '先收敛第一版可交付结果';
   return `${firstDeliverable}，期间会按时间投入拆成完整任务级路径。`;
@@ -701,7 +740,7 @@ const goalSceneSteps = computed(() => {
     { key: 'framing', label: '方向收敛', active: coreStep === 'framing', done: coreStep !== 'framing' && !!coreStep },
     { key: 'planning', label: '任务拆解', active: coreStep === 'planning', done: coreStep === 'persist' || coreStep === 'completed' || coreStatus === 'succeeded' },
     { key: 'persist', label: '路径落成', active: coreStep === 'persist', done: coreStatus === 'succeeded' },
-    { key: 'enrichment', label: '内容准备', active: enrichmentStatus === 'pending' || enrichmentStatus === 'processing', done: enrichmentStatus === 'succeeded' }
+    { key: 'enrichment', label: '阶段任务生成', active: enrichmentStatus === 'pending' || enrichmentStatus === 'processing', done: enrichmentStatus === 'succeeded' }
   ];
 });
 
@@ -714,7 +753,7 @@ let hasShownRateLimitWarning = false;
 
 const hasPollingTargets = (pathList: any[]) => pathList.some((p: any) => {
   const enrichmentStatus = p?.generationStatus?.enrichment;
-  return p.status === 'generating'
+  return (p.status === 'generating' && !isPathTimeout(p))
     || (p.status === 'active'
       && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing')
       && !isEnrichmentStale(p));
@@ -911,8 +950,8 @@ const retryPathGeneration = async (path: any) => {
   try {
     const shouldRetryEnrichment = canRetryEnrichment(path);
     if (shouldRetryEnrichment) {
-      await request.post(`/learning/paths/${path.id}/retry-enrichment`);
-      toast.success('已在后台继续完善学习内容');
+      await request.post(`/learning/paths/${path.id}/retry-stage-design`);
+      toast.success('已在后台继续生成阶段任务');
     } else {
       await request.patch(`/learning/paths/${path.id}/retry`);
       toast.success('已开始重新生成测试学习路径');
@@ -952,7 +991,10 @@ const loadGoalData = async (conversationId: string) => {
 onMounted(() => {
   if (route.query.from === 'goal' && route.query.auto === '1') {
     showGeneratingAlert.value = true;
-    setTimeout(() => { showGeneratingAlert.value = false; }, 5000);
+    generatingAlertTimer = window.setTimeout(() => {
+      showGeneratingAlert.value = false;
+      generatingAlertTimer = null;
+    }, 5000);
   }
   loadPaths().then(() => {
     if (hasPollingTargets(paths.value)) {
@@ -964,6 +1006,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPolling();
+  if (generatingAlertTimer) {
+    clearTimeout(generatingAlertTimer);
+    generatingAlertTimer = null;
+  }
   window.removeEventListener('scroll', handleScroll);
 });
 </script>
@@ -1086,6 +1132,47 @@ onUnmounted(() => {
 .header-nav a.nav-item--active {
   background: rgba(52, 120, 246, 0.09);
   color: #1f57cc;
+}
+
+.paths-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.paths-bulk-toolbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.paths-bulk-toolbar__meta strong {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.paths-bulk-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.path-overview-card__select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: color-mix(in srgb, #172033 68%, white);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.path-overview-card__select input {
+  accent-color: #3478f6;
 }
 
 .header-right {
@@ -1563,6 +1650,22 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.path-overview-card__progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #66758d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.path-overview-card__progress-copy strong {
+  color: #172033;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .path-overview-card__progress-fill {
   height: 100%;
   border-radius: 999px;
@@ -1571,15 +1674,40 @@ onUnmounted(() => {
 }
 
 .path-overview-card__progress-fill--loading {
-  width: 60%;
-  background: linear-gradient(90deg, #3478f6, #54c789, #3478f6);
-  background-size: 200% 100%;
-  animation: progress-loading 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, rgba(52, 120, 246, 0.1) 0%, #3478f6 18%, #8d6bff 52%, #54c789 82%, rgba(84, 199, 137, 0.12) 100%);
+  box-shadow: 0 0 16px rgba(82, 143, 255, 0.22);
+  will-change: transform;
+  animation: progress-loading 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.path-overview-card__progress-fill--framing {
+  background: linear-gradient(90deg, rgba(52, 120, 246, 0.12) 0%, #3478f6 48%, #6ea8ff 100%);
+}
+
+.path-overview-card__progress-fill--planning {
+  background: linear-gradient(90deg, rgba(91, 111, 246, 0.12) 0%, #6a5cff 34%, #8d6bff 70%, #53a4ff 100%);
+}
+
+.path-overview-card__progress-fill--persist {
+  background: linear-gradient(90deg, rgba(84, 199, 137, 0.12) 0%, #1fbf75 28%, #54c789 64%, #8bdcae 100%);
+}
+
+.path-overview-card__progress-fill--completed {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.12) 0%, #22c55e 32%, #54c789 72%, #9ae6b4 100%);
 }
 
 @keyframes progress-loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    transform: translateX(-110%);
+    opacity: 0.65;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(260%);
+    opacity: 0.9;
+  }
 }
 
 /* ========== 预传递信息 ========== */

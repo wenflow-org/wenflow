@@ -579,6 +579,8 @@ model milestones {
   title          String
   description    String?
   goal           String?
+  coreConceptId  String?
+  coreConceptName String?
   estimatedHours Float?
   status         String         @default("locked")
   unlockedAt     DateTime?
@@ -720,6 +722,8 @@ model subtasks {
   annotationConfidence Float?
   cognitiveLevel       String?
   coreConcept          String?
+  linkedConceptId      String?
+  linkedConceptName    String?
   displayLabel         String?
   knowledgeType        String?
   learningObjectives   String?

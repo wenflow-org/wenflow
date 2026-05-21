@@ -96,7 +96,7 @@ function dedupeConcepts(values: Array<string | null | undefined>): string[] {
 }
 
 function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; name: string | null; description: string | null } {
-  const linkedConceptId = normalizeConcept((task as any).coreConcept);
+  const linkedConceptId = normalizeConcept((task as any).linkedConceptId || (task as any).coreConcept);
   const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
   const cognitiveCore = promptTemplate?.cognitiveCore || promptTemplate?.cognitiveDesign;
   const concepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore.coreConcepts : [];
@@ -114,7 +114,7 @@ function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; 
 
   return {
     id: linkedConceptId,
-    name: linkedConceptId,
+    name: normalizeConcept((task as any).linkedConceptName) || linkedConceptId,
     description: null
   };
 }

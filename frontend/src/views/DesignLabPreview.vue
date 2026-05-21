@@ -598,7 +598,7 @@
                   </div>
 
                   <div class="alert-card-preview path-enrichment-banner">
-                    <strong>学习内容准备中</strong>
+                    <strong>阶段任务生成中</strong>
                     <span>路径已经生成，系统正在后台准备学习内容。完成前暂不能开始学习。</span>
                   </div>
                 </section>

@@ -16,6 +16,12 @@ const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
 };
 
+function normalizePromptText(value: string | null | undefined): string {
+  return typeof value === 'string'
+    ? value.replace(/\r\n/g, '\n').trim()
+    : '';
+}
+
 /**
  * 获取所有 Skill 列表（含统计）
  */
@@ -221,8 +227,12 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
     const agentId = `skill:${name}`;
     const activePrompt = await promptService.getActivePrompt(agentId);
     const fallbackPrompt = SKILL_FALLBACK_PROMPTS[name] || null;
+    const fallbackNormalized = normalizePromptText(fallbackPrompt);
 
     if (activePrompt) {
+      const activeNormalized = normalizePromptText(activePrompt.systemPrompt);
+      const promptDrift = !!fallbackPrompt && activeNormalized !== fallbackNormalized;
+
       return res.json({
         success: true,
         data: {
@@ -230,6 +240,12 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
           agentId,
           prompt: activePrompt,
           fallbackPrompt,
+          promptDrift,
+          driftDetail: fallbackPrompt ? {
+            activeVersion: activePrompt.version,
+            fallbackAvailable: true,
+            activeMatchesCode: !promptDrift,
+          } : null,
         },
       });
     }
@@ -253,6 +269,12 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
             status: 'FALLBACK',
           },
           fallbackPrompt,
+          promptDrift: false,
+          driftDetail: {
+            activeVersion: null,
+            fallbackAvailable: true,
+            activeMatchesCode: true,
+          },
         },
       });
     }

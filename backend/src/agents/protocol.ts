@@ -146,6 +146,7 @@ export interface ChatMessage {
 export interface MilestoneOutput {
   stageNumber: number;
   title: string;
+  coreConcept?: string;
   description?: string;
   goal?: string;
   estimatedHours?: number;
@@ -156,10 +157,25 @@ export interface MilestoneOutput {
 export interface SubtaskOutput {
   id?: string;
   title: string;
-  type: 'reading' | 'practice' | 'project' | 'quiz';
+  type:
+    | 'reading'
+    | 'practice'
+    | 'project'
+    | 'quiz'
+    | 'acquire'
+    | 'deconstruct'
+    | 'model'
+    | 'execute'
+    | 'diagnose'
+    | 'refine'
+    | 'consolidate';
   estimatedMinutes: number;
   description?: string;
   acceptanceCriteria?: string;
+  linkedConcept?: string;
+  knowledgeType?: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
+  cognitiveLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;
+  transferable?: boolean;
   status?: 'todo' | 'in_progress' | 'completed';
 }
 

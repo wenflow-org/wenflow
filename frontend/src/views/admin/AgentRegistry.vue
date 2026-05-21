@@ -17,7 +17,7 @@
 
     <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
       <el-card class="summary-card summary-card--blue" shadow="hover">
-        <div class="label">已注册</div>
+        <div class="label">Agent 数量</div>
         <div class="value">{{ summary?.total }}</div>
       </el-card>
       <el-card class="summary-card summary-card--green" shadow="hover">
@@ -593,15 +593,17 @@ const newPromptForm = ref({
   maxTokens: 4000
 });
 
-const orchestratorIds = new Set([
-  'ai-teaching',
-  'ai-teaching-agent',
-  'requirement-orchestrator',
-  'path-orchestrator'
-]);
+const isAgentRuntime = (agent: AdminRegistryAgent) => {
+  const roleHint = `${agent.role || ''} ${agent.type || ''}`.toLowerCase();
+  if (roleHint.includes('orchestrator')) return false;
+  if (agent.agentId.endsWith('-orchestrator')) return false;
+  if (agent.agentId === 'ai-teaching' || agent.agentId === 'ai-teaching-agent') return false;
+  return true;
+};
 
 const filteredAgents = computed(() => {
   return agents.value.filter(agent => {
+    if (!isAgentRuntime(agent)) return false;
     const byKeyword = !keyword.value || `${agent.agentId} ${agent.name}`.toLowerCase().includes(keyword.value.toLowerCase());
     const byLifecycle = !lifecycle.value || agent.lifecycleStatus === lifecycle.value;
     const byHealth = !health.value || agent.status === health.value;
@@ -618,8 +620,8 @@ const loadRegistry = async () => {
   loading.value = true;
   try {
     const response: any = await adminAgentsApi.getRegistry();
-    summary.value = response.data.data.summary;
-    agents.value = response.data.data.agents || [];
+    agents.value = (response.data.data.agents || []).filter(isAgentRuntime);
+    summary.value = buildAgentSummary(agents.value);
     void loadPromptSummaries(agents.value);
   } catch (error) {
     console.error('加载 Agent 注册列表失败:', error);
@@ -765,7 +767,7 @@ const buildCodeFallbackPrompt = (agentId: string): PromptVersionSummary | null =
 const promptSourceLabel = (source: 'db-active' | 'db-versioned-no-active' | 'code-fallback' | 'orchestrator-no-direct-prompt' | 'legacy-service') => {
   if (source === 'db-active') return 'DB Active';
   if (source === 'db-versioned-no-active') return 'DB Inactive';
-  if (source === 'orchestrator-no-direct-prompt') return 'Orchestrator';
+  if (source === 'orchestrator-no-direct-prompt') return 'Unsupported';
   if (source === 'legacy-service') return 'Legacy Service';
   return 'Code Fallback';
 };
@@ -780,7 +782,7 @@ const promptSourceTagType = (source: 'db-active' | 'db-versioned-no-active' | 'c
 
 const promptEmptyDescription = computed(() => {
   if (currentPromptSource.value === 'orchestrator-no-direct-prompt') {
-    return '该编排器本身不直接管理单一 Prompt，请查看成员 agent 的 Prompt 配置';
+    return '当前页面仅展示 Agent，编排器 Prompt 请到 Orchestrator Registry 查看';
   }
   if (currentPromptSource.value === 'legacy-service') {
     return '该条目当前更像旧服务概念，不对应独立的数据库 Prompt 管理';
@@ -1115,21 +1117,13 @@ const getHealthTagType = (status: string) => {
   return 'info';
 };
 
-const getRuntimeRole = (agent: AdminRegistryAgent): 'orchestrator' | 'agent' => {
-  const roleHint = `${agent.role || ''} ${agent.type || ''}`.toLowerCase();
-  if (roleHint.includes('orchestrator')) return 'orchestrator';
-  if (orchestratorIds.has(agent.agentId)) return 'orchestrator';
-  if (agent.agentId.endsWith('-orchestrator')) return 'orchestrator';
-  return 'agent';
-};
+const getRuntimeRole = (_agent: AdminRegistryAgent): 'agent' => 'agent';
 
 const getRuntimeRoleLabel = (agent: AdminRegistryAgent) => {
-  return getRuntimeRole(agent) === 'orchestrator' ? 'orchestrator' : 'agent';
+  return getRuntimeRole(agent);
 };
 
-const getRuntimeRoleTagType = (agent: AdminRegistryAgent) => {
-  return getRuntimeRole(agent) === 'orchestrator' ? 'warning' : 'info';
-};
+const getRuntimeRoleTagType = (_agent: AdminRegistryAgent) => 'info';
 
 const rateClass = (rate: number) => {
   if (rate >= 95) return 'rate-good';
@@ -1752,3 +1746,14 @@ onMounted(loadRegistry);
 }
 
 </style>
+const buildAgentSummary = (items: AdminRegistryAgent[]) => {
+  const active24h = items.filter((a) => a.status === 'healthy' || a.status === 'warning').length;
+  const neverCalled = items.filter((a) => !a.callCount).length;
+  const unhealthy = items.filter((a) => a.status === 'warning' || a.status === 'error').length;
+  return {
+    total: items.length,
+    active24h,
+    neverCalled,
+    unhealthy,
+  };
+};

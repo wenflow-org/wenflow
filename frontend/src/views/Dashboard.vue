@@ -218,7 +218,7 @@ const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);
 const totalTaskCount = computed(() => completedTaskCount.value + inProgressTaskCount.value || 1);
 
-const getEnrichmentStatus = (path: DashboardPath | null | undefined) => path?.generationStatus?.enrichment || null;
+const getEnrichmentStatus = (path: DashboardPath | null | undefined) => path?.generationStatus?.stageDesign || null;
 
 const getPathDisplayState = (path: DashboardPath | null | undefined) => {
   if (!path) return 'attention';

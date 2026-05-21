@@ -29,72 +29,175 @@ import { logger } from '../../utils/logger';
 
 const PATH_AGENT_MAX_TOKENS = 32000;
 
-export const DEFAULT_PATH_GENERATION_PROMPT = `你是一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条显性的任务链。
+function normalizePromptString(value: any): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function normalizePromptStringArray(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizePromptString(item))
+    .filter((item): item is string => !!item);
+}
+
+function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
+  if (!pathSceneFraming || typeof pathSceneFraming !== 'object') return null;
+
+  const normalizedInput = pathSceneFraming.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
+    ? pathSceneFraming.normalizedInput
+    : {};
+  const learnerProfile = normalizedInput.learnerProfile && typeof normalizedInput.learnerProfile === 'object'
+    ? normalizedInput.learnerProfile
+    : {};
+  const problemSpace = normalizedInput.problemSpace && typeof normalizedInput.problemSpace === 'object'
+    ? normalizedInput.problemSpace
+    : {};
+  const resources = normalizedInput.resources && typeof normalizedInput.resources === 'object'
+    ? normalizedInput.resources
+    : {};
+  const successCriteria = normalizedInput.successCriteria && typeof normalizedInput.successCriteria === 'object'
+    ? normalizedInput.successCriteria
+    : {};
+  const confirmedProposal = normalizedInput.confirmedProposal && typeof normalizedInput.confirmedProposal === 'object'
+    ? normalizedInput.confirmedProposal
+    : null;
+  return {
+    normalizedInput: {
+      version: normalizePromptString(normalizedInput.version) || '1.0',
+      learnerProfile: {
+        surfaceGoal: normalizePromptString(learnerProfile.surfaceGoal),
+        currentBaseline: {
+          level: normalizePromptString(learnerProfile.currentBaseline?.level),
+          evidence: normalizePromptString(learnerProfile.currentBaseline?.evidence),
+        },
+      },
+      problemSpace: {
+        realProblem: normalizePromptString(problemSpace.realProblem),
+        scenario: normalizePromptString(problemSpace.scenario),
+        currentPainPoint: normalizePromptString(problemSpace.currentPainPoint),
+      },
+      resources: {
+        timePerWeek: normalizePromptString(resources.timePerWeek),
+        timePerSession: normalizePromptString(resources.timePerSession),
+        timeHorizon: normalizePromptString(resources.timeHorizon),
+        deadlineText: normalizePromptString(resources.deadlineText),
+      },
+      successCriteria: {
+        observableResult: normalizePromptString(successCriteria.observableResult),
+        acceptanceCheck: normalizePromptString(successCriteria.acceptanceCheck),
+      },
+      confirmedProposal: confirmedProposal ? {
+        learningDirection: normalizePromptString(confirmedProposal.learningDirection),
+        firstDeliverable: normalizePromptString(confirmedProposal.firstDeliverable),
+        keyStages: normalizePromptStringArray(confirmedProposal.keyStages),
+        outOfScope: normalizePromptStringArray(confirmedProposal.outOfScope),
+      } : null,
+    },
+  };
+}
+
+export const DEFAULT_PATH_GENERATION_PROMPT = `你是一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条阶段化的学习骨架。
 
 你的任务不是只罗列任务，而是：
 1. 先识别这条路径真正要建立的底层认知结构。
-2. 再把这个认知结构投影成阶段化、可执行的任务链。
-3. 让用户看到的是 taskChain，让系统拿到的是 cognitiveCore。
+2. 再把这个认知结构投影成 milestone 级的阶段骨架。
+3. 让系统先拿到稳定的 cognitiveCore 与 milestones，阶段内 subtasks 由后续 stage-designer 单独生成。
 4. 优先围绕用户要产出的真实交付物组织路径，而不是围绕功能模块、知识目录或页面清单平均铺开。
 
 你必须严格按以下顺序思考：
 第一步：定义 cognitiveCore
 第二步：根据 cognitiveCore 设计 milestone
-第三步：根据 milestone 设计 subtask
-第四步：输出兼容镜像字段
+第三步：输出兼容镜像字段
 
-禁止跳过第一步直接生成任务。
+禁止跳过第一步直接生成 milestone。
 
 输入优先级：
 1. normalizedInput 是路径生成的主真相源。
 2. normalizedInput.confirmedProposal 是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope。
 3. normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准。
-4. supportingEvidence 仅用于核对原话、身份、场景细节，不可推翻 normalizedInput 主字段。
-
 cognitiveCore 硬约束：
 1. cognitiveCore 必须包含 1 个 cognitiveDomain 和 2-4 个 coreConcepts。
 2. coreConcepts 中必须且只能有 1 个 role = "hub"。
-3. cognitiveDomain 必须是一体化底层能力描述，说明这些 coreConcepts 如何共同服务问题解决；不要只是学科名、功能集合或概念列表。
-4. 每个 coreConcept 必须是可迁移的认知关系，而不是具体功能、页面、模块、阶段、周计划或任务动作。
-5. 自检标准：如果把这个概念放到另一个完全不同的领域，它仍然成立，则可能合格；如果只能用于当前功能或当前步骤，则不合格。
-6. 以下都不算概念：功能名、页面名、栏目名、模块名、阶段计划、周计划、行动安排、任务描述。
-7. 反例："内容呈现设计"、"课程交互设计"、"学习路径展示"、"个人数据面板"、"第1周记录日志"、"先划定重点再做回顾"。
-8. 正例："复杂信息的层级化组织与导航"、"操作反馈与状态闭环"、"行为驱动与动机调控"、"规则到场景的迁移验证"、"压力下的动作序列稳定执行"。
+3. 先提炼 coreConcepts，再基于 coreConcepts 整合 cognitiveDomain。不要先写 cognitiveDomain 再反向补概念。
 
-taskChain 硬约束：
+什么是核心概念：
+1. 核心概念不是知识点、功能模块、学习阶段或任务步骤。
+2. 核心概念是解决这类问题时必须理解的底层认知关系。
+3. 一条好的核心概念描述的是“关系”，而不是“事物”。
+4. 它应该能迁移到相近但不同的场景，并指导 Learn 层知道该帮助学习者理解什么、练习什么。
+
+提炼 coreConcepts 时，必须先连续问自己三件事：
+第一问：这个人真正在应对什么？
+1. 不要回答他“要做什么”，而要回答他“在与什么博弈”。
+2. 例如：
+- “坡道起步总是熄火”背后是在应对“动力传递的时机与反馈信号的识别”。
+- “睡不着，脑子停不下来”背后是在应对“认知唤醒与生理放松的拮抗关系”。
+- “公告出来了不知道从哪开始复习”背后是在应对“碎片信息摄入下的系统性知识建构”。
+- “不知道怎么设计好的用户体验”背后是在应对“设计者与使用者的认知资源错配”。
+
+第二问：如果只保留一个最核心的关系，它是什么？
+1. 这个关系就是 hub concept。
+2. 它应该是“如果这个没理解，后面的都白做”的那个关系。
+
+第三问：还有哪些关系支撑着这个核心？
+1. 这些是 supporting concepts。
+2. supporting concept 必须明确自己与 hub 的关系：前提、展开、互补，或循环校准。
+3. 不要只是并列罗列几个看起来抽象的名词；要让它们共同构成一套稳定的认知骨架。
+
+概念设计的质量标准：
+1. 可迁移检验：把这个概念放到另一个相近领域，它是否仍然成立？如果只能用于当前功能、当前页面、当前模块或当前步骤，则不合格。
+2. 非任务检验：如果这个概念在描述“先做什么、再做什么”，它就是任务，不是概念。
+3. 可指导检验：Learn 层拿到这个概念后，是否知道要帮助学习者建立什么理解、练习什么判断、校准什么能力？如果不知道，这个概念还不够好。
+
+概念命名规范：
+1. coreConcept.name 应该写成一句关系描述，而不是单词标签。
+2. name 优先控制在 12-28 个字左右，便于后续 milestone、task、Learn 复用；更详细的解释写到 description。
+3. 好的名称通常像：
+- “动力传递临界点的识别与稳定维持”
+- “多动作协同的序列化与节奏控制”
+- “生理唤醒与睡眠驱力的动态平衡调控”
+- “复杂信息的层级化组织与导航”
+4. 不好的名称通常是：
+- 单个对象名，例如“离合器”“睡眠卫生”“碎片时间”
+- 任务动作句，例如“梳理需求”“提炼检查点”“整合清单并验证”
+
+cognitiveDomain 生成规则：
+1. 在 coreConcepts 稳定后，再整合出 cognitiveDomain。
+2. cognitiveDomain 不是把每个概念重说一遍，而是回答：这些概念合在一起，最终构成了什么一体化底层能力？
+3. 把答案写成“能力/判断/组织/调节/映射/验证”一类表述，让它像一条长期可迁移的能力主线。
+4. 优先使用这样的句式：
+- “在____约束下，识别____并建立____”
+- “把____转成____，再通过____完成校准”
+- “围绕____建立可迁移的判断框架与执行闭环”
+5. 好的 cognitiveDomain 应让人看到：这条路径最终训练的不是某个功能，而是一种可复用的认知能力。
+
+milestones 硬约束：
 1. milestone 必须按认知递进组织，而不是按功能模块、页面对象或知识目录排列。
 2. milestone 应体现类似：识别问题结构、建立判断框架、在场景中应用、通过验证与迭代收敛。
 3. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分。
 4. 每个里程碑是一个独立学习目标，可以独立评估完成度。
+4.1 每个 milestone 必须明确绑定 1 个 coreConcept，写入 coreConcept 字段，表示这个阶段主要服务的核心概念。
 5. 普通目标建议 3-6 个 milestone；超长目标建议 6-10 个。
-6. 每个 milestone 建议 4-8 个 subtask。
-7. subtask.type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate，不允许任何其他类型标签。
-8. 每个 subtask 必须引用一个已有 concept id，写入 linkedConcept。
-9. linkedConcept 必须命中 coreConcepts.id，不允许悬空；每个 coreConcept 至少要被一个 task 引用。
+6. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划。
+7. milestone title 不要写成“第1周”“第2周”这类排期语句，也不要写成“记录/梳理/提炼/整合”这类操作步骤句。
 
 首阶段约束：
-1. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 和第一批任务必须直接服务于它。
-2. 第一个 subtask 优先控制在 30-60 分钟内。
-3. 第一个 subtask 必须产出一个可见 artefact，例如草稿、清单、模板、示例分析、评审记录、可运行片段。
-4. 第一个 subtask 不能只是阅读、调研、收集资料、记录或泛泛理解。
+1. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它。
+2. 第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方。
 
-successCriteria 与验收标准约束：
-1. 如果 normalizedInput.successCriteria.observableResult 存在，所有里程碑 goal 和 acceptanceCriteria 必须通向该结果。
+successCriteria 约束：
+1. 如果 normalizedInput.successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果。
 2. 如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点。
 3. 如果两者都缺失，再依据 realProblem 与 keyStages 组织路径。
-4. acceptanceCriteria 必须是用户自己可以判断“是否完成”的可观察结果。
-5. 禁止使用“理解”“掌握”“熟悉”“搞懂”“学习”等不可验证表述。
-6. 反例："理解用户体验原则"。
-7. 正例："产出一份包含 4 个模块、每个模块至少 3 条检查点的检查清单草稿，并能用它评估一个示例页面"。
+4. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则。
 
 时间约束：
-1. 每个 subtask 的 estimatedMinutes 建议在 30-120 之间。
-2. 如果输入提供 totalWeeks，不要超过 totalWeeks；若 totalWeeks > 52，则按 52 周规划。
-3. 如果输入提供 timePerWeek、timePerDay 或 totalWeeks，整体任务量要与预算匹配，不要明显超配。
-4. 预算不足时，优先保留 hub concept 与 firstDeliverable 相关任务，裁剪外围任务。
+1. 如果输入提供 totalWeeks，不要超过 totalWeeks；若 totalWeeks > 52，则按 52 周规划。
+2. 如果输入提供 timePerWeek、timePerDay 或 totalWeeks，整体阶段任务量要与预算匹配，不要明显超配。
+3. 预算不足时，优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段。
 
 场景与命名约束：
-1. 如果提供了具体应用场景，所有里程碑标题、任务标题、任务描述、案例都必须紧密围绕该场景，不可使用泛泛的通用示例。
+1. 如果提供了具体应用场景，所有里程碑标题、描述、goal 都必须紧密围绕该场景，不可使用泛泛的通用示例。
 2. 路径名称必须直接反映用户的原始学习目标和具体应用场景，不可使用通用模板名称。
 3. 如果用户水平是 beginner，路径名称必须使用“入门”“基础”“从零开始”等词，不得出现“中级”“进阶”“高级”等词。 
 
@@ -116,27 +219,6 @@ successCriteria 与验收标准约束：
       }
     ]
   },
-  "taskChain": {
-    "milestones": [
-      {
-        "stageNumber": 1,
-        "title": "里程碑标题",
-        "description": "里程碑描述",
-        "goal": "里程碑学习目标",
-        "estimatedHours": 4,
-        "subtasks": [
-          {
-            "title": "子任务标题",
-            "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate",
-            "estimatedMinutes": 60,
-            "description": "任务描述",
-            "acceptanceCriteria": "完成标准",
-            "linkedConcept": "concept-1"
-          }
-        ]
-      }
-    ]
-  },
   "cognitiveDesign": {
     "cognitiveDomain": "与 cognitiveCore.cognitiveDomain 相同，仅作兼容镜像",
     "coreConcepts": [
@@ -149,38 +231,30 @@ successCriteria 与验收标准约束：
     ]
   },
   "milestones": [
-    {
-      "stageNumber": 1,
-      "title": "里程碑标题",
-      "description": "里程碑描述",
-      "goal": "里程碑学习目标",
-      "estimatedHours": 4,
-      "subtasks": [
-        {
-          "title": "子任务标题",
-          "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate",
-          "estimatedMinutes": 60,
-          "description": "任务描述",
-          "acceptanceCriteria": "完成标准",
-          "linkedConcept": "concept-1"
-        }
-      ]
+      {
+        "stageNumber": 1,
+        "title": "里程碑标题",
+        "coreConcept": "concept-1",
+        "description": "里程碑描述",
+        "goal": "里程碑学习目标",
+      "estimatedHours": 4
     }
   ]
 }
 
 最终自检：
-1. 我的 coreConcepts 是否像功能名、页面名、阶段名、周计划、任务动作？如果像，必须重写。
+1. 我的 cognitiveDomain 是否像一条长期可迁移的能力主线，而不是用户问题原话？如果不像，必须继续抽象。
+1.1 我的 coreConcept 是否都像“机制/关系/框架/原则/模型”，并能作为 milestone 的稳定骨架？如果不像，必须改写。
+1.2 我的每个 milestone 是否都绑定了一个明确的 coreConcept？如果没有，必须补齐。
+1.3 如果某个 coreConcept 以“梳理/整理/记录/分析/验证/设计”等任务动作开头，必须改写成底层关系描述。
+1.4 如果 Learn 层拿到某个概念后，仍不知道要帮助学习者建立什么理解或练习什么判断，必须继续重写。
 2. 我的 milestone 是否按功能模块、页面对象或知识目录分组？如果是，必须重组为认知递进阶段。
-3. 我的第一个任务是否只是阅读、调研、收集资料或记录？如果是，必须改成能快速产出可见 artefact 的任务。
-4. 我的 acceptanceCriteria 是否可观察、可判断？如果不是，必须重写。
-5. 我的每个 linkedConcept 是否都命中 coreConcepts.id？如果没有，必须修正。
+3. 我的 milestone 标题或 goal 是否写成了周计划、步骤清单或执行处方？如果是，必须收回到阶段骨架层。
 
 兼容要求：
-1. cognitiveCore 是正式认知结构，taskChain 是正式任务链；不要只输出任务，不输出认知层。
+1. cognitiveCore 是正式认知结构，milestones 是正式阶段骨架；不要只输出阶段，不输出认知层。
 2. cognitiveDesign = cognitiveCore。
-3. milestones = taskChain.milestones。
-4. cognitiveDesign 和 milestones 只是兼容镜像，不得与正式输出语义不一致。`;
+3. cognitiveDesign 和 milestones 只是兼容镜像，不得与正式输出语义不一致。`;
 
 export const DEFAULT_PATH_FRAMING_PROMPT = `此常量仅保留兼容，不再作为 Path 主链推荐 framing 结构。`;
 
@@ -191,6 +265,15 @@ interface PathOutput {
   subject: string;
   totalMilestones: number;
   estimatedHours?: number;
+  cognitiveCore?: {
+    cognitiveDomain?: string;
+    coreConcepts?: Array<{
+      id?: string;
+      name?: string;
+      role?: string;
+      description?: string;
+    }>;
+  };
   cognitiveDesign?: {
     cognitiveDomain?: string;
     coreConcepts?: Array<{
@@ -199,6 +282,10 @@ interface PathOutput {
       role?: string;
       description?: string;
     }>;
+  };
+  _debug?: {
+    rawModelOutput?: string;
+    extractedJson?: string;
   };
   milestones: MilestoneOutput[];
 }
@@ -283,7 +370,6 @@ export const pathAgentDefinition: AgentDefinition = {
           totalMilestones: { type: 'number' },
           estimatedHours: { type: 'number' },
           cognitiveCore: { type: 'object' },
-          taskChain: { type: 'object' },
           cognitiveDesign: { type: 'object' },
           milestones: { type: 'array' }
         }
@@ -549,6 +635,7 @@ async function generatePath(
         : [];
   const observableResult = framingNormalizedInput?.successCriteria?.observableResult || null;
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
+  const promptFriendlySceneFraming = buildPathSceneFramingPromptInput(pathSceneFraming);
   
   const systemPrompt = promptConfig?.systemPrompt || DEFAULT_PATH_GENERATION_PROMPT;
 
@@ -571,13 +658,13 @@ ${confirmedProposal || framingConfirmedProposal ? `用户确认的方案轮廓�
 
 【重要】请基于用户确认的方案轮廓设计路径阶段，保持方向一致。` : ''}
 
-${pathSceneFraming ? `路径前置清洗结果（高优先级参考输入）：
-${JSON.stringify(pathSceneFraming, null, 2)}
+${promptFriendlySceneFraming ? `路径前置清洗结果（高优先级参考输入）：
+${JSON.stringify(promptFriendlySceneFraming, null, 2)}
 
 【重要】如果提供了这份清洗结果，请把它视为上游已整理好的正式输入：
 - 优先依据其中的 normalizedInput.problemSpace.realProblem、normalizedInput.successCriteria、normalizedInput.confirmedProposal 设计路径
-- 第一阶段和第一批任务必须直接服务于 normalizedInput.confirmedProposal.firstDeliverable（若存在）
-- supportingEvidence 只用于核对原话和补足上下文，不要把它当主真相源重写业务方向` : ''}
+- 第一阶段必须直接服务于 normalizedInput.confirmedProposal.firstDeliverable（若存在）
+- 不要把 confirmedProposal.keyStages 直接抄成 coreConcept；keyStages 是阶段提示，不是隐藏概念名称。` : ''}
 
 ${conversationHistory && conversationHistory.length > 0 ? `
 完整对话历史（用于验证关键信息）：
@@ -605,22 +692,20 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称中必须包含"${analysis.context || input.goal}"或高度相关的关键词，不得使用通用模板名称
 - 每个里程碑的标题必须体现"${analysis.context || input.goal}"的具体阶段
-- 每个任务的描述必须使用"${analysis.context || input.goal}"的真实案例和数据场景
 - 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景
 
 重要要求：
 1. 路径名称必须直接反映用户的原始学习目标："${input.goal}"
 2. 如果用户水平是 beginner（零基础），路径名称必须使用"入门"、"基础"、"从零开始"等词汇，绝对不能出现"中级"、"进阶"、"高级"等词
-3. 所有里程碑、子任务的标题和描述都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
-4. 案例、数据、练习内容都必须与"${analysis.context || input.goal}"强相关
+3. 所有里程碑标题、描述、goal 都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
 
 生成前自检（必须满足）：
 1. 不要把里程碑写成“内容呈现/课程交互/学习路径展示/个人数据面板”这类功能分组；如果阶段标题像功能目录，必须重组为认知递进阶段。
-2. 第一阶段的第一个任务不能只是阅读、调研、收集资料或记笔记；它必须在 30-60 分钟内产出一个可展示 artefact。
-3. 如果 ${confirmedFirstDeliverable ? `首个交付物是“${confirmedFirstDeliverable}”` : '存在首个交付物'}，第一阶段 goal 和第一批任务必须直接服务于它。
-4. ${observableResult ? `可观察结果是“${observableResult}”，所有里程碑 goal 和完成标准都必须通向它。` : '如果没有明确的可观察结果，就把首个交付物当作早期验收锚点。'}
-5. ${acceptanceCheck ? `验收检查要求：${acceptanceCheck}` : '每个 acceptanceCriteria 都必须是用户自己可以判断“是否完成”的可观察结果。'}
-6. coreConcepts 必须是可迁移的认知关系，不得是功能名、页面名、模块名或栏目名。` }
+2. 不要输出 subtasks、tasks、acceptanceCriteria、第一周计划、执行次数或作业清单；这些由后续 stage-designer 生成。
+3. 如果 ${confirmedFirstDeliverable ? `首个交付物是“${confirmedFirstDeliverable}”` : '存在首个交付物'}，第一阶段 goal 必须直接服务于它。
+4. ${observableResult ? `可观察结果是“${observableResult}”，所有里程碑 goal 都必须通向它。` : '如果没有明确的可观察结果，就把首个交付物当作早期阶段目标锚点。'}
+5. ${acceptanceCheck ? `验收检查要求：${acceptanceCheck}` : 'goal 必须是用户自己可以判断“是否达成”的阶段结果，但不要下钻到 task 级验收。'}
+6. coreConcepts 必须先表达底层认知关系，再用于绑定里程碑；如果概念名仍像功能名、页面名、模块名、栏目名或任务动作句，必须继续抽象。` }
   ];
 
 const userId = context?.userId || input?.metadata?.userId;
@@ -646,7 +731,13 @@ const userId = context?.userId || input?.metadata?.userId;
         subject: analysis.subject,
         totalMilestones: pathData.totalMilestones,
         estimatedHours: pathData.estimatedHours,
-        milestones: pathData.milestones
+        cognitiveCore: pathData.cognitiveCore,
+        cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
+        milestones: pathData.milestones,
+        _debug: {
+          rawModelOutput: content,
+          extractedJson: jsonMatch[0],
+        }
       };
     }
   } catch (error: any) {
