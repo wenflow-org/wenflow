@@ -6,6 +6,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
 import { getGateway } from '../gateway';
 import { agentHandlers, allAgentDefinitions } from '../agents';
 import { AgentExecutionRequest, AgentContext } from '../agents/protocol';
@@ -258,9 +259,9 @@ router.post('/match', async (req: Request, res: Response) => {
 });
 
 /**
- * 注册 Agent（开发/管理接口）
+ * 注册 Agent（仅管理员可调用）
  */
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const definition = req.body;
     

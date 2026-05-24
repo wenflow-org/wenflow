@@ -136,12 +136,14 @@ import goalConversationRoutes from './routes/goal-conversation';
 import testGoalConversationRoutes from './routes/test-goal-conversation';
 import agentsRoutes from './routes/agents';
 import skillsRoutes from './routes/skills';
+import adaptiveGuidanceRoutes from './routes/adaptive-guidance.routes';
 import pluginRoutes from './routes/plugins';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
 import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
 import adminPromptStabilityRoutes from './routes/admin/prompt-stability';
+import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
 import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
@@ -195,7 +197,7 @@ app.get('/api', (req, res) => {
 agents: {
       'path-agent': '学习路径规划',
       'ai-teaching-agent': 'AI授课编排',
-      'progress-agent': '进度追踪'
+      'learner-model-agent': '学习者画像与状态中心'
     },
     skills: [
       'pdf-parser',
@@ -237,6 +239,7 @@ app.use('/api/admin/api-config', authMiddleware, acpContextMiddleware('admin'), 
 app.use('/api/admin/agent-model-configs', authMiddleware, acpContextMiddleware('admin'), adminAgentModelConfigsRoutes);
 app.use('/api/admin/agent-prompts', authMiddleware, acpContextMiddleware('admin'), adminAgentPromptsRoutes);
 app.use('/api/admin/prompt-stability', authMiddleware, acpContextMiddleware('admin'), adminPromptStabilityRoutes);
+app.use('/api/admin/runtime-definitions', authMiddleware, acpContextMiddleware('admin'), adminRuntimeDefinitionsRoutes);
 app.use('/api/admin/skill-model-configs', authMiddleware, acpContextMiddleware('admin'), adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', authMiddleware, acpContextMiddleware('admin'), adminUsersRoutes);
 app.use('/api/admin/learner-models', authMiddleware, acpContextMiddleware('admin'), adminLearnerModelsRoutes);
@@ -246,6 +249,7 @@ app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminPlatfo
 app.use('/api/users', authMiddleware, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
 app.use('/api/skills', authMiddleware, acpContextMiddleware('user'), skillsRoutes);
+app.use('/api/adaptive-guidance', authMiddleware, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
 app.use('/api/plugins', authMiddleware, acpContextMiddleware('user'), pluginRoutes);
 app.use('/api/ai-teaching', authMiddleware, acpContextMiddleware('user'), aiTeachingRoutes);
 app.use('/api/feedback', authMiddleware, acpContextMiddleware('user'), feedbackRoutes);

@@ -1,19 +1,20 @@
 /**
- * PeerAgent - 伴学 Agent
- * 在教学 Agent 判断学生需要强化时，主动介入进行讨论式对话
+ * PeerReinforcementSkill - 伴学 Skill
+ * 在教学主链判断学生需要强化时，提供同伴式讨论补强能力
  */
 
 import prisma from '../../config/database';
 import { v4 as uuidv4 } from 'uuid';
-import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
-import { agentConfigService } from '../../services/agentConfig.service';
+import { ExecutionContext } from '../../gateway/api-gateway';
+import { callPrompt } from '../../composers/prompt-composer';
+import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../protocol';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 interface ChatMessage { role: MessageRole; content: string }
 
-const AGENT_ID = 'peer-agent';
+const AGENT_ID = 'skill:peer-reinforcement';
 
 export const DEFAULT_PEER_AGENT_PROMPT = `你是学习伙伴，和学生一起探索问题。
 
@@ -26,11 +27,11 @@ export const DEFAULT_PEER_AGENT_PROMPT = `你是学习伙伴，和学生一起�
 
 export const peerAgentDefinition: AgentDefinition = {
   id: AGENT_ID,
-  name: '伴学 Agent',
+  name: '伴学 Skill',
   version: '1.0.0',
   type: 'teaching',
   category: 'standard',
-  description: '讨论式伴学，通过费曼技巧、辩论、反例等方式强化理解',
+  description: '讨论式伴学能力，通过费曼技巧、辩论、反例等方式强化理解',
   capabilities: [
     'feynman-technique',
     'debate-facilitation',
@@ -107,7 +108,45 @@ export interface PeerDiscussionOutput {
   message: string;
   strategy: string;
   followUpQuestions?: string[];
+  promptDebug?: any;
+  inputEcho?: PeerDiscussionInput;
 }
+
+function buildPeerUserPayload(input: PeerDiscussionInput) {
+  const contextSection = input.tutorContext.length > 0
+    ? `\n【最近对话】\n${input.tutorContext.slice(-5).map((m) => `${m.role}: ${m.content.substring(0, 100)}`).join('\n')}`
+    : '';
+
+  const studentMessageSection = input.studentMessage
+    ? `\n【学生消息】${input.studentMessage}`
+    : '';
+
+  return `请生成一段同伴讨论消息：${contextSection}${studentMessageSection}`;
+}
+
+const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
+  agentId: AGENT_ID,
+  defaultSystemPrompt: DEFAULT_PEER_AGENT_PROMPT,
+  caller: {
+    agentId: AGENT_ID,
+  },
+  buildUserPayload: (input) => buildPeerUserPayload(input),
+  normalizeOutput: (parsed, input) => {
+    if (typeof parsed === 'string' && parsed.trim()) {
+      return parsed.trim();
+    }
+
+    if (parsed && typeof parsed === 'object' && typeof (parsed as any).message === 'string' && (parsed as any).message.trim()) {
+      return (parsed as any).message.trim();
+    }
+
+    return '';
+  },
+  modelDefaults: {
+    temperature: 0.7,
+    maxTokens: 4000,
+  },
+};
 
 export class PeerAgent {
   private readonly strategyPrompts: Record<string, string> = {
@@ -132,8 +171,7 @@ export class PeerAgent {
     let result: PeerDiscussionOutput | null = null;
 
     try {
-      const promptConfig = await agentConfigService.getActivePrompt(AGENT_ID);
-      const systemPrompt = `${promptConfig?.systemPrompt || DEFAULT_PEER_AGENT_PROMPT}
+      const strategyPrompt = `${DEFAULT_PEER_AGENT_PROMPT}
 ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
 
 当前讨论主题：${input.topic}
@@ -141,44 +179,38 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
 学生理解度：${input.understanding || 0.5}
 `;
 
-      const contextSection = input.tutorContext.length > 0
-        ? `\n【最近对话】\n${input.tutorContext.slice(-5).map(m => `${m.role}: ${m.content.substring(0, 100)}`).join('\n')}`
-        : '';
+      const promptResult = await callPrompt({
+        ...peerPromptSpec,
+        defaultSystemPrompt: strategyPrompt,
+      }, input, {
+        userId: 'system',
+      });
 
-      const studentMessageSection = input.studentMessage
-        ? `\n【学生消息】${input.studentMessage}`
-        : '';
+      const message = promptResult.success && promptResult.output ? promptResult.output : '';
 
-      const userPrompt = `请生成一段同伴讨论消息：${contextSection}${studentMessageSection}`;
+      if (!message.trim()) {
+        throw new Error('PEER_RESPONSE_EMPTY');
+      }
 
-      const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: 'peer-agent' };
-      const response = await gateway.execute({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: promptConfig?.temperature,
-        max_tokens: promptConfig?.maxTokens,
-      }, caller, { userId: 'system' });
-
-      const message = response.choices[0]?.message?.content || '';
-
-      logger.info(`[PeerAgent] 生成讨论消息：strategy=${input.strategy}, topic=${input.topic}`);
+      logger.info(`[PeerReinforcementSkill] 生成讨论消息：strategy=${input.strategy}, topic=${input.topic}`);
 
       result = {
         message,
         strategy: input.strategy,
         followUpQuestions: this.extractFollowUpQuestions(message),
+        promptDebug: promptResult.debug || null,
+        inputEcho: input,
       };
       return result;
     } catch (e: any) {
       error = e instanceof Error ? e : new Error(e.message);
-      logger.error(`[PeerAgent] 讨论生成失败：${error.message}`);
+      logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
       
       result = {
         message: this.getFallbackMessage(input.strategy, input.topic),
         strategy: input.strategy,
+        promptDebug: null,
+        inputEcho: input,
       };
       return result;
     } finally {
@@ -199,7 +231,7 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
           },
         });
       } catch (logError) {
-        logger.error('[PeerAgent] 日志记录失败', { logError });
+        logger.error('[PeerReinforcementSkill] 日志记录失败', { logError });
       }
     }
   }
@@ -265,6 +297,8 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
             message: result.message,
             strategy: result.strategy,
             followUpQuestions: result.followUpQuestions || [],
+            promptDebug: result.promptDebug || null,
+            input: result.inputEcho || input,
           }
         },
         strategy: result.strategy,
@@ -278,7 +312,7 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
       schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: AGENT_ID,
-        agentName: '伴学 Agent',
+        agentName: '伴学 Skill',
         agentType: 'teaching',
         confidence: 0.8,
         generatedAt: new Date().toISOString(),
@@ -296,12 +330,12 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
       userVisible: '同伴回复生成失败，请稍后重试。',
       error: {
         code: 'PEER_AGENT_FAILED',
-        message: error?.message || 'PeerAgent execution failed'
+        message: error?.message || 'PeerReinforcementSkill execution failed'
       },
       schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: AGENT_ID,
-        agentName: '伴学 Agent',
+        agentName: '伴学 Skill',
         agentType: 'teaching',
         confidence: 0,
         generatedAt: new Date().toISOString(),

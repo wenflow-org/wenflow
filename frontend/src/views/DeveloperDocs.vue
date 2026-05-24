@@ -566,11 +566,6 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
           <h3>Agent 类型</h3>
           <div class="agent-types">
             <div class="agent-type-card">
-              <h4>📝 content-agent</h4>
-              <p>内容生成 Agent</p>
-              <span class="agent-version">v3.0</span>
-            </div>
-            <div class="agent-type-card">
               <h4>🎓 ai-teaching-agent</h4>
               <p>AI 授课编排 Agent</p>
               <span class="agent-version">v2.0</span>
@@ -581,8 +576,8 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
               <span class="agent-version">v1.0</span>
             </div>
             <div class="agent-type-card">
-              <h4>📊 progress-agent</h4>
-              <p>进度跟踪 Agent</p>
+              <h4>🧠 learner-model-agent</h4>
+              <p>学习者画像与状态中心</p>
               <span class="agent-version">v1.0</span>
             </div>
             <div class="agent-type-card">

@@ -15,8 +15,8 @@ import {
 } from '../agents/protocol';
 import { pathAdjustmentEngine, PathAdjustment } from '../agents/path-agent/adjustment';
 import { learnerModelAgent } from '../agents/learner-model-agent';
-import { normalizeAgentOutput } from '../agents/output-normalizer';
 import prisma from '../config/database';
+import { learnerProgressService } from './learner/LearnerProgressService';
 
 export interface AgentCollaborationConfig {
   enableAutoAdjustment: boolean;
@@ -72,7 +72,7 @@ export class AgentCollaborationService {
   
   /**
    * 处理一节课完成事件
-   * 触发 progress-agent 评估
+   * 触发学习者状态评估
    */
   private async handleLessonCompleted(event: LearningEvent): Promise<void> {
     const { userId, data } = event;
@@ -80,22 +80,23 @@ export class AgentCollaborationService {
     
     const lessonData = data as LessonCompletedData;
     
-    const progressResult = await this.callProgressAgent(userId, {
-      action: 'lesson_complete',
-      lessonData
+    const progressResult = await learnerProgressService.evaluateLessonCompletion(userId, {
+      duration: lessonData.duration,
+      performance: lessonData.performance,
+      score: lessonData.performance?.understanding ? lessonData.performance.understanding * 100 : undefined,
+      attempts: lessonData.performance?.frustrationLevel ? Math.round(lessonData.performance.frustrationLevel / 2) : undefined
     });
-    
-    const normalizedProgress = normalizeAgentOutput('progress-agent', progressResult);
-    const progressPayload = normalizedProgress.internal?.progress || progressResult.progress;
 
-    if (normalizedProgress.success && progressPayload?.signal) {
+    await learnerProgressService.emitSignals(userId, [progressResult.signal]);
+
+    if (progressResult.signal) {
       await this.eventBus.emit({
         type: 'learning:signal:detected',
         source: 'agent-collaboration',
         userId,
         data: {
-          signal: progressPayload.signal,
-          metrics: progressPayload.metrics,
+          signal: progressResult.signal,
+          metrics: progressResult.metrics,
           lessonId: lessonData.lessonId
         }
       });
@@ -311,22 +312,6 @@ export class AgentCollaborationService {
       });
     } catch (error) {
       console.error('[AgentCollaboration] Failed to get personalization:', error);
-    }
-  }
-  
-  /**
-   * 调用 progress-agent
-   */
-  private async callProgressAgent(userId: string, input: any): Promise<any> {
-    try {
-      const { progressAgentHandler } = await import('../agents/progress-agent');
-      return await progressAgentHandler(
-        { type: 'custom', goal: '', metadata: input },
-        { userId }
-      );
-    } catch (error) {
-      console.error('[AgentCollaboration] Failed to call progress-agent:', error);
-      return { success: false };
     }
   }
   

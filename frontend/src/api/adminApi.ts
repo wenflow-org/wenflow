@@ -226,6 +226,8 @@ export interface AdminRegistryAgent {
   name: string;
   type: string;
   role?: string;
+  kind?: 'agent' | 'skill' | 'orchestrator' | 'alias';
+  aliases?: string[];
   lifecycleStatus: 'draft' | 'staging' | 'published';
   status: 'healthy' | 'warning' | 'error' | 'idle';
   callCount: number;
@@ -485,6 +487,33 @@ getManifestDiagnostics: async () => {
       `/admin/agent-lab/agents/${encodeURIComponent(agentId)}/test`,
       { input, context }
     );
+  },
+};
+
+export const adminRuntimeDefinitionsApi = {
+  getAgentDefinitions: async () => {
+    return adminAxios.get('/admin/runtime-definitions/agents');
+  },
+
+  getAgentDefinitionDetail: async (id: string) => {
+    return adminAxios.get(`/admin/runtime-definitions/agents/${encodeURIComponent(id)}`);
+  },
+
+  getOrchestratorDefinitions: async () => {
+    return adminAxios.get('/admin/runtime-definitions/orchestrators');
+  },
+
+  getOrchestratorDefinitionDetail: async (id: string) => {
+    return adminAxios.get(`/admin/runtime-definitions/orchestrators/${encodeURIComponent(id)}`);
+  },
+
+  getPromptCallLogs: async (params?: {
+    limit?: number;
+    agentId?: string;
+    pathId?: string;
+    pipelineRunId?: string;
+  }) => {
+    return adminAxios.get('/admin/runtime-definitions/prompt-call-logs', { params });
   },
 };
 
@@ -762,6 +791,22 @@ export const adminVirtualLearnersApi = {
 
   virtualSessionAdvancePath: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/advance-path`);
+  },
+
+  getVirtualSessionPathStatus: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/path-status`);
+  },
+
+  startVirtualLearning: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/start-learning`);
+  },
+
+  virtualSessionLearningStep: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/learning-step`);
+  },
+
+  virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number }) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/auto-learning`, data);
   },
 
   getVirtualSessionLogs: async (sessionId: string) => {

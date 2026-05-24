@@ -31,8 +31,7 @@
               <el-option label="目标对话 Agent" value="goal-conversation-agent" />
               <el-option label="路径规划 Agent" value="path-agent" />
               <el-option label="AI 授课 Agent" value="ai-teaching-agent" />
-              <el-option label="学习者模型 Agent" value="learner-model-agent" />
-              <el-option label="进度追踪 Agent" value="progress-agent" />
+              <el-option label="学习者画像与状态中心" value="learner-model-agent" />
             </el-select>
           </el-form-item>
 
@@ -517,25 +516,33 @@ onMounted(() => {
 
 .bg-orb {
   position: absolute;
-  border-radius: 999px;
-  filter: blur(60px);
-  opacity: 0.18;
+  border-radius: 50%;
+  filter: blur(110px);
+  opacity: 0.15;
 }
 
 .bg-orb--1 {
-  width: 280px;
-  height: 280px;
-  top: -60px;
-  right: -80px;
-  background: #60a5fa;
+  width: 460px;
+  height: 460px;
+  top: -180px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%);
+  animation: orb-d 26s ease-in-out infinite;
 }
 
 .bg-orb--2 {
-  width: 260px;
-  height: 260px;
-  left: -70px;
+  width: 380px;
+  height: 380px;
+  left: -100px;
   top: 220px;
-  background: #a78bfa;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+  animation: orb-d 30s ease-in-out infinite reverse;
+}
+
+@keyframes orb-d {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 30px) scale(0.95); }
 }
 
 .page-hero,
@@ -547,35 +554,42 @@ onMounted(() => {
 }
 
 .page-hero {
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
+  padding: 24px 28px;
+  border-radius: 20px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92));
+  backdrop-filter: blur(16px);
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-primary) 12%, white);
-  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
+  color: var(--color-primary-dark, #1f57cc);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .page-hero__title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 14px 0 8px;
-  font-size: 28px;
-  font-weight: 800;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 1.5rem;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
 }
 
 .page-hero__subtitle {
-  margin: 0;
+  margin: 4px 0 0;
   color: var(--text-secondary);
+  font-size: 0.9375rem;
 }
 
 .title-icon {

@@ -35,7 +35,7 @@
 
             <div class="test-path-detail-chip-row">
               <span class="test-path-detail-chip">状态：{{ pathStatusLabel }}</span>
-              <span v-if="path.subject" class="test-path-detail-chip">主题：{{ path.subject }}</span>
+              <span v-if="subjectTagLabel" class="test-path-detail-chip">主题：{{ subjectTagLabel }}</span>
               <span class="test-path-detail-chip">阶段：{{ pathOverviewMetrics[0]?.value || 0 }}</span>
               <span class="test-path-detail-chip">预计投入：{{ pathOverviewMetrics[1]?.value || '--' }}</span>
             </div>
@@ -55,7 +55,7 @@
           <div class="test-path-detail-section-head">
             <div>
               <span class="test-path-detail-eyebrow">Path 调试</span>
-              <h2>链路分层</h2>
+              <h2>Pipeline</h2>
             </div>
           </div>
 
@@ -86,51 +86,33 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Node 1</span>
-                  <strong>Goal 输出</strong>
+                  <span class="test-path-detail-eyebrow">Goal</span>
+                  <strong>Goal</strong>
                 </div>
-              </div>
-
-              <div class="test-path-process-lead-block">
-                <span class="test-path-detail-copy-block__label">结果</span>
-                <p>
-                  {{ processDetail.goalFinalPayload?.understanding?.real_problem || processDetail.goalFinalPayload?.rawGoal || '当前没有可用的 Goal 主问题描述。' }}
-                </p>
               </div>
 
               <div class="test-path-process-split-grid">
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">摘要</span>
-                  <div class="test-path-detail-kv-list">
-                    <div class="test-path-detail-kv"><span>rawGoal</span><strong>{{ processDetail.goalFinalPayload?.rawGoal || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>真实问题</span><strong>{{ processDetail.goalFinalPayload?.understanding?.real_problem || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>表层目标</span><strong>{{ processDetail.goalFinalPayload?.understanding?.surface_goal || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>已确认方案</span><strong>{{ summarizeValue(processDetail.goalFinalPayload?.confirmedProposal) }}</strong></div>
-                    <div class="test-path-detail-kv"><span>置信度</span><strong>{{ formatConfidence(processDetail.goalFinalPayload?.confidence) }}</strong></div>
-                    <div class="test-path-detail-kv"><span>对话记录</span><strong>{{ processDetail.goalFinalPayload?.conversationHistory?.length || 0 }} 条</strong></div>
-                  </div>
-                  <div class="test-path-process-pill-stack">
-                    <span class="test-path-process-pill test-path-process-pill--focus">{{ getProcessSourceBadge(processDetail.goalFinalPayload?.provenance) }}</span>
-                    <span v-for="item in getHandoffCoverage(processDetail.goalFinalPayload)" :key="item" class="test-path-process-pill">{{ item }}</span>
-                  </div>
+                  <span class="test-path-detail-copy-block__label">输入内容</span>
+                  <pre>{{ JSON.stringify(goalConversationRaw, null, 2) }}</pre>
                 </article>
 
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">JSON</span>
+                  <span class="test-path-detail-copy-block__label">输出内容</span>
                   <pre>{{ JSON.stringify(processDetail.raw?.goalFinalPayload, null, 2) }}</pre>
                 </article>
               </div>
 
               <details class="test-path-detail-raw-panel test-path-detail-raw-panel--compact">
-                <summary>展开 Goal 原始数据</summary>
+                <summary>展开 Goal 派生结果</summary>
                 <div v-if="goalConversationRaw" class="test-path-detail-process-grid test-path-detail-process-grid--two">
-                  <article class="test-path-detail-process-card">
-                    <span class="test-path-detail-copy-block__label">Goal 对话原始数据 `goalConversation`</span>
-                    <pre>{{ JSON.stringify(goalConversationRaw, null, 2) }}</pre>
-                  </article>
                   <article class="test-path-detail-process-card">
                     <span class="test-path-detail-copy-block__label">Goal 摘要 `goalSummary`</span>
                     <pre>{{ JSON.stringify(goalConversationSummary, null, 2) }}</pre>
+                  </article>
+                  <article class="test-path-detail-process-card">
+                    <span class="test-path-detail-copy-block__label">Goal 快照元信息</span>
+                    <pre>{{ JSON.stringify(processDetail.goalFinalPayload, null, 2) }}</pre>
                   </article>
                 </div>
                 <div v-else class="test-path-detail-empty-state test-path-detail-empty-state--inline">
@@ -142,31 +124,19 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Node 2</span>
-                  <strong>Orchestrator 输出</strong>
+                  <span class="test-path-detail-eyebrow">Orchestrator</span>
+                  <strong>Orchestrator</strong>
                 </div>
-              </div>
-
-              <div class="test-path-process-lead-block">
-                <span class="test-path-detail-copy-block__label">结果</span>
-                <p>{{ processDetail.normalizedInput?.description || '当前没有可用的 orchestrator description。' }}</p>
               </div>
 
               <div class="test-path-process-split-grid">
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">摘要</span>
-                  <div class="test-path-detail-kv-list">
-                    <div class="test-path-detail-kv"><span>description</span><strong>{{ processDetail.normalizedInput?.description || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>skillLevel</span><strong>{{ processDetail.normalizedInput?.skillLevel || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>timePerDay</span><strong>{{ processDetail.normalizedInput?.timePerDay || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>deadlineText</span><strong>{{ processDetail.normalizedInput?.deadlineText || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>confirmedProposal</span><strong>{{ summarizeValue(processDetail.normalizedInput?.confirmedProposal) }}</strong></div>
-                    <div class="test-path-detail-kv"><span>conversationHistory</span><strong>{{ processDetail.normalizedInput?.conversationHistory?.length || 0 }} 条</strong></div>
-                  </div>
+                  <span class="test-path-detail-copy-block__label">输入内容</span>
+                  <pre>{{ JSON.stringify(processDetail.raw?.goalFinalPayload, null, 2) }}</pre>
                 </article>
 
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">JSON</span>
+                  <span class="test-path-detail-copy-block__label">输出内容</span>
                   <pre>{{ JSON.stringify(processDetail.raw?.normalizedInput, null, 2) }}</pre>
                 </article>
               </div>
@@ -175,35 +145,19 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Node 3</span>
-                  <strong>Framing 输出</strong>
+                  <span class="test-path-detail-eyebrow">Framing</span>
+                  <strong>Framing · skill:path-scene-framing</strong>
                 </div>
-              </div>
-
-              <div class="test-path-process-lead-block test-path-process-lead-block--framing">
-                <span class="test-path-detail-copy-block__label">结果</span>
-                <p>{{ processDetail.framing?.normalizedInput?.problemSpace?.realProblem || processDetail.framing?.normalizedInput?.learnerProfile?.surfaceGoal || '当前没有可用的 framing 主问题描述。' }}</p>
               </div>
 
               <div class="test-path-process-split-grid">
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">摘要</span>
-                  <div class="test-path-detail-kv-list">
-                    <div class="test-path-detail-kv"><span>surfaceGoal</span><strong>{{ processDetail.framing?.normalizedInput?.learnerProfile?.surfaceGoal || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>realProblem</span><strong>{{ processDetail.framing?.normalizedInput?.problemSpace?.realProblem || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>firstDeliverable</span><strong>{{ processDetail.framing?.normalizedInput?.confirmedProposal?.firstDeliverable || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>observableResult</span><strong>{{ processDetail.framing?.normalizedInput?.successCriteria?.observableResult || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>keyStages</span><strong>{{ processDetail.framing?.normalizedInput?.confirmedProposal?.keyStages?.length || 0 }} 个</strong></div>
-                  </div>
+                  <span class="test-path-detail-copy-block__label">输入内容</span>
+                  <pre>{{ JSON.stringify(processDetail.raw?.sceneFramingInput, null, 2) }}</pre>
                 </article>
 
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">AI 原始输出</span>
-                  <pre>{{ processDetail.raw?.sceneFramingRaw || '当前没有保存 framing AI 原始返回。' }}</pre>
-                </article>
-
-                <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">Skill 清洗后输出</span>
+                  <span class="test-path-detail-copy-block__label">输出内容</span>
                   <pre>{{ JSON.stringify(processDetail.raw?.sceneFraming, null, 2) }}</pre>
                 </article>
               </div>
@@ -212,41 +166,20 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Node 4</span>
-                  <strong>Path 隐藏认知层</strong>
+                  <span class="test-path-detail-eyebrow">Cognitive Core</span>
+                  <strong>Cognitive Core · path-agent</strong>
                 </div>
               </div>
 
-              <article class="test-path-concept-domain-card">
-                <span class="test-path-detail-copy-block__label">Path 北极星 · cognitiveDomain</span>
-                <strong>{{ processDetail?.cognitiveDesign?.cognitiveDomain || '暂无认知域描述' }}</strong>
-              </article>
-
               <div class="test-path-process-split-grid">
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">摘要</span>
-                  <div class="test-path-detail-kv-list">
-                    <div class="test-path-detail-kv"><span>概念数</span><strong>{{ cognitiveConcepts.length }}</strong></div>
-                    <div class="test-path-detail-kv"><span>Hub</span><strong>{{ hubConceptName || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>里程碑绑定</span><strong>{{ milestoneConceptBoundCount }}/{{ pathStages.length }}</strong></div>
-                    <div class="test-path-detail-kv"><span>任务概念命中</span><strong>{{ linkedConceptHitCount }}/{{ totalTasks }}</strong></div>
-                    <div class="test-path-detail-kv"><span>疑似失真概念</span><strong>{{ processDetail.cognitiveDiagnostics?.suspiciousConcepts?.length || 0 }} 个</strong></div>
-                    <div class="test-path-detail-kv"><span>domain 告警</span><strong>{{ processDetail.cognitiveDiagnostics?.suspiciousDomain ? '是' : '否' }}</strong></div>
-                  </div>
-                  <div class="test-path-process-pill-stack">
-                    <span v-for="item in cognitiveCoverageSummary" :key="item" class="test-path-process-pill">{{ item }}</span>
-                    <span v-for="item in outputQualitySignals" :key="`signal-${item}`" class="test-path-process-pill">{{ item }}</span>
-                  </div>
+                  <span class="test-path-detail-copy-block__label">输入内容</span>
+                  <pre>{{ JSON.stringify(processDetail.raw?.pathAgentInput, null, 2) }}</pre>
                 </article>
 
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">生成状态</span>
-                  <div class="test-path-detail-kv-list">
-                    <div class="test-path-detail-kv"><span>core</span><strong>{{ generationStatus?.core || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>coreStep</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>stageDesign</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>updatedAt</span><strong>{{ generationStatus?.updatedAt || '--' }}</strong></div>
-                  </div>
+                  <span class="test-path-detail-copy-block__label">输出内容</span>
+                  <pre>{{ processDetail.raw?.pathAgentRaw || '当前没有保存 path-agent 原始输出。' }}</pre>
                 </article>
               </div>
 
@@ -280,12 +213,8 @@
               </div>
 
               <details class="test-path-detail-raw-panel test-path-detail-raw-panel--compact">
-                <summary>展开隐藏认知层原始 JSON</summary>
+                <summary>展开派生结果</summary>
                 <div class="test-path-detail-process-grid test-path-detail-process-grid--two">
-                  <article class="test-path-detail-process-card">
-                    <span class="test-path-detail-copy-block__label">Path 原始输出</span>
-                    <pre>{{ processDetail.raw?.pathAgentRaw || '当前没有保存 path-agent 原始输出。' }}</pre>
-                  </article>
                   <article class="test-path-detail-process-card">
                     <span class="test-path-detail-copy-block__label">认知结构 `cognitiveDesign`</span>
                     <pre>{{ JSON.stringify(processDetail.cognitiveDesign, null, 2) }}</pre>
@@ -293,6 +222,10 @@
                   <article class="test-path-detail-process-card">
                     <span class="test-path-detail-copy-block__label">里程碑概念绑定 `milestoneConcepts`</span>
                     <pre>{{ JSON.stringify(processDetail.milestoneConcepts, null, 2) }}</pre>
+                  </article>
+                  <article class="test-path-detail-process-card">
+                    <span class="test-path-detail-copy-block__label">认知诊断 `cognitiveDiagnostics`</span>
+                    <pre>{{ JSON.stringify(processDetail.cognitiveDiagnostics, null, 2) }}</pre>
                   </article>
                   <article class="test-path-detail-process-card">
                     <span class="test-path-detail-copy-block__label">生成状态 `generationStatus`</span>
@@ -305,35 +238,32 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Node 5</span>
-                  <strong>阶段任务设计层</strong>
+                  <span class="test-path-detail-eyebrow">Stage Designer</span>
+                  <strong>Stage Designer · skill:stage-designer</strong>
                 </div>
-              </div>
-
-              <div class="test-path-process-lead-block">
-                  <span class="test-path-detail-copy-block__label">结果</span>
-                <p>{{ taskProfileLeadText }}</p>
               </div>
 
               <div class="test-path-process-split-grid">
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">摘要</span>
-                  <div class="test-path-detail-kv-list">
-                    <div class="test-path-detail-kv"><span>已生成任务</span><strong>{{ profiledTaskCount }}/{{ totalTasks }}</strong></div>
-                    <div class="test-path-detail-kv"><span>覆盖率</span><strong>{{ taskProfileCoverageLabel }}</strong></div>
-                    <div class="test-path-detail-kv"><span>knowledgeType</span><strong>{{ taskProfileKnowledgeTypeCount }} 种</strong></div>
-                    <div class="test-path-detail-kv"><span>cognitiveLevel</span><strong>{{ taskProfileCognitiveLevelCount }} 种</strong></div>
-                    <div class="test-path-detail-kv"><span>displayLabel</span><strong>{{ taskDisplayLabelCount }} 条</strong></div>
-                    <div class="test-path-detail-kv"><span>stageDesigns</span><strong>{{ Object.keys(processDetail.stageDesigns || {}).length }} 个阶段</strong></div>
-                  </div>
-                  <div class="test-path-process-pill-stack">
-                    <span v-for="item in taskProfileSignals" :key="item" class="test-path-process-pill">{{ item }}</span>
-                  </div>
+                  <span class="test-path-detail-copy-block__label">输入内容</span>
+                  <template v-if="stageDesignEntries.length">
+                    <div v-for="entry in stageDesignEntries" :key="entry.stageKey" class="test-path-detail-copy-block">
+                      <span class="test-path-detail-copy-block__label">{{ entry.stageKey }}</span>
+                      <pre>{{ JSON.stringify(entry.inputPayload, null, 2) }}</pre>
+                    </div>
+                  </template>
+                  <pre v-else>{{ JSON.stringify(null, null, 2) }}</pre>
                 </article>
 
                 <article class="test-path-detail-process-card">
-                  <span class="test-path-detail-copy-block__label">JSON</span>
-                  <pre>{{ JSON.stringify(processDetail.raw?.stageDesigns || taskProfiles, null, 2) }}</pre>
+                  <span class="test-path-detail-copy-block__label">输出内容</span>
+                  <template v-if="stageDesignEntries.length">
+                    <div v-for="entry in stageDesignEntries" :key="`${entry.stageKey}-raw`" class="test-path-detail-copy-block">
+                      <span class="test-path-detail-copy-block__label">{{ entry.stageKey }}</span>
+                      <pre>{{ entry.rawModelOutput || '当前没有保存 stage-designer 原始输出。' }}</pre>
+                    </div>
+                  </template>
+                  <pre v-else>{{ JSON.stringify(null, null, 2) }}</pre>
                 </article>
               </div>
 
@@ -512,12 +442,19 @@ const pathStatusLabel = computed(() => {
   if (status === 'draft' || status === 'generating') return '生成中';
   return '规划中';
 });
+const subjectTagLabel = computed(() => {
+  const raw = typeof path.value?.subject === 'string' ? path.value.subject.trim() : '';
+  if (!raw) return '';
+  if (raw.length > 24) return '';
+  if (/[，。；！？,.!?]/.test(raw)) return '';
+  return raw;
+});
 const pathOverviewMetrics = computed(() => [
-  { label: '阶段数', value: String(path.value?.totalMilestones || path.value?.totalStages || 0) },
+  { label: '阶段数', value: String(path.value?.totalMilestones || path.value?.totalStages || pathStages.value.length || 0) },
   { label: '预计投入', value: `${Math.round(path.value?.estimatedHours || 0)} 小时` },
   { label: '当前阶段', value: (() => {
-    const idx = pathStages.value.findIndex((s: any) => s === activeStage.value);
-    return idx >= 0 ? `第 ${idx + 1} 阶段` : '待开始';
+    const stageNumber = activeStage.value?.stageNumber || activeStage.value?.weekNumber || null;
+    return stageNumber ? `第 ${stageNumber} 阶段` : (pathStages.value.length > 0 ? '第 1 阶段' : '待开始');
   })() },
   { label: '任务进度', value: `${completedTasks.value}/${totalTasks.value}` }
 ]);
@@ -549,16 +486,6 @@ const linkedConceptHitRate = computed(() => totalTasks.value === 0 ? '0%' : `${M
 const getConceptTaskHitCount = (conceptId: string) => pathStages.value.reduce((sum: number, stage: any) => {
   return sum + normalizeTaskList(stage).filter((task: any) => task.linkedConceptId === conceptId).length;
 }, 0);
-const cognitiveCoverageSummary = computed(() => {
-  const items: string[] = [];
-  if (processDetail.value?.cognitiveDesign?.cognitiveDomain) items.push('已生成认知域');
-  if (milestoneConceptBoundCount.value > 0) items.push(`里程碑概念绑定 ${milestoneConceptBoundCount.value}/${pathStages.value.length}`);
-  if (hubConceptName.value) items.push(`Hub：${hubConceptName.value}`);
-  if (linkedConceptHitCount.value > 0) items.push(`任务概念命中 ${linkedConceptHitCount.value}/${totalTasks.value}`);
-  const uncovered = cognitiveConcepts.value.filter((concept: any) => getConceptTaskHitCount(concept.id) === 0);
-  if (uncovered.length > 0) items.push(`未命中概念 ${uncovered.length} 个`);
-  return items.length > 0 ? items : ['暂无认知层摘要'];
-});
 const stageConceptTree = computed(() => {
   const milestoneMap = new Map<string, any>();
   milestoneConcepts.value.forEach((item: any) => {
@@ -603,30 +530,21 @@ const goalConversationRawHint = computed(() => {
   }
   return '当前未加载到 Goal 对话原始数据。';
 });
-const outputQualitySignals = computed(() => {
-  const items: string[] = [];
-  if (processDetail.value?.cognitiveDiagnostics?.suspiciousDomain) items.push('cognitiveDomain 疑似退化');
-  if (processDetail.value?.cognitiveDiagnostics?.suspiciousConcepts?.length) items.push(`疑似任务句概念 ${processDetail.value.cognitiveDiagnostics.suspiciousConcepts.length} 个`);
-  if (milestoneConceptBoundCount.value < pathStages.value.length) items.push(`里程碑缺少概念绑定 ${pathStages.value.length - milestoneConceptBoundCount.value} 个`);
-  if (linkedConceptHitCount.value < totalTasks.value) items.push(`任务未命中概念 ${totalTasks.value - linkedConceptHitCount.value} 个`);
-  if (items.length === 0) items.push('隐藏认知层结构健康');
-  return items;
-});
 const taskProfileCoverageLabel = computed(() => totalTasks.value === 0 ? '0%' : `${Math.round((profiledTaskCount.value / totalTasks.value) * 100)}%`);
 const taskProfileKnowledgeTypeCount = computed(() => new Set(taskProfiles.value.map((item: any) => item.knowledgeType).filter(Boolean)).size);
 const taskProfileCognitiveLevelCount = computed(() => new Set(taskProfiles.value.map((item: any) => item.cognitiveLevel).filter(Boolean)).size);
 const taskDisplayLabelCount = computed(() => taskProfiles.value.filter((item: any) => typeof item.displayLabel === 'string' && item.displayLabel.trim()).length);
-const taskProfileSignals = computed(() => {
-  const items: string[] = [];
-  if (profiledTaskCount.value < totalTasks.value) items.push(`未完成标记 ${totalTasks.value - profiledTaskCount.value} 个`);
-  if (taskProfileKnowledgeTypeCount.value > 0) items.push(`knowledgeType ${taskProfileKnowledgeTypeCount.value} 种`);
-  if (taskProfileCognitiveLevelCount.value > 0) items.push(`cognitiveLevel ${taskProfileCognitiveLevelCount.value} 种`);
-  if (items.length === 0) items.push('暂无任务标记结果');
-  return items;
-});
-const taskProfileLeadText = computed(() => {
-  if (totalTasks.value === 0) return '当前路径还没有可标记的任务。';
-  return `当前共 ${totalTasks.value} 个任务，其中 ${profiledTaskCount.value} 个已有阶段任务标签，覆盖率 ${taskProfileCoverageLabel.value}。`;
+const stageDesignEntries = computed(() => {
+  const stageDesigns = processDetail.value?.raw?.stageDesigns;
+  if (!stageDesigns || typeof stageDesigns !== 'object') return [];
+
+  return Object.keys(stageDesigns)
+    .sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }))
+    .map((stageKey) => ({
+      stageKey,
+      inputPayload: stageDesigns[stageKey]?.inputPayload || null,
+      rawModelOutput: stageDesigns[stageKey]?.rawModelOutput || null,
+    }));
 });
 const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
 const activeStage = computed(() => pathStages.value.find((stage: any) => normalizeTaskList(stage).some((task: any) => task.status !== 'completed')) || pathStages.value[0] || null);
@@ -649,13 +567,6 @@ const profiledTaskCount = computed(() => pathStages.value.reduce(
   0,
 ));
 
-const getProcessSourceBadge = (provenance: any) => {
-  if (!provenance) return '未标注';
-  if (provenance.source === 'persisted-goal-final-payload' || provenance.source === 'persisted-normalized-input') return '正式落库';
-  if (provenance.source === 'missing') return '缺失';
-  return provenance.source || '未标注';
-};
-
 const getProcessSourceSummary = (provenance: any) => {
   if (!provenance) return '无来源说明';
   return provenance.source === 'missing' ? '缺少新结构数据' : '正式落库';
@@ -667,25 +578,6 @@ const summarizeValue = (value: any) => {
   if (typeof value === 'object') return `${Object.keys(value).length} 个字段`;
   if (typeof value === 'string') return value.trim() || '--';
   return String(value);
-};
-
-const formatConfidence = (value: any) => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return `${Math.round(value * 100)}%`;
-};
-
-const getHandoffCoverage = (handoff: any) => {
-  const chips: string[] = [];
-  if (handoff?.rawGoal) chips.push('原始目标');
-  if (handoff?.understanding && Object.keys(handoff.understanding).length > 0) chips.push('目标理解');
-  if (handoff?.collected && Object.keys(handoff.collected).length > 0) chips.push('已收集信息');
-  if (handoff?.structuredData) chips.push('结构化数据');
-  if (handoff?.confirmedProposal) chips.push('已确认方案');
-  if (handoff?.confidenceScores) chips.push('置信度评分');
-  if (handoff?.conversationHistory?.length) chips.push(`对话记录:${handoff.conversationHistory.length}`);
-  if (handoff?.finalUserVisible) chips.push('用户确认话术');
-  if (chips.length === 0) chips.push('字段缺失较多');
-  return chips;
 };
 
 const formatTaskAnnotationConfidence = (value: any) => {

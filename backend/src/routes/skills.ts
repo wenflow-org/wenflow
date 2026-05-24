@@ -6,6 +6,8 @@ import { Router, Request, Response } from 'express';
 import prisma from '../config/database';
 import { getGateway } from '../gateway';
 import { skillHandlers, allSkillDefinitions } from '../skills';
+import { authMiddleware } from '../middleware/auth.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
 
 const router = Router();
 
@@ -139,9 +141,9 @@ router.post('/match', async (req: Request, res: Response) => {
 });
 
 /**
- * 注册 Skill（开发/管理接口）
+ * 注册 Skill（仅管理员可调用）
  */
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const { definition, handler } = req.body;
     

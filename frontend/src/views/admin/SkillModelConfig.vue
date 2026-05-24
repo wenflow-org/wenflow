@@ -6,10 +6,7 @@
     </div>
 
     <div class="page-hero">
-      <span class="pill">
-        <el-icon><Operation /></el-icon>
-        Skill 模型配置
-      </span>
+      <span class="pill">Skill 模型配置</span>
       <h2 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Operation /></el-icon>
         Skill 模型配置
@@ -963,8 +960,9 @@ onMounted(() => fetchConfigs());
 .bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
+.admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
@@ -986,8 +984,7 @@ onMounted(() => fetchConfigs());
 .admin-list-card {
   border: 1px solid #d2dbf3;
   border-radius: 28px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  padding: 1rem;
   background: color-mix(in srgb, #ffffff 90%, white);
   backdrop-filter: blur(20px);
   position: relative;
@@ -1153,21 +1150,28 @@ onMounted(() => fetchConfigs());
 }
 
 .chip-section {
-  display: grid;
-  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg-surface) 60%, white);
+  border-radius: var(--radius-md);
 }
 
 .chip-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.chip-row:last-child {
+  margin-bottom: 0;
 }
 
 .chip-label {
-  min-width: 72px;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
+  min-width: 80px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .skill-config-form :deep(.el-form-item) {
@@ -1257,9 +1261,9 @@ onMounted(() => fetchConfigs());
   background: #1e1e1e;
   color: #d4d4d4;
   padding: 1rem;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: auto;
-  max-height: 360px;
+  max-height: 300px;
 }
 
 .prompt-text-card__content {
@@ -1276,22 +1280,46 @@ onMounted(() => fetchConfigs());
 
 .contract-grid {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   min-width: 0;
 }
 
 .contract-grid--preview {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
 }
 
 .contract-card {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--glass-bg-light);
+  display: grid;
+  gap: 0.75rem;
   min-width: 0;
 }
 
+.contract-card h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.contract-card p {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
 .preview-textarea :deep(.el-textarea__inner) {
-  font-family: monospace;
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875rem;
+  border-radius: 16px;
+  background: rgba(52, 120, 246, 0.03);
+  border-color: rgba(52, 120, 246, 0.08);
 }
 
 :deep(.prompt-versions-table .el-table) {

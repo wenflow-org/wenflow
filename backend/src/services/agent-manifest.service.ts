@@ -1,4 +1,4 @@
-export type AgentRuntimeKind = 'agent' | 'orchestrator' | 'alias';
+export type AgentRuntimeKind = 'agent' | 'skill' | 'orchestrator' | 'alias';
 
 export type MonitoringGroupName =
   | 'RequirementCollection'
@@ -60,20 +60,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     }
   },
   {
-    id: 'progress-agent',
-    name: '进度追踪 Agent',
-    description: '追踪学习进度',
-    category: 'tracking',
-    kind: 'agent',
-    runtimeEnabled: true,
-    userVisible: true,
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: {
-      temperature: 0.4,
-      maxTokens: 600
-    }
-  },
-  {
     id: 'learner-model-agent',
     name: '学习者模型 Agent',
     description: '聚合学习者画像、状态与知识记忆',
@@ -88,14 +74,15 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     }
   },
   {
-    id: 'peer-agent',
-    name: '伴学 Agent',
-    description: '同伴式引导讨论',
+    id: 'skill:peer-reinforcement',
+    name: '伴学 Skill',
+    description: '同伴式引导讨论与理解补强能力',
     category: 'teaching',
-    kind: 'agent',
+    kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'LearningCompanion',
+    aliases: ['peer-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: {
       temperature: 0.8,
@@ -179,7 +166,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: true,
     monitoringGroup: 'TeachingOrchestration',
     aliases: ['ai-teaching'],
-    orchestratorMembers: ['ai-teaching-agent', 'teaching-turn-agent', 'peer-agent', 'session-wrapup-agent']
+    orchestratorMembers: ['ai-teaching-agent', 'teaching-turn-agent', 'skill:peer-reinforcement', 'session-wrapup-agent']
   }
 ];
 

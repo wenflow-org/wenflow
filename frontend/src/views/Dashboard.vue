@@ -210,6 +210,7 @@ const paths = ref<DashboardPath[]>([]);
 const loading = ref(false);
 const scrolled = ref(false);
 const selectedCalendarDay = ref<any>(null);
+const adaptiveGuidance = ref<any | null>(null);
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const pathCount = computed(() => stats.value?.paths?.total || 0);
@@ -271,23 +272,32 @@ const continueLearningTarget = computed(() => {
 });
 
 const dashboardTitle = computed(() => {
+  if (adaptiveGuidance.value?.headline) return adaptiveGuidance.value.headline;
   if (!hasLearningPath.value) return `你好，${userStore.user?.name || '同学'}，先从一个具体目标开始。`;
   return `欢迎回来，${userStore.user?.name || '同学'}。`;
 });
 
 const dashboardSubtitle = computed(() => {
+  if (adaptiveGuidance.value?.subtitle) return adaptiveGuidance.value.subtitle;
   if (!hasLearningPath.value) return '描述一件你最近想解决的事，把它缩小到可以开始的一步。';
   return '从上次停下的位置继续，把学习接上。';
 });
 
 const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习路径' : '还没有学习路径'));
 const primaryPathDesc = computed(() => (
+  adaptiveGuidance.value?.pathHint
+    ? adaptiveGuidance.value.pathHint
+    : (
   hasLearningPath.value
     ? '从上次停下的位置继续。'
     : '从一个具体目标开始，系统会根据你的情况生成第一版学习路径。'
+    )
 ));
 
 const currentPathHint = computed(() => {
+  if (adaptiveGuidance.value?.warningCopy && adaptiveGuidance.value.warningCopy !== '当前没有明显风险。') {
+    return adaptiveGuidance.value.warningCopy;
+  }
   if (inProgressTaskCount.value > 0) return `${inProgressTaskCount.value} 个任务进行中`;
   if (completedTaskCount.value > 0) return '已完成部分任务';
   return hasLearningPath.value ? '路径已生成' : '先创建一个目标';
@@ -299,17 +309,58 @@ const nextStepLabel = computed(() => {
 });
 
 const nextStepHint = computed(() => {
+  if (adaptiveGuidance.value?.nextStep) return adaptiveGuidance.value.nextStep;
   if (!hasLearningPath.value) return '从一个真实问题开始';
   return primaryActionTask.value ? '' : '进入学习路径查看安排';
 });
 
 const todayActionItems = computed(() => {
+  const resolveAdaptiveTarget = (value?: string) => {
+    switch (value) {
+      case 'continue-learning':
+        return continueLearningTarget.value;
+      case 'learning-state':
+        return learningStatePath.value;
+      case 'achievements':
+        return achievementsPath.value;
+      case 'create-goal':
+        return goalConversationPath.value;
+      case 'path-detail':
+        return primaryPath.value?.id ? `/learning-path/${primaryPath.value.id}` : learningPathsPath.value;
+      default:
+        return continueLearningTarget.value;
+    }
+  };
+
   if (!hasLearningPath.value) {
+    if (adaptiveGuidance.value?.todayActions?.length) {
+      return adaptiveGuidance.value.todayActions.map((item: any, index: number) => ({
+        id: `adaptive-empty-${index}`,
+        tone: index === 0 ? 'primary' : 'muted',
+        dot: index === 0 ? 'active' : 'dim',
+        title: item.title,
+        desc: item.desc,
+        action: item.action,
+        to: resolveAdaptiveTarget(item.to) || goalConversationPath.value
+      }));
+    }
     return [
       { id: 'goal', tone: 'primary', dot: 'active', title: '先规划一个目标', desc: '描述你想解决的事，系统会生成学习路径。', action: '规划目标', to: '/goal-conversation' },
       { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '完成一次学习后，系统会根据你的节奏给出建议。', action: '前往查看', to: '/learning-state' },
       { id: 'record', tone: 'muted', dot: 'dim', title: '查看学习记录', desc: '开始学习后会自动记录学习时间。', action: '前往查看', to: '/achievements' }
     ];
+  }
+
+  if (adaptiveGuidance.value?.todayActions?.length) {
+    return adaptiveGuidance.value.todayActions.map((item: any, index: number) => ({
+      id: `adaptive-${index}`,
+      tone: index === 0 ? 'primary' : index === 1 ? 'accent' : 'muted',
+      dot: index === 0 ? 'active' : index === 1 ? 'active' : 'dim',
+      title: item.title,
+      desc: item.desc,
+      action: item.action,
+      to: resolveAdaptiveTarget(item.to),
+    }));
   }
 
   const lsb = stats.value?.state?.lsb;
@@ -386,6 +437,15 @@ async function fetchDashboardData() {
       paths.value = (pathsResult.value as DashboardPath[]) || [];
     } else {
       console.error('获取学习路径失败:', pathsResult.reason);
+    }
+
+    try {
+      const activePaths = (pathsResult.status === 'fulfilled' ? (pathsResult.value as DashboardPath[]) || [] : [])
+        .filter((path) => getPathDisplayState(path) === 'active');
+      const primaryGuidancePath = activePaths.find((path) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
+      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('dashboard', primaryGuidancePath?.id);
+    } catch (error) {
+      console.error('获取动态引导文案失败:', error);
     }
   } catch (error) {
     console.error('获取学习台数据失败:', error);

@@ -34,13 +34,6 @@ export { registerAllPlugins, getAllPlugins } from './plugins';
 // Path Agent
 export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from './path-agent';
 
-// Progress Agent
-export {
-  progressAgentDefinition,
-  progressAgentHandler as progressAgentHandlerFn,
-  setupProgressAgentListeners
-} from './progress-agent';
-
 // Goal Conversation Agent
 export {
   goalConversationAgentDefinition,
@@ -118,11 +111,10 @@ export {
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from './path-agent';
-import { progressAgentDefinition, progressAgentHandler as progressAgentHandlerFn } from './progress-agent';
 import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from './goal-conversation-agent';
 import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from './teaching-turn-agent';
-import { peerAgentDefinition, peerAgentHandler } from './peer-agent';
+import { peerAgentHandler } from './peer-agent';
 import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from './session-wrapup-agent';
 import { virtualLearnerSimulationAgentDefinition, virtualLearnerSimulationAgentHandler } from './virtual-learner-simulation-agent';
 import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-orchestrator-agent';
@@ -130,11 +122,9 @@ import { getAgentManifest } from '../services/agent-manifest.service';
 
 export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
-  progressAgentDefinition,
   learnerModelAgentDefinition,
   goalConversationAgentDefinition,
   teachingTurnAgentDefinition,
-  peerAgentDefinition,
   sessionWrapupAgentDefinition,
   virtualLearnerSimulationAgentDefinition,
   simulationOrchestratorAgentDefinition
@@ -142,11 +132,10 @@ export const allAgentDefinitions: AgentDefinition[] = [
 
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
   'path-agent': pathAgentHandlerFn,
-  'progress-agent': progressAgentHandlerFn,
   'learner-model-agent': learnerModelAgentHandlerFn,
   'goal-conversation-agent': goalConversationAgentHandler,
   'teaching-turn-agent': teachingTurnAgentHandler,
-  'peer-agent': peerAgentHandler,
+  'skill:peer-reinforcement': peerAgentHandler,
   'session-wrapup-agent': sessionWrapupAgentHandler,
   'virtual-learner-simulation-agent': virtualLearnerSimulationAgentHandler,
   'simulation-orchestrator': simulationOrchestratorAgentHandler

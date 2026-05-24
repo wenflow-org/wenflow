@@ -644,7 +644,8 @@ router.post('/sessions/:sessionId/auto', async (req: any, res) => {
 });
 
 /**
- * 推进到路径生成阶段
+ * 兜底重试：推进到路径生成阶段
+ * 仅在 goalConversationService 自动触发的 path 生成失败时由前端调用
  * POST /api/admin/virtual-sessions/:sessionId/advance-path
  */
 router.post('/sessions/:sessionId/advance-path', async (req: any, res) => {
@@ -663,6 +664,171 @@ router.post('/sessions/:sessionId/advance-path', async (req: any, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '推进路径生成失败'
+    });
+  }
+});
+
+/**
+ * 查询路径生成状态（前端轮询用）
+ * GET /api/admin/virtual-sessions/:sessionId/path-status
+ */
+router.get('/sessions/:sessionId/path-status', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId }
+    });
+    
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: '模拟会话不存在'
+      });
+    }
+    
+    if (!session.learningPathId) {
+      return res.json({
+        success: true,
+        data: {
+          status: 'not_started',
+          learningPathId: null,
+          path: null
+        }
+      });
+    }
+    
+    const learningPath = await prisma.learning_paths.findUnique({
+      where: { id: session.learningPathId },
+      include: {
+        milestones: {
+          orderBy: { stageNumber: 'asc' },
+          select: {
+            id: true,
+            stageNumber: true,
+            title: true,
+            description: true,
+            estimatedHours: true,
+            status: true
+          }
+        }
+      }
+    });
+    
+    if (!learningPath) {
+      return res.json({
+        success: true,
+        data: {
+          status: 'not_found',
+          learningPathId: session.learningPathId,
+          path: null
+        }
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        status: learningPath.status,
+        learningPathId: learningPath.id,
+        path: {
+          id: learningPath.id,
+          title: learningPath.title,
+          name: learningPath.name,
+          description: learningPath.description,
+          subject: learningPath.subject,
+          difficulty: learningPath.difficulty,
+          estimatedHours: learningPath.estimatedHours,
+          totalMilestones: learningPath.totalMilestones,
+          completedMilestones: learningPath.completedMilestones,
+          status: learningPath.status,
+          aiGenerated: learningPath.aiGenerated,
+          createdAt: learningPath.createdAt,
+          updatedAt: learningPath.updatedAt,
+          milestones: learningPath.milestones
+        }
+      }
+    });
+  } catch (error: any) {
+    logger.error('查询路径状态失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '查询路径状态失败'
+    });
+  }
+});
+
+/**
+ * 开始 Learning 阶段
+ * POST /api/admin/virtual-sessions/:sessionId/start-learning
+ */
+router.post('/sessions/:sessionId/start-learning', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    const result = await simulationOrchestrator.startLearningPhase(sessionId);
+    
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('开始学习阶段失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '开始学习阶段失败'
+    });
+  }
+});
+
+/**
+ * 执行单步学习
+ * POST /api/admin/virtual-sessions/:sessionId/learning-step
+ */
+router.post('/sessions/:sessionId/learning-step', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    const result = await simulationOrchestrator.executeLearningStep(sessionId);
+    
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('执行学习步骤失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '执行学习步骤失败'
+    });
+  }
+});
+
+/**
+ * 自动学习（完成整个路径或指定里程碑数）
+ * POST /api/admin/virtual-sessions/:sessionId/auto-learning
+ */
+router.post('/sessions/:sessionId/auto-learning', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { maxMilestones = 10 } = req.body;
+    
+    const result = await simulationOrchestrator.executeAutoLearning(sessionId, {
+      maxMilestones
+    });
+    
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('自动学习失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '自动学习失败'
     });
   }
 });

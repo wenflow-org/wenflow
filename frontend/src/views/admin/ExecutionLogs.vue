@@ -658,9 +658,9 @@ const getAgentDisplayName = (name: string) => {
     'path-orchestrator': '路径编排',
     'ai-teaching-agent': 'AI 授课',
     'learner-model-agent': '学习者模型',
-    'progress-agent': '进度追踪',
     'content-generator': '内容生成',
-    'peer-agent': '伴学介入',
+    'peer-agent': '伴学介入(旧ID)',
+    'skill:peer-reinforcement': '伴学介入',
     'session-wrapup-agent': '课后产出',
     'path-scene-framing': '路径场景收敛',
     'stage-designer': '阶段任务设计器',
@@ -1001,10 +1001,9 @@ onUnmounted(() => {
 
 /* Background orbs */
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 999px; filter: blur(52px); opacity: 0.42; }
-.bg-orb--1 { width: 380px; height: 380px; top: -120px; left: -80px; background: color-mix(in srgb, var(--color-primary) 30%, white); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 320px; height: 320px; top: 12%; right: -80px; background: color-mix(in srgb, var(--color-accent) 22%, white); animation: orb-d 30s ease-in-out infinite reverse; }
-.bg-orb--3 { width: 260px; height: 260px; bottom: -70px; left: 24%; background: color-mix(in srgb, var(--color-secondary) 22%, white); animation: orb-d 28s ease-in-out infinite alternate; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */

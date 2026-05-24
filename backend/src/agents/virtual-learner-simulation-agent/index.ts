@@ -263,7 +263,7 @@ async function handleSimulateReply(
   const messages = [
     { role: 'system', content: systemPrompt },
     ...(simulationContext.conversationHistory || []).map((item: any) => ({
-      role: item.role,
+      role: normalizeMessageRole(item.role),
       content: item.content
     }))
   ];
@@ -517,6 +517,12 @@ function parseReactionOutput(rawContent: string): {
     decision: 'accept',
     confidence: 0.5
   };
+}
+
+function normalizeMessageRole(role: string): 'user' | 'assistant' | 'system' {
+  if (role === 'user') return 'user';
+  if (role === 'system') return 'system';
+  return 'assistant';
 }
 
 export { type SimulationAgentInput, type SimulationAgentOutput, type SimulationContext } from './types';

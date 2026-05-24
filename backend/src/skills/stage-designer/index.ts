@@ -4,6 +4,7 @@ import {
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 const STAGE_DESIGNER_MAX_TOKENS = 32000;
 const STAGE_DESIGNER_TEMPERATURE = 0.3;
@@ -25,10 +26,11 @@ export const STAGE_DESIGNER_PROMPT = `你是一位阶段任务设计师。
 4. 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书。
 5. type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate。
 6. linkedConcept 必须等于 milestone.coreConcept，除非 repairHints 明确要求桥接任务。
-7. 输出数量控制在 3-6 个 subtasks。
+7. 输出数量优先遵守 normalizedInput.planningHints.subtasksPerStageRange；若未提供 planningHints，默认 3-6 个 subtasks。
 8. 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它。
 9. 可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives。
 10. 只输出 1 个 JSON 对象，不要输出 markdown，不要解释。
+11. estimatedMinutes 优先落在 normalizedInput.planningHints.subtaskMinutesRange 内；若未提供 planningHints，默认控制在 30-90 分钟附近。
 
 颗粒度边界：
 1. 你生成的是“阶段内任务方向”，不是“本周执行方案”。
@@ -140,56 +142,47 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
 }
 
 export async function stageDesigner(input: any): Promise<SkillExecutionResult<any>> {
-  const startTime = Date.now();
-
   try {
-    const promptConfig = await new AgentConfigService().getActivePrompt('skill:stage-designer');
-    const systemPrompt = promptConfig?.systemPrompt || STAGE_DESIGNER_PROMPT;
     const milestone = input?.milestone && typeof input.milestone === 'object' ? input.milestone : null;
     if (!milestone) {
       throw new Error('STAGE_DESIGNER_INVALID_INPUT: milestone is required');
     }
-
-    const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          milestone: input.milestone,
-          cognitiveCore: input.cognitiveCore,
-          normalizedInput: input.normalizedInput || null,
-          repairHints: input.repairHints || null,
-        }, null, 2)
-      }
-    ];
-
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'stage-designer' };
-    const response = await gateway.execute({
-      messages,
-      max_tokens: promptConfig?.maxTokens || STAGE_DESIGNER_MAX_TOKENS,
-      temperature: promptConfig?.temperature ?? STAGE_DESIGNER_TEMPERATURE,
-    }, caller, {});
-
-    const content = response.choices[0]?.message.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('STAGE_DESIGNER_INVALID: response does not contain valid JSON');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
     const fallbackConcept = normalizeString(milestone?.coreConcept);
+    const result = await callPrompt<any, { subtasks: any[] }>({
+      agentId: 'skill:stage-designer',
+      defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
+      caller: { skillId: 'stage-designer' },
+      modelDefaults: {
+        maxTokens: STAGE_DESIGNER_MAX_TOKENS,
+        temperature: STAGE_DESIGNER_TEMPERATURE,
+      },
+      buildUserPayload: (payload) => ({
+        milestone: payload.milestone,
+        cognitiveCore: payload.cognitiveCore,
+        normalizedInput: payload.normalizedInput || null,
+        repairHints: payload.repairHints || null,
+      }),
+      normalizeOutput: (parsed, payload) => ({
+        subtasks: normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
+      }),
+    }, input);
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'STAGE_DESIGNER_INVALID');
+    }
 
     return {
       success: true,
       output: {
-        subtasks: normalizeSubtasks(parsed?.subtasks, fallbackConcept),
+        subtasks: result.output.subtasks,
         _debug: {
-          rawModelOutput: content,
-          extractedJson: jsonMatch[0],
+          rawModelOutput: result.debug.rawModelOutput,
+          extractedJson: result.debug.extractedJson,
+          userPayload: result.debug.userPayload,
+          systemPromptVersion: result.debug.systemPromptVersion,
         },
       },
-      duration: Date.now() - startTime,
+      duration: result.debug.durationMs,
     };
   } catch (error: any) {
     return {
@@ -198,7 +191,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         code: 'STAGE_DESIGNER_FAILED',
         message: error?.message || 'Unknown error'
       },
-      duration: Date.now() - startTime,
+      duration: 0,
     };
   }
 }

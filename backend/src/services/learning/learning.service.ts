@@ -5,12 +5,12 @@ import aiService from '../ai/ai.service';
 import stateTrackingService from './state-tracking.service';
 import achievementService from '../achievements/achievement.service';
 import { updateLearningMetrics } from '../metrics/LearningMetricService';
-import { progressAgentHandler } from '../../agents/progress-agent';
-import type { AgentInput, AgentContext } from '../../agents/protocol';
+import type { AgentInput } from '../../agents/protocol';
 import { runWithContext } from '../../gateway/api-gateway/context';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { learnerProgressService } from '../learner/LearnerProgressService';
 
 // Path 任务画像 Skills
 import { executeSkill } from '../../skills';
@@ -61,6 +61,7 @@ interface GeneratePathData {
     conversationHistory?: Array<{ role: string; content: string }>;
     goalFinalPayload?: GoalToPathHandoffSnapshot;
     pathSceneFraming?: any;
+    pathSceneFramingInput?: any;
     pathSceneFramingRaw?: string | null;
     replan?: {
       mode?: 'new_version' | 'overwrite';
@@ -75,7 +76,7 @@ interface GeneratePathData {
 interface PathReplanRequest {
   pathId: string;
   userId: string;
-  triggerSource?: 'goal-conversation' | 'progress-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
@@ -222,7 +223,7 @@ type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
   recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-  triggerSource?: 'learn' | 'ai-teaching' | 'progress-agent' | 'system' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'learner-model-agent' | 'system' | null;
 }
 
 interface PathAdjustmentEvidence {
@@ -545,7 +546,7 @@ function parsePathAdjustmentPolicy(raw: string | null): PathAdjustmentPolicy | n
       : null;
     const triggerSource = candidate.triggerSource === 'learn'
       || candidate.triggerSource === 'ai-teaching'
-      || candidate.triggerSource === 'progress-agent'
+      || candidate.triggerSource === 'learner-model-agent'
       || candidate.triggerSource === 'system'
       ? candidate.triggerSource
       : null;
@@ -891,6 +892,12 @@ class LearningService {
     const sceneFramingRaw = typeof parsedTemplate?.sceneFramingRaw === 'string'
       ? parsedTemplate.sceneFramingRaw
       : null;
+    const sceneFramingInput = parsedTemplate?.sceneFramingInput && typeof parsedTemplate.sceneFramingInput === 'object'
+      ? parsedTemplate.sceneFramingInput
+      : null;
+    const pathAgentInput = parsedTemplate?.pathAgentInput && typeof parsedTemplate.pathAgentInput === 'object'
+      ? parsedTemplate.pathAgentInput
+      : null;
     const pathAgentRaw = typeof parsedTemplate?.pathAgentRaw === 'string'
       ? parsedTemplate.pathAgentRaw
       : null;
@@ -1056,7 +1063,9 @@ class LearningService {
         raw: {
           goalFinalPayload,
           normalizedInput,
+          sceneFramingInput,
           sceneFramingRaw,
+          pathAgentInput,
           pathAgentRaw,
           sceneFraming,
           stageDesigns,
@@ -1893,13 +1902,16 @@ class LearningService {
       const agentContext = { userId: data.userId };
 
       if (!data.userProfile?.pathSceneFraming) {
-        const sceneFramingResult = await executeSkill(pathSceneFramingDefinition, {
+        const pathSceneFramingInput = {
           goal: agentInput.goal,
           currentLevel: agentInput.currentLevel,
           timePerDay: agentInput.timePerDay,
           structuredData: agentInput.structuredData,
           confirmedProposal: agentInput.confirmedProposal,
           metadata: agentInput.metadata || {},
+        };
+        const sceneFramingResult = await executeSkill(pathSceneFramingDefinition, {
+          ...pathSceneFramingInput,
         });
         const sceneFraming = stripSceneFramingDebugMeta(sceneFramingResult);
         const sceneFramingRaw = typeof sceneFramingResult?._debug?.rawModelOutput === 'string'
@@ -1909,6 +1921,7 @@ class LearningService {
           ...(data.userProfile || {}),
           pathSceneFraming: sceneFraming,
           pathSceneFramingRaw: sceneFramingRaw,
+          pathSceneFramingInput,
         };
         agentInput.metadata = {
           ...(agentInput.metadata || {}),
@@ -1942,6 +1955,16 @@ class LearningService {
       const pathAgentRaw = typeof (path as any)?._debug?.rawModelOutput === 'string'
         ? (path as any)._debug.rawModelOutput
         : null;
+      const pathAgentInput = {
+        goal: agentInput.goal,
+        currentLevel: agentInput.currentLevel,
+        timePerDay: agentInput.timePerDay,
+        metadata: agentInput.metadata || {},
+        structuredData: agentInput.structuredData || null,
+        confirmedProposal: agentInput.confirmedProposal || null,
+        confidenceScores: agentInput.confidenceScores || null,
+        conversationHistory: Array.isArray(agentInput.conversationHistory) ? agentInput.conversationHistory : [],
+      };
       logger.info('PathAgent 调用成功', { userId: data.userId, pathId: path.id });
 
       return {
@@ -1951,6 +1974,8 @@ class LearningService {
         estimatedTotalHours: path.estimatedHours || 0,
         sceneFraming: data.userProfile?.pathSceneFraming || null,
         sceneFramingRaw: data.userProfile?.pathSceneFramingRaw || null,
+        sceneFramingInput: data.userProfile?.pathSceneFramingInput || null,
+        pathAgentInput,
         pathAgentRaw,
         suggestedMilestones: taskChainMilestones.map((m: any, idx: number) => ({
           stage: m.stageNumber || idx + 1,
@@ -1985,7 +2010,9 @@ class LearningService {
         mode: data.mode || 'generate',
         goalFinalPayload: buildGoalToPathHandoffSnapshot(data),
         normalizedInput: buildNormalizedPathInputSnapshot(data),
+        sceneFramingInput: analysis.sceneFramingInput || data.userProfile?.pathSceneFramingInput || null,
         sceneFramingRaw: analysis.sceneFramingRaw || data.userProfile?.pathSceneFramingRaw || null,
+        pathAgentInput: analysis.pathAgentInput || null,
         pathAgentRaw: analysis.pathAgentRaw || null,
         suggestedMilestones: normalizedMilestonesData,
         cognitiveDesign,
@@ -2156,6 +2183,10 @@ class LearningService {
       const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
         ? parsedTemplate.normalizedInput
         : null;
+      const stageDesignerBaseInput = {
+        cognitiveCore: pathCognitiveDesign,
+        normalizedInput,
+      };
       const stageDesignRawOutputs: Record<string, any> = {};
       const stageDesignOutputs: Array<{
         milestoneId: string;
@@ -2165,7 +2196,7 @@ class LearningService {
       let designedTaskCount = 0;
 
       for (const milestone of learningPath.milestones) {
-        const stageResult = await executeSkill(stageDesignerDefinition, {
+        const stageDesignerInput = {
           milestone: {
             stageNumber: milestone.stageNumber,
             title: milestone.title,
@@ -2174,13 +2205,14 @@ class LearningService {
             goal: milestone.goal || null,
             estimatedHours: milestone.estimatedHours || null,
           },
-          cognitiveCore: pathCognitiveDesign,
-          normalizedInput,
+          ...stageDesignerBaseInput,
           repairHints: null,
-        });
+        };
+        const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
         const stageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
         stageDesignRawOutputs[`stage-${milestone.stageNumber}`] = {
+          inputPayload: stageDesignerInput,
           rawModelOutput: stageResult?._debug?.rawModelOutput || null,
           extractedJson: stageResult?._debug?.extractedJson || null,
           normalizedOutput: {
@@ -2869,7 +2901,7 @@ const learningPath = await prisma.learning_paths.findUnique({
       : null;
     const completedTasks = (milestone.subtasks || []).filter((task: any) => task.status === 'completed');
 
-    const stageResult = await executeSkill(stageDesignerDefinition, {
+    const stageDesignerInput = {
       milestone: {
         stageNumber: milestone.stageNumber,
         title: milestone.title,
@@ -2887,7 +2919,8 @@ const learningPath = await prisma.learning_paths.findUnique({
         learnerReplanProjection,
         preserveCompletedTasks: completedTasks.map((task: any) => ({ id: task.id, title: task.title })),
       },
-    });
+    };
+    const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
     const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
 
@@ -2943,6 +2976,7 @@ const learningPath = await prisma.learning_paths.findUnique({
             stageDesigns: {
               ...(parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object' ? parsedTemplate.stageDesigns : {}),
               [`stage-${milestone.stageNumber}`]: {
+                inputPayload: stageDesignerInput,
                 rawModelOutput: stageResult?._debug?.rawModelOutput || null,
                 extractedJson: stageResult?._debug?.extractedJson || null,
                 normalizedOutput: {
@@ -3113,40 +3147,24 @@ const learningPath = await prisma.learning_paths.findUnique({
         logger.warn('检查成就失败（不影响任务完成）:', error);
       }
 
-      // 调用 progress-agent 生成学习报告
+      // 基于学习者状态中心生成学习报告
       let learningReport: { reasoning?: string; suggestion?: string; recommendations?: string[] } | undefined;
       
       try {
-        const agentInput: AgentInput = {
-          type: 'standard',
-          goal: 'task_completion_analysis',
-          metadata: {
-            action: 'task_complete',
-            taskId: data.taskId,
-            data: {
-              taskTitle: subtask.title,
-              timeSpent: data.actualMinutes || 30,
-              subjectiveDifficulty: data.subjectiveDifficulty,
-              difficulty: subtask.estimatedMinutes ? Math.min(subtask.estimatedMinutes / 30, 10) : 5
-            }
-          }
+        const progressResult = await learnerProgressService.evaluateTaskCompletion(data.userId, {
+          taskTitle: subtask.title,
+          timeSpent: data.actualMinutes || 30,
+          subjectiveDifficulty: data.subjectiveDifficulty,
+          difficulty: subtask.estimatedMinutes ? Math.min(subtask.estimatedMinutes / 30, 10) : 5
+        });
+
+        await learnerProgressService.emitSignals(data.userId, [progressResult.signal]);
+
+        learningReport = {
+          reasoning: progressResult.metrics?.reasoning,
+          suggestion: progressResult.metrics?.suggestion,
+          recommendations: progressResult.recommendations
         };
-
-        const agentContext: AgentContext = {
-          userId: data.userId
-        };
-
-        const result = await progressAgentHandler(agentInput, agentContext);
-        const normalizedProgressResult = normalizeAgentOutput('progress-agent', result);
-        const progressPayload = normalizedProgressResult.internal?.progress || result.progress;
-
-        if (normalizedProgressResult.success && progressPayload) {
-          learningReport = {
-            reasoning: progressPayload.metrics?.reasoning,
-            suggestion: progressPayload.metrics?.suggestion,
-            recommendations: progressPayload.recommendations
-          };
-        }
       } catch (error) {
         logger.warn('生成学习报告失败（不影响任务完成）:', error);
       }

@@ -32,6 +32,12 @@
         <button class="test-learn-btn test-learn-btn--primary" @click="goBack">返回路径详情</button>
       </div>
 
+      <div v-else-if="sessionPaused" class="test-learn-card test-learn-blocked">
+        <h2>授课已暂停</h2>
+        <p>点击“恢复授课”继续刚才的测试会话。</p>
+        <button class="test-learn-btn test-learn-btn--primary" @click="resumeSessionFromPause">恢复授课</button>
+      </div>
+
       <template v-else-if="task">
         <section class="test-learn-hero test-learn-card">
           <div>
@@ -63,6 +69,17 @@
                 <div class="test-learn-kv"><span>messages</span><strong>{{ messages.length }}</strong></div>
                 <div class="test-learn-kv"><span>elapsed</span><strong>{{ formatTime(activeTime) }}</strong></div>
                 <div class="test-learn-kv"><span>knowledgePoints</span><strong>{{ knowledgePoints.length }}</strong></div>
+              </div>
+            </section>
+
+            <section class="test-learn-card">
+              <span class="test-learn-eyebrow">任务上下文</span>
+              <div class="test-learn-kv-list">
+                <div class="test-learn-kv"><span>taskType</span><strong>{{ task.taskType || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>displayLabel</span><strong>{{ task.displayLabel || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>knowledgeType</span><strong>{{ task.knowledgeType || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>cognitiveLevel</span><strong>{{ task.cognitiveLevel || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>coreConcept</span><strong>{{ task.coreConcept || '--' }}</strong></div>
               </div>
             </section>
 
@@ -131,6 +148,66 @@
                     </div>
                   </div>
 
+                  <details v-if="msg.role === 'assistant' && getLearningTraceCard(msg)" class="test-learn-trace">
+                    <summary class="test-learn-trace__summary">
+                      {{ getLearningTraceSummaryLabel(msg) }}
+                    </summary>
+
+                    <template v-if="getLearningTraceCard(msg)">
+                      <div class="test-learn-trace__meta">
+                        <span>{{ getLearningTraceCard(msg)?.kindLabel }}</span>
+                        <span>{{ getLearningTraceCard(msg)?.summary }}</span>
+                        <span v-if="getLearningTraceCard(msg)?.promptVersionLabel">{{ getLearningTraceCard(msg)?.promptVersionLabel }}</span>
+                      </div>
+
+                      <div v-if="getLearningTraceCard(msg)?.metricChips.length" class="test-learn-trace__metric-grid">
+                        <article
+                          v-for="metric in getLearningTraceCard(msg)?.metricChips || []"
+                          :key="metric.label"
+                          class="test-learn-trace__metric"
+                        >
+                          <span>{{ metric.label }}</span>
+                          <strong>{{ metric.value }}</strong>
+                        </article>
+                      </div>
+
+                      <div v-if="(getLearningTraceCard(msg)?.inputSections.length || 0) > 0" class="test-learn-trace__group">
+                        <span class="test-learn-trace__group-title">本轮输入</span>
+                        <div v-for="section in getLearningTraceCard(msg)?.inputSections || []" :key="`input-${section.key}`" class="test-learn-trace__section">
+                          <span class="test-learn-trace__label">{{ section.label }}</span>
+                          <pre>{{ section.content }}</pre>
+                        </div>
+                      </div>
+
+                      <div v-if="(getLearningTraceCard(msg)?.outputSections.length || 0) > 0" class="test-learn-trace__group">
+                        <span class="test-learn-trace__group-title">本轮输出</span>
+                        <div v-for="section in getLearningTraceCard(msg)?.outputSections || []" :key="`output-${section.key}`" class="test-learn-trace__section">
+                          <span class="test-learn-trace__label">{{ section.label }}</span>
+                          <pre>{{ section.content }}</pre>
+                        </div>
+                      </div>
+
+                      <section v-if="getLearningTraceCard(msg)?.peerCard" class="test-learn-trace__peer">
+                        <div class="test-learn-trace__peer-head">
+                          <div>
+                            <span class="test-learn-trace__peer-eyebrow">伴学介入</span>
+                            <strong>{{ getLearningTraceCard(msg)?.peerCard?.title }}</strong>
+                          </div>
+                          <span class="test-learn-trace__peer-badge">skill:peer-reinforcement</span>
+                        </div>
+
+                        <div v-if="getLearningTraceCard(msg)?.peerCard?.summary" class="test-learn-trace__peer-summary">
+                          {{ getLearningTraceCard(msg)?.peerCard?.summary }}
+                        </div>
+
+                        <div v-for="section in getLearningTraceCard(msg)?.peerCard?.sections || []" :key="section.key" class="test-learn-trace__section">
+                          <span class="test-learn-trace__label">{{ section.label }}</span>
+                          <pre>{{ section.content }}</pre>
+                        </div>
+                      </section>
+                    </template>
+                  </details>
+
                   <div class="test-learn-message__actions">
                     <button class="test-learn-btn test-learn-btn--inline" @click="copyMessage(msg.content)">复制</button>
                     <button v-if="(msg as any).failed" class="test-learn-btn test-learn-btn--inline" @click="retryMessage(index)">重试</button>
@@ -145,6 +222,118 @@
                   </div>
                 </article>
               </div>
+
+              <div v-if="showCompletionPrompt" class="test-learn-completion">
+                <span>已达到本节完成条件</span>
+                <div class="test-learn-chip-row">
+                  <button class="test-learn-btn test-learn-btn--ghost" @click="dismissCompletionPrompt">继续学习</button>
+                  <button class="test-learn-btn test-learn-btn--primary" @click="confirmCompletionEnd">结束并评估</button>
+                </div>
+              </div>
+            </section>
+
+            <section v-if="latestPromptDebug" class="test-learn-card">
+              <div class="test-learn-section-head">
+                <div>
+                  <span class="test-learn-eyebrow">Prompt Debug</span>
+                  <h2>最近一轮 Teaching Turn</h2>
+                </div>
+              </div>
+
+              <div class="test-learn-kv-list">
+                <div class="test-learn-kv"><span>agentId</span><strong>{{ latestPromptDebug.agentId || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>version</span><strong>{{ latestPromptDebug.systemPromptVersion ?? '--' }}</strong></div>
+                <div class="test-learn-kv"><span>durationMs</span><strong>{{ latestPromptDebug.durationMs ?? '--' }}</strong></div>
+                <div class="test-learn-kv"><span>attempts</span><strong>{{ latestPromptDebug.attempts?.length || 0 }}</strong></div>
+              </div>
+
+              <div v-if="latestTeachingTraceCard" class="test-learn-trace-panel">
+                <div class="test-learn-trace-panel__head">
+                  <div>
+                    <span class="test-learn-eyebrow">结构化摘要</span>
+                    <strong>{{ latestTeachingTraceCard.summary }}</strong>
+                  </div>
+                  <div class="test-learn-trace-panel__meta">
+                    <span>{{ latestTeachingTraceCard.kindLabel }}</span>
+                    <span v-if="latestTeachingTraceCard.promptVersionLabel">{{ latestTeachingTraceCard.promptVersionLabel }}</span>
+                  </div>
+                </div>
+
+                <div v-if="latestTeachingTraceCard.metricChips.length" class="test-learn-trace__metric-grid">
+                  <article
+                    v-for="metric in latestTeachingTraceCard.metricChips"
+                    :key="`latest-${metric.label}`"
+                    class="test-learn-trace__metric"
+                  >
+                    <span>{{ metric.label }}</span>
+                    <strong>{{ metric.value }}</strong>
+                  </article>
+                </div>
+
+                <div v-if="latestTeachingTraceCard.inputSections.length" class="test-learn-trace__group">
+                  <span class="test-learn-trace__group-title">本轮输入</span>
+                  <div v-for="section in latestTeachingTraceCard.inputSections" :key="`latest-input-${section.key}`" class="test-learn-trace__section">
+                    <span class="test-learn-trace__label">{{ section.label }}</span>
+                    <pre>{{ section.content }}</pre>
+                  </div>
+                </div>
+
+                <div v-if="latestTeachingTraceCard.outputSections.length" class="test-learn-trace__group">
+                  <span class="test-learn-trace__group-title">本轮输出</span>
+                  <div v-for="section in latestTeachingTraceCard.outputSections" :key="`latest-output-${section.key}`" class="test-learn-trace__section">
+                    <span class="test-learn-trace__label">{{ section.label }}</span>
+                    <pre>{{ section.content }}</pre>
+                  </div>
+                </div>
+
+                <section v-if="latestTeachingTraceCard.peerCard" class="test-learn-trace__peer">
+                  <div class="test-learn-trace__peer-head">
+                    <div>
+                      <span class="test-learn-trace__peer-eyebrow">伴学介入</span>
+                      <strong>{{ latestTeachingTraceCard.peerCard.title }}</strong>
+                    </div>
+                    <span class="test-learn-trace__peer-badge">skill:peer-reinforcement</span>
+                  </div>
+
+                  <div v-if="latestTeachingTraceCard.peerCard.summary" class="test-learn-trace__peer-summary">
+                    {{ latestTeachingTraceCard.peerCard.summary }}
+                  </div>
+
+                  <div v-for="section in latestTeachingTraceCard.peerCard.sections" :key="`latest-peer-${section.key}`" class="test-learn-trace__section">
+                    <span class="test-learn-trace__label">{{ section.label }}</span>
+                    <pre>{{ section.content }}</pre>
+                  </div>
+                </section>
+              </div>
+
+              <div v-if="latestSessionStateSections.length" class="test-learn-trace-panel">
+                <div class="test-learn-trace-panel__head">
+                  <div>
+                    <span class="test-learn-eyebrow">课堂状态</span>
+                    <strong>当前会话结构化内部状态</strong>
+                  </div>
+                </div>
+
+                <div v-for="section in latestSessionStateSections" :key="`session-${section.key}`" class="test-learn-trace__section">
+                  <span class="test-learn-trace__label">{{ section.label }}</span>
+                  <pre>{{ section.content }}</pre>
+                </div>
+              </div>
+
+              <details class="test-learn-raw-panel" open>
+                <summary>展开 userPayload</summary>
+                <pre>{{ latestPromptDebug.userPayload }}</pre>
+              </details>
+
+              <details class="test-learn-raw-panel">
+                <summary>展开 rawModelOutput</summary>
+                <pre>{{ latestPromptDebug.rawModelOutput }}</pre>
+              </details>
+
+              <details class="test-learn-raw-panel">
+                <summary>展开 normalizedOutput</summary>
+                <pre>{{ JSON.stringify(latestPromptDebug.normalizedOutput, null, 2) }}</pre>
+              </details>
             </section>
 
             <section v-if="activeCheckpoint" class="test-learn-card">
@@ -182,6 +371,24 @@
             </section>
           </section>
         </section>
+
+        <PeerNotification
+          :visible="peerNotificationVisible"
+          @click="openPeerChatFromNotification"
+          @close="peerNotificationVisible = false"
+        />
+        <PeerChatWindow
+          :visible="peerChatWindowVisible"
+          :messages="peerChatMessages"
+          :loading="peerInitializing"
+          @send="handlePeerChatSend"
+          @close="peerChatWindowVisible = false"
+        />
+        <button
+          v-if="peerChatMessages.length > 0 && !peerChatWindowVisible"
+          class="test-learn-peer-float"
+          @click="peerChatWindowVisible = true"
+        >同伴讨论</button>
       </template>
     </main>
   </div>
@@ -192,10 +399,12 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Loading } from '@element-plus/icons-vue';
 import { toast } from '@/utils/toast';
-import { aiTeachingAPI, type Checkpoint, type CheckpointSubmitPayload, type CheckpointSubmitResult, type KnowledgePointStatus } from '@/api/aiTeaching';
+import { aiTeachingAPI, type Checkpoint, type CheckpointSubmitPayload, type CheckpointSubmitResult, type KnowledgePointStatus, type WrapupArtifact, type ReplanAdvisory } from '@/api/aiTeaching';
 import api, { API_BASE_URL } from '@/utils/api';
 import CheckpointCard from '@/components/learning/CheckpointCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
+import PeerNotification from '@/components/PeerNotification.vue';
+import PeerChatWindow from '@/components/PeerChatWindow.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -228,6 +437,38 @@ interface ChatMessage {
   strategies?: string[];
   knowledgePoint?: string | null;
   knowledgePoints?: KnowledgePointStatus[];
+  promptDebug?: any;
+  peerTriggered?: boolean;
+  peerMessage?: string | null;
+  peerDebug?: any;
+}
+
+interface TraceMetricChip {
+  label: string;
+  value: string;
+}
+
+interface TraceSectionView {
+  key: string;
+  label: string;
+  content: string;
+}
+
+interface LearningPeerTraceCard {
+  title: string;
+  summary: string;
+  sections: TraceSectionView[];
+}
+
+interface LearningTraceCard {
+  kind: 'opening' | 'teaching-turn';
+  kindLabel: string;
+  summary: string;
+  promptVersionLabel?: string;
+  metricChips: TraceMetricChip[];
+  inputSections: TraceSectionView[];
+  outputSections: TraceSectionView[];
+  peerCard?: LearningPeerTraceCard | null;
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -237,6 +478,15 @@ const checkpointRef = ref<InstanceType<typeof CheckpointCard> | null>(null);
 const activeCheckpoint = ref<Checkpoint | null>(null);
 const checkpointSubmitting = ref(false);
 const knowledgePoints = ref<KnowledgePointStatus[]>([]);
+const latestPromptDebug = ref<any | null>(null);
+const sessionDetailState = ref<any | null>(null);
+const sessionWrapup = ref<WrapupArtifact | null>(null);
+const sessionAdvisory = ref<ReplanAdvisory | null>(null);
+const showCompletionPrompt = ref(false);
+const peerNotificationVisible = ref(false);
+const peerChatWindowVisible = ref(false);
+const peerChatMessages = ref<Array<{ role: 'user' | 'peer'; content: string; timestamp: string }>>([]);
+const peerInitializing = ref(false);
 const elapsedTime = ref(0);
 const activeTime = ref(0);
 let timerInterval: number | null = null;
@@ -275,6 +525,227 @@ const formatTime = (seconds: number) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
+const prettyTraceValue = (value: any) => {
+  if (value === null || value === undefined || value === '') return null;
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+};
+
+const buildTraceSection = (key: string, label: string, value: any): TraceSectionView | null => {
+  const content = prettyTraceValue(value);
+  if (!content) return null;
+  return { key, label, content };
+};
+
+const getPromptDebugPayload = (msg: any) => {
+  const raw = msg?.promptDebug?.userPayload;
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const getPromptDebugNormalizedOutput = (msg: any) => {
+  const value = msg?.promptDebug?.normalizedOutput;
+  return value && typeof value === 'object' ? value : null;
+};
+
+const getLearnDebug = (msg: any) => {
+  const value = msg?.promptDebug?.learnDebug;
+  return value && typeof value === 'object' ? value : null;
+};
+
+const resolveDebugAnalysis = (msg: any) => {
+  if (msg?.analysis && typeof msg.analysis === 'object') {
+    return msg.analysis;
+  }
+
+  const normalized = getPromptDebugNormalizedOutput(msg);
+  const analysis = normalized?.analysis;
+  return analysis && typeof analysis === 'object' ? analysis : null;
+};
+
+const resolveDebugKnowledgePoint = (msg: any) => {
+  if (typeof msg?.knowledgePoint === 'string' && msg.knowledgePoint.trim()) {
+    return msg.knowledgePoint;
+  }
+
+  const normalized = getPromptDebugNormalizedOutput(msg);
+  const currentPoint = normalized?.knowledge?.currentPoint;
+  return typeof currentPoint === 'string' && currentPoint.trim() ? currentPoint : null;
+};
+
+const resolveDebugStrategies = (msg: any) => {
+  if (Array.isArray(msg?.strategies) && msg.strategies.length > 0) {
+    return msg.strategies;
+  }
+
+  const normalized = getPromptDebugNormalizedOutput(msg);
+  const strategies = normalized?.pedagogy?.strategies;
+  return Array.isArray(strategies) ? strategies : [];
+};
+
+const getPromptDebugPromptVersionLabel = (msg: any) => {
+  const version = msg?.promptDebug?.systemPromptVersion;
+  if (version === null || version === undefined || version === '') return '';
+  return `Prompt v${version}`;
+};
+
+const buildOpeningTraceCard = (msg: ChatMessage): LearningTraceCard | null => {
+  const openingMode = typeof msg.analysis?.openingMode === 'string' ? msg.analysis.openingMode : null;
+  const quickReplies = Array.isArray(msg.quickReplies)
+    ? msg.quickReplies.map((item) => item.text).filter(Boolean)
+    : [];
+
+  if (!openingMode && quickReplies.length === 0) return null;
+
+  const sections = [
+    buildTraceSection('visibleReply', '开场可见内容', msg.content),
+    buildTraceSection('openingMode', '开场模式', openingMode),
+    buildTraceSection('quickReplies', '快捷回复', quickReplies),
+  ].filter(Boolean) as TraceSectionView[];
+
+  return {
+    kind: 'opening',
+    kindLabel: '开场交互块',
+    summary: openingMode ? `mode: ${openingMode}` : '首轮开场消息',
+    metricChips: [
+      { label: 'mode', value: openingMode || '--' },
+      { label: 'quickReplies', value: String(quickReplies.length) },
+    ],
+    inputSections: [],
+    outputSections: sections,
+    peerCard: null,
+  };
+};
+
+const buildPeerTraceCard = (msg: ChatMessage): LearningPeerTraceCard | null => {
+  if (!msg.peerTriggered && !msg.peerMessage && !msg.peerDebug) return null;
+
+  const analysis = resolveDebugAnalysis(msg);
+  const sections = [
+    buildTraceSection('triggerReason', '触发上下文', {
+      cognitiveLevel: analysis?.cognitiveLevel || null,
+      understanding: analysis?.understanding ?? null,
+      engagement: analysis?.engagement ?? null,
+      knowledgePoint: resolveDebugKnowledgePoint(msg),
+      strategies: resolveDebugStrategies(msg),
+    }),
+    buildTraceSection('peerInput', '伴学 Skill 输入', msg.peerDebug?.input || null),
+    buildTraceSection('peerMessage', '伴学输出', msg.peerMessage || '本轮触发了伴学，但当前没有返回可见文案。'),
+    buildTraceSection('followUpQuestions', '伴学追问', msg.peerDebug?.followUpQuestions || null),
+    buildTraceSection('peerPromptDebug', '伴学结构化调试', msg.peerDebug?.promptDebug || null),
+  ].filter(Boolean) as TraceSectionView[];
+
+  return {
+    title: 'Peer Reinforcement Skill',
+    summary: msg.peerTriggered ? '本轮 teaching-turn 决定触发伴学 skill。' : '存在伴学输出。',
+    sections,
+  };
+};
+
+const buildTurnDebugSummary = (msg: any) => {
+  const payload = getPromptDebugPayload(msg);
+  if (!payload) {
+    return '查看这一轮的 teaching-turn 输入输出';
+  }
+
+  const coreConcept = payload?.scenario?.cognitiveFrame?.currentCoreConcept?.name || payload?.scenario?.taskProfile?.coreConcept || '';
+  const learnerMessage = typeof payload?.latestLearnerMessage === 'string' ? payload.latestLearnerMessage : '';
+  return [coreConcept, learnerMessage ? `最近输入：${learnerMessage}` : ''].filter(Boolean).join(' · ') || '查看这一轮的 teaching-turn 输入输出';
+};
+
+const buildTeachingTurnTraceCard = (msg: ChatMessage): LearningTraceCard | null => {
+  const payload = getPromptDebugPayload(msg);
+  const normalized = getPromptDebugNormalizedOutput(msg);
+  const learnDebug = getLearnDebug(msg);
+  const analysis = resolveDebugAnalysis(msg);
+  const knowledgePoint = resolveDebugKnowledgePoint(msg);
+  const strategies = resolveDebugStrategies(msg);
+
+  if (!payload && !normalized && !learnDebug && !analysis && !knowledgePoint && strategies.length === 0 && !msg.peerTriggered && !msg.peerMessage && !msg.peerDebug) {
+    return null;
+  }
+
+  const inputSections = [
+    buildTraceSection('pathBackgroundContext', '路径背景上下文', learnDebug?.input?.pathBackgroundContext || null),
+    buildTraceSection('classroomContext', '课堂上下文', learnDebug?.input?.classroomContext || null),
+    buildTraceSection('learnerStateContext', '学习者状态上下文', learnDebug?.input?.learnerStateContext || null),
+    buildTraceSection('classroomEventContext', '课堂事件上下文', learnDebug?.input?.classroomEventContext || null),
+    buildTraceSection('teachingControlContext', '教学控制上下文', learnDebug?.input?.teachingControlContext || null),
+    buildTraceSection('latestLearnerMessage', '本轮用户输入', payload?.latestLearnerMessage || null),
+    buildTraceSection('taskProfile', '任务画像 taskProfile', payload?.scenario?.taskProfile || null),
+    buildTraceSection('cognitiveFrame', '局部认知图景 cognitiveFrame', payload?.scenario?.cognitiveFrame || null),
+    buildTraceSection('knowledgeBoard', '当前知识看板 knowledge', payload?.knowledge || null),
+  ].filter(Boolean) as TraceSectionView[];
+
+  const outputSections = [
+    buildTraceSection('visibleReply', '可见回复', msg.content),
+    buildTraceSection('stageDecision', '本轮阶段决策', learnDebug?.output?.stageDecision || null),
+    buildTraceSection('completionCandidateEvidence', '完成判定依据', learnDebug?.output?.completionCandidateEvidence || normalized?.control?.completionCandidateEvidence || null),
+    buildTraceSection('classroomContextAfter', '本轮后课堂上下文', learnDebug?.output?.classroomContext || null),
+    buildTraceSection('learnerStateAfter', '本轮后学习者状态', learnDebug?.output?.learnerStateContext || null),
+    buildTraceSection('knowledgeStateAfter', '本轮后知识状态', learnDebug?.output?.knowledgeState || null),
+    buildTraceSection('auxiliaryActions', '辅助动作决策', learnDebug?.output?.auxiliaryActions || null),
+    buildTraceSection('normalizedOutput', '结构化输出 normalizedOutput', normalized || null),
+  ].filter(Boolean) as TraceSectionView[];
+
+  return {
+    kind: 'teaching-turn',
+    kindLabel: '教学回合',
+    summary: buildTurnDebugSummary(msg),
+    promptVersionLabel: getPromptDebugPromptVersionLabel(msg),
+    metricChips: [
+      { label: 'knowledgePoint', value: knowledgePoint || '--' },
+      { label: 'cognitiveLevel', value: analysis?.cognitiveLevel || '--' },
+      { label: 'understanding', value: analysis?.understanding !== undefined && analysis?.understanding !== null ? String(analysis.understanding) : '--' },
+      { label: 'engagement', value: analysis?.engagement !== undefined && analysis?.engagement !== null ? String(analysis.engagement) : '--' },
+      { label: 'strategies', value: strategies.length ? strategies.map(strategyLabel).join(' / ') : '--' },
+    ],
+    inputSections,
+    outputSections,
+    peerCard: buildPeerTraceCard(msg),
+  };
+};
+
+const getLearningTraceCard = (msg: ChatMessage): LearningTraceCard | null => {
+  const openingCard = buildOpeningTraceCard(msg);
+  if (openingCard) return openingCard;
+  return buildTeachingTurnTraceCard(msg);
+};
+
+const getLearningTraceSummaryLabel = (msg: ChatMessage) => {
+  const card = getLearningTraceCard(msg);
+  if (!card) return '查看本轮教学输入与输出';
+  if (card.kind === 'opening') return '查看开场交互块';
+  return card.peerCard ? '查看本轮教学输入、输出与伴学介入' : '查看本轮教学输入与输出';
+};
+
+const latestTeachingTraceCard = computed(() => {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const msg = messages.value[index];
+    if (msg.role === 'assistant') {
+      const card = getLearningTraceCard(msg);
+      if (card) return card;
+    }
+  }
+  return null;
+});
+
+const latestSessionStateSections = computed(() => {
+  const state = sessionDetailState.value;
+  if (!state || typeof state !== 'object') return [];
+
+  return [
+    buildTraceSection('classroomContext', '课堂上下文', state.classroomContext || null),
+    buildTraceSection('learnerStateContext', '学习者状态上下文', state.learnerStateContext || null),
+    buildTraceSection('teachingControlContext', '教学控制上下文', state.teachingControlContext || null),
+    buildTraceSection('stageHistory', '阶段轨迹', state.stageHistory || null),
+    buildTraceSection('classroomEventHistory', '课堂事件历史', state.classroomEventHistory || null),
+  ].filter(Boolean) as TraceSectionView[];
+});
+
 const handleScroll = () => { headerScrolled.value = window.scrollY > 20; };
 
 const copyMessage = async (content: string) => {
@@ -304,6 +775,14 @@ const resetSessionState = () => {
   messages.value = [];
   knowledgePoints.value = [];
   activeCheckpoint.value = null;
+  latestPromptDebug.value = null;
+  sessionDetailState.value = null;
+  sessionWrapup.value = null;
+  sessionAdvisory.value = null;
+  showCompletionPrompt.value = false;
+  peerChatMessages.value = [];
+  peerNotificationVisible.value = false;
+  peerChatWindowVisible.value = false;
   elapsedTime.value = 0;
   activeTime.value = 0;
   sessionPaused.value = false;
@@ -356,14 +835,18 @@ const resumeSession = async (sessionId: string) => {
     topic: detail.topic,
     difficulty: 5,
   };
-  messages.value = detail.messages as ChatMessage[];
-  knowledgePoints.value = detail.knowledgePoints || [];
-  activeCheckpoint.value = detail.pendingCheckpoint || null;
-  sessionPaused.value = false;
-  sessionActive.value = true;
-  sessionInitializing.value = false;
-  startTimer();
-};
+    messages.value = detail.messages as ChatMessage[];
+    knowledgePoints.value = detail.knowledgePoints || [];
+    sessionDetailState.value = detail.state || null;
+    activeCheckpoint.value = detail.pendingCheckpoint || null;
+    latestPromptDebug.value = null;
+    showCompletionPrompt.value = false;
+    sessionPaused.value = false;
+    sessionActive.value = true;
+    sessionInitializing.value = false;
+    startTimer();
+    toast.success('已恢复测试授课进度');
+  };
 
 const startSession = async () => {
   if (!task.value) return;
@@ -393,7 +876,7 @@ const startSession = async () => {
       quickRepliesUsed: false,
     });
     startTimer();
-    toast.success('测试授课会话已开始');
+    toast.success('测试授课会话已开始，课程进度将在 48 小时内保留');
   } catch (error: any) {
     sessionInitializing.value = false;
     toast.error(error.message || '开始会话失败');
@@ -417,8 +900,48 @@ const sendMessage = async () => {
       strategies: result.strategies || [],
       knowledgePoint: result.knowledgePoint,
       knowledgePoints: result.knowledgePoints,
+      promptDebug: result.promptDebug || null,
+      peerTriggered: result.peerTriggered,
+      peerMessage: result.peerMessage || null,
+      peerDebug: result.peerDebug || null,
     });
     if (result.knowledgePoints && result.knowledgePoints.length > 0) knowledgePoints.value = result.knowledgePoints;
+    latestPromptDebug.value = result.promptDebug || null;
+    if (result.autoEnded && result.wrapup) {
+      sessionActive.value = false;
+      sessionPaused.value = false;
+      sessionWrapup.value = result.wrapup;
+      sessionAdvisory.value = result.advisory || null;
+      stopTimer();
+      toast.success('本节课已自动结束并生成评估');
+      router.push({
+        path: `/admin/test/learn/${taskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+        query: pathId.value ? { pathId: pathId.value } : undefined,
+      });
+      return;
+    }
+    if (result.promptDebug?.learnDebug?.output) {
+      sessionDetailState.value = {
+        ...(sessionDetailState.value || {}),
+        classroomContext: result.promptDebug.learnDebug.output.classroomContext || sessionDetailState.value?.classroomContext,
+        learnerStateContext: result.promptDebug.learnDebug.output.learnerStateContext || sessionDetailState.value?.learnerStateContext,
+      };
+    }
+    if (result.isCompletion) {
+      showCompletionPrompt.value = true;
+    }
+    if (result.peerTriggered) {
+      if (result.peerMessage) {
+        peerChatMessages.value.push({
+          role: 'peer',
+          content: result.peerMessage,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      nextTick(() => {
+        peerNotificationVisible.value = true;
+      });
+    }
     if (result.checkpoint) {
       activeCheckpoint.value = result.checkpoint;
       nextTick(() => checkpointRef.value?.$el?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }));
@@ -473,6 +996,92 @@ const handleCheckpointReview = () => {
 };
 const handleCheckpointRetry = () => { toast.info('你可以重新作答这道题'); };
 
+const dismissCompletionPrompt = () => {
+  showCompletionPrompt.value = false;
+};
+
+const confirmCompletionEnd = async () => {
+  if (!sessionInfo.value.sessionId) return;
+  try {
+    const result = await aiTeachingAPI.endSession(sessionInfo.value.sessionId);
+    showCompletionPrompt.value = false;
+    sessionActive.value = false;
+    sessionPaused.value = false;
+    stopTimer();
+    toast.success(result.wrapup?.evaluation ? '测试评估已生成' : '测试总结已生成');
+    router.push({
+      path: `/admin/test/learn/${taskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+      query: pathId.value ? { pathId: pathId.value } : undefined,
+    });
+  } catch (error: any) {
+    toast.error(error.message || '结束测试会话失败');
+  }
+};
+
+const handlePeerChatSend = async (text: string) => {
+  if (!sessionInfo.value.sessionId) return;
+  peerChatMessages.value.push({
+    role: 'user',
+    content: text,
+    timestamp: new Date().toISOString(),
+  });
+
+  try {
+    const result = await aiTeachingAPI.sendPeerMessage(sessionInfo.value.sessionId, text);
+    if (!result.peerResponse?.trim()) {
+      throw new Error('同伴暂时没有返回可用内容');
+    }
+    peerChatMessages.value.push({
+      role: 'peer',
+      content: result.peerResponse,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    toast.error(error.message || '同伴消息发送失败');
+    peerChatMessages.value.pop();
+  }
+};
+
+const openPeerChatFromNotification = async () => {
+  peerChatWindowVisible.value = true;
+  peerNotificationVisible.value = false;
+
+  if (peerInitializing.value || !sessionInfo.value.sessionId) {
+    return;
+  }
+
+  const hasPeerMessage = peerChatMessages.value.some((msg) => msg.role === 'peer');
+  if (hasPeerMessage) {
+    return;
+  }
+
+  const latestUserMessage = [...messages.value]
+    .reverse()
+    .find((msg) => msg.role === 'user' && msg.content?.trim())?.content;
+
+  if (!latestUserMessage) {
+    return;
+  }
+
+  peerInitializing.value = true;
+  try {
+    const result = await aiTeachingAPI.sendPeerMessage(sessionInfo.value.sessionId, latestUserMessage);
+    if (result.peerResponse?.trim()) {
+      peerChatMessages.value.push({
+        role: 'peer',
+        content: result.peerResponse,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      toast.info('同伴暂时没有生成可展示内容');
+    }
+  } catch (error: any) {
+    toast.error(error.message || '拉取同伴消息失败');
+  } finally {
+    peerInitializing.value = false;
+  }
+};
+
 const pauseSession = async () => {
   if (!sessionInfo.value.sessionId) return;
   try {
@@ -525,14 +1134,24 @@ const goBack = () => {
 
 onMounted(async () => {
   await loadTaskData();
+  if (task.value?.status === 'completed') {
+    toast.info('本任务已完成，请返回路径详情查看评估');
+    router.replace(pathDetailLink.value);
+    return;
+  }
+  if (task.value && task.value.learningPath?.canStartLearning !== false) {
+    await startSession();
+  }
   window.addEventListener('scroll', handleScroll);
   window.addEventListener('pagehide', persistPauseOnPageHide);
+  window.addEventListener('beforeunload', persistPauseOnPageHide);
 });
 
 onUnmounted(() => {
   stopTimer();
   window.removeEventListener('scroll', handleScroll);
   window.removeEventListener('pagehide', persistPauseOnPageHide);
+  window.removeEventListener('beforeunload', persistPauseOnPageHide);
 });
 </script>
 
@@ -619,11 +1238,34 @@ onUnmounted(() => {
 .test-learn-blocked,
 .test-learn-hero,
 .test-learn-message,
-.test-learn-debug-box {
+.test-learn-debug-box,
+.test-learn-raw-panel {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(23, 32, 51, 0.06);
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
   border-radius: 24px;
+}
+
+.test-learn-raw-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+}
+
+.test-learn-raw-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #1f57cc;
+}
+
+.test-learn-raw-panel pre {
+  margin: 12px 0 0;
+  padding: 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 16px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .test-learn-empty,
@@ -634,6 +1276,31 @@ onUnmounted(() => {
   gap: 10px;
   padding: 24px;
   text-align: center;
+}
+
+.test-learn-completion {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(103, 194, 58, 0.1);
+  border: 1px solid rgba(103, 194, 58, 0.18);
+  display: grid;
+  gap: 10px;
+}
+
+.test-learn-peer-float {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 16px;
+  background: #67c23a;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 18px 40px rgba(103, 194, 58, 0.28);
 }
 
 .test-learn-hero,
@@ -818,6 +1485,122 @@ onUnmounted(() => {
   padding: 12px;
   border-radius: 18px;
   background: rgba(15, 23, 42, 0.04);
+}
+
+.test-learn-trace,
+.test-learn-trace-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(31, 87, 204, 0.04);
+  border: 1px solid rgba(31, 87, 204, 0.1);
+}
+
+.test-learn-trace__summary {
+  cursor: pointer;
+  color: #1f57cc;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.test-learn-trace__meta,
+.test-learn-trace-panel__head,
+.test-learn-trace-panel__meta,
+.test-learn-trace__peer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.test-learn-trace__meta,
+.test-learn-trace-panel__meta {
+  color: #66758d;
+  font-size: 12px;
+}
+
+.test-learn-trace__metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.test-learn-trace__metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.test-learn-trace__metric span,
+.test-learn-trace__label,
+.test-learn-trace__peer-eyebrow {
+  color: #66758d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.test-learn-trace__metric strong,
+.test-learn-trace-panel__head strong,
+.test-learn-trace__peer-head strong {
+  color: #172033;
+}
+
+.test-learn-trace__section {
+  display: grid;
+  gap: 8px;
+}
+
+.test-learn-trace__group {
+  display: grid;
+  gap: 10px;
+}
+
+.test-learn-trace__group-title {
+  color: #1f57cc;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.test-learn-trace__section pre {
+  margin: 0;
+  padding: 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 14px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.test-learn-trace__peer {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(103, 194, 58, 0.08);
+  border: 1px solid rgba(103, 194, 58, 0.16);
+}
+
+.test-learn-trace__peer-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(103, 194, 58, 0.16);
+  color: #2f7d1f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.test-learn-trace__peer-summary {
+  color: #3f4e66;
+  line-height: 1.7;
+  font-size: 13px;
 }
 
 .test-learn-section-head {

@@ -119,8 +119,8 @@
         <section class="paths-hero glass-card">
           <div class="paths-hero__copy">
             <span class="pill">路径总览</span>
-            <h1>查看所有路径进度。</h1>
-            <p>在这里查看你创建过的学习路径、当前阶段和学习进度。</p>
+            <h1>{{ pathsHeroTitle }}</h1>
+            <p>{{ pathsHeroSubtitle }}</p>
           </div>
           <div class="paths-hero__actions">
             <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续学习</button>
@@ -381,6 +381,7 @@ const pathToRegenerate = ref<any>(null);
 const retryingPathId = ref<string | null>(null);
 const showGeneratingAlert = ref(false);
 const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
+const adaptiveGuidance = ref<any | null>(null);
 
 // 前端提示超时阈值：4 分钟
 const GENERATION_TIMEOUT_SECONDS = 240;
@@ -416,7 +417,12 @@ const timeoutPaths = computed(() =>
 
 const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
 
-const getPathSummary = (path: any) => path.summary || path.description || '这里会显示这条学习路径的简要说明。';
+const getPathSummary = (path: any) => {
+  if (adaptiveGuidance.value?.pathHint && primaryPath.value?.id === path.id) {
+    return adaptiveGuidance.value.pathHint;
+  }
+  return path.summary || path.description || '这里会显示这条学习路径的简要说明。';
+};
 
 const getPathInsightChips = (path: any) => {
   const chips: string[] = [];
@@ -497,6 +503,21 @@ const getPathCurrentStage = (path: any) => {
   if (typeof path.currentStage === 'number') return path.currentStage;
   if (typeof path.currentMilestoneIndex === 'number') return path.currentMilestoneIndex + 1;
   if (typeof path.currentMilestoneOrder === 'number') return path.currentMilestoneOrder;
+
+  const activeStage = getActiveStage(path);
+  if (activeStage) {
+    const explicitStageNumber = Number(activeStage.stageNumber || activeStage.weekNumber);
+    if (Number.isFinite(explicitStageNumber) && explicitStageNumber > 0) {
+      return explicitStageNumber;
+    }
+
+    const stages = getPathStages(path);
+    const activeIndex = stages.findIndex((stage: any) => stage === activeStage);
+    if (activeIndex >= 0) {
+      return activeIndex + 1;
+    }
+  }
+
   return getPathStageCount(path) > 0 ? 1 : 0;
 };
 
@@ -509,6 +530,14 @@ const getPathProgress = (path: any) => {
   if (typeof path.progress === 'number') return Math.max(0, Math.min(100, Math.round(path.progress)));
   if (typeof path.progressPercentage === 'number') return Math.max(0, Math.min(100, Math.round(path.progressPercentage)));
   if (typeof path.completionRate === 'number') return Math.max(0, Math.min(100, Math.round(path.completionRate * 100)));
+
+  const stages = getPathStages(path);
+  const tasks = stages.flatMap((stage: any) => normalizeTaskList(stage));
+  if (tasks.length > 0) {
+    const completed = tasks.filter((task: any) => task.status === 'completed').length;
+    return Math.max(0, Math.min(100, Math.round((completed / tasks.length) * 100)));
+  }
+
   const total = getPathStageCount(path);
   const current = getPathCurrentStage(path);
   if (total > 0 && current > 0) {
@@ -547,6 +576,9 @@ const primaryPath = computed(() => {
   const activePaths = sortedPaths.value.filter((path: any) => getPathDisplayState(path) === 'active');
   return activePaths.find((path: any) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
 });
+
+const pathsHeroTitle = computed(() => adaptiveGuidance.value?.headline || '查看所有路径进度。');
+const pathsHeroSubtitle = computed(() => adaptiveGuidance.value?.subtitle || '在这里查看你创建过的学习路径、当前阶段和学习进度。');
 
 const pathFilterChips = computed(() => {
   const list = sortedPaths.value;
@@ -649,6 +681,11 @@ const loadPaths = async () => {
   try {
     const response = await request.get('/learning/paths');
     paths.value = response.data.data;
+    try {
+      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('path-list');
+    } catch (error) {
+      console.error('获取路径列表动态引导文案失败:', error);
+    }
   } catch (error: any) {
     console.error('加载学习路径失败:', error);
     toast.error(error.response?.data?.error?.message || '加载学习路径失败');

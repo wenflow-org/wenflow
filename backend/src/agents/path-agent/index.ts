@@ -19,6 +19,7 @@ import {
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 type ChatMessage = { role: MessageRole; content: string };
@@ -115,8 +116,9 @@ export const DEFAULT_PATH_GENERATION_PROMPT = `你是一位认知建构师，负
 1. normalizedInput 是路径生成的主真相源。
 2. normalizedInput.confirmedProposal 是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope。
 3. normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准。
+4. normalizedInput.planningHints 如果存在，是上游对路径节奏的建议范围，优先用于决定概念数、milestone 数、周期上限；若缺失，再使用默认范围。
 cognitiveCore 硬约束：
-1. cognitiveCore 必须包含 1 个 cognitiveDomain 和 2-4 个 coreConcepts。
+1. cognitiveCore 必须包含 1 个 cognitiveDomain 和 planningHints.conceptRange 范围内的 coreConcepts；若未提供 planningHints，默认 2-4 个。
 2. coreConcepts 中必须且只能有 1 个 role = "hub"。
 3. 先提炼 coreConcepts，再基于 coreConcepts 整合 cognitiveDomain。不要先写 cognitiveDomain 再反向补概念。
 
@@ -177,7 +179,7 @@ milestones 硬约束：
 3. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分。
 4. 每个里程碑是一个独立学习目标，可以独立评估完成度。
 4.1 每个 milestone 必须明确绑定 1 个 coreConcept，写入 coreConcept 字段，表示这个阶段主要服务的核心概念。
-5. 普通目标建议 3-6 个 milestone；超长目标建议 6-10 个。
+5. milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个。
 6. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划。
 7. milestone title 不要写成“第1周”“第2周”这类排期语句，也不要写成“记录/梳理/提炼/整合”这类操作步骤句。
 
@@ -192,7 +194,7 @@ successCriteria 约束：
 4. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则。
 
 时间约束：
-1. 如果输入提供 totalWeeks，不要超过 totalWeeks；若 totalWeeks > 52，则按 52 周规划。
+1. 如果输入提供 totalWeeks，不要超过 totalWeeks；如果 normalizedInput.planningHints.maxWeeks 存在，也不要超过它；若两者都缺失，默认不超过 52 周。
 2. 如果输入提供 timePerWeek、timePerDay 或 totalWeeks，整体阶段任务量要与预算匹配，不要明显超配。
 3. 预算不足时，优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段。
 
@@ -597,9 +599,6 @@ async function generatePath(
     pathSceneFraming?: any;
   }
 ): Promise<PathOutput> {
-  const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'path-agent' };
-  const promptConfig = await agentConfigService.getActivePrompt('path-agent');
   
   const confirmedProposal = analysis.confirmedProposal;
   const conversationHistory = analysis.conversationHistory;
@@ -636,12 +635,8 @@ async function generatePath(
   const observableResult = framingNormalizedInput?.successCriteria?.observableResult || null;
   const acceptanceCheck = framingNormalizedInput?.successCriteria?.acceptanceCheck || null;
   const promptFriendlySceneFraming = buildPathSceneFramingPromptInput(pathSceneFraming);
-  
-  const systemPrompt = promptConfig?.systemPrompt || DEFAULT_PATH_GENERATION_PROMPT;
 
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `原始学习目标：${input.goal}
+  const userPayload = `原始学习目标：${input.goal}
 学习主题：${analysis.subject}
 目标水平：${analysis.level}
 ${analysis.context ? `具体应用场景：${analysis.context}` : ''}
@@ -705,46 +700,46 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 3. 如果 ${confirmedFirstDeliverable ? `首个交付物是“${confirmedFirstDeliverable}”` : '存在首个交付物'}，第一阶段 goal 必须直接服务于它。
 4. ${observableResult ? `可观察结果是“${observableResult}”，所有里程碑 goal 都必须通向它。` : '如果没有明确的可观察结果，就把首个交付物当作早期阶段目标锚点。'}
 5. ${acceptanceCheck ? `验收检查要求：${acceptanceCheck}` : 'goal 必须是用户自己可以判断“是否达成”的阶段结果，但不要下钻到 task 级验收。'}
-6. coreConcepts 必须先表达底层认知关系，再用于绑定里程碑；如果概念名仍像功能名、页面名、模块名、栏目名或任务动作句，必须继续抽象。` }
-  ];
+6. coreConcepts 必须先表达底层认知关系，再用于绑定里程碑；如果概念名仍像功能名、页面名、模块名、栏目名或任务动作句，必须继续抽象。`;
 
-const userId = context?.userId || input?.metadata?.userId;
-  const response = await gateway.execute(
-    {
-      messages,
-      max_tokens: promptConfig?.maxTokens || PATH_AGENT_MAX_TOKENS,
-      temperature: promptConfig?.temperature
+  const userId = context?.userId || input?.metadata?.userId;
+  const result = await callPrompt<any, PathOutput>({
+    agentId: 'path-agent',
+    defaultSystemPrompt: DEFAULT_PATH_GENERATION_PROMPT,
+    caller: { agentId: 'path-agent' },
+    modelDefaults: {
+      maxTokens: PATH_AGENT_MAX_TOKENS,
+      temperature: 0.2,
     },
-    caller,
-    { userId }
-  );
-  const content = response.choices[0]?.message.content || '';
-   
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const pathData = JSON.parse(jsonMatch[0]);
-      return {
-        id: `path_${Date.now()}`,
-        name: pathData.name,
-        summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
-        subject: analysis.subject,
-        totalMilestones: pathData.totalMilestones,
-        estimatedHours: pathData.estimatedHours,
-        cognitiveCore: pathData.cognitiveCore,
-        cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
-        milestones: pathData.milestones,
-        _debug: {
-          rawModelOutput: content,
-          extractedJson: jsonMatch[0],
-        }
-      };
-    }
-  } catch (error: any) {
-    throw new Error(`PATH_AGENT_OUTPUT_INVALID: ${error?.message || 'JSON parse failed'}`);
+    buildUserPayload: () => userPayload,
+    normalizeOutput: (pathData) => ({
+      id: `path_${Date.now()}`,
+      name: pathData.name,
+      summary: typeof pathData.summary === 'string' ? pathData.summary : undefined,
+      subject: analysis.subject,
+      totalMilestones: pathData.totalMilestones,
+      estimatedHours: pathData.estimatedHours,
+      cognitiveCore: pathData.cognitiveCore,
+      cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
+      milestones: pathData.milestones,
+      _debug: {
+        rawModelOutput: '',
+        extractedJson: '',
+      }
+    }),
+  }, input, { userId });
+
+  if (!result.success || !result.output) {
+    throw new Error(result.error?.message || 'PATH_AGENT_OUTPUT_INVALID');
   }
 
-  throw new Error('PATH_AGENT_OUTPUT_INVALID: response does not contain valid JSON');
+  return {
+    ...result.output,
+    _debug: {
+      rawModelOutput: result.debug.rawModelOutput,
+      extractedJson: result.debug.extractedJson || undefined,
+    }
+  };
 }
 
 /**

@@ -168,8 +168,13 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
         knowledgePoint: result.knowledgePoint,
         knowledgePoints: result.knowledgePoints,
         isCompletion: result.isCompletion,
+        autoEnded: result.autoEnded === true,
+        wrapup: result.wrapup || null,
+        advisory: result.advisory || null,
         peerTriggered: result.peerTriggered,
         peerMessage: result.peerMessage,
+        promptDebug: result.promptDebug || null,
+        peerDebug: result.peerDebug || null,
       },
     });
   } catch (error: any) {

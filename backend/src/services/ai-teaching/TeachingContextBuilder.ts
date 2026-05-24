@@ -18,6 +18,7 @@ export interface TeachingScenarioContext {
   taskKnowledgeScope: {
     primaryConcepts: string[];
     prerequisiteConcepts: string[];
+    supportingConcepts: string[];
   };
   taskProfile: {
     knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
@@ -25,6 +26,12 @@ export interface TeachingScenarioContext {
     displayLabel: string | null;
     learningObjectives: string[];
     coreConcept: string | null;
+    linkedConceptId: string | null;
+    linkedConceptName: string | null;
+  };
+  currentTaskContext: {
+    description: string | null;
+    acceptanceCriteria: string | null;
   };
   teachingStrategyGuidance: {
     knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
@@ -36,6 +43,18 @@ export interface TeachingScenarioContext {
     targetDepth: string;
     preferredStrategies: string[];
     responseConstraints: string[];
+  };
+  cognitiveFrame: {
+    currentCoreConcept: {
+      id: string | null;
+      name: string | null;
+      description: string | null;
+    };
+    prerequisiteConcepts: string[];
+    neighboringConcepts: string[];
+    targetRelation: string | null;
+    milestoneIntent: string | null;
+    transferGoal: string | null;
   };
   canStartLearning: boolean;
   learningBlockedReason: string | null;
@@ -95,10 +114,14 @@ function dedupeConcepts(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => normalizeConcept(value)).filter(Boolean) as string[]));
 }
 
+function parsePathPromptTemplateCore(path: any) {
+  const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
+  return promptTemplate?.cognitiveCore || promptTemplate?.cognitiveDesign || null;
+}
+
 function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; name: string | null; description: string | null } {
   const linkedConceptId = normalizeConcept((task as any).linkedConceptId || (task as any).coreConcept);
-  const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
-  const cognitiveCore = promptTemplate?.cognitiveCore || promptTemplate?.cognitiveDesign;
+  const cognitiveCore = parsePathPromptTemplateCore(path);
   const concepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore.coreConcepts : [];
 
   if (linkedConceptId) {
@@ -117,6 +140,61 @@ function resolveTaskConceptFromPath(task: any, path: any): { id: string | null; 
     name: normalizeConcept((task as any).linkedConceptName) || linkedConceptId,
     description: null
   };
+}
+
+function buildCognitiveFrame(params: {
+  task: any;
+  milestone: any;
+  path: any;
+  resolvedConcept: { id: string | null; name: string | null; description: string | null };
+  primaryConcepts: string[];
+  prerequisiteConcepts: string[];
+  taskProfile: TeachingScenarioContext['taskProfile'];
+}) {
+  const { task, milestone, path, resolvedConcept, primaryConcepts, prerequisiteConcepts, taskProfile } = params;
+  const cognitiveCore = parsePathPromptTemplateCore(path);
+  const coreConcepts = Array.isArray(cognitiveCore?.coreConcepts) ? cognitiveCore.coreConcepts : [];
+  const currentConceptId = normalizeConcept(resolvedConcept.id);
+  const currentConceptName = normalizeConcept(resolvedConcept.name);
+  const neighboringConcepts = dedupeConcepts(
+    coreConcepts
+      .filter((concept: any) => {
+        const conceptId = normalizeConcept(concept?.id);
+        const conceptName = normalizeConcept(concept?.name);
+        if (!conceptId && !conceptName) return false;
+        return conceptId !== currentConceptId && conceptName !== currentConceptName;
+      })
+      .slice(0, 3)
+      .map((concept: any) => normalizeConcept(concept?.name))
+  );
+
+  const milestoneIntent = normalizeConcept(
+    milestone?.goal
+    || milestone?.title
+    || task?.milestones?.goal
+    || task?.milestones?.title
+    || null
+  );
+  const transferGoal = task?.transferable
+    ? normalizeConcept(task?.description) || currentConceptName
+    : null;
+  const targetRelation = normalizeConcept(resolvedConcept.description)
+    || currentConceptName
+    || primaryConcepts[0]
+    || null;
+
+  return {
+    currentCoreConcept: {
+      id: currentConceptId,
+      name: currentConceptName,
+      description: normalizeConcept(resolvedConcept.description),
+    },
+    prerequisiteConcepts,
+    neighboringConcepts,
+    targetRelation,
+    milestoneIntent,
+    transferGoal,
+  } as TeachingScenarioContext['cognitiveFrame'];
 }
 
 function parseLearningObjectives(raw: string | null | undefined): string[] {
@@ -150,25 +228,25 @@ function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['tas
     factual: {
       explanationStyle: 'Give concise, concrete explanations that emphasize precise definitions, key facts, and recognition cues.',
       interactionPattern: 'Use quick recall checks, contrast similar terms, and verify exact understanding before moving on.',
-      preferredStrategies: ['retrieval-practice', 'definition-check', 'contrastive-example'],
+      preferredStrategies: ['explain', 'drill'],
       responseConstraints: ['Avoid over-expanding into theory not needed for the current fact set.'],
     },
     conceptual: {
       explanationStyle: 'Explain underlying ideas, relationships, and why the concept works, using analogies only when they sharpen understanding.',
       interactionPattern: 'Prompt the learner to compare, classify, and explain connections in their own words.',
-      preferredStrategies: ['conceptual-scaffolding', 'compare-and-contrast', 'why-explanation'],
+      preferredStrategies: ['explain', 'scaffold', 'diagnose'],
       responseConstraints: ['Do not reduce the lesson to memorized definitions without showing relationships.'],
     },
     procedural: {
       explanationStyle: 'Teach as a sequence of steps with decision points, examples, and common failure cases.',
       interactionPattern: 'Guide the learner through doing the task step by step, then fade support as they gain traction.',
-      preferredStrategies: ['worked-example', 'step-by-step-coaching', 'error-correction'],
+      preferredStrategies: ['demonstrate', 'scaffold', 'feedback'],
       responseConstraints: ['Do not stay only at abstract explanation; anchor the reply in execution.'],
     },
     metacognitive: {
       explanationStyle: 'Focus on planning, self-monitoring, reflection, and how to choose an approach.',
       interactionPattern: 'Ask the learner to justify choices, inspect mistakes, and decide what to try next.',
-      preferredStrategies: ['self-explanation', 'reflection-prompt', 'strategy-selection'],
+      preferredStrategies: ['reflect', 'diagnose', 'motivate'],
       responseConstraints: ['Do not answer everything directly; preserve space for learner reflection and self-correction.'],
     },
   };
@@ -206,7 +284,7 @@ function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['tas
   const knowledgeGuidance = knowledgeType ? byKnowledgeType[knowledgeType] : {
     explanationStyle: 'Explain clearly with concrete examples matched to the current task.',
     interactionPattern: 'Use a guided back-and-forth that checks understanding before adding complexity.',
-    preferredStrategies: ['scaffolding', 'example'],
+    preferredStrategies: ['explain', 'scaffold'],
     responseConstraints: [] as string[],
   };
 
@@ -280,13 +358,29 @@ export async function buildTeachingScenarioContext(
   const canStartLearning = previousSession?.status === 'active'
     ? true
     : path.status === 'active';
+  const milestone = task.milestones;
   const taskProfile = {
     knowledgeType: (task as any).knowledgeType || null,
     cognitiveLevel: (task as any).cognitiveLevel || null,
     displayLabel: (task as any).displayLabel || null,
     learningObjectives: parseLearningObjectives((task as any).learningObjectives),
     coreConcept: resolvedConcept.name,
+    linkedConceptId: resolvedConcept.id,
+    linkedConceptName: resolvedConcept.name,
   } as TeachingScenarioContext['taskProfile'];
+  const cognitiveFrame = buildCognitiveFrame({
+    task,
+    milestone,
+    path,
+    resolvedConcept,
+    primaryConcepts,
+    prerequisiteConcepts,
+    taskProfile,
+  });
+  const supportingConcepts = dedupeConcepts([
+    ...cognitiveFrame.neighboringConcepts,
+    ...prerequisiteConcepts,
+  ]).filter((concept) => !primaryConcepts.includes(concept)).slice(0, 3);
 
   return {
     userId,
@@ -301,9 +395,15 @@ export async function buildTeachingScenarioContext(
     taskKnowledgeScope: {
       primaryConcepts,
       prerequisiteConcepts,
+      supportingConcepts,
     },
     taskProfile,
+    currentTaskContext: {
+      description: task.description || null,
+      acceptanceCriteria: (task as any).acceptanceCriteria || null,
+    },
     teachingStrategyGuidance: buildTeachingStrategyGuidance(taskProfile),
+    cognitiveFrame,
     canStartLearning,
     learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习。',
     learnerSnapshot,

@@ -69,8 +69,13 @@ export interface MessageResult {
   knowledgePoints: KnowledgePointStatus[];
   isCompletion: boolean;
   peerTriggered: boolean;
+  autoEnded?: boolean;
+  wrapup?: WrapupArtifact | null;
+  advisory?: ReplanAdvisory | null;
   peerMessage?: string | null;
+  peerDebug?: any;
   checkpoint?: Checkpoint | null;
+  promptDebug?: any;
 }
 
 export interface PeerMessageResult {
@@ -113,7 +118,7 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string }>;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: any; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: any; peerTriggered?: boolean; peerMessage?: string | null; peerDebug?: any }>;
   state: any;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;

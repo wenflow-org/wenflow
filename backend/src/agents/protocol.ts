@@ -110,7 +110,7 @@ export interface AgentOutput {
     confidence: number;
   };
   
-  // 进度输出（progress-agent）
+  // 进度输出（学习者状态评估）
   progress?: {
     signal: LearningSignal;
     metrics: ProgressMetrics;

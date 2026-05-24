@@ -48,9 +48,9 @@ export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
     maxTokens: 4000,
   },
   {
-    agentId: 'peer-agent',
-    name: 'v1-default-peer-agent',
-    description: '从 peer-agent 当前代码默认 Prompt 初始化',
+    agentId: 'skill:peer-reinforcement',
+    name: 'v1-default-peer-reinforcement',
+    description: '从 skill:peer-reinforcement 当前代码默认 Prompt 初始化',
     systemPrompt: DEFAULT_PEER_AGENT_PROMPT,
     temperature: 0.7,
     maxTokens: 4000,

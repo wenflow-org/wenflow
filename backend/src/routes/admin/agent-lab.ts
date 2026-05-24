@@ -61,9 +61,7 @@ function getAgentCategory(name: string): string {
     'GenerateAgent': 'generation',  // 统一的路径生成 Agent
     'EvaluateAgent': 'analysis',
     'OptimizeAgent': 'analysis',
-    'ContentAgent': 'execution',
-    'TutorAgent': 'execution',
-    'ProgressAgent': 'execution'
+    'TutorAgent': 'execution'
   };
   return categories[name] || 'other';
 }
@@ -77,16 +75,13 @@ function getAgentCapabilities(name: string): string[] {
     'ExtractAgent': ['requirement-extraction', 'data-parsing'],
     'GenerateAgent': ['path-generation', 'path-planning', 'curriculum-design'],  // 统一的路径生成能力
     'EvaluateAgent': ['quality-assessment', 'scoring'],
-    'OptimizeAgent': ['optimization', 'recommendation'],
-    'ContentAgent': ['content-generation', 'exercise-creation'],
-    'ProgressAgent': ['progress-tracking', 'signal-detection']
+    'OptimizeAgent': ['optimization', 'recommendation']
   };
   return capabilities[name] || [];
 }
 
 const platformNameToCatalogId: Record<string, string> = {
   PathAgent: 'path-agent',
-  ProgressAgent: 'progress-agent',
   GoalConversationAgent: 'goal-conversation-agent',
   'ai-teaching-agent': 'ai-teaching-agent',
   'learner-model-agent': 'learner-model-agent'

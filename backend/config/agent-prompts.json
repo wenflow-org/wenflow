@@ -6,7 +6,6 @@
   "GenerateAgent": null,
   "EvaluateAgent": null,
   "OptimizeAgent": null,
-  "ContentAgent": null,
   "TutorAgent": null,
   "ProgressAgent": null
 }

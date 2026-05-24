@@ -341,6 +341,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '编排器管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
+        path: 'agent-definitions',
+        name: 'AdminAgentDefinitions',
+        component: () => import('@/views/admin/AgentDefinitions.vue'),
+        meta: { title: '运行时定义', requiresAdminAuth: true, adminGroup: 'system' }
+      },
+      {
+        path: 'orchestrator-definitions',
+        name: 'AdminOrchestratorDefinitions',
+        component: () => import('@/views/admin/OrchestratorDefinitions.vue'),
+        meta: { title: '编排定义', requiresAdminAuth: true, adminGroup: 'system' }
+      },
+      {
         path: 'ui-lab',
         name: 'AdminUILabHome',
         component: () => import('@/views/DemoScenePage.vue'),
@@ -475,13 +487,13 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
       {
         path: 'test/learn/:taskId',
         name: 'AdminTestLearningPage',
-        component: () => import('@/views/admin/test/TestLearningPage.vue'),
+        component: () => import('@/views/LearningPage.vue'),
         meta: { title: '测试授课页面', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
       },
       {
         path: 'test/learn/:taskId/evaluation/:sessionId',
         name: 'AdminTestLearningEvaluationPage',
-        component: () => import('@/views/admin/test/TestLearningEvaluationPage.vue'),
+        component: () => import('@/views/LearningEvaluationPage.vue'),
         meta: { title: '测试课程评估', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
       },
       {
@@ -489,6 +501,12 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         name: 'AdminExecutionLogs',
         component: () => import('@/views/admin/ExecutionLogs.vue'),
         meta: { title: 'Agent 执行日志', requiresAdminAuth: true, adminGroup: 'monitor' }
+      },
+      {
+        path: 'prompt-call-logs',
+        name: 'AdminPromptCallLogs',
+        component: () => import('@/views/admin/PromptCallLogs.vue'),
+        meta: { title: 'Prompt 调用日志', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
         path: 'orchestrators',

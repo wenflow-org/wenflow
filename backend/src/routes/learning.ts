@@ -215,7 +215,7 @@ const completeTaskSchema = z.object({
 });
 
 const replanPathSchema = z.object({
-  triggerSource: z.enum(['goal-conversation', 'progress-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
+  triggerSource: z.enum(['goal-conversation', 'learner-model-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
   reason: z.string().optional(),
   mode: z.enum(['new_version', 'overwrite']).optional(),
   stageNumber: z.number().int().positive().optional(),
@@ -806,7 +806,7 @@ router.get('/stats', async (req, res, next) => {
 
 // ==================== 旧版 Weeks/Tasks 路由（已废弃）====================
 // 注意：以下路由使用旧的 weeks/tasks 模型，已被 milestones/subtasks 取代
-// 保留用于向后兼容，但建议使用新的 ContentAgent 集成端点
+// 保留用于向后兼容，但建议使用新的交互式学习集成端点
 /*
 // 获取某周的所有任务
 router.get('/weeks/:weekId/tasks', async (req, res, next) => {

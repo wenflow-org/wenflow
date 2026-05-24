@@ -837,49 +837,6 @@ export const OPTIMIZE_AGENT_CONFIG = {
 
 // 注意：PathAgent 已合并到 GenerateAgent，使用 GenerateAgent 作为统一的路径生成 Agent
 
-export const CONTENT_AGENT_SYSTEM_PROMPT = `你是学习内容生成专家。
-
-【任务】
-为特定学习任务生成详细的学习内容和练习。
-
-【输出格式】
-{
-  "taskId": "task_001",
-  "explanation": "详细的知识点讲解",
-  "exercises": [
-    {
-      "question": "问题",
-      "type": "multiple-choice|coding|short-answer|essay",
-      "options": ["选项 A", "选项 B"],
-      "hint": "提示",
-      "answer": "答案"
-    }
-  ],
-  "resources": [
-    {
-      "title": "资源标题",
-      "type": "article|video|book|documentation|exercise",
-      "url": "https://...",
-      "description": "资源描述"
-    }
-  ]
-}
-
-【规则】
-1. 讲解要清晰易懂
-2. 练习要匹配难度
-3. 资源要有价值`;
-
-export const CONTENT_AGENT_CONFIG = {
-  name: 'ContentAgent',
-  description: '学习内容生成',
-  icon: '📖',
-  color: '#67C23A',
-  temperature: 0.5,
-  maxTokens: 4000,  // 生成详细学习内容需要更多token空间
-  systemPrompt: CONTENT_AGENT_SYSTEM_PROMPT
-};
-
 export const TUTOR_AGENT_SYSTEM_PROMPT = `你是 AI 辅导老师"小智"。
 
 【角色】
@@ -907,49 +864,6 @@ export const TUTOR_AGENT_CONFIG = {
   systemPrompt: TUTOR_AGENT_SYSTEM_PROMPT
 };
 
-export const PROGRESS_AGENT_SYSTEM_PROMPT = `你是学习进度分析专家。
-
-【任务】
-分析学生的学习行为，检测学习状态信号，给出建议。
-
-【检测的信号类型】
-- accelerating: 学习加速（进展顺利）
-- decelerating: 学习减速（进展变慢）
-- lane-change: 变道（改变学习重点）
-- fatigue-high: 疲劳度高
-- frustration: 挫败感
-- mastery: 掌握知识点
-- struggling: 挣扎（遇到困难）
-
-【输出格式】
-{
-  "signal": {
-    "type": "信号类型",
-    "intensity": 0.8,
-    "context": "上下文描述",
-    "timestamp": "2026-03-05T12:00:00Z"
-  },
-  "metrics": {
-    "completionRate": 0.75,
-    "averageScore": 85,
-    "timeSpent": 120,
-    "ktl": 0.6,
-    "lf": 0.3,
-    "lss": 0.4
-  },
-  "recommendations": ["建议 1", "建议 2"]
-}`;
-
-export const PROGRESS_AGENT_CONFIG = {
-  name: 'ProgressAgent',
-  description: '学习进度分析',
-  icon: '📊',
-  color: '#909399',
-  temperature: 0.4,
-  maxTokens: 1000,
-  systemPrompt: PROGRESS_AGENT_SYSTEM_PROMPT
-};
-
 // Arena Agent 配置列表（供 Agent Lab 使用）
 // 已统一：GenerateAgent 作为唯一的路径生成 Agent（原 PathAgent 已合并）
 export const ARENA_AGENT_CONFIGS = [
@@ -962,7 +876,5 @@ export const ARENA_AGENT_CONFIGS = [
   EVALUATE_AGENT_CONFIG,
   OPTIMIZE_AGENT_CONFIG,
   // 业务执行层
-  CONTENT_AGENT_CONFIG,
-  TUTOR_AGENT_CONFIG,
-  PROGRESS_AGENT_CONFIG
+  TUTOR_AGENT_CONFIG
 ];

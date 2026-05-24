@@ -6,6 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
 import { 
   agentPluginRegistry, 
   agentPluginConfig,
@@ -258,26 +259,15 @@ router.get('/config', async (req: Request, res: Response) => {
 });
 
 /**
- * 更新插件配置
+ * 更新插件配置（仅管理员可调用）
  */
-router.put('/config', authMiddleware, async (req: Request, res: Response) => {
+router.put('/config', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const updates = req.body;
-    
-    // 验证用户权限（需要管理员）
-    const userId = (req as any).user?.userId;
-    const userRole = (req as any).user?.role;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Unauthorized'
-      });
-    }
-    
+
     // 更新配置
     const newConfig = agentPluginConfig.updateConfig(updates);
-    
+
     res.json({
       success: true,
       data: newConfig
@@ -291,9 +281,9 @@ router.put('/config', authMiddleware, async (req: Request, res: Response) => {
 });
 
 /**
- * 重置插件配置为默认
+ * 重置插件配置为默认（仅管理员可调用）
  */
-router.post('/config/reset', authMiddleware, async (req: Request, res: Response) => {
+router.post('/config/reset', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
     const newConfig = agentPluginConfig.reset();
     

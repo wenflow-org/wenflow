@@ -1,6 +1,6 @@
 /**
- * Agent 日志工具类
- * 用于记录 ContentAgent v3.0 的详细运行日志
+ * 学习链路日志工具类
+ * 用于记录交互式学习相关的详细运行日志
  */
 
 import { logger } from './logger';
@@ -69,12 +69,12 @@ export interface AgentCallMetrics {
   };
 }
 
-export class AgentLogger {
+export class LearningAgentLogger {
   /**
    * 记录策略选择日志
    */
   static logStrategySelection(data: StrategySelectionLog): void {
-    logger.info('[ContentAgent] 策略选择', {
+    logger.info('[Learning] 策略选择', {
       timestamp: new Date().toISOString(),
       userId: data.userId,
       sessionId: data.sessionId,
@@ -88,7 +88,7 @@ export class AgentLogger {
    * 记录内容生成日志
    */
   static logContentGeneration(data: ContentGenerationLog): void {
-    logger.info('[ContentAgent] 内容生成', {
+    logger.info('[Learning] 内容生成', {
       timestamp: new Date().toISOString(),
       userId: data.userId,
       sessionId: data.sessionId,
@@ -105,7 +105,7 @@ export class AgentLogger {
    * 记录错误日志
    */
   static logError(data: ErrorLog): void {
-    logger.error('[ContentAgent] 错误', {
+    logger.error('[Learning] 错误', {
       timestamp: new Date().toISOString(),
       userId: data.userId,
       sessionId: data.sessionId,
@@ -175,7 +175,7 @@ export class AgentLogger {
     previousState: any,
     newState: any
   ): void {
-    logger.info('[ContentAgent] 学生状态变化', {
+    logger.info('[Learning] 学生状态变化', {
       timestamp: new Date().toISOString(),
       userId,
       sessionId,
@@ -193,7 +193,7 @@ export class AgentLogger {
     uiType: string,
     renderTime: number
   ): void {
-    logger.debug('[ContentAgent] UI 组件渲染', {
+    logger.debug('[Learning] UI 组件渲染', {
       timestamp: new Date().toISOString(),
       userId,
       sessionId,
@@ -203,4 +203,4 @@ export class AgentLogger {
   }
 }
 
-export default AgentLogger;
+export default LearningAgentLogger;

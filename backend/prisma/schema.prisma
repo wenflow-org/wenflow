@@ -199,6 +199,68 @@ model agent_prompts {
   @@index([status])
 }
 
+model agent_definitions {
+  id               String   @id
+  displayName      String
+  description      String?
+  category         String
+  inputSchema      String?
+  outputSchema     String?
+  variableBindings String?
+  capabilities     String?
+  defaultMaxTokens Int?
+  defaultTemperature Float?
+  schemaVersion    Int      @default(1)
+  source           String   @default("code")
+  managedByCode    Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([category])
+  @@index([managedByCode])
+}
+
+model orchestrator_definitions {
+  id            String   @id
+  displayName   String
+  description   String?
+  category      String   @default("orchestrator")
+  steps         String
+  variableGraph String?
+  source        String   @default("code")
+  managedByCode Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model prompt_call_logs {
+  id                  String   @id
+  agentId             String
+  systemPromptVersion Int?
+  systemPromptHash    String
+  userPayload         String
+  rawModelOutput      String?
+  extractedJson       String?
+  normalizedOutput    String?
+  success             Boolean  @default(false)
+  errorCode           String?
+  errorMessage        String?
+  promptDrift         Boolean  @default(false)
+  durationMs          Int      @default(0)
+  tokenUsage          String?
+  pathId              String?
+  userId              String?
+  conversationId      String?
+  pipelineRunId       String?
+  pipelineStepIndex   Int?
+  createdAt           DateTime @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([pipelineRunId])
+  @@index([pathId])
+  @@index([userId])
+}
+
 model agent_registrations {
   id           String   @id
   name         String   @unique
@@ -377,7 +439,7 @@ model content_feedback {
   userId         String
   sessionId      String
   subtaskId      String?
-  agentId        String   @default("content-agent-v3")
+  agentId        String   @default("ai-teaching-agent")
   rating         Int
   helpfulness    Int?
   clarity        Int?

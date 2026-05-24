@@ -67,7 +67,7 @@ export interface LearningSessionResponse {
 }
 
 /**
- * ContentAgent v3.0 对话式学习类型定义
+ * 交互式学习类型定义
  */
 
 /**
@@ -112,9 +112,9 @@ export interface DialogueMessage {
 }
 
 /**
- * ContentAgent 输出内容
+ * 交互式学习输出内容
  */
-export interface ContentAgentOutput {
+export interface InteractiveLearningOutput {
   /** 成功标志 */
   success: boolean
   /** 当前内容 */
@@ -147,7 +147,7 @@ export interface ContentAgentOutput {
 /**
  * 对话式学习会话响应
  */
-export interface DialogueLearningSession {
+export interface InteractiveLearningSession {
   /** 会话 ID */
   sessionId: string
   /** 任务标题 */
@@ -155,7 +155,7 @@ export interface DialogueLearningSession {
   /** 任务 ID */
   taskId: string
   /** 初始内容（第一轮对话） */
-  initialContent: ContentAgentOutput['content']
+  initialContent: InteractiveLearningOutput['content']
   /** 对话历史 */
   conversationHistory: DialogueMessage[]
   /** 学生状态 */
@@ -165,11 +165,11 @@ export interface DialogueLearningSession {
 /**
  * 提交回答响应
  */
-export interface SubmitResponseResult {
+export interface SubmitLearningResponse {
   /** 学生回答后的 AI 反馈 */
   feedback: string
   /** 下一轮对话内容 */
-  nextContent: ContentAgentOutput['content'] | null
+  nextContent: InteractiveLearningOutput['content'] | null
   /** 更新后的学生状态 */
   studentState: StudentState
   /** 对话是否完成 */

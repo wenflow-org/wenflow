@@ -2,6 +2,8 @@ import prisma from '../../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
+import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../protocol';
 
@@ -62,6 +64,13 @@ export interface SessionWrapupInput {
       confused: number;
     };
     completionCandidateSeen: boolean;
+  };
+  sessionStructure?: {
+    pathBackground?: Record<string, any> | null;
+    finalClassroomContext?: Record<string, any> | null;
+    classroomEventHistory?: Array<Record<string, any>>;
+    stageHistory?: Array<Record<string, any>>;
+    endReason?: string | null;
   };
 }
 
@@ -180,8 +189,8 @@ export const WRAPUP_PROMPT = `你是一位课后产出助手。请基于本节�
 2. evaluation：给系统使用的本节课评分
 
 证据优先级：
-1. sessionEvidence / knowledgeContext.delta
-2. knowledgePoints / learningState / task 与 path 上下文
+1. sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory
+2. sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文
 3. recent transcript
 
 重要规则：
@@ -189,16 +198,28 @@ export const WRAPUP_PROMPT = `你是一位课后产出助手。请基于本节�
 2. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
 3. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
 4. practiceAdvice 必须贴合 taskType；reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
-5. evaluation 可以为 null；若存在，所有分数字段必须完整且类型正确
+5. evaluation 原则上必须输出；若证据不足，也要给出保守评分，并把 confidence 设低，同时在 reasoning 中说明证据不足。只有输入严重损坏时才允许 evaluation 缺失。
 6. sessionLss/sessionKtl/sessionLf 范围 0-10
 7. confidence 范围 0-1，表示证据充分度，不是主观自信
 8. reasoning 最多 120 字，并引用 1-2 个关键证据
 9. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
+10. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
+11. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered。仅在引导下答对一次，更适合 learning；仅被复习或回顾的内容，不应伪装成本节新增掌握。
+12. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾。
 
 评分参考：
-- sessionKtl：本节知识获得质量。高分需要有理解提升、困惑解决、知识点推进或掌握证据。
-- sessionLss：本节学习压力。高分需要有明显阻塞、反复困惑、高负荷证据。
-- sessionLf：本节疲劳负担。高分需要有参与度下降、低效重复、疲劳/沮丧信号等证据。
+- sessionKtl：本节知识获得质量。
+  - 8-10：学生能独立完成核心任务，或修正了关键误解后稳定应用核心知识点。
+  - 5-7：学生在引导下能推进任务，但对核心概念仍有模糊或应用不稳定。
+  - 1-4：学生反复卡住，未能完成核心任务，或关键误解仍未解决。
+- sessionLss：本节学习压力。
+  - 8-10：多轮阻塞、反复困惑、高负荷，课堂推进明显吃力。
+  - 5-7：有明显吃力和停顿，但在引导下仍能推进。
+  - 1-4：课堂整体顺畅，没有明显负荷阻塞。
+- sessionLf：本节疲劳负担。
+  - 8-10：出现明显疲劳、低效重复、情绪受挫或持续投入下降。
+  - 5-7：存在一定疲劳或重复，但仍能维持参与。
+  - 1-4：精力基本稳定，课堂参与和回应效率良好。
 
 JSON 模板：
 {
@@ -356,8 +377,8 @@ function buildFallbackSummary(input: SessionWrapupInput): SessionWrapupSummary {
     keyTakeaways: ['完成本节学习回顾', '已整理知识点掌握情况'],
     actionPlan: ['继续完成下一步练习', '对不稳知识点做针对性复盘'],
     evaluationHighlights: {
-      strengths: ['课堂内容已被系统整理'],
-      improvements: ['本节课评分暂未生成，请稍后重试查看'],
+      strengths: mastered > 0 ? ['本节课已有明确知识点推进或掌握证据'] : ['课堂内容已被系统整理，已形成后续复盘基础'],
+      improvements: ['仍需结合本节证据继续判断哪些知识点只是巩固、哪些已真正掌握'],
     },
     metricInterpretation: {
       session: '本节课总结已生成。',
@@ -384,6 +405,11 @@ function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'eva
 【任务说明】${input.sessionInfo.taskDescription || '无'}
 【路径标题】${input.sessionInfo.pathTitle || '无'}
 【路径摘要】${input.sessionInfo.pathSummary || '无'}
+【路径背景】${JSON.stringify(input.sessionStructure?.pathBackground || null)}
+【课堂最终状态】${JSON.stringify(input.sessionStructure?.finalClassroomContext || null)}
+【课堂事件历史】${JSON.stringify(input.sessionStructure?.classroomEventHistory || [])}
+【阶段轨迹】${JSON.stringify(input.sessionStructure?.stageHistory || [])}
+【结束原因】${input.sessionStructure?.endReason || '无'}
 【知识点状态】${JSON.stringify(input.knowledgePoints)}
 【知识点变化】${JSON.stringify(input.knowledgeContext?.delta || null)}
 【课堂证据】${JSON.stringify(input.sessionEvidence || null)}
@@ -409,6 +435,11 @@ function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'eva
 【任务说明】${input.sessionInfo.taskDescription || '无'}
 【路径标题】${input.sessionInfo.pathTitle || '无'}
 【路径摘要】${input.sessionInfo.pathSummary || '无'}
+【路径背景】${JSON.stringify(input.sessionStructure?.pathBackground || null)}
+【课堂最终状态】${JSON.stringify(input.sessionStructure?.finalClassroomContext || null)}
+【课堂事件历史】${JSON.stringify(input.sessionStructure?.classroomEventHistory || [])}
+【阶段轨迹】${JSON.stringify(input.sessionStructure?.stageHistory || [])}
+【结束原因】${input.sessionStructure?.endReason || '无'}
 【知识点状态】${JSON.stringify(input.knowledgePoints)}
 【知识点变化】${JSON.stringify(input.knowledgeContext?.delta || null)}
 【学习状态】${input.learningState ? JSON.stringify(input.learningState) : '无'}
@@ -446,6 +477,53 @@ function buildEvidenceSnapshot(input: SessionWrapupInput) {
   };
 }
 
+function buildConservativeEvaluation(input: SessionWrapupInput): SessionWrapupEvaluation {
+  const turnCount = input.sessionEvidence?.turnCount || 0;
+  const avgUnderstanding = typeof input.sessionEvidence?.avgUnderstanding === 'number'
+    ? input.sessionEvidence.avgUnderstanding
+    : 0.5;
+  const avgEngagement = typeof input.sessionEvidence?.avgEngagement === 'number'
+    ? input.sessionEvidence.avgEngagement
+    : 0.5;
+  const confusionCount = input.sessionEvidence?.topConfusionPoints?.length || 0;
+  const progressRatio = input.knowledgePoints.length > 0
+    ? input.knowledgePoints.reduce((sum, point) => sum + Math.max(0, Math.min(100, point.progress)), 0) / (input.knowledgePoints.length * 100)
+    : 0.35;
+  const masteredRatio = input.knowledgePoints.length > 0
+    ? input.knowledgePoints.filter((point) => point.status === 'mastered').length / input.knowledgePoints.length
+    : 0;
+
+  const sessionKtl = Math.max(1, Math.min(10, Number(((progressRatio * 4.5) + (masteredRatio * 3) + (avgUnderstanding * 2.5)).toFixed(1))));
+  const sessionLss = Math.max(1, Math.min(10, Number((((1 - avgUnderstanding) * 4.5) + (confusionCount * 1.2) + ((turnCount > 6 ? 1 : 0) * 1.5)).toFixed(1))));
+  const sessionLf = Math.max(1, Math.min(10, Number((((1 - avgEngagement) * 5) + (turnCount > 8 ? 2 : turnCount > 5 ? 1 : 0)).toFixed(1))));
+
+  return {
+    sessionLss,
+    sessionKtl,
+    sessionLf,
+    confidence: 0.2,
+    reasoning: '证据不足，已基于本节对话轮数、理解度、投入度与知识点进展生成保守评分。',
+  };
+}
+
+const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string, unknown> | null> = {
+  agentId: AGENT_ID,
+  defaultSystemPrompt: WRAPUP_PROMPT,
+  caller: {
+    agentId: AGENT_ID,
+  },
+  buildUserPayload: (input) => buildWrapupUserPrompt(input, 'primary'),
+  normalizeOutput: (parsed) => (parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null),
+  validateParsedOutput: (parsed) => ({
+    valid: !!(parsed && typeof parsed === 'object'),
+    failureReason: 'SESSION_WRAPUP_OUTPUT_INVALID',
+  }),
+  modelDefaults: {
+    temperature: 0.7,
+    maxTokens: 4000,
+  },
+};
+
 export function toWrapupArtifact(result: SessionWrapupResult, input: SessionWrapupInput): SessionWrapupArtifact {
   return {
     status: result.evaluation ? 'complete' : 'summary-only',
@@ -469,21 +547,11 @@ export class SessionWrapupAgent {
     try {
       const gateway = getAPIGateway();
       const caller: CallerInfo = { agentId: AGENT_ID };
-      const promptConfig = await agentConfigService.getActivePrompt(AGENT_ID);
-      const response = await gateway.execute({
-        messages: [
-          { role: 'system', content: promptConfig?.systemPrompt || WRAPUP_PROMPT },
-          {
-            role: 'user',
-            content: buildWrapupUserPrompt(input, 'primary')
-          }
-        ],
-        temperature: promptConfig?.temperature,
-        max_tokens: promptConfig?.maxTokens,
-      }, caller, { userId: 'system' });
+      const promptResult = await callPrompt(sessionWrapupPromptSpec, input, {
+        userId: 'system',
+      });
 
-      const content = response.choices[0]?.message.content || '{}';
-      const parsed = parseContent(content);
+      const parsed = promptResult.output;
       const parsedSummary = parsed?.summary;
       const parsedEvaluation = parsed?.evaluation;
 
@@ -496,6 +564,11 @@ export class SessionWrapupAgent {
       if (!evaluation) {
         evaluation = await this.generateEvaluationFallback(input, gateway, caller);
         evaluationSource = evaluation ? 'ai-fallback' : 'failed';
+      }
+
+      if (!evaluation) {
+        evaluation = buildConservativeEvaluation(input);
+        evaluationSource = 'failed';
       }
 
       result = {
@@ -511,7 +584,7 @@ export class SessionWrapupAgent {
       logger.error('[SessionWrapupAgent] 生成失败', { error });
       result = {
         summary: buildFallbackSummary(input),
-        evaluation: null,
+        evaluation: buildConservativeEvaluation(input),
         summarySource: 'fallback',
         evaluationSource: 'failed',
       };

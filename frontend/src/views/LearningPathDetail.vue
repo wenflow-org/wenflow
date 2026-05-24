@@ -72,7 +72,7 @@
                   <div class="path-detail-hero__tags">
                     <span class="pill">学习路径</span>
                     <span class="path-detail-hero__tag">{{ pathStatusLabel }}</span>
-                    <span v-if="path.subject" class="path-detail-hero__tag">{{ path.subject }}</span>
+                    <span v-if="subjectTagLabel" class="path-detail-hero__tag">{{ subjectTagLabel }}</span>
                   </div>
                   <h1 class="path-title">{{ path.name }}</h1>
                   <p class="path-description">{{ path.summary || path.description }}</p>
@@ -229,9 +229,6 @@
                             </div>
                           </div>
                           <p class="task-desc">{{ task.description }}</p>
-                          <p v-if="task.acceptanceCriteria" class="task-acceptance">
-                            完成标准：{{ task.acceptanceCriteria }}
-                          </p>
                           <div class="task-footer">
                             <div class="task-time">
                               <el-icon><Clock /></el-icon>
@@ -460,6 +457,7 @@ const evaluationDialogVisible = ref(false);
 const evaluationLoading = ref(false);
 const selectedTaskEvaluation = ref<TaskEvaluationDetail | null>(null);
 const retryingEnrichment = ref(false);
+const adaptiveGuidance = ref<any | null>(null);
 let enrichmentPollingTimer: number | null = null;
 let enrichmentPollingInFlight = false;
 
@@ -492,15 +490,28 @@ const pathStatusLabel = computed(() => {
   return '规划中';
 });
 
+const subjectTagLabel = computed(() => {
+  const raw = typeof path.value?.subject === 'string' ? path.value.subject.trim() : '';
+  if (!raw) return '';
+
+  // 只把短主题词当作 pill 展示，避免把整段目标描述塞进标签。
+  if (raw.length > 24) return '';
+  if (/[，。；！？,.!?]/.test(raw)) return '';
+
+  return raw;
+});
+
 const pathOverviewMetrics = computed(() => {
+  const stages = pathStages.value;
+  const activeStageNumber = activeStage.value?.stageNumber || activeStage.value?.weekNumber || null;
+
   return [
-    { label: '阶段数', value: String(path.value?.totalMilestones || path.value?.totalStages || path.value?.totalWeeks || 0) },
+    {
+      label: '阶段数',
+      value: String(path.value?.totalMilestones || path.value?.totalStages || path.value?.totalWeeks || stages.length || 0)
+    },
     { label: '预计投入', value: `${formatHours(path.value?.estimatedHours || 0)} 小时` },
-    { label: '当前阶段', value: (() => {
-      const stages = pathStages.value;
-      const idx = stages.findIndex((s: any) => s === activeStage.value);
-      return idx >= 0 ? `第 ${idx + 1} 阶段` : '待开始';
-    })() },
+    { label: '当前阶段', value: activeStageNumber ? `第 ${activeStageNumber} 阶段` : (stages.length > 0 ? '第 1 阶段' : '待开始') },
     { label: '任务进度', value: `${completedTasks.value}/${totalTasks.value}` }
   ];
 });
@@ -595,6 +606,11 @@ const paceRangeText = computed(() => {
 });
 
 const pathDetailNotes = computed(() => {
+  if (adaptiveGuidance.value?.subtitle || adaptiveGuidance.value?.warningCopy) {
+    return [adaptiveGuidance.value.subtitle, adaptiveGuidance.value.warningCopy]
+      .filter((item: string) => typeof item === 'string' && item.trim())
+      .slice(0, 3);
+  }
   const notes: string[] = [];
   const stage = activeStage.value;
   const stageSummary = stage?.description || stage?.goal;
@@ -675,6 +691,12 @@ const getTaskConceptLabel = (task: any) => {
 };
 
 const pathDetailPlan = computed(() => {
+  if (adaptiveGuidance.value?.todayActions?.length) {
+    return adaptiveGuidance.value.todayActions.slice(0, 3).map((item: any, index: number) => ({
+      title: item.title || `任务 ${index + 1}`,
+      desc: item.desc || item.action || '',
+    }));
+  }
   const items = nextActionTasks.value.map((task: any, index: number) => ({
     title: `任务 ${index + 1}`,
     desc: `${task.title}${task.estimatedMinutes ? ` · 预计 ${task.estimatedMinutes} 分钟` : ''}`
@@ -688,6 +710,18 @@ const pathDetailPlan = computed(() => {
 });
 
 const paceSuggestionCards = computed(() => {
+  if (adaptiveGuidance.value?.paceHint || adaptiveGuidance.value?.nextStep) {
+    return [
+      {
+        title: adaptiveGuidance.value.paceHint || paceRangeText.value,
+        desc: '根据当前学习状态动态调整。'
+      },
+      {
+        title: adaptiveGuidance.value.nextStep || `当前阶段先聚焦「${activeStage.value?.title || '这一阶段'}」`,
+        desc: '优先处理当前最关键的推进点。'
+      }
+    ];
+  }
   const stage = activeStage.value;
   return [
     {
@@ -754,6 +788,12 @@ const loadPathData = async () => {
       startEnrichmentPolling();
     } else {
       stopEnrichmentPolling();
+    }
+
+    try {
+      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('path-detail', pathId as string);
+    } catch (error) {
+      console.error('获取路径动态引导文案失败:', error);
     }
   } catch (error: any) {
     toast.error(error.response?.data?.error?.message || '加载路径详情失败');

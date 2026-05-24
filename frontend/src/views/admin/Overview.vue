@@ -397,35 +397,35 @@ onMounted(() => {
 
 .overview-bg-orb {
   position: absolute;
-  border-radius: 999px;
-  filter: blur(52px);
-  opacity: 0.42;
+  border-radius: 50%;
+  filter: blur(110px);
+  opacity: 0.15;
 }
 
 .overview-bg-orb--1 {
-  width: 380px;
-  height: 380px;
-  top: -120px;
-  left: -80px;
-  background: color-mix(in srgb, var(--color-primary) 30%, white);
+  width: 460px;
+  height: 460px;
+  top: -180px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%);
   animation: admin-orb-drift 26s ease-in-out infinite;
 }
 
 .overview-bg-orb--2 {
-  width: 320px;
-  height: 320px;
-  top: 12%;
-  right: -80px;
-  background: color-mix(in srgb, var(--color-accent) 22%, white);
+  width: 380px;
+  height: 380px;
+  left: -100px;
+  bottom: 120px;
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
   animation: admin-orb-drift 30s ease-in-out infinite reverse;
 }
 
 .overview-bg-orb--3 {
-  width: 260px;
-  height: 260px;
+  width: 320px;
+  height: 320px;
   bottom: -70px;
   left: 24%;
-  background: color-mix(in srgb, var(--color-secondary) 22%, white);
+  background: radial-gradient(circle, rgba(67, 176, 216, 0.18), transparent 70%);
   animation: admin-orb-drift 28s ease-in-out infinite alternate;
 }
 
@@ -452,14 +452,13 @@ onMounted(() => {
   position: relative;
   z-index: 1;
   margin-bottom: 1.5rem;
-  padding: 20px 24px;
-  border-radius: 28px;
-  border: 1px solid #d2dbf3;
+  padding: 24px 28px;
+  border-radius: 20px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
   background:
-    radial-gradient(circle at top right, rgba(52, 120, 246, 0.03), transparent 40%),
-    color-mix(in srgb, #ffffff 95%, white);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92));
+  backdrop-filter: blur(16px);
   overflow: hidden;
 }
 
@@ -490,20 +489,18 @@ onMounted(() => {
 
 .overview-hero__title {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.03em;
   line-height: 1.15;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.4);
 }
 
 .overview-hero__subtitle {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   color: var(--text-secondary);
   line-height: 1.6;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .hero-refresh-btn {
@@ -537,10 +534,9 @@ onMounted(() => {
   padding: 0 12px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-primary) 10%, white);
-  color: var(--color-primary-dark);
+  color: var(--color-primary-dark, #1f57cc);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 /* surface-card 基础 */

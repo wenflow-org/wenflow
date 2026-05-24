@@ -13,6 +13,7 @@ import prisma from '../config/database';
 import { virtualLearnerSimulationAgentHandler } from '../agents/virtual-learner-simulation-agent';
 import goalConversationService from '../services/learning/goal-conversation.service';
 import pathOrchestrator, { type GoalPathRequest } from './path.orchestrator';
+import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingOrchestrator';
 import {
   getSimulationOrchestratorConfig,
   type SimulationOrchestratorConfig
@@ -245,12 +246,16 @@ class SimulationOrchestrator {
       let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
       try {
         const collectedData = JSON.parse(conversation.collectedData || '{}');
-        conversationHistory = collectedData.messages || [];
+        const rawMessages = collectedData.messages || [];
+        conversationHistory = rawMessages.map((m: any) => ({
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.content
+        }));
       } catch {}
       
       const lastAssistantMessage = conversationHistory.length > 0
         ? conversationHistory.filter(m => m.role === 'assistant').pop()?.content || ''
-        : '';
+        : conversationHistory.filter(m => m.role !== 'user').pop()?.content || '';
       
       let goalState: any = {};
       try {
@@ -327,12 +332,43 @@ class SimulationOrchestrator {
       const goalReady = goalResult.internal.core.stage === 'ready';
       
       if (goalReady) {
+        // 同步 learningPathId 到 virtual_session（goalConversationService 已自动触发 path 生成）
+        const updatedConversation = await prisma.goal_conversations.findUnique({
+          where: { id: session.goalConversationId }
+        });
+        
+        if (updatedConversation?.learningPathId) {
+          await this.updateSessionStatus(
+            input.sessionId,
+            'running',
+            'path',
+            undefined,
+            updatedConversation.learningPathId
+          );
+        }
+        
         await this.updateStageResults(input.sessionId, 'goal', {
           success: true,
           durationMs: Date.now() - startTime,
           conversationId: session.goalConversationId,
-          finalStage: goalResult.internal.core.stage
+          finalStage: goalResult.internal.core.stage,
+          learningPathId: updatedConversation?.learningPathId
         });
+        
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'stage-transition',
+          details: {
+            output: {
+              from: 'goal',
+              to: 'path',
+              learningPathId: updatedConversation?.learningPathId,
+              message: '路径已自动开始生成'
+            }
+          }
+        });
+        
+        await this.addSessionLog(input.sessionId, logs[logs.length - 1]);
       }
       
       await this.addSessionLog(input.sessionId, logs[logs.length - 1]);
@@ -645,6 +681,450 @@ class SimulationOrchestrator {
       };
     } catch (error: any) {
       logger.error('[simulation-orchestrator] 路径评审失败', {
+        sessionId,
+        error: error.message
+      });
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async startLearningPhase(sessionId: string): Promise<{
+    success: boolean;
+    teachingSessionId?: string;
+    welcomeMessage?: string;
+    milestones?: any[];
+    error?: string;
+  }> {
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      
+      if (!session.learningPathId) {
+        throw new Error('学习路径不存在，请先生成路径');
+      }
+      
+      const learningPath = await prisma.learning_paths.findUnique({
+        where: { id: session.learningPathId },
+        include: {
+          milestones: {
+            orderBy: { stageNumber: 'asc' },
+            include: {
+              subtasks: {
+                orderBy: { order: 'asc' },
+                where: { status: 'active' }
+              }
+            }
+          }
+        }
+      });
+      
+      if (!learningPath || !learningPath.milestones.length) {
+        throw new Error('学习路径或里程碑不存在');
+      }
+      
+      const firstMilestone = learningPath.milestones[0];
+      const firstTask = firstMilestone.subtasks?.[0];
+      
+      if (!firstTask) {
+        throw new Error('第一个里程碑没有可用任务');
+      }
+      
+      logger.info('[simulation-orchestrator] 开始学习阶段', {
+        sessionId,
+        learningPathId: learningPath.id,
+        firstTaskId: firstTask.id,
+        firstMilestone: firstMilestone.title
+      });
+      
+      const teachingSession = await aiTeachingOrchestrator.startSession({
+        userId: session.userId,
+        taskId: firstTask.id,
+        forceNew: true
+      });
+      
+      await this.updateSessionStatus(
+        sessionId,
+        'running',
+        'learning',
+        session.goalConversationId || undefined,
+        session.learningPathId
+      );
+      
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'learning-start',
+        details: {
+          output: {
+            teachingSessionId: teachingSession.sessionId,
+            welcomeMessage: teachingSession.welcomeMessage,
+            currentMilestone: firstMilestone.title,
+            currentTask: firstTask.title
+          }
+        }
+      });
+      
+      await this.updateStageResults(sessionId, 'learning', {
+        success: true,
+        teachingSessionId: teachingSession.sessionId,
+        currentMilestone: firstMilestone.stageNumber,
+        currentMilestoneTitle: firstMilestone.title,
+        currentTaskId: firstTask.id,
+        currentTaskTitle: firstTask.title,
+        totalMilestones: learningPath.milestones.length
+      });
+      
+      return {
+        success: true,
+        teachingSessionId: teachingSession.sessionId,
+        welcomeMessage: teachingSession.welcomeMessage,
+        milestones: learningPath.milestones.map(m => ({
+          stageNumber: m.stageNumber,
+          title: m.title,
+          description: m.description,
+          estimatedHours: m.estimatedHours,
+          subtasksCount: m.subtasks?.length || 0
+        }))
+      };
+    } catch (error: any) {
+      logger.error('[simulation-orchestrator] 学习阶段启动失败', {
+        sessionId,
+        error: error.message
+      });
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async executeLearningStep(sessionId: string): Promise<{
+    success: boolean;
+    userMessage?: string;
+    aiResponse?: string;
+    milestoneProgress?: any;
+    isPathCompleted?: boolean;
+    logs?: SimulationLogEntry[];
+    error?: string;
+  }> {
+    const startTime = Date.now();
+    const logs: SimulationLogEntry[] = [];
+    
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      const profile = this.parseProfileData(session.virtual_learner_profiles);
+      
+      if (!session.learningPathId) {
+        throw new Error('学习路径不存在');
+      }
+      
+      const stageResults: any = {};
+      try {
+        const sr = session.stageResults || '{}';
+        const parsed = JSON.parse(sr);
+        Object.assign(stageResults, parsed);
+      } catch {}
+      
+      const learningState = stageResults.learning || {};
+      const currentMilestoneIdx = learningState.currentMilestone || 0;
+      const currentTaskIdx = learningState.currentTaskIdx || 0;
+      
+      const learningPath = await prisma.learning_paths.findUnique({
+        where: { id: session.learningPathId },
+        include: {
+          milestones: {
+            orderBy: { stageNumber: 'asc' },
+            include: {
+              subtasks: {
+                orderBy: { order: 'asc' },
+                where: { status: 'active' }
+              }
+            }
+          }
+        }
+      });
+      
+      if (!learningPath) {
+        throw new Error('学习路径不存在');
+      }
+      
+      const milestones = learningPath.milestones;
+      const currentMilestone = milestones[currentMilestoneIdx];
+      
+      if (!currentMilestone) {
+        return {
+          success: true,
+          isPathCompleted: true,
+          milestoneProgress: {
+            completed: milestones.length,
+            total: milestones.length
+          },
+          logs
+        };
+      }
+      
+      const tasks = currentMilestone.subtasks || [];
+      const currentTask = tasks[currentTaskIdx];
+      
+      if (!currentTask) {
+        const nextMilestoneIdx = currentMilestoneIdx + 1;
+        if (nextMilestoneIdx >= milestones.length) {
+          return {
+            success: true,
+            isPathCompleted: true,
+            logs
+          };
+        }
+        
+        await this.updateStageResults(sessionId, 'learning', {
+          ...learningState,
+          currentMilestone: nextMilestoneIdx,
+          currentTaskIdx: 0
+        });
+        
+        return await this.executeLearningStep(sessionId);
+      }
+      
+      const simulationContext = {
+        profile,
+        conversationHistory: learningState.conversationHistory || [],
+        currentStage: 'learning',
+        learningState: {
+          currentMilestone: currentMilestone.title,
+          currentTask: currentTask.title,
+          milestoneProgress: currentMilestoneIdx + 1,
+          totalMilestones: milestones.length
+        }
+      };
+      
+      const agentInput = {
+        type: 'custom' as const,
+        goal: '模拟学习者回复任务',
+        metadata: {
+          simulationType: 'simulate_learning_reply',
+          simulationContext
+        }
+      };
+      
+      const agentContext = {
+        userId: session.userId,
+        sourceEntry: 'simulation' as const,
+        metadata: {
+          traceId: uuidv4(),
+          sessionId,
+          taskId: currentTask.id,
+          milestoneId: currentMilestone.id
+        }
+      };
+      
+      const virtualReplyStart = Date.now();
+      const virtualReplyResult = await virtualLearnerSimulationAgentHandler(agentInput, agentContext);
+      
+      if (!virtualReplyResult.success || !virtualReplyResult.userVisible) {
+        const errorMsg = typeof virtualReplyResult.error === 'string'
+          ? virtualReplyResult.error
+          : virtualReplyResult.error?.message || '学习者回复生成失败';
+        throw new Error(errorMsg);
+      }
+      
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'learning-reply',
+        durationMs: Date.now() - virtualReplyStart,
+        details: {
+          output: {
+            reply: virtualReplyResult.userVisible?.substring(0, 100),
+            currentTask: currentTask.title,
+            currentMilestone: currentMilestone.title
+          }
+        }
+      });
+      
+      let aiResponse = '';
+      let nextTaskIdx = currentTaskIdx + 1;
+      let nextMilestoneIdx = currentMilestoneIdx;
+      let taskCompleted = false;
+      
+      const teachingSessionId = learningState.teachingSessionId;
+      
+      if (teachingSessionId) {
+        try {
+          const aiResponseStart = Date.now();
+          const aiResult = await aiTeachingOrchestrator.processStudentMessage(
+            teachingSessionId,
+            virtualReplyResult.userVisible
+          );
+          
+          aiResponse = aiResult.aiResponse || '';
+          
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'learning-response',
+            durationMs: Date.now() - aiResponseStart,
+            details: {
+              output: {
+                aiResponse: aiResponse?.substring(0, 100),
+                isCompletion: aiResult.isCompletion,
+                cognitiveLevel: aiResult.analysis?.cognitiveLevel
+              }
+            }
+          });
+          
+          if (aiResult.isCompletion) {
+            taskCompleted = true;
+            nextTaskIdx = 0;
+            nextMilestoneIdx = currentMilestoneIdx + 1;
+          }
+        } catch (err: any) {
+          logger.warn('[simulation-orchestrator] AI教学响应失败，使用模拟回复', {
+            sessionId,
+            error: err.message
+          });
+          aiResponse = `好的，我已经理解了。让我们继续下一个任务。`;
+          taskCompleted = true;
+          nextTaskIdx = 0;
+          nextMilestoneIdx = currentMilestoneIdx + 1;
+        }
+      } else {
+        aiResponse = `收到你的回复："${virtualReplyResult.userVisible.substring(0, 50)}..." 让我们继续学习。`;
+        taskCompleted = true;
+      }
+      
+      const isPathCompleted = nextMilestoneIdx >= milestones.length;
+      
+      await this.updateStageResults(sessionId, 'learning', {
+        ...learningState,
+        currentMilestone: isPathCompleted ? currentMilestoneIdx : nextMilestoneIdx,
+        currentTaskIdx: isPathCompleted ? 0 : nextTaskIdx,
+        conversationHistory: [
+          ...(learningState.conversationHistory || []),
+          { role: 'user', content: virtualReplyResult.userVisible },
+          { role: 'assistant', content: aiResponse }
+        ]
+      });
+      
+      if (isPathCompleted) {
+        await this.updateSessionStatus(sessionId, 'completed', 'learning');
+        
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'stage-transition',
+          details: {
+            output: {
+              from: 'learning',
+              to: 'completed',
+              message: '学习路径已完成'
+            }
+          }
+        });
+      }
+      
+      for (const log of logs) {
+        await this.addSessionLog(sessionId, log);
+      }
+      
+      return {
+        success: true,
+        userMessage: virtualReplyResult.userVisible,
+        aiResponse,
+        milestoneProgress: {
+          currentMilestone: nextMilestoneIdx + 1,
+          totalMilestones: milestones.length,
+          currentTask: isPathCompleted ? null : (tasks[nextTaskIdx]?.title || null)
+        },
+        isPathCompleted,
+        logs
+      };
+    } catch (error: any) {
+      const durationMs = Date.now() - startTime;
+      
+      logger.error('[simulation-orchestrator] 学习步骤执行失败', {
+        sessionId,
+        error: error.message,
+        durationMs
+      });
+      
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'error',
+        durationMs,
+        details: {
+          error: error.message
+        }
+      });
+      
+      return {
+        success: false,
+        logs,
+        error: error.message
+      };
+    }
+  }
+
+  async executeAutoLearning(
+    sessionId: string,
+    options: { maxMilestones?: number } = {}
+  ): Promise<{
+    success: boolean;
+    totalSteps?: number;
+    completedMilestones?: number;
+    error?: string;
+  }> {
+    const maxMilestones = options.maxMilestones || 10;
+    
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      
+      if (session.status === 'completed') {
+        return { success: true, totalSteps: 0, completedMilestones: 0 };
+      }
+      
+      if (session.currentStage !== 'learning') {
+        const startResult = await this.startLearningPhase(sessionId);
+        if (!startResult.success) {
+          return { success: false, error: startResult.error };
+        }
+      }
+      
+      let steps = 0;
+      const maxSteps = maxMilestones * 3;
+      
+      for (let i = 0; i < maxSteps; i++) {
+        const stepResult = await this.executeLearningStep(sessionId);
+        steps++;
+        
+        if (stepResult.isPathCompleted) {
+          logger.info('[simulation-orchestrator] 自动学习完成', {
+            sessionId,
+            totalSteps: steps
+          });
+          
+          return {
+            success: true,
+            totalSteps: steps,
+            completedMilestones: maxMilestones
+          };
+        }
+        
+        if (!stepResult.success) {
+          throw new Error(stepResult.error || '学习步骤失败');
+        }
+        
+        if (i % 5 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      return {
+        success: true,
+        totalSteps: steps,
+        completedMilestones: maxMilestones
+      };
+    } catch (error: any) {
+      logger.error('[simulation-orchestrator] 自动学习失败', {
         sessionId,
         error: error.message
       });

@@ -75,6 +75,10 @@ import { pathSceneFraming as pathSceneFramingFn } from './path-scene-framing';
 export { stageDesignerDefinition } from './stage-designer';
 import { stageDesigner as stageDesignerFn } from './stage-designer';
 
+// 动态引导文案
+export { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
+import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './adaptive-guidance-copy';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -97,6 +101,7 @@ import { smartSearchDefinition } from './smart-search';
 import { labelGeneratorDefinition } from './label-generator';
 import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
+import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   pdfParserDefinition,
@@ -115,7 +120,8 @@ export const allSkillDefinitions: SkillDefinition[] = [
   smartSearchDefinition,
   labelGeneratorDefinition,
   pathSceneFramingDefinition,
-  stageDesignerDefinition
+  stageDesignerDefinition,
+  adaptiveGuidanceCopyDefinition
 ];
 
 // Skill 名称映射
@@ -136,7 +142,8 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'smart-search': smartSearchFn,
   'label-generator': labelGeneratorFn,
   'path-scene-framing': pathSceneFramingFn,
-  'stage-designer': stageDesignerFn
+  'stage-designer': stageDesignerFn,
+  'adaptive-guidance-copy': adaptiveGuidanceCopyFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';

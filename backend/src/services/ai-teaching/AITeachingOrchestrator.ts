@@ -78,6 +78,253 @@ function parseSessionArtifacts(teachingState: Record<string, any> | null | undef
   return teachingState?.sessionArtifacts || {};
 }
 
+type LearnStage = 'opening' | 'teaching' | 'intervention' | 'checkpoint' | 'wrapup';
+
+function mapOpeningModeToStage(openingMode: string | null | undefined): LearnStage {
+  return openingMode ? 'opening' : 'opening';
+}
+
+function dedupeStringList(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => typeof value === 'string' ? value.trim() : '').filter(Boolean)));
+}
+
+function getLatestUserMessage(messages: TeachingSessionMessage[]): string {
+  return [...messages].reverse().find((message) => message.role === 'user' && message.content?.trim())?.content || '';
+}
+
+function buildPathBackgroundContext(context: TeachingScenarioContext) {
+  return {
+    pathPosition: {
+      pathTitle: context.pathContext.pathTitle || context.teachingProjection.pathContext.pathTitle,
+      pathSummary: context.pathContext.pathSummary || context.teachingProjection.pathContext.pathSummary || null,
+      currentMilestoneTitle: context.teachingProjection.pathContext.currentMilestoneTitle,
+      currentStageNumber: context.teachingProjection.pathContext.currentStageNumber,
+      currentTaskOrder: context.teachingProjection.pathContext.currentTaskOrder,
+      totalTasksInMilestone: context.teachingProjection.pathContext.totalTasksInMilestone,
+    },
+    taskIntent: {
+      subject: context.subject,
+      topic: context.topic,
+      taskTitle: context.taskTitle,
+      taskDescription: context.taskDescription,
+      acceptanceCriteria: context.currentTaskContext.acceptanceCriteria,
+      taskType: context.taskType,
+      taskGoal: context.cognitiveFrame.targetRelation,
+      milestoneIntent: context.cognitiveFrame.milestoneIntent,
+      transferGoal: context.cognitiveFrame.transferGoal,
+    },
+    knowledgeBoundary: {
+      primaryConcepts: context.taskKnowledgeScope.primaryConcepts,
+      prerequisiteConcepts: context.taskKnowledgeScope.prerequisiteConcepts,
+      learningObjectives: context.taskProfile.learningObjectives,
+      coreConcept: context.taskProfile.coreConcept,
+    },
+    cognitiveFrame: context.cognitiveFrame,
+    teachingGuidance: context.teachingStrategyGuidance,
+  };
+}
+
+function buildLearnerStateContext(
+  context: TeachingScenarioContext,
+  teachingState: Record<string, any> | null | undefined,
+  latestAnalysis?: any,
+) {
+  const previous = teachingState?.learnerStateContext || {};
+  return {
+    currentUnderstanding: latestAnalysis?.understanding ?? previous.currentUnderstanding ?? null,
+    currentCognitiveLevel: latestAnalysis?.cognitiveLevel || previous.currentCognitiveLevel || null,
+    currentConfusionPoints: latestAnalysis?.confusionPoints || previous.currentConfusionPoints || [],
+    emotionalState: latestAnalysis?.emotionalState || previous.emotionalState || null,
+    engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
+    recentTrend: context.teachingProjection.liveState.recentTrend,
+    recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
+    confidenceLevel: context.teachingProjection.stableProfile.confidenceLevel,
+    preferredStyle: context.teachingProjection.stableProfile.preferredStyle,
+    struggleDetected: previous.struggleDetected === true,
+  };
+}
+
+function buildTeachingControlContext(
+  stage: LearnStage,
+  context: TeachingScenarioContext,
+  learnerStateContext: Record<string, any>,
+  sessionArtifacts: Record<string, any>,
+) {
+  const canTriggerPeer = stage === 'intervention' || learnerStateContext.struggleDetected === true;
+  return {
+    priority: stage === 'opening'
+      ? '定位首个焦点知识点'
+      : stage === 'intervention'
+        ? '先脱离卡点并恢复推进'
+        : stage === 'checkpoint'
+          ? '验证当前知识点是否真正建立'
+          : stage === 'wrapup'
+            ? '收束当前课堂并准备评估'
+            : '围绕当前焦点知识点继续推进',
+    recommendedApproach: context.teachingProjection.teachingHints.recommendedApproach,
+    targetDepth: context.teachingStrategyGuidance.targetDepth,
+    allowPrerequisiteRecovery: true,
+    allowPeerSupport: canTriggerPeer,
+    allowCheckpoint: stage === 'checkpoint' || stage === 'teaching',
+    nearWrapup: sessionArtifacts.endReason === 'completion-candidate' || stage === 'wrapup',
+  };
+}
+
+function buildClassroomEvent(
+  type: string,
+  summary: string,
+  payload: Record<string, any> = {},
+) {
+  return {
+    type,
+    summary,
+    occurredAt: new Date().toISOString(),
+    payload,
+  };
+}
+
+function detectEndIntent(message: string) {
+  const text = (message || '').trim();
+  if (!text) return { isEndIntent: false, reason: '' };
+
+  const patterns = [
+    /结束(本节|这节|课程|课堂|学习)/,
+    /到此结束/,
+    /现在结束/,
+    /请.*结束/,
+    /标记.*结束/,
+    /本节课结束/,
+    /停止学习/,
+    /不学了/,
+    /结束吧/,
+  ];
+
+  if (patterns.some((pattern) => pattern.test(text))) {
+    return { isEndIntent: true, reason: '检测到显式结束课堂意图' };
+  }
+
+  return { isEndIntent: false, reason: '' };
+}
+
+function determineNextStage(params: {
+  currentStage: LearnStage;
+  teachingOutput: TeachingTurnOutput;
+  peerTriggered: boolean;
+  learnerMessage: string;
+}): { stage: LearnStage; reason: string } {
+  const { currentStage, teachingOutput, peerTriggered, learnerMessage } = params;
+  const understanding = Number(teachingOutput.analysis?.understanding ?? 0.5);
+  const emotion = teachingOutput.analysis?.emotionalState;
+  const confusionPoints = Array.isArray(teachingOutput.analysis?.confusionPoints)
+    ? teachingOutput.analysis.confusionPoints
+    : [];
+  const completionCandidate = teachingOutput.control?.isCompletionCandidate === true;
+
+  if (completionCandidate) {
+    return { stage: 'checkpoint', reason: '检测到完成候选，先进入检核确认' };
+  }
+
+  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2) {
+    return { stage: 'intervention', reason: '学生出现明显卡点，进入干预阶段' };
+  }
+
+  if (currentStage === 'opening' && learnerMessage.trim()) {
+    return { stage: 'teaching', reason: '已完成开场定位，进入正常推进' };
+  }
+
+  if (currentStage === 'intervention' && understanding >= 0.5) {
+    return { stage: 'teaching', reason: '卡点已缓解，回到授课推进' };
+  }
+
+  if (currentStage === 'checkpoint' && understanding < 0.5) {
+    return { stage: 'teaching', reason: '检核信号不足，回到授课推进' };
+  }
+
+  return { stage: currentStage === 'opening' ? 'teaching' : currentStage, reason: '保持当前教学推进阶段' };
+}
+
+function buildClassroomContext(params: {
+  previousState: Record<string, any> | null | undefined;
+  stage: LearnStage;
+  stageReason: string;
+  teachingOutput?: TeachingTurnOutput | null;
+  learnerMessage: string;
+  context: TeachingScenarioContext;
+  knowledgeState: TeachingKnowledgePointState[];
+  learnerStateContext: Record<string, any>;
+  peerTriggered?: boolean;
+  peerMessage?: string;
+}) {
+  const {
+    previousState,
+    stage,
+    stageReason,
+    teachingOutput,
+    learnerMessage,
+    context,
+    knowledgeState,
+    learnerStateContext,
+    peerTriggered,
+  } = params;
+  const previousClassroom = previousState?.classroomContext || {};
+  const currentFocus = teachingOutput?.knowledge?.currentPoint
+    || previousClassroom?.focus?.currentKnowledgePoint
+    || knowledgeState.find((point) => point.status === 'learning')?.name
+    || knowledgeState[0]?.name
+    || context.taskProfile.coreConcept
+    || null;
+  const progressed = knowledgeState.filter((point) => point.progress > 0).map((point) => point.name);
+  const pending = knowledgeState.filter((point) => point.status === 'pending').map((point) => point.name);
+  const recovering = knowledgeState.filter((point) => point.status === 'review').map((point) => point.name);
+  const mastered = knowledgeState.filter((point) => point.status === 'mastered').map((point) => point.name);
+  const confusionPoints = learnerStateContext.currentConfusionPoints || [];
+
+  return {
+    stage: {
+      current: stage,
+      goal: stage === 'opening'
+        ? '完成本节课切入点定位'
+        : stage === 'intervention'
+          ? '先处理当前卡点并恢复可推进状态'
+          : stage === 'checkpoint'
+            ? '验证当前焦点知识点是否真正建立'
+            : stage === 'wrapup'
+              ? '完成课堂收束并准备课后评估'
+              : '围绕焦点知识点继续推进理解与应用',
+      reason: stageReason,
+    },
+    focus: {
+      currentKnowledgePoint: currentFocus,
+      linkedTaskGoal: context.cognitiveFrame.targetRelation,
+      latestLearnerMessage: learnerMessage,
+    },
+    progress: {
+      progressedKnowledgePoints: dedupeStringList(progressed),
+      pendingKnowledgePoints: dedupeStringList(pending),
+      recoveringKnowledgePoints: dedupeStringList(recovering),
+      initiallyMasteredKnowledgePoints: dedupeStringList(mastered),
+    },
+    risk: {
+      confusionPoints,
+      emotionalState: learnerStateContext.emotionalState || null,
+      engagement: learnerStateContext.engagement ?? null,
+      struggleDetected: learnerStateContext.struggleDetected === true,
+      peerSupportActive: peerTriggered === true,
+    },
+    nextStep: {
+      suggestedAction: stage === 'opening'
+        ? '继续定位首个焦点知识点'
+        : stage === 'intervention'
+          ? '先降阶讲解或触发伴学'
+          : stage === 'checkpoint'
+            ? '组织验证性追问或小检核'
+            : stage === 'wrapup'
+              ? '准备结束课堂并进入评估'
+              : '继续围绕焦点知识点推进',
+    },
+  };
+}
+
 function buildTeachingStateWithArtifacts(
   teachingState: Record<string, any> | null | undefined,
   sessionArtifacts: Record<string, any>
@@ -86,6 +333,20 @@ function buildTeachingStateWithArtifacts(
     ...(teachingState || {}),
     sessionArtifacts,
   };
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(errorMessage)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function computeEffectiveDurationMinutes(session: TeachingSessionRecord) {
@@ -222,6 +483,20 @@ function buildTeachingTurnInput(
   context: TeachingScenarioContext
 ): TeachingTurnInput {
   const compression = teachingContextCompressionService.compress(session.messages);
+  const teachingState = session.teachingState || {};
+  const classroomContext = teachingState.classroomContext || {};
+  const learnerStateContext = teachingState.learnerStateContext || buildLearnerStateContext(context, teachingState);
+  const teachingControlContext = teachingState.teachingControlContext || buildTeachingControlContext(
+    (classroomContext?.stage?.current as LearnStage) || 'opening',
+    context,
+    learnerStateContext,
+    parseSessionArtifacts(teachingState),
+  );
+  const classroomEventContext = {
+    recentEvents: Array.isArray(teachingState.classroomEventHistory)
+      ? teachingState.classroomEventHistory.slice(-5)
+      : [],
+  };
 
   return {
     messages: compression.messages,
@@ -232,6 +507,8 @@ function buildTeachingTurnInput(
       taskDescription: context.taskDescription,
       taskType: context.taskType,
       taskProfile: context.taskProfile,
+      currentTaskContext: context.currentTaskContext,
+      cognitiveFrame: context.cognitiveFrame,
       teachingStrategyGuidance: context.teachingStrategyGuidance,
       pathTitle: context.teachingProjection.pathContext.pathTitle,
       pathSummary: context.teachingProjection.pathContext.pathSummary,
@@ -240,6 +517,7 @@ function buildTeachingTurnInput(
       currentTaskOrder: context.teachingProjection.pathContext.currentTaskOrder,
       totalTasksInMilestone: context.teachingProjection.pathContext.totalTasksInMilestone,
       taskKnowledgeScope: context.taskKnowledgeScope,
+      pathBackgroundContext: buildPathBackgroundContext(context),
       contextCompression: compression.compressed ? {
         enabled: true,
         estimatedTokens: compression.estimatedTokens,
@@ -251,12 +529,20 @@ function buildTeachingTurnInput(
       profile: context.userProfile,
       currentState: context.learningState,
       projection: context.teachingProjection,
+      learnerStateContext,
     },
+    classroomContext,
+    classroomEventContext,
+    visibleDialogueContext: session.messages.map((item) => ({
+      role: item.role,
+      content: item.content,
+    })),
     knowledge: {
       points: session.knowledgeState,
     },
     controls: {
       mode: session.mode as TeachingMode,
+      teachingControlContext,
     }
   };
 }
@@ -308,6 +594,14 @@ function filterTaskScopedKnowledgePoints(
 
 function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
   return agentOutput?.internal?.ext?.teaching as TeachingTurnOutput;
+}
+
+function extractPeerDebug(agentOutput: any) {
+  return agentOutput?.internal?.ext?.peer || null;
+}
+
+function extractTeachingPromptDebug(agentOutput: any) {
+  return agentOutput?.internal?.ext?.promptDebug || null;
 }
 
 export class AITeachingOrchestrator {
@@ -400,8 +694,64 @@ export class AITeachingOrchestrator {
       knowledgeState: context.previousSession?.knowledgePoints || [],
       teachingState: {
         ...(context.learningState || {}),
+        learnerStateContext: buildLearnerStateContext(context, null, {
+          cognitiveLevel: null,
+          understanding: null,
+          confusionPoints: [],
+          emotionalState: null,
+          engagement: null,
+        }),
+        classroomContext: {
+          stage: {
+            current: mapOpeningModeToStage(opening.mode),
+            goal: '完成本节课切入点定位',
+            reason: '新课堂启动，进入开场定位',
+          },
+          focus: {
+            currentKnowledgePoint: null,
+            linkedTaskGoal: context.cognitiveFrame.targetRelation,
+            latestLearnerMessage: '',
+          },
+          progress: {
+            progressedKnowledgePoints: [],
+            pendingKnowledgePoints: [],
+            recoveringKnowledgePoints: [],
+            initiallyMasteredKnowledgePoints: [],
+          },
+          risk: {
+            confusionPoints: [],
+            emotionalState: null,
+            engagement: null,
+            struggleDetected: false,
+            peerSupportActive: false,
+          },
+          nextStep: {
+            suggestedAction: '通过开场交互确认学生切入点',
+          },
+        },
+        classroomEventHistory: [
+          buildClassroomEvent('session-started', '课堂已开始，进入开场定位', {
+            openingMode: opening.mode,
+            taskTitle: context.taskTitle,
+          }),
+        ],
+        stageHistory: [
+          {
+            stage: mapOpeningModeToStage(opening.mode),
+            reason: '新课堂启动，进入开场定位',
+            enteredAt: new Date().toISOString(),
+          },
+        ],
+        teachingControlContext: buildTeachingControlContext(
+          mapOpeningModeToStage(opening.mode),
+          context,
+          buildLearnerStateContext(context, null),
+          {},
+        ),
         sessionArtifacts: {
           initialKnowledgeState: context.previousSession?.knowledgePoints || [],
+          pathBackgroundContext: buildPathBackgroundContext(context),
+          endReason: null,
         },
       },
     });
@@ -434,11 +784,13 @@ export class AITeachingOrchestrator {
         && context.teachingProjection.liveState.recommendedPacing !== 'slow'
         ? 'predict'
         : 'self-assess';
-    const response = await gateway.execute({
-      messages: [
-        {
-          role: 'system',
-          content: `你是一位经验丰富的 AI 教师。请为本节课生成一个“开场交互块”，输出严格 JSON。
+    let response: any = null;
+    try {
+      response = await withTimeout(gateway.execute({
+        messages: [
+          {
+            role: 'system',
+            content: `你是一位经验丰富的 AI 教师。请为本节课生成一个“开场交互块”，输出严格 JSON。
 
 格式：
 {
@@ -477,12 +829,21 @@ export class AITeachingOrchestrator {
             },
             openingMode,
           })
-        }
-      ]
-    }, caller, { userId: context.userId });
+          }
+        ]
+      }, caller, { userId: context.userId }), 8000, 'OPENING_GENERATION_TIMEOUT');
+    } catch (error) {
+      logger.error('[AITeaching] 开场交互块生成失败，已中止会话启动', {
+        error: error instanceof Error ? error.message : String(error),
+        userId: context.userId,
+        taskId: context.taskId,
+        topic: context.topic,
+      });
+      throw error instanceof Error ? error : new Error(String(error));
+    }
 
     try {
-      const content = response.choices[0]?.message.content || '{}';
+      const content = response?.choices?.[0]?.message?.content || '{}';
       const parsed = JSON.parse(content);
       const quickReplies = Array.isArray(parsed?.quickReplies)
         ? parsed.quickReplies
@@ -499,26 +860,24 @@ export class AITeachingOrchestrator {
           mode: openingMode,
         };
       }
-    } catch {
-      // ignore and use fallback
+    } catch (error) {
+      logger.error('[AITeaching] 开场交互块解析失败，已中止会话启动', {
+        error: error instanceof Error ? error.message : String(error),
+        userId: context.userId,
+        taskId: context.taskId,
+        topic: context.topic,
+        rawContent: response?.choices?.[0]?.message?.content || null,
+      });
+      throw error instanceof Error ? error : new Error(String(error));
     }
 
-    const fallbackQuickReplies = openingMode === 'predict'
-      ? [{ text: '我先猜一下' }, { text: '先给我一个例子' }, { text: '我会一点' }]
-      : openingMode === 'example-first'
-        ? [{ text: '先给我一个最小例子' }, { text: '一步步带我做' }, { text: '我想先自己试试' }]
-        : [{ text: '我完全不会' }, { text: '我知道一点' }, { text: '直接开始吧' }];
-
-    return {
-      message: `这节我们聚焦 **${context.topic}**，我会结合你当前的学习状态，用尽量顺手的方式带你进入这个任务。`,
-      question: openingMode === 'predict'
-        ? '开始前，你想先猜一下这题/这个概念会怎么走，还是先看一个例子？'
-        : openingMode === 'example-first'
-          ? '开始前，你更希望我先给一个最小例子，还是一步一步带你拆开？'
-          : '开始前，你觉得自己对这块是完全陌生、知道一点，还是已经做过类似内容？',
-      quickReplies: fallbackQuickReplies,
-      mode: openingMode,
-    };
+    logger.error('[AITeaching] 开场交互块缺少有效结构，已中止会话启动', {
+      userId: context.userId,
+      taskId: context.taskId,
+      topic: context.topic,
+      rawContent: response?.choices?.[0]?.message?.content || null,
+    });
+    throw new Error('OPENING_GENERATION_INVALID');
   }
 
   async processStudentMessage(
@@ -534,6 +893,16 @@ export class AITeachingOrchestrator {
     currentState: LearningStateMetrics;
     peerTriggered: boolean;
     peerMessage?: string;
+    promptDebug?: any;
+    peerDebug?: any;
+    autoEnded?: boolean;
+    wrapup?: SessionWrapupArtifact & {
+      stateUpdate: LearningStateMetrics | null;
+      duration: number;
+      summarySource: 'model' | 'fallback';
+      evaluationSource: 'model' | 'ai-fallback' | 'failed';
+    };
+    advisory?: ReplanAdvisory;
   }> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.status !== 'active') {
@@ -541,6 +910,7 @@ export class AITeachingOrchestrator {
     }
 
     const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+    const endIntent = detectEndIntent(message);
 
     const updatedMessages = appendTimestamp([
       ...session.messages,
@@ -561,17 +931,168 @@ export class AITeachingOrchestrator {
     }
 
     const rawTeachingOutput = extractTeachingOutput(turnResult);
+    const promptDebug = extractTeachingPromptDebug(turnResult);
     const teachingOutput = filterTaskScopedKnowledgePoints(context, rawTeachingOutput, session.knowledgeState);
     const mergedKnowledge = knowledgeStateService.merge(
       session.knowledgeState.filter((point) => isTaskScopedKnowledgePoint(point.name, buildTaskKnowledgeCandidates(context, teachingOutput.knowledge.currentPoint))),
       teachingOutput.knowledge.points
     );
+    const previousTeachingState = session.teachingState || {};
+    const previousClassroomStage = (previousTeachingState.classroomContext?.stage?.current as LearnStage) || 'opening';
     const peerTriggered = peerTriggerService.shouldTrigger(session, teachingOutput, message);
+    let peerMessage: string | undefined;
+    let peerDebug: any = null;
+
+    if (peerTriggered) {
+      const peerInput = {
+        topic: session.topic,
+        strategy: 'feynman' as const,
+        studentMessage: message,
+        tutorContext: updatedMessages.slice(-6).map((item) => ({
+          role: item.role,
+          content: item.content,
+        })),
+        cognitiveLevel: teachingOutput.analysis.cognitiveLevel,
+        understanding: teachingOutput.analysis.understanding,
+      };
+      const peerResult = await peerAgentHandler(peerInput, {
+        userId: session.userId,
+        sessionId: session.id,
+      });
+
+      if (peerResult.success) {
+        peerMessage = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
+        peerDebug = extractPeerDebug(peerResult);
+      }
+    }
+
+    const nextStageDecision = determineNextStage({
+      currentStage: previousClassroomStage,
+      teachingOutput,
+      peerTriggered,
+      learnerMessage: message,
+    });
+    const learnerStateContext = buildLearnerStateContext(context, previousTeachingState, {
+      ...teachingOutput.analysis,
+      struggleDetected: nextStageDecision.stage === 'intervention',
+    });
+    learnerStateContext.struggleDetected = nextStageDecision.stage === 'intervention';
+
+    const classroomContext = buildClassroomContext({
+      previousState: previousTeachingState,
+      stage: nextStageDecision.stage,
+      stageReason: nextStageDecision.reason,
+      teachingOutput,
+      learnerMessage: message,
+      context,
+      knowledgeState: mergedKnowledge,
+      learnerStateContext,
+      peerTriggered,
+      peerMessage,
+    });
+
+    const classroomEvents = Array.isArray(previousTeachingState.classroomEventHistory)
+      ? [...previousTeachingState.classroomEventHistory]
+      : [];
+
+    classroomEvents.push(buildClassroomEvent('teaching-turn', nextStageDecision.reason, {
+      stage: nextStageDecision.stage,
+      focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
+      learnerMessage: message,
+      confusionPoints: learnerStateContext.currentConfusionPoints || [],
+      peerTriggered,
+      endIntent: endIntent.isEndIntent,
+    }));
+
+    if (endIntent.isEndIntent) {
+      classroomEvents.push(buildClassroomEvent('end-intent', endIntent.reason, {
+        learnerMessage: message,
+      }));
+    }
+
+    if (peerTriggered) {
+      classroomEvents.push(buildClassroomEvent('peer-support', '本轮触发伴学支持', {
+        peerMessage: peerMessage || null,
+      }));
+    }
+
+    if (teachingOutput.control.isCompletionCandidate) {
+      classroomEvents.push(buildClassroomEvent('completion-candidate', '本轮出现课堂完成候选信号', {
+        focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
+      }));
+    }
+
+    const stageHistory = Array.isArray(previousTeachingState.stageHistory)
+      ? [...previousTeachingState.stageHistory]
+      : [];
+    const lastStage = stageHistory[stageHistory.length - 1];
+    if (!lastStage || lastStage.stage !== nextStageDecision.stage) {
+      stageHistory.push({
+        stage: nextStageDecision.stage,
+        reason: nextStageDecision.reason,
+        enteredAt: new Date().toISOString(),
+      });
+    }
+
+    const sessionArtifacts = parseSessionArtifacts(previousTeachingState);
+    const teachingControlContext = buildTeachingControlContext(
+      nextStageDecision.stage,
+      context,
+      learnerStateContext,
+      {
+        ...sessionArtifacts,
+        endReason: endIntent.isEndIntent
+          ? 'learner-requested-end'
+          : teachingOutput.control.isCompletionCandidate
+            ? 'completion-candidate'
+            : sessionArtifacts.endReason,
+      },
+    );
+
+    const learnDebug = {
+      input: {
+        pathBackgroundContext: buildPathBackgroundContext(context),
+        classroomContext,
+        learnerStateContext,
+        classroomEventContext: {
+          recentEvents: classroomEvents.slice(-5),
+        },
+        visibleDialogueContext: session.messages.map((item) => ({
+          role: item.role,
+          content: item.content,
+        })).concat([{ role: 'user', content: message }]),
+        teachingControlContext,
+      },
+      output: {
+        stageDecision: nextStageDecision,
+        classroomContext,
+        learnerStateContext,
+        knowledgeState: normalizeKnowledgePoints(mergedKnowledge),
+        auxiliaryActions: {
+          peerTriggered,
+          completionCandidate: teachingOutput.control.isCompletionCandidate,
+          autoEndRequested: endIntent.isEndIntent,
+        },
+        completionCandidateEvidence: teachingOutput.control.completionCandidateEvidence || null,
+      },
+    };
+
+    if (promptDebug && typeof promptDebug === 'object') {
+      promptDebug.learnDebug = learnDebug;
+    }
+
     const assistantMessage: TeachingSessionMessage = {
       role: 'assistant',
       content: teachingOutput.reply,
       timestamp: new Date().toISOString(),
       analysis: teachingOutput.analysis,
+      strategies: teachingOutput.pedagogy.strategies,
+      knowledgePoint: teachingOutput.knowledge.currentPoint,
+      knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
+      promptDebug,
+      peerTriggered,
+      peerMessage: peerMessage || null,
+      peerDebug,
     };
 
     const persistedMessages = [...updatedMessages, assistantMessage];
@@ -591,7 +1112,19 @@ export class AITeachingOrchestrator {
       strategies: teachingOutput.pedagogy.strategies,
       completionCandidate: teachingOutput.control.isCompletionCandidate,
       peerTriggered,
-      sessionArtifacts: parseSessionArtifacts(session.teachingState),
+      learnerStateContext,
+      classroomContext,
+      classroomEventHistory: classroomEvents.slice(-40),
+      stageHistory,
+      teachingControlContext,
+      sessionArtifacts: {
+        ...parseSessionArtifacts(session.teachingState),
+        endReason: endIntent.isEndIntent
+          ? 'learner-requested-end'
+          : teachingOutput.control.isCompletionCandidate
+            ? 'completion-candidate'
+            : parseSessionArtifacts(session.teachingState).endReason,
+      },
     };
 
     await teachingSessionRepository.updateTurnState(sessionId, {
@@ -602,7 +1135,7 @@ export class AITeachingOrchestrator {
 
     await learningService.markTaskInProgress(session.taskId, session.userId);
 
-    return {
+    const baseResult = {
       analysis: teachingOutput.analysis,
       aiResponse: teachingOutput.reply,
       strategies: teachingOutput.pedagogy.strategies,
@@ -611,8 +1144,22 @@ export class AITeachingOrchestrator {
       isCompletion: teachingOutput.control.isCompletionCandidate,
       currentState,
       peerTriggered,
-      peerMessage: undefined,
+      peerMessage,
+      promptDebug,
+      peerDebug,
     };
+
+    if (endIntent.isEndIntent) {
+      const ended = await this.endSession(sessionId);
+      return {
+        ...baseResult,
+        autoEnded: true,
+        wrapup: ended.wrapup,
+        advisory: ended.advisory,
+      };
+    }
+
+    return baseResult;
   }
 
   async endSession(sessionId: string): Promise<{
@@ -631,6 +1178,13 @@ export class AITeachingOrchestrator {
 
     const durationMinutes = computeEffectiveDurationMinutes(session);
     const sessionArtifacts = parseSessionArtifacts(session.teachingState);
+    const classroomEventHistory = Array.isArray(session.teachingState?.classroomEventHistory)
+      ? session.teachingState?.classroomEventHistory
+      : [];
+    const finalClassroomContext = session.teachingState?.classroomContext || null;
+    const stageHistory = Array.isArray(session.teachingState?.stageHistory)
+      ? session.teachingState?.stageHistory
+      : [];
     const initialKnowledgeState = Array.isArray(sessionArtifacts.initialKnowledgeState)
       ? sessionArtifacts.initialKnowledgeState
       : [];
@@ -668,6 +1222,13 @@ export class AITeachingOrchestrator {
         delta: knowledgeDelta,
       },
       sessionEvidence,
+      sessionStructure: {
+        pathBackground: sessionArtifacts.pathBackgroundContext || null,
+        finalClassroomContext,
+        classroomEventHistory,
+        stageHistory,
+        endReason: sessionArtifacts.endReason || 'manual-end',
+      },
     });
 
     const wrapupArtifact = toWrapupArtifact(wrapupResult, {
@@ -695,6 +1256,13 @@ export class AITeachingOrchestrator {
         delta: knowledgeDelta,
       },
       sessionEvidence,
+      sessionStructure: {
+        pathBackground: sessionArtifacts.pathBackgroundContext || null,
+        finalClassroomContext,
+        classroomEventHistory,
+        stageHistory,
+        endReason: sessionArtifacts.endReason || 'manual-end',
+      },
     });
 
     const evaluationResult = wrapupResult.evaluation

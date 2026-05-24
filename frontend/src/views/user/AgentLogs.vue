@@ -24,10 +24,8 @@
         <el-form-item label="Agent">
           <el-select v-model="filters.agentId" placeholder="全部" clearable>
             <el-option label="Path Agent" value="path-agent" />
-            <el-option label="Content Agent" value="content-agent" />
             <el-option label="AI Teaching Agent" value="ai-teaching-agent" />
-            <el-option label="Progress Agent" value="progress-agent" />
-            <el-option label="Learner Model Agent" value="learner-model-agent" />
+            <el-option label="Learner State Hub" value="learner-model-agent" />
           </el-select>
         </el-form-item>
         <el-form-item label="能力类型">
@@ -534,7 +532,6 @@ const formatAgentId = (logOrAgentId: any) => {
     'goal-conversation-agent': '目标对话',
     'ai-teaching-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
-    'progress-agent': '进度追踪',
     'learner-model-agent': '学习者模型',
     'course-design': '课程设计',
     'system-call': '平台底层调用'
@@ -575,10 +572,8 @@ const getCapabilityType = (agentId: string) => {
   const mapping: Record<string, string> = {
     'goal-conversation-agent': 'goal',
     'path-agent': 'path',
-    'content-agent-v5': 'teaching',
     'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
-    'progress-agent': 'tracking',
     'learner-model-agent': 'profile',
     'unknown': 'system',
     'system-call': 'system'

@@ -113,7 +113,7 @@ export interface SimulationAgentOutput extends AgentOutput {
 
 export interface SimulationLogEntry {
   timestamp: string;
-  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'error';
+  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'learning-reply' | 'learning-response' | 'learning-start' | 'error';
   durationMs?: number;
   details: {
     input?: any;

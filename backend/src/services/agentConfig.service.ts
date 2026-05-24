@@ -6,7 +6,7 @@
 
 import { logger } from '../utils/logger';
 import { prisma } from '../config/database';
-import { AgentLogger } from '../utils/agent-logger';
+import { LearningAgentLogger } from '../utils/learning-agent-logger';
 import { agentAlerts } from '../utils/agent-alerts';
 
 export interface PromptConfig {
@@ -85,7 +85,7 @@ export class AgentConfigService {
       });
 
       // 同时记录到日志系统
-      AgentLogger.logPerformance({
+      LearningAgentLogger.logPerformance({
         agentId: metrics.agentId,
         action: 'prompt_execution',
         duration: metrics.duration,
@@ -212,7 +212,7 @@ export class AgentConfigService {
     selectedStrategy: string;
     strategyReason: string;
   }): void {
-    AgentLogger.logStrategySelection({
+      LearningAgentLogger.logStrategySelection({
       userId: data.userId,
       sessionId: data.sessionId,
       studentState: data.studentState,
@@ -234,7 +234,7 @@ export class AgentConfigService {
     qualityScore: number;
     tokensUsed?: number;
   }): void {
-    AgentLogger.logContentGeneration({
+      LearningAgentLogger.logContentGeneration({
       userId: data.userId,
       sessionId: data.sessionId,
       strategy: data.strategy,
@@ -256,7 +256,7 @@ export class AgentConfigService {
     stack?: string;
     errorCode?: string;
   }): void {
-    AgentLogger.logError({
+      LearningAgentLogger.logError({
       userId: data.userId,
       sessionId: data.sessionId,
       error: data.error,

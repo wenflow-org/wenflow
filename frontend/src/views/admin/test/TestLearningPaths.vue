@@ -162,12 +162,16 @@
 
                 <template v-else-if="getPathDisplayState(path) === 'attention'">
                   <div class="path-overview-card__status-row">
-                    <span class="path-state-pill path-state-pill--failed">待重试</span>
+                    <span class="path-state-pill path-state-pill--failed">{{ getAttentionStateLabel(path) }}</span>
                   </div>
                   <strong>{{ getPathTitle(path) }}</strong>
                   <p>{{ getFailureCopy(path) }}</p>
+                  <div v-if="getFailureHint(path)" class="path-overview-card__failure-hint">
+                    {{ getFailureHint(path) }}
+                  </div>
                   <div class="path-overview-card__actions-row">
                     <button type="button" class="btn btn-ghost" :disabled="retryingPathId === path.id || batchRegenerating" @click="retryPathGeneration(path)">{{ getRetryButtonLabel(path) }}</button>
+                    <button v-if="canRegeneratePath(path)" type="button" class="btn btn-ghost" :disabled="batchRegenerating" @click="confirmRegenerate(path)">重新生成路径</button>
                     <button type="button" class="btn btn-ghost" :disabled="batchRegenerating" @click="confirmDelete(path)">删除</button>
                   </div>
                 </template>
@@ -491,6 +495,17 @@ const canRetryEnrichment = (path: any) => {
   return false;
 };
 
+const getFailureType = (path: any): 'core' | 'stage-design' | null => {
+  if (canRetryEnrichment(path)) return 'stage-design';
+  if (path?.status === 'failed') return 'core';
+  if (path?.status === 'generating' && isPathTimeout(path)) return 'core';
+  return null;
+};
+
+const canRegeneratePath = (path: any) => {
+  return path?.status === 'active';
+};
+
 const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
 const getPathSummary = (path: any) => path.summary || path.description || '这里会显示路径摘要。';
 const getPathStages = (path: any) => path?.milestones || path?.weeks || [];
@@ -623,6 +638,10 @@ const getPathProgress = (path: any) => {
 };
 
 const getFailureCopy = (path: any) => {
+  const failureType = getFailureType(path);
+  if (failureType === 'stage-design') {
+    return path.learningBlockedReason || path.description || '路径骨架已经完成，但阶段任务层没有成功产出，可以先局部补跑。';
+  }
   if (path.status === 'generating' && isPathTimeout(path)) {
     return path.description || '这条路径生成时间较长，可以稍后刷新，或直接重试。';
   }
@@ -632,11 +651,29 @@ const getFailureCopy = (path: any) => {
   return path.description || path.summary || '这条路径暂时没有生成成功，可以直接重试。';
 };
 
+const getFailureHint = (path: any) => {
+  const failureType = getFailureType(path);
+  if (failureType === 'stage-design') {
+    return '局部补跑只续跑 Stage Designer；重新生成路径会整条主链重来。';
+  }
+  if (failureType === 'core') {
+    return '这类问题属于路径主链失败，需要重新生成整条路径。';
+  }
+  return '';
+};
+
+const getAttentionStateLabel = (path: any) => {
+  const failureType = getFailureType(path);
+  if (failureType === 'stage-design') return '阶段任务待补跑';
+  if (failureType === 'core') return '路径待重生';
+  return '待处理';
+};
+
 const getRetryActionLabel = (path: any) => {
   if (canRetryEnrichment(path)) {
     return '继续生成阶段任务';
   }
-  return '重试';
+  return '重试整条路径';
 };
 const getRetryButtonLabel = (path: any) => {
   if (retryingPathId.value !== path.id) {
@@ -735,7 +772,7 @@ const goalSceneSteps = computed(() => {
   const path = goalScenePath.value;
   const coreStep = path?.generationStatus?.coreStep;
   const coreStatus = path?.generationStatus?.core;
-  const enrichmentStatus = path?.generationStatus?.enrichment;
+  const enrichmentStatus = path?.generationStatus?.stageDesign;
   return [
     { key: 'framing', label: '方向收敛', active: coreStep === 'framing', done: coreStep !== 'framing' && !!coreStep },
     { key: 'planning', label: '任务拆解', active: coreStep === 'planning', done: coreStep === 'persist' || coreStep === 'completed' || coreStatus === 'succeeded' },
@@ -752,7 +789,7 @@ let pollingInFlight = false;
 let hasShownRateLimitWarning = false;
 
 const hasPollingTargets = (pathList: any[]) => pathList.some((p: any) => {
-  const enrichmentStatus = p?.generationStatus?.enrichment;
+  const enrichmentStatus = p?.generationStatus?.stageDesign;
   return (p.status === 'generating' && !isPathTimeout(p))
     || (p.status === 'active'
       && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing')
@@ -950,7 +987,7 @@ const retryPathGeneration = async (path: any) => {
   try {
     const shouldRetryEnrichment = canRetryEnrichment(path);
     if (shouldRetryEnrichment) {
-      await request.post(`/learning/paths/${path.id}/retry-stage-design`);
+      await learningAPI.retryPathEnrichment(path.id);
       toast.success('已在后台继续生成阶段任务');
     } else {
       await request.patch(`/learning/paths/${path.id}/retry`);

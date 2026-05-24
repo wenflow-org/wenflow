@@ -5,6 +5,13 @@ export interface TeachingSessionMessage {
   content: string;
   timestamp: string;
   analysis?: Record<string, any>;
+  strategies?: string[];
+  knowledgePoint?: string | null;
+  knowledgePoints?: TeachingKnowledgePointState[];
+  promptDebug?: Record<string, any> | null;
+  peerTriggered?: boolean;
+  peerMessage?: string | null;
+  peerDebug?: Record<string, any> | null;
 }
 
 export interface TeachingKnowledgePointState {

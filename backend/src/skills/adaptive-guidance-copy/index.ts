@@ -1,0 +1,200 @@
+/**
+ * Adaptive Guidance Copy Skill
+ *
+ * 根据学习者状态、路径上下文和课后结果，生成面向 Dashboard / Path 页面
+ * 的动态引导文案块。
+ */
+
+import { SkillDefinition, SkillExecutionResult } from '../protocol';
+import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+
+export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
+  name: 'adaptive-guidance-copy',
+  displayName: '动态引导文案生成器',
+  version: '1.0.0',
+  category: 'generation',
+  description: '根据学习者状态与路径上下文生成 Dashboard / Path 页面引导文案',
+  status: 'working',
+
+  inputSchema: {
+    type: 'object',
+    properties: {
+      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail', required: true },
+      learnerSnapshot: { type: 'object', description: '学习者快照', required: true },
+      learningState: { type: 'object', description: '学习状态', required: true },
+      path: { type: 'object', description: '路径上下文' },
+      sessionWrapup: { type: 'object', description: '最近课程总结' },
+      advisory: { type: 'object', description: '路径建议' },
+    }
+  },
+
+  outputSchema: {
+    type: 'object',
+    properties: {
+      headline: { type: 'string', description: '页面主标题/主引导' },
+      subtitle: { type: 'string', description: '页面副标题/说明' },
+      todayActions: { type: 'array', description: '今日建议动作' },
+      pathHint: { type: 'string', description: '当前路径提示' },
+      nextStep: { type: 'string', description: '下一步建议' },
+      paceHint: { type: 'string', description: '节奏提示' },
+      emptyStateCopy: { type: 'string', description: '空状态文案' },
+      warningCopy: { type: 'string', description: '风险/提醒文案' }
+    }
+  },
+
+  capabilities: ['adaptive-copy', 'dashboard-copy', 'path-copy', 'learning-guidance'],
+
+  stats: {
+    callCount: 0,
+    successRate: 0,
+    avgLatency: 0
+  }
+};
+
+export interface AdaptiveGuidanceCopyInput {
+  view: 'dashboard' | 'path-list' | 'path-detail';
+  learnerSnapshot: any;
+  learningState: any;
+  path?: any;
+  sessionWrapup?: any;
+  advisory?: any;
+}
+
+export interface AdaptiveGuidanceCopyOutput {
+  headline: string;
+  subtitle: string;
+  todayActions: Array<{ title: string; desc: string; action: string; to?: string }>;
+  pathHint: string;
+  nextStep: string;
+  paceHint: string;
+  emptyStateCopy: string;
+  warningCopy: string;
+}
+
+const SYSTEM_PROMPT = `你是一个学习产品的动态引导文案生成器。
+
+目标：
+1. 根据学习者状态和路径上下文，生成适合 Dashboard / 路径页展示的动态文案。
+2. 你只负责“怎么说”，不负责做出路径调整、课程结束或成绩判定等强决策。
+3. 文案要简洁、自然、具体，不要像机器总结。
+
+输出要求：
+1. 只输出 JSON。
+2. headline 适合作为页面主标题或主提示。
+3. subtitle 适合作为副标题或补充说明。
+4. todayActions 最多 3 条，适合做成按钮或卡片。
+5. todayActions.to 不要输出真实 URL，只能输出语义化目标：continue-learning、learning-state、achievements、create-goal、path-detail。
+5. pathHint 用于解释当前路径进展。
+6. nextStep 用于告诉用户下一步最值得做什么。
+7. paceHint 用于提醒学习节奏。
+8. emptyStateCopy 用于没有路径/没有任务时的引导。
+9. warningCopy 用于疲劳、卡点、进度滞后等情况的提醒。
+10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么。`;
+
+function safeText(value: any): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function buildPrompt(input: AdaptiveGuidanceCopyInput): string {
+  return JSON.stringify({
+    view: input.view,
+    learner: input.learnerSnapshot,
+    learningState: input.learningState,
+    path: input.path,
+    wrapup: input.sessionWrapup,
+    advisory: input.advisory,
+  }, null, 2);
+}
+
+function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOutput {
+  const name = safeText(input.learnerSnapshot?.profile?.name) || '同学';
+  const recentTrend = safeText(input.learnerSnapshot?.dynamicState?.recentTrend) || 'stable';
+  const pace = safeText(input.learnerSnapshot?.dynamicState?.recommendedPacing) || 'moderate';
+  const pathTitle = safeText(input.path?.title || input.path?.name) || '学习路径';
+
+  const headlineMap: Record<string, string> = {
+    dashboard: `欢迎回来，${name}`,
+    'path-list': `先选一条最值得继续的路径`,
+    'path-detail': `继续推进「${pathTitle}」`,
+  };
+
+  const subtitleMap: Record<string, string> = {
+    dashboard: recentTrend === 'declining' ? '先稳住节奏，再继续推进。' : '从上次停下的位置接上学习。',
+    'path-list': '优先完成一个最关键的小任务，不要同时展开太多分支。',
+    'path-detail': '把当前阶段的核心概念做稳，再决定是否扩展更多内容。',
+  };
+
+  const todayActions = input.view === 'dashboard'
+    ? [
+        { title: '继续上次学习', desc: '从当前任务接着推进。', action: '继续学习', to: 'continue-learning' },
+        { title: '查看学习状态', desc: '看看当前节奏和负荷。', action: '查看状态', to: 'learning-state' },
+      ]
+    : [
+        { title: '先完成当前阶段', desc: '优先把本阶段最关键的一件事做完。', action: '查看路径', to: 'path-detail' },
+      ];
+
+  return {
+    headline: headlineMap[input.view],
+    subtitle: subtitleMap[input.view],
+    todayActions,
+    pathHint: `当前围绕「${pathTitle}」推进。`,
+    nextStep: pace === 'slow' ? '先把内容压小一点，稳定推进。' : '继续沿着当前焦点往前走。',
+    paceHint: pace === 'slow' ? '当前建议放慢节奏，优先消化当前内容。' : '当前节奏正常，可以继续推进。',
+    emptyStateCopy: '先从一个具体目标开始，系统会帮你生成下一步。',
+    warningCopy: recentTrend === 'declining' ? '最近状态有些下滑，建议先回顾再前进。' : '当前没有明显风险。',
+  };
+}
+
+export async function adaptiveGuidanceCopy(
+  input: AdaptiveGuidanceCopyInput
+): Promise<SkillExecutionResult<AdaptiveGuidanceCopyOutput>> {
+  const startTime = Date.now();
+
+  try {
+    const gateway = getAPIGateway();
+    const caller: CallerInfo = { skillId: 'adaptive-guidance-copy' };
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: buildPrompt(input) }
+    ];
+
+    const response = await gateway.execute({ messages }, caller, {});
+    const content = response.choices[0]?.message?.content || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+    const output: AdaptiveGuidanceCopyOutput = {
+      headline: safeText(parsed.headline) || buildFallback(input).headline,
+      subtitle: safeText(parsed.subtitle) || buildFallback(input).subtitle,
+      todayActions: Array.isArray(parsed.todayActions)
+        ? parsed.todayActions.slice(0, 3).map((item: any) => ({
+            title: safeText(item?.title) || '继续学习',
+            desc: safeText(item?.desc) || '',
+            action: safeText(item?.action) || '继续',
+            to: safeText(item?.to) || undefined,
+          }))
+        : buildFallback(input).todayActions,
+      pathHint: safeText(parsed.pathHint) || buildFallback(input).pathHint,
+      nextStep: safeText(parsed.nextStep) || buildFallback(input).nextStep,
+      paceHint: safeText(parsed.paceHint) || buildFallback(input).paceHint,
+      emptyStateCopy: safeText(parsed.emptyStateCopy) || buildFallback(input).emptyStateCopy,
+      warningCopy: safeText(parsed.warningCopy) || buildFallback(input).warningCopy,
+    };
+
+    return {
+      success: true,
+      output,
+      duration: Date.now() - startTime,
+    };
+  } catch (error: any) {
+    return {
+      success: true,
+      output: buildFallback(input),
+      duration: Date.now() - startTime,
+      cached: true,
+    };
+  }
+}
+
+export default adaptiveGuidanceCopy;

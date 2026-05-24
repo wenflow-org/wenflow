@@ -67,7 +67,7 @@ export interface LearningPath {
   adjustmentPolicy?: {
     allowedModes?: Array<'expand' | 'compress' | 'replan'>;
     recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-    triggerSource?: 'learn' | 'ai-teaching' | 'progress-agent' | 'system' | null;
+    triggerSource?: 'learn' | 'ai-teaching' | 'learner-model-agent' | 'system' | null;
   } | null;
   adjustmentEvidence?: {
     stableConcepts?: string[];
@@ -178,6 +178,17 @@ export interface LearningStats {
   } | null;
 }
 
+export interface AdaptiveGuidanceCopy {
+  headline: string;
+  subtitle: string;
+  todayActions: Array<{ title: string; desc: string; action: string; to?: string }>;
+  pathHint: string;
+  nextStep: string;
+  paceHint: string;
+  emptyStateCopy: string;
+  warningCopy: string;
+}
+
 export const learningAPI = {
   // 创建学习目标
   async createGoal(data: { description: string; subject?: string }): Promise<LearningGoal> {
@@ -224,7 +235,7 @@ export const learningAPI = {
   },
 
   async retryPathEnrichment(pathId: string): Promise<{ message?: string }> {
-    const response = await api.post(`/learning/paths/${pathId}/retry-enrichment`);
+    const response = await api.post(`/learning/paths/${pathId}/retry-stage-design`);
     return response.data;
   },
 
@@ -245,8 +256,14 @@ export const learningAPI = {
   },
 
   // 获取当前学习状态
-async getCurrentState() {
+  async getCurrentState() {
     const response = await api.get('/state/current');
     return (response as any)?.data ?? null;
+  },
+
+  async getAdaptiveGuidance(view: 'dashboard' | 'path-list' | 'path-detail', pathId?: string): Promise<AdaptiveGuidanceCopy | null> {
+    const query = pathId ? `?view=${encodeURIComponent(view)}&pathId=${encodeURIComponent(pathId)}` : `?view=${encodeURIComponent(view)}`;
+    const response = await api.get(`/adaptive-guidance/copy${query}`);
+    return response.data || null;
   }
 };

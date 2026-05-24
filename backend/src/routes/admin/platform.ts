@@ -710,10 +710,7 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
 
     const manifestEntries = listAgentManifest().filter(item => item.kind !== 'alias');
     const registrationMap = new Map(registrations.map(item => [item.id, item]));
-    const allAgentIds = Array.from(new Set([
-      ...registrations.map(item => item.id),
-      ...manifestEntries.map(item => item.id)
-    ]));
+    const allAgentIds = manifestEntries.map(item => item.id);
 
     const agents = allAgentIds.map(agentId => {
       const registration = registrationMap.get(agentId);
@@ -732,6 +729,8 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
         name: registration?.name || manifest?.name || agentId,
         type: registration?.type || manifest?.category || 'custom',
         role: inferRuntimeRole(agentId, registration?.type),
+        kind: manifest?.kind || 'agent',
+        aliases: manifest?.aliases || [],
         category: registration?.category || manifest?.category,
         description: registration?.description || manifest?.description,
         version: registration?.version || '1.0.0',
@@ -859,7 +858,7 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                 ? 'legacy-service'
                 : 'agent-prompt',
             note: canonicalAgentId === 'ai-teaching-agent'
-              ? '该编排器本身不直接持有单一 System Prompt，教学主输出由 teaching-turn-agent、peer-agent、session-wrapup-agent 等成员 agent 提供。'
+              ? '该编排器本身不直接持有单一 System Prompt，教学主输出由 teaching-turn-agent、skill:peer-reinforcement、session-wrapup-agent 等运行节点提供。'
               : canonicalAgentId === 'tutor-agent'
                 ? '该名称当前更像旧服务概念，不是已注册的独立 runtime agent。若需要 Prompt 管理，应先确认真实运行 ID。'
                 : null

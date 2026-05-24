@@ -619,7 +619,6 @@ const openMemberDrawer = async (orchestrator: AdminRegistryAgent) => {
       ],
       'path-orchestrator': [
         { agentId: 'path-agent', name: '路径生成 Agent', role: 'leader', enabled: true, callCount: 120 },
-        { agentId: 'content-agent', name: '内容准备 Agent', role: 'worker', enabled: true, callCount: 80 },
         { agentId: 'validation-agent', name: '路径验证 Agent', role: 'validator', enabled: false, callCount: 0 }
       ],
       'simulation-orchestrator': [
@@ -876,18 +875,17 @@ onMounted(loadRegistry);
 }
 
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 999px; filter: blur(52px); opacity: 0.42; }
-.bg-orb--1 { width: 380px; height: 380px; top: -120px; left: -80px; background: color-mix(in srgb, var(--color-primary) 30%, white); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 320px; height: 320px; top: 12%; right: -80px; background: color-mix(in srgb, var(--color-accent) 22%, white); animation: orb-d 30s ease-in-out infinite reverse; }
-.bg-orb--3 { width: 260px; height: 260px; bottom: -70px; left: 24%; background: color-mix(in srgb, var(--color-secondary) 22%, white); animation: orb-d 28s ease-in-out infinite alternate; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
 
-@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(40px, 20px) scale(1.05); } }
+@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-hero { margin-bottom: 1.5rem; position: relative; z-index: 1; }
-.pill { display: inline-block; font-size: 0.6875rem; font-weight: 700; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, white); padding: 0.25rem 0.6rem; border-radius: var(--radius-full); letter-spacing: 0.04em; margin-bottom: 0.5rem; }
-.admin-page-title { display: flex; align-items: center; gap: 0.5rem; font-size: 1.375rem; font-weight: 800; color: var(--text-primary); margin: 0; }
+.page-hero { position: relative; z-index: 1; margin-bottom: 1.5rem; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
 .admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
-.page-hero__subtitle { font-size: 0.875rem; color: var(--text-muted); margin: 0.5rem 0 0; }
+.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 
 .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
 .summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }

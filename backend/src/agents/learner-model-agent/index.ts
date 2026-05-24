@@ -1,7 +1,7 @@
 /**
  * Learner Model Agent
  * 
- * 学习者模型Agent - 从多个数据源整合学习者画像、状态与知识记忆，向其他Agent提供个性化参数
+ * 学习者画像与状态中心 - 从多个数据源整合学习者画像、状态与知识记忆，向其他Agent提供个性化参数
  */
 
 import {
@@ -23,7 +23,7 @@ import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotSe
 
 export const learnerModelAgentDefinition: AgentDefinition = {
   id: 'learner-model-agent',
-  name: '学习者模型Agent',
+  name: '学习者画像与状态中心',
   version: '1.0.0',
   type: 'custom',
   category: 'standard',
@@ -138,7 +138,7 @@ class LearnerModelAgent {
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'learner-model-agent',
-          agentName: '学习者模型Agent',
+          agentName: '学习者画像与状态中心',
           agentType: 'custom',
           confidence: result.confidence || 0.8,
           generatedAt: new Date().toISOString()
@@ -154,7 +154,7 @@ class LearnerModelAgent {
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'learner-model-agent',
-          agentName: '学习者模型Agent',
+          agentName: '学习者画像与状态中心',
           agentType: 'custom',
           confidence: 0,
           generatedAt: new Date().toISOString()
@@ -246,7 +246,7 @@ class LearnerModelAgent {
       if (!event.userId) return;
       
       await this.updateProfile(event.userId, {
-        agentId: 'progress-agent',
+        agentId: 'learner-model-agent',
         timestamp: new Date().toISOString(),
         dataType: 'learning',
         data: {

@@ -66,8 +66,12 @@
       <el-table-column label="Agent" min-width="280">
         <template #default="{ row }">
           <div class="agent-cell">
-            <strong class="agent-cell__name">{{ row.name }}</strong>
+            <div class="agent-cell__title-row">
+              <strong class="agent-cell__name">{{ row.name }}</strong>
+              <el-tag size="small" :type="getKindTagType(row.kind)">{{ getKindLabel(row.kind) }}</el-tag>
+            </div>
             <span class="agent-cell__id">{{ row.agentId }}</span>
+            <span v-if="row.aliases?.length" class="agent-cell__alias">aliases: {{ row.aliases.join(', ') }}</span>
             <span class="agent-cell__meta">{{ row.type }} · v{{ row.version }}</span>
           </div>
         </template>
@@ -137,7 +141,7 @@
             <el-descriptions-item label="类型">{{ currentDesign.basic.type }}</el-descriptions-item>
             <el-descriptions-item label="分类">{{ currentDesign.basic.category }}</el-descriptions-item>
             <el-descriptions-item label="角色">{{ currentDesign.runtime.role }}</el-descriptions-item>
-            <el-descriptions-item label="运行类型">{{ currentDesign.runtime.kind }}</el-descriptions-item>
+            <el-descriptions-item label="运行类型">{{ getKindLabel(currentDesign.runtime.kind) }}</el-descriptions-item>
             <el-descriptions-item label="启用状态">
               <el-tag :type="currentDesign.runtime.runtimeEnabled ? 'success' : 'info'" size="small">
                 {{ currentDesign.runtime.runtimeEnabled ? 'enabled' : 'disabled' }}
@@ -150,6 +154,9 @@
             </el-descriptions-item>
             <el-descriptions-item label="监控分组">{{ currentDesign.runtime.monitoringGroup || '-' }}</el-descriptions-item>
             <el-descriptions-item label="别名">{{ currentDesign.runtime.aliases.join(', ') || '-' }}</el-descriptions-item>
+            <el-descriptions-item v-if="isLegacyAliasDesign(currentDesign)" label="兼容说明" :span="2">
+              当前请求 ID 属于历史兼容别名，真实运行身份已迁移到新的 canonical ID。
+            </el-descriptions-item>
             <el-descriptions-item label="描述" :span="2">{{ currentDesign.basic.description || '-' }}</el-descriptions-item>
           </el-descriptions>
 
@@ -598,6 +605,7 @@ const isAgentRuntime = (agent: AdminRegistryAgent) => {
   if (roleHint.includes('orchestrator')) return false;
   if (agent.agentId.endsWith('-orchestrator')) return false;
   if (agent.agentId === 'ai-teaching' || agent.agentId === 'ai-teaching-agent') return false;
+  if (agent.kind === 'skill') return false;
   return true;
 };
 
@@ -742,7 +750,7 @@ const buildCodeFallbackPrompt = (agentId: string): PromptVersionSummary | null =
       temperature: 0.7,
       maxTokens: 4000,
     },
-    'peer-agent': {
+    'skill:peer-reinforcement': {
       name: 'Code fallback',
       systemPrompt: '当前 Agent 使用代码内置默认 Prompt。请先初始化数据库 Prompt 后再在此处做版本化管理。',
       temperature: 0.7,
@@ -1119,6 +1127,25 @@ const getHealthTagType = (status: string) => {
 
 const getRuntimeRole = (_agent: AdminRegistryAgent): 'agent' => 'agent';
 
+const getKindLabel = (kind?: string) => {
+  if (kind === 'skill') return 'Skill';
+  if (kind === 'orchestrator') return '编排器';
+  if (kind === 'alias') return '别名';
+  return 'Agent';
+};
+
+const getKindTagType = (kind?: string) => {
+  if (kind === 'skill') return 'success';
+  if (kind === 'orchestrator') return 'warning';
+  if (kind === 'alias') return 'info';
+  return 'info';
+};
+
+const isLegacyAliasDesign = (design: AgentDesignDetail | null) => {
+  if (!design) return false;
+  return design.requestedAgentId !== design.agentId;
+};
+
 const getRuntimeRoleLabel = (agent: AdminRegistryAgent) => {
   return getRuntimeRole(agent);
 };
@@ -1329,6 +1356,19 @@ const deletePromptDraft = async (promptId: string) => {
   }
 };
 
+const buildAgentSummary = (items: AdminRegistryAgent[]) => {
+  const now = Date.now();
+  const active24h = items.filter((a) => a.lastActivity && (now - new Date(a.lastActivity).getTime()) <= 24 * 3600000).length;
+  const neverCalled = items.filter((a) => !a.callCount).length;
+  const unhealthy = items.filter((a) => a.status === 'warning' || a.status === 'error').length;
+  return {
+    total: items.length,
+    active24h,
+    neverCalled,
+    unhealthy,
+  };
+};
+
 onMounted(loadRegistry);
 </script>
 
@@ -1340,46 +1380,49 @@ onMounted(loadRegistry);
 
 /* Background orbs */
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 999px; filter: blur(52px); opacity: 0.42; }
-.bg-orb--1 { width: 380px; height: 380px; top: -120px; left: -80px; background: color-mix(in srgb, var(--color-primary) 30%, white); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 320px; height: 320px; top: 12%; right: -80px; background: color-mix(in srgb, var(--color-accent) 22%, white); animation: orb-d 30s ease-in-out infinite reverse; }
-.bg-orb--3 { width: 260px; height: 260px; bottom: -70px; left: 24%; background: color-mix(in srgb, var(--color-secondary) 22%, white); animation: orb-d 28s ease-in-out infinite alternate; }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
+.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
+.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 28px; border: 1px solid #d2dbf3; background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), color-mix(in srgb, #ffffff 90%, white); backdrop-filter: blur(20px); margin-bottom: 1.5rem; box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16); }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
+.admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.8rem;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
+.summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }
+
 .summary-card .label {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .summary-card .value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin-top: 0.25rem;
   color: var(--text-primary);
-  font-size: 1.6rem;
-  font-weight: 700;
 }
 
 .summary-card .value.danger {
   color: var(--color-danger);
 }
 
-/* Summary card gradient variants */
-.summary-card--blue { border-radius: 28px; background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(52, 120, 246, 0.02)); border: 1px solid rgba(52, 120, 246, 0.1); }
-.summary-card--green { border-radius: 28px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(16, 185, 129, 0.02)); border: 1px solid rgba(16, 185, 129, 0.1); }
-.summary-card--orange { border-radius: 28px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(245, 158, 11, 0.02)); border: 1px solid rgba(245, 158, 11, 0.1); }
-.summary-card--red { border-radius: 28px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(239, 68, 68, 0.02)); border: 1px solid rgba(239, 68, 68, 0.1); }
+.summary-card--blue .value { color: var(--color-primary); }
+.summary-card--green .value { color: #16a34a; }
+.summary-card--orange .value { color: #ea580c; }
+.summary-card--red .value { color: #dc2626; }
 
 .admin-list-card {
   width: 100%;
@@ -1437,23 +1480,26 @@ onMounted(loadRegistry);
 }
 
 .search {
-  width: 260px;
+  width: 220px;
 }
 
 .select {
-  width: 140px;
+  width: 120px;
 }
 
 .rate-good {
-  color: var(--color-success);
+  color: #16a34a;
+  font-weight: 700;
 }
 
 .rate-mid {
-  color: var(--color-primary);
+  color: #ea580c;
+  font-weight: 600;
 }
 
 .rate-bad {
-  color: var(--color-danger);
+  color: #dc2626;
+  font-weight: 700;
 }
 
 .type-cell {
@@ -1464,6 +1510,14 @@ onMounted(loadRegistry);
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.agent-cell__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .agent-cell__name {
@@ -1478,6 +1532,11 @@ onMounted(loadRegistry);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-cell__alias {
+  color: var(--color-warning);
+  font-size: 12px;
 }
 
 .status-cell {
@@ -1524,23 +1583,28 @@ onMounted(loadRegistry);
 }
 
 .chip-section {
-  margin-top: 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg-surface) 60%, white);
+  border-radius: var(--radius-md);
 }
 
 .chip-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
   align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.chip-row:last-child {
+  margin-bottom: 0;
 }
 
 .chip-label {
-  min-width: 92px;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
+  min-width: 80px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .empty {
@@ -1548,7 +1612,7 @@ onMounted(loadRegistry);
 }
 
 .design-tabs {
-  margin-top: 1rem;
+  margin-top: 1.5rem;
 }
 
 .sample-block {
@@ -1561,15 +1625,14 @@ onMounted(loadRegistry);
 }
 
 .sample-json {
-  background: var(--bg-secondary);
-  padding: 0.75rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1rem;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
+  overflow: auto;
+  max-height: 300px;
 }
 
 .prompt-panel {
@@ -1701,17 +1764,18 @@ onMounted(loadRegistry);
 
 .contract-grid--preview {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin-top: 1rem;
 }
 
 .contract-card {
-  border-radius: 28px;
-  border: 1px solid #d2dbf3;
-  background: color-mix(in srgb, #ffffff 90%, white);
-  backdrop-filter: blur(20px);
   padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--glass-bg-light);
+  display: grid;
+  gap: 0.75rem;
   min-width: 0;
   overflow: hidden;
 }
@@ -1732,28 +1796,4 @@ onMounted(loadRegistry);
   border-color: rgba(52, 120, 246, 0.08);
 }
 
-.sample-json {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.875rem;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: rgba(52, 120, 246, 0.03);
-  border-radius: 16px;
-  padding: 1rem;
-  max-height: 400px;
-  overflow-y: auto;
-  margin: 0;
-}
-
 </style>
-const buildAgentSummary = (items: AdminRegistryAgent[]) => {
-  const active24h = items.filter((a) => a.status === 'healthy' || a.status === 'warning').length;
-  const neverCalled = items.filter((a) => !a.callCount).length;
-  const unhealthy = items.filter((a) => a.status === 'warning' || a.status === 'error').length;
-  return {
-    total: items.length,
-    active24h,
-    neverCalled,
-    unhealthy,
-  };
-};
