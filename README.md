@@ -2,6 +2,8 @@
 
 ![WenFlow 品牌横幅](docs/logo/品牌横幅.png)
 
+> ⚠️ **当前主要开发版本**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) 分支 | main 分支为稳定版
+
 **从真实问题出发的 AI 学习路径原型**
 
 > 问流：不是先找课，而是先把真正的问题说清楚。

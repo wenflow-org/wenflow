@@ -2,6 +2,8 @@
 
 ![WenFlow Banner](docs/logo/品牌横幅.png)
 
+> ⚠️ **Current Main Development**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) branch | main is stable
+
 **An AI learning-path prototype that starts from real problems**
 
 > WenFlow: don't start by finding courses; start by clarifying the real problem.
