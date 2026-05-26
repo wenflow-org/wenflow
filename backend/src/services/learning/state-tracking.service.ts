@@ -3,6 +3,7 @@
 
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import learningStateService from './learning-state.service';
 
 export interface LearningStateMetrics {
   lss: number; // Learning Stress Score (0-100)
@@ -56,20 +57,17 @@ class LearningStateService {
    */
   async getPreviousMetrics(userId: string): Promise<LearningStateMetrics | null> {
     try {
-      const metrics = await prisma.learning_metrics.findFirst({
-        where: { userId },
-        orderBy: { calculatedAt: 'desc' }
-      });
-
+      const metrics = await learningStateService.getCurrentState(userId);
       if (!metrics) {
         return null;
       }
 
+      const displayMetrics = learningStateService.toDisplayMetrics(metrics);
       return {
-        lss: metrics.lss ?? 0,
-        ktl: metrics.ktl ?? 0,
-        lf: metrics.lf ?? 0,
-        lsb: metrics.lsb ?? 0,
+        lss: displayMetrics.lss,
+        ktl: displayMetrics.ktl,
+        lf: displayMetrics.lf,
+        lsb: displayMetrics.lsb,
       };
     } catch (error) {
       logger.error('获取上一个学习指标失败:', error);
@@ -183,24 +181,21 @@ await prisma.learning_metrics.create({
    */
   async getCurrentState(userId: string): Promise<LearningStateMetrics | null> {
     try {
-      const metrics = await prisma.learning_metrics.findFirst({
-        where: { userId },
-        orderBy: { calculatedAt: 'desc' }
-      });
-
+      const metrics = await learningStateService.getCurrentState(userId);
       if (!metrics) {
         return null;
       }
 
-      if (!this.hasUsableMetrics(metrics)) {
+      const displayMetrics = learningStateService.toDisplayMetrics(metrics);
+      if (!this.hasUsableMetrics(displayMetrics)) {
         return null;
       }
 
       return {
-        lss: metrics.lss ?? 0,
-        ktl: metrics.ktl ?? 0,
-        lf: metrics.lf ?? 0,
-        lsb: metrics.lsb ?? 0,
+        lss: displayMetrics.lss,
+        ktl: displayMetrics.ktl,
+        lf: displayMetrics.lf,
+        lsb: displayMetrics.lsb,
       };
     } catch (error) {
       logger.error('获取当前学习状态失败:', error);
@@ -226,19 +221,11 @@ await prisma.learning_metrics.create({
   > {
     try {
       const safeDays = Math.max(1, Math.min(365, days));
+      const metrics = await learningStateService.getTrends(userId, safeDays);
+
       const startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
       startDate.setDate(startDate.getDate() - (safeDays - 1));
-
-      const metrics = await prisma.learning_metrics.findMany({
-        where: {
-          userId,
-          calculatedAt: {
-            gte: startDate,
-          },
-        },
-        orderBy: { calculatedAt: 'asc' },
-      });
 
       const toDateKey = (date: Date): string => {
         const y = date.getFullYear();
@@ -249,7 +236,7 @@ await prisma.learning_metrics.create({
 
       const metricsByDay = new Map<string, typeof metrics>();
       for (const metric of metrics) {
-        const key = toDateKey(metric.calculatedAt);
+        const key = toDateKey(metric.timestamp);
         const list = metricsByDay.get(key) || [];
         list.push(metric);
         metricsByDay.set(key, list);
@@ -268,20 +255,21 @@ await prisma.learning_metrics.create({
           continue;
         }
 
-        const validLss = dayMetrics
+        const displayDayMetrics = dayMetrics.map((m) => learningStateService.toDisplayMetrics(m));
+        const validLss = displayDayMetrics
           .map((m) => m.lss)
           .filter((value): value is number => typeof value === 'number');
         const avgLss = validLss.length > 0
           ? validLss.reduce((sum, value) => sum + value, 0) / validLss.length
           : null;
 
-        const lastMetric = dayMetrics[dayMetrics.length - 1];
+        const lastMetric = displayDayMetrics[displayDayMetrics.length - 1];
         trends.push({
           date: new Date(currentDate),
           lss: avgLss,
-          ktl: lastMetric.ktl ?? null,
-          lf: lastMetric.lf ?? null,
-          lsb: lastMetric.lsb ?? null,
+          ktl: lastMetric?.ktl ?? null,
+          lf: lastMetric?.lf ?? null,
+          lsb: lastMetric?.lsb ?? null,
         });
       }
 

@@ -3,7 +3,9 @@ import { learnerModelAgent } from '../../agents/learner-model-agent';
 import { personalizationEngine } from '../../agents/learner-model-agent/personalization';
 import type {
   LearnerDynamicState,
+  LearnerLearningControlState,
   LearnerKnowledgeMemory,
+  LearnerReplanSignal,
   LearnerSnapshot,
   LearnerTeachingHints,
 } from '../../agents/learner-model-agent/types';
@@ -42,6 +44,119 @@ function deriveSessionQuality(ktl: number, lf: number): 'strong' | 'mixed' | 'we
   if (ktl >= 5 && lf <= 3) return 'strong';
   if (ktl <= 2 && lf >= 5) return 'weak';
   return 'mixed';
+}
+
+function deriveLearningControlState(input: {
+  dynamicState: LearnerDynamicState;
+  knowledgeMemory: LearnerKnowledgeMemory;
+}): LearnerLearningControlState {
+  const { dynamicState, knowledgeMemory } = input;
+  const { lss, ktl, lf, lsb } = dynamicState.metrics;
+  const fragileCount = knowledgeMemory.globalSignals.fragileConcepts.length;
+  const strugglingCount = knowledgeMemory.globalSignals.strugglingConcepts.length;
+  const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
+
+  const paceMode: LearnerLearningControlState['paceMode'] = lf >= 6 || lsb < 0
+    ? 'recover'
+    : dynamicState.recentTrend === 'improving' && ktl >= 5 && lf <= 3 && lss <= 4
+      ? 'push'
+      : 'steady';
+
+  const conceptLoad: LearnerLearningControlState['conceptLoad'] = lf >= 6 || lsb < 0
+    ? 'low'
+    : dynamicState.recentTrend === 'improving' && ktl >= 6 && prerequisiteGapCount === 0
+      ? 'high'
+      : 'medium';
+
+  const reviewPriority: LearnerLearningControlState['reviewPriority'] = prerequisiteGapCount > 0 || fragileCount > 0 || lsb < 0
+    ? 'high'
+    : strugglingCount > 0
+      ? 'medium'
+      : 'low';
+
+  const checkpointNeed: LearnerLearningControlState['checkpointNeed'] = dynamicState.recentTrend === 'declining' || fragileCount > 0 || strugglingCount > 1
+    ? 'high'
+    : paceMode === 'push'
+      ? 'low'
+      : 'medium';
+
+  return {
+    paceMode,
+    conceptLoad,
+    reviewPriority,
+    challengeLevelCap: paceMode === 'recover' ? 'low' : paceMode === 'push' ? 'high' : 'medium',
+    checkpointNeed,
+    shouldAvoidNewConcepts: conceptLoad === 'low',
+    shouldPreferConsolidation: reviewPriority === 'high',
+    shouldOfferBreak: lf >= 6 || dynamicState.fatigueRisk === 'high',
+  };
+}
+
+function deriveReplanSignal(input: {
+  dynamicState: LearnerDynamicState;
+  learningControlState: LearnerLearningControlState;
+  knowledgeMemory: LearnerKnowledgeMemory;
+}): LearnerReplanSignal {
+  const { dynamicState, learningControlState, knowledgeMemory } = input;
+  const fragileCount = knowledgeMemory.globalSignals.fragileConcepts.length;
+  const strugglingCount = knowledgeMemory.globalSignals.strugglingConcepts.length;
+  const blockedCount = knowledgeMemory.globalBackground.blockedFoundations.length;
+  const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
+  const reasonCodes: string[] = [];
+
+  if (dynamicState.metrics.lf >= 6) reasonCodes.push('fatigue_high');
+  if (dynamicState.metrics.lsb < 0) reasonCodes.push('lsb_negative');
+  if (dynamicState.recentTrend === 'declining') reasonCodes.push('recent_trend_declining');
+  if (fragileCount > 0) reasonCodes.push('fragile_concepts');
+  if (strugglingCount > 0) reasonCodes.push('struggling_concepts');
+  if (blockedCount > 0) reasonCodes.push('blocked_foundations');
+  if (prerequisiteGapCount > 0) reasonCodes.push('prerequisite_gaps');
+
+  const highRisk = dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0 || prerequisiteGapCount > 0 || blockedCount > 0;
+  const mediumRisk = learningControlState.reviewPriority === 'high' || fragileCount > 0 || strugglingCount > 0 || dynamicState.recentTrend === 'declining';
+  const accelerateReady = dynamicState.metrics.ktl >= 6 && dynamicState.metrics.lf <= 3 && dynamicState.metrics.lss <= 4 && fragileCount === 0 && strugglingCount === 0;
+
+  if (accelerateReady) {
+    return {
+      shouldSuggest: true,
+      priority: 'low',
+      recommendation: 'accelerate',
+      scope: 'next_milestone',
+      rationale: '当前掌握较稳定，且近期压力与疲劳都较低，可以考虑把下一阶段调整为更聚焦的推进版本。',
+      reasonCodes: ['stable_mastery', 'ready_to_accelerate'],
+    };
+  }
+
+  if (highRisk) {
+    return {
+      shouldSuggest: true,
+      priority: 'high',
+      recommendation: prerequisiteGapCount > 0 || blockedCount > 0 ? 'resequence' : 'slow_down',
+      scope: prerequisiteGapCount > 0 || blockedCount > 0 ? 'downstream_path' : 'next_milestone',
+      rationale: '当前学习状态和知识风险都提示继续按原路径推进的成本偏高，建议先经过人工确认后再调整后续安排。',
+      reasonCodes,
+    };
+  }
+
+  if (mediumRisk) {
+    return {
+      shouldSuggest: true,
+      priority: 'medium',
+      recommendation: 'reinforce',
+      scope: 'next_milestone',
+      rationale: '当前存在不稳定知识点或学习趋势下滑，建议在进入下一阶段前先补强关键基础。',
+      reasonCodes,
+    };
+  }
+
+  return {
+    shouldSuggest: false,
+    priority: 'none',
+    recommendation: 'keep',
+    scope: 'none',
+    rationale: '',
+    reasonCodes: [],
+  };
 }
 
 export class LearnerSnapshotService {
@@ -121,6 +236,15 @@ export class LearnerSnapshotService {
       ...knowledgeMemory,
       ...(currentPath ? { currentPath } : {}),
     };
+    const learningControlState = deriveLearningControlState({
+      dynamicState,
+      knowledgeMemory: finalKnowledgeMemory,
+    });
+    const replanSignal = deriveReplanSignal({
+      dynamicState,
+      learningControlState,
+      knowledgeMemory: finalKnowledgeMemory,
+    });
 
     return {
       snapshotVersion: 'learner-snapshot-v1',
@@ -144,6 +268,8 @@ export class LearnerSnapshotService {
       },
       profile,
       dynamicState,
+      learningControlState,
+      replanSignal,
       knowledgeMemory: finalKnowledgeMemory,
       teachingHints,
     };

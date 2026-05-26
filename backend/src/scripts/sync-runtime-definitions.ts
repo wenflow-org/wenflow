@@ -5,6 +5,7 @@ import { goalConversationRuntimeDefinition } from '../agents/goal-conversation-a
 import { teachingTurnRuntimeDefinition } from '../agents/teaching-turn-agent/definition';
 import { peerRuntimeDefinition } from '../agents/peer-agent/definition';
 import { sessionWrapupRuntimeDefinition } from '../agents/session-wrapup-agent/definition';
+import { learnerModelRuntimeDefinition } from '../agents/learner-model-agent/definition';
 import { pathSceneFramingRuntimeDefinition } from '../skills/path-scene-framing/definition';
 import { stageDesignerRuntimeDefinition } from '../skills/stage-designer/definition';
 import { pathOrchestratorRuntimeDefinition } from '../orchestrators/definition';
@@ -23,6 +24,7 @@ async function main() {
   const definitions = [
     pathAgentRuntimeDefinition,
     goalConversationRuntimeDefinition,
+    learnerModelRuntimeDefinition,
     teachingTurnRuntimeDefinition,
     peerRuntimeDefinition,
     sessionWrapupRuntimeDefinition,

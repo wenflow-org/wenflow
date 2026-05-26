@@ -132,6 +132,9 @@ export interface AgentOutput {
   // 虚拟学习者回复（virtual-learner-simulation-agent）
   userReply?: string;
 
+  // 虚拟学习者潜在状态（simulation）
+  learnerState?: Record<string, any>;
+
 // 调试信息（可选）
   debug?: Record<string, any>;
 }

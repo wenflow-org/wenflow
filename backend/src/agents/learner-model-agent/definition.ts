@@ -1,0 +1,66 @@
+import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
+
+export const learnerModelRuntimeDefinition: RuntimeDefinitionRecord = {
+  id: 'learner-model-agent',
+  displayName: '学习者画像与状态中心',
+  description: '聚合学习者画像、动态学习状态、知识背景、replan 触发信号与教学控制态，向 goal/path/learn 提供统一 learner snapshot。',
+  category: 'agent',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string' },
+      userId: { type: 'string' },
+      learningPathId: { type: 'string' },
+      milestoneId: { type: 'string' },
+      taskId: { type: 'string' },
+      mode: { type: 'string' },
+      source: { type: 'object' },
+    },
+    required: ['action'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      snapshot: { type: 'object' },
+      profile: { type: 'object' },
+      config: { type: 'object' },
+      promptEnhancement: { type: 'string' },
+      contentHints: { type: 'object' },
+      changes: { type: 'array' },
+    },
+  },
+  variableBindings: {
+    consumes: [
+      'action',
+      'userId',
+      'learningPathId',
+      'milestoneId',
+      'taskId',
+      'mode',
+      'source.dataType',
+      'source.data',
+      'source.confidence',
+    ],
+    produces: [
+      'snapshot.dynamicState',
+      'snapshot.learningControlState',
+      'snapshot.replanSignal',
+      'snapshot.knowledgeMemory.globalBackground',
+      'profile.narrativeInsights',
+      'profile.curriculumControls',
+      'config',
+      'promptEnhancement',
+    ],
+  },
+  capabilities: [
+    'profile-aggregation',
+    'learner-snapshot',
+    'knowledge-background-management',
+    'teaching-control-derivation',
+    'replan-signal-generation',
+  ],
+  defaultMaxTokens: 2000,
+  defaultTemperature: 0.3,
+  source: 'code',
+  managedByCode: true,
+};

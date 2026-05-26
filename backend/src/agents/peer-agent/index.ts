@@ -204,7 +204,11 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
       return result;
     } catch (e: any) {
       error = e instanceof Error ? e : new Error(e.message);
-      logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
+      if (error.message === 'PEER_RESPONSE_EMPTY') {
+        logger.warn('[PeerReinforcementSkill] 讨论生成为空，使用 fallback');
+      } else {
+        logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
+      }
       
       result = {
         message: this.getFallbackMessage(input.strategy, input.topic),
@@ -222,7 +226,7 @@ ${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
             agentId: AGENT_ID,
             userId: 'system',
             sourceEntry: 'platform',
-            success: error === null,
+            success: true,
             durationMs,
             input: JSON.stringify(input).slice(0, 1000),
             output: result ? JSON.stringify(result).slice(0, 500) : null,

@@ -425,7 +425,7 @@ function normalizeDialogueText(text: string): string {
     .trim();
 }
 
-function enforceSingleQuestionForUnderstanding(text: string, stage: 'understanding' | 'proposing' | 'ready'): string {
+function enforceSingleQuestionForUnderstanding(text: string, stage: 'understanding' | 'proposing' | 'ready' | 'completed'): string {
   if (!text || stage !== 'understanding') {
     return text;
   }
@@ -608,10 +608,10 @@ function sanitizeUnderstanding(understanding: any): any {
 }
 
 function normalizeStageAndConfidence(
-  stage: 'understanding' | 'proposing' | 'ready',
+  stage: 'understanding' | 'proposing' | 'ready' | 'completed',
   confidence: number,
   options?: StageControlOptions
-): { stage: 'understanding' | 'proposing' | 'ready'; confidence: number } {
+): { stage: 'understanding' | 'proposing' | 'ready' | 'completed'; confidence: number } {
   const STAGE_CAPS = {
     understanding: 0.92,
     proposing: 0.95,
@@ -697,7 +697,7 @@ function parseGoalConversationResponse(
   const { parsedJson, dialogueText: extractedDialogueText } = extractStructuredPayload(content);
   let dialogueText = extractedDialogueText;
 
-  let stage: 'understanding' | 'proposing' | 'ready' = 'understanding';
+  let stage: 'understanding' | 'proposing' | 'ready' | 'completed' = 'understanding';
   let quickReplies: QuickReply[] = [];
   let structuredData: any = undefined;
   let confirmedProposal: any = undefined;
@@ -708,7 +708,7 @@ function parseGoalConversationResponse(
   if (parsedJson) {
     const normalizedPayload = parsedJson.goalConversation || {};
     understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
-    const validStages = ['understanding', 'proposing', 'ready'];
+    const validStages = ['understanding', 'proposing', 'ready', 'completed'];
     const stageFromPayload = parsedJson.stage || parsedJson.state?.stage;
     stage = validStages.includes(stageFromPayload) ? stageFromPayload : 'understanding';
 
@@ -804,7 +804,7 @@ function parseGoalConversationResponse(
       core: {
         stage,
         confidence,
-        isCompleted: stage === 'ready'
+        isCompleted: stage === 'ready' || stage === 'completed'
       },
       ext: {
         goalConversation: {

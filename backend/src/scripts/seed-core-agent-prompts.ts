@@ -3,6 +3,7 @@ import { DEFAULT_PATH_GENERATION_PROMPT } from '../agents/path-agent/index';
 import { TEACHING_TURN_SYSTEM_PROMPT } from '../agents/teaching-turn-agent/index';
 import { WRAPUP_PROMPT } from '../agents/session-wrapup-agent/index';
 import { DEFAULT_PEER_AGENT_PROMPT } from '../agents/peer-agent/index';
+import { DEFAULT_SIMULATION_PROMPT } from '../agents/virtual-learner-simulation-agent/prompt';
 import { PATH_SCENE_FRAMING_PROMPT, PATH_SCENE_FRAMING_MAX_TOKENS, PATH_SCENE_FRAMING_TEMPERATURE } from '../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../skills/stage-designer';
 
@@ -54,6 +55,14 @@ export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
     systemPrompt: DEFAULT_PEER_AGENT_PROMPT,
     temperature: 0.7,
     maxTokens: 4000,
+  },
+  {
+    agentId: 'virtual-learner-simulation-agent',
+    name: 'v1-default-virtual-learner-simulation',
+    description: '从 virtual-learner-simulation-agent 当前代码默认 Prompt 模板初始化',
+    systemPrompt: DEFAULT_SIMULATION_PROMPT,
+    temperature: 0.8,
+    maxTokens: 500,
   },
   {
     agentId: 'skill:path-scene-framing',

@@ -1051,9 +1051,12 @@ export class AITeachingOrchestrator {
 
     const learnDebug = {
       input: {
+        normalizedLearnContext: context.normalizedLearnContext,
         pathBackgroundContext: buildPathBackgroundContext(context),
         classroomContext,
         learnerStateContext,
+        backgroundKnowledge: context.backgroundKnowledge,
+        learningControlState: context.learningControlState,
         classroomEventContext: {
           recentEvents: classroomEvents.slice(-5),
         },
@@ -1275,6 +1278,8 @@ export class AITeachingOrchestrator {
     const finalState = evaluationResult
       ? await learningStateService.calculateAndUpdateFromSessionScore(session.userId, {
           sessionLss: evaluationResult.evaluation.sessionLss,
+          sessionKtl: evaluationResult.evaluation.sessionKtl,
+          sessionLf: evaluationResult.evaluation.sessionLf,
           durationMinutes,
           confidence: evaluationResult.evaluation.confidence,
         })
@@ -1368,6 +1373,13 @@ export class AITeachingOrchestrator {
           taskId: session.taskId,
           pathId: session.learningPathId,
           performance: evaluationResult ? persistedEvaluation : null,
+          knowledgeState: session.knowledgeState,
+          visibleDialogueContext: session.messages.slice(-16).map((message) => ({
+            role: message.role,
+            content: message.content,
+            analysis: message.analysis || null,
+          })),
+          classroomEventHistory,
           wrapup: finalWrapup,
           advisory,
         },

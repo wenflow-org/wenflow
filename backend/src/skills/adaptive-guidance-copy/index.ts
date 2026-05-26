@@ -19,7 +19,7 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
-      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail', required: true },
+      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail|learning-state', required: true },
       learnerSnapshot: { type: 'object', description: '学习者快照', required: true },
       learningState: { type: 'object', description: '学习状态', required: true },
       path: { type: 'object', description: '路径上下文' },
@@ -52,7 +52,7 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
 };
 
 export interface AdaptiveGuidanceCopyInput {
-  view: 'dashboard' | 'path-list' | 'path-detail';
+  view: 'dashboard' | 'path-list' | 'path-detail' | 'learning-state';
   learnerSnapshot: any;
   learningState: any;
   path?: any;
@@ -75,8 +75,9 @@ const SYSTEM_PROMPT = `你是一个学习产品的动态引导文案生成器。
 
 目标：
 1. 根据学习者状态和路径上下文，生成适合 Dashboard / 路径页展示的动态文案。
-2. 你只负责“怎么说”，不负责做出路径调整、课程结束或成绩判定等强决策。
-3. 文案要简洁、自然、具体，不要像机器总结。
+2. 对于 learning-state 页面，重点生成“如何解读当前状态”和“下一步怎么调节”的引导。
+3. 你只负责“怎么说”，不负责做出路径调整、课程结束或成绩判定等强决策。
+4. 文案要简洁、自然、具体，不要像机器总结。
 
 输出要求：
 1. 只输出 JSON。
@@ -89,7 +90,8 @@ const SYSTEM_PROMPT = `你是一个学习产品的动态引导文案生成器。
 7. paceHint 用于提醒学习节奏。
 8. emptyStateCopy 用于没有路径/没有任务时的引导。
 9. warningCopy 用于疲劳、卡点、进度滞后等情况的提醒。
-10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么。`;
+10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么。
+11. learning-state 页面要避免重复解释指标公式，更聚焦“当前状态意味着什么”。`;
 
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -116,12 +118,16 @@ function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOu
     dashboard: `欢迎回来，${name}`,
     'path-list': `先选一条最值得继续的路径`,
     'path-detail': `继续推进「${pathTitle}」`,
+    'learning-state': `先看清当前状态，再决定下一步`,
   };
 
   const subtitleMap: Record<string, string> = {
     dashboard: recentTrend === 'declining' ? '先稳住节奏，再继续推进。' : '从上次停下的位置接上学习。',
     'path-list': '优先完成一个最关键的小任务，不要同时展开太多分支。',
     'path-detail': '把当前阶段的核心概念做稳，再决定是否扩展更多内容。',
+    'learning-state': recentTrend === 'declining'
+      ? '最近状态有些下滑，先判断是疲劳、卡点，还是任务粒度偏大。'
+      : '结合最近趋势看节奏、负荷和掌握情况，再决定继续推进还是先调整。',
   };
 
   const todayActions = input.view === 'dashboard'
@@ -129,6 +135,12 @@ function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOu
         { title: '继续上次学习', desc: '从当前任务接着推进。', action: '继续学习', to: 'continue-learning' },
         { title: '查看学习状态', desc: '看看当前节奏和负荷。', action: '查看状态', to: 'learning-state' },
       ]
+    : input.view === 'learning-state'
+      ? [
+          { title: '查看当前路径', desc: '回到当前任务，确认状态影响的是哪一步。', action: '查看路径', to: 'path-detail' },
+          { title: '继续学习', desc: '如果状态稳定，就继续完成当前最小任务。', action: '继续学习', to: 'continue-learning' },
+          { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'continue-learning' },
+        ]
     : [
         { title: '先完成当前阶段', desc: '优先把本阶段最关键的一件事做完。', action: '查看路径', to: 'path-detail' },
       ];
@@ -137,7 +149,7 @@ function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOu
     headline: headlineMap[input.view],
     subtitle: subtitleMap[input.view],
     todayActions,
-    pathHint: `当前围绕「${pathTitle}」推进。`,
+    pathHint: input.view === 'learning-state' ? `先结合当前路径「${pathTitle}」判断状态来源。` : `当前围绕「${pathTitle}」推进。`,
     nextStep: pace === 'slow' ? '先把内容压小一点，稳定推进。' : '继续沿着当前焦点往前走。',
     paceHint: pace === 'slow' ? '当前建议放慢节奏，优先消化当前内容。' : '当前节奏正常，可以继续推进。',
     emptyStateCopy: '先从一个具体目标开始，系统会帮你生成下一步。',

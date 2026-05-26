@@ -46,20 +46,64 @@ export interface ConversationHistoryItem {
   content: string;
 }
 
+export interface KnowledgePointState {
+  key: string;
+  mastery?: number;
+  confidence?: number;
+  memoryStrength?: number;
+  selfPerceivedMastery?: number;
+  lastActive?: string;
+  errorPatterns?: string[];
+  transferScore?: number;
+}
+
+export interface LearnerLatentState {
+  understandingLevel?: number;
+  perceivedDifficulty?: number;
+  confusionLevel?: number;
+  frustrationLevel?: number;
+  motivationLevel?: number;
+  selfPerceivedMastery?: number;
+  actualMastery?: number;
+  memoryStrength?: number;
+  wantsClarification?: boolean;
+  readyToAdvance?: boolean;
+  attentionLevel?: number;
+  persistenceLevel?: number;
+  emotion?: 'neutral' | 'slightly_frustrated' | 'happy' | 'confident' | 'confused';
+  remainingUnknowns?: string[];
+  detectedMisconceptions?: string[];
+  stableErrorStyle?: string[];
+}
+
+export interface GoalConcernPool {
+  primary: string[];
+  secondary: string[];
+  hidden: string[];
+}
+
 export interface SimulationContext {
   profile: VirtualLearnerProfile;
   conversationHistory: ConversationHistoryItem[];
   currentStage: 'goal' | 'path' | 'learning';
   lastAssistantMessage?: string;
+  learnerState?: LearnerLatentState;
+  knowledgeState?: KnowledgePointState[];
   goalState?: {
     stage?: string;
     collectedData?: any;
     understanding?: any;
     confidence?: number;
+    missingFields?: string[];
+    concernPool?: GoalConcernPool;
+    disclosedConcerns?: string[];
   };
   learningState?: {
+    currentMilestone?: string;
     currentTask?: any;
     currentContent?: any;
+    milestoneProgress?: number;
+    totalMilestones?: number;
   };
 }
 
@@ -68,12 +112,14 @@ export interface ReactionContext {
   targetData: any;
   profile: VirtualLearnerProfile;
   previousInteractions?: ConversationHistoryItem[];
+  learnerState?: LearnerLatentState;
+  knowledgeState?: KnowledgePointState[];
 }
 
 // AgentInput 扩展：通过 metadata 传递模拟相关数据
 export interface SimulationAgentInput extends AgentInput {
   // 自定义操作类型
-  simulationType?: 'generate_profile' | 'simulate_reply' | 'simulate_reaction';
+  simulationType?: 'generate_profile' | 'simulate_goal_reply' | 'simulate_learning_reply' | 'simulate_reaction' | 'simulate_reply';
   // 画像生成输入
   generateProfileInput?: {
     learningGoal: string;
@@ -102,12 +148,21 @@ export interface SimulationAgentOutput extends AgentOutput {
     priorAttempts?: string;
     personalityTraits?: PersonalityTraits;
   };
+  learnerState?: LearnerLatentState;
   // 模拟反应输出
   reactionOutput?: {
     reaction: string;
     decision: 'accept' | 'modify' | 'reject';
     modifyRequest?: string;
     confidence: number;
+    reasons?: {
+      goalAlignment?: number;
+      difficultyFit?: number;
+      timeFit?: number;
+      prerequisiteFit?: number;
+      motivationFit?: number;
+    };
+    biggestConcern?: string;
   };
 }
 

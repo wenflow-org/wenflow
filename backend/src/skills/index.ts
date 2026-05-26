@@ -7,45 +7,13 @@
 // 协议
 export * from './protocol';
 
-// PDF 解析
-export { pdfParserDefinition } from './pdf-parser';
-import { pdfParser as pdfParserFn } from './pdf-parser';
-
 // 文本结构分析
 export { textStructureAnalyzerDefinition } from './text-structure-analyzer';
 import { textStructureAnalyzer as textStructureAnalyzerFn } from './text-structure-analyzer';
 
-// 时间估算
-export { timeEstimatorDefinition } from './time-estimator';
-import { timeEstimator as timeEstimatorFn } from './time-estimator';
-
-// 内容生成
-export { contentGenerationDefinition } from './content-generation';
-import { contentGeneration as contentGenerationFn } from './content-generation';
-
-// 测验生成
-export { quizGenerationDefinition } from './quiz-generation';
-import { quizGeneration as quizGenerationFn } from './quiz-generation';
-
 // 检索
 export { retrievalDefinition } from './retrieval';
 import { retrieval as retrievalFn } from './retrieval';
-
-// 答案生成
-export { answerGenerationDefinition } from './answer-generation';
-import { answerGeneration as answerGenerationFn } from './answer-generation';
-
-// 代码解释器
-export { codeExplainerDefinition } from './code-explainer';
-import { codeExplainer as codeExplainerFn } from './code-explainer';
-
-// 练习生成器
-export { exerciseGeneratorDefinition } from './exercise-generator';
-import { exerciseGenerator as exerciseGeneratorFn } from './exercise-generator';
-
-// 错误模式分析
-export { errorPatternDefinition } from './error-pattern';
-import { errorPattern as errorPatternFn } from './error-pattern';
 
 // Web 内容提取
 export { webExtractorDefinition } from './web-extractor';
@@ -79,21 +47,29 @@ import { stageDesigner as stageDesignerFn } from './stage-designer';
 export { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './adaptive-guidance-copy';
 
+// goal 阶段画像推断
+export { goalProfileInferenceDefinition } from './goal-profile-inference';
+import { goalProfileInference as goalProfileInferenceFn } from './goal-profile-inference';
+
+// learn 阶段模式蒸馏
+export { learningPatternDistillerDefinition } from './learning-pattern-distiller';
+import { learningPatternDistiller as learningPatternDistillerFn } from './learning-pattern-distiller';
+
+// 课堂知识蒸馏
+export { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
+import { sessionKnowledgeDistiller as sessionKnowledgeDistillerFn } from './session-knowledge-distiller';
+
+// 对话概念抽取
+export { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
+import { dialogueConceptExtractor as dialogueConceptExtractorFn } from './dialogue-concept-extractor';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
-import { pdfParserDefinition } from './pdf-parser';
 import { textStructureAnalyzerDefinition } from './text-structure-analyzer';
-import { timeEstimatorDefinition } from './time-estimator';
-import { contentGenerationDefinition } from './content-generation';
-import { quizGenerationDefinition } from './quiz-generation';
 import { retrievalDefinition } from './retrieval';
-import { answerGenerationDefinition } from './answer-generation';
-import { codeExplainerDefinition } from './code-explainer';
-import { exerciseGeneratorDefinition } from './exercise-generator';
-import { errorPatternDefinition } from './error-pattern';
 import { webExtractorDefinition } from './web-extractor';
 import { imageAnalyzerDefinition } from './image-analyzer';
 import { memorySearchDefinition } from './memory-search';
@@ -102,18 +78,14 @@ import { labelGeneratorDefinition } from './label-generator';
 import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
+import { goalProfileInferenceDefinition } from './goal-profile-inference';
+import { learningPatternDistillerDefinition } from './learning-pattern-distiller';
+import { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
+import { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
 
 export const allSkillDefinitions: SkillDefinition[] = [
-  pdfParserDefinition,
   textStructureAnalyzerDefinition,
-  timeEstimatorDefinition,
-  contentGenerationDefinition,
-  quizGenerationDefinition,
   retrievalDefinition,
-  answerGenerationDefinition,
-  codeExplainerDefinition,
-  exerciseGeneratorDefinition,
-  errorPatternDefinition,
   webExtractorDefinition,
   imageAnalyzerDefinition,
   memorySearchDefinition,
@@ -121,21 +93,17 @@ export const allSkillDefinitions: SkillDefinition[] = [
   labelGeneratorDefinition,
   pathSceneFramingDefinition,
   stageDesignerDefinition,
-  adaptiveGuidanceCopyDefinition
+  adaptiveGuidanceCopyDefinition,
+  goalProfileInferenceDefinition,
+  learningPatternDistillerDefinition,
+  sessionKnowledgeDistillerDefinition,
+  dialogueConceptExtractorDefinition
 ];
 
 // Skill 名称映射
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
-  'pdf-parser': pdfParserFn,
   'text-structure-analyzer': textStructureAnalyzerFn,
-  'time-estimator': timeEstimatorFn,
-  'content-generation': contentGenerationFn,
-  'quiz-generation': quizGenerationFn,
   'retrieval': retrievalFn,
-  'answer-generation': answerGenerationFn,
-  'code-explainer': codeExplainerFn,
-  'exercise-generator': exerciseGeneratorFn,
-  'error-pattern': errorPatternFn,
   'web-extractor': webExtractorFn,
   'image-analyzer': imageAnalyzerFn,
   'memory-search': memorySearchFn,
@@ -143,7 +111,11 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'label-generator': labelGeneratorFn,
   'path-scene-framing': pathSceneFramingFn,
   'stage-designer': stageDesignerFn,
-  'adaptive-guidance-copy': adaptiveGuidanceCopyFn
+  'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
+  'goal-profile-inference': goalProfileInferenceFn,
+  'learning-pattern-distiller': learningPatternDistillerFn,
+  'session-knowledge-distiller': sessionKnowledgeDistillerFn,
+  'dialogue-concept-extractor': dialogueConceptExtractorFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';

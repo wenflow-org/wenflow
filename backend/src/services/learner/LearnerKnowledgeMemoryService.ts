@@ -1,10 +1,14 @@
 import prisma from '../../config/database';
 import type {
+  LearnerBackgroundConceptLedgerItem,
+  LearnerGlobalBackgroundKnowledge,
   LearnerConceptState,
   LearnerKnowledgeMemory,
   LearnerPathKnowledgeMemory,
   LearnerRecentEvidence,
+  LearnerRecurringConfusion,
   LearnerTaskMastery,
+  LearnerTransferSignal,
 } from '../../agents/learner-model-agent/types';
 
 type BuildInput = {
@@ -101,6 +105,13 @@ export class LearnerKnowledgeMemoryService {
           masteredConcepts: [],
           fragileConcepts: [],
           strugglingConcepts: [],
+        },
+        globalBackground: {
+          conceptLedger: [],
+          recurringConfusions: [],
+          reusableFoundations: [],
+          blockedFoundations: [],
+          transferSignals: [],
         },
       };
     }
@@ -450,6 +461,69 @@ export class LearnerKnowledgeMemoryService {
       recentEvidence: recentEvidence.sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime()).slice(0, 20),
     };
 
+    const conceptLedger: LearnerBackgroundConceptLedgerItem[] = conceptStates
+      .map((concept) => {
+        const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.status === 'mastered'
+          ? 'stable'
+          : concept.status === 'review'
+            ? 'understood'
+            : concept.status === 'learning'
+              ? 'practiced'
+              : 'seen';
+        const transferReadiness: LearnerBackgroundConceptLedgerItem['transferReadiness'] = concept.stability === 'stable'
+          ? 'high'
+          : concept.stability === 'developing'
+            ? 'medium'
+            : 'low';
+        const misconceptionRisk: LearnerBackgroundConceptLedgerItem['misconceptionRisk'] = concept.stability === 'fragile'
+          ? 'high'
+          : concept.status === 'learning'
+            ? 'medium'
+            : 'low';
+        const evidence = recentEvidence.filter((item) => item.conceptKeys.includes(concept.label) || item.conceptKeys.includes(concept.conceptKey));
+        return {
+          conceptKey: concept.conceptKey,
+          label: concept.label,
+          familiarity,
+          transferReadiness,
+          misconceptionRisk,
+          firstSeenAt: concept.lastSeenAt,
+          lastSeenAt: concept.lastSeenAt,
+          sourcePaths: [path.id],
+          sourceTasks: concept.relatedTaskIds,
+          evidenceCount: evidence.length,
+        };
+      })
+      .slice(0, 40);
+
+    const recurringConfusions: LearnerRecurringConfusion[] = fragileConcepts.slice(0, 12).map((label) => ({
+      conceptKey: label,
+      label,
+      pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
+      confidence: 0.7,
+      count: recentEvidence.filter((item) => item.signal === 'struggle' && item.conceptKeys.includes(label)).length || 1,
+      lastSeenAt: conceptStates.find((concept) => concept.label === label)?.lastSeenAt,
+    }));
+
+    const transferSignals: LearnerTransferSignal[] = conceptLedger
+      .filter((concept) => concept.transferReadiness !== 'low')
+      .slice(0, 20)
+      .map((concept) => ({
+        conceptKey: concept.conceptKey,
+        label: concept.label,
+        readiness: concept.transferReadiness,
+        confidence: concept.transferReadiness === 'high' ? 0.8 : 0.6,
+        lastSeenAt: concept.lastSeenAt,
+      }));
+
+    const globalBackground: LearnerGlobalBackgroundKnowledge = {
+      conceptLedger,
+      recurringConfusions,
+      reusableFoundations: conceptLedger.filter((concept) => concept.transferReadiness === 'high').map((concept) => concept.label).slice(0, 12),
+      blockedFoundations: conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label).slice(0, 12),
+      transferSignals,
+    };
+
     return {
       currentPath,
       globalSignals: {
@@ -457,6 +531,7 @@ export class LearnerKnowledgeMemoryService {
         fragileConcepts,
         strugglingConcepts,
       },
+      globalBackground,
     };
   }
 }

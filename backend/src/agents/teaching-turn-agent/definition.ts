@@ -48,6 +48,8 @@ export const teachingTurnRuntimeDefinition: RuntimeDefinitionRecord = {
       'scenario.currentStageNumber',
       'learner.currentState',
       'learner.projection',
+      'learner.projection.backgroundKnowledge',
+      'learner.projection.learningControlState',
       'knowledge.points[]',
       'controls.mode',
     ],

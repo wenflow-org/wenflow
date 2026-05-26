@@ -5,6 +5,36 @@ import type { LearnerSnapshot, TeachingLearnerProjection } from '../../agents/le
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
 
+export interface LearnNormalizedContextV1 {
+  version: '1.0';
+  task: {
+    id: string;
+    title: string;
+    type: 'reading' | 'practice' | 'project' | 'quiz';
+    description: string | null;
+    acceptanceCriteria: string | null;
+  };
+  path: {
+    pathId: string;
+    title: string;
+    summary: string | null;
+    currentMilestoneTitle: string;
+    currentStageNumber: number;
+    currentTaskOrder: number;
+  };
+  learner: {
+    liveState: TeachingLearnerProjection['liveState'];
+    stableProfile: TeachingLearnerProjection['stableProfile'];
+    backgroundKnowledge: TeachingLearnerProjection['backgroundKnowledge'];
+    learningControlState: TeachingLearnerProjection['learningControlState'];
+  };
+  knowledge: {
+    primaryConcepts: string[];
+    prerequisiteConcepts: string[];
+    supportingConcepts: string[];
+  };
+}
+
 export interface TeachingScenarioContext {
   userId: string;
   taskId: string;
@@ -60,6 +90,9 @@ export interface TeachingScenarioContext {
   learningBlockedReason: string | null;
   learnerSnapshot: LearnerSnapshot;
   teachingProjection: TeachingLearnerProjection;
+  learningControlState: TeachingLearnerProjection['learningControlState'];
+  backgroundKnowledge: TeachingLearnerProjection['backgroundKnowledge'];
+  normalizedLearnContext: LearnNormalizedContextV1;
   userProfile: any;
   learningState: {
     lss: number;
@@ -408,6 +441,37 @@ export async function buildTeachingScenarioContext(
     learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习。',
     learnerSnapshot,
     teachingProjection,
+    learningControlState: teachingProjection.learningControlState,
+    backgroundKnowledge: teachingProjection.backgroundKnowledge,
+    normalizedLearnContext: {
+      version: '1.0',
+      task: {
+        id: task.id,
+        title: task.title,
+        type: ((task.taskType as 'reading' | 'practice' | 'project' | 'quiz') || 'practice'),
+        description: task.description || null,
+        acceptanceCriteria: (task as any).acceptanceCriteria || null,
+      },
+      path: {
+        pathId: path.id,
+        title: path.title || path.name || '当前学习路径',
+        summary: parsePathSummary(path.aiPromptTemplate),
+        currentMilestoneTitle: teachingProjection.pathContext.currentMilestoneTitle,
+        currentStageNumber: teachingProjection.pathContext.currentStageNumber,
+        currentTaskOrder: teachingProjection.pathContext.currentTaskOrder,
+      },
+      learner: {
+        liveState: teachingProjection.liveState,
+        stableProfile: teachingProjection.stableProfile,
+        backgroundKnowledge: teachingProjection.backgroundKnowledge,
+        learningControlState: teachingProjection.learningControlState,
+      },
+      knowledge: {
+        primaryConcepts,
+        prerequisiteConcepts,
+        supportingConcepts,
+      },
+    },
     userProfile: learnerSnapshot.profile,
     learningState: learningState ? {
       lss: learningState.lss,

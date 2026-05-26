@@ -691,7 +691,7 @@ router.get('/sessions/:sessionId/path-status', async (req: any, res) => {
       return res.json({
         success: true,
         data: {
-          status: 'not_started',
+          status: session.currentStage === 'path' ? 'generating' : 'not_started',
           learningPathId: null,
           path: null
         }
@@ -703,13 +703,22 @@ router.get('/sessions/:sessionId/path-status', async (req: any, res) => {
       include: {
         milestones: {
           orderBy: { stageNumber: 'asc' },
-          select: {
-            id: true,
-            stageNumber: true,
-            title: true,
-            description: true,
-            estimatedHours: true,
-            status: true
+          include: {
+            subtasks: {
+              orderBy: { order: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                status: true,
+                taskType: true,
+                estimatedMinutes: true,
+                cognitiveLevel: true,
+                knowledgeType: true,
+                displayLabel: true,
+                order: true
+              }
+            }
           }
         }
       }
@@ -765,8 +774,9 @@ router.get('/sessions/:sessionId/path-status', async (req: any, res) => {
 router.post('/sessions/:sessionId/start-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
+    const { taskId } = req.body || {};
     
-    const result = await simulationOrchestrator.startLearningPhase(sessionId);
+    const result = await simulationOrchestrator.startLearningPhase(sessionId, { taskId });
     
     res.json({
       success: result.success,
@@ -830,6 +840,55 @@ router.post('/sessions/:sessionId/auto-learning', async (req: any, res) => {
       success: false,
       error: error.message || '自动学习失败'
     });
+  }
+});
+
+router.post('/sessions/:sessionId/restart-path', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await simulationOrchestrator.advanceToPathGeneration(sessionId);
+
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('重新开始路径失败:', error);
+    res.status(500).json({ success: false, error: error.message || '重新开始路径失败' });
+  }
+});
+
+router.post('/sessions/:sessionId/restart-learning', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { taskId } = req.body || {};
+    const result = await simulationOrchestrator.startLearningPhase(sessionId, { taskId });
+
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('重新开始学习失败:', error);
+    res.status(500).json({ success: false, error: error.message || '重新开始学习失败' });
+  }
+});
+
+router.post('/sessions/:sessionId/stop-learning', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await simulationOrchestrator.emergencyStopLearning(sessionId, 'admin-emergency-stop');
+
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('紧急停止学习失败:', error);
+    res.status(500).json({ success: false, error: error.message || '紧急停止学习失败' });
   }
 });
 

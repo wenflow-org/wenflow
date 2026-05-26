@@ -5,6 +5,7 @@ import aiService from '../ai/ai.service';
 import stateTrackingService from './state-tracking.service';
 import achievementService from '../achievements/achievement.service';
 import { updateLearningMetrics } from '../metrics/LearningMetricService';
+import learningStateService from './learning-state.service';
 import type { AgentInput } from '../../agents/protocol';
 import { runWithContext } from '../../gateway/api-gateway/context';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
@@ -81,6 +82,7 @@ interface PathReplanRequest {
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
   evidence?: Record<string, any>;
+  requireConfirmation?: boolean;
 }
 
 const STALE_GENERATING_PATH_MINUTES = 15;
@@ -3041,6 +3043,27 @@ const learningPath = await prisma.learning_paths.findUnique({
       scope: 'path',
     });
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
+    const replanSignal = learnerSnapshot.replanSignal;
+
+    if (replanSignal?.shouldSuggest && data.requireConfirmation !== false) {
+      return {
+        enabled: false,
+        status: 'awaiting-confirmation',
+        signal: replanSignal,
+        request: {
+          pathId: data.pathId,
+          userId: data.userId,
+          triggerSource,
+          mode,
+          reason: data.reason || replanSignal.rationale || '',
+          evidence: {
+            ...(data.evidence || {}),
+            learnerReplanProjection,
+            replanSignal,
+          }
+        }
+      };
+    }
 
     const targetMilestone = this.resolveStageReplanTarget(path, data.stageNumber || null);
     if (!targetMilestone) {
@@ -3083,6 +3106,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         evidence: {
           ...(data.evidence || {}),
           learnerReplanProjection,
+          replanSignal,
         }
       },
       result: {
@@ -3236,6 +3260,7 @@ const learningPath = await prisma.learning_paths.findUnique({
       // 获取学习状态指标
       const currentState = await stateTrackingService.getCurrentState(userId);
       const suggestion = currentState ? stateTrackingService.generateSuggestion(currentState) : null;
+      const displayState = currentState ? learningStateService.toDisplayMetrics(currentState as any) : null;
 
       return {
         user: {
@@ -3269,7 +3294,7 @@ const learningPath = await prisma.learning_paths.findUnique({
           progress: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
           completionRate: subtasks.length > 0 ? (completedSubtasks.length / subtasks.length * 100).toFixed(1) : '0'
         },
-        state: currentState,
+        state: displayState,
         suggestion
       };
     } catch (error) {

@@ -10,7 +10,7 @@ import aiService from '../../services/ai/ai.service';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { AgentDefinition, AgentContext, AgentInput, AgentOutput, ChatMessage } from '../protocol';
 import { buildSimulationPrompt, buildProfileGenerationPrompt, buildReactionPrompt } from './prompt';
-import type { SimulationAgentInput, SimulationAgentOutput, SimulationContext, PersonalityTraits, ReactionContext } from './types';
+import type { SimulationAgentInput, SimulationAgentOutput, SimulationContext, ReactionContext, LearnerLatentState } from './types';
 
 export const virtualLearnerSimulationAgentDefinition: AgentDefinition = {
   id: 'virtual-learner-simulation-agent',
@@ -30,7 +30,7 @@ export const virtualLearnerSimulationAgentDefinition: AgentDefinition = {
       metadata: {
         type: 'object',
         properties: {
-          simulationType: { type: 'string', enum: ['generate_profile', 'simulate_reply', 'simulate_reaction'] },
+          simulationType: { type: 'string', enum: ['generate_profile', 'simulate_goal_reply', 'simulate_learning_reply', 'simulate_reaction', 'simulate_reply'] },
           generateProfileInput: { type: 'object' },
           simulationContext: { type: 'object' }
         }
@@ -43,7 +43,9 @@ export const virtualLearnerSimulationAgentDefinition: AgentDefinition = {
       success: { type: 'boolean' },
       userVisible: { type: 'string' },
       internal: { type: 'object' },
-      generatedProfile: { type: 'object' }
+      generatedProfile: { type: 'object' },
+      learnerState: { type: 'object' },
+      reactionOutput: { type: 'object' }
     }
   },
   stats: {
@@ -75,8 +77,16 @@ if (simulationType === 'generate_profile') {
     if (simulationType === 'simulate_reaction') {
       return await handleSimulateReaction(input, context, startTime, traceId);
     }
+
+    if (simulationType === 'simulate_learning_reply') {
+      return await handleSimulateReply(input, context, startTime, traceId, 'simulate_learning_reply');
+    }
+
+    if (simulationType === 'simulate_goal_reply') {
+      return await handleSimulateReply(input, context, startTime, traceId, 'simulate_goal_reply');
+    }
     
-    return await handleSimulateReply(input, context, startTime, traceId);
+    return await handleSimulateReply(input, context, startTime, traceId, 'simulate_reply');
   } catch (error: any) {
     const duration = Date.now() - startTime;
     
@@ -226,7 +236,8 @@ async function handleSimulateReply(
   input: AgentInput,
   context: AgentContext,
   startTime: number,
-  traceId: string
+  traceId: string,
+  mode: 'simulate_reply' | 'simulate_goal_reply' | 'simulate_learning_reply'
 ): Promise<AgentOutput> {
   const simulationContext = input.metadata?.simulationContext;
   
@@ -260,12 +271,8 @@ async function handleSimulateReply(
     promptLength: systemPrompt.length
   });
   
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...(simulationContext.conversationHistory || []).map((item: any) => ({
-      role: normalizeMessageRole(item.role),
-      content: item.content
-    }))
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt }
   ];
   
   const response = await aiService.chat(messages, {
@@ -300,7 +307,7 @@ async function handleSimulateReply(
     duration,
     tokensUsed: response.usage?.totalTokens || 0,
     success: true,
-    input: { type: 'simulate_reply' },
+    input: { type: mode },
     output: { replyLength: parsed.reply.length }
   });
   
@@ -313,7 +320,9 @@ async function handleSimulateReply(
         confidence: 0.8,
         isCompleted: false
       },
-      thoughtProcess: parsed.thoughtProcess
+      thoughtProcess: parsed.thoughtProcess,
+      emotion: parsed.emotion,
+      learnerState: parsed.learnerState
     },
     metadata: {
       agentId: 'virtual-learner-simulation-agent',
@@ -354,7 +363,36 @@ function parseProfileOutput(rawContent: string): { profile?: any } {
   return { profile: undefined };
 }
 
-function parseSimulationOutput(rawContent: string): { reply: string; thoughtProcess?: string } {
+function normalizeLearnerState(raw: any): LearnerLatentState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const toUnit = (value: unknown, fallback?: number) => {
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(0, Math.min(1, num));
+  };
+
+  return {
+    understandingLevel: toUnit(raw.understandingLevel),
+    perceivedDifficulty: toUnit(raw.perceivedDifficulty),
+    confusionLevel: toUnit(raw.confusionLevel),
+    frustrationLevel: toUnit(raw.frustrationLevel),
+    motivationLevel: toUnit(raw.motivationLevel),
+    selfPerceivedMastery: toUnit(raw.selfPerceivedMastery),
+    actualMastery: toUnit(raw.actualMastery),
+    memoryStrength: toUnit(raw.memoryStrength),
+    wantsClarification: typeof raw.wantsClarification === 'boolean' ? raw.wantsClarification : undefined,
+    readyToAdvance: typeof raw.readyToAdvance === 'boolean' ? raw.readyToAdvance : undefined,
+    attentionLevel: toUnit(raw.attentionLevel),
+    persistenceLevel: toUnit(raw.persistenceLevel),
+    emotion: typeof raw.emotion === 'string' ? raw.emotion : undefined,
+    remainingUnknowns: Array.isArray(raw.remainingUnknowns) ? raw.remainingUnknowns.map(String) : undefined,
+    detectedMisconceptions: Array.isArray(raw.detectedMisconceptions) ? raw.detectedMisconceptions.map(String) : undefined,
+    stableErrorStyle: Array.isArray(raw.stableErrorStyle) ? raw.stableErrorStyle.map(String) : undefined
+  };
+}
+
+function parseSimulationOutput(rawContent: string): { reply: string; thoughtProcess?: string; emotion?: string; learnerState?: LearnerLatentState } {
   const trimmed = rawContent.trim();
   
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
@@ -363,7 +401,9 @@ function parseSimulationOutput(rawContent: string): { reply: string; thoughtProc
       const parsed = JSON.parse(jsonMatch[0]);
       return {
         reply: parsed.reply || '',
-        thoughtProcess: parsed.thoughtProcess
+        thoughtProcess: parsed.thoughtProcess,
+        emotion: parsed.emotion,
+        learnerState: normalizeLearnerState(parsed.learnerState)
       };
     } catch (e) {
       logger.warn('[virtual-learner-simulation-agent] JSON解析失败，尝试其他方式');
@@ -427,7 +467,7 @@ async function handleSimulateReaction(
   });
   
   const rawContent = response.content || '';
-  const parsed = parseReactionOutput(rawContent);
+  const parsed = applyReactionHeuristics(parseReactionOutput(rawContent), reactionContext);
   
   if (!parsed.reaction) {
     logger.warn('[virtual-learner-simulation-agent] Reaction解析失败', {
@@ -494,6 +534,14 @@ function parseReactionOutput(rawContent: string): {
   decision: 'accept' | 'modify' | 'reject';
   modifyRequest?: string;
   confidence: number;
+  reasons?: {
+    goalAlignment?: number;
+    difficultyFit?: number;
+    timeFit?: number;
+    prerequisiteFit?: number;
+    motivationFit?: number;
+  };
+  biggestConcern?: string;
 } {
   const trimmed = rawContent.trim();
   
@@ -505,7 +553,9 @@ function parseReactionOutput(rawContent: string): {
         reaction: parsed.reaction || '',
         decision: parsed.decision || 'accept',
         modifyRequest: parsed.modifyRequest,
-        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.7
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.7,
+        reasons: parsed.reasons,
+        biggestConcern: parsed.biggestConcern
       };
     } catch (e) {
       logger.warn('[virtual-learner-simulation-agent] Reaction JSON解析失败');
@@ -517,6 +567,55 @@ function parseReactionOutput(rawContent: string): {
     decision: 'accept',
     confidence: 0.5
   };
+}
+
+function applyReactionHeuristics(
+  result: {
+    reaction: string;
+    decision: 'accept' | 'modify' | 'reject';
+    modifyRequest?: string;
+    confidence: number;
+    reasons?: {
+      goalAlignment?: number;
+      difficultyFit?: number;
+      timeFit?: number;
+      prerequisiteFit?: number;
+      motivationFit?: number;
+    };
+    biggestConcern?: string;
+  },
+  context: ReactionContext
+) {
+  const normalized = {
+    ...result,
+    confidence: Math.max(0, Math.min(1, Number.isFinite(result.confidence) ? result.confidence : 0.7))
+  };
+
+  const availableTime = context.profile.profile?.availableTime;
+  const estimatedHours = Number(context.targetData?.estimatedHours || 0);
+  const difficulty = String(context.targetData?.difficulty || '').toLowerCase();
+  const knowledgeLevel = context.profile.knowledgeLevel;
+
+  if (availableTime === 'minimal' && estimatedHours >= 30 && normalized.decision === 'accept') {
+    normalized.decision = 'modify';
+    normalized.modifyRequest = normalized.modifyRequest || '希望路径更短一些，先从最小可执行版本开始。';
+  }
+
+  if (knowledgeLevel === 'beginner' && ['hard', 'advanced'].includes(difficulty) && normalized.decision === 'accept') {
+    normalized.decision = 'modify';
+    normalized.modifyRequest = normalized.modifyRequest || '希望起点再基础一些，先补足前置知识。';
+    normalized.confidence = Math.min(normalized.confidence, 0.62);
+  }
+
+  if (normalized.decision === 'modify' && !normalized.modifyRequest) {
+    normalized.modifyRequest = '希望更贴合我的当前基础、时间投入和第一阶段上手难度。';
+  }
+
+  if (normalized.decision === 'reject') {
+    normalized.confidence = Math.min(normalized.confidence, 0.45);
+  }
+
+  return normalized;
 }
 
 function normalizeMessageRole(role: string): 'user' | 'assistant' | 'system' {

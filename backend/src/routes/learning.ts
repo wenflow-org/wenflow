@@ -219,7 +219,8 @@ const replanPathSchema = z.object({
   reason: z.string().optional(),
   mode: z.enum(['new_version', 'overwrite']).optional(),
   stageNumber: z.number().int().positive().optional(),
-  evidence: z.record(z.any()).optional()
+  evidence: z.record(z.any()).optional(),
+  requireConfirmation: z.boolean().optional()
 });
 
 // 创建学习目标
@@ -627,7 +628,8 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
       reason: payload.reason,
       mode: payload.mode,
       stageNumber: payload.stageNumber,
-      evidence: payload.evidence
+      evidence: payload.evidence,
+      requireConfirmation: payload.requireConfirmation
     });
 
     res.json({

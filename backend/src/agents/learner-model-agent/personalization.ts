@@ -21,7 +21,7 @@ export class PersonalizationEngine {
   }
   
   private generateContentStyle(profile: LearnerModelProfile): LearnerPersonalizationConfig['contentStyle'] {
-    const { cognitive, preferences } = profile;
+    const { cognitive, preferences, narrativeInsights } = profile;
     
     const useAnalogies = cognitive.thinkingStyle === 'intuitive' || 
                          cognitive.thinkingStyle === 'visual' ||
@@ -40,6 +40,9 @@ export class PersonalizationEngine {
     } else if (cognitive.metacognitionLevel === 'high' && cognitive.priorKnowledgeStructure === 'systematic') {
       exampleFrequency = 'minimal';
     }
+    if (narrativeInsights.practicePreferenceNote.includes('边学边做') || narrativeInsights.effectiveTeachingPattern.includes('立刻做一个小验证')) {
+      exampleFrequency = 'frequent';
+    }
     
     let codeCommentDetail: 'minimal' | 'moderate' | 'extensive' = 'moderate';
     if (cognitive.metacognitionLevel === 'low' || cognitive.confusionPattern === 'principle-misunderstanding') {
@@ -55,25 +58,28 @@ export class PersonalizationEngine {
   }
   
   private generatePacing(profile: LearnerModelProfile): LearnerPersonalizationConfig['pacing'] {
-    const { learning, cognitive, derivedInsights } = profile;
+    const { learning, cognitive, derivedInsights, curriculumControls } = profile;
     
     const initialDifficulty: 'easy' | 'medium' | 'hard' = derivedInsights.recommendedDifficulty;
     
     let difficultyProgression: 'slow' | 'moderate' | 'fast' = 'moderate';
     if (learning.recentProgress === 'improving' && cognitive.metacognitionLevel === 'high') {
       difficultyProgression = 'fast';
-    } else if (learning.lf > 50 || cognitive.metacognitionLevel === 'low') {
+    } else if (learning.lf > 5 || cognitive.metacognitionLevel === 'low') {
       difficultyProgression = 'slow';
     }
     
-    const breakFrequency = learning.lf > 50 ? 2 : 
-                           learning.lf > 30 ? 3 : 4;
+    const breakFrequency = learning.lf > 5 ? 2 : 
+                           learning.lf > 3 ? 3 : 4;
     
     let reviewFrequency: 'minimal' | 'moderate' | 'frequent' = 'moderate';
     if (cognitive.confusionPattern !== 'none' || cognitive.priorKnowledgeStructure === 'scattered') {
       reviewFrequency = 'frequent';
-    } else if (cognitive.metacognitionLevel === 'high' && learning.ktl > 50) {
+    } else if (cognitive.metacognitionLevel === 'high' && learning.ktl > 5) {
       reviewFrequency = 'minimal';
+    }
+    if (curriculumControls.reviewFrequencyLevel === 'high') {
+      reviewFrequency = 'frequent';
     }
     
     return {
@@ -85,7 +91,7 @@ export class PersonalizationEngine {
   }
   
   private generateInteraction(profile: LearnerModelProfile): LearnerPersonalizationConfig['interaction'] {
-    const { cognitive, emotional, learning } = profile;
+    const { cognitive, emotional, learning, narrativeInsights } = profile;
     
     let hintTiming: 'immediate' | 'delayed' | 'on-request' = 'delayed';
     if (cognitive.metacognitionLevel === 'low' || emotional.confidenceLevel === 'anxious') {
@@ -104,7 +110,10 @@ export class PersonalizationEngine {
     let challengeFrequency: 'low' | 'medium' | 'high' = 'medium';
     if (learning.recentProgress === 'improving' && cognitive.metacognitionLevel === 'high') {
       challengeFrequency = 'high';
-    } else if (emotional.confidenceLevel === 'anxious' || learning.lf > 50) {
+    } else if (emotional.confidenceLevel === 'anxious' || learning.lf > 5) {
+      challengeFrequency = 'low';
+    }
+    if (narrativeInsights.supportStyleNote.includes('避免连续追问')) {
       challengeFrequency = 'low';
     }
     
@@ -116,15 +125,15 @@ export class PersonalizationEngine {
   }
   
   private generatePathAdjustment(profile: LearnerModelProfile): LearnerPersonalizationConfig['pathAdjustment'] {
-    const { learning, behavioral, cognitive } = profile;
+    const { learning, behavioral, cognitive, curriculumControls } = profile;
     
     let compressionThreshold = 0.7;
-    if (cognitive.metacognitionLevel === 'high' && learning.ktl > 50) {
+    if (cognitive.metacognitionLevel === 'high' && learning.ktl > 5) {
       compressionThreshold = 0.6;
     }
     
     let extensionThreshold = 0.4;
-    if (cognitive.metacognitionLevel === 'low' || learning.lf > 40) {
+    if (cognitive.metacognitionLevel === 'low' || learning.lf > 4) {
       extensionThreshold = 0.5;
     }
     
@@ -135,6 +144,10 @@ export class PersonalizationEngine {
     
     if (behavioral.consistencyScore < 0.4) {
       extensionThreshold = Math.min(0.6, extensionThreshold + 0.1);
+    }
+    if (curriculumControls.taskGranularityLevel === 'small') {
+      extensionThreshold = Math.min(0.65, extensionThreshold + 0.1);
+      compressionThreshold = Math.max(0.65, compressionThreshold);
     }
     
     return {
@@ -147,7 +160,7 @@ export class PersonalizationEngine {
   generatePromptEnhancement(profile: LearnerModelProfile): string {
     const parts: string[] = [];
     
-    const { cognitive, preferences, emotional, derivedInsights } = profile;
+    const { cognitive, preferences, emotional, derivedInsights, narrativeInsights, curriculumControls } = profile;
     
     if (cognitive.thinkingStyle === 'visual') {
       parts.push('学习者偏好可视化内容，请多使用图表、流程图说明');
@@ -163,6 +176,18 @@ export class PersonalizationEngine {
     }
     if (preferences.theoryVsPractice === 'practice-first') {
       parts.push('学习者偏好"先练后讲"，请先安排动手任务');
+    }
+    if (narrativeInsights.contentReceptionPattern) {
+      parts.push(`内容接受方式：${narrativeInsights.contentReceptionPattern}`);
+    }
+    if (narrativeInsights.frictionPatternNote) {
+      parts.push(`认知摩擦：${narrativeInsights.frictionPatternNote}`);
+    }
+    if (narrativeInsights.supportStyleNote) {
+      parts.push(`支持方式：${narrativeInsights.supportStyleNote}`);
+    }
+    if (curriculumControls.progressionStrategyNote) {
+      parts.push(`课程推进建议：${curriculumControls.progressionStrategyNote}`);
     }
     if (derivedInsights.riskFactors.length > 0) {
       parts.push(`注意风险：${derivedInsights.riskFactors.join('；')}`);
@@ -180,7 +205,7 @@ export class PersonalizationEngine {
     const avoidFormats: string[] = [];
     const emphasisAreas: string[] = [];
     
-    const { cognitive, preferences } = profile;
+    const { cognitive, preferences, narrativeInsights } = profile;
     
     switch (preferences.preferredStyle) {
       case 'video':
@@ -207,6 +232,9 @@ export class PersonalizationEngine {
     }
     if (cognitive.priorKnowledgeStructure === 'scattered') {
       emphasisAreas.push('知识体系梳理');
+    }
+    if (narrativeInsights.practicePreferenceNote.includes('边学边做')) {
+      emphasisAreas.push('讲解后立刻验证');
     }
     
     return { preferredFormats, avoidFormats, emphasisAreas };

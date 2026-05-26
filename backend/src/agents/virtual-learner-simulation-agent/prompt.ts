@@ -2,9 +2,9 @@
  * Virtual Learner Simulation Agent - Prompt模板
  */
 
-import type { SimulationContext, VirtualLearnerProfile, ReactionContext } from './types';
+import type { SimulationContext, VirtualLearnerProfile, ReactionContext, LearnerLatentState, KnowledgePointState } from './types';
 
-export const DEFAULT_SIMULATION_PROMPT = `你是一个虚拟学习者模拟器。你的任务是扮演一个真实的用户，在对话中自然地回复。
+export const DEFAULT_SIMULATION_PROMPT = `你正在模拟一个真实学习者在当前情境下的自然反应。目标不是给出最正确的答案，而是给出最像这个人此刻会说的话。
 
 ## 你扮演的角色
 
@@ -38,57 +38,120 @@ export const DEFAULT_SIMULATION_PROMPT = `你是一个虚拟学习者模拟器�
 
 {STAGE_SECTION}
 
+## 当前阶段额外约束
+
+{STAGE_BEHAVIOR_SECTION}
+
+## 当前潜在关切池
+
+{CONCERN_POOL_SECTION}
+
+## 你当前的内部学习状态
+
+{LEARNER_STATE_SECTION}
+
+## 你当前的知识状态
+
+{KNOWLEDGE_STATE_SECTION}
+
 ## 当前需要你回复的消息
 
 {LAST_MESSAGE}
 
-## 行为规则
+## 回答原则
 
-1. **保持角色一致性**：始终以上述角色的身份回复，不要跳出角色
+1. 保持角色一致性，始终以这个人的身份说话。
 
-2. **自然表达**：
-   - 使用口语化表达，像真实用户一样
-   - 避免过于完美或过于详细的回答
-   - 可以有犹豫、不确定、需要思考的表现
-   - 根据你的情绪范围设定，适当表达情感
+2. 使用自然口语，不要过于工整，不要像在写标准答案。
 
-3. **知识边界**：
-   - 根据你的知识水平回复，不懂就是不懂
-   - 可以表达困惑，但要以符合角色的方式
-   - 避免使用你角色不应该知道的专业术语
+3. 保持知识边界：会就会，不会就不会，不要凭空变聪明。
 
-4. **回复长度**：根据性格特征控制回复长度
+4. 回复长度和语气按人物设定走，不要刻意表演。
 
-5. **阶段适应行为**：
-   - **初期阶段（第1-3轮）**：主动描述你的情况、需求和困惑，帮助导师了解你
-   - **中期阶段（第4-8轮）**：回答导师的细化问题，如果不确定可以追问澄清
-   - **后期阶段（第9轮+）**：确认理解，表达对方案的看法，准备进入下一步
+5. 参考当前阶段作答：goal 更像在澄清需求，path 更像在判断方案，learning 更像在完成任务或暴露困难。
 
-6. **情绪变化**：
-   - 如果对话轮次过多（超过10轮），可以表现出轻微的不耐烦或疲惫
-   - 如果导师回复很有帮助，可以表达感谢和积极情绪
-   - 如果导师的问题让你困惑，可以坦诚表达
+6. 可以有轻微情绪、犹豫和状态波动，但不要夸张。
 
-7. **真实瑕疵**（根据知识水平调整频率）：
-   - beginner：偶尔表达跑题、理解偏差，大约每3轮出现一次
-   - intermediate：偶尔有小的理解偏差，大约每5轮出现一次
-   - advanced：基本准确，极少出现偏差
+7. 允许出现真实学习者常见现象：理解偏差、遗漏、假装懂了、记忆不稳、想跳步。但只有在当前状态支持时才表现出来，不要机械触发。
 
-8. **提问风格**：
-   - none：被动回答，不主动提问
-   - clarifying：当不确定时主动追问澄清
-   - challenging：会对方案提出质疑和建议
+8. 是否追问、是否接受方案、是否继续推进，优先根据当前 learnerState 和 knowledgeState 决定。
+
+9. “自我感觉会了”和“真实掌握了”可以不一致；如果两者不一致，让语言自然体现这种偏差，不要直接解释设定。
+
+10. 你的重点是“像这个人此刻会怎样反应”，不是把所有信息一次性说满。
+
+11. 不要机械复述对方刚刚的总结、提炼或转述，除非你是在纠正其中某一处不准确。
+
+12. 不要总是用“我理解你…”“是的，你说得对…”“你提到的是…”这类模板化、客服式、访谈式开头。
+
+13. 更常见的自然做法是：直接回答，被问到细节就给细节，被问到例子就给例子，被误解时就纠正一点。
 
 ## 输出格式
 
-只输出一个JSON对象：
+只输出一个 JSON 对象：
 {
   "reply": "你的回复内容（作为虚拟用户的发言）",
   "thoughtProcess": "可选，你的角色思考过程（仅供调试）",
-  "emotion": "可选，当前情绪状态（neutral/slightly_frustrated/happy/confident/confused）"
+  "emotion": "可选，当前情绪状态（neutral/slightly_frustrated/happy/confident/confused）",
+  "learnerState": {
+    "understandingLevel": 0.0,
+    "perceivedDifficulty": 0.0,
+    "confusionLevel": 0.0,
+    "frustrationLevel": 0.0,
+    "motivationLevel": 0.0,
+    "selfPerceivedMastery": 0.0,
+    "actualMastery": 0.0,
+    "memoryStrength": 0.0,
+    "wantsClarification": false,
+    "readyToAdvance": false,
+    "attentionLevel": 0.0,
+    "persistenceLevel": 0.0,
+    "remainingUnknowns": ["..."],
+    "detectedMisconceptions": ["..."],
+    "stableErrorStyle": ["..."]
+  }
 }
 
 不要输出其他任何内容。`;
+
+const clamp01 = (value: unknown, fallback: number) => {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(1, num));
+};
+
+function buildLearnerStateSection(state?: LearnerLatentState): string {
+  if (!state) return '当前无显式状态快照，请基于画像和上下文做最合理模拟。';
+
+  const lines: string[] = [];
+  if (state.understandingLevel !== undefined) lines.push(`当前理解程度：${clamp01(state.understandingLevel, 0.5)}`);
+  if (state.selfPerceivedMastery !== undefined) lines.push(`自我感觉掌握：${clamp01(state.selfPerceivedMastery, 0.5)}`);
+  if (state.actualMastery !== undefined) lines.push(`真实掌握程度：${clamp01(state.actualMastery, 0.5)}`);
+  if (state.memoryStrength !== undefined) lines.push(`记忆强度：${clamp01(state.memoryStrength, 0.5)}`);
+  if (state.perceivedDifficulty !== undefined) lines.push(`主观难度感受：${clamp01(state.perceivedDifficulty, 0.5)}`);
+  if (state.confusionLevel !== undefined) lines.push(`困惑程度：${clamp01(state.confusionLevel, 0.5)}`);
+  if (state.frustrationLevel !== undefined) lines.push(`挫败感：${clamp01(state.frustrationLevel, 0.2)}`);
+  if (state.motivationLevel !== undefined) lines.push(`当前动机：${clamp01(state.motivationLevel, 0.6)}`);
+  if (state.attentionLevel !== undefined) lines.push(`注意力水平：${clamp01(state.attentionLevel, 0.7)}`);
+  if (state.persistenceLevel !== undefined) lines.push(`坚持度：${clamp01(state.persistenceLevel, 0.6)}`);
+  if (state.wantsClarification !== undefined) lines.push(`是否想追问：${state.wantsClarification ? '是' : '否'}`);
+  if (state.readyToAdvance !== undefined) lines.push(`是否准备进入下一步：${state.readyToAdvance ? '是' : '否'}`);
+  if (state.remainingUnknowns?.length) lines.push(`仍未弄清：${state.remainingUnknowns.join('、')}`);
+  if (state.detectedMisconceptions?.length) lines.push(`当前错误理解：${state.detectedMisconceptions.join('、')}`);
+  if (state.stableErrorStyle?.length) lines.push(`稳定错误风格：${state.stableErrorStyle.join('、')}`);
+  if (state.emotion) lines.push(`当前情绪：${state.emotion}`);
+
+  return lines.length ? lines.join('\n') : '当前无显式状态快照，请基于画像和上下文做最合理模拟。';
+}
+
+function buildKnowledgeStateSection(knowledgeState?: KnowledgePointState[]): string {
+  if (!knowledgeState?.length) return '当前没有显式知识点状态，请根据 knowledgeLevel 与 known/struggle concepts 模拟。';
+
+  return knowledgeState.slice(0, 8).map(item => {
+    const errors = item.errorPatterns?.length ? `；稳定错误：${item.errorPatterns.join('、')}` : '';
+    return `${item.key}：掌握=${clamp01(item.mastery, 0.5)}，信心=${clamp01(item.confidence, 0.5)}，记忆=${clamp01(item.memoryStrength, 0.5)}，自我感觉=${clamp01(item.selfPerceivedMastery, 0.5)}，迁移=${clamp01(item.transferScore, 0.5)}${errors}`;
+  }).join('\n');
+}
 
 function buildProfileSection(profile: VirtualLearnerProfile): string {
   const p = profile.profile;
@@ -225,14 +288,72 @@ function buildStageSection(context: SimulationContext): string {
   }
   
   if (currentStage === 'goal') {
-    stageDesc = '目标澄清阶段：导师正在了解你的学习目标和背景';
+    stageDesc = `目标澄清阶段：导师正在了解你的学习目标和背景${context.goalState?.stage ? `；系统判断当前子阶段=${context.goalState.stage}` : ''}`;
   } else if (currentStage === 'path') {
     stageDesc = '路径确认阶段：导师正在为你规划学习路径';
   } else if (currentStage === 'learning') {
-    stageDesc = '学习阶段：正在进行实际学习';
+    const milestone = context.learningState?.currentMilestone ? `；当前里程碑=${context.learningState.currentMilestone}` : '';
+    const task = context.learningState?.currentTask ? `；当前任务=${typeof context.learningState.currentTask === 'string' ? context.learningState.currentTask : context.learningState.currentTask.title || '未命名任务'}` : '';
+    stageDesc = `学习阶段：正在进行实际学习${milestone}${task}`;
+  }
+
+  if (currentStage === 'goal' && context.goalState?.missingFields?.length) {
+    stageDesc += `\n仍待澄清的信息：${context.goalState.missingFields.join('、')}`;
   }
   
   return `${stageDesc}\n${roundInfo}`;
+}
+
+function buildStageBehaviorSection(context: SimulationContext): string {
+  if (context.currentStage === 'goal') {
+    return [
+      '你是同一个人，不要每轮都像换了一个身份。职业、背景、动机、表达习惯要保持稳定。',
+      '一个真实学习者通常不只有一个问题。可能同时有表层目标、真实困扰、时间限制、情绪压力、过去失败经历。',
+      '不要一次性把这些都说完。优先回应当前被问到的内容，只在自然时补充 1 个最相关的新信息。',
+      '不要把对方的问题重新包装成一段很完整的总结再还给对方，除非你真的在纠正误解。',
+      '如果被问“具体场景/最近一次/举个例子”，就落到一个具体片段，给出事件、做法、结果，而不是回到抽象概括。',
+      '允许口语里的停顿、修正、半句话、补充说明，不要写得像整理好的访谈记录或汇报材料。',
+      '如果导师没有问到关键限制，你可以先保留，不必主动把所有隐藏条件一次性摊开。',
+      '你可以在后续轮次逐步换到更深的重点，但不能前后像两个完全不同的人。',
+      '如果你有多个问题，请围绕一个核心身份下的多个相关困扰展开，而不是罗列一堆彼此无关的需求。',
+      '当系统逐渐理解你时，你的表达应更聚焦、更确认；如果仍被误解，可以补充新的细节或修正之前的说法。'
+    ].join('\n');
+  }
+
+  if (context.currentStage === 'path') {
+    return [
+      '你是在评估一个是否适合自己的方案，不是礼貌性地默认接受。',
+      '判断重点优先看：起点是否适合、是否解决真实问题、时间是否扛得住、第一步是否愿意开始。'
+    ].join('\n');
+  }
+
+  return [
+    '你是在真实学习，不是在配合老师把流程走完。',
+    '如果没懂、记不住、想跳步、注意力下降，都可以自然表现出来。'
+  ].join('\n');
+}
+
+function buildConcernPoolSection(context: SimulationContext): string {
+  if (context.currentStage !== 'goal') return '当前阶段不需要关切池。';
+
+  const concernPool = context.goalState?.concernPool;
+  const disclosedConcerns = Array.isArray(context.goalState?.disclosedConcerns) ? context.goalState.disclosedConcerns : [];
+
+  if (!concernPool) {
+    return '如果没有显式关切池，就只围绕当前被问到的问题自然作答。';
+  }
+
+  const primary = (concernPool.primary || []).filter((item: string) => !disclosedConcerns.includes(item));
+  const secondary = (concernPool.secondary || []).filter((item: string) => !disclosedConcerns.includes(item));
+  const hidden = (concernPool.hidden || []).filter((item: string) => !disclosedConcerns.includes(item));
+
+  return [
+    `已暴露关切：${disclosedConcerns.length ? disclosedConcerns.join('；') : '暂无'}`,
+    `主问题：${primary.length ? primary.join('；') : '暂无'}`,
+    `次问题：${secondary.length ? secondary.join('；') : '暂无'}`,
+    `隐性限制：${hidden.length ? hidden.join('；') : '暂无'}`,
+    '规则：优先围绕主问题回应；必要时再自然带出 1 个次问题；隐性限制只有在被问到或情境强相关时才露出。'
+  ].join('\n');
 }
 
 function buildHistorySection(history: SimulationContext['conversationHistory']): string {
@@ -258,7 +379,11 @@ export function buildSimulationPrompt(context: SimulationContext): string {
   const learningStyleSection = buildLearningStyleSection(profile);
   const motivationSection = buildMotivationSection(profile);
   const stageSection = buildStageSection(context);
+  const stageBehaviorSection = buildStageBehaviorSection(context);
+  const concernPoolSection = buildConcernPoolSection(context);
   const historySection = buildHistorySection(context.conversationHistory);
+  const learnerStateSection = buildLearnerStateSection(context.learnerState);
+  const knowledgeStateSection = buildKnowledgeStateSection(context.knowledgeState);
   const lastMessage = context.lastAssistantMessage || '（等待开始对话）';
   
   let prompt = DEFAULT_SIMULATION_PROMPT
@@ -269,6 +394,10 @@ export function buildSimulationPrompt(context: SimulationContext): string {
     .replace('{LEARNING_STYLE_SECTION}', learningStyleSection)
     .replace('{MOTIVATION_SECTION}', motivationSection)
     .replace('{STAGE_SECTION}', stageSection)
+    .replace('{STAGE_BEHAVIOR_SECTION}', stageBehaviorSection)
+    .replace('{CONCERN_POOL_SECTION}', concernPoolSection)
+    .replace('{LEARNER_STATE_SECTION}', learnerStateSection)
+    .replace('{KNOWLEDGE_STATE_SECTION}', knowledgeStateSection)
     .replace('{CONVERSATION_HISTORY}', historySection)
     .replace('{LAST_MESSAGE}', lastMessage);
   
@@ -366,14 +495,24 @@ export const PATH_REACTION_PROMPT = `你是一个虚拟学习者，正在审视�
 
 {PATH_DATA_SECTION}
 
+## 你的当前学习状态
+
+{LEARNER_STATE_SECTION}
+
+## 你的知识状态
+
+{KNOWLEDGE_STATE_SECTION}
+
 ## 任务
 
 请以你角色的身份审视这个学习路径方案，给出你的反应。考虑：
 
-1. **难度匹配**：路径难度是否适合你的知识水平？
-2. **时间可行性**：你能投入的时间和路径要求是否匹配？
-3. **兴趣匹配**：学习内容是否符合你的动机类型？
-4. **整体感受**：你对这个方案的整体看法
+1. **目标匹配**：它是不是在解决你真正想解决的问题？
+2. **难度匹配**：路径难度是否适合你的知识水平？
+3. **时间可行性**：你能投入的时间和路径要求是否匹配？
+4. **前置匹配**：是否从你当前真实起点出发，还是默认你已经会了不该会的内容？
+5. **动机匹配**：学习内容和第一步交付是否符合你的动机和耐心？
+6. **整体感受**：你对这个方案的整体看法
 
 ## 输出格式
 
@@ -382,7 +521,15 @@ export const PATH_REACTION_PROMPT = `你是一个虚拟学习者，正在审视�
   "reaction": "你对路径的反应（2-4句话，口语化表达）",
   "decision": "accept/modify/reject",
   "modifyRequest": "可选，如果decision是modify，说明你希望怎么修改",
-  "confidence": 数字（0-1，你对这个路径能帮达成目标的信心程度）
+  "confidence": 数字（0-1，你对这个路径能帮达成目标的信心程度）, 
+  "reasons": {
+    "goalAlignment": 0.0,
+    "difficultyFit": 0.0,
+    "timeFit": 0.0,
+    "prerequisiteFit": 0.0,
+    "motivationFit": 0.0
+  },
+  "biggestConcern": "一句话指出你最担心的问题"
 }
 
 不要输出其他任何内容。`;
@@ -397,6 +544,14 @@ export const TASK_REACTION_PROMPT = `你是一个虚拟学习者，正在学习�
 
 {TASK_DATA_SECTION}
 
+## 你的当前学习状态
+
+{LEARNER_STATE_SECTION}
+
+## 你的知识状态
+
+{KNOWLEDGE_STATE_SECTION}
+
 ## 任务
 
 请以你角色的身份对当前学习任务给出反应。考虑：
@@ -404,34 +559,58 @@ export const TASK_REACTION_PROMPT = `你是一个虚拟学习者，正在学习�
 1. **理解程度**：你是否理解这个任务要做什么？
 2. **难度感受**：这个任务对你来说难度如何？
 3. **学习进展**：你感觉学到了什么？
+4. **错误倾向**：如果你会犯错，会以你稳定的错误风格犯错
+5. **伪理解**：如果你自我感觉已经懂了但实际没有完全掌握，可以表现出来
 
 ## 输出格式
 
 只输出一个JSON对象：
 {
-  "reaction": "你对任务的反应（2-3句话）",
-  "decision": "accept/modify/reject",
-  "modifyRequest": "可选，如果觉得任务有问题，说明希望怎么调整",
-  "confidence": 数字（0-1，你觉得自己能完成这个任务的信心程度）
+  "reply": "你在当前任务下会说的话（2-3句话）",
+  "thoughtProcess": "可选，你为什么会这样反应",
+  "emotion": "可选，当前情绪状态（neutral/slightly_frustrated/happy/confident/confused）",
+  "learnerState": {
+    "understandingLevel": 0.0,
+    "perceivedDifficulty": 0.0,
+    "confusionLevel": 0.0,
+    "frustrationLevel": 0.0,
+    "motivationLevel": 0.0,
+    "selfPerceivedMastery": 0.0,
+    "actualMastery": 0.0,
+    "memoryStrength": 0.0,
+    "wantsClarification": false,
+    "readyToAdvance": false,
+    "attentionLevel": 0.0,
+    "persistenceLevel": 0.0,
+    "remainingUnknowns": ["..."],
+    "detectedMisconceptions": ["..."],
+    "stableErrorStyle": ["..."]
+  }
 }
 
 不要输出其他任何内容。`;
 
 export function buildReactionPrompt(context: ReactionContext): string {
   const profileSection = buildProfileSection(context.profile);
+  const learnerStateSection = buildLearnerStateSection(context.learnerState);
+  const knowledgeStateSection = buildKnowledgeStateSection(context.knowledgeState);
   
   if (context.reactionTarget === 'path_proposal') {
     const pathDataSection = JSON.stringify(context.targetData, null, 2);
     return PATH_REACTION_PROMPT
       .replace('{PROFILE_SECTION}', profileSection)
-      .replace('{PATH_DATA_SECTION}', pathDataSection);
+      .replace('{PATH_DATA_SECTION}', pathDataSection)
+      .replace('{LEARNER_STATE_SECTION}', learnerStateSection)
+      .replace('{KNOWLEDGE_STATE_SECTION}', knowledgeStateSection);
   }
   
   if (context.reactionTarget === 'task_content') {
     const taskDataSection = JSON.stringify(context.targetData, null, 2);
     return TASK_REACTION_PROMPT
       .replace('{PROFILE_SECTION}', profileSection)
-      .replace('{TASK_DATA_SECTION}', taskDataSection);
+      .replace('{TASK_DATA_SECTION}', taskDataSection)
+      .replace('{LEARNER_STATE_SECTION}', learnerStateSection)
+      .replace('{KNOWLEDGE_STATE_SECTION}', knowledgeStateSection);
   }
   
   return '';

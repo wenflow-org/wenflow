@@ -59,8 +59,8 @@
             </div>
 
             <div class="app-page-head__intro">
-              <h1>看见最近的学习状态，再决定下一步怎么学。</h1>
-              <p>这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。</p>
+              <h1>{{ statePageTitle }}</h1>
+              <p>{{ statePageSubtitle }}</p>
             </div>
 
             <div v-if="state" class="app-page-head__summary state-hero__summary">
@@ -69,6 +69,19 @@
                 <strong :class="item.valueClass">{{ item.value }}</strong>
                 <p>{{ item.note }}</p>
               </article>
+            </div>
+
+            <div v-if="stateGuidanceActions.length" class="state-hero__actions-strip">
+              <router-link
+                v-for="item in stateGuidanceActions"
+                :key="item.title"
+                :to="item.to"
+                class="state-hero__action-card"
+              >
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.desc }}</p>
+                <span>{{ item.action }}</span>
+              </router-link>
             </div>
           </section>
         </section>
@@ -110,17 +123,67 @@
               </article>
 
               <aside class="state-side-panels">
+                <article v-if="learnerCenter" class="glass-card state-insight-card state-insight-card--primary">
+                  <div class="state-panel__head">
+                    <span class="section-kicker">学习档案</span>
+                  </div>
+                  <div class="state-definition-list">
+                    <div class="state-definition-item">
+                      <strong>系统当前如何理解你的学习方式</strong>
+                      <p>{{ learnerNarrativeSummary }}</p>
+                    </div>
+                    <div class="state-definition-item">
+                      <strong>可复用基础</strong>
+                      <p>{{ reusableFoundationsText }}</p>
+                    </div>
+                    <div class="state-definition-item">
+                      <strong>不稳定前置</strong>
+                      <p>{{ blockedFoundationsText }}</p>
+                    </div>
+                  </div>
+                  <div class="state-hero__actions-strip state-hero__actions-strip--stacked">
+                    <router-link :to="'/user/account'" class="state-hero__action-card">
+                      <strong>查看账户设置</strong>
+                      <p>账户资料和学习状态入口已经集中整理。</p>
+                      <span>前往设置</span>
+                    </router-link>
+                  </div>
+                </article>
+
+                <article v-if="learnerReplanSignal?.shouldSuggest" class="glass-card state-insight-card state-insight-card--warning">
+                  <div class="state-panel__head">
+                    <span class="section-kicker">路径调整建议</span>
+                    <span class="state-insight-card__badge">{{ replanPriorityText }}</span>
+                  </div>
+                  <p class="state-insight-card__summary">{{ learnerReplanSignal.rationale }}</p>
+                  <div class="state-warning-list">
+                    <div class="state-warning-item">
+                      <strong>建议动作</strong>
+                      <p>{{ replanActionText }}</p>
+                    </div>
+                  </div>
+                  <div class="state-hero__actions-strip state-hero__actions-strip--stacked">
+                    <router-link :to="currentPathDetailPath" class="state-hero__action-card">
+                      <strong>查看当前路径</strong>
+                      <p>先查看当前路径中的调整建议，再决定是否创建新版本。</p>
+                      <span>前往查看</span>
+                    </router-link>
+                  </div>
+                </article>
+
                 <article v-if="warnings.length > 0" class="glass-card state-insight-card state-insight-card--warning">
                   <div class="state-panel__head">
                     <span class="section-kicker">学习预警</span>
                     <span class="state-insight-card__badge">{{ warnings.length }} 条</span>
                   </div>
+                  <p v-if="stateWarningSummary" class="state-insight-card__summary">{{ stateWarningSummary }}</p>
                   <div class="state-warning-list">
                     <div v-for="(warning, index) in warnings.slice(0, 3)" :key="index" class="state-warning-item">
                       <strong>{{ warning.title }}</strong>
                       <p>{{ warning.message }}</p>
                     </div>
                   </div>
+                  <div v-if="warnings.length > 3" class="state-insight-card__summary">其余 {{ warnings.length - 3 }} 条预警可在后续版本展开查看。</div>
                 </article>
 
                 <article class="glass-card state-insight-card">
@@ -151,6 +214,9 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import request from '../utils/request';
 import { metricsAPI } from '../api/metrics';
+import { learningAPI } from '../api/learning';
+import { userAPI, type LearnerCenterSnapshot } from '../api/user';
+import { getReplanActionText, getReplanPriorityText } from '../utils/replanSignal';
 import { Chart } from 'chart.js/auto';
 import { useUserStore } from '../stores/user';
 import {
@@ -209,8 +275,74 @@ const warnings = ref<Array<{
   message: string;
   suggestion: string;
 }>>([]);
+const adaptiveGuidance = ref<any | null>(null);
+const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
+const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
+const learnerCenter = ref<LearnerCenterSnapshot | null>(null);
 let chartInstance: Chart | null = null;
 const trendCache = new Map<number, TrendData[]>();
+
+const statePageTitle = computed(() => adaptiveCopy.value?.headline || '看见最近的学习状态，再决定下一步怎么学。');
+const statePageSubtitle = computed(() => adaptiveCopy.value?.subtitle || '这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。');
+
+const stateWarningSummary = computed(() => {
+  if (adaptiveCopy.value?.warningCopy && adaptiveCopy.value.warningCopy !== '当前没有明显风险。') {
+    return adaptiveCopy.value.warningCopy;
+  }
+  if (adaptiveSummary.value?.global?.hasWarnings) return '当前状态存在需关注项，建议先看预警再决定是否继续推进。';
+  return '';
+});
+
+const stateGuidanceActions = computed(() => {
+  const resolveTarget = (value?: string) => {
+    switch (value) {
+      case 'continue-learning':
+        return dashboardPath.value;
+      case 'learning-state':
+        return learningStatePath.value;
+      case 'achievements':
+        return achievementsPath.value;
+      case 'create-goal':
+        return goalConversationPath.value;
+      case 'path-detail':
+        return learningPathsPath.value;
+      default:
+        return learningPathsPath.value;
+    }
+  };
+
+  if (adaptiveCopy.value?.todayActions?.length) {
+    return adaptiveCopy.value.todayActions.slice(0, 3).map((item: any) => ({
+      title: item.title,
+      desc: item.desc,
+      action: item.action,
+      to: resolveTarget(item.to)
+    }));
+  }
+
+  return [];
+});
+
+const learnerReplanSignal = computed(() => learnerCenter.value?.replanSignal || null);
+const replanPriorityText = computed(() => getReplanPriorityText(learnerReplanSignal.value?.priority));
+const replanActionText = computed(() => getReplanActionText(learnerReplanSignal.value));
+const currentPathDetailPath = computed(() => {
+  const pathId = learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId;
+  return pathId ? `/learning-path/${pathId}` : learningPathsPath.value;
+});
+const learnerNarrativeSummary = computed(() => {
+  const narrative = learnerCenter.value?.profile?.narrativeInsights;
+  if (!narrative) return '暂无学习者画像摘要。';
+  return [narrative.contentReceptionPattern, narrative.practicePreferenceNote, narrative.supportStyleNote].filter(Boolean).join('；') || '暂无学习者画像摘要。';
+});
+const reusableFoundationsText = computed(() => {
+  const values = learnerCenter.value?.knowledgeMemory?.globalBackground?.reusableFoundations || [];
+  return values.length > 0 ? values.slice(0, 6).join('、') : '暂无明确可复用基础。';
+});
+const blockedFoundationsText = computed(() => {
+  const values = learnerCenter.value?.knowledgeMemory?.globalBackground?.blockedFoundations || [];
+  return values.length > 0 ? values.slice(0, 6).join('、') : '暂无高风险前置。';
+});
 
 const stateMetricCards = computed(() => {
   if (!state.value) return [];
@@ -226,7 +358,7 @@ const stateMetricCards = computed(() => {
     {
       label: 'LSS 学习压力',
       value: state.value.lss.toFixed(2),
-      note: '单次学习的即时压力评分',
+      note: '最近一次课程压力，已换算为 0-100 展示',
       tone: 'lss',
       valueClass: getLSSValueClass(state.value.lss)
     },
@@ -240,7 +372,7 @@ const stateMetricCards = computed(() => {
     {
       label: 'LF 学习疲劳',
       value: state.value.lf.toFixed(2),
-      note: '7 天短期疲劳水平',
+      note: '近期疲劳累计，已换算为 0-100 展示',
       tone: 'lf',
       valueClass: getLFValueClass(state.value.lf)
     }
@@ -249,10 +381,10 @@ const stateMetricCards = computed(() => {
 
 const stateDefinitionCards = computed(() => {
   return [
-    { title: 'LSS 学习压力', desc: '单次学习的压力评分，范围 0-100。高值表示认知负荷更高。' },
-    { title: 'KTL 知识掌握', desc: '长期知识积累的量化指标，使用 42 天加权平均计算。' },
-    { title: 'LF 学习疲劳', desc: '短期疲劳程度，使用 7 天加权平均计算，随时间衰减。' },
-    { title: 'LSB 状态平衡值', desc: '核心指标，计算公式为 LSB = KTL - LF，用来判断当前推进状态。' }
+    { title: 'LSS 学习压力', desc: '最近一次课程的即时压力，内部按 0-10 评估，对外换算为 0-100。' },
+    { title: 'KTL 知识掌握', desc: '长期知识积累的量化指标，使用 42 天加权平均计算，并换算为 0-100 展示。' },
+    { title: 'LF 学习疲劳', desc: '近期疲劳程度，使用 7 天加权平均计算，并换算为 0-100 展示。' },
+    { title: 'LSB 状态平衡值', desc: '核心指标，计算公式为 LSB = KTL - LF，内部范围约 -10 到 10，对外换算展示。' }
   ];
 });
 
@@ -501,6 +633,22 @@ const loadWarnings = async () => {
   }
 };
 
+const loadAdaptiveGuidance = async () => {
+  try {
+    adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('learning-state');
+  } catch (error) {
+    console.error('加载学习状态引导文案失败:', error);
+  }
+};
+
+const loadLearnerCenter = async () => {
+  try {
+    learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' });
+  } catch (error) {
+    console.error('加载学习档案失败:', error);
+  }
+};
+
 // get level types
 const getLSBValueClass = (lsb: number) => {
   if (lsb < 0) return 'value-danger';
@@ -539,7 +687,9 @@ onMounted(() => {
     loading.value = true;
     await Promise.all([
       loadCurrentState(),
-      loadTrends(trendDays.value)
+      loadTrends(trendDays.value),
+      loadAdaptiveGuidance(),
+      loadLearnerCenter()
     ]);
     loading.value = false;
 
@@ -1161,6 +1311,51 @@ onUnmounted(() => {
   background: linear-gradient(180deg, rgba(141, 107, 255, 0.08), rgba(255, 255, 255, 0.9));
 }
 
+.state-hero__actions-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.state-hero__actions-strip--stacked {
+  grid-template-columns: 1fr;
+}
+
+.state-hero__action-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  text-decoration: none;
+  color: #172033;
+  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+}
+
+.state-hero__action-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(52, 120, 246, 0.16);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.06);
+}
+
+.state-hero__action-card strong {
+  font-size: 14px;
+}
+
+.state-hero__action-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.state-hero__action-card span {
+  color: #1f57cc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .state-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -1213,6 +1408,13 @@ onUnmounted(() => {
 .state-insight-card--warning {
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.9));
   border-color: rgba(245, 158, 11, 0.12);
+}
+
+.state-insight-card__summary {
+  margin: -4px 0 0;
+  color: #8a5300;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .state-warning-list,

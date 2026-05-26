@@ -102,6 +102,29 @@
             </div>
           </el-card>
         </div>
+
+        <div class="grid two-col section-card-row">
+          <el-card shadow="never">
+            <template #header>叙述型画像</template>
+            <div class="text-list">
+              <div class="text-item"><strong>目标叙述</strong><p>{{ snapshot.profile.narrativeInsights?.goalNarrative || '暂无' }}</p></div>
+              <div class="text-item"><strong>背景上下文</strong><p>{{ snapshot.profile.narrativeInsights?.backgroundContextNote || '暂无' }}</p></div>
+              <div class="text-item"><strong>动机叙述</strong><p>{{ snapshot.profile.narrativeInsights?.motivationNarrative || '暂无' }}</p></div>
+              <div class="text-item"><strong>时间约束</strong><p>{{ snapshot.profile.narrativeInsights?.timeConstraintNote || '暂无' }}</p></div>
+              <div class="text-item"><strong>自我认知</strong><p>{{ snapshot.profile.narrativeInsights?.selfAssessmentNote || '暂无' }}</p></div>
+            </div>
+          </el-card>
+          <el-card shadow="never">
+            <template #header>学习模式叙述</template>
+            <div class="text-list">
+              <div class="text-item"><strong>内容接收方式</strong><p>{{ snapshot.profile.narrativeInsights?.contentReceptionPattern || '暂无' }}</p></div>
+              <div class="text-item"><strong>练习偏好</strong><p>{{ snapshot.profile.narrativeInsights?.practicePreferenceNote || '暂无' }}</p></div>
+              <div class="text-item"><strong>认知摩擦</strong><p>{{ snapshot.profile.narrativeInsights?.frictionPatternNote || '暂无' }}</p></div>
+              <div class="text-item"><strong>有效教学模式</strong><p>{{ snapshot.profile.narrativeInsights?.effectiveTeachingPattern || '暂无' }}</p></div>
+              <div class="text-item"><strong>支持风格</strong><p>{{ snapshot.profile.narrativeInsights?.supportStyleNote || '暂无' }}</p></div>
+            </div>
+          </el-card>
+        </div>
       </el-tab-pane>
       <el-tab-pane label="动态状态" name="state">
         <div class="grid metric-grid">
@@ -197,6 +220,16 @@
             </div>
           </el-card>
         </div>
+        <el-card shadow="never" class="section-card">
+          <template #header>课程调参建议</template>
+          <div class="kv-list">
+            <div class="kv-item"><span>任务粒度</span><strong>{{ snapshot.profile.curriculumControls?.taskGranularityLevel || '--' }}</strong></div>
+            <div class="kv-item"><span>概念密度</span><strong>{{ snapshot.profile.curriculumControls?.conceptDensityLevel || '--' }}</strong></div>
+            <div class="kv-item"><span>复习频率</span><strong>{{ snapshot.profile.curriculumControls?.reviewFrequencyLevel || '--' }}</strong></div>
+          </div>
+          <div class="text-block" style="margin-top: 12px;">{{ snapshot.profile.curriculumControls?.progressionStrategyNote || '暂无' }}</div>
+          <div class="text-block" style="margin-top: 12px;">{{ snapshot.profile.narrativeInsights?.taskGranularityNote || '暂无任务粒度说明' }}</div>
+        </el-card>
       </el-tab-pane>
       <el-tab-pane label="证据记录" name="evidence">
         <div class="grid evidence-kpis">
@@ -408,6 +441,32 @@ onMounted(loadData);
 .empty-text { color: var(--text-secondary); }
 .text-block { white-space: pre-wrap; line-height: 1.7; }
 .evidence-item { display: grid; gap: 4px; }
+
+.text-list {
+  display: grid;
+  gap: 12px;
+}
+
+.text-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(243, 246, 251, 0.88);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.text-item strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.text-item p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  font-size: 13px;
+}
 
 .kpi-card {
   border-radius: 16px;

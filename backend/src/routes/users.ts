@@ -2,6 +2,7 @@
 import express from 'express';
 import prisma from '../config/database';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 
 const router = express.Router();
 
@@ -43,6 +44,27 @@ router.get('/me', async (req, res, next) => {
         level: calculatedLevel,
         xpToNextLevel: (calculatedLevel * calculatedLevel * 100) - user.xp
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/me/learner-center', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const pathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
+    const scope = req.query.scope === 'path' || req.query.scope === 'teaching' ? req.query.scope : 'global';
+
+    const snapshot = await learnerSnapshotRefreshService.getLatest({
+      userId,
+      pathId,
+      scope,
+    });
+
+    res.json({
+      success: true,
+      data: snapshot,
     });
   } catch (error) {
     next(error);

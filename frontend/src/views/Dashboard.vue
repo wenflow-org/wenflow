@@ -103,6 +103,13 @@
           <router-link :to="hasLearningPath ? continueLearningTarget : '/goal-conversation'" class="btn btn--primary btn--full">
             {{ hasLearningPath ? '继续上次学习' : '创建第一个目标' }}
           </router-link>
+
+          <div v-if="learnerStateChips.length" class="focus-card__state-strip">
+            <span v-for="item in learnerStateChips" :key="item.label" class="focus-card__state-chip" :class="`focus-card__state-chip--${item.tone}`">
+              <strong>{{ item.label }}</strong>
+              <em>{{ item.value }}</em>
+            </span>
+          </div>
         </aside>
       </section>
 
@@ -211,6 +218,8 @@ const loading = ref(false);
 const scrolled = ref(false);
 const selectedCalendarDay = ref<any>(null);
 const adaptiveGuidance = ref<any | null>(null);
+const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
+const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const pathCount = computed(() => stats.value?.paths?.total || 0);
@@ -272,21 +281,21 @@ const continueLearningTarget = computed(() => {
 });
 
 const dashboardTitle = computed(() => {
-  if (adaptiveGuidance.value?.headline) return adaptiveGuidance.value.headline;
+  if (adaptiveCopy.value?.headline) return adaptiveCopy.value.headline;
   if (!hasLearningPath.value) return `你好，${userStore.user?.name || '同学'}，先从一个具体目标开始。`;
   return `欢迎回来，${userStore.user?.name || '同学'}。`;
 });
 
 const dashboardSubtitle = computed(() => {
-  if (adaptiveGuidance.value?.subtitle) return adaptiveGuidance.value.subtitle;
+  if (adaptiveCopy.value?.subtitle) return adaptiveCopy.value.subtitle;
   if (!hasLearningPath.value) return '描述一件你最近想解决的事，把它缩小到可以开始的一步。';
   return '从上次停下的位置继续，把学习接上。';
 });
 
 const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习路径' : '还没有学习路径'));
 const primaryPathDesc = computed(() => (
-  adaptiveGuidance.value?.pathHint
-    ? adaptiveGuidance.value.pathHint
+  adaptiveCopy.value?.pathHint
+    ? adaptiveCopy.value.pathHint
     : (
   hasLearningPath.value
     ? '从上次停下的位置继续。'
@@ -295,8 +304,8 @@ const primaryPathDesc = computed(() => (
 ));
 
 const currentPathHint = computed(() => {
-  if (adaptiveGuidance.value?.warningCopy && adaptiveGuidance.value.warningCopy !== '当前没有明显风险。') {
-    return adaptiveGuidance.value.warningCopy;
+  if (adaptiveCopy.value?.warningCopy && adaptiveCopy.value.warningCopy !== '当前没有明显风险。') {
+    return adaptiveCopy.value.warningCopy;
   }
   if (inProgressTaskCount.value > 0) return `${inProgressTaskCount.value} 个任务进行中`;
   if (completedTaskCount.value > 0) return '已完成部分任务';
@@ -309,9 +318,52 @@ const nextStepLabel = computed(() => {
 });
 
 const nextStepHint = computed(() => {
-  if (adaptiveGuidance.value?.nextStep) return adaptiveGuidance.value.nextStep;
+  if (adaptiveCopy.value?.nextStep) return adaptiveCopy.value.nextStep;
   if (!hasLearningPath.value) return '从一个真实问题开始';
   return primaryActionTask.value ? '' : '进入学习路径查看安排';
+});
+
+const learnerStateChips = computed(() => {
+  const summary = adaptiveSummary.value;
+  const state = stats.value?.state;
+  const items: Array<{ label: string; value: string; tone: 'neutral' | 'good' | 'warn' }> = [];
+
+  if (summary?.global?.pacingLevel) {
+    const tone = summary.global.pacingLevel === 'slow' ? 'warn' : 'good';
+    items.push({
+      label: '当前节奏',
+      value: summary.global.pacingLevel === 'slow' ? '建议放慢' : summary.global.pacingLevel === 'fast' ? '可以加快' : '稳定推进',
+      tone
+    });
+  } else if (typeof state?.lsb === 'number') {
+    items.push({
+      label: '学习状态',
+      value: state.lsb >= 0 ? '状态平衡' : '需要恢复',
+      tone: state.lsb >= 0 ? 'good' : 'warn'
+    });
+  }
+
+  if (summary?.global?.hasWarnings) {
+    items.push({
+      label: '当前提醒',
+      value: '有需关注项',
+      tone: 'warn'
+    });
+  }
+
+  if (summary?.global?.primaryAction) {
+    items.push({
+      label: '下一步',
+      value: summary.global.primaryAction === 'create-goal'
+        ? '先创建目标'
+        : summary.global.primaryAction === 'learning-state'
+          ? '先看状态'
+          : '继续当前任务',
+      tone: 'neutral'
+    });
+  }
+
+  return items.slice(0, 3);
 });
 
 const todayActionItems = computed(() => {
@@ -333,8 +385,8 @@ const todayActionItems = computed(() => {
   };
 
   if (!hasLearningPath.value) {
-    if (adaptiveGuidance.value?.todayActions?.length) {
-      return adaptiveGuidance.value.todayActions.map((item: any, index: number) => ({
+    if (adaptiveCopy.value?.todayActions?.length) {
+      return adaptiveCopy.value.todayActions.map((item: any, index: number) => ({
         id: `adaptive-empty-${index}`,
         tone: index === 0 ? 'primary' : 'muted',
         dot: index === 0 ? 'active' : 'dim',
@@ -351,8 +403,8 @@ const todayActionItems = computed(() => {
     ];
   }
 
-  if (adaptiveGuidance.value?.todayActions?.length) {
-    return adaptiveGuidance.value.todayActions.map((item: any, index: number) => ({
+  if (adaptiveCopy.value?.todayActions?.length) {
+    return adaptiveCopy.value.todayActions.map((item: any, index: number) => ({
       id: `adaptive-${index}`,
       tone: index === 0 ? 'primary' : index === 1 ? 'accent' : 'muted',
       dot: index === 0 ? 'active' : index === 1 ? 'active' : 'dim',
@@ -1019,6 +1071,46 @@ a.dashboard-list__item:hover .dashboard-list__action {
 
 .focus-card__summary {
   margin-top: -4px;
+}
+
+.focus-card__state-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.focus-card__state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.focus-card__state-chip strong {
+  font-size: 12px;
+  margin: 0;
+}
+
+.focus-card__state-chip em {
+  font-style: normal;
+  color: var(--dash-muted);
+  font-weight: 700;
+}
+
+.focus-card__state-chip--good {
+  border-color: rgba(49, 177, 111, 0.18);
+  background: rgba(49, 177, 111, 0.08);
+}
+
+.focus-card__state-chip--warn {
+  border-color: rgba(244, 170, 70, 0.24);
+  background: rgba(244, 170, 70, 0.12);
 }
 
 .focus-card__stats,

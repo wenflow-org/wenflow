@@ -6,6 +6,66 @@ import { runGoalConversationAgent } from '../../agents/goal-conversation-agent';
 import pathOrchestrator, { GoalPathRequest } from '../../orchestrators/path.orchestrator';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 
+interface GoalNormalizedStateV1 {
+  version: '1.0';
+  learnerIntent: {
+    surfaceGoal: string | null;
+    realProblem: string | null;
+    motivation: string | null;
+  };
+  baseline: {
+    currentLevel: string | null;
+    priorKnowledgeStructure: string | null;
+  };
+  constraints: {
+    availableTime: string | null;
+    deadlineText: string | null;
+  };
+  successCriteria: {
+    observableResult: string | null;
+    acceptanceCheck: string | null;
+  };
+  proposal: {
+    learningDirection: string | null;
+    firstDeliverable: string | null;
+  };
+}
+
+function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
+  const understanding = data?.understanding || {};
+  const confirmedProposal = data?.confirmedProposal || {};
+  return {
+    version: '1.0',
+    learnerIntent: {
+      surfaceGoal: typeof understanding?.surface_goal === 'string' ? understanding.surface_goal : null,
+      realProblem: typeof understanding?.real_problem === 'string' ? understanding.real_problem : null,
+      motivation: typeof understanding?.motivation === 'string' ? understanding.motivation : null,
+    },
+    baseline: {
+      currentLevel: typeof understanding?.background?.current_level === 'string' ? understanding.background.current_level : null,
+      priorKnowledgeStructure: typeof understanding?.cognitive_profile?.prior_knowledge_structure === 'string'
+        ? understanding.cognitive_profile.prior_knowledge_structure
+        : null,
+    },
+    constraints: {
+      availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
+      deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
+    },
+    successCriteria: {
+      observableResult: typeof understanding?.success_criteria?.observable_result === 'string'
+        ? understanding.success_criteria.observable_result
+        : null,
+      acceptanceCheck: typeof understanding?.success_criteria?.acceptance_check === 'string'
+        ? understanding.success_criteria.acceptance_check
+        : null,
+    },
+    proposal: {
+      learningDirection: typeof confirmedProposal?.learning_direction === 'string' ? confirmedProposal.learning_direction : null,
+      firstDeliverable: typeof confirmedProposal?.first_deliverable === 'string' ? confirmedProposal.first_deliverable : null,
+    },
+  };
+}
+
 /**
  * 问题穿透对话系统设计 V2：
  *
@@ -162,7 +222,7 @@ class GoalConversationService {
             conversationId: conversation.id,
             stage: core.stage,
             confidence: core.confidence,
-            isCompleted: core.stage === 'ready'
+              isCompleted: core.stage === 'ready' || core.stage === 'completed'
           },
           ext: {
             goalConversation: goalExt
@@ -351,7 +411,7 @@ async continueConversation(
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
       // 如果对话完成，先生成学习路径
-      if (core.stage === 'ready') {
+      if (core.stage === 'ready' || core.stage === 'completed') {
         try {
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, responseWithConversationId);
 
@@ -635,6 +695,8 @@ async continueConversation(
       data.confidenceScores = goalExt.confidenceScores;
     }
 
+    data.normalizedGoalState = buildGoalNormalizedState(data);
+
     if (core.learningPath !== undefined) {
       data.learningPath = core.learningPath || null;
     }
@@ -690,6 +752,7 @@ async continueConversation(
       structuredData,
       confirmedProposal,
       confidenceScores,
+      normalizedGoalState: data.normalizedGoalState || buildGoalNormalizedState(data),
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
       stage: core.stage,

@@ -105,6 +105,42 @@
                 </span>
               </div>
 
+              <div v-if="pathReplanSignal?.shouldSuggest" class="replan-advisory-banner">
+                <div class="replan-advisory-banner__copy">
+                  <strong>建议先确认后续路径安排</strong>
+                  <p>{{ pathReplanSignal.rationale }}</p>
+                  <div class="replan-advisory-banner__meta">
+                    <span>优先级：{{ pathReplanMeta.priority }}</span>
+                    <span>建议：{{ pathReplanMeta.recommendation }}</span>
+                    <span>范围：{{ pathReplanMeta.scope }}</span>
+                  </div>
+                  <p class="replan-advisory-banner__action-copy">{{ pathReplanMeta.action }}</p>
+                  <div class="replan-advisory-banner__chips" v-if="pathReplanSignal.reasonCodes?.length">
+                    <span v-for="code in pathReplanMeta.reasonCodes" :key="code" class="path-detail-chip path-detail-chip--warn">{{ code }}</span>
+                  </div>
+                </div>
+                <div class="replan-advisory-banner__actions">
+                  <el-button type="primary" :loading="replanLoading" @click="previewReplan">查看调整建议</el-button>
+                  <span v-if="latestReplanPreview" class="replan-advisory-banner__hint">已生成预览，请在弹窗中确认是否执行。</span>
+                </div>
+              </div>
+
+              <div v-if="replanExecutionResult" class="replan-result-banner">
+                <div class="replan-result-banner__copy">
+                  <strong>已完成路径调整</strong>
+                  <p>{{ replanResultSummary }}</p>
+                  <div class="replan-result-banner__meta">
+                    <span>状态：{{ replanExecutionResult.status }}</span>
+                    <span v-if="replanExecutionResult.result?.redesignedStageNumber">调整阶段：第 {{ replanExecutionResult.result.redesignedStageNumber }} 阶段</span>
+                    <span v-if="replanExecutionResult.result?.redesignedTaskCount">重设计任务数：{{ replanExecutionResult.result.redesignedTaskCount }}</span>
+                  </div>
+                </div>
+                <div class="replan-result-banner__actions">
+                  <el-button @click="dismissReplanResult">收起结果</el-button>
+                  <el-button type="primary" @click="refreshPathAfterReplan">刷新当前路径</el-button>
+                </div>
+              </div>
+
               <div
                 v-if="showEnrichmentBanner"
                 class="enrichment-banner"
@@ -384,6 +420,58 @@
         />
       </div>
     </el-dialog>
+
+    <el-dialog
+      v-model="replanPreviewDialogVisible"
+      title="确认路径调整"
+      width="620px"
+      :close-on-click-modal="false"
+    >
+      <div class="replan-preview-dialog">
+        <div class="replan-preview-dialog__hero">
+          <strong>{{ pathReplanMeta.recommendation }}</strong>
+          <p>{{ previewRationaleText }}</p>
+        </div>
+
+        <div class="replan-preview-dialog__meta">
+          <article class="replan-preview-dialog__meta-item">
+            <span>优先级</span>
+            <strong>{{ previewMeta.priority }}</strong>
+          </article>
+          <article class="replan-preview-dialog__meta-item">
+            <span>调整范围</span>
+            <strong>{{ previewMeta.scope }}</strong>
+          </article>
+          <article class="replan-preview-dialog__meta-item">
+            <span>建议动作</span>
+            <strong>{{ previewMeta.action }}</strong>
+          </article>
+        </div>
+
+        <div class="replan-preview-dialog__section">
+          <span class="section-kicker">本次会做什么</span>
+          <ul class="replan-preview-dialog__list">
+            <li>基于当前学习证据，重新安排后续阶段任务。</li>
+            <li>{{ previewTargetText }}</li>
+            <li>已完成任务会被冻结，不会被改写。</li>
+          </ul>
+        </div>
+
+        <div v-if="previewMeta.reasonCodes.length" class="replan-preview-dialog__section">
+          <span class="section-kicker">触发原因</span>
+          <div class="path-detail-chip-row path-detail-chip-row--wrap">
+            <span v-for="code in previewMeta.reasonCodes" :key="code" class="path-detail-chip path-detail-chip--warn">{{ code }}</span>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="replan-preview-dialog__footer">
+          <el-button @click="replanPreviewDialogVisible = false">稍后再说</el-button>
+          <el-button type="primary" :loading="replanConfirmLoading" @click="confirmReplan">确认创建新版本</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -410,6 +498,14 @@ import api from '../utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import type { TaskEvaluationDetail } from '@/api/aiTeaching';
 import { learningAPI } from '@/api/learning';
+import { userAPI } from '@/api/user';
+import {
+  getReplanActionText,
+  getReplanPriorityText,
+  getReplanReasonCodeLabels,
+  getReplanRecommendationText,
+  getReplanScopeText,
+} from '@/utils/replanSignal';
 
 const route = useRoute();
 const router = useRouter();
@@ -458,6 +554,12 @@ const evaluationLoading = ref(false);
 const selectedTaskEvaluation = ref<TaskEvaluationDetail | null>(null);
 const retryingEnrichment = ref(false);
 const adaptiveGuidance = ref<any | null>(null);
+const learnerCenter = ref<any | null>(null);
+const replanLoading = ref(false);
+const replanConfirmLoading = ref(false);
+const replanPreviewDialogVisible = ref(false);
+const latestReplanPreview = ref<any | null>(null);
+const replanExecutionResult = ref<any | null>(null);
 let enrichmentPollingTimer: number | null = null;
 let enrichmentPollingInFlight = false;
 
@@ -605,9 +707,58 @@ const paceRangeText = computed(() => {
   return `单次 ${min}-${max} 分钟`;
 });
 
+const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
+const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
+const pathReplanSignal = computed(() => learnerCenter.value?.replanSignal || null);
+const pathReplanMeta = computed(() => ({
+  priority: getReplanPriorityText(pathReplanSignal.value?.priority),
+  recommendation: getReplanRecommendationText(pathReplanSignal.value?.recommendation),
+  scope: getReplanScopeText(pathReplanSignal.value?.scope),
+  action: getReplanActionText(pathReplanSignal.value),
+  reasonCodes: getReplanReasonCodeLabels(pathReplanSignal.value?.reasonCodes || []),
+}));
+const previewSignal = computed(() => latestReplanPreview.value?.signal || pathReplanSignal.value || null);
+const previewMeta = computed(() => ({
+  priority: getReplanPriorityText(previewSignal.value?.priority),
+  recommendation: getReplanRecommendationText(previewSignal.value?.recommendation),
+  scope: getReplanScopeText(previewSignal.value?.scope),
+  action: getReplanActionText(previewSignal.value),
+  reasonCodes: getReplanReasonCodeLabels(previewSignal.value?.reasonCodes || []),
+}));
+const previewRationaleText = computed(() => {
+  return latestReplanPreview.value?.request?.reason
+    || previewSignal.value?.rationale
+    || '系统判断当前学习状态更适合先确认后续路径安排。';
+});
+const previewTargetText = computed(() => {
+  const stageNumber = latestReplanPreview.value?.request?.stageNumber;
+  if (stageNumber) {
+    return `本次会优先重设计第 ${stageNumber} 阶段的后续安排。`;
+  }
+
+  if (previewSignal.value?.scope === 'downstream_path') {
+    return '本次会影响当前阶段之后的后续路径安排。';
+  }
+
+  return '本次会优先调整紧接着的下一阶段安排。';
+});
+const replanResultSummary = computed(() => {
+  const result = replanExecutionResult.value?.result;
+  if (!result) return '路径已根据当前学习证据完成调整。';
+
+  const parts = ['路径已根据当前学习证据完成调整'];
+  if (result.redesignedStageNumber) {
+    parts.push(`第 ${result.redesignedStageNumber} 阶段已重新设计`);
+  }
+  if (typeof result.preservedCompletedTaskCount === 'number') {
+    parts.push(`保留已完成任务 ${result.preservedCompletedTaskCount} 个`);
+  }
+  return `${parts.join('，')}。`;
+});
+
 const pathDetailNotes = computed(() => {
-  if (adaptiveGuidance.value?.subtitle || adaptiveGuidance.value?.warningCopy) {
-    return [adaptiveGuidance.value.subtitle, adaptiveGuidance.value.warningCopy]
+  if (adaptiveCopy.value?.subtitle || adaptiveCopy.value?.warningCopy) {
+    return [adaptiveCopy.value.subtitle, adaptiveCopy.value.warningCopy]
       .filter((item: string) => typeof item === 'string' && item.trim())
       .slice(0, 3);
   }
@@ -691,8 +842,8 @@ const getTaskConceptLabel = (task: any) => {
 };
 
 const pathDetailPlan = computed(() => {
-  if (adaptiveGuidance.value?.todayActions?.length) {
-    return adaptiveGuidance.value.todayActions.slice(0, 3).map((item: any, index: number) => ({
+  if (adaptiveCopy.value?.todayActions?.length) {
+    return adaptiveCopy.value.todayActions.slice(0, 3).map((item: any, index: number) => ({
       title: item.title || `任务 ${index + 1}`,
       desc: item.desc || item.action || '',
     }));
@@ -710,14 +861,19 @@ const pathDetailPlan = computed(() => {
 });
 
 const paceSuggestionCards = computed(() => {
-  if (adaptiveGuidance.value?.paceHint || adaptiveGuidance.value?.nextStep) {
+  if (adaptiveCopy.value?.paceHint || adaptiveCopy.value?.nextStep || adaptiveSummary.value?.path?.recommendedAction) {
+    const summaryAction = adaptiveSummary.value?.path?.recommendedAction;
     return [
       {
-        title: adaptiveGuidance.value.paceHint || paceRangeText.value,
+        title: adaptiveCopy.value?.paceHint
+          || (summaryAction === 'slow-down' ? '当前建议放慢节奏，优先消化当前内容。' : paceRangeText.value),
         desc: '根据当前学习状态动态调整。'
       },
       {
-        title: adaptiveGuidance.value.nextStep || `当前阶段先聚焦「${activeStage.value?.title || '这一阶段'}」`,
+        title: adaptiveCopy.value?.nextStep
+          || (summaryAction === 'review-prerequisites'
+            ? '先补前置概念，再继续当前阶段。'
+            : `当前阶段先聚焦「${activeStage.value?.title || '这一阶段'}」`),
         desc: '优先处理当前最关键的推进点。'
       }
     ];
@@ -752,6 +908,17 @@ const handleLogout = async () => {
 
 const handleScroll = () => {
   headerScrolled.value = window.scrollY > 50;
+};
+
+const loadLearnerCenter = async () => {
+  try {
+    learnerCenter.value = await userAPI.getLearnerCenter({
+      pathId,
+      scope: 'path'
+    });
+  } catch (error) {
+    console.error('获取路径学习者中心失败:', error);
+  }
 };
 
 const loadPathData = async () => {
@@ -795,6 +962,8 @@ const loadPathData = async () => {
     } catch (error) {
       console.error('获取路径动态引导文案失败:', error);
     }
+
+    await loadLearnerCenter();
   } catch (error: any) {
     toast.error(error.response?.data?.error?.message || '加载路径详情失败');
   } finally {
@@ -859,6 +1028,68 @@ const retryEnrichment = async () => {
   } finally {
     retryingEnrichment.value = false;
   }
+};
+
+const previewReplan = async () => {
+  replanLoading.value = true;
+  try {
+    const response = await learningAPI.requestPathReplan(pathId, {
+      triggerSource: 'learner-model-agent',
+      mode: 'new_version',
+      reason: pathReplanSignal.value?.rationale || '根据学习者状态建议确认后续路径安排',
+      requireConfirmation: true,
+    });
+
+    if (response.status !== 'awaiting-confirmation') {
+      throw new Error('当前未返回可确认的调整预览');
+    }
+
+    latestReplanPreview.value = response;
+    replanPreviewDialogVisible.value = true;
+  } catch (error: any) {
+    toast.error(error?.message || '获取调整建议失败');
+  } finally {
+    replanLoading.value = false;
+  }
+};
+
+const confirmReplan = async () => {
+  if (!latestReplanPreview.value?.request) {
+    await previewReplan();
+    if (!latestReplanPreview.value?.request) return;
+  }
+
+  replanConfirmLoading.value = true;
+  try {
+    const request = latestReplanPreview.value.request;
+    const response = await learningAPI.requestPathReplan(pathId, {
+      triggerSource: request.triggerSource || 'learner-model-agent',
+      mode: request.mode || 'new_version',
+      stageNumber: request.stageNumber,
+      reason: request.reason,
+      evidence: request.evidence,
+      requireConfirmation: false,
+    });
+
+    replanExecutionResult.value = response;
+    replanPreviewDialogVisible.value = false;
+    latestReplanPreview.value = null;
+    toast.success('已执行路径调整，请查看最新结果');
+    await loadPathData();
+  } catch (error: any) {
+    toast.error(error?.message || '确认路径调整失败');
+  } finally {
+    replanConfirmLoading.value = false;
+  }
+};
+
+const dismissReplanResult = () => {
+  replanExecutionResult.value = null;
+};
+
+const refreshPathAfterReplan = async () => {
+  await loadPathData();
+  toast.success('已刷新当前路径');
 };
 
 const startEnrichmentPolling = () => {
@@ -2251,6 +2482,170 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
+.replan-advisory-banner {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(245, 108, 108, 0.18);
+  background: rgba(255, 247, 245, 0.86);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.replan-advisory-banner__copy strong {
+  color: #8a3b2a;
+}
+
+.replan-advisory-banner__copy p {
+  margin: 8px 0 0;
+  color: #7a5d56;
+  line-height: 1.7;
+}
+
+.replan-advisory-banner__meta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #8d6b63;
+}
+
+.replan-advisory-banner__action-copy {
+  font-weight: 600;
+}
+
+.replan-advisory-banner__chips {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.replan-advisory-banner__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replan-advisory-banner__hint {
+  font-size: 12px;
+  color: #7a8599;
+}
+
+.replan-result-banner {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.08), rgba(31, 87, 204, 0.04));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.replan-result-banner__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.replan-result-banner__copy strong {
+  font-size: 15px;
+  color: #1f57cc;
+}
+
+.replan-result-banner__copy p {
+  margin: 0;
+  color: #435066;
+  line-height: 1.6;
+}
+
+.replan-result-banner__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: #5d6b82;
+}
+
+.replan-result-banner__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replan-preview-dialog {
+  display: grid;
+  gap: 18px;
+}
+
+.replan-preview-dialog__hero {
+  display: grid;
+  gap: 8px;
+}
+
+.replan-preview-dialog__hero strong {
+  font-size: 18px;
+  color: #172033;
+}
+
+.replan-preview-dialog__hero p {
+  margin: 0;
+  color: #5d6b82;
+  line-height: 1.7;
+}
+
+.replan-preview-dialog__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.replan-preview-dialog__meta-item {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(244, 247, 252, 0.92);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  display: grid;
+  gap: 6px;
+}
+
+.replan-preview-dialog__meta-item span {
+  font-size: 12px;
+  color: #7a8599;
+}
+
+.replan-preview-dialog__meta-item strong {
+  color: #172033;
+  line-height: 1.5;
+}
+
+.replan-preview-dialog__section {
+  display: grid;
+  gap: 10px;
+}
+
+.replan-preview-dialog__list {
+  margin: 0;
+  padding-left: 18px;
+  color: #435066;
+  line-height: 1.7;
+}
+
+.replan-preview-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.path-detail-chip--warn {
+  background: rgba(245, 108, 108, 0.12);
+  color: #c45656;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -2331,6 +2726,18 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+
+  .replan-result-banner {
+    flex-direction: column;
+  }
+
+  .replan-result-banner__actions {
+    width: 100%;
+  }
+
+  .replan-preview-dialog__meta {
+    grid-template-columns: 1fr;
   }
 }
 

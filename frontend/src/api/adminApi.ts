@@ -797,8 +797,8 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/path-status`);
   },
 
-  startVirtualLearning: async (sessionId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/start-learning`);
+  startVirtualLearning: async (sessionId: string, data?: { taskId?: string }) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/start-learning`, data);
   },
 
   virtualSessionLearningStep: async (sessionId: string) => {
@@ -807,6 +807,18 @@ export const adminVirtualLearnersApi = {
 
   virtualSessionAutoLearning: async (sessionId: string, data?: { maxMilestones?: number }) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/auto-learning`, data);
+  },
+
+  restartVirtualSessionPath: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/restart-path`);
+  },
+
+  restartVirtualLearning: async (sessionId: string, data?: { taskId?: string }) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/restart-learning`, data);
+  },
+
+  stopVirtualLearning: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/stop-learning`);
   },
 
   getVirtualSessionLogs: async (sessionId: string) => {

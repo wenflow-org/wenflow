@@ -37,6 +37,13 @@ export class LearnerProjectionService {
         fragile: snapshot.knowledgeMemory.globalSignals.fragileConcepts,
         struggling: snapshot.knowledgeMemory.globalSignals.strugglingConcepts,
       },
+      backgroundKnowledge: {
+        reusableFoundations: snapshot.knowledgeMemory.globalBackground.reusableFoundations,
+        blockedFoundations: snapshot.knowledgeMemory.globalBackground.blockedFoundations,
+        recentConceptLedger: snapshot.knowledgeMemory.globalBackground.conceptLedger.slice(0, 12),
+        recurringConfusions: snapshot.knowledgeMemory.globalBackground.recurringConfusions.slice(0, 8),
+      },
+      learningControlState: snapshot.learningControlState,
       teachingHints: {
         promptEnhancement: snapshot.teachingHints.promptEnhancement,
         recommendedApproach: snapshot.teachingHints.recommendedApproach,
@@ -84,6 +91,7 @@ export class LearnerProjectionService {
         milestoneStates: currentPath.milestoneProgress,
         taskMastery: currentPath.taskMastery,
       },
+      signal: snapshot.replanSignal,
     };
   }
 }

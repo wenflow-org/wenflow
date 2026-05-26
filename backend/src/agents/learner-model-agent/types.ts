@@ -62,6 +62,27 @@ export interface InteractionHistory {
   conceptsMastered: string[];
 }
 
+export interface LearnerNarrativeInsights {
+  goalNarrative: string;
+  backgroundContextNote: string;
+  motivationNarrative: string;
+  timeConstraintNote: string;
+  selfAssessmentNote: string;
+  contentReceptionPattern: string;
+  practicePreferenceNote: string;
+  frictionPatternNote: string;
+  effectiveTeachingPattern: string;
+  supportStyleNote: string;
+  taskGranularityNote: string;
+}
+
+export interface LearnerCurriculumControls {
+  taskGranularityLevel: 'small' | 'medium' | 'large';
+  conceptDensityLevel: 'low' | 'medium' | 'high';
+  reviewFrequencyLevel: 'low' | 'medium' | 'high';
+  progressionStrategyNote: string;
+}
+
 export interface LearnerModelProfile {
   userId: string;
   lastUpdated: string;
@@ -72,6 +93,8 @@ export interface LearnerModelProfile {
   preferences: LearningPreferences;
   emotional: EmotionalProfile;
   history: InteractionHistory;
+  narrativeInsights: LearnerNarrativeInsights;
+  curriculumControls: LearnerCurriculumControls;
   
   derivedInsights: {
     learningVelocity: number;
@@ -151,6 +174,44 @@ export interface LearnerPrerequisiteGap {
   severity: 'low' | 'medium' | 'high';
 }
 
+export interface LearnerBackgroundConceptLedgerItem {
+  conceptKey: string;
+  label: string;
+  familiarity: 'seen' | 'practiced' | 'understood' | 'stable';
+  transferReadiness: 'low' | 'medium' | 'high';
+  misconceptionRisk: 'low' | 'medium' | 'high';
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  sourcePaths: string[];
+  sourceTasks: string[];
+  evidenceCount: number;
+}
+
+export interface LearnerRecurringConfusion {
+  conceptKey: string;
+  label: string;
+  pattern: string;
+  confidence: number;
+  count: number;
+  lastSeenAt?: string;
+}
+
+export interface LearnerTransferSignal {
+  conceptKey: string;
+  label: string;
+  readiness: 'low' | 'medium' | 'high';
+  confidence: number;
+  lastSeenAt?: string;
+}
+
+export interface LearnerGlobalBackgroundKnowledge {
+  conceptLedger: LearnerBackgroundConceptLedgerItem[];
+  recurringConfusions: LearnerRecurringConfusion[];
+  reusableFoundations: string[];
+  blockedFoundations: string[];
+  transferSignals: LearnerTransferSignal[];
+}
+
 export interface LearnerPathKnowledgeMemory {
   learningPathId: string;
   pathTitle: string;
@@ -186,6 +247,27 @@ export interface LearnerKnowledgeMemory {
     fragileConcepts: string[];
     strugglingConcepts: string[];
   };
+  globalBackground: LearnerGlobalBackgroundKnowledge;
+}
+
+export interface LearnerLearningControlState {
+  paceMode: 'recover' | 'steady' | 'push';
+  conceptLoad: 'low' | 'medium' | 'high';
+  reviewPriority: 'high' | 'medium' | 'low';
+  challengeLevelCap: 'low' | 'medium' | 'high';
+  checkpointNeed: 'high' | 'medium' | 'low';
+  shouldAvoidNewConcepts: boolean;
+  shouldPreferConsolidation: boolean;
+  shouldOfferBreak: boolean;
+}
+
+export interface LearnerReplanSignal {
+  shouldSuggest: boolean;
+  priority: 'none' | 'low' | 'medium' | 'high';
+  recommendation: 'keep' | 'reinforce' | 'slow_down' | 'resequence' | 'accelerate';
+  scope: 'none' | 'next_milestone' | 'downstream_path';
+  rationale: string;
+  reasonCodes: string[];
 }
 
 export interface LearnerTeachingHints {
@@ -218,6 +300,8 @@ export interface LearnerSnapshot {
   };
   profile: LearnerModelProfile;
   dynamicState: LearnerDynamicState;
+  learningControlState: LearnerLearningControlState;
+  replanSignal: LearnerReplanSignal;
   knowledgeMemory: LearnerKnowledgeMemory;
   teachingHints: LearnerTeachingHints;
 }
@@ -252,6 +336,13 @@ export interface TeachingLearnerProjection {
     fragile: string[];
     struggling: string[];
   };
+  backgroundKnowledge: {
+    reusableFoundations: string[];
+    blockedFoundations: string[];
+    recentConceptLedger: LearnerBackgroundConceptLedgerItem[];
+    recurringConfusions: LearnerRecurringConfusion[];
+  };
+  learningControlState: LearnerLearningControlState;
   teachingHints: {
     promptEnhancement: string;
     recommendedApproach: string;
@@ -299,6 +390,7 @@ export interface LearnerReplanProjection {
     milestoneStates: LearnerMilestoneProgress[];
     taskMastery: LearnerTaskMastery[];
   };
+  signal: LearnerReplanSignal;
 }
 
 export interface LearnerPersonalizationConfig {
@@ -332,7 +424,7 @@ export interface LearnerPersonalizationConfig {
 export interface ProfileUpdateSource {
   agentId: string;
   timestamp: string;
-  dataType: 'cognitive' | 'behavioral' | 'learning' | 'preferences' | 'emotional' | 'interaction';
+  dataType: 'cognitive' | 'behavioral' | 'learning' | 'preferences' | 'emotional' | 'interaction' | 'knowledge-background';
   data: Partial<
     CognitiveProfile & 
     BehavioralBaseline & 
@@ -340,7 +432,9 @@ export interface ProfileUpdateSource {
     LearningPreferences & 
     EmotionalProfile &
     InteractionHistory
-  >;
+  > & {
+    learnerBackground?: Partial<LearnerGlobalBackgroundKnowledge>;
+  };
   confidence: number;
 }
 

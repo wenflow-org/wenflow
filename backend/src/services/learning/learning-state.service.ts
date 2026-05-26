@@ -18,6 +18,13 @@ const EWMA_CONFIG = {
   LF_LAMBDA: 0.70,   // 7天衰减
 };
 
+const NATURAL_DECAY = {
+  LSS_DAILY_FACTOR: 0.82,
+  KTL_DAILY_FACTOR: 0.99,
+  LF_DAILY_FACTOR: 0.74,
+  LF_BASELINE: 1.2,
+};
+
 // LSS 输入参数
 export interface LSSInputs {
   difficulty: number;      // 任务难度 1-10
@@ -40,6 +47,8 @@ export interface LearningStateMetrics {
 
 export interface SessionScoreInput {
   sessionLss: number;
+  sessionKtl?: number;
+  sessionLf?: number;
   durationMinutes: number;
   confidence?: number;
 }
@@ -82,6 +91,76 @@ export interface InterventionDecision {
 }
 
 export class LearningStateService {
+  private getNaturalDayDiff(from: Date, to: Date): number {
+    const start = new Date(from);
+    const end = new Date(to);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    const diff = end.getTime() - start.getTime();
+    return Math.max(0, Math.floor(diff / 86400000));
+  }
+
+  private normalizeTenScale(value: number | null | undefined): number {
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    if (numeric > 10) {
+      return Math.min(10, Math.max(0, numeric / 10));
+    }
+    return Math.min(10, Math.max(0, numeric));
+  }
+
+  private normalizeBalanceScale(value: number | null | undefined): number {
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    if (numeric > 10 || numeric < -10) {
+      return Math.max(-10, Math.min(10, numeric / 10));
+    }
+    return Math.max(-10, Math.min(10, numeric));
+  }
+
+  toDisplayMetrics(metrics: LearningStateMetrics): LearningStateMetrics {
+    return {
+      ...metrics,
+      lss: Number((metrics.lss * 10).toFixed(2)),
+      ktl: Number((metrics.ktl * 10).toFixed(2)),
+      lf: Number((metrics.lf * 10).toFixed(2)),
+      lsb: Number((metrics.lsb * 10).toFixed(2)),
+    };
+  }
+
+  restoreMetrics(input: {
+    lss: number | null | undefined;
+    ktl: number | null | undefined;
+    lf: number | null | undefined;
+    lsb: number | null | undefined;
+    timestamp: Date;
+  }, asOf: Date = new Date()): LearningStateMetrics {
+    const normalized: LearningStateMetrics = {
+      lss: this.normalizeTenScale(input.lss),
+      ktl: this.normalizeTenScale(input.ktl),
+      lf: this.normalizeTenScale(input.lf),
+      lsb: this.normalizeBalanceScale(input.lsb),
+      timestamp: input.timestamp,
+    };
+
+    const dayDiff = this.getNaturalDayDiff(input.timestamp, asOf);
+    if (dayDiff <= 0) {
+      return normalized;
+    }
+
+    const decayedLss = normalized.lss * Math.pow(NATURAL_DECAY.LSS_DAILY_FACTOR, dayDiff);
+    const decayedKtl = normalized.ktl * Math.pow(NATURAL_DECAY.KTL_DAILY_FACTOR, dayDiff);
+    const decayedLf = NATURAL_DECAY.LF_BASELINE
+      + (normalized.lf - NATURAL_DECAY.LF_BASELINE) * Math.pow(NATURAL_DECAY.LF_DAILY_FACTOR, dayDiff);
+    const decayedLsb = this.calculateLSB(decayedKtl, decayedLf);
+
+    return {
+      lss: this.normalizeTenScale(decayedLss),
+      ktl: this.normalizeTenScale(decayedKtl),
+      lf: this.normalizeTenScale(decayedLf),
+      lsb: decayedLsb,
+      timestamp: asOf,
+    };
+  }
+
   /**
    * 计算 LSS (Learning Stress Score)
    * 公式：LSS = (难度×0.3 + 认知负荷×0.3 + 效率惩罚×0.4) × 时间因子
@@ -169,13 +248,13 @@ export class LearningStateService {
 
     if (!latestRecord) return null;
 
-    return {
-      lss: latestRecord.lss ?? 0,
-      ktl: latestRecord.ktl ?? 0,
-      lf: latestRecord.lf ?? 0,
-      lsb: latestRecord.lsb ?? 0,
+    return this.restoreMetrics({
+      lss: latestRecord.lss,
+      ktl: latestRecord.ktl,
+      lf: latestRecord.lf,
+      lsb: latestRecord.lsb,
       timestamp: latestRecord.calculatedAt,
-    };
+    });
   }
 
   /**
@@ -226,23 +305,27 @@ export class LearningStateService {
     input: SessionScoreInput
   ): Promise<LearningStateMetrics> {
     const normalizedLss = Math.min(10, Math.max(0, input.sessionLss));
+    const normalizedSessionKtl = Math.min(10, Math.max(0, input.sessionKtl ?? input.sessionLss));
+    const normalizedSessionLf = Math.min(10, Math.max(0, input.sessionLf ?? input.sessionLss));
     const confidence = input.confidence === undefined
       ? 0.75
       : Math.min(1, Math.max(0.2, input.confidence));
 
     // 低置信度自动降权，避免单次评估抖动过大
-    const confidenceWeightedLss = normalizedLss * confidence;
+    const confidenceAdjustedLss = normalizedLss * (0.6 + confidence * 0.4);
+    const confidenceAdjustedKtl = normalizedSessionKtl * (0.6 + confidence * 0.4);
+    const confidenceAdjustedLf = normalizedSessionLf * (0.6 + confidence * 0.4);
 
     const previousMetrics = await this.getPreviousMetrics(userId);
-    const previousKTL = previousMetrics?.ktl ?? confidenceWeightedLss;
-    const previousLF = previousMetrics?.lf ?? confidenceWeightedLss;
+    const previousKTL = previousMetrics?.ktl ?? confidenceAdjustedKtl;
+    const previousLF = previousMetrics?.lf ?? confidenceAdjustedLf;
 
-    const currentKTL = this.calculateKTL(previousKTL, confidenceWeightedLss);
-    const currentLF = this.calculateLF(previousLF, confidenceWeightedLss);
+    const currentKTL = this.calculateKTL(previousKTL, confidenceAdjustedKtl);
+    const currentLF = this.calculateLF(previousLF, confidenceAdjustedLf);
     const currentLSB = this.calculateLSB(currentKTL, currentLF);
 
     const metrics: LearningStateMetrics = {
-      lss: confidenceWeightedLss,
+      lss: confidenceAdjustedLss,
       ktl: currentKTL,
       lf: currentLF,
       lsb: currentLSB,
@@ -250,8 +333,8 @@ export class LearningStateService {
     };
 
     await this.saveMetrics(userId, metrics, {
-      difficulty: Math.max(1, Math.min(10, confidenceWeightedLss)),
-      cognitiveLoad: Math.max(1, Math.min(10, confidenceWeightedLss)),
+      difficulty: Math.max(1, Math.min(10, confidenceAdjustedLss)),
+      cognitiveLoad: Math.max(1, Math.min(10, confidenceAdjustedLss)),
       efficiency: confidence,
       timeSpent: input.durationMinutes,
       expectedTime: 15,
@@ -260,7 +343,7 @@ export class LearningStateService {
     });
 
     logger.info(
-      `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, confidence=${confidence.toFixed(2)}, weightedLss=${confidenceWeightedLss.toFixed(2)}, LSB=${currentLSB.toFixed(2)}`
+      `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, sessionKtl=${normalizedSessionKtl.toFixed(2)}, sessionLf=${normalizedSessionLf.toFixed(2)}, confidence=${confidence.toFixed(2)}, adjustedLss=${confidenceAdjustedLss.toFixed(2)}, adjustedKtl=${confidenceAdjustedKtl.toFixed(2)}, adjustedLf=${confidenceAdjustedLf.toFixed(2)}, LSB=${currentLSB.toFixed(2)}`
     );
 
     return metrics;
@@ -343,10 +426,10 @@ await prisma.learning_metrics.create({
     });
 
     return records.map(r => ({
-      lss: r.lss ?? 0,
-      ktl: r.ktl ?? 0,
-      lf: r.lf ?? 0,
-      lsb: r.lsb ?? 0,
+      lss: this.normalizeTenScale(r.lss),
+      ktl: this.normalizeTenScale(r.ktl),
+      lf: this.normalizeTenScale(r.lf),
+      lsb: this.normalizeBalanceScale(r.lsb),
       timestamp: r.calculatedAt,
     }));
   }

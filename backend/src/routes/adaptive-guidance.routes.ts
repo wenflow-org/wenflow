@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adaptiveGuidanceCopy } from '../skills/adaptive-guidance-copy';
 import { learnerSnapshotService } from '../services/learner/LearnerSnapshotService';
+import { learnerStateSummaryService } from '../services/learner/LearnerStateSummaryService';
 import learningService from '../services/learning/learning.service';
+import stateTrackingService from '../services/learning/state-tracking.service';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 
@@ -17,7 +19,7 @@ router.get('/copy', async (req: any, res) => {
       return res.status(401).json({ success: false, error: '未登录' });
     }
 
-    const view = req.query.view === 'path-detail' || req.query.view === 'path-list'
+    const view = req.query.view === 'path-detail' || req.query.view === 'path-list' || req.query.view === 'learning-state'
       ? req.query.view
       : 'dashboard';
     const pathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
@@ -25,7 +27,7 @@ router.get('/copy', async (req: any, res) => {
     const learnerSnapshot = await learnerSnapshotService.getSnapshot({
       userId,
       learningPathId: pathId,
-      mode: 'path',
+      mode: view === 'path-detail' ? 'path' : 'global',
     });
 
     const learningState = await learningService.getLearningStats(userId).catch(() => null);
@@ -42,6 +44,16 @@ router.get('/copy', async (req: any, res) => {
     const sessionWrapup = latestTeachingSession?.wrapup ? JSON.parse(latestTeachingSession.wrapup) : null;
     const advisory = latestTeachingSession?.advisory ? JSON.parse(latestTeachingSession.advisory) : null;
 
+    const warnings = await stateTrackingService.checkWarnings(userId).catch(() => []);
+    const warningCount = warnings.length;
+
+    const summary = learnerStateSummaryService.build({
+      learnerSnapshot,
+      learningState,
+      path,
+      warningCount,
+    });
+
     const result = await adaptiveGuidanceCopy({
       view,
       learnerSnapshot,
@@ -51,7 +63,7 @@ router.get('/copy', async (req: any, res) => {
       advisory,
     });
 
-    return res.json({ success: true, data: result.output });
+    return res.json({ success: true, data: { copy: result.output, summary } });
   } catch (error: any) {
     logger.error('[adaptive-guidance] copy failed', { error: error?.message || String(error) });
     return res.status(500).json({ success: false, error: error?.message || '生成引导文案失败' });

@@ -83,6 +83,7 @@ export interface GoalPathRequest {
   structuredData?: any;
   confirmedProposal?: any;
   confidenceScores?: any;
+  normalizedGoalState?: any;
   conversationHistory?: Array<{ role: string; content: string }>;
   finalUserVisible?: string;
   stage?: string;

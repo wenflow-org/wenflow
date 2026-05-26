@@ -189,6 +189,44 @@ export interface AdaptiveGuidanceCopy {
   warningCopy: string;
 }
 
+export interface LearnerStateSummary {
+  global: {
+    stateLevel: 'recover' | 'caution' | 'balanced' | 'strong';
+    pressureLevel: 'low' | 'medium' | 'high';
+    fatigueLevel: 'low' | 'medium' | 'high';
+    trendLevel: 'improving' | 'stable' | 'declining';
+    pacingLevel: 'slow' | 'moderate' | 'fast';
+    hasWarnings: boolean;
+    warningLevel: 'none' | 'info' | 'warning' | 'critical';
+    primaryAction: 'continue-learning' | 'learning-state' | 'achievements' | 'create-goal' | 'path-detail';
+  };
+  path?: {
+    pathId?: string;
+    title?: string;
+    progressPercent: number;
+    stageTitle?: string;
+    taskTitle?: string;
+    hasPrerequisiteGaps: boolean;
+    hasFragileConcepts: boolean;
+    hasStrugglingConcepts: boolean;
+    recommendedAction: 'continue-current-task' | 'review-prerequisites' | 'slow-down' | 'open-path';
+  } | null;
+}
+
+export interface AdaptiveGuidancePayload {
+  copy: AdaptiveGuidanceCopy;
+  summary: LearnerStateSummary;
+}
+
+export interface PathReplanResponse {
+  enabled: boolean;
+  status: string;
+  signal?: any;
+  request?: any;
+  policy?: any;
+  result?: any;
+}
+
 export const learningAPI = {
   // 创建学习目标
   async createGoal(data: { description: string; subject?: string }): Promise<LearningGoal> {
@@ -228,6 +266,18 @@ export const learningAPI = {
     return response.data;
   },
 
+  async requestPathReplan(pathId: string, data: {
+    triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
+    reason?: string;
+    mode?: 'new_version' | 'overwrite';
+    stageNumber?: number;
+    evidence?: Record<string, any>;
+    requireConfirmation?: boolean;
+  }): Promise<PathReplanResponse> {
+    const response = await api.post(`/learning/paths/${pathId}/replan`, data);
+    return response.data;
+  },
+
   // 重新生成学习路径
   async regeneratePath(pathId: string): Promise<{ message?: string }> {
     const response = await api.post(`/learning/paths/${pathId}/regenerate`);
@@ -261,7 +311,7 @@ export const learningAPI = {
     return (response as any)?.data ?? null;
   },
 
-  async getAdaptiveGuidance(view: 'dashboard' | 'path-list' | 'path-detail', pathId?: string): Promise<AdaptiveGuidanceCopy | null> {
+  async getAdaptiveGuidance(view: 'dashboard' | 'path-list' | 'path-detail' | 'learning-state', pathId?: string): Promise<AdaptiveGuidancePayload | null> {
     const query = pathId ? `?view=${encodeURIComponent(view)}&pathId=${encodeURIComponent(pathId)}` : `?view=${encodeURIComponent(view)}`;
     const response = await api.get(`/adaptive-guidance/copy${query}`);
     return response.data || null;

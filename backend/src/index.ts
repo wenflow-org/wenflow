@@ -16,6 +16,7 @@ import { createAgentCollaborationService } from './services/agent-collaboration.
 import { learnerModelAgent } from './agents/learner-model-agent';
 import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
+import { learnerBackgroundOrchestrator } from './services/learner/LearnerBackgroundOrchestrator';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
 
@@ -200,20 +201,19 @@ agents: {
       'learner-model-agent': '学习者画像与状态中心'
     },
     skills: [
-      'pdf-parser',
       'text-structure-analyzer',
-      'time-estimator',
-      'content-generation',
-      'quiz-generation',
       'retrieval',
-      'answer-generation',
-      'code-explainer',
-      'exercise-generator',
-      'error-pattern',
       'web-extractor',
       'image-analyzer',
       'memory-search',
-      'smart-search'
+      'smart-search',
+      'path-scene-framing',
+      'stage-designer',
+      'adaptive-guidance-copy',
+      'goal-profile-inference',
+      'learning-pattern-distiller',
+      'session-knowledge-distiller',
+      'dialogue-concept-extractor'
     ]
   });
 });
@@ -359,6 +359,7 @@ async function initializeAgentCollaboration() {
   service.start();
   
   learnerModelAgent.setupEventListeners(eventBus);
+  learnerBackgroundOrchestrator.setupEventListeners(eventBus);
   
   logger.info('✅ Agent Collaboration Service started');
   
