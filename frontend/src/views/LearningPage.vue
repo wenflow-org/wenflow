@@ -1609,10 +1609,10 @@ const handleWrapupAdvisoryAction = async (action: string) => {
 
   try {
     await ElMessageBox.confirm(
-      '这会基于当前学习证据创建一个新的路径版本，保留原路径不变。是否继续？',
-      '调整下一阶段',
+      '这会基于当前学习证据调整当前路径的后续阶段，已完成任务会保留不变。是否继续？',
+      '调整当前路径',
       {
-        confirmButtonText: '确认调整',
+        confirmButtonText: '确认调整当前路径',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -1640,7 +1640,7 @@ const handleWrapupAdvisoryAction = async (action: string) => {
 
     const payload = result.data || result;
     const newPathId = payload?.result?.newPathId || payload?.data?.result?.newPathId;
-    toast.success('已创建新的学习路径版本');
+    toast.success('已调整当前路径的后续阶段');
     if (newPathId) {
       router.push(`/learning-path/${newPathId}`);
     }

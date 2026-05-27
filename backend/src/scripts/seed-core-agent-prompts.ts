@@ -6,6 +6,7 @@ import { DEFAULT_PEER_AGENT_PROMPT } from '../agents/peer-agent/index';
 import { DEFAULT_SIMULATION_PROMPT } from '../agents/virtual-learner-simulation-agent/prompt';
 import { PATH_SCENE_FRAMING_PROMPT, PATH_SCENE_FRAMING_MAX_TOKENS, PATH_SCENE_FRAMING_TEMPERATURE } from '../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../skills/stage-designer';
+import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from '../skills/virtual-learner-scenario-designer';
 
 const DEFAULT_MODEL = (process.env.AI_MODEL || '').trim();
 
@@ -79,6 +80,14 @@ export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
     systemPrompt: STAGE_DESIGNER_PROMPT,
     temperature: 0.3,
     maxTokens: 32000,
+  },
+  {
+    agentId: 'skill:virtual-learner-scenario-designer',
+    name: 'v1-default-virtual-learner-scenario-designer',
+    description: '从 virtual-learner-scenario-designer 当前代码默认 Prompt 初始化',
+    systemPrompt: VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
+    temperature: VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE,
+    maxTokens: VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS,
   },
 ];
 

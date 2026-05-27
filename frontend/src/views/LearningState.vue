@@ -165,7 +165,7 @@
                   <div class="state-hero__actions-strip state-hero__actions-strip--stacked">
                     <router-link :to="currentPathDetailPath" class="state-hero__action-card">
                       <strong>查看当前路径</strong>
-                      <p>先查看当前路径中的调整建议，再决定是否创建新版本。</p>
+                      <p>先查看当前路径中的调整建议，再决定是否调整后续阶段。</p>
                       <span>前往查看</span>
                     </router-link>
                   </div>
@@ -208,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
@@ -623,6 +623,21 @@ const loadTrends = async (days: number) => {
   }
 };
 
+const refreshStatePage = async (options?: { forceTrends?: boolean }) => {
+  loading.value = true;
+  if (options?.forceTrends) {
+    trendCache.delete(trendDays.value);
+  }
+
+  await Promise.all([
+    loadCurrentState(),
+    loadTrends(trendDays.value),
+    loadAdaptiveGuidance(),
+    loadLearnerCenter()
+  ]);
+  loading.value = false;
+};
+
 // 加载预警信息
 const loadWarnings = async () => {
   try {
@@ -684,14 +699,7 @@ watch(trendDays, (newDays) => {
 
 onMounted(() => {
   const init = async () => {
-    loading.value = true;
-    await Promise.all([
-      loadCurrentState(),
-      loadTrends(trendDays.value),
-      loadAdaptiveGuidance(),
-      loadLearnerCenter()
-    ]);
-    loading.value = false;
+    await refreshStatePage();
 
     // 预警放到首屏之后，降低图表首屏阻塞
     if ('requestIdleCallback' in window) {
@@ -708,6 +716,10 @@ onMounted(() => {
   init();
 
   window.addEventListener('scroll', handleScroll);
+});
+
+onActivated(() => {
+  refreshStatePage({ forceTrends: true });
 });
 
 onUnmounted(() => {

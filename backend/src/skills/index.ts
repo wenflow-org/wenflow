@@ -63,6 +63,10 @@ import { sessionKnowledgeDistiller as sessionKnowledgeDistillerFn } from './sess
 export { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
 import { dialogueConceptExtractor as dialogueConceptExtractorFn } from './dialogue-concept-extractor';
 
+// 虚拟学习者场景设计
+export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './virtual-learner-scenario-designer';
+import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } from './virtual-learner-scenario-designer';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -82,6 +86,7 @@ import { goalProfileInferenceDefinition } from './goal-profile-inference';
 import { learningPatternDistillerDefinition } from './learning-pattern-distiller';
 import { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
 import { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
+import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   textStructureAnalyzerDefinition,
@@ -97,7 +102,8 @@ export const allSkillDefinitions: SkillDefinition[] = [
   goalProfileInferenceDefinition,
   learningPatternDistillerDefinition,
   sessionKnowledgeDistillerDefinition,
-  dialogueConceptExtractorDefinition
+  dialogueConceptExtractorDefinition,
+  virtualLearnerScenarioDesignerDefinition
 ];
 
 // Skill 名称映射
@@ -115,7 +121,8 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'goal-profile-inference': goalProfileInferenceFn,
   'learning-pattern-distiller': learningPatternDistillerFn,
   'session-knowledge-distiller': sessionKnowledgeDistillerFn,
-  'dialogue-concept-extractor': dialogueConceptExtractorFn
+  'dialogue-concept-extractor': dialogueConceptExtractorFn,
+  'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';

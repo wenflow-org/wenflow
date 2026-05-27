@@ -217,8 +217,8 @@ const handleAdvisoryAction = async (action: string) => {
   }
 
   try {
-    await ElMessageBox.confirm('这会基于当前学习证据创建新的路径版本，是否继续？', '调整下一阶段', {
-      confirmButtonText: '确认调整',
+    await ElMessageBox.confirm('这会基于当前学习证据调整当前路径的后续阶段，已完成任务会保留不变。是否继续？', '调整当前路径', {
+      confirmButtonText: '确认调整当前路径',
       cancelButtonText: '取消',
       type: 'warning'
     });
@@ -235,7 +235,7 @@ const handleAdvisoryAction = async (action: string) => {
         taskTitle: sessionDetail.value.topic
       }
     });
-    toast.success('已创建新的学习路径版本');
+    toast.success('已调整当前路径的后续阶段');
   } catch (err: any) {
     if (err !== 'cancel') toast.error(err?.message || '调整下一阶段失败');
   }

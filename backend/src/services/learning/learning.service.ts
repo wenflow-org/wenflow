@@ -3010,7 +3010,8 @@ const learningPath = await prisma.learning_paths.findUnique({
   }
 
   async requestPathReplan(data: PathReplanRequest) {
-    const mode = data.mode || 'new_version';
+    const requestedMode = data.mode || 'new_version';
+    const mode = requestedMode === 'new_version' ? 'overwrite' : requestedMode;
     const triggerSource = data.triggerSource || 'api';
 
     const path = await prisma.learning_paths.findUnique({
@@ -3044,6 +3045,7 @@ const learningPath = await prisma.learning_paths.findUnique({
     });
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
     const replanSignal = learnerSnapshot.replanSignal;
+    const targetMilestone = this.resolveStageReplanTarget(path, data.stageNumber || null);
 
     if (replanSignal?.shouldSuggest && data.requireConfirmation !== false) {
       return {
@@ -3055,6 +3057,8 @@ const learningPath = await prisma.learning_paths.findUnique({
           userId: data.userId,
           triggerSource,
           mode,
+          requestedMode,
+          stageNumber: targetMilestone?.stageNumber || null,
           reason: data.reason || replanSignal.rationale || '',
           evidence: {
             ...(data.evidence || {}),
@@ -3065,7 +3069,6 @@ const learningPath = await prisma.learning_paths.findUnique({
       };
     }
 
-    const targetMilestone = this.resolveStageReplanTarget(path, data.stageNumber || null);
     if (!targetMilestone) {
       throw new Error('当前路径没有可重设计的阶段');
     }
@@ -3101,6 +3104,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         userId: data.userId,
         triggerSource,
         mode,
+        requestedMode,
         stageNumber: targetMilestone.stageNumber,
         reason: data.reason || '',
         evidence: {
@@ -3115,6 +3119,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         redesignedTaskCount: redesignResult.redesignedTaskCount,
         preservedCompletedTaskCount: redesignResult.preservedCompletedTaskCount,
         mode,
+        requestedMode,
       }
     };
   }

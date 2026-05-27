@@ -222,6 +222,7 @@ await prisma.learning_metrics.create({
     try {
       const safeDays = Math.max(1, Math.min(365, days));
       const metrics = await learningStateService.getTrends(userId, safeDays);
+      const currentState = await learningStateService.getCurrentState(userId);
 
       const startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
@@ -243,15 +244,33 @@ await prisma.learning_metrics.create({
       }
 
       const trends: Array<{ date: Date; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> = [];
+      let lastKnownMetric = metrics.length > 0 ? metrics[0] : null;
+      const todayKey = toDateKey(new Date());
 
       for (let i = 0; i < safeDays; i += 1) {
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + i);
+        currentDate.setHours(12, 0, 0, 0);
         const key = toDateKey(currentDate);
         const dayMetrics = metricsByDay.get(key) || [];
 
         if (dayMetrics.length === 0) {
-          trends.push({ date: new Date(currentDate), lss: null, ktl: null, lf: null, lsb: null });
+          if (!lastKnownMetric) {
+            trends.push({ date: new Date(currentDate), lss: null, ktl: null, lf: null, lsb: null });
+            continue;
+          }
+
+          const restoredMetric = key === todayKey && currentState
+            ? currentState
+            : learningStateService.restoreMetrics(lastKnownMetric, currentDate);
+          const displayMetric = learningStateService.toDisplayMetrics(restoredMetric);
+          trends.push({
+            date: new Date(currentDate),
+            lss: displayMetric.lss,
+            ktl: displayMetric.ktl,
+            lf: displayMetric.lf,
+            lsb: displayMetric.lsb,
+          });
           continue;
         }
 
@@ -264,6 +283,7 @@ await prisma.learning_metrics.create({
           : null;
 
         const lastMetric = displayDayMetrics[displayDayMetrics.length - 1];
+        lastKnownMetric = dayMetrics[dayMetrics.length - 1];
         trends.push({
           date: new Date(currentDate),
           lss: avgLss,

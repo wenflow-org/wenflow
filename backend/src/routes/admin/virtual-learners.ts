@@ -13,6 +13,8 @@ import { logger } from '../../utils/logger';
 import simulationOrchestrator from '../../orchestrators/simulation.orchestrator';
 import { getGateway } from '../../gateway';
 import type { SimulationAgentInput } from '../../agents/virtual-learner-simulation-agent/types';
+import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
+import { executeSkill } from '../../skills';
 
 const router = express.Router();
 const VIRTUAL_USER_PASSWORD = 'VirtualTest123';
@@ -99,6 +101,41 @@ router.post('/generate-profile', async (req: any, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'AI生成画像失败'
+    });
+  }
+});
+
+/**
+ * AI生成虚拟学习者实验场景
+ * POST /api/admin/virtual-learners/generate-scenario
+ */
+router.post('/generate-scenario', async (req: any, res) => {
+  try {
+    const {
+      preferredDomains,
+      preferredGoalTypes,
+      preferredLevels,
+      preferredMotivations,
+      avoidDomains,
+    } = req.body || {};
+
+    const result = await executeSkill(virtualLearnerScenarioDesignerDefinition, {
+      preferredDomains,
+      preferredGoalTypes,
+      preferredLevels,
+      preferredMotivations,
+      avoidDomains,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('AI生成虚拟学习者场景失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'AI生成虚拟学习者场景失败',
     });
   }
 });
@@ -239,7 +276,8 @@ router.get('/', async (req: any, res) => {
               id: true,
               status: true,
               currentStage: true,
-              createdAt: true
+              createdAt: true,
+              updatedAt: true
             },
             orderBy: { createdAt: 'desc' },
             take: 5
@@ -545,7 +583,8 @@ router.get('/sessions/:sessionId', async (req: any, res) => {
         profile: {
           ...session.virtual_learner_profiles,
           profile: JSON.parse(session.virtual_learner_profiles.profile || '{}'),
-          email: session.virtual_learner_profiles.users.email
+          email: session.virtual_learner_profiles.users.email,
+          userName: session.virtual_learner_profiles.users.name
         }
       }
     });

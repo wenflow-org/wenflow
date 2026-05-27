@@ -11,7 +11,7 @@
           刷新
         </el-button>
         <div class="title-wrap">
-          <h1>{{ profile?.userName || '加载中' }}</h1>
+          <h1>{{ profile?.userName || '会话详情' }}</h1>
           <div class="title-meta">
             <el-tag size="small" :type="getStatusType(session?.status)">{{ getStatusLabel(session?.status) }}</el-tag>
             <el-tag size="small" type="info">{{ getStageLabel(session?.currentStage) }}</el-tag>
@@ -58,14 +58,6 @@
             <div class="kv-item"><span>目标</span><strong>{{ profile?.learningGoal || '--' }}</strong></div>
             <div class="kv-item"><span>模式</span><strong>{{ profile?.simulationMode === 'ai' ? 'AI' : '手动' }}</strong></div>
           </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">导航</div>
-          <button v-for="item in navItems" :key="item.key" class="nav-item" :class="{ active: activeTab === item.key }" @click="activeTab = item.key">
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.meta }}</span>
-          </button>
         </section>
 
         <section class="panel">
@@ -1153,7 +1145,6 @@ onUnmounted(() => {
 .topbar-left,
 .title-meta,
 .stage-strip,
-.metrics-row,
 .mini-row,
 .actionbar,
 .chips,
@@ -1216,6 +1207,8 @@ onUnmounted(() => {
 }
 
 .metrics-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -1229,7 +1222,6 @@ onUnmounted(() => {
 }
 
 .metric-card {
-  flex: 1;
   padding: 14px;
 }
 
@@ -1836,9 +1828,12 @@ onUnmounted(() => {
   .overview-grid,
   .signal-grid,
   .knowledge-grid,
-  .latent-grid,
-  .metrics-row {
+  .latent-grid {
     grid-template-columns: 1fr;
+  }
+
+  .metrics-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .layout {
@@ -1854,6 +1849,18 @@ onUnmounted(() => {
   .lesson-header-card {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 768px) {
+  .metrics-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .metrics-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

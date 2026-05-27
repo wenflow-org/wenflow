@@ -127,7 +127,7 @@
 
               <div v-if="replanExecutionResult" class="replan-result-banner">
                 <div class="replan-result-banner__copy">
-                  <strong>已完成路径调整</strong>
+                  <strong>已完成后续阶段调整</strong>
                   <p>{{ replanResultSummary }}</p>
                   <div class="replan-result-banner__meta">
                     <span>状态：{{ replanExecutionResult.status }}</span>
@@ -423,7 +423,7 @@
 
     <el-dialog
       v-model="replanPreviewDialogVisible"
-      title="确认路径调整"
+      title="确认调整当前路径"
       width="620px"
       :close-on-click-modal="false"
     >
@@ -451,7 +451,7 @@
         <div class="replan-preview-dialog__section">
           <span class="section-kicker">本次会做什么</span>
           <ul class="replan-preview-dialog__list">
-            <li>基于当前学习证据，重新安排后续阶段任务。</li>
+            <li>基于当前学习证据，重新安排当前路径的后续阶段任务。</li>
             <li>{{ previewTargetText }}</li>
             <li>已完成任务会被冻结，不会被改写。</li>
           </ul>
@@ -468,7 +468,7 @@
       <template #footer>
         <div class="replan-preview-dialog__footer">
           <el-button @click="replanPreviewDialogVisible = false">稍后再说</el-button>
-          <el-button type="primary" :loading="replanConfirmLoading" @click="confirmReplan">确认创建新版本</el-button>
+          <el-button type="primary" :loading="replanConfirmLoading" @click="confirmReplan">确认调整当前路径</el-button>
         </div>
       </template>
     </el-dialog>
@@ -728,7 +728,7 @@ const previewMeta = computed(() => ({
 const previewRationaleText = computed(() => {
   return latestReplanPreview.value?.request?.reason
     || previewSignal.value?.rationale
-    || '系统判断当前学习状态更适合先确认后续路径安排。';
+    || '系统判断当前学习状态更适合先确认后续阶段安排。';
 });
 const previewTargetText = computed(() => {
   const stageNumber = latestReplanPreview.value?.request?.stageNumber;
@@ -744,9 +744,9 @@ const previewTargetText = computed(() => {
 });
 const replanResultSummary = computed(() => {
   const result = replanExecutionResult.value?.result;
-  if (!result) return '路径已根据当前学习证据完成调整。';
+  if (!result) return '当前路径的后续阶段已根据学习证据完成调整。';
 
-  const parts = ['路径已根据当前学习证据完成调整'];
+  const parts = ['当前路径的后续阶段已根据学习证据完成调整'];
   if (result.redesignedStageNumber) {
     parts.push(`第 ${result.redesignedStageNumber} 阶段已重新设计`);
   }
@@ -1036,7 +1036,7 @@ const previewReplan = async () => {
     const response = await learningAPI.requestPathReplan(pathId, {
       triggerSource: 'learner-model-agent',
       mode: 'new_version',
-      reason: pathReplanSignal.value?.rationale || '根据学习者状态建议确认后续路径安排',
+      reason: pathReplanSignal.value?.rationale || '根据学习者状态建议确认当前路径的后续阶段安排',
       requireConfirmation: true,
     });
 
@@ -1074,7 +1074,7 @@ const confirmReplan = async () => {
     replanExecutionResult.value = response;
     replanPreviewDialogVisible.value = false;
     latestReplanPreview.value = null;
-    toast.success('已执行路径调整，请查看最新结果');
+    toast.success('已调整当前路径的后续阶段，请查看最新结果');
     await loadPathData();
   } catch (error: any) {
     toast.error(error?.message || '确认路径调整失败');

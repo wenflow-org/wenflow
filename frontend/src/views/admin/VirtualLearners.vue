@@ -54,6 +54,40 @@
             </el-select>
           </div>
         </section>
+
+        <section class="lab-panel lab-panel--sessions">
+          <div class="lab-panel__head">
+            <div>
+              <div class="lab-panel__title">最近实验样本</div>
+            </div>
+          </div>
+
+          <div v-if="recentSessions.length === 0" class="empty-state small">还没有可回看的样本</div>
+          <div v-else class="session-list">
+            <article v-for="item in recentSessions" :key="item.id" class="session-row">
+              <div class="session-row__top">
+                <div class="session-row__main">
+                  <strong>{{ item.profileName }}</strong>
+                  <p>{{ item.goal || '暂无学习目标' }}</p>
+                  <div class="session-funnel">
+                    <span class="session-funnel__node" :class="item.goalReady ? 'done' : 'active'">Goal</span>
+                    <span class="session-funnel__line" :class="{ done: item.goalReady }"></span>
+                    <span class="session-funnel__node" :class="item.pathReady ? 'done' : (item.goalReady ? 'active' : '')">Path</span>
+                    <span class="session-funnel__line" :class="{ done: item.pathReady }"></span>
+                    <span class="session-funnel__node" :class="item.learnStarted ? (item.learnCompleted ? 'done' : 'active') : ''">Learn</span>
+                  </div>
+                </div>
+                <el-button type="primary" link @click="goToSession(item.id)">进入回放</el-button>
+              </div>
+              <div class="session-row__meta">
+                <el-tag size="small" :type="getSessionStatusType(item.status)">{{ getSessionStatusLabel(item.status) }}</el-tag>
+                <el-tag size="small" type="info" effect="plain">{{ getSessionStageLabel(item.currentStage) }}</el-tag>
+                <span v-if="item.roundCount !== null">{{ item.roundCount }} 轮</span>
+                <span class="session-row__active">最后活跃 {{ formatRelativeTime(item.updatedAt) }}</span>
+              </div>
+            </article>
+          </div>
+        </section>
       </aside>
 
       <section class="lab-main">
@@ -131,38 +165,6 @@
             />
           </div>
         </section>
-
-        <section class="lab-panel lab-panel--sessions">
-          <div class="lab-panel__head">
-            <div>
-              <div class="lab-panel__title">最近实验样本</div>
-            </div>
-          </div>
-
-          <div v-if="recentSessions.length === 0" class="empty-state small">还没有可回看的样本</div>
-          <div v-else class="session-list">
-            <article v-for="item in recentSessions" :key="item.id" class="session-row">
-              <div class="session-row__main">
-                <strong>{{ item.profileName }}</strong>
-                <p>{{ item.goal || '暂无学习目标' }}</p>
-                <div class="session-funnel">
-                  <span class="session-funnel__node" :class="item.goalReady ? 'done' : 'active'">Goal</span>
-                  <span class="session-funnel__line" :class="{ done: item.goalReady }"></span>
-                  <span class="session-funnel__node" :class="item.pathReady ? 'done' : (item.goalReady ? 'active' : '')">Path</span>
-                  <span class="session-funnel__line" :class="{ done: item.pathReady }"></span>
-                  <span class="session-funnel__node" :class="item.learnStarted ? (item.learnCompleted ? 'done' : 'active') : ''">Learn</span>
-                </div>
-              </div>
-              <div class="session-row__meta">
-                <el-tag size="small" :type="getSessionStatusType(item.status)">{{ getSessionStatusLabel(item.status) }}</el-tag>
-                <el-tag size="small" type="info" effect="plain">{{ getSessionStageLabel(item.currentStage) }}</el-tag>
-                <span v-if="item.roundCount !== null">{{ item.roundCount }} 轮</span>
-                <span>{{ formatTime(item.createdAt) }}</span>
-              </div>
-              <el-button type="primary" link @click="goToSession(item.id)">进入回放</el-button>
-            </article>
-          </div>
-        </section>
       </section>
     </main>
 
@@ -197,6 +199,13 @@
         <el-divider>画像设定</el-divider>
 
         <div class="ai-generate-section">
+          <el-button
+            :loading="generatingScenario"
+            @click="handleGenerateScenario"
+          >
+            <el-icon><Plus /></el-icon>
+            一键随机场景
+          </el-button>
           <el-button
             type="primary"
             :loading="generatingProfile"
@@ -333,6 +342,7 @@ const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const generatingProfile = ref(false)
+const generatingScenario = ref(false)
 const profiles = ref<any[]>([])
 const searchKeyword = ref('')
 const filterLevel = ref('')
@@ -491,6 +501,20 @@ const formatTime = (time: string | Date | null) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+const formatRelativeTime = (time: string | Date | null) => {
+  if (!time) return '-'
+  const now = Date.now()
+  const diff = now - new Date(time).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}天前`
+  return formatTime(time)
+}
+
 const debouncedSearch = () => {
   pagination.value.page = 1
 }
@@ -587,6 +611,44 @@ const handleGenerateProfile = async () => {
     ElMessage.error(error.message || '生成画像失败')
   } finally {
     generatingProfile.value = false
+  }
+}
+
+const handleGenerateScenario = async () => {
+  generatingScenario.value = true
+  try {
+    const res = await adminApi.generateScenario()
+    const scenario = res.data?.data
+    if (res.data?.success && scenario?.goalSeed && scenario?.personaSeed) {
+      const goalSeed = scenario.goalSeed
+      const personaSeed = scenario.personaSeed
+      formData.value.learningGoal = goalSeed.surfaceGoal || goalSeed.realProblem || ''
+      formData.value.knowledgeLevel = personaSeed.knowledgeLevel || 'beginner'
+      formData.value.name = formData.value.name || personaSeed.nameHint || personaSeed.occupation || '随机样本'
+      formData.value.profile.age = personaSeed.age
+      formData.value.profile.occupation = personaSeed.occupation || ''
+      formData.value.profile.education = personaSeed.education || ''
+      formData.value.profile.background = personaSeed.background || ''
+      formData.value.simulationMode = 'ai'
+      formData.value.personalityTraits = {
+        ...formData.value.personalityTraits,
+        ...(personaSeed.personalityTraits || {})
+      }
+      const noteLines = [
+        goalSeed.realProblem ? `真实问题：${goalSeed.realProblem}` : '',
+        goalSeed.motivation ? `动机：${goalSeed.motivation}` : '',
+        Array.isArray(goalSeed.constraints) && goalSeed.constraints.length ? `限制：${goalSeed.constraints.join('；')}` : '',
+        Array.isArray(scenario.consistencyNotes) && scenario.consistencyNotes.length ? `一致性：${scenario.consistencyNotes.join('；')}` : ''
+      ].filter(Boolean)
+      formData.value.notes = noteLines.join('\n')
+      ElMessage.success('随机场景已生成')
+    } else {
+      ElMessage.error(res.data?.error || '随机场景生成失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '随机场景生成失败')
+  } finally {
+    generatingScenario.value = false
   }
 }
 
@@ -881,6 +943,14 @@ onMounted(() => {
   gap: 16px;
 }
 
+.lab-sidebar {
+  position: sticky;
+  top: 24px;
+  align-self: flex-start;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
 .lab-panel {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(223, 228, 238, 0.92);
@@ -922,14 +992,14 @@ onMounted(() => {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .profile-card {
   border: 1px solid #e7ecf3;
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 14px;
   background: #fbfcfe;
 }
 
@@ -937,7 +1007,6 @@ onMounted(() => {
 .profile-card__footer,
 .profile-meta-row,
 .profile-stats,
-.session-row,
 .session-row__meta,
 .task-row {
   display: flex;
@@ -945,21 +1014,21 @@ onMounted(() => {
 }
 
 .profile-card__head {
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .avatar-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #1f4fd6, #7c3aed);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -972,7 +1041,7 @@ onMounted(() => {
 }
 
 .profile-card__identity strong {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .profile-card__identity span {
@@ -983,43 +1052,43 @@ onMounted(() => {
 .profile-kv {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
+  gap: 3px;
+  margin-bottom: 8px;
 }
 
 .profile-kv span {
-  font-size: 12px;
+  font-size: 11px;
   color: #8b94a6;
 }
 
 .profile-kv strong {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.4;
   color: #273142;
 }
 
 .profile-meta-row {
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
-  font-size: 12px;
+  margin-bottom: 8px;
+  font-size: 11px;
   color: #6b7280;
 }
 
 .profile-meta-row span {
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   background: #f1f5f9;
 }
 
 .profile-stats {
-  gap: 10px;
+  gap: 8px;
 }
 
 .mini-stat {
   flex: 1;
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 8px 10px;
+  border-radius: 12px;
   background: white;
   border: 1px solid #edf1f6;
 }
@@ -1037,10 +1106,17 @@ onMounted(() => {
 }
 
 .profile-card__footer {
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 16px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-top: 12px;
   flex-wrap: wrap;
+}
+
+.profile-card__footer .el-button {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 6px 12px;
 }
 
 .pagination-row {
@@ -1050,16 +1126,26 @@ onMounted(() => {
 }
 
 .session-row {
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
   border-bottom: 1px solid #edf1f6;
+}
+
+.session-row__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .session-row__main {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
 }
 
 .session-row:last-child {
@@ -1068,32 +1154,40 @@ onMounted(() => {
 
 .session-row strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .session-row p {
   margin: 0;
   color: #6b7280;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .session-funnel {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .session-funnel__node {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 46px;
-  height: 24px;
-  padding: 0 8px;
+  min-width: 40px;
+  height: 22px;
+  padding: 0 6px;
   border-radius: 999px;
   background: #eef2f7;
   color: #7a8597;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -1108,7 +1202,7 @@ onMounted(() => {
 }
 
 .session-funnel__line {
-  width: 22px;
+  width: 16px;
   height: 2px;
   background: #d9e0ea;
   border-radius: 999px;
@@ -1119,10 +1213,25 @@ onMounted(() => {
 }
 
 .session-row__meta {
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 11px;
   color: #8b94a6;
+}
+
+.session-row__active {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.session-row__top .el-button {
+  flex-shrink: 0;
+}
+
+.lab-sidebar .session-list {
+  gap: 0;
 }
 
 .empty-state {
@@ -1181,13 +1290,19 @@ onMounted(() => {
   color: #9ca3af;
 }
 
+@media (max-width: 1440px) {
+  .summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1280px) {
   .summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .profile-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1202,6 +1317,12 @@ onMounted(() => {
 
   .lab-hero {
     flex-direction: column;
+  }
+
+  .lab-sidebar {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 }
 

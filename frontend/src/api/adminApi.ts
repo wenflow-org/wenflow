@@ -722,6 +722,16 @@ export const adminSkillsApi = {
 };
 
 export const adminVirtualLearnersApi = {
+  generateScenario: async (data?: {
+    preferredDomains?: string[];
+    preferredGoalTypes?: string[];
+    preferredLevels?: string[];
+    preferredMotivations?: string[];
+    avoidDomains?: string[];
+  }) => {
+    return adminAxios.post('/admin/virtual-learners/generate-scenario', data || {});
+  },
+
   generateProfile: async (data: {
     learningGoal: string;
     knowledgeLevel: string;
