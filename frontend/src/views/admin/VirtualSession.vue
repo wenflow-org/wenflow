@@ -6,19 +6,31 @@
           <el-icon><ArrowLeft /></el-icon>
           返回
         </el-button>
-        <el-button text :loading="refreshing" @click="refreshSessionState">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <div class="topbar-avatar">{{ profile?.userName?.charAt(0) || '?' }}</div>
         <div class="title-wrap">
-          <h1>{{ profile?.userName || '会话详情' }}</h1>
-          <div class="title-meta">
+          <div class="title-row">
+            <h1>{{ profile?.userName || '会话详情' }}</h1>
             <el-tag size="small" :type="getStatusType(session?.status)">{{ getStatusLabel(session?.status) }}</el-tag>
             <el-tag size="small" type="info">{{ getStageLabel(session?.currentStage) }}</el-tag>
           </div>
+          <p class="topbar-goal">{{ profile?.learningGoal || '--' }}</p>
+          <div class="topbar-meta">
+            <span>{{ getKnowledgeLevelLabel(profile?.knowledgeLevel) }}</span>
+            <span>·</span>
+            <span>{{ profile?.simulationMode === 'ai' ? 'AI 模式' : '手动模式' }}</span>
+          </div>
         </div>
       </div>
+      <div class="topbar-right">
+        <el-button size="small" @click="loginAsVirtual">登录账号</el-button>
+        <el-button size="small" @click="exportChat">导出</el-button>
+        <el-button text :loading="refreshing" @click="refreshSessionState">
+          <el-icon><Refresh /></el-icon>
+        </el-button>
+      </div>
+    </header>
 
+    <section class="stage-strip-wrapper">
       <div class="stage-strip">
         <span class="stage-pill" :class="getStagePillClass('goal')">Goal</span>
         <span class="stage-line" :class="{ done: goalReady }"></span>
@@ -26,7 +38,7 @@
         <span class="stage-line" :class="{ done: pathReady }"></span>
         <span class="stage-pill" :class="getStagePillClass('learning')">Learn</span>
       </div>
-    </header>
+    </section>
 
     <section class="metrics-row">
       <article v-for="item in topMetrics" :key="item.label" class="metric-card">
@@ -43,41 +55,16 @@
       <el-button v-if="pathBannerTone === 'danger'" size="small" type="danger" :loading="advanceLoading" @click="retryPathGeneration">重试</el-button>
     </div>
 
-    <main class="layout layout--compact">
-      <aside class="sidebar">
-        <section class="panel">
-          <div class="panel-title">样本</div>
-          <div class="sample-card">
-            <div class="sample-avatar">{{ profile?.userName?.charAt(0) || '?' }}</div>
-            <div>
-              <strong>{{ profile?.userName || '--' }}</strong>
-              <div class="muted">{{ profile?.knowledgeLevel || '--' }}</div>
-            </div>
-          </div>
-          <div class="kv-list">
-            <div class="kv-item"><span>目标</span><strong>{{ profile?.learningGoal || '--' }}</strong></div>
-            <div class="kv-item"><span>模式</span><strong>{{ profile?.simulationMode === 'ai' ? 'AI' : '手动' }}</strong></div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">操作</div>
-          <div class="action-stack">
-            <el-button round @click="loginAsVirtual">登录账号</el-button>
-            <el-button round @click="exportChat">导出</el-button>
-          </div>
-        </section>
-      </aside>
-
+    <main class="layout">
       <section class="main">
         <div class="tabbar">
           <button v-for="item in tabs" :key="item.key" class="tab" :class="{ active: activeTab === item.key }" @click="activeTab = item.key">{{ item.label }}</button>
         </div>
 
-        <section v-if="activeTab === 'overview'" class="panel main-panel">
+         <section v-if="activeTab === 'overview'" class="panel main-panel">
           <div class="section-head">
-            <div class="section-head__title">总览</div>
-            <div class="section-head__meta">{{ keyEvents.length }} 事件</div>
+            <div class="section-head__title">Session Inspector</div>
+            <div class="section-head__meta">{{ keyEvents.length }} 事件 / {{ logs.length }} 日志</div>
           </div>
           <div class="overview-grid">
             <article v-for="item in overviewCards" :key="item.label" class="overview-card">
@@ -86,155 +73,87 @@
               <em>{{ item.meta }}</em>
             </article>
           </div>
-        </section>
 
-        <section v-else-if="activeTab === 'goal'" class="panel main-panel">
-          <div class="section-head">
-            <div class="section-head__title">Goal</div>
-            <div class="section-head__meta">{{ goalRounds.length }} 轮</div>
-          </div>
-          <div class="mini-row">
-            <span>{{ goalSummary.status }}</span>
-            <span>{{ goalSummary.finalStage }}</span>
-            <span>{{ goalSummary.quickReplyCount }} replies</span>
-          </div>
-          <div class="card-list">
-            <article v-for="item in goalRounds" :key="item.id" class="turn-card">
-              <div class="turn-card__head">
-                <strong>第 {{ item.round }} 轮</strong>
-                <div class="chips"><span v-for="chip in item.badges" :key="chip.text" class="chip" :class="chip.tone">{{ chip.text }}</span></div>
+          <div class="inspector-grid">
+            <section class="inspector-card">
+              <div class="section-head">
+                <div class="section-head__title">当前绑定</div>
+                <div class="section-head__meta">主链路对象</div>
               </div>
-              <div v-if="item.userMessage" class="dialog-row dialog-row-user">
-                <span class="dialog-role">画像用户</span>
-                <div class="msg msg-user">{{ item.userMessage }}</div>
+              <div class="kv-list">
+                <div class="kv-item"><span>goalConversationId</span><strong>{{ session?.goalConversationId || '--' }}</strong></div>
+                <div class="kv-item"><span>learningPathId</span><strong>{{ session?.learningPathId || '--' }}</strong></div>
+                <div class="kv-item"><span>currentTask</span><strong>{{ learningProgress.currentTask || '--' }}</strong></div>
+                <div class="kv-item"><span>story</span><strong>{{ session?.stageResults?.story?.title || session?.stageResults?.story?.triggerEvent || '--' }}</strong></div>
+                <div class="kv-item"><span>pressurePoints</span><strong>{{ storyPressurePointsText }}</strong></div>
+                <div class="kv-item"><span>behaviorHooks</span><strong>{{ storyBehaviorHooksText }}</strong></div>
               </div>
-              <div v-if="item.assistantMessage" class="dialog-row dialog-row-ai">
-                <span class="dialog-role">系统追问</span>
-                <div class="msg msg-ai">{{ item.assistantMessage }}</div>
-              </div>
-              <div v-if="item.learnerRows?.length" class="latent-grid">
-                <div v-for="state in item.learnerRows" :key="state.label" class="latent-box"><span>{{ state.label }}</span><strong>{{ state.value }}</strong></div>
-              </div>
-            </article>
-            <div v-if="goalRounds.length === 0" class="empty-box">暂无</div>
-          </div>
-        </section>
+            </section>
 
-        <section v-else-if="activeTab === 'path'" class="panel main-panel">
-          <div class="section-head">
-            <div class="section-head__title">Path</div>
-            <div class="section-head__meta">{{ milestoneCards.length }} milestones / {{ totalTaskCount }} tasks</div>
-          </div>
-          <div class="mini-row">
-            <span>{{ pathStatusLabel }}</span>
-            <span>{{ pathData?.title || '--' }}</span>
-            <span>{{ pathData?.estimatedHours ? `${pathData.estimatedHours}h` : '--' }}</span>
-          </div>
-          <div class="path-column">
-            <article v-for="item in milestoneCards" :key="item.id" class="milestone-card">
-              <div class="milestone-card__head milestone-card__head--path">
-                <div>
-                  <strong>M{{ item.stageNumber }} {{ item.status }}</strong>
-                  <h3>{{ item.title }}</h3>
-                </div>
-                <span class="milestone-card__meta milestone-card__meta--path">{{ item.estimatedHours }}</span>
+            <section class="inspector-card">
+              <div class="section-head">
+                <div class="section-head__title">视图入口</div>
+                <div class="section-head__meta">调试 / 正式</div>
               </div>
-              <div v-if="item.tasks.length" class="path-task-list">
-                <div v-for="task in item.tasks" :key="task.id" class="path-task-row" :class="task.tone">
-                  <button type="button" class="path-task-row__info path-task-link" @click="openLessonFromPath(task.id)">
-                    <strong>{{ task.title }}</strong>
-                    <span>{{ task.status }} · {{ task.estimatedMinutes }}</span>
-                  </button>
-                  <span v-if="!task.canStart" class="path-task-pill" :class="task.tone">{{ task.status }}</span>
-                  <el-button
-                    v-if="task.canStart && pathReady && session?.currentStage !== 'learning'"
-                    size="small"
-                    type="primary"
-                    plain
-                    :loading="learningStartLoading && pendingTaskId === task.id"
-                    @click="startLearning(task.id)"
-                  >
-                    从此开始
-                  </el-button>
-                </div>
+              <div class="entry-actions">
+                <el-button size="small" type="primary" :disabled="!session?.goalConversationId" @click="openGoalDebugView">调试 Goal</el-button>
+                <el-button size="small" type="primary" :disabled="!session?.learningPathId" @click="openPathDebugView">调试 Path</el-button>
+                <el-button size="small" type="primary" :disabled="!currentLesson?.id" @click="openLearnDebugView">调试 Learn</el-button>
+                <el-button size="small" plain :disabled="!session?.goalConversationId" @click="openGoalFormalView">正式 Goal</el-button>
+                <el-button size="small" plain :disabled="!session?.learningPathId" @click="openPathFormalView">正式 Path</el-button>
+                <el-button size="small" plain :disabled="!currentLesson?.id" @click="openLearnFormalView">正式 Learn</el-button>
               </div>
-            </article>
-            <div v-if="milestoneCards.length === 0" class="empty-box">暂无</div>
+            </section>
+
+            <section class="inspector-card inspector-card--full">
+              <div class="section-head">
+                <div class="section-head__title">诊断摘要</div>
+                <div class="section-head__meta">{{ diagnosisSummary.title }}</div>
+              </div>
+              <div class="mini-row">
+                <span v-for="action in diagnosisSummary.actions" :key="action">{{ action }}</span>
+              </div>
+              <pre class="inspector-pre">{{ JSON.stringify(session?.stageResults || {}, null, 2) }}</pre>
+            </section>
           </div>
         </section>
 
-        <section v-else-if="activeTab === 'learn'" class="panel main-panel learn-panel">
+        <section v-else-if="activeTab === 'links'" class="panel main-panel">
           <div class="section-head">
-            <div class="section-head__title">Learn</div>
-            <div class="section-head__meta">{{ currentLessonRounds.length }} 轮</div>
+            <div class="section-head__title">入口</div>
+            <div class="section-head__meta">不再在本页回放三阶段 UI</div>
           </div>
-          <div class="mini-row">
-            <span>{{ learnSummary.progressLabel }}</span>
-            <span>{{ learnSummary.currentMilestone }}</span>
-            <span>{{ currentLesson?.title || learnSummary.currentTask }}</span>
-          </div>
-          <div class="lesson-main lesson-main--full">
-              <div v-if="currentLesson" class="lesson-header-card" :class="currentLesson.tone">
-                <div>
-                  <div class="muted">{{ currentLesson.milestoneLabel }}</div>
-                  <h3>{{ currentLesson.title }}</h3>
-                </div>
-                <div class="lesson-header-card__meta">
-                  <span class="path-task-pill pending">{{ currentLessonIndex + 1 }}/{{ learnLessons.length || 0 }}</span>
-                  <span class="path-task-pill" :class="currentLesson.tone">{{ currentLesson.status }}</span>
-                  <span class="path-task-pill pending">{{ currentLesson.estimatedMinutes }}</span>
-                </div>
+          <div class="inspector-grid">
+            <section class="inspector-card">
+              <div class="section-head">
+                <div class="section-head__title">Goal</div>
+                <div class="section-head__meta">{{ goalSummary.status }}</div>
               </div>
-              <div v-else class="empty-box">暂无课次</div>
-
-              <div class="lesson-main__actions">
-                <el-button size="small" :disabled="currentLessonIndex <= 0" @click="goPrevLesson">上一节</el-button>
-                <el-button size="small" :disabled="currentLessonIndex >= learnLessons.length - 1" @click="goNextLesson">下一节</el-button>
-                <el-button
-                  v-if="currentLesson?.canStart && session?.currentStage !== 'learning'"
-                  size="small"
-                  type="primary"
-                  plain
-                  :loading="learningStartLoading && pendingTaskId === currentLesson.id"
-                  @click="startLearning(currentLesson.id)"
-                >
-                  从此开始
-                </el-button>
+              <div class="entry-actions">
+                <el-button size="small" type="primary" :disabled="!session?.goalConversationId" @click="openGoalDebugView">调试 Goal</el-button>
+                <el-button size="small" plain :disabled="!session?.goalConversationId" @click="openGoalFormalView">正式 Goal</el-button>
               </div>
-
-              <div class="card-list">
-                <article v-for="item in currentLessonRounds" :key="item.id" class="turn-card">
-                  <div class="turn-card__head">
-                    <div class="turn-card__title">
-                      <strong>{{ item.title }}</strong>
-                      <span v-if="item.time" class="turn-card__time">{{ item.time }}</span>
-                    </div>
-                    <div class="chips"><span v-for="chip in item.badges" :key="chip.text" class="chip" :class="chip.tone">{{ chip.text }}</span></div>
-                  </div>
-                  <div v-if="item.userMessage" class="dialog-row dialog-row-user">
-                    <span class="dialog-role">画像用户</span>
-                    <div class="msg msg-user">{{ item.userMessage }}</div>
-                  </div>
-                  <div v-if="item.assistantMessage" class="dialog-row dialog-row-ai">
-                    <span class="dialog-role">AI 教师</span>
-                    <div class="msg msg-ai">{{ item.assistantMessage }}</div>
-                  </div>
-                  <div v-if="item.signalRows?.length" class="signal-grid">
-                    <div v-for="signal in item.signalRows" :key="signal.label" class="signal-box"><span>{{ signal.label }}</span><strong>{{ signal.value }}</strong></div>
-                  </div>
-                  <div v-if="item.monitorRows?.length" class="signal-grid">
-                    <div v-for="monitor in item.monitorRows" :key="monitor.label" class="signal-box"><span>{{ monitor.label }}</span><strong>{{ monitor.value }}</strong></div>
-                  </div>
-                  <div v-if="item.peerMessage" class="msg msg-ai msg-peer">伴学：{{ item.peerMessage }}</div>
-                  <div v-if="item.knowledgeRows?.length" class="knowledge-grid">
-                    <div v-for="knowledge in item.knowledgeRows" :key="knowledge.label" class="signal-box"><span>{{ knowledge.label }}</span><strong>{{ knowledge.value }}</strong></div>
-                  </div>
-                  <div v-if="item.learnerRows?.length" class="latent-grid">
-                    <div v-for="state in item.learnerRows" :key="state.label" class="latent-box"><span>{{ state.label }}</span><strong>{{ state.value }}</strong></div>
-                  </div>
-                </article>
-                <div v-if="currentLessonRounds.length === 0" class="empty-box">这节课还没有学习会话</div>
+            </section>
+            <section class="inspector-card">
+              <div class="section-head">
+                <div class="section-head__title">Path</div>
+                <div class="section-head__meta">{{ pathStatusLabel }}</div>
               </div>
+              <div class="entry-actions">
+                <el-button size="small" type="primary" :disabled="!session?.learningPathId" @click="openPathDebugView">调试 Path</el-button>
+                <el-button size="small" plain :disabled="!session?.learningPathId" @click="openPathFormalView">正式 Path</el-button>
+              </div>
+            </section>
+            <section class="inspector-card">
+              <div class="section-head">
+                <div class="section-head__title">Learn</div>
+                <div class="section-head__meta">{{ learnSummary.currentTask }}</div>
+              </div>
+              <div class="entry-actions">
+                <el-button size="small" type="primary" :disabled="!currentLesson?.id" @click="openLearnDebugView">调试 Learn</el-button>
+                <el-button size="small" plain :disabled="!currentLesson?.id" @click="openLearnFormalView">正式 Learn</el-button>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -332,11 +251,13 @@ type ReplayRound = {
   peerMessage?: string
   taskId?: string | null
   kind?: 'opening' | 'round'
+  roleLabel?: string
 }
 
 type LearnLesson = {
   id: string
   title: string
+  description: string
   status: string
   tone: string
   canStart: boolean
@@ -377,12 +298,11 @@ const pathData = ref<any>(null)
 const learningProgress = ref({ currentMilestone: 0, totalMilestones: 0, currentTask: null as string | null })
 const selectedLessonId = ref<string | null>(null)
 let pathPollTimer: ReturnType<typeof setInterval> | null = null
+let autoPollTimer: ReturnType<typeof setInterval> | null = null
 
 const tabs = [
-  { key: 'overview', label: '全流程' },
-  { key: 'goal', label: 'Goal' },
-  { key: 'path', label: 'Path' },
-  { key: 'learn', label: 'Learn' },
+  { key: 'overview', label: '概览' },
+  { key: 'links', label: '入口' },
   { key: 'events', label: '事件' },
   { key: 'logs', label: '日志' }
 ] as const
@@ -408,7 +328,8 @@ const filteredLogs = computed(() => (logFilter.value === 'all' ? logs.value : lo
 const lastQuickReplies = computed(() => logs.value.filter(l => l.phase === 'goal-response').pop()?.details?.output?.quickReplies || [])
 
 const pathStatusLabel = computed(() => {
-  if (pathReady.value) return '已生成'
+  if (pathData.value?.status === 'completed') return '已完成'
+  if (pathData.value?.status === 'active') return '进行中'
   if (pathStatus.value === 'generating') return '生成中'
   if (pathStatus.value === 'failed') return '失败'
   if (pathStatus.value === 'not_found') return '丢失'
@@ -418,7 +339,6 @@ const pathStatusLabel = computed(() => {
 })
 
 const topMetrics = computed(() => [
-  { label: '阶段', value: getStageLabel(session.value?.currentStage) },
   { label: '轮次', value: String(totalRounds.value) },
   { label: 'Path', value: pathStatusLabel.value },
   { label: 'Learn', value: learningProgress.value.totalMilestones > 0 ? `${learningProgress.value.currentMilestone}/${learningProgress.value.totalMilestones}` : '未开始' },
@@ -456,6 +376,7 @@ const milestoneCards = computed(() => {
       id: item.id || `milestone-${stageNumber}`,
       stageNumber,
       title: item.title || `阶段 ${stageNumber}`,
+      description: item.description || item.goal || '',
       estimatedHours: item.estimatedHours ? `${item.estimatedHours}h` : '--',
       status,
       railTone,
@@ -483,8 +404,14 @@ const milestoneCards = computed(() => {
         return {
           id: task.id,
           title: task.title || '未命名任务',
+          description: task.description || '',
           status: taskStatus,
           estimatedMinutes: task.estimatedMinutes ? `${task.estimatedMinutes}m` : '--',
+          taskType: task.taskType || '',
+          knowledgeType: task.knowledgeType || '',
+          cognitiveLevel: task.cognitiveLevel || '',
+          displayLabel: task.displayLabel || '',
+          conceptLabel: getTaskConceptLabel(task),
           tone,
           canStart
         }
@@ -494,6 +421,93 @@ const milestoneCards = computed(() => {
 })
 
 const totalTaskCount = computed(() => milestoneCards.value.reduce((sum, item) => sum + item.tasks.length, 0))
+
+const pathCompletedTaskCount = computed(() => milestoneCards.value.reduce((sum, item) => sum + item.tasks.filter((task: any) => task.tone === 'done').length, 0))
+
+const pathCompletionRate = computed(() => {
+  if (totalTaskCount.value === 0) return 0
+  return Math.round((pathCompletedTaskCount.value / totalTaskCount.value) * 100)
+})
+
+const pathOverviewCards = computed(() => [
+  { label: '阶段数', value: String(pathData.value?.totalMilestones || milestoneCards.value.length || 0) },
+  { label: '预计投入', value: pathData.value?.estimatedHours ? `${pathData.value.estimatedHours} 小时` : '--' },
+  { label: '当前阶段', value: pathData.value?.pathContext?.currentStageNumber ? `第 ${pathData.value.pathContext.currentStageNumber} 阶段` : '待开始' },
+  { label: '任务进度', value: `${pathCompletedTaskCount.value}/${totalTaskCount.value}` }
+])
+
+const nextActionTasks = computed(() => {
+  const currentStage = milestoneCards.value.find(item => item.tasks.some((task: any) => task.tone !== 'done')) || milestoneCards.value[0]
+  const tasks = currentStage?.tasks || []
+  return tasks.filter((task: any) => task.tone !== 'done').slice(0, 3)
+})
+
+const currentStageEffortText = computed(() => {
+  const total = nextActionTasks.value.reduce((sum: number, task: any) => {
+    const minutes = Number(String(task.estimatedMinutes || '').replace('m', '')) || 0
+    return sum + minutes
+  }, 0)
+
+  return total > 0 ? `${total} 分钟` : '按当前任务推进'
+})
+
+const pathDetailNotes = computed(() => {
+  const notes: string[] = []
+  const currentStage = milestoneCards.value.find(item => item.tasks.some((task: any) => task.tone !== 'done')) || milestoneCards.value[0]
+
+  if (pathData.value?.pathContext?.storyContext?.triggerEvent) {
+    notes.push(`这条路径优先回应「${pathData.value.pathContext.storyContext.triggerEvent}」里的真实卡点。`)
+  }
+
+  if (pathData.value?.pathContext?.cognitiveFrame?.targetRelation) {
+    notes.push(`当前阶段先围绕「${pathData.value.pathContext.cognitiveFrame.targetRelation}」推进，不必同时展开太多分支。`)
+  }
+
+  if (currentStage?.tasks?.length) {
+    notes.push('先完成当前阶段最小任务，再继续扩展到后续阶段。')
+  }
+
+  return notes.slice(0, 3)
+})
+
+const pathDetailPlan = computed(() => {
+  if (!nextActionTasks.value.length) {
+    return [{ title: '当前暂无待推进任务', desc: '等路径状态就绪后，这里会出现最值得先开始的任务。' }]
+  }
+
+  return nextActionTasks.value.map((task: any, index: number) => ({
+    title: `任务 ${index + 1}`,
+    desc: `${task.title}${task.estimatedMinutes ? ` · 预计 ${task.estimatedMinutes}` : ''}`
+  }))
+})
+
+const paceSuggestionCards = computed(() => {
+  const targetDepth = pathData.value?.pathContext?.teachingStrategyGuidance?.targetDepth || '--'
+  const interactionPattern = pathData.value?.pathContext?.teachingStrategyGuidance?.interactionPattern || '--'
+  return [
+    { title: currentStageEffortText.value, desc: '优先把一个任务完整收口，再继续下一个步骤。' },
+    { title: `目标深度：${targetDepth}`, desc: `建议互动方式：${interactionPattern}` }
+  ]
+})
+
+const pathSceneCards = computed(() => {
+  const scene = pathData.value?.sceneSummary
+  if (!scene) return []
+
+  return [
+    scene.firstDeliverable ? { title: '首个最小交付物', desc: scene.firstDeliverable } : null,
+    scene.targetState ? { title: '目标状态', desc: scene.targetState } : null,
+    Array.isArray(scene.planningFocus) && scene.planningFocus.length ? { title: '当前规划重点', desc: scene.planningFocus.join('、') } : null
+  ].filter(Boolean) as Array<{ title: string; desc: string }>
+})
+
+const cognitiveConceptCards = computed(() => {
+  const concepts = Array.isArray(pathData.value?.cognitiveDesign?.coreConcepts) ? pathData.value.cognitiveDesign.coreConcepts : []
+  return concepts.map((concept: any, index: number) => ({
+    title: `${concept.role === 'hub' || index === 0 ? '枢纽概念' : '支撑概念'} · ${concept.name}`,
+    desc: concept.description || '作为后续教学和任务推进时的隐性认知锚点。'
+  }))
+})
 
 const goalSummary = computed(() => {
   const rounds = logs.value.filter(l => l.phase === 'virtual-reply').length
@@ -522,6 +536,7 @@ const latestLearningTaskTitle = computed(() => {
 const learnLessons = computed<LearnLesson[]>(() => milestoneCards.value.flatMap(item => item.tasks.map((task: any, index: number) => ({
   id: task.id,
   title: task.title,
+  description: task.description || '',
   status: task.status,
   tone: task.tone,
   canStart: task.canStart,
@@ -562,6 +577,37 @@ const currentLessonIndex = computed(() => {
   return learnLessons.value.findIndex(item => item.id === currentLesson.value?.id)
 })
 
+const currentLessonDebugRound = computed<ReplayRound | null>(() => {
+  if (!currentLessonRounds.value.length) return null
+  return currentLessonRounds.value.slice().reverse().find(item => item.kind !== 'opening') || currentLessonRounds.value[currentLessonRounds.value.length - 1] || null
+})
+
+const currentLessonKnowledgeRows = computed(() => currentLessonDebugRound.value?.knowledgeRows || [])
+
+const currentLessonLearnerRows = computed(() => currentLessonDebugRound.value?.learnerRows || [])
+
+const learnSessionStats = computed(() => [
+  { label: 'stage', value: session.value?.currentStage || '--' },
+  { label: 'status', value: getStatusLabel(session.value?.status) },
+  { label: 'rounds', value: String(currentLessonRounds.value.length) },
+  { label: 'lesson', value: currentLesson.value ? `${currentLessonIndex.value + 1}/${learnLessons.value.length || 0}` : '--' }
+])
+
+const currentLessonContextRows = computed(() => {
+  if (!currentLesson.value) return []
+
+  const matchedMilestone = milestoneCards.value.find(item => item.id === currentLesson.value?.milestoneId)
+  const matchedTask = matchedMilestone?.tasks.find((task: any) => task.id === currentLesson.value?.id)
+
+  return [
+    { label: 'taskType', value: matchedTask?.taskType ? getTaskTypeText(matchedTask.taskType) : '--' },
+    { label: 'displayLabel', value: matchedTask?.displayLabel || '--' },
+    { label: 'knowledgeType', value: matchedTask?.knowledgeType ? getKnowledgeTypeLabel(matchedTask.knowledgeType) : '--' },
+    { label: 'cognitiveLevel', value: matchedTask?.cognitiveLevel ? getCognitiveLevelLabel(matchedTask.cognitiveLevel) : '--' },
+    { label: 'coreConcept', value: matchedTask?.conceptLabel || '--' }
+  ]
+})
+
 const keyEvents = computed(() => logs.value
   .filter(log => log.phase === 'error' || log.phase === 'stage-transition' || log.phase === 'learning-start' || (log.phase === 'goal-response' && isGoalConvergedStage(log.details?.output?.stage)))
   .map((log, index) => ({
@@ -583,36 +629,107 @@ const diagnosisSummary = computed(() => {
 const overviewCards = computed(() => [
   { label: 'Goal', value: goalSummary.value.status, meta: goalSummary.value.finalStage },
   { label: 'Path', value: pathStatusLabel.value, meta: `${milestoneCards.value.length} stages` },
-  { label: 'Learn', value: session.value?.currentStage === 'learning' ? '进行中' : '未进入', meta: `${learnSummary.value.progressLabel}` }
+  { label: 'Learn', value: session.value?.currentStage === 'learning' ? '进行中' : '未进入', meta: `${learnSummary.value.progressLabel}` },
+  { label: '故事压力点', value: storyPressurePointsText.value, meta: storyBehaviorHooksText.value }
 ])
+
+const storyPressurePointsText = computed(() => {
+  const items = session.value?.stageResults?.story?.pressurePoints
+  return Array.isArray(items) && items.length ? items.slice(0, 2).join('；') : '--'
+})
+
+const storyBehaviorHooksText = computed(() => {
+  const items = session.value?.stageResults?.story?.behaviorHooks
+  return Array.isArray(items) && items.length ? items.slice(0, 2).join('；') : '--'
+})
 
 const goalRounds = computed<ReplayRound[]>(() => {
   const rounds: ReplayRound[] = []
-  const virtualLogs = logs.value.filter(l => l.phase === 'virtual-reply')
-  const goalResponseLogs = logs.value.filter(l => l.phase === 'goal-response')
-  const total = Math.max(virtualLogs.length, goalResponseLogs.length)
-  for (let i = 0; i < total; i++) {
-    const userLog = virtualLogs[i]
-    const assistantLog = goalResponseLogs[i]
-      rounds.push({
-        id: `goal-${i}`,
-        round: i + 1,
-        title: `第 ${i + 1} 轮`,
-        userMessage: userLog?.details?.output?.reply || '',
-          assistantMessage: assistantLog?.details?.output?.userVisible || '',
-          badges: [
-            ...(assistantLog?.details?.output?.stage ? [{ text: assistantLog.details.output.stage, tone: isGoalConvergedStage(assistantLog.details.output.stage) ? 'success' : 'neutral' }] : []),
-            ...(assistantLog?.details?.output?.confidence !== undefined ? [{ text: `c ${assistantLog.details.output.confidence}`, tone: 'info' }] : []),
-            ...(Array.isArray(assistantLog?.details?.output?.quickReplies) ? [{ text: `${assistantLog.details.output.quickReplies.length} replies`, tone: 'warning' }] : [])
-          ],
-      signalRows: [
-        { label: 'stage', value: assistantLog?.details?.output?.stage || '--' },
-        { label: 'confidence', value: assistantLog?.details?.output?.confidence !== undefined ? String(assistantLog.details.output.confidence) : '--' },
-        { label: 'replies', value: Array.isArray(assistantLog?.details?.output?.quickReplies) ? String(assistantLog.details.output.quickReplies.length) : '--' }
+  let pendingRound: ReplayRound | null = null
+
+  logs.value.forEach((log, index) => {
+    if (log.phase === 'virtual-reply') {
+      const isOpening = !!log.details?.output?.opening
+      const learnerState = log.details?.output?.learnerState || null
+
+      pendingRound = {
+        id: `goal-user-${index}`,
+        round: rounds.length + 1,
+        title: isOpening ? 'Goal 开场' : `第 ${rounds.length + 1} 轮`,
+        time: formatTime(log.timestamp),
+        userMessage: log.details?.output?.reply || '',
+        assistantMessage: '',
+        badges: isOpening
+          ? [{ text: 'opening', tone: 'info' }]
+          : [],
+        signalRows: [],
+        learnerRows: learnerState ? [
+          { label: '困惑', value: learnerState.confusionLevel !== undefined ? String(learnerState.confusionLevel) : '--' },
+          { label: '真掌握', value: learnerState.actualMastery !== undefined ? String(learnerState.actualMastery) : '--' },
+          { label: '自感掌握', value: learnerState.selfPerceivedMastery !== undefined ? String(learnerState.selfPerceivedMastery) : '--' },
+          { label: '注意力', value: learnerState.attentionLevel !== undefined ? String(learnerState.attentionLevel) : '--' },
+          { label: '想追问', value: learnerState.wantsToAsk !== undefined ? String(learnerState.wantsToAsk) : '--' },
+          { label: '可推进', value: learnerState.readyToAdvance !== undefined ? String(learnerState.readyToAdvance) : '--' }
+        ] : [],
+        kind: isOpening ? 'opening' : 'round',
+        roleLabel: isOpening ? '画像用户开场' : '画像用户'
+      }
+
+      rounds.push(pendingRound)
+      return
+    }
+
+    if (log.phase === 'goal-response') {
+      const assistantMessage = log.details?.output?.userVisible || ''
+      const assistantBadges = [
+        ...(log.details?.output?.stage ? [{ text: log.details.output.stage, tone: isGoalConvergedStage(log.details.output.stage) ? 'success' : 'neutral' }] : []),
+        ...(log.details?.output?.confidence !== undefined ? [{ text: `c ${log.details.output.confidence}`, tone: 'info' }] : []),
+        ...(Array.isArray(log.details?.output?.quickReplies) ? [{ text: `${log.details.output.quickReplies.length} replies`, tone: 'warning' }] : [])
       ]
-    })
-  }
-  return rounds
+      const signalRows = [
+        { label: 'stage', value: log.details?.output?.stage || '--' },
+        { label: 'confidence', value: log.details?.output?.confidence !== undefined ? String(log.details.output.confidence) : '--' },
+        { label: 'replies', value: Array.isArray(log.details?.output?.quickReplies) ? String(log.details.output.quickReplies.length) : '--' }
+      ]
+
+      if (pendingRound && !pendingRound.assistantMessage) {
+        pendingRound.assistantMessage = assistantMessage
+        pendingRound.time = formatTime(log.timestamp)
+        pendingRound.badges = [...pendingRound.badges, ...assistantBadges]
+        pendingRound.signalRows = signalRows
+        pendingRound = null
+        return
+      }
+
+      rounds.push({
+        id: `goal-ai-${index}`,
+        round: rounds.length + 1,
+        title: '系统开场',
+        time: formatTime(log.timestamp),
+        assistantMessage,
+        badges: [{ text: 'opening', tone: 'info' }, ...assistantBadges],
+        signalRows,
+        kind: 'opening',
+        roleLabel: '系统开场'
+      })
+    }
+  })
+
+  let visibleRound = 0
+  return rounds.map(item => {
+    if (item.kind === 'opening') {
+      return {
+        ...item,
+        title: item.title || '开场'
+      }
+    }
+
+    visibleRound += 1
+    return {
+      ...item,
+      title: `第 ${visibleRound} 轮`
+    }
+  })
 })
 
 const learnRounds = computed<ReplayRound[]>(() => {
@@ -643,7 +760,8 @@ const learnRounds = computed<ReplayRound[]>(() => {
         monitorRows: [],
         knowledgeRows: [],
         taskId: matchedLesson?.id || null,
-        kind: 'opening'
+        kind: 'opening',
+        roleLabel: 'AI 开场'
       })
       return
     }
@@ -680,7 +798,8 @@ const learnRounds = computed<ReplayRound[]>(() => {
         monitorRows: [],
         knowledgeRows: [],
         taskId: matchedLesson?.id || null,
-        kind: 'round'
+        kind: 'round',
+        roleLabel: '画像用户'
       }
 
       rounds.push(pendingRound)
@@ -740,14 +859,16 @@ const currentLessonRounds = computed(() => {
     if (item.kind === 'opening') {
       return {
         ...item,
-        title: '课程开场'
+        title: '课程开场',
+        roleLabel: 'AI 开场'
       }
     }
 
     roundNumber += 1
     return {
       ...item,
-      title: `第 ${roundNumber} 轮`
+      title: `第 ${roundNumber} 轮`,
+      roleLabel: '画像用户'
     }
   })
 })
@@ -762,6 +883,78 @@ const getStatusType = (status: string) => ({ running: 'success', completed: 'inf
 const getStatusLabel = (status: string) => ({ created: '已创建', running: '运行中', completed: '已完成', failed: '失败' }[status] || status || '未知')
 const getStageLabel = (stage: string) => ({ goal: 'Goal 对话', path: 'Path 生成', learning: 'Learn 课堂' }[stage] || '待开始')
 const getLogLabel = (phase: string) => ({ 'virtual-reply': '虚拟回复', 'goal-response': 'Goal 响应', 'stage-transition': '阶段切换', 'learning-start': '学习开始', 'learning-reply': '学习回复', 'learning-response': '学习响应', error: '错误' }[phase] || phase)
+const getKnowledgeLevelLabel = (value?: string) => ({ beginner: '初学者', intermediate: '中级', advanced: '高级' }[value || ''] || value || '--')
+const getTaskTypeText = (type: string) => ({
+  reading: '阅读',
+  practice: '练习',
+  project: '项目',
+  quiz: '测验',
+  acquire: '获取',
+  deconstruct: '拆解',
+  model: '建模',
+  execute: '执行',
+  diagnose: '诊断',
+  refine: '优化',
+  consolidate: '巩固'
+}[type] || type)
+const getKnowledgeTypeLabel = (type: string) => ({
+  factual: '知识点',
+  conceptual: '原理理解',
+  procedural: '动手操作',
+  metacognitive: '反思总结'
+}[type] || type)
+const getCognitiveLevelLabel = (level: string) => ({
+  remember: '了解',
+  understand: '搞懂',
+  apply: '实战',
+  analyze: '拆解',
+  evaluate: '决策',
+  create: '创造'
+}[level] || level)
+const getTaskConceptLabel = (task: any) => {
+  const conceptId = typeof task?.coreConcept === 'string' ? task.coreConcept : ''
+  if (!conceptId) return ''
+  const concepts = Array.isArray(pathData.value?.cognitiveDesign?.coreConcepts) ? pathData.value.cognitiveDesign.coreConcepts : []
+  const conceptName = concepts.find((concept: any) => concept.id === conceptId)?.name
+  return conceptName ? `关联概念：${conceptName}` : ''
+}
+
+const buildViewQuery = () => new URLSearchParams({
+  virtualSessionId: sessionId,
+  viewMode: 'debug'
+}).toString()
+
+const openGoalDebugView = () => {
+  if (!session.value?.goalConversationId) return
+  router.push(`/admin/test/goal-full/${session.value.goalConversationId}?${buildViewQuery()}`)
+}
+
+const openPathDebugView = () => {
+  if (!session.value?.learningPathId) return
+  router.push(`/admin/test/learning-path/${session.value.learningPathId}?${buildViewQuery()}`)
+}
+
+const openLearnDebugView = () => {
+  const lessonId = currentLesson.value?.id
+  if (!lessonId) return
+  router.push(`/admin/test/learn/${lessonId}?${buildViewQuery()}`)
+}
+
+const openGoalFormalView = () => {
+  if (!session.value?.goalConversationId) return
+  window.open(`/goal-conversation/${session.value.goalConversationId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
+}
+
+const openPathFormalView = () => {
+  if (!session.value?.learningPathId) return
+  window.open(`/learning-path/${session.value.learningPathId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
+}
+
+const openLearnFormalView = () => {
+  const lessonId = currentLesson.value?.id
+  if (!lessonId) return
+  window.open(`/learn/${lessonId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
+}
 
 const pathBannerText = computed(() => {
   if (pathStatus.value === 'generating' || pathStatus.value === 'not_started' || (goalReady.value && pathStatus.value === 'idle')) return 'Path 生成中'
@@ -807,6 +1000,7 @@ const buildMessagesFromLogs = (items: LogItem[]) => {
   items.forEach(log => {
     if (log.phase === 'virtual-reply' && log.details?.output?.reply) nextMessages.push({ role: 'user', content: log.details.output.reply })
     if (log.phase === 'goal-response' && log.details?.output?.userVisible) nextMessages.push({ role: 'assistant', content: log.details.output.userVisible })
+    if (log.phase === 'learning-start' && log.details?.output?.welcomeMessage) nextMessages.push({ role: 'assistant', content: log.details.output.welcomeMessage })
     if (log.phase === 'learning-reply' && log.details?.output?.reply) nextMessages.push({ role: 'user', content: log.details.output.reply })
     if (log.phase === 'learning-response' && log.details?.output?.aiResponse) nextMessages.push({ role: 'assistant', content: log.details.output.aiResponse })
   })
@@ -896,6 +1090,7 @@ const executeSingleStep = async () => {
 
 const executeAutoLoop = async () => {
   autoLoading.value = true
+  autoPollTimer = setInterval(() => { loadSession() }, 2000)
   try {
     const res = await adminApi.virtualSessionAuto(sessionId, { maxRounds: 20 })
     if (res.data?.success) {
@@ -906,6 +1101,7 @@ const executeAutoLoop = async () => {
   } catch (error: any) {
     ElMessage.error(error.message || '自动失败')
   } finally {
+    if (autoPollTimer) { clearInterval(autoPollTimer); autoPollTimer = null }
     autoLoading.value = false
   }
 }
@@ -1045,6 +1241,12 @@ const pollPathStatus = async () => {
     if (res.data?.success) {
       pathStatus.value = res.data.data.status || 'idle'
       pathData.value = res.data.data.path
+      if (res.data.data.pathContext) {
+        pathData.value = {
+          ...(res.data.data.path || {}),
+          pathContext: res.data.data.pathContext
+        }
+      }
       if (res.data.data.learningPathId && !session.value?.learningPathId) {
         session.value = {
           ...session.value,
@@ -1116,6 +1318,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopPathPolling()
+  if (autoPollTimer) { clearInterval(autoPollTimer); autoPollTimer = null }
 })
 </script>
 
@@ -1127,24 +1330,20 @@ onUnmounted(() => {
   color: #1f2937;
 }
 
-.topbar,
-.metrics-row,
-.layout {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid #e5eaf2;
+  border-radius: 16px;
 }
 
 .topbar-left,
 .title-meta,
-.stage-strip,
 .mini-row,
 .actionbar,
 .chips,
@@ -1164,17 +1363,69 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.topbar-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1f4fd6, #7c3aed);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .title-wrap h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 18px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-goal {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #5f6b7d;
+  max-width: 500px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  color: #8b94a6;
+  margin-top: 4px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .title-meta {
   gap: 8px;
-  margin-top: 4px;
+}
+
+.stage-strip-wrapper {
+  max-width: 1400px;
+  margin: 10px auto 12px;
+  padding: 0 4px;
 }
 
 .stage-strip {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1208,7 +1459,7 @@ onUnmounted(() => {
 
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -1257,13 +1508,222 @@ onUnmounted(() => {
   color: #c53838;
 }
 
-.layout {
+.path-hero-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid #e5eaf2;
+  border-radius: 16px;
+}
+
+.path-hero-card__copy {
+  flex: 1;
+}
+
+.path-hero-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.path-hero-card__tag {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #7a8597;
+  font-size: 12px;
+}
+
+.path-hero-card h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.path-hero-card p {
+  margin: 0;
+  color: #5f6b7d;
+  line-height: 1.6;
+}
+
+.path-hero-card__side {
+  width: 180px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.path-hero-action {
+  width: 100%;
+}
+
+.path-detail-main-grid {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 330px;
   gap: 12px;
 }
 
-.sidebar,
+.path-stage-column,
+.path-side-column {
+  min-width: 0;
+}
+
+.path-detail-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.path-detail-overview-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: #fbfcfe;
+  border: 1px solid #e7ecf3;
+}
+
+.path-detail-overview-card span {
+  display: block;
+  font-size: 11px;
+  color: #7b8597;
+  margin-bottom: 6px;
+}
+
+.path-detail-overview-card strong {
+  font-size: 14px;
+}
+
+.path-detail-progress__ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: conic-gradient(#1f4fd6 calc(var(--progress) * 1%), #eef2f7 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.path-detail-progress__ring-label {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.progress-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.progress-label {
+  font-size: 11px;
+  color: #7b8597;
+}
+
+.path-detail-side-card {
+  padding: 14px;
+}
+
+.path-detail-side-card__head {
+  margin-bottom: 10px;
+}
+
+.path-detail-side-card__time {
+  font-size: 12px;
+  color: #7b8597;
+  margin-bottom: 10px;
+}
+
+.path-detail-note-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.path-detail-plan-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.path-detail-plan-item {
+  padding: 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e7ecf3;
+}
+
+.path-detail-plan-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.path-detail-plan-item p {
+  margin: 0;
+  color: #5f6b7d;
+  line-height: 1.5;
+}
+
+.path-detail-domain-block {
+  margin-bottom: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #fbfcfe;
+  border: 1px solid #e7ecf3;
+}
+
+.path-detail-domain-block span {
+  display: block;
+  font-size: 11px;
+  color: #7b8597;
+  margin-bottom: 6px;
+}
+
+.path-detail-domain-block strong {
+  font-size: 14px;
+}
+
+.path-context-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.path-context-strip span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f3f6fb;
+  color: #5f6b7d;
+  font-size: 12px;
+}
+
+.metrics-row,
+.layout,
+.status-banner {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .main {
   display: flex;
   flex-direction: column;
@@ -1433,6 +1893,40 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.inspector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.inspector-card {
+  padding: 12px;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.inspector-card--full {
+  grid-column: 1 / -1;
+}
+
+.entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inspector-pre {
+  margin: 10px 0 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: #111827;
+  color: #e5edf9;
+  overflow: auto;
+  font-size: 12px;
+}
+
 .overview-card,
 .turn-card,
 .milestone-card,
@@ -1501,6 +1995,12 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.milestone-card__desc {
+  margin: 8px 0 0;
+  color: #5f6b7d;
+  line-height: 1.6;
+}
+
 .path-task-list {
   display: flex;
   flex-direction: column;
@@ -1524,6 +2024,32 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.path-task-row__title-line {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.path-task-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.path-task-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.path-task-desc {
+  margin: 4px 0 0;
+  color: #5f6b7d;
+  line-height: 1.6;
 }
 
 .path-task-link {
@@ -1701,6 +2227,100 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.learn-workbench {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.learn-sidebar,
+.learn-main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.learn-side-card {
+  padding: 14px;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.learn-eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: #7b8597;
+}
+
+.learn-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.learn-section-head h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+}
+
+.learn-side-card__desc {
+  margin: 6px 0 0;
+  color: #5f6b7d;
+  line-height: 1.55;
+}
+
+.learn-kp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.learn-kp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e7ecf3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.learn-kp-item strong,
+.learn-kp-item span {
+  font-size: 12px;
+}
+
+.learn-kp-item span {
+  color: #64748b;
+}
+
+.latent-grid--sidebar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.empty-box--compact {
+  padding: 12px;
+  font-size: 12px;
+}
+
+.lesson-main__actions--toolbar {
+  padding: 0 2px;
+}
+
+.turn-card--learn {
+  background: #fff;
+}
+
+.learn-conversation-card,
+.learn-debug-card {
+  background: #fbfcfe;
+}
+
 .lesson-header-card,
 .lesson-header-card__meta,
 .lesson-main__actions {
@@ -1824,7 +2444,9 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1180px) {
+  .learn-workbench,
   .layout,
+  .inspector-grid,
   .overview-grid,
   .signal-grid,
   .knowledge-grid,
@@ -1833,12 +2455,21 @@ onUnmounted(() => {
   }
 
   .metrics-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .layout {
-    display: flex;
+  .topbar {
     flex-direction: column;
+    gap: 12px;
+  }
+
+  .topbar-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .topbar-goal {
+    max-width: 100%;
   }
 
   .path-task-row {
@@ -1849,6 +2480,10 @@ onUnmounted(() => {
   .lesson-header-card {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .latent-grid--sidebar {
+    grid-template-columns: 1fr;
   }
 }
 

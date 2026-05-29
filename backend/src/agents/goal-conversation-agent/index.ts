@@ -71,6 +71,7 @@ interface StageControlOptions {
   latestUserInput?: string;
   previousStage?: 'understanding' | 'proposing' | 'ready' | 'completed' | string;
   previousConfidence?: number;
+  confirmProposal?: boolean;
 }
 
 interface GoalConversationStateSnapshot {
@@ -627,15 +628,9 @@ function normalizeStageAndConfidence(
   let normalizedStage = stage;
   let normalizedConfidence = Number.isFinite(confidence) ? confidence : 0.2;
 
-  const latestUserInput = (options?.latestUserInput || '').trim();
   const previousStage = options?.previousStage;
 
-  const confirmIntent = /^(好|好的|行|可以|是的|对|确认|就这样|没问题|开始生成|生成学习路径|可以生成)/i.test(
-    latestUserInput
-  );
-  const adjustIntent = /(调整|修改|换个方向|再想想|先不要|不对)/.test(latestUserInput);
-
-  if (previousStage === 'proposing' && confirmIntent && !adjustIntent) {
+  if (previousStage === 'proposing' && options?.confirmProposal === true) {
     normalizedStage = 'ready';
   }
 
@@ -955,7 +950,8 @@ export async function goalConversationAgentHandler(
       const observedResult = parseGoalConversationResponse(retryInfo.content, previousUnderstanding, {
         latestUserInput: input.goal,
         previousStage: input.metadata?.previousStage,
-        previousConfidence: previousUnderstanding?.confidence || 0.2
+        previousConfidence: previousUnderstanding?.confidence || 0.2,
+        confirmProposal: input.metadata?.confirmProposal === true
       });
 
       await agentConfigService.recordAgentCall({
@@ -1079,7 +1075,8 @@ export async function goalConversationAgentHandler(
     const result = parseGoalConversationResponse(retryInfo.content, previousUnderstanding, {
       latestUserInput: input.goal,
       previousStage: input.metadata?.previousStage,
-      previousConfidence: previousUnderstanding?.confidence || 0.2
+      previousConfidence: previousUnderstanding?.confidence || 0.2,
+      confirmProposal: input.metadata?.confirmProposal === true
     });
 
     await agentConfigService.recordAgentCall({
@@ -1189,17 +1186,19 @@ export async function runGoalConversationAgent(params: {
   maxFormatRetries?: number;
   allowInvalidStructuredOutput?: boolean;
   systemPromptOverride?: string;
+  confirmProposal?: boolean;
 }): Promise<GoalConversationAgentResult> {
   const result = await goalConversationAgentHandler(
     {
       type: 'custom',
       goal: params.input,
-      metadata: {
-        userId: params.userId,
-        previousUnderstanding: params.previousUnderstanding,
-        previousStage: params.previousStage,
-        previousState: params.previousState
-      }
+        metadata: {
+          userId: params.userId,
+          previousUnderstanding: params.previousUnderstanding,
+          previousStage: params.previousStage,
+          previousState: params.previousState,
+          confirmProposal: params.confirmProposal === true
+        }
     },
     {
       userId: params.userId,

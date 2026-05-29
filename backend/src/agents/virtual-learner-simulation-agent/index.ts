@@ -148,7 +148,8 @@ async function handleGenerateProfile(
     profileInput.learningGoal,
     profileInput.knowledgeLevel,
     profileInput.simulationMode,
-    profileInput.personalityTraits
+    profileInput.personalityTraits,
+    profileInput.existingProfile
   );
   
   const model = config?.model || undefined;
@@ -352,6 +353,24 @@ function parseProfileOutput(rawContent: string): { profile?: any } {
           availableTime: parsed.availableTime || undefined,
           techComfort: parsed.techComfort || undefined,
           priorAttempts: parsed.priorAttempts || undefined,
+          corePersonality: parsed.corePersonality || undefined,
+          personalityDrivers: Array.isArray(parsed.personalityDrivers) ? parsed.personalityDrivers.map(String) : undefined,
+          communicationStyle: parsed.communicationStyle || undefined,
+          motivationOrientation: parsed.motivationOrientation || undefined,
+          emotionalBaseline: parsed.emotionalBaseline || undefined,
+          emotionalTriggers: Array.isArray(parsed.emotionalTriggers) ? parsed.emotionalTriggers.map(String) : undefined,
+          resiliencePattern: parsed.resiliencePattern || undefined,
+          metacognitiveProfile: parsed.metacognitiveProfile || undefined,
+          cognitiveLoadTolerance: parsed.cognitiveLoadTolerance || undefined,
+          selfRegulationStyle: parsed.selfRegulationStyle || undefined,
+          digitalLiteracy: parsed.digitalLiteracy || undefined,
+          helpSeekingPattern: parsed.helpSeekingPattern || undefined,
+          adversarialPattern: parsed.adversarialPattern || undefined,
+          memoryRepairPattern: parsed.memoryRepairPattern || undefined,
+          behaviorBoundaries: Array.isArray(parsed.behaviorBoundaries) ? parsed.behaviorBoundaries.map(String) : undefined,
+          learningPreferences: Array.isArray(parsed.learningPreferences) ? parsed.learningPreferences.map(String) : undefined,
+          failurePatterns: Array.isArray(parsed.failurePatterns) ? parsed.failurePatterns.map(String) : undefined,
+          behavioralProfileSummary: parsed.behavioralProfileSummary || undefined,
           personalityTraits: parsed.personalityTraits || undefined
         }
       };
@@ -378,6 +397,7 @@ function normalizeLearnerState(raw: any): LearnerLatentState | undefined {
     confusionLevel: toUnit(raw.confusionLevel),
     frustrationLevel: toUnit(raw.frustrationLevel),
     motivationLevel: toUnit(raw.motivationLevel),
+    goalReadiness: toUnit(raw.goalReadiness),
     selfPerceivedMastery: toUnit(raw.selfPerceivedMastery),
     actualMastery: toUnit(raw.actualMastery),
     memoryStrength: toUnit(raw.memoryStrength),

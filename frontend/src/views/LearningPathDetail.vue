@@ -73,6 +73,7 @@
                     <span class="pill">学习路径</span>
                     <span class="path-detail-hero__tag">{{ pathStatusLabel }}</span>
                     <span v-if="subjectTagLabel" class="path-detail-hero__tag">{{ subjectTagLabel }}</span>
+                    <span v-if="virtualPathSummary" class="path-detail-hero__tag">{{ virtualPathSummary }}</span>
                   </div>
                   <h1 class="path-title">{{ path.name }}</h1>
                   <p class="path-description">{{ path.summary || path.description }}</p>
@@ -499,6 +500,7 @@ import { aiTeachingAPI } from '@/api/aiTeaching';
 import type { TaskEvaluationDetail } from '@/api/aiTeaching';
 import { learningAPI } from '@/api/learning';
 import { userAPI } from '@/api/user';
+import { adminApi } from '@/api/adminApi';
 import {
   getReplanActionText,
   getReplanPriorityText,
@@ -511,8 +513,11 @@ const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const pathId = route.params.id as string;
+const virtualSessionId = computed(() => typeof route.query.virtualSessionId === 'string' ? route.query.virtualSessionId.trim() : '');
+const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route.query.viewMode.trim() : '');
 const isTestMode = computed(() => route.meta.isTestMode === true);
 const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const isVirtualSessionView = computed(() => !!virtualSessionId.value);
 const goalConversationPath = computed(() => {
   if (isTestMode.value) {
     return isAdminRoute.value ? '/admin/test/goal-full' : '/test/goal-full';
@@ -548,6 +553,7 @@ const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerScrolled = ref(false);
 const loading = ref(true);
 const path = ref<any>(null);
+const virtualContext = ref<any>(null);
 const activeWeeks = ref<number[]>([1]);
 const evaluationDialogVisible = ref(false);
 const evaluationLoading = ref(false);
@@ -616,6 +622,19 @@ const pathOverviewMetrics = computed(() => {
     { label: '当前阶段', value: activeStageNumber ? `第 ${activeStageNumber} 阶段` : (stages.length > 0 ? '第 1 阶段' : '待开始') },
     { label: '任务进度', value: `${completedTasks.value}/${totalTasks.value}` }
   ];
+});
+
+const effectivePathId = computed(() => String(virtualContext.value?.bindings?.learningPathId || pathId || ''));
+
+const virtualPathSummary = computed(() => {
+  if (!virtualContext.value) return '';
+  const profile = virtualContext.value.profile || {};
+  const story = virtualContext.value.storyContext || {};
+  return [
+    profile.userName ? `画像：${profile.userName}` : '',
+    story.title ? `故事：${story.title}` : '',
+    viewMode.value ? `模式：${viewMode.value}` : ''
+  ].filter(Boolean).join(' · ');
 });
 
 const generationStatus = computed(() => path.value?.generationStatus || null);
@@ -926,7 +945,11 @@ const loadPathData = async () => {
     loading.value = true;
   }
   try {
-    const response = await api.get(`/learning/paths/${pathId}`);
+    if (isVirtualSessionView.value) {
+      await loadVirtualContext();
+    }
+
+    const response = await api.get(`/learning/paths/${effectivePathId.value}`);
     path.value = response.data;
 
     // 兼容 weeks 和 milestones 两种数据格式
@@ -958,7 +981,7 @@ const loadPathData = async () => {
     }
 
     try {
-      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('path-detail', pathId as string);
+      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('path-detail', effectivePathId.value as string);
     } catch (error) {
       console.error('获取路径动态引导文案失败:', error);
     }
@@ -992,7 +1015,7 @@ const openTaskDetail = (task: any) => {
     return;
   }
 
-  router.push(`/learn/${task.id}`);
+  router.push({ path: `/learn/${task.id}`, query: buildRouteQuery() });
 };
 
 // 点击"开始学习"按钮
@@ -1007,7 +1030,7 @@ const startTask = (task: any) => {
     return;
   }
 
-  router.push(`/learn/${task.id}`);
+  router.push({ path: `/learn/${task.id}`, query: buildRouteQuery() });
 };
 
 const startPrimaryActionTask = () => {
@@ -1257,6 +1280,27 @@ const getCognitiveLevelColor = (level: string) => {
     create: '#409EFF'
   };
   return colors[level] || '#909399';
+};
+
+const buildRouteQuery = (extra: Record<string, string> = {}) => {
+  const query: Record<string, string> = {};
+  if (virtualSessionId.value) query.virtualSessionId = virtualSessionId.value;
+  if (viewMode.value) query.viewMode = viewMode.value;
+  return { ...query, ...extra };
+};
+
+const loadVirtualContext = async () => {
+  if (!virtualSessionId.value) {
+    virtualContext.value = null;
+    return;
+  }
+
+  const response = await adminApi.getVirtualSessionContext(virtualSessionId.value);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '加载虚拟会话上下文失败');
+  }
+
+  virtualContext.value = response.data.data;
 };
 
 onMounted(() => {

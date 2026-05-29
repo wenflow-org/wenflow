@@ -16,6 +16,24 @@ export interface VirtualLearnerProfileData {
   availableTime?: 'minimal' | 'moderate' | 'abundant';
   techComfort?: 'low' | 'medium' | 'high';
   priorAttempts?: string;
+  corePersonality?: string;
+  personalityDrivers?: string[];
+  communicationStyle?: string;
+  motivationOrientation?: string;
+  emotionalBaseline?: string;
+  emotionalTriggers?: string[];
+  resiliencePattern?: string;
+  metacognitiveProfile?: string;
+  cognitiveLoadTolerance?: string;
+  selfRegulationStyle?: string;
+  digitalLiteracy?: string;
+  helpSeekingPattern?: string;
+  adversarialPattern?: string;
+  memoryRepairPattern?: string;
+  behaviorBoundaries?: string[];
+  learningPreferences?: string[];
+  failurePatterns?: string[];
+  behavioralProfileSummary?: string;
 }
 
 export interface PersonalityTraits {
@@ -63,6 +81,7 @@ export interface LearnerLatentState {
   confusionLevel?: number;
   frustrationLevel?: number;
   motivationLevel?: number;
+  goalReadiness?: number;
   selfPerceivedMastery?: number;
   actualMastery?: number;
   memoryStrength?: number;
@@ -87,6 +106,20 @@ export interface SimulationContext {
   conversationHistory: ConversationHistoryItem[];
   currentStage: 'goal' | 'path' | 'learning';
   lastAssistantMessage?: string;
+  storyContext?: {
+    storyId?: string | null;
+    title?: string;
+    sourceType?: string | null;
+    outline?: string;
+    triggerEvent?: string;
+    visibleOpening?: string;
+    hiddenDetails?: string[];
+    misdiagnosis?: string;
+    pressurePoints?: string[];
+    behaviorHooks?: string[];
+    goalSeed?: any;
+    disclosurePlan?: any;
+  } | null;
   learnerState?: LearnerLatentState;
   knowledgeState?: KnowledgePointState[];
   goalState?: {
@@ -126,6 +159,7 @@ export interface SimulationAgentInput extends AgentInput {
     knowledgeLevel: 'beginner' | 'intermediate' | 'advanced';
     simulationMode?: 'manual' | 'ai';
     personalityTraits?: PersonalityTraits;
+    existingProfile?: VirtualLearnerProfileData;
   };
   // 模拟对话上下文
   simulationContext?: SimulationContext;
@@ -146,6 +180,24 @@ export interface SimulationAgentOutput extends AgentOutput {
     availableTime?: 'minimal' | 'moderate' | 'abundant';
     techComfort?: 'low' | 'medium' | 'high';
     priorAttempts?: string;
+    corePersonality?: string;
+    personalityDrivers?: string[];
+    communicationStyle?: string;
+    motivationOrientation?: string;
+    emotionalBaseline?: string;
+    emotionalTriggers?: string[];
+    resiliencePattern?: string;
+    metacognitiveProfile?: string;
+    cognitiveLoadTolerance?: string;
+    selfRegulationStyle?: string;
+    digitalLiteracy?: string;
+    helpSeekingPattern?: string;
+    adversarialPattern?: string;
+    memoryRepairPattern?: string;
+    behaviorBoundaries?: string[];
+    learningPreferences?: string[];
+    failurePatterns?: string[];
+    behavioralProfileSummary?: string;
     personalityTraits?: PersonalityTraits;
   };
   learnerState?: LearnerLatentState;

@@ -479,6 +479,12 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         meta: { title: '虚拟用户模拟', requiresAdminAuth: true, adminGroup: 'devDebug' }
       },
       {
+        path: 'virtual-learners/:profileId',
+        name: 'AdminVirtualProfile',
+        component: () => import('@/views/admin/VirtualProfile.vue'),
+        meta: { title: '角色会话管理', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
         path: 'virtual-session/:sessionId',
         name: 'AdminVirtualSession',
         component: () => import('@/views/admin/VirtualSession.vue'),

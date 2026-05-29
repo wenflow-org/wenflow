@@ -57,10 +57,18 @@
         <el-table-column label="Skill" min-width="280">
           <template #default="{ row }">
             <div class="skill-cell">
-              <strong class="skill-cell__name">{{ row.displayName || row.skillId }}</strong>
-              <span class="skill-cell__id" v-if="row.displayName">{{ row.skillId }}</span>
+              <strong class="skill-cell__name">{{ getSkillDisplayName(row) }}</strong>
+              <span class="skill-cell__id">调用名：{{ row.skillId }}</span>
               <span class="skill-cell__meta">{{ row.tier }}</span>
               <span v-if="getSkillHint(row.skillId)" class="skill-cell__hint">{{ getSkillHint(row.skillId) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="最后调用日期" min-width="170">
+          <template #default="{ row }">
+            <div class="last-called-cell">
+              <strong>{{ formatLastCalledRelative(row.lastCalledAt) }}</strong>
+              <span>{{ formatDateTime(row.lastCalledAt) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -112,8 +120,8 @@
       <div class="skill-workbench" v-loading="skillWorkbenchLoading">
         <template v-if="currentSkill">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="名称">{{ currentSkill.displayName || currentSkill.skillId }}</el-descriptions-item>
-            <el-descriptions-item label="Skill ID">{{ currentSkill.skillId }}</el-descriptions-item>
+            <el-descriptions-item label="中文名称">{{ getSkillDisplayName(currentSkill) }}</el-descriptions-item>
+            <el-descriptions-item label="调用名">{{ currentSkill.skillId }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag v-if="currentSkill.status" :type="getStatusTagType(currentSkill.status)" size="small">
                 {{ getStatusLabel(currentSkill.status) }}
@@ -384,6 +392,7 @@ interface SkillModelConfig {
   skillId: string;
   displayName?: string;
   status?: 'working' | 'placeholder' | 'simplified' | 'mock';
+  lastCalledAt?: string | null;
   tier: string;
   model?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
@@ -461,12 +470,51 @@ const SKILL_HINTS: Record<string, string> = {
   'stage-designer': 'Path 阶段任务设计层：围绕单个 milestone 生成 subtasks，并补轻量任务标签，不直接写 Learn 教案。',
 };
 
-const supportsPromptManagement = (skillId?: string) => skillId === 'path-scene-framing' || skillId === 'stage-designer';
+const SKILL_CN_NAMES: Record<string, string> = {
+  'text-structure-analyzer': '文本结构分析器',
+  'retrieval': '内容检索器',
+  'web-extractor': '网页内容提取器',
+  'image-analyzer': '图片分析器',
+  'memory-search': '学习记忆搜索器',
+  'smart-search': '智能搜索器',
+  'label-generator': '动态标签生成器',
+  'path-scene-framing': '路径场景构图',
+  'stage-designer': '阶段任务设计器',
+  'adaptive-guidance-copy': '动态引导文案生成器',
+  'goal-profile-inference': '目标阶段画像推断器',
+  'learning-pattern-distiller': '学习模式蒸馏器',
+  'session-knowledge-distiller': '课堂知识蒸馏器',
+  'dialogue-concept-extractor': '对话概念抽取器',
+  'virtual-learner-persona-designer': '虚拟学习者身份设计器',
+  'virtual-learner-scenario-designer': '虚拟学习者故事设计器',
+  'peer-reinforcement': '同伴强化',
+  'goal-type-identifier': '目标类型识别器',
+  'batch-anderson-labeler': '批量安德森标注器',
+  'time-estimator': '时间估算器',
+  'quiz-generation': '测验生成器',
+  'pdf-parser': 'PDF 解析器',
+  'exercise-generator': '练习生成器',
+  'error-pattern': '错误模式分析器',
+  'content-generation': '内容生成器',
+  'code-explainer': '代码解释器',
+  'answer-generation': '答案生成器',
+};
+
+const supportsPromptManagement = (skillId?: string) => {
+  return skillId === 'path-scene-framing'
+    || skillId === 'stage-designer'
+    || skillId === 'virtual-learner-persona-designer'
+    || skillId === 'virtual-learner-scenario-designer';
+};
 const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`;
 
 const getSkillHint = (skillId?: string) => {
   if (!skillId) return '';
   return SKILL_HINTS[skillId] || '';
+};
+
+const getSkillDisplayName = (row: SkillModelConfig) => {
+  return SKILL_CN_NAMES[row.skillId] || row.displayName || row.skillId;
 };
 
 watch(
@@ -583,6 +631,20 @@ const formatDateTime = (value: string | null | undefined) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleString('zh-CN');
+};
+
+const formatLastCalledRelative = (value: string | null | undefined) => {
+  if (!value) return '未调用';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未调用';
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  return `${days} 天前`;
 };
 
 const promptPreviewText = computed(() => effectivePrompt.value?.systemPrompt?.trim() || '');
@@ -1080,6 +1142,23 @@ onMounted(() => fetchConfigs());
 
 .params-cell__row--sub {
   justify-content: flex-start;
+}
+
+.last-called-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.last-called-cell strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.last-called-cell span {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .skill-config-dialog :deep(.el-dialog) {

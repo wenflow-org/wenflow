@@ -9,11 +9,15 @@ import prisma from '../../config/database';
 import { getGateway } from '../../gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
+import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
+import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
 
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
+  'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
+  'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
 };
 
 function normalizePromptText(value: string | null | undefined): string {

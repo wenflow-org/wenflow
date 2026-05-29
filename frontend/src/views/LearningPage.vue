@@ -59,6 +59,7 @@
 
         <div v-if="task.week?.weekNumber" class="learning-header-card__meta">
           <span>阶段 {{ task.week.weekNumber }}</span>
+          <span v-if="virtualDebugSummary">{{ virtualDebugSummary }}</span>
         </div>
       </section>
 
@@ -373,6 +374,7 @@ import {
   type ReplanAdvisory,
   type WrapupArtifact
 } from '@/api/aiTeaching';
+import { adminApi } from '@/api/adminApi';
 import api from '../utils/api';
 import { API_BASE_URL } from '../utils/api';
 import CheckpointCard from '@/components/learning/CheckpointCard.vue';
@@ -390,9 +392,12 @@ import PeerChatWindow from '@/components/PeerChatWindow.vue';
 const route = useRoute();
 const router = useRouter();
 const taskId = computed(() => route.params.taskId as string);
+const virtualSessionId = computed(() => typeof route.query.virtualSessionId === 'string' ? route.query.virtualSessionId.trim() : '');
+const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route.query.viewMode.trim() : '');
 
 const isTestMode = computed(() => route.meta.isTestMode === true);
 const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const isVirtualSessionView = computed(() => !!virtualSessionId.value);
 const dashboardPath = computed(() => {
   if (isTestMode.value) {
     return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
@@ -408,6 +413,8 @@ const learningPathDetailBasePath = computed(() => {
 
 const pageLoading = ref(true);
 const task = ref<any>(null);
+const virtualContext = ref<any>(null);
+const effectiveTaskId = computed(() => String(virtualContext.value?.bindings?.currentTaskId || taskId.value || ''));
 
 const sessionInitializing = ref(false);
 const sessionInitMode = ref<'new' | 'resumed'>('new');
@@ -654,6 +661,18 @@ const latestTeachingInputSummary = computed(() => {
     .join(' · ') || '展示 teaching-turn 最近一次 userPayload';
 });
 
+const virtualDebugSummary = computed(() => {
+  if (!virtualContext.value) return '';
+  const profile = virtualContext.value.profile || {};
+  const story = virtualContext.value.storyContext || {};
+  const bindings = virtualContext.value.bindings || {};
+  return [
+    profile.userName ? `画像：${profile.userName}` : '',
+    story.title ? `故事：${story.title}` : '',
+    bindings.teachingSessionId ? `session：${String(bindings.teachingSessionId).slice(0, 8)}` : '未启动 Learn session'
+  ].filter(Boolean).join(' · ');
+});
+
 const pathInputSections = computed(() => {
   const payload = latestTeachingInputPayload.value;
   if (!payload || typeof payload !== 'object') return [];
@@ -749,6 +768,13 @@ const pathHandoffSections = computed(() => {
       content: JSON.stringify(section.value, null, 2),
     }));
 });
+
+const buildRouteQuery = (extra: Record<string, string> = {}) => {
+  const query: Record<string, string> = {};
+  if (virtualSessionId.value) query.virtualSessionId = virtualSessionId.value;
+  if (viewMode.value) query.viewMode = viewMode.value;
+  return { ...query, ...extra };
+};
 
 const turnDebugDialogTitle = computed(() => selectedTurnDebugMode.value === 'input' ? '本轮教学输入' : '本轮教学输出');
 
@@ -1030,12 +1056,34 @@ const copyMessage = async (content: string) => {
   }
 };
 
+const loadVirtualContext = async () => {
+  if (!virtualSessionId.value) {
+    virtualContext.value = null;
+    return;
+  }
+
+  const response = await adminApi.getVirtualSessionContext(virtualSessionId.value);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '加载虚拟会话上下文失败');
+  }
+
+  virtualContext.value = response.data.data;
+};
+
 const loadTaskData = async () => {
-  if (!taskId.value) return;
+  if (!taskId.value && !virtualSessionId.value) return;
   
   pageLoading.value = true;
   try {
-    const response = await api.get(`/learning/tasks/${taskId.value}`);
+    if (isVirtualSessionView.value) {
+      await loadVirtualContext();
+    }
+
+    if (!effectiveTaskId.value) {
+      throw new Error('当前虚拟 session 还没有绑定学习任务');
+    }
+
+    const response = await api.get(`/learning/tasks/${effectiveTaskId.value}`);
     task.value = response.data || response;
     
     if (task.value?.week?.learningObjectives) {
@@ -1274,8 +1322,8 @@ const sendMessage = async () => {
       await nextTick();
       const pathId = task.value?.learningPath?.id || '';
       router.push({
-        path: `/learn/${taskId.value}/evaluation/${sessionInfo.value.sessionId}`,
-        query: pathId ? { pathId } : undefined,
+        path: `/learn/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+        query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery(),
       });
       return;
     }
@@ -1473,7 +1521,7 @@ const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complet
   if (action === 'complete-task') {
     try {
       const actualMinutes = Math.ceil(activeTime.value / 60);
-      await api.post(`/learning/tasks/${taskId.value}/complete`, {
+      await api.post(`/learning/tasks/${effectiveTaskId.value}/complete`, {
         actualMinutes
       });
       toast.success('已将本任务标记为完成');
@@ -1563,8 +1611,8 @@ const endSession = async (options?: {
     } else if (!options?.skipEvaluationDialog) {
       const pathId = task.value?.learningPath?.id || '';
       router.push({
-        path: `/learn/${taskId.value}/evaluation/${sessionInfo.value.sessionId}`,
-        query: pathId ? { pathId } : undefined
+        path: `/learn/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+        query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery()
       });
       return;
     }
@@ -1586,10 +1634,10 @@ const closeEvaluationAndReturn = () => {
   if (task.value?.learningPath?.id) {
     router.push({
       path: `${learningPathDetailBasePath.value}/${task.value.learningPath.id}`,
-      query: { t: String(Date.now()) }
+      query: buildRouteQuery({ t: String(Date.now()) })
     });
   } else {
-    router.push(dashboardPath.value);
+    router.push({ path: dashboardPath.value, query: buildRouteQuery() });
   }
 };
 
@@ -1633,7 +1681,7 @@ const handleWrapupAdvisoryAction = async (action: string) => {
         advisoryAction: action,
         advisory: sessionAdvisory.value,
         wrapup: sessionWrapup.value,
-        taskId: taskId.value,
+        taskId: effectiveTaskId.value,
         taskTitle: task.value?.title,
       }
     });
@@ -1642,7 +1690,7 @@ const handleWrapupAdvisoryAction = async (action: string) => {
     const newPathId = payload?.result?.newPathId || payload?.data?.result?.newPathId;
     toast.success('已调整当前路径的后续阶段');
     if (newPathId) {
-      router.push(`/learning-path/${newPathId}`);
+      router.push({ path: `/learning-path/${newPathId}`, query: buildRouteQuery() });
     }
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -1705,7 +1753,7 @@ const pauseAndLeave = async () => {
     }
   }
   const pathId = task.value?.learningPath?.id;
-  await router.push(pathId ? `${learningPathDetailBasePath.value}/${pathId}` : dashboardPath.value);
+  await router.push(pathId ? { path: `${learningPathDetailBasePath.value}/${pathId}`, query: buildRouteQuery() } : { path: dashboardPath.value, query: buildRouteQuery() });
 };
 
 const handleSessionCommand = (command: string) => {
@@ -1776,7 +1824,7 @@ const goBack = () => {
     pauseAndLeave();
   } else {
     const pathId = task.value?.learningPath?.id;
-    router.push(pathId ? `${learningPathDetailBasePath.value}/${pathId}` : dashboardPath.value);
+    router.push(pathId ? { path: `${learningPathDetailBasePath.value}/${pathId}`, query: buildRouteQuery() } : { path: dashboardPath.value, query: buildRouteQuery() });
   }
 };
 
@@ -1836,11 +1884,18 @@ onMounted(async () => {
   if (task.value?.status === 'completed') {
     toast.info('本任务已完成，请返回学习路径查看评估');
     const pathId = task.value?.learningPath?.id;
-    router.replace(pathId ? `${learningPathDetailBasePath.value}/${pathId}` : dashboardPath.value);
+    router.replace(pathId ? { path: `${learningPathDetailBasePath.value}/${pathId}`, query: buildRouteQuery() } : { path: dashboardPath.value, query: buildRouteQuery() });
     return;
   }
 
-  if (task.value && task.value.learningPath?.canStartLearning !== false) {
+  if (isVirtualSessionView.value) {
+    const teachingSessionId = String(virtualContext.value?.bindings?.teachingSessionId || '');
+    if (teachingSessionId) {
+      await resumeSession(teachingSessionId);
+    } else if (task.value && task.value.learningPath?.canStartLearning !== false) {
+      toast.info('当前虚拟 session 还没有绑定 Learn 会话，可先在控制中心启动 Learn。');
+    }
+  } else if (task.value && task.value.learningPath?.canStartLearning !== false) {
     await startSession();
   }
 

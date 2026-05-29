@@ -14,9 +14,10 @@ export async function startTestGoalConversation(text: string): Promise<GoalConve
   return response.data;
 }
 
-export async function replyTestGoalConversation(sessionId: string, text: string): Promise<GoalConversationEnvelope> {
+export async function replyTestGoalConversation(sessionId: string, text: string, options?: { confirmProposal?: boolean }): Promise<GoalConversationEnvelope> {
   const response = await api.post(`/test/goal-conversation/${sessionId}/reply`, {
-    input: { text }
+    input: { text },
+    confirmProposal: options?.confirmProposal === true
   }) as TestGoalConversationApiResponse;
 
   return response.data;

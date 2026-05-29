@@ -16,7 +16,7 @@ class RequirementOrchestrator {
     return goalConversationService.startConversation(userId, goal, options);
   }
 
-  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full' }) {
+  async step(conversationId: string, reply: string, userId: string, options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }) {
     logger.info('[requirement-orchestrator] step', {
       orchestratorId: this.id,
       userId,

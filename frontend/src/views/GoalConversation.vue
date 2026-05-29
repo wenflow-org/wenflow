@@ -20,7 +20,8 @@
         </nav>
 
         <div class="header-right planning-header__actions">
-          <router-link :to="conversationBasePath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <span v-if="!isTestMode && virtualDebugSummary" class="session-badge stage-info">{{ virtualDebugSummary }}</span>
+          <router-link :to="newConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
           <el-dropdown>
             <button type="button" class="user-chip planning-user-chip">
               <span>{{ userInitial }}</span>
@@ -85,6 +86,9 @@
               <span class="planning-block-label">调试面板</span>
               <strong>{{ testDebugSummary }}</strong>
             </div>
+            <div v-if="virtualDebugSummary" class="planning-debug-block__hint">
+              {{ virtualDebugSummary }}
+            </div>
 
             <div class="planning-debug-metrics">
               <article v-for="item in testDebugCards" :key="item.label" class="planning-debug-metric">
@@ -148,11 +152,12 @@
             <div class="planning-chat-card__copy">
               <h2 v-if="!hasConversationStarted">{{ isTestMode ? '说一件你想测试的目标表达。' : '说一件你最近卡住的事。' }}</h2>
               <p v-if="!hasConversationStarted" class="planning-chat-card__intro">想到哪说到哪，先不用整理。</p>
+              <p v-if="!isTestMode && virtualDebugSummary && !hasConversationStarted" class="planning-chat-card__intro planning-chat-card__intro--virtual">{{ virtualDebugSummary }}</p>
             </div>
 
             <div class="planning-chat-card__meta" :class="{ 'planning-chat-card__meta--compact': hasConversationStarted }">
-              <router-link v-if="!hasConversationStarted" to="/dashboard" class="planning-secondary-btn">回到学习台</router-link>
-              <div v-if="hasConversationStarted" class="planning-chat-card__head-actions">
+              <router-link v-if="!hasConversationStarted" :to="navDashboardPath" class="planning-secondary-btn">回到学习台</router-link>
+              <div v-if="hasConversationStarted && !isVirtualFormalView" class="planning-chat-card__head-actions">
                 <button type="button" class="planning-secondary-btn" @click="resetConversation">重置本次目标</button>
               </div>
             </div>
@@ -166,7 +171,7 @@
                 <span>查看学习路径</span>
                 <el-icon><ArrowRight /></el-icon>
               </button>
-              <button v-if="!isTestMode" class="proposal-btn proposal-btn-secondary" @click="showRegenerateDialog = true">重新规划</button>
+              <button v-if="!isTestMode && !isVirtualFormalView" class="proposal-btn proposal-btn-secondary" @click="showRegenerateDialog = true">重新规划</button>
             </div>
           </div>
 
@@ -485,6 +490,7 @@ import {
   replyTestGoalConversation,
   startTestGoalConversation
 } from '@/api/testGoalConversation';
+import { adminApi } from '@/api/adminApi';
 
 const md = new MarkdownIt({
   html: true,
@@ -515,6 +521,19 @@ const navLearningPathsPath = computed(() => (isTestMode.value ? testLearningPath
 const navLearningStatePath = computed(() => (isTestMode.value ? testLearningStateBasePath.value : '/learning-state'));
 const navAchievementsPath = computed(() => (isTestMode.value ? testAchievementsBasePath.value : '/achievements'));
 const conversationStorageKey = computed(() => isTestMode.value ? ACTIVE_TEST_GOAL_CONVERSATION_KEY : ACTIVE_GOAL_CONVERSATION_KEY);
+const virtualSessionId = computed(() => typeof route.query.virtualSessionId === 'string' ? route.query.virtualSessionId.trim() : '');
+const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route.query.viewMode.trim() : '');
+const buildRouteQuery = () => {
+  const query = new URLSearchParams();
+  if (virtualSessionId.value) query.set('virtualSessionId', virtualSessionId.value);
+  if (viewMode.value) query.set('viewMode', viewMode.value);
+  return query.toString();
+};
+const newConversationPath = computed(() => {
+  const suffix = buildRouteQuery();
+  return suffix ? `${conversationBasePath.value}?${suffix}` : conversationBasePath.value;
+});
+const isVirtualFormalView = computed(() => !isTestMode.value && !!virtualSessionId.value);
 
 const handleLogout = async () => {
   try {
@@ -876,6 +895,7 @@ const structuredData = ref<Record<string, any> | null>(null);
 const confirmedProposal = ref<Record<string, any> | null>(null);
 const confidenceScores = ref<Record<string, any> | null>(null);
 const testDebug = ref<Record<string, any>>({});
+const virtualContext = ref<any>(null);
 
 const sortedMessages = computed(() => {
   const allMessages = [...aiMessages.value, ...userMessages.value];
@@ -885,6 +905,8 @@ const sortedMessages = computed(() => {
     return timeA - timeB;
   });
 });
+
+const isVirtualSessionView = computed(() => !!virtualSessionId.value);
 
 const stages = {
   understanding: { label: '理解中', color: 'info' },
@@ -1201,7 +1223,7 @@ const testDebugCards = computed(() => {
     ?? testDebug.value.historyCount
     ?? 0;
 
-  return [
+  const cards = [
     { label: '上下文策略', value: String(testDebug.value.contextStrategy || 'n/a') },
     { label: '上下文证据数', value: String(conversationContextCount) },
     { label: '可见消息数', value: String(testDebug.value.visibleMessageCount ?? sortedMessages.value.length) },
@@ -1213,12 +1235,33 @@ const testDebugCards = computed(() => {
     { label: '格式失败', value: String(testDebug.value.formatFailureCount ?? 0) },
     { label: '状态已应用', value: testDebug.value.stateApplied === false ? '否' : '是' }
   ];
+
+  if (isVirtualSessionView.value) {
+    cards.unshift(
+      { label: '虚拟会话', value: virtualSessionId.value || '--' },
+      { label: '视图模式', value: viewMode.value || 'debug' }
+    );
+  }
+
+  return cards;
 });
 
 const testDebugSummary = computed(() => {
   if (!isTestMode.value) return '';
   const traceCount = Array.isArray(testDebug.value.requestLog) ? testDebug.value.requestLog.length : 0;
   return `${traceCount} 次请求`;
+});
+
+const virtualDebugSummary = computed(() => {
+  if (!virtualContext.value) return '';
+  const profile = virtualContext.value.profile || {};
+  const story = virtualContext.value.storyContext || {};
+  const session = virtualContext.value.virtualSession || {};
+  return [
+    profile.userName ? `画像：${profile.userName}` : '',
+    story.title ? `故事：${story.title}` : '',
+    session.currentStage ? `阶段：${session.currentStage}` : ''
+  ].filter(Boolean).join(' · ');
 });
 
 const testRequestTraces = computed<TestRequestTraceView[]>(() => {
@@ -1636,7 +1679,10 @@ const syncConversationRoute = (id: string) => {
     return;
   }
 
-  router.replace(normalized ? `${conversationBasePath.value}/${normalized}` : conversationBasePath.value);
+  const suffix = buildRouteQuery();
+  router.replace(normalized
+    ? `${conversationBasePath.value}/${normalized}${suffix ? `?${suffix}` : ''}`
+    : `${conversationBasePath.value}${suffix ? `?${suffix}` : ''}`);
 };
 
 const mapStoredMessage = (message: any, index: number): Message | null => {
@@ -1697,6 +1743,21 @@ const syncConversationState = (response: GoalConversationEnvelope) => {
   }
 };
 
+const loadVirtualContext = async () => {
+  if (!virtualSessionId.value) {
+    virtualContext.value = null;
+    return '';
+  }
+
+  const response = await adminApi.getVirtualSessionContext(virtualSessionId.value);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '加载虚拟会话上下文失败');
+  }
+
+  virtualContext.value = response.data.data;
+  return String(response.data.data?.bindings?.goalConversationId || '');
+};
+
 const syncConversationHistory = (messages: any[] = []) => {
   const mappedMessages = messages
     .map((message, index) => mapStoredMessage(message, index))
@@ -1719,7 +1780,8 @@ const hydrateConversation = (response: GoalConversationEnvelope, options?: { mes
 
 const restoreConversation = async (targetConversationId?: string) => {
   const routeConversationId = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
-  const storedId = (targetConversationId || routeConversationId).trim();
+  const virtualGoalConversationId = virtualSessionId.value ? await loadVirtualContext() : '';
+  const storedId = (targetConversationId || virtualGoalConversationId || routeConversationId).trim();
   if (!storedId) return;
 
   loading.value = true;
@@ -1767,8 +1829,10 @@ const resetLocalConversationState = () => {
   userMessages.value = [];
   uploadedFiles.value.forEach((file) => revokePreviewUrl(file.previewUrl));
   uploadedFiles.value = [];
-  writeStoredConversationId('');
-  syncConversationRoute('');
+  if (!virtualSessionId.value) {
+    writeStoredConversationId('');
+    syncConversationRoute('');
+  }
 };
 
 const formatMessage = (text: string) => md.render(text);
@@ -1787,12 +1851,16 @@ const isFailedMessage = (content: string) => {
 const navigateToLearningPath = () => {
   const learningPathsRoute = isTestMode.value ? testLearningPathsBasePath.value : '/learning-paths';
   const learningPathDetailBase = isTestMode.value ? testLearningPathDetailBasePath.value : '/learning-path';
+  const query = new URLSearchParams();
+  if (virtualSessionId.value) query.set('virtualSessionId', virtualSessionId.value);
+  if (viewMode.value) query.set('viewMode', viewMode.value);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
   if (generatedPathStatus.value === 'generating') {
-    router.push(learningPathsRoute);
+    router.push(`${learningPathsRoute}${suffix}`);
   } else if (generatedPathId.value) {
-    router.push(`${learningPathDetailBase}/${generatedPathId.value}`);
+    router.push(`${learningPathDetailBase}/${generatedPathId.value}${suffix}`);
   } else {
-    router.push(learningPathsRoute);
+    router.push(`${learningPathsRoute}${suffix}`);
   }
 };
 
@@ -1853,7 +1921,7 @@ const navigateToLearningPath = () => {
 const navigateToHome = () => {
   const token = localStorage.getItem('token');
   if (token) {
-    router.push('/dashboard');
+    router.push(navDashboardPath.value);
   } else {
     router.push('/');
   }
@@ -2053,9 +2121,10 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
 
     loading.value = true;
       const response = isTestMode.value
-        ? await replyTestGoalConversation(conversationId.value, confirmText)
+        ? await replyTestGoalConversation(conversationId.value, confirmText, { confirmProposal: true })
         : await replyGoalConversation(conversationId.value, confirmText, {
-            contextMode: contextMode.value
+            contextMode: contextMode.value,
+            confirmProposal: true
           });
     syncConversationState(response);
     attachTraceIdToLatestUserMessage();
@@ -2176,6 +2245,17 @@ onMounted(() => {
   
   window.addEventListener('scroll', handleScroll);
 });
+
+watch(
+  () => route.query.virtualSessionId,
+  (nextId, prevId) => {
+    const nextValue = typeof nextId === 'string' ? nextId : '';
+    const prevValue = typeof prevId === 'string' ? prevId : '';
+    if (nextValue === prevValue) return;
+    resetLocalConversationState();
+    void restoreConversation();
+  }
+);
 
 watch(
   () => route.params.conversationId,
@@ -4632,6 +4712,12 @@ onUnmounted(() => {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+
+.planning-debug-block__hint {
+  color: var(--planning-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .planning-debug-block__head strong {

@@ -67,6 +67,10 @@ import { dialogueConceptExtractor as dialogueConceptExtractorFn } from './dialog
 export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './virtual-learner-scenario-designer';
 import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } from './virtual-learner-scenario-designer';
 
+// 虚拟学习者身份设计
+export { virtualLearnerPersonaDesignerDefinition, VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT, VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE } from './virtual-learner-persona-designer';
+import { virtualLearnerPersonaDesigner as virtualLearnerPersonaDesignerFn } from './virtual-learner-persona-designer';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -87,6 +91,7 @@ import { learningPatternDistillerDefinition } from './learning-pattern-distiller
 import { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
 import { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
+import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   textStructureAnalyzerDefinition,
@@ -103,6 +108,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   learningPatternDistillerDefinition,
   sessionKnowledgeDistillerDefinition,
   dialogueConceptExtractorDefinition,
+  virtualLearnerPersonaDesignerDefinition,
   virtualLearnerScenarioDesignerDefinition
 ];
 
@@ -122,10 +128,32 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'learning-pattern-distiller': learningPatternDistillerFn,
   'session-knowledge-distiller': sessionKnowledgeDistillerFn,
   'dialogue-concept-extractor': dialogueConceptExtractorFn,
+  'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
   'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';
+import { logger } from '../utils/logger';
+
+function summarizeSkillPayload(value: any, depth = 0): any {
+  if (depth > 2) return '[max-depth]';
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    return value.length > 160 ? `${value.slice(0, 160)}...` : value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) {
+    return {
+      count: value.length,
+      sample: value.slice(0, 2).map((item) => summarizeSkillPayload(item, depth + 1)),
+    };
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).slice(0, 10).map(([key, item]) => [key, summarizeSkillPayload(item, depth + 1)]);
+    return Object.fromEntries(entries);
+  }
+  return String(value);
+}
 
 /**
  * 执行 Skill
@@ -139,17 +167,38 @@ export async function executeSkill(definition: SkillDefinition, input: any): Pro
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);
   }
+
+  const startedAt = Date.now();
+  logger.info('[skill-executor] 开始执行', {
+    skillId,
+    inputSummary: summarizeSkillPayload(input),
+  });
   
   // 设置 skillId 到 context，让 OpenAIClient 知道这是 skill 调用（默认用 chat 模型）
   setRequestContext({ skillId });
-  
-  const result = await handler(input);
-  
-  // 检查执行结果，失败时抛出异常
-  if (result && result.success === false) {
-    const errorMsg = result.error?.message || `Skill ${skillId} execution failed`;
-    throw new Error(errorMsg);
+
+  try {
+    const result = await handler(input);
+    
+    if (result && result.success === false) {
+      const errorMsg = result.error?.message || `Skill ${skillId} execution failed`;
+      throw new Error(errorMsg);
+    }
+
+    const output = result?.output || result;
+    logger.info('[skill-executor] 执行完成', {
+      skillId,
+      durationMs: Date.now() - startedAt,
+      outputSummary: summarizeSkillPayload(output),
+    });
+
+    return output;
+  } catch (error: any) {
+    logger.error('[skill-executor] 执行失败', {
+      skillId,
+      durationMs: Date.now() - startedAt,
+      error: error?.message || String(error),
+    });
+    throw error;
   }
-  
-  return result?.output || result;
 }

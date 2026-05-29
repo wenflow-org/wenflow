@@ -38,6 +38,7 @@
               <span v-if="subjectTagLabel" class="test-path-detail-chip">主题：{{ subjectTagLabel }}</span>
               <span class="test-path-detail-chip">阶段：{{ pathOverviewMetrics[0]?.value || 0 }}</span>
               <span class="test-path-detail-chip">预计投入：{{ pathOverviewMetrics[1]?.value || '--' }}</span>
+              <span v-if="virtualDebugSummary" class="test-path-detail-chip test-path-detail-chip--accent">{{ virtualDebugSummary }}</span>
             </div>
           </div>
 
@@ -404,7 +405,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { Loading } from '@element-plus/icons-vue';
@@ -412,6 +413,7 @@ import { toast } from '@/utils/toast';
 import api from '@/utils/api';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI, type TaskEvaluationDetail } from '@/api/aiTeaching';
+import { adminApi } from '@/api/adminApi';
 import { useUserStore } from '@/stores/user';
 
 const route = useRoute();
@@ -419,9 +421,12 @@ const router = useRouter();
 const userStore = useUserStore();
 
 const pathId = route.params.id as string;
+const virtualSessionId = computed(() => typeof route.query.virtualSessionId === 'string' ? route.query.virtualSessionId.trim() : '');
+const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route.query.viewMode.trim() : '');
 const headerScrolled = ref(false);
 const loading = ref(true);
 const path = ref<any>(null);
+const virtualContext = ref<any>(null);
 const activeWeeks = ref<number[]>([1]);
 const evaluationDialogVisible = ref(false);
 const evaluationLoading = ref(false);
@@ -580,14 +585,44 @@ const summarizeValue = (value: any) => {
   return String(value);
 };
 
+const effectivePathId = computed(() => {
+  const boundPathId = virtualContext.value?.bindings?.learningPathId;
+  return String(boundPathId || pathId || '');
+});
+
+const virtualDebugSummary = computed(() => {
+  if (!virtualContext.value) return '';
+  const profile = virtualContext.value.profile || {};
+  const story = virtualContext.value.storyContext || {};
+  return [
+    profile.userName ? `画像：${profile.userName}` : '',
+    story.title ? `故事：${story.title}` : '',
+    viewMode.value ? `模式：${viewMode.value}` : ''
+  ].filter(Boolean).join(' · ');
+});
+
 const formatTaskAnnotationConfidence = (value: any) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
   return `${Math.round(value * 100)}%`;
 };
 
 const handleScroll = () => { headerScrolled.value = window.scrollY > 50; };
+const loadVirtualContext = async () => {
+  if (!virtualSessionId.value) {
+    virtualContext.value = null;
+    return;
+  }
+
+  const response = await adminApi.getVirtualSessionContext(virtualSessionId.value);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '加载虚拟会话上下文失败');
+  }
+
+  virtualContext.value = response.data.data;
+};
+
 const loadGoalConversationRaw = async () => {
-  const conversationId = processDetail.value?.sourceConversationId || generationStatus.value?.sourceConversationId;
+  const conversationId = processDetail.value?.sourceConversationId || generationStatus.value?.sourceConversationId || virtualContext.value?.bindings?.goalConversationId;
   if (!conversationId) {
     goalConversationRaw.value = null;
     return;
@@ -605,7 +640,8 @@ const loadGoalConversationRaw = async () => {
 const loadPathData = async () => {
   if (!path.value) loading.value = true;
   try {
-    const response = await api.get(`/learning/paths/${pathId}`);
+    await loadVirtualContext();
+    const response = await api.get(`/learning/paths/${effectivePathId.value}`);
     path.value = response.data;
     if (path.value.milestones && !path.value.weeks) {
       path.value.weeks = path.value.milestones.map((m: any) => ({ ...m, weekNumber: m.stageNumber, tasks: m.subtasks }));
@@ -646,7 +682,11 @@ const openTaskDetail = (task: any) => {
     toast.warning(path.value?.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
     return;
   }
-  router.push(`/admin/test/learn/${task.id}`);
+  const query = new URLSearchParams();
+  if (virtualSessionId.value) query.set('virtualSessionId', virtualSessionId.value);
+  if (viewMode.value) query.set('viewMode', viewMode.value);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  router.push(`/admin/test/learn/${task.id}${suffix}`);
 };
 const startTask = (task: any) => openTaskDetail(task);
 const startPrimaryActionTask = () => { if (primaryActionTask.value) startTask(primaryActionTask.value); };
@@ -738,6 +778,15 @@ onMounted(() => {
   void loadPathData();
   window.addEventListener('scroll', handleScroll);
 });
+
+watch(
+  [() => route.params.id, () => route.query.virtualSessionId],
+  () => {
+    path.value = null;
+    goalConversationRaw.value = null;
+    void loadPathData();
+  }
+);
 
 onUnmounted(() => {
   stopEnrichmentPolling();

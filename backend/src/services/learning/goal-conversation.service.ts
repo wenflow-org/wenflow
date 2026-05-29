@@ -78,6 +78,10 @@ class GoalConversationService {
   private readonly RECENT_CONTEXT_LIMIT = 20;
   private readonly MAX_FORMAT_RETRIES = 2;
 
+  private hasContinueDiscussIntent(text: string) {
+    return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
+  }
+
 
 
 
@@ -242,7 +246,7 @@ async continueConversation(
     conversationId: string,
     userReply: string,
     userId: string,
-    options?: { contextMode?: 'recent' | 'full' }
+    options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }
   ) {
       try {
         // 获取当前对话状态
@@ -294,11 +298,10 @@ async continueConversation(
           };
         }
 
-        // 确认意图硬规则：proposing 阶段 + 用户确认 -> 直接生成路径（不依赖模型）
-        const confirmIntent = /^(好|好的|行|可以|是的|对|确认|就这样|没问题|开始生成|生成学习路径|可以生成)/i.test(userReply.trim());
-        const adjustIntent = /(调整|修改|换个方向|再想想|先不要|不对)/.test(userReply);
+        // 只接受 UI 显式确认动作，不再依赖自然语言文本猜测“行/可以”是否代表确认。
+        const confirmProposal = options?.confirmProposal === true;
 
-        if (conversation.stage === 'proposing' && confirmIntent && !adjustIntent) {
+        if (conversation.stage === 'proposing' && confirmProposal) {
           const data = JSON.parse(conversation.collectedData || '{}');
           const understanding = data.understanding || {};
           
@@ -573,7 +576,7 @@ async continueConversation(
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: { contextMode?: 'recent' | 'full' }
+    options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }
   ) {
     const startTime = Date.now();
 
@@ -603,7 +606,8 @@ async continueConversation(
         previousUnderstanding,
         previousStage: data.stage || conversation.stage,
         previousState,
-        maxFormatRetries: this.MAX_FORMAT_RETRIES
+        maxFormatRetries: this.MAX_FORMAT_RETRIES,
+        confirmProposal: options?.confirmProposal === true
       });
 
         logger.info('AI响应', {

@@ -50,6 +50,7 @@ export type GoalConversationContextMode = 'recent' | 'full';
 
 interface GoalConversationRequestOptions {
   contextMode?: GoalConversationContextMode;
+  confirmProposal?: boolean;
 }
 
 export async function startGoalConversation(
@@ -71,7 +72,8 @@ export async function replyGoalConversation(
 ): Promise<GoalConversationEnvelope> {
   const response = await api.post(`/goal-conversation/${conversationId}/reply`, {
     input: { text },
-    contextMode: options.contextMode || 'recent'
+    contextMode: options.contextMode || 'recent',
+    confirmProposal: options.confirmProposal === true
   }) as GoalConversationApiResponse;
 
   return response.data;

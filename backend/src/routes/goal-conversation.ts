@@ -51,6 +51,10 @@ function getContextMode(body: any): 'recent' | 'full' {
   return body?.contextMode === 'full' ? 'full' : 'recent';
 }
 
+function getConfirmProposal(body: any): boolean {
+  return body?.confirmProposal === true;
+}
+
 router.post('/start', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -99,7 +103,8 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
     }
 
     const result = await requirementOrchestrator.step(conversationId, reply, userId, {
-      contextMode: getContextMode(req.body)
+      contextMode: getContextMode(req.body),
+      confirmProposal: getConfirmProposal(req.body)
     });
     return res.json({
       success: true,

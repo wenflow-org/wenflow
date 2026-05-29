@@ -8,9 +8,11 @@ import { sessionWrapupRuntimeDefinition } from '../agents/session-wrapup-agent/d
 import { learnerModelRuntimeDefinition } from '../agents/learner-model-agent/definition';
 import { pathSceneFramingRuntimeDefinition } from '../skills/path-scene-framing/definition';
 import { stageDesignerRuntimeDefinition } from '../skills/stage-designer/definition';
+import { virtualLearnerPersonaDesignerRuntimeDefinition } from '../skills/virtual-learner-persona-designer/definition';
 import { virtualLearnerScenarioDesignerRuntimeDefinition } from '../skills/virtual-learner-scenario-designer/definition';
 import { pathOrchestratorRuntimeDefinition } from '../orchestrators/definition';
 import { aiTeachingOrchestratorRuntimeDefinition } from '../orchestrators/ai-teaching.definition';
+import { simulationOrchestratorRuntimeDefinition } from '../orchestrators/simulation.definition';
 
 dotenv.config();
 
@@ -31,12 +33,14 @@ async function main() {
     sessionWrapupRuntimeDefinition,
     pathSceneFramingRuntimeDefinition,
     stageDesignerRuntimeDefinition,
+    virtualLearnerPersonaDesignerRuntimeDefinition,
     virtualLearnerScenarioDesignerRuntimeDefinition,
   ];
 
   const orchestratorDefinitions = [
     pathOrchestratorRuntimeDefinition,
     aiTeachingOrchestratorRuntimeDefinition,
+    simulationOrchestratorRuntimeDefinition,
   ];
 
   for (const definition of definitions) {

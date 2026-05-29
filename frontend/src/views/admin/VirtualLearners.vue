@@ -8,7 +8,7 @@
     <section class="lab-hero">
       <div class="lab-hero__copy">
         <span class="lab-pill">Virtual Learner Lab</span>
-        <h1>虚拟学习者实验总控台</h1>
+        <h1>虚拟学习者总控台</h1>
       </div>
 
       <div class="lab-hero__actions">
@@ -58,7 +58,7 @@
         <section class="lab-panel lab-panel--sessions">
           <div class="lab-panel__head">
             <div>
-              <div class="lab-panel__title">最近实验样本</div>
+              <div class="lab-panel__title">最近诊断样本</div>
             </div>
           </div>
 
@@ -77,7 +77,7 @@
                     <span class="session-funnel__node" :class="item.learnStarted ? (item.learnCompleted ? 'done' : 'active') : ''">Learn</span>
                   </div>
                 </div>
-                <el-button type="primary" link @click="goToSession(item.id)">进入回放</el-button>
+                <el-button type="primary" link @click="goToSession(item.id)">进入诊断</el-button>
               </div>
               <div class="session-row__meta">
                 <el-tag size="small" :type="getSessionStatusType(item.status)">{{ getSessionStatusLabel(item.status) }}</el-tag>
@@ -93,36 +93,44 @@
       <section class="lab-main">
         <section class="lab-panel lab-panel--profiles">
           <div class="lab-panel__head">
-            <div>
+            <div class="lab-panel__head-left">
+              <el-checkbox
+                v-if="!loading && filteredProfiles.length > 0"
+                :model-value="isAllSelected"
+                @change="toggleSelectAll"
+              />
               <div class="lab-panel__title">虚拟学习者库</div>
             </div>
-            <div class="lab-panel__meta">共 {{ filteredProfiles.length }} 个样本</div>
+            <div class="lab-panel__head-right">
+              <template v-if="selectedIds.size > 0">
+                <span class="select-count">已选 {{ selectedIds.size }} 项</span>
+                <el-button type="danger" size="small" @click="handleBatchDelete">批量删除</el-button>
+              </template>
+              <div v-else class="lab-panel__meta">共 {{ filteredProfiles.length }} 个样本</div>
+            </div>
           </div>
 
           <div v-if="loading" class="empty-state">正在加载虚拟学习者...</div>
           <div v-else-if="filteredProfiles.length === 0" class="empty-state">暂无匹配的虚拟学习者</div>
           <div v-else class="profile-grid">
-            <article v-for="row in pagedProfiles" :key="row.id" class="profile-card">
+            <article v-for="row in pagedProfiles" :key="row.id" class="profile-card" :class="{ 'profile-card--selected': selectedIds.has(row.id) }">
               <div class="profile-card__head">
+                <el-checkbox
+                  :model-value="selectedIds.has(row.id)"
+                  @change="toggleSelect(row.id)"
+                  @click.stop
+                />
                 <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
                 <div class="profile-card__identity">
                   <strong>{{ row.userName }}</strong>
-                  <span>{{ row.email }}</span>
+                  <span>{{ row.profile?.occupation || '未填写职业' }}</span>
                 </div>
-                <el-tag size="small" :type="row.simulationMode === 'ai' ? 'success' : 'info'">
-                  {{ row.simulationMode === 'ai' ? 'AI 自动' : '手动' }}
-                </el-tag>
               </div>
 
               <div class="profile-card__body">
-                <div class="profile-kv">
-                  <span>学习目标</span>
-                  <strong>{{ row.learningGoal || '-' }}</strong>
-                </div>
                 <div class="profile-meta-row">
-                  <span>{{ getKnowledgeLevelLabel(row.knowledgeLevel) }}</span>
-                  <span v-if="row.profile?.occupation">{{ row.profile.occupation }}</span>
                   <span v-if="row.profile?.age">{{ row.profile.age }}岁</span>
+                  <span>{{ getStoryPool(row).length }} 个故事</span>
                 </div>
 
                 <div class="profile-stats">
@@ -130,25 +138,22 @@
                     <span>会话数</span>
                     <strong>{{ row.sessionCount || 0 }}</strong>
                   </div>
-                  <div class="mini-stat">
-                    <span>创建时间</span>
-                    <strong>{{ formatTime(row.createdAt) }}</strong>
-                  </div>
                 </div>
               </div>
 
-              <div class="profile-card__footer">
-                <el-button type="primary" @click="startSession(row)">启动模拟</el-button>
-                <el-button @click="openSessionDrawer(row)">会话库</el-button>
-                <el-dropdown trigger="click">
-                  <el-button>
-                    更多
+                <div class="profile-card__footer">
+                  <el-button type="primary" @click="goToProfile(row)">进入详情</el-button>
+                  <el-button @click="openStartSessionDialog(row)">快速开局</el-button>
+                  <el-dropdown trigger="click">
+                    <el-button>
+                      更多
                   </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
-                      <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
-                    </el-dropdown-menu>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click="openSessionDrawer(row)">查看会话</el-dropdown-item>
+                        <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
+                        <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
+                      </el-dropdown-menu>
                   </template>
                 </el-dropdown>
               </div>
@@ -175,49 +180,20 @@
       destroy-on-close
     >
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="formData.name" placeholder="虚拟学习者显示名称" />
+        <el-form-item label="学习者称呼" prop="name">
+          <el-input v-model="formData.name" placeholder="这个虚拟学习者怎么称呼，如：小林 / 王姐 / 店长A" />
         </el-form-item>
+        <div class="ai-generate-hint">用于在人物详情、会话和故事中称呼这个学习者。</div>
 
-        <el-form-item label="学习目标" prop="learningGoal">
-          <el-input
-            v-model="formData.learningGoal"
-            type="textarea"
-            :rows="3"
-            placeholder="描述这个虚拟学习者想解决什么问题、想学到什么..."
-          />
-        </el-form-item>
-
-        <el-form-item label="知识水平" prop="knowledgeLevel">
-          <el-select v-model="formData.knowledgeLevel" style="width: 100%">
-            <el-option label="初学者" value="beginner" />
-            <el-option label="中级" value="intermediate" />
-            <el-option label="高级" value="advanced" />
-          </el-select>
-        </el-form-item>
-
-        <el-divider>画像设定</el-divider>
-
+        <el-divider>基础身份</el-divider>
         <div class="ai-generate-section">
-          <el-button
-            :loading="generatingScenario"
-            @click="handleGenerateScenario"
-          >
-            <el-icon><Plus /></el-icon>
-            一键随机场景
-          </el-button>
-          <el-button
-            type="primary"
-            :loading="generatingProfile"
-            :disabled="!formData.learningGoal || !formData.knowledgeLevel"
-            @click="handleGenerateProfile"
-          >
+          <el-button type="primary" plain :loading="generatingScenario" @click="handleGeneratePersona">
             <el-icon><MagicStick /></el-icon>
-            AI 生成画像
+            AI 一键生成身份
           </el-button>
-          <span class="ai-generate-hint" v-if="!formData.learningGoal || !formData.knowledgeLevel">
-            请先填写学习目标和知识水平
-          </span>
+        </div>
+        <div class="ai-generate-hint ai-generate-hint--block">
+          这里只创建虚拟学习者身份。AI 一键生成会补全基础身份与稳定特质；故事池请在创建后进入人物详情页单独生成和维护。
         </div>
 
         <el-form-item label="年龄">
@@ -236,42 +212,42 @@
           <el-input v-model="formData.profile.background" type="textarea" :rows="2" placeholder="简要背景经历..." />
         </el-form-item>
 
-        <el-divider>模拟配置</el-divider>
+        <el-divider>稳定特质</el-divider>
+        <div class="ai-generate-hint ai-generate-hint--block">
+          这组字段描述这个人长期稳定的表达习惯、求助方式和受压反应。
+        </div>
 
-        <el-form-item label="模拟模式">
-          <el-radio-group v-model="formData.simulationMode">
-            <el-radio value="manual">手动控制</el-radio>
-            <el-radio value="ai">AI 自动扮演</el-radio>
-          </el-radio-group>
+        <el-form-item label="核心人格">
+          <el-input v-model="formData.profile.corePersonality" placeholder="如：遇到真实压力时会先保留判断，不会一上来把话说满" />
         </el-form-item>
 
-        <el-form-item label="性格设定" v-if="formData.simulationMode === 'ai'">
-          <div class="personality-settings">
-            <div class="personality-item">
-              <span class="label">回复长度</span>
-              <el-radio-group v-model="formData.personalityTraits.verbosity" size="small">
-                <el-radio value="terse">简洁</el-radio>
-                <el-radio value="normal">适中</el-radio>
-                <el-radio value="verbose">详细</el-radio>
-              </el-radio-group>
-            </div>
-            <div class="personality-item">
-              <span class="label">态度倾向</span>
-              <el-radio-group v-model="formData.personalityTraits.enthusiasm" size="small">
-                <el-radio value="low">冷淡</el-radio>
-                <el-radio value="normal">正常</el-radio>
-                <el-radio value="high">热情</el-radio>
-              </el-radio-group>
-            </div>
-          </div>
+        <el-form-item label="情感底色">
+          <el-input v-model="formData.profile.emotionalBaseline" type="textarea" :rows="2" placeholder="如：平时不一定明显表达，但在连续受挫或公开出错时会明显紧张" />
         </el-form-item>
 
-        <el-form-item label="Temperature" v-if="formData.simulationMode === 'ai'">
-          <el-slider v-model="formData.simulationTemperature" :min="0.5" :max="1.2" :step="0.1" show-input />
+        <el-form-item label="求助模式">
+          <el-input v-model="formData.profile.helpSeekingPattern" type="textarea" :rows="2" placeholder="如：先自己试，卡两次才问；一旦开口就希望对方给具体例子" />
         </el-form-item>
 
-        <el-form-item label="备注">
-          <el-input v-model="formData.notes" type="textarea" :rows="2" placeholder="管理员备注" />
+        <el-form-item label="对抗模式">
+          <el-input v-model="formData.profile.adversarialPattern" type="textarea" :rows="2" placeholder="如：建议太理想化时，会先说时间不够或条件不允许" />
+        </el-form-item>
+
+        <el-form-item label="元认知特征">
+          <el-input v-model="formData.profile.metacognitiveProfile" type="textarea" :rows="2" placeholder="如：能感觉到自己没懂，但不太会立刻说清具体卡点" />
+        </el-form-item>
+
+        <el-form-item label="负荷容忍度">
+          <el-input v-model="formData.profile.cognitiveLoadTolerance" placeholder="如：信息一多就容易先抓表面，之后才慢慢整理重点" />
+        </el-form-item>
+
+        <el-form-item label="纠错方式">
+          <el-input v-model="formData.profile.memoryRepairPattern" placeholder="如：忘了会先模糊带过，被追问后才承认没记住" />
+        </el-form-item>
+
+        <el-divider>内部信息</el-divider>
+        <el-form-item label="管理员备注">
+          <el-input v-model="formData.notes" type="textarea" :rows="2" placeholder="仅管理员可见的补充说明" />
         </el-form-item>
       </el-form>
 
@@ -285,12 +261,27 @@
 
     <el-drawer
       v-model="sessionDrawerVisible"
-      :title="`${currentSessionProfile?.userName || ''} 的会话库`"
+      :title="`${currentSessionProfile?.userName || ''} 的会话记录`"
       size="620px"
       direction="rtl"
     >
       <div class="drawer-summary">
         <strong>{{ currentSessionProfile?.learningGoal || '暂无学习目标' }}</strong>
+        <span v-if="getStoryPool(currentSessionProfile).length">{{ getStoryPool(currentSessionProfile).length }} 个故事</span>
+      </div>
+
+      <div v-if="getStoryPool(currentSessionProfile).length" class="story-pool-preview">
+        <article v-for="(story, index) in getStoryPool(currentSessionProfile)" :key="story.id || index" class="story-pool-card">
+          <div class="story-pool-card__head">
+            <strong>{{ story.title || `故事 ${index + 1}` }}</strong>
+            <el-tag size="small" effect="plain">{{ getStorySourceLabel(story.sourceType) }}</el-tag>
+          </div>
+          <p>{{ story.storyOutline || story.visibleOpening || '暂无故事摘要' }}</p>
+          <div class="story-pool-card__meta">{{ story.triggerEvent || '暂无触发事件' }}</div>
+          <div class="story-pool-card__actions">
+            <el-button type="primary" link size="small" @click="startSession(currentSessionProfile, story)">用此故事开局</el-button>
+          </div>
+        </article>
       </div>
 
       <el-table :data="currentSessions" v-loading="sessionsLoading" stripe size="small">
@@ -322,12 +313,40 @@
 
         <el-table-column label="操作" width="130" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="goToSession(row.id)">进入</el-button>
+            <el-button type="primary" link size="small" @click="goToSession(row.id)">诊断</el-button>
             <el-button type="danger" link size="small" @click="deleteSession(row.id)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-drawer>
+
+    <el-dialog v-model="startSessionDialogVisible" title="选择故事" width="560px">
+      <div class="start-session-panel">
+        <div class="start-session-panel__head">
+          <strong>{{ startSessionTarget?.userName || '虚拟学习者' }}</strong>
+          <span>先选故事，再进入详情与实验</span>
+        </div>
+        <div v-if="getStoryPool(startSessionTarget).length" class="start-session-story-list">
+          <label
+            v-for="(story, index) in getStoryPool(startSessionTarget)"
+            :key="story.id || index"
+            class="start-session-story"
+            :class="{ active: startSessionStoryIndex === index }"
+          >
+            <input v-model="startSessionStoryIndex" type="radio" :value="index" />
+            <div>
+              <strong>{{ story.title || `故事 ${index + 1}` }}</strong>
+              <p>{{ story.storyOutline || story.visibleOpening || '暂无故事摘要' }}</p>
+            </div>
+          </label>
+        </div>
+        <div v-else class="empty-state small">这个学习者还没有故事池，先进入详情页生成故事，再开始实验。</div>
+      </div>
+      <template #footer>
+        <el-button @click="startSessionDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmStartSession">{{ startSessionPrimaryActionLabel }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -341,11 +360,14 @@ import { adminApi } from '@/api/adminApi'
 const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
-const generatingProfile = ref(false)
 const generatingScenario = ref(false)
 const profiles = ref<any[]>([])
 const searchKeyword = ref('')
 const filterLevel = ref('')
+const selectedIds = ref<Set<string>>(new Set())
+const isAllSelected = computed(() => {
+  return pagedProfiles.value.length > 0 && pagedProfiles.value.every(p => selectedIds.value.has(p.id))
+})
 const pagination = ref({
   page: 1,
   limit: 12,
@@ -357,13 +379,19 @@ const sessionDrawerVisible = ref(false)
 const sessionsLoading = ref(false)
 const currentSessionProfile = ref<any>(null)
 const currentSessions = ref<any[]>([])
+const scenarioDraft = ref<any | null>(null)
 const editingProfile = ref<any>(null)
 const formRef = ref()
+const startSessionDialogVisible = ref(false)
+const startSessionTarget = ref<any | null>(null)
+const startSessionStoryIndex = ref(0)
+
+const startSessionPrimaryActionLabel = computed(() => {
+  return getStoryPool(startSessionTarget.value).length ? '用该故事进入详情' : '进入详情生成故事'
+})
 
 const formData = ref({
   name: '',
-  learningGoal: '',
-  knowledgeLevel: 'beginner',
   profile: {
     age: undefined as number | undefined,
     occupation: '',
@@ -381,9 +409,7 @@ const formData = ref({
 })
 
 const formRules = {
-  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
-  learningGoal: [{ required: true, message: '请输入学习目标', trigger: 'blur' }],
-  knowledgeLevel: [{ required: true, message: '请选择知识水平', trigger: 'change' }]
+  name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
 const filteredProfiles = computed(() => {
@@ -542,11 +568,22 @@ const handlePageChange = (page: number) => {
 }
 
 const resetForm = () => {
+  scenarioDraft.value = null
   formData.value = {
     name: '',
-    learningGoal: '',
-    knowledgeLevel: 'beginner',
-    profile: { age: undefined, occupation: '', education: '', background: '' },
+    profile: {
+      age: undefined,
+      occupation: '',
+      education: '',
+      background: '',
+      corePersonality: '',
+      emotionalBaseline: '',
+      helpSeekingPattern: '',
+      adversarialPattern: '',
+      metacognitiveProfile: '',
+      cognitiveLoadTolerance: '',
+      memoryRepairPattern: ''
+    },
     simulationMode: 'manual',
     simulationTemperature: 0.8,
     personalityTraits: { verbosity: 'normal', enthusiasm: 'normal', confusionStyle: 'direct' },
@@ -561,16 +598,22 @@ const openCreateDialog = () => {
 }
 
 const openEditDialog = (profile: any) => {
+  scenarioDraft.value = null
   editingProfile.value = profile
   formData.value = {
     name: profile.userName || '',
-    learningGoal: profile.learningGoal || '',
-    knowledgeLevel: profile.knowledgeLevel || 'beginner',
     profile: {
       age: profile.profile?.age,
       occupation: profile.profile?.occupation || '',
       education: profile.profile?.education || '',
-      background: profile.profile?.background || ''
+      background: profile.profile?.background || '',
+      corePersonality: profile.profile?.corePersonality || '',
+      emotionalBaseline: profile.profile?.emotionalBaseline || '',
+      helpSeekingPattern: profile.profile?.helpSeekingPattern || '',
+      adversarialPattern: profile.profile?.adversarialPattern || '',
+      metacognitiveProfile: profile.profile?.metacognitiveProfile || '',
+      cognitiveLoadTolerance: profile.profile?.cognitiveLoadTolerance || '',
+      memoryRepairPattern: profile.profile?.memoryRepairPattern || ''
     },
     simulationMode: profile.simulationMode || 'manual',
     simulationTemperature: profile.simulationTemperature || 0.8,
@@ -584,72 +627,56 @@ const openEditDialog = (profile: any) => {
   createDialogVisible.value = true
 }
 
-const handleGenerateProfile = async () => {
-  generatingProfile.value = true
-  try {
-    const res = await adminApi.generateProfile({
-      learningGoal: formData.value.learningGoal,
-      knowledgeLevel: formData.value.knowledgeLevel,
-      simulationMode: formData.value.simulationMode,
-      personalityTraits: formData.value.personalityTraits
-    })
-    if (res.data?.success && res.data?.data) {
-      const generated = res.data.data
-      formData.value.profile.age = generated.age
-      formData.value.profile.occupation = generated.occupation
-      formData.value.profile.education = generated.education
-      formData.value.profile.background = generated.background
-      if (generated.personalityTraits) {
-        formData.value.personalityTraits = {
-          ...formData.value.personalityTraits,
-          ...generated.personalityTraits
-        }
-      }
-      ElMessage.success('画像已生成')
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '生成画像失败')
-  } finally {
-    generatingProfile.value = false
-  }
-}
-
-const handleGenerateScenario = async () => {
+const handleGeneratePersona = async () => {
   generatingScenario.value = true
   try {
-    const res = await adminApi.generateScenario()
-    const scenario = res.data?.data
-    if (res.data?.success && scenario?.goalSeed && scenario?.personaSeed) {
-      const goalSeed = scenario.goalSeed
-      const personaSeed = scenario.personaSeed
-      formData.value.learningGoal = goalSeed.surfaceGoal || goalSeed.realProblem || ''
-      formData.value.knowledgeLevel = personaSeed.knowledgeLevel || 'beginner'
+    const res = await adminApi.generatePersona()
+    const persona = res.data?.data
+    if (res.data?.success && persona?.personaSeed) {
+      scenarioDraft.value = null
+      const personaSeed = persona.personaSeed
       formData.value.name = formData.value.name || personaSeed.nameHint || personaSeed.occupation || '随机样本'
       formData.value.profile.age = personaSeed.age
       formData.value.profile.occupation = personaSeed.occupation || ''
       formData.value.profile.education = personaSeed.education || ''
       formData.value.profile.background = personaSeed.background || ''
-      formData.value.simulationMode = 'ai'
-      formData.value.personalityTraits = {
-        ...formData.value.personalityTraits,
-        ...(personaSeed.personalityTraits || {})
-      }
-      const noteLines = [
-        goalSeed.realProblem ? `真实问题：${goalSeed.realProblem}` : '',
-        goalSeed.motivation ? `动机：${goalSeed.motivation}` : '',
-        Array.isArray(goalSeed.constraints) && goalSeed.constraints.length ? `限制：${goalSeed.constraints.join('；')}` : '',
-        Array.isArray(scenario.consistencyNotes) && scenario.consistencyNotes.length ? `一致性：${scenario.consistencyNotes.join('；')}` : ''
-      ].filter(Boolean)
-      formData.value.notes = noteLines.join('\n')
-      ElMessage.success('随机场景已生成')
+      formData.value.profile.corePersonality = personaSeed.corePersonality || ''
+      formData.value.profile.emotionalBaseline = personaSeed.emotionalBaseline || ''
+      formData.value.profile.helpSeekingPattern = personaSeed.helpSeekingPattern || ''
+      formData.value.profile.adversarialPattern = personaSeed.adversarialPattern || ''
+      formData.value.profile.metacognitiveProfile = personaSeed.metacognitiveProfile || ''
+      formData.value.profile.cognitiveLoadTolerance = personaSeed.cognitiveLoadTolerance || ''
+      formData.value.profile.memoryRepairPattern = personaSeed.memoryRepairPattern || ''
+      ElMessage.success('学习者身份已生成')
     } else {
-      ElMessage.error(res.data?.error || '随机场景生成失败')
+      ElMessage.error(res.data?.error || '学习者身份生成失败')
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '随机场景生成失败')
+    ElMessage.error(error.message || '学习者身份生成失败')
   } finally {
     generatingScenario.value = false
   }
+}
+
+const getStorySourceLabel = (value: string) => {
+  switch (value) {
+    case 'work':
+      return '工作'
+    case 'life':
+      return '生活'
+    case 'study':
+      return '学习'
+    case 'self_management':
+      return '自我管理'
+    default:
+      return value || '故事'
+  }
+}
+
+const getStoryPool = (profile: any) => {
+  if (!profile) return []
+  const profileData = profile.profile || {}
+  return Array.isArray(profileData.storyPool) ? profileData.storyPool.filter((story: any) => story && typeof story === 'object') : []
 }
 
 const handleSubmit = async () => {
@@ -698,6 +725,54 @@ const handleDelete = async (profile: any) => {
   }
 }
 
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(pagedProfiles.value.map(p => p.id))
+  }
+}
+
+const toggleSelect = (id: string) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  selectedIds.value = next
+}
+
+const handleBatchDelete = async () => {
+  const count = selectedIds.value.size
+  if (count === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${count} 个虚拟学习者？相关学习数据也会被删除。`,
+      '批量删除',
+      { type: 'warning' }
+    )
+    const ids = Array.from(selectedIds.value)
+    const results = await Promise.allSettled(
+      ids.map(id => adminApi.deleteVirtualLearner(id))
+    )
+    const successCount = results.filter(r => r.status === 'fulfilled' && (r as any).value?.data?.success).length
+    const failCount = count - successCount
+    if (successCount > 0) {
+      ElMessage.success(`成功删除 ${successCount} 个`)
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`${failCount} 个删除失败`)
+    }
+    selectedIds.value = new Set()
+    loadProfiles()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '批量删除失败')
+    }
+  }
+}
+
 const getSessionStatusType = (status: string) => {
   switch (status) {
     case 'running':
@@ -739,6 +814,10 @@ const getSessionStageLabel = (stage: string) => {
   }
 }
 
+const goToProfile = (profile: any) => {
+  router.push(`/admin/virtual-learners/${profile.id}`)
+}
+
 const openSessionDrawer = async (profile: any) => {
   currentSessionProfile.value = profile
   currentSessions.value = profile.sessions || []
@@ -762,6 +841,28 @@ const goToSession = (sessionId: string) => {
   router.push(`/admin/virtual-session/${sessionId}`)
 }
 
+const openStartSessionDialog = (profile: any) => {
+  startSessionTarget.value = profile
+  startSessionStoryIndex.value = 0
+  startSessionDialogVisible.value = true
+}
+
+const confirmStartSession = async () => {
+  if (!startSessionTarget.value) return
+  const storyPool = getStoryPool(startSessionTarget.value)
+  const story = storyPool[startSessionStoryIndex.value] || storyPool[0]
+  try {
+    const res = await adminApi.startVirtualSession(startSessionTarget.value.id, story ? { storyId: story.id, storyIndex: startSessionStoryIndex.value } : undefined)
+    if (res.data?.success) {
+      ElMessage.success('已创建 session，进入人物控制中心')
+      startSessionDialogVisible.value = false
+      router.push(`/admin/virtual-learners/${startSessionTarget.value.id}?sessionId=${res.data.data?.id}`)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '启动失败')
+  }
+}
+
 const deleteSession = async (sessionId: string) => {
   try {
     await ElMessageBox.confirm('确定删除此会话？相关数据将被清除。', '确认删除', { type: 'warning' })
@@ -778,12 +879,12 @@ const deleteSession = async (sessionId: string) => {
   }
 }
 
-const startSession = async (profile: any) => {
+const startSession = async (profile: any, story?: any) => {
   try {
-    const res = await adminApi.startVirtualSession(profile.id)
+    const res = await adminApi.startVirtualSession(profile.id, story ? { storyId: story.id } : undefined)
     if (res.data?.success) {
-      ElMessage.success('模拟会话已启动')
-      router.push(`/admin/virtual-session/${res.data.data?.id}`)
+      ElMessage.success('已创建 session，进入人物控制中心')
+      router.push(`/admin/virtual-learners/${profile.id}?sessionId=${res.data.data?.id}`)
     }
   } catch (error: any) {
     ElMessage.error(error.message || '启动失败')
@@ -978,6 +1079,189 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.lab-panel__head-left,
+.lab-panel__head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.story-draft-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.story-draft-panel__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  background: #fafcff;
+}
+
+.story-draft-panel__head strong {
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.story-draft-panel__head span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.story-draft-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.story-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #e8edf5;
+  background: #ffffff;
+}
+
+.story-card.primary {
+  border-color: #c9dafd;
+  background: #f7faff;
+}
+
+.story-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.story-card__head strong {
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.story-card p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.story-card__line {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.story-card__line:last-child {
+  margin-bottom: 0;
+}
+
+.story-card__line span {
+  font-size: 11px;
+  color: #8b94a6;
+}
+
+.story-card__line strong {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #334155;
+  font-weight: 500;
+}
+
+.story-pool-preview {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.story-pool-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #e6ebf2;
+  background: #fafcff;
+}
+
+.story-pool-card__head,
+.start-session-panel__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.story-pool-card p,
+.start-session-story p,
+.start-session-panel__head span {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #5f6b7d;
+}
+
+.story-pool-card__meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8b94a6;
+}
+
+.story-pool-card__actions {
+  margin-top: 8px;
+}
+
+.start-session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.start-session-story-list {
+  display: grid;
+  gap: 10px;
+}
+
+.start-session-story {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #e6ebf2;
+  background: #fff;
+  cursor: pointer;
+}
+
+.start-session-story.active {
+  border-color: #c8dafd;
+  background: #f7faff;
+}
+
+.start-session-story input {
+  margin-top: 3px;
+}
+
+.start-session-story strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.select-count {
+  font-size: 12px;
+  color: #8b94a6;
+}
+
+.profile-card--selected {
+  border-color: #c8dafd;
+  background: #f8faff;
+}
+
 .filter-stack,
 .session-list {
   display: flex;
@@ -994,6 +1278,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .profile-card {
@@ -1001,6 +1286,10 @@ onMounted(() => {
   border-radius: 16px;
   padding: 14px;
   background: #fbfcfe;
+  overflow: hidden;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
 }
 
 .profile-card__head,
@@ -1049,30 +1338,15 @@ onMounted(() => {
   color: #7a8597;
 }
 
-.profile-kv {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
-}
-
-.profile-kv span {
-  font-size: 11px;
-  color: #8b94a6;
-}
-
-.profile-kv strong {
-  font-size: 13px;
-  line-height: 1.4;
-  color: #273142;
-}
-
 .profile-meta-row {
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   font-size: 11px;
   color: #6b7280;
+  min-height: 24px;
+  display: flex;
+  align-items: flex-start;
 }
 
 .profile-meta-row span {
@@ -1086,7 +1360,8 @@ onMounted(() => {
 }
 
 .mini-stat {
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 88px;
   padding: 8px 10px;
   border-radius: 12px;
   background: white;
@@ -1109,7 +1384,8 @@ onMounted(() => {
   display: flex;
   justify-content: flex-start;
   gap: 6px;
-  margin-top: 12px;
+  margin-top: auto;
+  padding-top: 12px;
   flex-wrap: wrap;
 }
 

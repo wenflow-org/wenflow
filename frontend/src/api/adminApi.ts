@@ -105,6 +105,22 @@ export const adminPlatformSettingsApi = {
   }
 };
 
+export interface AdvanceTimePreviewResponse {
+  dayDiff: number;
+  simulatedAsOf: string;
+  hasMetricRecord: boolean;
+  latestMetricAt?: string;
+  before: any;
+  after: any | null;
+}
+
+export const adminDevtoolsApi = {
+  advanceTimePreview: async (data: { days: number; userId?: string; pathId?: string }) => {
+    const response = await adminAxios.post('/admin/devtools/advance-time', data);
+    return response.data?.data as AdvanceTimePreviewResponse;
+  }
+};
+
 /**
  * 用户管理 API
  */
@@ -722,6 +738,14 @@ export const adminSkillsApi = {
 };
 
 export const adminVirtualLearnersApi = {
+  generatePersona: async (data?: {
+    preferredLevels?: string[];
+    candidatePersonas?: string[];
+    existingPersonaSeed?: Record<string, any>;
+  }) => {
+    return adminAxios.post('/admin/virtual-learners/generate-persona', data || {});
+  },
+
   generateScenario: async (data?: {
     preferredDomains?: string[];
     preferredGoalTypes?: string[];
@@ -753,15 +777,30 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${id}`);
   },
 
+  draftVirtualLearnerProfile: async (id: string) => {
+    return adminAxios.post(`/admin/virtual-learners/${id}/draft-profile`);
+  },
+
+  draftVirtualLearnerStories: async (id: string) => {
+    return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`);
+  },
+
   createVirtualLearner: async (data: {
     name: string;
-    learningGoal: string;
+    learningGoal?: string;
     knowledgeLevel?: string;
     profile?: {
       age?: number;
       occupation?: string;
       education?: string;
       background?: string;
+      corePersonality?: string;
+      emotionalBaseline?: string;
+      helpSeekingPattern?: string;
+      adversarialPattern?: string;
+      metacognitiveProfile?: string;
+      cognitiveLoadTolerance?: string;
+      memoryRepairPattern?: string;
     };
     simulationMode?: string;
     simulationTemperature?: number;
@@ -783,12 +822,16 @@ export const adminVirtualLearnersApi = {
     return adminAxios.delete(`/admin/virtual-learners/${id}`);
   },
 
-  startVirtualSession: async (profileId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/${profileId}/start-session`);
+  startVirtualSession: async (profileId: string, data?: { storyId?: string; storyIndex?: number }) => {
+    return adminAxios.post(`/admin/virtual-learners/${profileId}/start-session`, data || {});
   },
 
   getVirtualSession: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}`);
+  },
+
+  getVirtualSessionContext: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/context`);
   },
 
   virtualSessionStep: async (sessionId: string) => {
@@ -875,4 +918,7 @@ export const adminApi = {
 
   // Virtual Learners
   ...adminVirtualLearnersApi,
+
+  // Devtools
+  ...adminDevtoolsApi,
 };

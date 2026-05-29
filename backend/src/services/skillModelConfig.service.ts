@@ -7,6 +7,7 @@ export interface SkillModelConfig {
   skillId: string;
   displayName?: string;
   status?: 'working' | 'placeholder' | 'simplified' | 'mock';
+  lastCalledAt?: Date | null;
   tier: string;
   model?: string;
   thinkingMode?: string;
@@ -38,6 +39,7 @@ class SkillModelConfigService {
             skillId,
             displayName,
             status,
+            lastCalledAt: skill.lastCalledAt || null,
             tier: 'chat',
             thinkingMode: 'default',
             reasoningEffort: 'default',
@@ -52,6 +54,7 @@ class SkillModelConfigService {
           ...persisted,
           displayName,
           status,
+          lastCalledAt: skill.lastCalledAt || null,
           thinkingMode: persisted.thinkingMode || 'default',
           reasoningEffort: persisted.reasoningEffort || 'default',
         };
@@ -65,6 +68,7 @@ class SkillModelConfigService {
         ...mergedConfigs,
         ...missingConfigs.map((config) => ({
           ...config,
+          lastCalledAt: null,
           thinkingMode: config.thinkingMode || 'default',
           reasoningEffort: config.reasoningEffort || 'default',
         })),

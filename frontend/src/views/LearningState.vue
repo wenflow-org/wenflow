@@ -1387,6 +1387,110 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.8);
 }
 
+.state-debug-panel {
+  margin-top: 20px;
+}
+
+.state-debug-panel__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.state-debug-preview {
+  margin-top: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.state-debug-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-size: 12px;
+  color: #7a8599;
+}
+
+.state-debug-empty {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(244, 247, 252, 0.9);
+  color: #5d6b82;
+}
+
+.state-debug-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.state-debug-compare-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(244, 247, 252, 0.92);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  display: grid;
+  gap: 6px;
+}
+
+.state-debug-compare-card span {
+  font-size: 12px;
+  color: #7a8599;
+}
+
+.state-debug-compare-card strong {
+  font-size: 22px;
+  color: #172033;
+}
+
+.state-debug-compare-card p {
+  margin: 0;
+  color: #4b5565;
+}
+
+.state-debug-sections {
+  display: grid;
+  gap: 14px;
+}
+
+.state-debug-section {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  display: grid;
+  gap: 12px;
+}
+
+.state-debug-section strong {
+  color: #172033;
+}
+
+.state-debug-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.state-debug-kv-item {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(244, 247, 252, 0.9);
+}
+
+.state-debug-kv-item span {
+  display: block;
+  font-size: 12px;
+  color: #7a8599;
+  margin-bottom: 6px;
+}
+
+.state-debug-kv-item p {
+  margin: 0;
+  color: #172033;
+  line-height: 1.6;
+}
+
 .state-trend-panel h2,
 .state-insight-card__title {
   margin: 0;
@@ -1499,10 +1603,15 @@ onUnmounted(() => {
   border: 1px solid rgba(52, 120, 246, 0.08);
 }
 
-.chart-container--state {
-  min-height: 360px;
-  padding: 10px 8px 2px;
-}
+  .chart-container--state {
+    min-height: 360px;
+    padding: 10px 8px 2px;
+  }
+
+  .state-debug-compare-grid,
+  .state-debug-kv-grid {
+    grid-template-columns: 1fr;
+  }
 
 /* ========== 按钮样式 ========== */
 .btn {

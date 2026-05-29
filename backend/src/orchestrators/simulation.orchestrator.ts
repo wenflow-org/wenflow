@@ -23,7 +23,8 @@ import type {
   SimulationStepResult,
   SimulationLogEntry,
   VirtualLearnerProfile,
-  GoalConcernPool
+  GoalConcernPool,
+  LearnerLatentState
 } from '../agents/virtual-learner-simulation-agent/types';
 
 const ORCHESTRATOR_ID = 'simulation-orchestrator';
@@ -129,6 +130,7 @@ class SimulationOrchestrator {
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     lastAssistantMessage: string,
     currentStage: 'goal' | 'path' | 'learning',
+    storyContext?: any,
     goalState?: any,
     learnerState?: any,
     knowledgeState?: any,
@@ -139,10 +141,90 @@ class SimulationOrchestrator {
       conversationHistory,
       currentStage,
       lastAssistantMessage,
+      storyContext,
       goalState,
-      learnerState,
+      learnerState: this.mergeLearnerState(profile, learnerState, currentStage, storyContext),
       knowledgeState,
       learningState
+    };
+  }
+
+  private buildStoryBehaviorBias(storyContext?: any): Partial<LearnerLatentState> {
+    if (!storyContext) return {};
+
+    const pressurePoints = Array.isArray(storyContext.pressurePoints) ? storyContext.pressurePoints : [];
+    const behaviorHooks = Array.isArray(storyContext.behaviorHooks) ? storyContext.behaviorHooks : [];
+    const text = [...pressurePoints, ...behaviorHooks].join('；');
+
+    const partial: Partial<LearnerLatentState> = {};
+
+    if (text.includes('焦虑') || text.includes('紧张') || text.includes('压力')) {
+      partial.frustrationLevel = 0.34;
+      partial.confusionLevel = 0.54;
+    }
+
+    if (text.includes('追问') || text.includes('确认') || text.includes('求助')) {
+      partial.wantsClarification = true;
+    }
+
+    if (text.includes('保留') || text.includes('质疑') || text.includes('防御')) {
+      partial.readyToAdvance = false;
+      partial.goalReadiness = 0.42;
+    }
+
+    if (text.includes('装懂') || text.includes('先猜') || text.includes('模糊带过')) {
+      partial.selfPerceivedMastery = 0.58;
+      partial.actualMastery = 0.38;
+    }
+
+    return partial;
+  }
+
+  private buildDefaultLearnerState(
+    profile: VirtualLearnerProfile,
+    currentStage: 'goal' | 'path' | 'learning'
+  ): LearnerLatentState {
+    const traits = profile.personalityTraits || {};
+    const p = profile.profile || {};
+
+    const patienceBase = traits.patience === 'low' ? 0.35 : traits.patience === 'high' ? 0.78 : 0.58;
+    const enthusiasmBase = traits.enthusiasm === 'low' ? 0.4 : traits.enthusiasm === 'high' ? 0.76 : 0.58;
+    const attentionPenalty = typeof p.cognitiveLoadTolerance === 'string' && p.cognitiveLoadTolerance.includes('信息一多') ? 0.12 : 0;
+    const frustrationBoost = p.emotionalBaseline || (Array.isArray(p.emotionalTriggers) && p.emotionalTriggers.length) ? 0.08 : 0;
+    const helpSeeking = typeof p.helpSeekingPattern === 'string' ? p.helpSeekingPattern : '';
+    const wantsClarificationByTrait = traits.questionStyle === 'clarifying'
+      || traits.questionStyle === 'challenging'
+      || helpSeeking.includes('追问')
+      || helpSeeking.includes('确认')
+      || helpSeeking.includes('具体例子');
+
+    return {
+      motivationLevel: enthusiasmBase,
+      attentionLevel: Math.max(0.2, patienceBase - attentionPenalty),
+      persistenceLevel: patienceBase,
+      confusionLevel: currentStage === 'goal' ? 0.48 : 0.32,
+      frustrationLevel: Math.min(0.75, 0.18 + frustrationBoost),
+      goalReadiness: currentStage === 'goal' ? 0.28 : currentStage === 'path' ? 0.6 : undefined,
+      wantsClarification: currentStage === 'goal' ? wantsClarificationByTrait : undefined,
+      readyToAdvance: currentStage === 'goal' ? false : undefined,
+      selfPerceivedMastery: profile.knowledgeLevel === 'beginner' ? 0.24 : profile.knowledgeLevel === 'advanced' ? 0.72 : 0.5,
+      actualMastery: profile.knowledgeLevel === 'beginner' ? 0.2 : profile.knowledgeLevel === 'advanced' ? 0.75 : 0.48,
+      memoryStrength: p.memoryRepairPattern ? 0.42 : 0.5,
+      remainingUnknowns: currentStage === 'goal' ? ['真实问题还没有完全说清', '还不确定哪种方式真正适合自己'] : undefined,
+      stableErrorStyle: Array.isArray(p.failurePatterns) ? p.failurePatterns.slice(0, 2) : undefined
+    };
+  }
+
+  private mergeLearnerState(
+    profile: VirtualLearnerProfile,
+    learnerState: any,
+    currentStage: 'goal' | 'path' | 'learning',
+    storyContext?: any
+  ): LearnerLatentState {
+    return {
+      ...this.buildDefaultLearnerState(profile, currentStage),
+      ...this.buildStoryBehaviorBias(storyContext),
+      ...(learnerState || {})
     };
   }
 
@@ -181,6 +263,34 @@ class SimulationOrchestrator {
 
     if (profile.profile?.motivationType === 'career' || profile.profile?.motivationType === 'necessity') {
       secondary.add('我希望学习结果尽快能用，不太想学很多暂时用不上的内容');
+    }
+
+    if (profile.profile?.emotionalBaseline) {
+      hidden.add(`这件事会牵动我的情绪底色：${profile.profile.emotionalBaseline}`);
+    }
+
+    if (Array.isArray(profile.profile?.emotionalTriggers) && profile.profile.emotionalTriggers.length) {
+      hidden.add(`有些情境会明显放大我的压力，比如：${profile.profile.emotionalTriggers.slice(0, 2).join('、')}`);
+    }
+
+    if (profile.profile?.helpSeekingPattern) {
+      hidden.add(`我在求助上有固定习惯：${profile.profile.helpSeekingPattern}`);
+    }
+
+    if (profile.profile?.adversarialPattern) {
+      secondary.add(`如果建议不贴近现实，我可能会先保留或质疑：${profile.profile.adversarialPattern}`);
+    }
+
+    if (profile.profile?.cognitiveLoadTolerance) {
+      secondary.add(`我的信息承载方式有边界：${profile.profile.cognitiveLoadTolerance}`);
+    }
+
+    if (profile.profile?.metacognitiveProfile) {
+      hidden.add(`我未必能马上准确说清卡点根因：${profile.profile.metacognitiveProfile}`);
+    }
+
+    if (profile.profile?.memoryRepairPattern) {
+      hidden.add(`即使我忘了或没真懂，也可能先按自己的习惯处理：${profile.profile.memoryRepairPattern}`);
     }
 
     return {
@@ -281,6 +391,10 @@ class SimulationOrchestrator {
       }
     });
   }
+
+  private parseStoryContextFromStageResults(stageResults: any): any {
+    return stageResults?.story || null;
+  }
   
   async executeSingleStep(input: SimulationOrchestratorInput): Promise<SimulationStepResult> {
     const startTime = Date.now();
@@ -294,11 +408,68 @@ class SimulationOrchestrator {
       
       const session = await this.getVirtualSession(input.sessionId);
       const profile = this.parseProfileData(session.virtual_learner_profiles);
+      let initialStageResults: any = {};
+      try {
+        initialStageResults = JSON.parse(session.stageResults || '{}');
+      } catch {}
+      const storyContext = this.parseStoryContextFromStageResults(initialStageResults);
       
       if (!session.goalConversationId) {
+        const openingContext = this.buildSimulationContext(
+          profile,
+          [],
+          '',
+          'goal',
+          storyContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined
+        );
+
+        const openingInput = {
+          type: 'custom' as const,
+          goal: '模拟虚拟用户首次开场',
+          metadata: {
+            simulationType: 'simulate_goal_reply',
+            simulationContext: openingContext
+          }
+        };
+
+        const openingAgentContext = {
+          userId: input.userId,
+          sourceEntry: 'simulation' as const,
+          metadata: {
+            traceId: uuidv4(),
+            sessionId: input.sessionId,
+            turnType: 'goal-opening'
+          }
+        };
+
+        const openingStart = Date.now();
+        const openingResult = await virtualLearnerSimulationAgentHandler(openingInput, openingAgentContext);
+        const openingReply = openingResult.success && openingResult.userVisible
+          ? openingResult.userVisible
+          : profile.learningGoal;
+
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'virtual-reply',
+          durationMs: Date.now() - openingStart,
+          details: {
+            output: {
+              reply: openingReply,
+              thoughtProcess: openingResult.internal?.thoughtProcess,
+              learnerState: this.mergeLearnerState(profile, openingResult.learnerState || openingResult.internal?.learnerState, 'goal', storyContext),
+              emotion: openingResult.internal?.emotion,
+              opening: true
+            }
+          }
+        });
+
         const goalResult = await goalConversationService.startConversation(
           input.userId,
-          profile.learningGoal
+          openingReply
         );
         
         await this.updateSessionStatus(
@@ -330,7 +501,7 @@ class SimulationOrchestrator {
 
         return {
           success: true,
-          virtualUserReply: profile.learningGoal,
+          virtualUserReply: openingReply,
           goalConversationResponse: {
             userVisible: goalResult.userVisible,
             stage: goalResult.internal.core.stage,
@@ -376,6 +547,7 @@ class SimulationOrchestrator {
       } catch {}
 
       const existingGoalState = stageResults.goal || {};
+      const activeStoryContext = this.parseStoryContextFromStageResults(stageResults);
       const concernPool = existingGoalState.concernPool || this.buildGoalConcernPool(profile, goalState);
       const disclosedConcerns = existingGoalState.disclosedConcerns || [];
       const missingFields = [
@@ -397,6 +569,7 @@ class SimulationOrchestrator {
         conversationHistory,
         lastAssistantMessage,
         'goal',
+        activeStoryContext,
         enrichedGoalState,
         stageResults.goal?.learnerState,
         stageResults.goal?.knowledgeState,
@@ -439,7 +612,7 @@ class SimulationOrchestrator {
           output: {
             reply: virtualReplyResult.userVisible,
             thoughtProcess: virtualReplyResult.internal?.thoughtProcess,
-            learnerState: virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState,
+            learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'goal', activeStoryContext),
             emotion: virtualReplyResult.internal?.emotion
           }
         }
@@ -455,7 +628,7 @@ class SimulationOrchestrator {
         ...existingGoalState,
         concernPool,
         disclosedConcerns: nextDisclosedConcerns,
-        learnerState: virtualReplyResult.internal?.learnerState
+        learnerState: this.mergeLearnerState(profile, virtualReplyResult.internal?.learnerState, 'goal', activeStoryContext)
       });
       
       const goalResponseStart = Date.now();
@@ -504,7 +677,7 @@ class SimulationOrchestrator {
           conversationId: session.goalConversationId,
           finalStage: goalResult.internal.core.stage,
           learningPathId: updatedConversation?.learningPathId,
-          learnerState: virtualReplyResult.internal?.learnerState,
+          learnerState: this.mergeLearnerState(profile, virtualReplyResult.internal?.learnerState, 'goal', activeStoryContext),
           concernPool,
           disclosedConcerns: nextDisclosedConcerns
         });
@@ -781,7 +954,7 @@ class SimulationOrchestrator {
               }))
             },
             profile,
-            learnerState: stageResults.path_review?.learnerState || stageResults.goal?.learnerState,
+            learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults)),
             knowledgeState: stageResults.goal?.knowledgeState
           }
         }
@@ -831,7 +1004,7 @@ class SimulationOrchestrator {
         confidence: reactionOutput.confidence,
         reasons: reactionOutput.reasons,
         biggestConcern: reactionOutput.biggestConcern,
-        learnerState: reactionResult.internal?.learnerState
+        learnerState: this.mergeLearnerState(profile, reactionResult.internal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults))
       });
       
       logger.info('[simulation-orchestrator] 路径评审完成', {
@@ -1078,7 +1251,7 @@ class SimulationOrchestrator {
         conversationHistory: learningState.conversationHistory || [],
         lastAssistantMessage,
         currentStage: 'learning',
-        learnerState: learningState.learnerState,
+        learnerState: this.mergeLearnerState(profile, learningState.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults)),
         learningState: {
           currentMilestone: currentMilestone.title,
           currentTask: currentTask.title,
@@ -1217,7 +1390,7 @@ class SimulationOrchestrator {
               totalMilestones: milestones.length
             }
           : this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, nextTaskIdx)),
-        learnerState: virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState,
+        learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults)),
         conversationHistory: [
           ...(learningState.conversationHistory || []),
           { role: 'user', content: virtualReplyResult.userVisible },

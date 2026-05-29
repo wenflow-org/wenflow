@@ -275,6 +275,124 @@ export class LearnerSnapshotService {
     };
   }
 
+  async previewSnapshotFromMetrics(input: LearnerSnapshotScopeInput & {
+    metrics: {
+      lss: number;
+      ktl: number;
+      lf: number;
+      lsb: number;
+    };
+    generatedAt?: Date;
+  }): Promise<LearnerSnapshot> {
+    const [{ profile, confidence }, knowledgeMemory, latestConversation, latestSession, latestCompletedTask] = await Promise.all([
+      learnerModelAgent.getProfile(input.userId),
+      learnerKnowledgeMemoryService.build({
+        userId: input.userId,
+        learningPathId: input.learningPathId,
+        milestoneId: input.milestoneId,
+        taskId: input.taskId,
+      }),
+      prisma.goal_conversations.findFirst({
+        where: { userId: input.userId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      prisma.teaching_sessions.findFirst({
+        where: { userId: input.userId },
+        orderBy: { updatedAt: 'desc' },
+        select: { updatedAt: true },
+      }),
+      prisma.subtasks.findFirst({
+        where: { userId: input.userId, status: 'completed' },
+        orderBy: { completedAt: 'desc' },
+        select: { completedAt: true },
+      }),
+    ]);
+
+    const personalization = {
+      config: personalizationEngine.generateConfig(profile),
+      promptEnhancement: personalizationEngine.generatePromptEnhancement(profile),
+      contentHints: personalizationEngine.generateContentHints(profile),
+    };
+
+    const dynamicState: LearnerDynamicState = {
+      metrics: {
+        lss: input.metrics.lss,
+        ktl: input.metrics.ktl,
+        lf: input.metrics.lf,
+        lsb: input.metrics.lsb,
+      },
+      recentTrend: profile.learning.recentProgress,
+      fatigueRisk: deriveFatigueRisk(input.metrics.lf),
+      confidenceTrend: profile.emotional.confidenceLevel === 'anxious' ? 'falling' : profile.emotional.confidenceLevel === 'confident' ? 'rising' : 'stable',
+      recentSessionQuality: deriveSessionQuality(input.metrics.ktl, input.metrics.lf),
+      recommendedPacing: derivePacing(input.metrics.lss, input.metrics.lf, input.metrics.ktl),
+      recommendedInteraction: {
+        hintTiming: personalization.config.interaction.hintTiming,
+        encouragement: personalization.config.interaction.encouragementFrequency,
+        challenge: personalization.config.interaction.challengeFrequency,
+      },
+    };
+
+    const currentPath = knowledgeMemory.currentPath
+      ? {
+          ...knowledgeMemory.currentPath,
+          pathSummary: await this.resolvePathSummary(knowledgeMemory.currentPath.learningPathId),
+        }
+      : undefined;
+
+    const teachingHints: LearnerTeachingHints = {
+      promptEnhancement: personalization.promptEnhancement,
+      recommendedApproach: profile.derivedInsights.suggestedApproach,
+      emphasize: personalization.contentHints.emphasisAreas,
+      avoid: personalization.contentHints.avoidFormats,
+      riskFactors: profile.derivedInsights.riskFactors,
+    };
+
+    const finalKnowledgeMemory: LearnerKnowledgeMemory = {
+      ...knowledgeMemory,
+      ...(currentPath ? { currentPath } : {}),
+    };
+    const learningControlState = deriveLearningControlState({
+      dynamicState,
+      knowledgeMemory: finalKnowledgeMemory,
+    });
+    const replanSignal = deriveReplanSignal({
+      dynamicState,
+      learningControlState,
+      knowledgeMemory: finalKnowledgeMemory,
+    });
+    const generatedAt = input.generatedAt || new Date();
+
+    return {
+      snapshotVersion: 'learner-snapshot-v1',
+      scope: {
+        userId: input.userId,
+        learningPathId: input.learningPathId,
+        milestoneId: input.milestoneId,
+        taskId: input.taskId,
+        mode: input.mode || (input.taskId ? 'teaching' : input.learningPathId ? 'path' : 'global'),
+      },
+      freshness: {
+        generatedAt: generatedAt.toISOString(),
+        confidence,
+        basedOn: {
+          latestGoalConversationAt: latestConversation?.createdAt?.toISOString(),
+          latestMetricAt: generatedAt.toISOString(),
+          latestTeachingSessionAt: latestSession?.updatedAt?.toISOString(),
+          latestTaskCompletionAt: latestCompletedTask?.completedAt?.toISOString(),
+          latestPathUpdateAt: currentPath ? await this.resolvePathUpdatedAt(currentPath.learningPathId) : undefined,
+        },
+      },
+      profile,
+      dynamicState,
+      learningControlState,
+      replanSignal,
+      knowledgeMemory: finalKnowledgeMemory,
+      teachingHints,
+    };
+  }
+
   private async resolvePathSummary(learningPathId: string): Promise<string | null> {
     const path = await prisma.learning_paths.findUnique({
       where: { id: learningPathId },
