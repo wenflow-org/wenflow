@@ -420,7 +420,7 @@ const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 
-const pathId = route.params.id as string;
+const pathId = computed(() => typeof route.params.id === 'string' ? route.params.id.trim() : '');
 const virtualSessionId = computed(() => typeof route.query.virtualSessionId === 'string' ? route.query.virtualSessionId.trim() : '');
 const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route.query.viewMode.trim() : '');
 const headerScrolled = ref(false);
@@ -587,7 +587,7 @@ const summarizeValue = (value: any) => {
 
 const effectivePathId = computed(() => {
   const boundPathId = virtualContext.value?.bindings?.learningPathId;
-  return String(boundPathId || pathId || '');
+  return String(boundPathId || pathId.value || '');
 });
 
 const virtualDebugSummary = computed(() => {
@@ -641,8 +641,21 @@ const loadPathData = async () => {
   if (!path.value) loading.value = true;
   try {
     await loadVirtualContext();
-    const response = await api.get(`/learning/paths/${effectivePathId.value}`);
-    path.value = response.data;
+    if (!effectivePathId.value) {
+      throw new Error('当前虚拟 session 还没有绑定学习路径');
+    }
+
+    if (virtualSessionId.value) {
+      const response = await adminApi.getVirtualSessionLearningPath(virtualSessionId.value);
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || '加载虚拟会话学习路径失败');
+      }
+      path.value = response.data.data?.path || null;
+    } else {
+      const response = await api.get(`/learning/paths/${effectivePathId.value}`);
+      path.value = response.data;
+    }
+
     if (path.value.milestones && !path.value.weeks) {
       path.value.weeks = path.value.milestones.map((m: any) => ({ ...m, weekNumber: m.stageNumber, tasks: m.subtasks }));
     }

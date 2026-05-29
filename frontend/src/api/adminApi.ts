@@ -777,12 +777,24 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${id}`);
   },
 
+  getVirtualLearnerStories: async (id: string) => {
+    return adminAxios.get(`/admin/virtual-learners/${id}/stories`);
+  },
+
   draftVirtualLearnerProfile: async (id: string) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-profile`);
   },
 
-  draftVirtualLearnerStories: async (id: string) => {
+draftVirtualLearnerStories: async (id: string) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`);
+  },
+
+  updateStoryStatus: async (profileId: string, storyIndex: number, status: string) => {
+    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, { status });
+  },
+
+  deleteStory: async (profileId: string, storyIndex: number) => {
+    return adminAxios.delete(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`);
   },
 
   createVirtualLearner: async (data: {
@@ -832,6 +844,18 @@ export const adminVirtualLearnersApi = {
 
   getVirtualSessionContext: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/context`);
+  },
+
+  getVirtualSessionGoalConversation: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/goal-conversation`);
+  },
+
+  getVirtualSessionLearningPath: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-path`);
+  },
+
+  getVirtualSessionLearningTask: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-task`);
   },
 
   virtualSessionStep: async (sessionId: string) => {

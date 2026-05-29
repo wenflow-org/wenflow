@@ -234,6 +234,179 @@ async function buildRecentScenarioHints() {
 
 router.use(authMiddleware);
 
+router.get('/:id/stories', async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id },
+      include: {
+        users: {
+          select: { id: true, email: true, name: true }
+        },
+        sessions: {
+          orderBy: { updatedAt: 'desc' },
+          take: 200,
+        },
+      },
+    });
+
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    const profileData = parseJson<any>(profile.profile, {});
+    const storyPool = getStoryPool(profile);
+    const stories = storyPool.map((story: any, index: number) => {
+      const runs = Array.isArray(profile.sessions)
+        ? profile.sessions
+            .filter((session: any) => {
+              const sessionStory = parseStoryContext(session);
+              return story?.id ? sessionStory?.storyId === story.id : index === 0;
+            })
+            .map((session: any) => ({
+              sessionId: session.id,
+              status: session.status,
+              currentStage: session.currentStage,
+              updatedAt: session.updatedAt,
+              createdAt: session.createdAt,
+              storyContext: parseStoryContext(session),
+              bindings: buildSessionBindings(session),
+            }))
+        : [];
+
+      const latestRun = runs[0] || null;
+      return {
+        key: story?.id || `story-${index}`,
+        index,
+        ...story,
+        storyId: story?.id || null,
+        storyTitle: story?.title || `故事 ${index + 1}`,
+        storyOutline: story?.storyOutline || story?.outline || '',
+        storyTriggerEvent: story?.triggerEvent || '',
+        stats: {
+          totalRuns: runs.length,
+          goalCount: runs.filter((item: any) => !!item.bindings?.goalConversationId).length,
+          pathCount: runs.filter((item: any) => !!item.bindings?.learningPathId).length,
+          learnCount: runs.filter((item: any) => !!item.bindings?.teachingSessionId || !!item.bindings?.currentTaskId).length,
+          runningCount: runs.filter((item: any) => item.status === 'running').length,
+        },
+        latestRun,
+        projection: {
+          formal: {
+            goal: latestRun?.bindings?.goalConversationId ? `/goal-conversation/${latestRun.bindings.goalConversationId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
+            path: latestRun?.bindings?.learningPathId ? `/learning-path/${latestRun.bindings.learningPathId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
+            learn: latestRun?.bindings?.currentTaskId ? `/learn/${latestRun.bindings.currentTaskId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
+          },
+          test: {
+            goal: latestRun?.bindings?.goalConversationId ? `/admin/test/goal-full/${latestRun.bindings.goalConversationId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
+            path: latestRun?.bindings?.learningPathId ? `/admin/test/learning-path/${latestRun.bindings.learningPathId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
+            learn: latestRun?.bindings?.currentTaskId ? `/admin/test/learn/${latestRun.bindings.currentTaskId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
+          }
+        }
+      }
+    })
+
+    res.json({
+      success: true,
+      data: {
+        profile: {
+          id: profile.id,
+          userId: profile.userId,
+          userName: profile.users.name,
+          email: profile.users.email,
+          learningGoal: profile.learningGoal,
+          knowledgeLevel: profile.knowledgeLevel,
+          profile: profileData,
+        },
+        stories,
+        summary: {
+          storyCount: stories.length,
+          runCount: Array.isArray(profile.sessions) ? profile.sessions.length : 0,
+          goalCount: stories.reduce((sum: number, item: any) => sum + (item.stats.goalCount || 0), 0),
+          pathCount: stories.reduce((sum: number, item: any) => sum + (item.stats.pathCount || 0), 0),
+          learnCount: stories.reduce((sum: number, item: any) => sum + (item.stats.learnCount || 0), 0),
+        }
+      }
+    })
+  } catch (error: any) {
+    logger.error('获取虚拟学习者故事摘要失败:', error)
+    res.status(500).json({ success: false, error: error.message || '获取虚拟学习者故事摘要失败' })
+  }
+})
+
+router.get('/sessions/:sessionId/goal-conversation', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      include: {
+        virtual_learner_profiles: {
+          include: {
+            users: {
+              select: { id: true, email: true, name: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: '模拟会话不存在' });
+    }
+
+    if (!session.goalConversationId) {
+      return res.status(404).json({ success: false, error: '当前虚拟会话尚未生成 Goal 对话' });
+    }
+
+    const conversation = await prisma.goal_conversations.findFirst({
+      where: { id: session.goalConversationId }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Goal 对话不存在' });
+    }
+
+    const data = parseJson<any>(conversation.collectedData, {});
+
+    res.json({
+      success: true,
+      data: {
+        id: conversation.id,
+        description: conversation.description,
+        stage: conversation.stage,
+        status: conversation.status,
+        messages: data.messages || [],
+        collected: data.collected || {},
+        understanding: data.understanding || {},
+        nextQuestions: data.questions_to_ask || [],
+        confirmedProposal: data.confirmedProposal || null,
+        structuredData: data.structuredData || null,
+        confidenceScores: data.confidenceScores || null,
+        learningPath: data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null),
+        confidence: data.confidence || 0,
+        createdAt: conversation.createdAt,
+        completedAt: conversation.completedAt,
+        meta: {
+          source: 'goal-conversation',
+          timestamp: new Date().toISOString(),
+          messages: data.messages || [],
+          virtualSessionId: sessionId,
+          profile: {
+            id: session.virtual_learner_profiles.id,
+            userId: session.virtual_learner_profiles.userId,
+            userName: session.virtual_learner_profiles.users.name,
+            email: session.virtual_learner_profiles.users.email,
+          }
+        }
+      }
+    });
+  } catch (error: any) {
+    logger.error('获取虚拟会话 Goal 对话失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取虚拟会话 Goal 对话失败' });
+  }
+})
+
 /**
  * AI生成画像
  * POST /api/admin/virtual-learners/generate-profile
@@ -315,6 +488,186 @@ router.post('/generate-profile', async (req: any, res) => {
       success: false,
       error: error.message || 'AI生成画像失败'
     });
+  }
+});
+
+router.get('/sessions/:sessionId/learning-path', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      include: {
+        virtual_learner_profiles: {
+          include: {
+            users: {
+              select: { id: true, email: true, name: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: '模拟会话不存在' });
+    }
+
+    if (!session.learningPathId) {
+      return res.status(404).json({ success: false, error: '当前虚拟会话尚未生成 Learning Path' });
+    }
+
+    const learningPath = await learningService.getLearningPath(session.learningPathId);
+    if (!learningPath) {
+      return res.status(404).json({ success: false, error: 'Learning Path 不存在' });
+    }
+
+    const storyContext = parseStoryContext(session);
+    const learningProgress = parseLearningProgress(session);
+    const firstMilestone = learningPath.milestones?.[0] || null;
+    const firstTask = firstMilestone?.subtasks?.[0] || null;
+    const activeTask = learningPath.milestones
+      ?.flatMap((milestone: any, milestoneIndex: number) => (milestone.subtasks || []).map((task: any, taskIndex: number) => ({
+        ...task,
+        milestone,
+        milestoneIndex,
+        taskIndex
+      })))
+      ?.find((task: any) => task.id === learningProgress.currentTaskId)
+      || null;
+    const contextTask = activeTask || firstTask;
+    const contextMilestone = activeTask?.milestone || firstMilestone;
+    const coreConcept = contextTask?.coreConcept || contextTask?.displayLabel || contextTask?.title || null;
+
+    const pathContext = {
+      storyContext,
+      pathTitle: learningPath.title,
+      pathSummary: learningPath.summary || learningPath.description || learningPath.aiPromptTemplate || null,
+      subject: learningPath.subject || null,
+      currentStageNumber: learningProgress.currentMilestone !== undefined && learningProgress.currentMilestone !== null
+        ? Number(learningProgress.currentMilestone) + 1
+        : (contextMilestone?.stageNumber || 1),
+      currentTaskOrder: learningProgress.currentTaskIdx !== undefined && learningProgress.currentTaskIdx !== null
+        ? Number(learningProgress.currentTaskIdx) + 1
+        : (contextTask?.order || 1),
+      taskProfile: contextTask ? {
+        knowledgeType: contextTask.knowledgeType || null,
+        cognitiveLevel: contextTask.cognitiveLevel || null,
+        displayLabel: contextTask.displayLabel || null,
+        coreConcept,
+        learningObjectives: Array.isArray(contextTask.learningObjectives)
+          ? contextTask.learningObjectives
+          : typeof contextTask.learningObjectives === 'string' && contextTask.learningObjectives.trim()
+            ? contextTask.learningObjectives.split(/[,，\n]/).map((item: string) => item.trim()).filter(Boolean)
+            : [],
+        linkedConceptName: coreConcept,
+      } : null,
+      taskKnowledgeScope: contextTask ? {
+        primaryConcepts: coreConcept ? [coreConcept] : [],
+        prerequisiteConcepts: [],
+        supportingConcepts: contextTask.displayLabel ? [contextTask.displayLabel] : [],
+      } : null,
+      cognitiveFrame: contextTask ? {
+        currentCoreConcept: coreConcept ? { name: coreConcept } : null,
+        targetRelation: contextTask.description || learningPath.summary || learningPath.description || null,
+        milestoneIntent: contextMilestone?.description || null,
+        transferGoal: contextTask.displayLabel || contextTask.title || null,
+        neighboringConcepts: contextTask.displayLabel ? [contextTask.displayLabel] : [],
+      } : null,
+      teachingStrategyGuidance: contextTask ? {
+        explanationStyle: contextTask.cognitiveLevel === 'advanced' ? 'concept-first' : 'step-by-step',
+        interactionPattern: contextTask.taskType === 'quiz' ? 'question-response' : 'guided-practice',
+        targetDepth: contextTask.cognitiveLevel || 'balanced',
+        preferredStrategies: contextTask.taskType ? [contextTask.taskType] : ['guided-practice'],
+        responseConstraints: storyContext?.visibleOpening ? ['先围绕故事中的真实场景解释，再给抽象总结'] : ['先从当前任务切入，再回到整体路径'],
+        coreConcept,
+        storyPressurePoints: Array.isArray(storyContext?.pressurePoints) ? storyContext.pressurePoints : [],
+        storyBehaviorHooks: Array.isArray(storyContext?.behaviorHooks) ? storyContext.behaviorHooks : [],
+      } : null
+    };
+
+    res.json({
+      success: true,
+      data: {
+        status: learningPath.status,
+        learningPathId: learningPath.id,
+        path: {
+          id: learningPath.id,
+          title: learningPath.title,
+          name: learningPath.name,
+          summary: learningPath.summary || null,
+          description: learningPath.description,
+          subject: learningPath.subject,
+          difficulty: learningPath.difficulty,
+          estimatedHours: learningPath.estimatedHours,
+          totalMilestones: learningPath.totalMilestones,
+          completedMilestones: learningPath.completedMilestones,
+          status: learningPath.status,
+          aiGenerated: learningPath.aiGenerated,
+          generationStatus: learningPath.generationStatus || null,
+          sceneSummary: learningPath.sceneSummary || null,
+          cognitiveDesign: learningPath.cognitiveDesign || null,
+          adjustmentPolicy: learningPath.adjustmentPolicy || null,
+          adjustmentEvidence: learningPath.adjustmentEvidence || null,
+          canStartLearning: learningPath.canStartLearning,
+          learningBlockedReason: learningPath.learningBlockedReason || null,
+          replanLineage: learningPath.replanLineage || null,
+          createdAt: learningPath.createdAt,
+          updatedAt: learningPath.updatedAt,
+          milestones: learningPath.milestones,
+          stages: learningPath.stages || learningPath.milestones,
+          totalStages: learningPath.totalStages || learningPath.totalMilestones
+        },
+        pathContext
+      }
+    });
+  } catch (error: any) {
+    logger.error('获取虚拟会话 Learning Path 失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取虚拟会话 Learning Path 失败' });
+  }
+});
+
+router.get('/sessions/:sessionId/learning-task', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      include: {
+        virtual_learner_profiles: {
+          include: {
+            users: {
+              select: { id: true, email: true, name: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: '模拟会话不存在' });
+    }
+
+    const learningProgress = parseLearningProgress(session);
+    const taskId = learningProgress.currentTaskId || learningProgress.currentTask || null;
+    if (!taskId) {
+      return res.status(404).json({ success: false, error: '当前虚拟会话尚未绑定学习任务' });
+    }
+
+    const task = await prisma.learning_tasks.findUnique({
+      where: { id: String(taskId) }
+    });
+
+    if (!task) {
+      return res.status(404).json({ success: false, error: '学习任务不存在' });
+    }
+
+    res.json({
+      success: true,
+      data: task
+    });
+  } catch (error: any) {
+    logger.error('获取虚拟会话 Learning Task 失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取虚拟会话 Learning Task 失败' });
   }
 });
 
@@ -467,20 +820,142 @@ router.post('/:id/draft-stories', async (req: any, res) => {
       recentScenarioHints,
       existingPersonaSeed: profileData,
       existingStoryPool,
-      targetStoryCount: 3,
+      targetStoryCount: 1,
     });
 
     logger.info('[admin-draft-stories] 故事草稿生成完成', {
       virtualProfileId: id,
-      generatedStoryCount: Array.isArray(result?.stories) ? result.stories.length : 0,
-      storyTitles: Array.isArray(result?.stories) ? result.stories.slice(0, 3).map((story: any) => story?.title || '未命名故事') : [],
+      generatedStoryTitle: result?.story?.title || null,
       systemPromptVersion: result?._debug?.systemPromptVersion || null,
     });
+
+    const newStory = result?.story;
+    if (newStory) {
+      const storyWithStatus = {
+        ...newStory,
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+      };
+      const updatedStoryPool = [...existingStoryPool, storyWithStatus];
+      const updatedProfile = {
+        ...profileData,
+        storyPool: updatedStoryPool,
+      };
+
+      await prisma.virtual_learner_profiles.update({
+        where: { id },
+        data: { profile: JSON.stringify(updatedProfile) },
+      });
+
+      logger.info('[admin-draft-stories] 故事草稿已自动持久化', {
+        virtualProfileId: id,
+        storyPoolCount: updatedStoryPool.length,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          ...result,
+          persisted: true,
+          storyPoolCount: updatedStoryPool.length,
+        },
+      });
+    }
 
     res.json({ success: true, data: result });
   } catch (error: any) {
     logger.error('增强故事生成失败:', error);
     res.status(500).json({ success: false, error: error.message || '增强故事生成失败' });
+  }
+});
+
+router.put('/:id/stories/:storyIndex', async (req: any, res) => {
+  try {
+    const { id, storyIndex } = req.params;
+    const { status } = req.body;
+
+    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    const profileData = parseJson<any>(profile.profile, {});
+    const storyPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
+    const index = parseInt(storyIndex, 10);
+
+    if (isNaN(index) || index < 0 || index >= storyPool.length) {
+      return res.status(400).json({ success: false, error: '无效的故事索引' });
+    }
+
+    if (status && !['draft', 'confirmed'].includes(status)) {
+      return res.status(400).json({ success: false, error: '无效的状态值' });
+    }
+
+    const updatedStoryPool = [...storyPool];
+    if (status) {
+      updatedStoryPool[index] = { ...updatedStoryPool[index], status };
+    }
+
+    const updatedProfile = {
+      ...profileData,
+      storyPool: updatedStoryPool,
+    };
+
+    await prisma.virtual_learner_profiles.update({
+      where: { id },
+      data: { profile: JSON.stringify(updatedProfile) },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        storyPool: updatedStoryPool,
+      },
+    });
+  } catch (error: any) {
+    logger.error('更新故事状态失败:', error);
+    res.status(500).json({ success: false, error: error.message || '更新故事状态失败' });
+  }
+});
+
+router.delete('/:id/stories/:storyIndex', async (req: any, res) => {
+  try {
+    const { id, storyIndex } = req.params;
+
+    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    const profileData = parseJson<any>(profile.profile, {});
+    const storyPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
+    const index = parseInt(storyIndex, 10);
+
+    if (isNaN(index) || index < 0 || index >= storyPool.length) {
+      return res.status(400).json({ success: false, error: '无效的故事索引' });
+    }
+
+    const updatedStoryPool = storyPool.filter((_: any, i: number) => i !== index);
+
+    const updatedProfile = {
+      ...profileData,
+      storyPool: updatedStoryPool,
+    };
+
+    await prisma.virtual_learner_profiles.update({
+      where: { id },
+      data: { profile: JSON.stringify(updatedProfile) },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        storyPool: updatedStoryPool,
+      },
+    });
+  } catch (error: any) {
+    logger.error('删除故事失败:', error);
+    res.status(500).json({ success: false, error: error.message || '删除故事失败' });
   }
 });
 
@@ -946,12 +1421,16 @@ router.get('/sessions/:sessionId', async (req: any, res) => {
     let logs: any[] = [];
     try {
       logs = JSON.parse(session.logs || '[]');
-    } catch {}
+    } catch {
+      // ignore malformed logs payload
+    }
     
     let stageResults: any = {};
     try {
       stageResults = JSON.parse(session.stageResults || '{}');
-    } catch {}
+    } catch {
+      // ignore malformed stageResults payload
+    }
     
     res.json({
       success: true,
@@ -1451,7 +1930,9 @@ router.get('/sessions/:sessionId/logs', async (req: any, res) => {
     let logs: any[] = [];
     try {
       logs = JSON.parse(session.logs || '[]');
-    } catch {}
+    } catch {
+      // ignore malformed logs payload
+    }
     
     res.json({
       success: true,

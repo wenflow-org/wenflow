@@ -1758,6 +1758,24 @@ const loadVirtualContext = async () => {
   return String(response.data.data?.bindings?.goalConversationId || '');
 };
 
+const loadVirtualFormalGoalConversation = async (sessionId: string) => {
+  const response = await adminApi.getVirtualSessionGoalConversation(sessionId);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '加载虚拟正式 Goal 失败');
+  }
+
+  const data = response.data.data;
+  virtualContext.value = {
+    ...(virtualContext.value || {}),
+    goalConversation: data,
+    bindings: virtualContext.value?.bindings || { goalConversationId: data.id }
+  };
+
+  conversationId.value = data.id || conversationId.value;
+
+  return data as GoalConversationEnvelope;
+};
+
 const syncConversationHistory = (messages: any[] = []) => {
   const mappedMessages = messages
     .map((message, index) => mapStoredMessage(message, index))
@@ -1788,7 +1806,9 @@ const restoreConversation = async (targetConversationId?: string) => {
   try {
     const response = isTestMode.value
       ? await getTestGoalConversation(storedId)
-      : await getGoalConversation(storedId);
+      : (isVirtualFormalView.value && virtualSessionId.value
+        ? await loadVirtualFormalGoalConversation(virtualSessionId.value)
+        : await getGoalConversation(storedId));
     hydrateConversation(response, {
       messages: response.meta.messages
     });
