@@ -12,7 +12,7 @@
         <el-icon class="admin-page-title__icon"><Grid /></el-icon>
         运行节点管理
       </h2>
-      <p class="page-hero__subtitle">这里只展示平台核心节点，包括 Goal / Path / Learner / Teaching / Simulation 主链中的 Agent、编排器与内部 Skill。外挂能力请前往“技能/组件配置”。</p>
+      <p class="page-hero__subtitle">统一查看平台内部 Agent、编排器与主链 Skill。外挂能力组件继续在“技能/组件配置”中管理，但两边都保留 Prompt、模型参数与运行预览能力。</p>
     </div>
 
     <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
@@ -1130,12 +1130,23 @@ const loadPromptSummaries = async (registryAgents: AdminRegistryAgent[]) => {
               const effectiveSkillResponse: any = await adminSkillsApi.getEffectiveSkillPrompt(getSkillRuntimeName(agent.agentId));
               const effectiveSource = effectiveSkillResponse.data?.data?.data?.source || effectiveSkillResponse.data?.data?.source || '';
 
-              if (effectiveSource === 'no-prompt') {
+              if (effectiveSource === 'generated-default') {
                 setPromptSummary(agent.agentId, {
                   loading: false,
-                  versionLabel: 'rule-only',
-                  status: 'NO_PROMPT',
-                  statusLabel: '规则型',
+                  versionLabel: 'generated',
+                  status: 'GENERATED',
+                  statusLabel: '默认草案',
+                  existsWithoutActive: false,
+                });
+                return;
+              }
+
+              if (effectiveSource === 'code-fallback') {
+                setPromptSummary(agent.agentId, {
+                  loading: false,
+                  versionLabel: 'built-in',
+                  status: 'FALLBACK',
+                  statusLabel: '代码内置',
                   existsWithoutActive: false,
                 });
                 return;

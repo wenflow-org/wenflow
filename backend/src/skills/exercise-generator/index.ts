@@ -9,6 +9,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 import { logger } from '../../utils/logger';
 
 /**
@@ -197,7 +198,7 @@ export async function exerciseGenerator(
     // 合并所有题型为一次调用
     const typeNames = questionTypes.map(t => QUESTION_TYPE_CONFIG[t]?.name || t).join('、');
     
-    const systemPrompt = `你是一位综合练习题设计专家，擅长设计多样化的练习题。
+    const defaultSystemPrompt = `你是一位综合练习题设计专家，擅长设计多样化的练习题。
 请生成${questionCount}道练习题，涵盖以下题型：${typeNames}。
 
 输出格式要求：
@@ -205,6 +206,8 @@ export async function exerciseGenerator(
 - 标明题型
 - 包含题干、答案、解析、提示
 - 用 Markdown 格式`;
+    const promptConfig = await agentConfigService.getActivePrompt('skill:exercise-generator');
+    const systemPrompt = promptConfig?.systemPrompt?.trim() || defaultSystemPrompt;
 
     const userPrompt = buildUnifiedPrompt(topic, questionTypes, questionCount, learningObjectives, difficulty, userLevel, context);
     

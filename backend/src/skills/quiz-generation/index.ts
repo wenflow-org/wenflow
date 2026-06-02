@@ -11,6 +11,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 
 /**
  * 测验生成 Skill 定义
@@ -123,7 +124,7 @@ export async function quizGeneration(
     } = input;
     
     // 构建系统提示
-    const systemPrompt = `你是一位专业的教育测评专家，擅长设计高质量的测试题目。
+    const defaultSystemPrompt = `你是一位专业的教育测评专家，擅长设计高质量的测试题目。
 请根据提供的内容生成测试题，要求：
 1. 题目紧扣主题和内容
 2. 难度适中，符合${difficulty === 'easy' ? '基础' : difficulty === 'hard' ? '进阶' : '中等'}水平
@@ -136,6 +137,8 @@ ${questionTypes.map(type => QUESTION_TYPE_GUIDES[type] || '').join('\n\n')}
 ---
 
 注意：每道题目之间用 "---" 分隔。`;
+    const promptConfig = await agentConfigService.getActivePrompt('skill:quiz-generation');
+    const systemPrompt = promptConfig?.systemPrompt?.trim() || defaultSystemPrompt;
 
     // 构建用户消息
     const userMessage = `主题：${topic}

@@ -40,7 +40,7 @@
                 <el-button @click="loadPromptManager">刷新</el-button>
               </div>
 
-              <div v-if="supportsPromptManagement(currentSkill.skillId) && effectivePrompt" class="prompt-active-card">
+              <div v-if="effectivePrompt" class="prompt-active-card">
                 <div class="prompt-summary-card">
                   <div class="prompt-summary-card__row"><span class="prompt-summary-card__label">当前版本</span><strong>{{ effectivePrompt.version !== null && effectivePrompt.version !== undefined ? `v${effectivePrompt.version}` : '-' }}</strong></div>
                   <div class="prompt-summary-card__row"><span class="prompt-summary-card__label">状态</span><el-tag size="small" :type="getPromptStatusTagType(effectivePrompt.status)">{{ getPromptStatusLabel(effectivePrompt.status) }}</el-tag></div>
@@ -61,10 +61,9 @@
                 </div>
               </div>
 
-              <el-empty v-else-if="supportsPromptManagement(currentSkill.skillId)" description="当前没有可展示的 Prompt。" />
-              <el-empty v-else description="该 Skill 当前未开放独立 Prompt 管理" />
+              <el-empty v-else description="当前没有可展示的 Prompt。" />
 
-              <div v-if="supportsPromptManagement(currentSkill.skillId)" class="prompt-versions-card">
+              <div class="prompt-versions-card">
                 <div class="prompt-versions-card__header"><h4>最近版本</h4><span class="prompt-versions-card__meta">{{ promptVersions.length }} 条</span></div>
                 <div v-if="promptVersions.length" class="prompt-versions-table">
                   <el-table :data="promptVersions" size="small" border>
@@ -171,7 +170,7 @@ const promptDrawerLoading = ref(false)
 const currentPromptSkillId = ref('')
 const promptVersions = ref<any[]>([])
 const effectivePrompt = ref<any | null>(null)
-const effectivePromptSource = ref<'db-active' | 'code-fallback' | ''>('')
+const effectivePromptSource = ref<'db-active' | 'code-fallback' | 'generated-default' | ''>('')
 const promptDriftWarning = ref(false)
 const promptExpanded = ref(false)
 const promptEditDialogVisible = ref(false)
@@ -188,12 +187,11 @@ const promptEditForm = ref<any>({ name: '', description: '', systemPrompt: '', t
 const editForm = ref<SkillNodeConfig>({ skillId: '', displayName: '', tier: 'chat', thinkingMode: 'default', reasoningEffort: 'default', temperature: 0.7, maxTokens: 2000, requestTimeoutMs: null, enabled: false })
 const editRules = { temperature: [{ required: true, message: '请设置温度', trigger: 'change' }], maxTokens: [{ required: true, message: '请输入最大 Token 数', trigger: 'blur' }] }
 
-const SKILL_HINTS: Record<string, string> = { 'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput），再交给 path-agent 主生成。', 'stage-designer': 'Path 阶段任务设计层：围绕单个 milestone 生成 subtasks，并补轻量任务标签，不直接写 Learn 教案。' }
+const SKILL_HINTS: Record<string, string> = { 'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput），再交给 path-agent 主生成。', 'stage-designer': 'Path 阶段任务设计层：围绕单个 milestone 生成 subtasks，并补轻量任务标签，不直接写 Learn 教案。', 'virtual-learner-goal-dialogue-simulator': '虚拟学习者 Goal 阶段回合模拟：只生成学习者在目标对话里的短回复与主观状态。', 'virtual-learner-path-evaluator': '虚拟学习者 Path 阶段评估：判断路径是否贴合故事处境，并给出可见反应。', 'virtual-learner-learn-turn-simulator': '虚拟学习者 Learn 阶段回合模拟：只生成学习者对老师本轮教学的短回复与主观状态。' }
 const SKILL_CN_NAMES: Record<string, string> = {
-  'text-structure-analyzer': '文本结构分析器', 'retrieval': '内容检索器', 'web-extractor': '网页内容提取器', 'image-analyzer': '图片分析器', 'memory-search': '学习记忆搜索器', 'smart-search': '智能搜索器', 'label-generator': '动态标签生成器', 'path-scene-framing': '路径场景构图', 'stage-designer': '阶段任务设计器', 'adaptive-guidance-copy': '动态引导文案生成器', 'goal-profile-inference': '目标阶段画像推断器', 'learning-pattern-distiller': '学习模式蒸馏器', 'session-knowledge-distiller': '课堂知识蒸馏器', 'dialogue-concept-extractor': '对话概念抽取器', 'virtual-learner-persona-designer': '虚拟学习者身份设计器', 'virtual-learner-scenario-designer': '虚拟学习者故事设计器', 'peer-reinforcement': '同伴强化', 'goal-type-identifier': '目标类型识别器', 'batch-anderson-labeler': '批量安德森标注器', 'time-estimator': '时间估算器', 'quiz-generation': '测验生成器', 'pdf-parser': 'PDF 解析器', 'exercise-generator': '练习生成器', 'error-pattern': '错误模式分析器', 'content-generation': '内容生成器', 'code-explainer': '代码解释器', 'answer-generation': '答案生成器',
+  'text-structure-analyzer': '文本结构分析器', 'retrieval': '内容检索器', 'web-extractor': '网页内容提取器', 'image-analyzer': '图片分析器', 'memory-search': '学习记忆搜索器', 'smart-search': '智能搜索器', 'label-generator': '动态标签生成器', 'path-scene-framing': '路径场景构图', 'stage-designer': '阶段任务设计器', 'adaptive-guidance-copy': '动态引导文案生成器', 'goal-profile-inference': '目标阶段画像推断器', 'learning-pattern-distiller': '学习模式蒸馏器', 'session-knowledge-distiller': '课堂知识蒸馏器', 'dialogue-concept-extractor': '对话概念抽取器', 'virtual-learner-persona-designer': '虚拟学习者身份设计器', 'virtual-learner-scenario-designer': '虚拟学习者故事设计器', 'virtual-learner-goal-dialogue-simulator': '虚拟学习者 Goal 对话模拟器', 'virtual-learner-path-evaluator': '虚拟学习者路径评估器', 'virtual-learner-learn-turn-simulator': '虚拟学习者 Learn 回合模拟器', 'peer-reinforcement': '同伴强化', 'goal-type-identifier': '目标类型识别器', 'batch-anderson-labeler': '批量安德森标注器', 'time-estimator': '时间估算器', 'quiz-generation': '测验生成器', 'pdf-parser': 'PDF 解析器', 'exercise-generator': '练习生成器', 'error-pattern': '错误模式分析器', 'content-generation': '内容生成器', 'code-explainer': '代码解释器', 'answer-generation': '答案生成器',
 }
 
-const supportsPromptManagement = (skillId?: string) => skillId === 'path-scene-framing' || skillId === 'stage-designer' || skillId === 'label-generator' || skillId === 'goal-profile-inference' || skillId === 'learning-pattern-distiller' || skillId === 'session-knowledge-distiller' || skillId === 'dialogue-concept-extractor' || skillId === 'adaptive-guidance-copy' || skillId === 'virtual-learner-persona-designer' || skillId === 'virtual-learner-scenario-designer'
 const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`
 const getSkillHint = (skillId?: string) => (skillId ? SKILL_HINTS[skillId] || '' : '')
 const getSkillDisplayName = (row: SkillNodeConfig) => SKILL_CN_NAMES[row.skillId] || row.displayName || row.skillId
@@ -206,8 +204,8 @@ const getStatusTagType = (status?: SkillNodeConfig['status']) => status === 'wor
 const getStatusLabel = (status?: SkillNodeConfig['status']) => status === 'working' ? '正常' : status === 'placeholder' ? '占位' : status === 'simplified' ? '简化' : status === 'mock' ? '模拟' : ''
 const getPromptStatusLabel = (status?: string | null) => !status ? '未知' : ({ ACTIVE: '已生效', BUILT_IN: '代码内置', FALLBACK: '代码内置', ARCHIVED: '已归档', DRAFT: '草稿', PUBLISHED: '已发布', STAGING: '预发布' } as Record<string, string>)[status.toUpperCase()] || '未知'
 const getPromptStatusTagType = (status?: string | null) => !status ? 'info' : ['ACTIVE', 'PUBLISHED'].includes(status.toUpperCase()) ? 'success' : status.toUpperCase() === 'STAGING' ? 'warning' : 'info'
-const promptSourceLabel = (source: 'db-active' | 'code-fallback' | '') => source === 'db-active' ? 'DB Active' : source === 'code-fallback' ? 'Code Fallback' : 'Unknown'
-const promptSourceTagType = (source: 'db-active' | 'code-fallback' | '') => source === 'db-active' ? 'success' : 'info'
+const promptSourceLabel = (source: 'db-active' | 'code-fallback' | 'generated-default' | '') => source === 'db-active' ? 'DB Active' : source === 'code-fallback' ? 'Code Fallback' : source === 'generated-default' ? 'Generated Default' : 'Unknown'
+const promptSourceTagType = (source: 'db-active' | 'code-fallback' | 'generated-default' | '') => source === 'db-active' ? 'success' : source === 'generated-default' ? 'warning' : 'info'
 const formatDateTime = (value: string | null | undefined) => !value ? '-' : Number.isNaN(new Date(value).getTime()) ? '-' : new Date(value).toLocaleString('zh-CN')
 const prettyJson = (value: any) => value === null || value === undefined ? '-' : JSON.stringify(value, null, 2)
 const promptPreviewText = computed(() => effectivePrompt.value?.systemPrompt?.trim() || '')
@@ -251,8 +249,7 @@ const loadSkill = async () => {
       effectivePromptSource.value = ''
       promptDriftWarning.value = false
       promptExpanded.value = false
-      if (supportsPromptManagement(skill.skillId)) await loadPromptManager()
-      else promptVersions.value = []
+      await loadPromptManager()
     }
   } catch {
     toast.error('加载 Skill 节点失败')

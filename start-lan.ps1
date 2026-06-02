@@ -230,6 +230,9 @@ function Test-AIConfigValue {
     }
 
     foreach ($invalid in $InvalidValues) {
+        if ([string]::IsNullOrEmpty($invalid)) {
+            continue
+        }
         if ($trimmed -eq $invalid) {
             return $false
         }
@@ -266,7 +269,7 @@ function Assert-RequiredEnvConfiguration {
     }
 
     $aiModel = Get-EnvValue -Path $EnvPath -Key 'AI_MODEL'
-    if (-not (Test-AIConfigValue -Value $aiModel -InvalidValues @(''))) {
+    if ([string]::IsNullOrWhiteSpace($aiModel)) {
         Write-Host 'AI_MODEL is missing.' -ForegroundColor Red
         Write-Host 'Run ./setup-env.ps1 and provide a default chat model.' -ForegroundColor Yellow
         exit 1

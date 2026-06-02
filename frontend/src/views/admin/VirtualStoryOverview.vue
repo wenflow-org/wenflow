@@ -1064,7 +1064,7 @@ const getDialoguePreviewText = (message: any) => {
 
 .panel-card {
   padding: 16px;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid #e3e8ef;
   background: #ffffff;
   box-shadow: none;
@@ -1237,10 +1237,11 @@ const getDialoguePreviewText = (message: any) => {
 .story-overview-hero__summary {
   display: grid;
   gap: 8px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid #e6ebf2;
-  background: #f8fafc;
+  padding: 0 0 10px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #e6ebf2;
+  background: transparent;
 }
 
 .story-overview-summary-row {
@@ -1306,7 +1307,10 @@ const getDialoguePreviewText = (message: any) => {
 
 .story-stage-grid--entry {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .story-stage-entry {
@@ -1316,11 +1320,16 @@ const getDialoguePreviewText = (message: any) => {
   min-height: 0;
   padding: 10px 12px;
   text-align: left;
-  border-radius: 10px;
-  border: 1px solid #e4e9f1;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid #e4e9f1;
   background: #ffffff;
   cursor: pointer;
   transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.story-stage-entry:first-child {
+  border-left: 0;
 }
 
 .story-stage-entry:hover {
@@ -1329,20 +1338,20 @@ const getDialoguePreviewText = (message: any) => {
 }
 
 .story-stage-entry--active {
-  border-color: #b8c6db;
+  border-color: #e4e9f1;
   background: #f8fafc;
 }
 
 .story-stage-entry--goal {
-  border-left: 3px solid #94a3b8;
+  box-shadow: inset 3px 0 0 #94a3b8;
 }
 
 .story-stage-entry--path {
-  border-left: 3px solid #a3a3a3;
+  box-shadow: inset 3px 0 0 #a3a3a3;
 }
 
 .story-stage-entry--learn {
-  border-left: 3px solid #c4b38a;
+  box-shadow: inset 3px 0 0 #c4b38a;
 }
 
 .story-stage-entry__main {
@@ -1556,10 +1565,11 @@ const getDialoguePreviewText = (message: any) => {
   align-content: start;
   gap: 6px;
   min-height: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #e6ebf1;
-  background: #fafbfd;
+  padding: 8px 0;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid #e6ebf1;
+  background: transparent;
 }
 
 .story-context-card span {
@@ -1595,7 +1605,7 @@ const getDialoguePreviewText = (message: any) => {
 
 .story-context-card--entry-side {
   min-height: 0;
-  background: #fafbfd;
+  background: transparent;
 }
 
 .story-pressure-list {

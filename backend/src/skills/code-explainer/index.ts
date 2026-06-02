@@ -9,6 +9,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 
 /**
  * Code Explainer Skill 定义
@@ -168,7 +169,7 @@ export async function codeExplainer(
     }[userLevel];
     
     // 构建系统提示
-    const systemPrompt = [
+    const defaultSystemPrompt = [
       SYSTEM_PROMPTS[explanationStyle] || SYSTEM_PROMPTS['line-by-line'],
       levelInstruction,
       `这是${language}代码。`,
@@ -177,6 +178,8 @@ export async function codeExplainer(
       focusAreas.includes('best-practices') ? '请指出是否符合最佳实践，并给出改进建议。' : '',
       focusAreas.includes('performance') ? '请分析性能特点，并给出优化建议。' : ''
     ].filter(Boolean).join('\n\n');
+    const promptConfig = await agentConfigService.getActivePrompt('skill:code-explainer');
+    const systemPrompt = promptConfig?.systemPrompt?.trim() || defaultSystemPrompt;
     
     // 构建用户消息
     const userMessage = `请解释以下${language}代码：\n\n\`\`\`${language}\n${code}\n\`\`\``;

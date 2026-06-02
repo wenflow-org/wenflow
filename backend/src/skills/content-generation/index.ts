@@ -11,6 +11,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 import { logger } from '../../utils/logger';
 
 /**
@@ -187,7 +188,7 @@ export async function contentGeneration(
     } = input;
     
     // 构建系统提示
-    const systemPrompt = [
+    const defaultSystemPrompt = [
       SYSTEM_PROMPTS[type] || SYSTEM_PROMPTS.explanation,
       LEVEL_INSTRUCTIONS[targetLevel] || LEVEL_INSTRUCTIONS.intermediate,
       LENGTH_GUIDE[length] || LENGTH_GUIDE.medium,
@@ -195,6 +196,8 @@ export async function contentGeneration(
       style === 'academic' ? '请使用学术性的语言风格，引用相关理论。' :
       '请使用轻松、友好的语言风格。'
     ].join('\n\n');
+    const promptConfig = await agentConfigService.getActivePrompt('skill:content-generation');
+    const systemPrompt = promptConfig?.systemPrompt?.trim() || defaultSystemPrompt;
     
     // 构建用户消息
     const userParts = [`请生成关于"${topic}"的${type === 'explanation' ? '讲解' : type === 'tutorial' ? '教程' : type === 'exercise' ? '练习' : '测试'}内容。`];

@@ -963,16 +963,24 @@ onMounted(() => {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
   margin-bottom: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #e5eaf2;
+  border-bottom: 1px solid #e5eaf2;
 }
 
 .summary-card {
-  min-height: 96px;
-  padding: 14px;
-  border-radius: 14px;
-  background: #fff;
-  border: 1px solid #e5eaf2;
+  min-height: 0;
+  padding: 2px 18px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid #e5eaf2;
+}
+
+.summary-card:first-child {
+  border-left: 0;
 }
 
 .summary-card__label {
@@ -997,19 +1005,19 @@ onMounted(() => {
 }
 
 .tone-blue {
-  background: linear-gradient(180deg, #f7faff, #ffffff);
+  background: transparent;
 }
 
 .tone-dark {
-  background: linear-gradient(180deg, #fafbfd, #ffffff);
+  background: transparent;
 }
 
 .tone-green {
-  background: linear-gradient(180deg, #f7fcf8, #ffffff);
+  background: transparent;
 }
 
 .tone-amber {
-  background: linear-gradient(180deg, #fffaf3, #ffffff);
+  background: transparent;
 }
 
 .toolbar-card {
@@ -1019,10 +1027,10 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid #e5eaf2;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
 }
 
 .toolbar-card__group {
@@ -1055,7 +1063,7 @@ onMounted(() => {
 .lab-panel {
   background: #fff;
   border: 1px solid #e5eaf2;
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 16px;
 }
 
@@ -1284,14 +1292,16 @@ onMounted(() => {
 .profile-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 0;
+  border-top: 1px solid #edf1f6;
 }
 
 .profile-card {
-  border: 1px solid #e7ecf3;
-  border-radius: 16px;
-  padding: 14px;
-  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  border-radius: 0;
+  padding: 14px 2px;
+  background: transparent;
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(180px, 0.85fr) auto;
   gap: 14px;
@@ -1372,14 +1382,15 @@ onMounted(() => {
 
 .mini-stat {
   min-width: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #fff;
-  border: 1px solid #edf1f6;
+  padding: 2px 0 2px 12px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid #edf1f6;
 }
 
 .mini-stat--soft {
-  background: #fafbfd;
+  background: transparent;
 }
 
 .mini-stat span {

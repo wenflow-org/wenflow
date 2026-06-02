@@ -11,6 +11,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 
 /**
  * 答案生成 Skill 定义
@@ -154,7 +155,7 @@ export async function answerGeneration(
     } = input;
     
     // 构建系统提示
-    const systemPrompt = `你是一位专业的AI学习辅导助手。
+    const defaultSystemPrompt = `你是一位专业的AI学习辅导助手。
 ${LEVEL_STRATEGIES[userLevel] || LEVEL_STRATEGIES.intermediate}
 
 ${STYLE_PROMPTS[style] || STYLE_PROMPTS.guided}
@@ -165,6 +166,8 @@ ${STYLE_PROMPTS[style] || STYLE_PROMPTS.guided}
 3. 如有检索到的参考资料，优先使用
 4. 如果不确定，诚实说明并提供方向
 5. 适当推荐相关主题供进一步学习`;
+    const promptConfig = await agentConfigService.getActivePrompt('skill:answer-generation');
+    const systemPrompt = promptConfig?.systemPrompt?.trim() || defaultSystemPrompt;
 
     // 构建消息
     const messages: ChatMessage[] = [

@@ -291,6 +291,8 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
     peerTriggered: boolean;
     peerMessage: string | null;
     learnerState: any | null;
+    learnerFeedback: any | null;
+    closureDecision: any | null;
     emotion: string | null;
   }> = [];
 
@@ -321,6 +323,8 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
         peerTriggered: false,
         peerMessage: null,
         learnerState: null,
+        learnerFeedback: null,
+        closureDecision: null,
         emotion: null,
       });
       continue;
@@ -333,6 +337,7 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
         currentTask: log?.details?.output?.currentTask ? String(log.details.output.currentTask) : null,
         currentMilestone: log?.details?.output?.currentMilestone ? String(log.details.output.currentMilestone) : null,
         learnerState: log?.details?.output?.learnerState || null,
+        learnerFeedback: log?.details?.output?.learnerFeedback || null,
         emotion: log?.details?.output?.emotion ? String(log.details.output.emotion) : null,
       };
       continue;
@@ -369,6 +374,8 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
         peerTriggered: !!output?.peerTriggered,
         peerMessage: output?.peerMessage ? String(output.peerMessage) : null,
         learnerState: pendingLearner.learnerState,
+        learnerFeedback: pendingLearner.learnerFeedback,
+        closureDecision: output?.closureDecision && typeof output.closureDecision === 'object' ? output.closureDecision : null,
         emotion: pendingLearner.emotion,
       });
       pendingLearner = null;
@@ -399,6 +406,8 @@ function buildLearningConversationRoundsProjection(logs: any[] = []) {
       peerTriggered: false,
       peerMessage: null,
       learnerState: pendingLearner.learnerState,
+      learnerFeedback: pendingLearner.learnerFeedback,
+      closureDecision: null,
       emotion: pendingLearner.emotion,
     });
   }

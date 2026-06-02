@@ -72,6 +72,7 @@ export interface PromptCallSpec<TInput, TOutput> {
   validateParsedOutput?: (parsed: any, input: TInput) => { valid: boolean; failureReason?: string };
   modelDefaults?: {
     maxTokens?: number;
+    minMaxTokens?: number;
     temperature?: number;
   };
   retryStrategy?: PromptRetryStrategy<TInput>;

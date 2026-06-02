@@ -1167,7 +1167,7 @@ onMounted(() => {
 .panel {
   background: #fff;
   border: 1px solid #e5eaf2;
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 18px;
 }
 
@@ -1599,10 +1599,11 @@ onMounted(() => {
 .profile-summary-card {
   display: grid;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid #e7ecf3;
-  background: #ffffff;
+  padding: 0 18px 0 0;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid #e7ecf3;
+  background: transparent;
 }
 
 .profile-summary-card__intro {
@@ -1626,14 +1627,20 @@ onMounted(() => {
 .profile-overview__facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid #edf1f6;
 }
 
 .persona-fact-card {
   padding: 10px 12px;
-  border-radius: 14px;
-  background: #fbfcfe;
-  border: 1px solid #e7ecf3;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.persona-fact-card:nth-child(2n) {
+  border-left: 1px solid #edf1f6;
 }
 
 .persona-fact-card span {
@@ -1657,6 +1664,8 @@ onMounted(() => {
 
 .story-list--compact {
   grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid #edf1f6;
 }
 
 .story-workbench {
@@ -1858,15 +1867,16 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #e7ecf3;
-  background: #ffffff;
+  padding: 12px 2px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  background: transparent;
 }
 
 .story-feature-card.active {
-  border-color: #c9dafd;
-  background: linear-gradient(180deg, #f8fbff, #ffffff);
+  border-color: #edf1f6;
+  background: #f8fafc;
 }
 
 .story-feature-card__main {
@@ -1980,14 +1990,20 @@ onMounted(() => {
 .trait-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
+  border-top: 1px solid #edf1f6;
 }
 
 .trait-card {
   padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #e7ecf3;
-  background: #ffffff;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  background: transparent;
+}
+
+.trait-card:nth-child(2n) {
+  border-left: 1px solid #edf1f6;
 }
 
 .trait-card span {

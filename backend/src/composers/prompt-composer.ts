@@ -23,6 +23,13 @@ function normalizeTokenUsage(usage: any) {
   };
 }
 
+function resolveMaxTokens(promptMaxTokens?: number | null, defaultMaxTokens?: number, minMaxTokens?: number): number | undefined {
+  const configured = Number(promptMaxTokens || defaultMaxTokens || 0);
+  const minimum = Number(minMaxTokens || 0);
+  const resolved = Math.max(configured, minimum);
+  return resolved > 0 ? resolved : undefined;
+}
+
 export async function callPrompt<TInput, TOutput>(
   spec: PromptCallSpec<TInput, TOutput>,
   input: TInput,
@@ -81,7 +88,7 @@ export async function callPrompt<TInput, TOutput>(
 
     const response = await gateway.execute({
       messages,
-      max_tokens: promptConfig?.maxTokens || spec.modelDefaults?.maxTokens,
+      max_tokens: resolveMaxTokens(promptConfig?.maxTokens, spec.modelDefaults?.maxTokens, spec.modelDefaults?.minMaxTokens),
       temperature: promptConfig?.temperature ?? spec.modelDefaults?.temperature,
     }, spec.caller, { userId: context.userId });
 

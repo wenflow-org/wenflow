@@ -33,6 +33,38 @@ import { memorySearch as memorySearchFn } from './memory-search';
 export { smartSearchDefinition } from './smart-search';
 import { smartSearch as smartSearchFn } from './smart-search';
 
+// PDF 解析
+export { pdfParserDefinition } from './pdf-parser';
+import { pdfParser as pdfParserFn } from './pdf-parser';
+
+// 时间估算
+export { timeEstimatorDefinition } from './time-estimator';
+import { timeEstimator as timeEstimatorFn } from './time-estimator';
+
+// 测验生成
+export { quizGenerationDefinition } from './quiz-generation';
+import { quizGeneration as quizGenerationFn } from './quiz-generation';
+
+// 练习生成
+export { exerciseGeneratorDefinition } from './exercise-generator';
+import { exerciseGenerator as exerciseGeneratorFn } from './exercise-generator';
+
+// 内容生成
+export { contentGenerationDefinition } from './content-generation';
+import { contentGeneration as contentGenerationFn } from './content-generation';
+
+// 错误模式分析
+export { errorPatternDefinition } from './error-pattern';
+import { errorPattern as errorPatternFn } from './error-pattern';
+
+// 代码解释
+export { codeExplainerDefinition } from './code-explainer';
+import { codeExplainer as codeExplainerFn } from './code-explainer';
+
+// 答案生成
+export { answerGenerationDefinition } from './answer-generation';
+import { answerGeneration as answerGenerationFn } from './answer-generation';
+
 // 动态标签生成 (PathAgent v3.1)
 export { labelGeneratorDefinition } from './label-generator';
 import { labelGenerator as labelGeneratorFn } from './label-generator';
@@ -96,6 +128,14 @@ import { webExtractorDefinition } from './web-extractor';
 import { imageAnalyzerDefinition } from './image-analyzer';
 import { memorySearchDefinition } from './memory-search';
 import { smartSearchDefinition } from './smart-search';
+import { pdfParserDefinition } from './pdf-parser';
+import { timeEstimatorDefinition } from './time-estimator';
+import { quizGenerationDefinition } from './quiz-generation';
+import { exerciseGeneratorDefinition } from './exercise-generator';
+import { contentGenerationDefinition } from './content-generation';
+import { errorPatternDefinition } from './error-pattern';
+import { codeExplainerDefinition } from './code-explainer';
+import { answerGenerationDefinition } from './answer-generation';
 import { labelGeneratorDefinition } from './label-generator';
 import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
@@ -117,6 +157,14 @@ export const allSkillDefinitions: SkillDefinition[] = [
   imageAnalyzerDefinition,
   memorySearchDefinition,
   smartSearchDefinition,
+  pdfParserDefinition,
+  timeEstimatorDefinition,
+  quizGenerationDefinition,
+  exerciseGeneratorDefinition,
+  contentGenerationDefinition,
+  errorPatternDefinition,
+  codeExplainerDefinition,
+  answerGenerationDefinition,
   labelGeneratorDefinition,
   pathSceneFramingDefinition,
   stageDesignerDefinition,
@@ -140,6 +188,14 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'image-analyzer': imageAnalyzerFn,
   'memory-search': memorySearchFn,
   'smart-search': smartSearchFn,
+  'pdf-parser': pdfParserFn,
+  'time-estimator': timeEstimatorFn,
+  'quiz-generation': quizGenerationFn,
+  'exercise-generator': exerciseGeneratorFn,
+  'content-generation': contentGenerationFn,
+  'error-pattern': errorPatternFn,
+  'code-explainer': codeExplainerFn,
+  'answer-generation': answerGenerationFn,
   'label-generator': labelGeneratorFn,
   'path-scene-framing': pathSceneFramingFn,
   'stage-designer': stageDesignerFn,

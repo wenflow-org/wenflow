@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import goalConversationService from '../services/learning/goal-conversation.service';
+import learningService from '../services/learning/learning.service';
 import pathOrchestrator, { type GoalPathRequest } from './path.orchestrator';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingOrchestrator';
 import {
@@ -1327,6 +1328,14 @@ class SimulationOrchestrator {
         teachingSessionId: teachingSession.sessionId,
         ...this.buildLearningProgressSnapshot(learningPath.milestones, firstMilestoneIdx, firstTaskIdx)
       });
+
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: {
+          currentTaskId: firstTask.id,
+          updatedAt: new Date()
+        }
+      });
       
       return {
         success: true,
@@ -1360,6 +1369,7 @@ class SimulationOrchestrator {
     aiResponse?: string;
     milestoneProgress?: any;
     isPathCompleted?: boolean;
+    taskCompleted?: boolean;
     logs?: SimulationLogEntry[];
     error?: string;
   }> {
@@ -1382,6 +1392,20 @@ class SimulationOrchestrator {
           success: false,
           error: learningState.stoppedReason ? `学习已停止: ${learningState.stoppedReason}` : '学习已停止'
         }
+      }
+
+      if (learningState.taskRuntime?.status === 'completed') {
+        return {
+          success: true,
+          isPathCompleted: false,
+          taskCompleted: true,
+          milestoneProgress: {
+            currentMilestone: typeof learningState.currentMilestone === 'number' ? learningState.currentMilestone + 1 : null,
+            totalMilestones: learningState.totalMilestones || null,
+            currentTask: learningState.currentTaskTitle || null
+          },
+          logs
+        };
       }
 
       const currentMilestoneIdx = learningState.currentMilestone || 0;
@@ -1494,9 +1518,11 @@ class SimulationOrchestrator {
         success: !!virtualReplyOutput?.reply,
         userVisible: virtualReplyOutput?.reply || '',
         learnerState: virtualReplyOutput?.learnerState,
+        learnerFeedback: virtualReplyOutput?.learnerFeedback,
         internal: {
           emotion: virtualReplyOutput?.emotion,
           learnerState: virtualReplyOutput?.learnerState,
+          learnerFeedback: virtualReplyOutput?.learnerFeedback,
         }
       };
       
@@ -1515,6 +1541,7 @@ class SimulationOrchestrator {
             currentTask: currentTask.title,
             currentMilestone: currentMilestone.title,
             learnerState: virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState,
+            learnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
             emotion: virtualReplyResult.internal?.emotion
           }
         }
@@ -1523,6 +1550,11 @@ class SimulationOrchestrator {
       let aiResponse = '';
       let nextTaskIdx = currentTaskIdx;
       let nextMilestoneIdx = currentMilestoneIdx;
+      let taskCompleted = false;
+      let taskCompletionResult: any = null;
+      let learningStepError: string | null = null;
+      let closureDecision: any = null;
+      let shouldStopCurrentTask = false;
 
       const teachingSessionId = learningState.teachingSessionId;
       
@@ -1536,6 +1568,33 @@ class SimulationOrchestrator {
           
           aiResponse = aiResult.aiResponse || '';
           
+          const learnerFeedback = virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null;
+          const teacherReady = !!(aiResult.isCompletion || aiResult.autoEnded);
+          const learnerReady = !!(
+            learnerFeedback?.selfReportedTaskDone === true &&
+            learnerFeedback?.wantsMoreHelp !== true &&
+            learnerFeedback?.stopAsking === true &&
+            (!Array.isArray(learnerFeedback?.remainingBlockers) || learnerFeedback.remainingBlockers.length === 0)
+          );
+          closureDecision = {
+            teacherReady,
+            learnerReady,
+            canCompleteTask: teacherReady && learnerReady,
+            teacherSignal: {
+              isCompletion: !!aiResult.isCompletion,
+              autoEnded: !!aiResult.autoEnded,
+              classroomStage: aiResult.promptDebug?.learnDebug?.output?.stageDecision?.stage || null
+            },
+            learnerFeedback,
+            reason: teacherReady && learnerReady
+              ? '教学系统给出收束信号，AI 学生也自评当前 task 已完成。'
+              : teacherReady
+                ? '教学系统给出收束信号，但 AI 学生仍未自评完成或仍想继续获得帮助。'
+                : learnerReady
+                  ? 'AI 学生自评当前 task 已完成，但教学系统尚未给出收束信号。'
+                  : '教学系统与 AI 学生均未同时满足当前 task 收束条件。'
+          };
+
           logs.push({
             timestamp: new Date().toISOString(),
             phase: 'learning-response',
@@ -1552,43 +1611,62 @@ class SimulationOrchestrator {
                 peerTriggered: aiResult.peerTriggered || false,
                 peerMessage: aiResult.peerMessage || null,
                 currentState: aiResult.currentState || null,
-                promptDebug: aiResult.promptDebug || null
+                promptDebug: aiResult.promptDebug || null,
+                closureDecision
               }
             }
           });
           
-          if (aiResult.isCompletion || aiResult.autoEnded) {
-            const followingTask = tasks[currentTaskIdx + 1];
-            if (followingTask) {
-              nextTaskIdx = currentTaskIdx + 1;
-            } else {
-              nextTaskIdx = 0;
-              nextMilestoneIdx = currentMilestoneIdx + 1;
+          if (closureDecision.canCompleteTask) {
+            if (String(currentTask.status || '').toLowerCase() !== 'completed') {
+              taskCompletionResult = await learningService.completeTask({
+                taskId: currentTask.id,
+                userId: session.userId,
+                actualMinutes: currentTask.estimatedMinutes || 30,
+                notes: '虚拟学习者完成当前 task 的教学会话',
+                rating: 5
+              });
             }
+            taskCompleted = true;
+            shouldStopCurrentTask = true;
+          } else if (closureDecision.teacherReady) {
+            shouldStopCurrentTask = true;
           }
         } catch (err: any) {
-          logger.warn('[simulation-orchestrator] AI教学响应失败，使用模拟回复', {
+          logger.warn('[simulation-orchestrator] AI教学响应失败，已停止当前学习步骤', {
             sessionId,
             error: err.message
           });
-          aiResponse = `好的，我已经理解了。让我们继续下一个任务。`;
-          const followingTask = tasks[currentTaskIdx + 1];
-          if (followingTask) {
-            nextTaskIdx = currentTaskIdx + 1;
-          } else {
-            nextTaskIdx = 0;
-            nextMilestoneIdx = currentMilestoneIdx + 1;
-          }
+          learningStepError = err.message || '教学响应失败';
+          aiResponse = `当前教学会话不可继续：${learningStepError}。请重新开始当前 task 或人工检查。`;
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'error',
+            details: {
+              error: err.message || '教学响应失败',
+              output: {
+                currentTask: currentTask.title,
+                currentMilestone: currentMilestone.title,
+                action: 'learning-step-stopped'
+              }
+            }
+          });
         }
       } else {
-        aiResponse = `收到你的回复："${virtualReplyResult.userVisible.substring(0, 50)}..." 让我们继续学习。`;
-        const followingTask = tasks[currentTaskIdx + 1];
-        if (followingTask) {
-          nextTaskIdx = currentTaskIdx + 1;
-        } else {
-          nextTaskIdx = 0;
-          nextMilestoneIdx = currentMilestoneIdx + 1;
-        }
+        learningStepError = '当前 Learn 没有绑定教学会话';
+        aiResponse = '当前 Learn 没有绑定教学会话，请先重新开始当前 task。';
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'error',
+          details: {
+            error: '当前 Learn 没有绑定教学会话',
+            output: {
+              currentTask: currentTask.title,
+              currentMilestone: currentMilestone.title,
+              action: 'learning-step-stopped'
+            }
+          }
+        });
       }
       
       const isPathCompleted = nextMilestoneIdx >= milestones.length;
@@ -1606,11 +1684,53 @@ class SimulationOrchestrator {
             }
           : this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, nextTaskIdx)),
         learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults)),
+        latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
+        closureDecision,
+        taskRuntime: taskCompleted
+          ? {
+              status: 'completed',
+              reason: closureDecision?.reason || '教学系统与 AI 学生共同判定当前 task 已完成，虚拟学习者停止继续追问',
+              completedAt: new Date().toISOString(),
+              taskId: currentTask.id,
+              taskTitle: currentTask.title,
+              teachingSessionId,
+              completionSource: 'teacher-and-learner-feedback',
+              closureDecision,
+              completionResult: taskCompletionResult?.task ? {
+                id: taskCompletionResult.task.id,
+                status: taskCompletionResult.task.status,
+                completedAt: taskCompletionResult.task.completedAt
+              } : null
+            }
+          : {
+              ...(learningState.taskRuntime || {}),
+              status: learningStepError
+                ? 'error'
+                : closureDecision?.teacherReady && !closureDecision?.learnerReady
+                  ? 'teacher_ready_learner_not_satisfied'
+                  : closureDecision?.learnerReady && !closureDecision?.teacherReady
+                    ? 'learner_ready_waiting_teacher'
+                    : 'active',
+              taskId: currentTask.id,
+              taskTitle: currentTask.title,
+              teachingSessionId,
+              error: learningStepError,
+              closureDecision,
+              updatedAt: new Date().toISOString()
+            },
         conversationHistory: [
           ...(learningState.conversationHistory || []),
           { role: 'user', content: virtualReplyResult.userVisible },
           { role: 'assistant', content: aiResponse }
         ]
+      });
+
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: {
+          currentTaskId: isPathCompleted ? null : currentTask.id,
+          updatedAt: new Date()
+        }
       });
       
       if (isPathCompleted) {
@@ -1634,7 +1754,7 @@ class SimulationOrchestrator {
       }
       
       return {
-        success: true,
+        success: !learningStepError,
         userMessage: virtualReplyResult.userVisible,
         aiResponse,
         milestoneProgress: {
@@ -1643,7 +1763,10 @@ class SimulationOrchestrator {
           currentTask: isPathCompleted ? null : (this.buildLearningProgressSnapshot(milestones, nextMilestoneIdx, nextTaskIdx).currentTaskTitle || null)
         },
         isPathCompleted,
-        logs
+        taskCompleted,
+        ...(shouldStopCurrentTask ? { currentTaskStopped: true } : {}),
+        logs,
+        error: learningStepError || undefined
       };
     } catch (error: any) {
       const durationMs = Date.now() - startTime;
@@ -1732,6 +1855,19 @@ class SimulationOrchestrator {
             success: true,
             totalSteps: steps,
             completedMilestones: maxMilestones
+          };
+        }
+
+        if (stepResult.taskCompleted || (stepResult as any).currentTaskStopped) {
+          logger.info('[simulation-orchestrator] 当前学习任务已收束或需处理，停止自动学习', {
+            sessionId,
+            totalSteps: steps
+          });
+
+          return {
+            success: true,
+            totalSteps: steps,
+            completedMilestones: 0
           };
         }
         

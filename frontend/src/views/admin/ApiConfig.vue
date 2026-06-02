@@ -106,45 +106,22 @@
           </el-form-item>
 
           <section class="strategy-panel">
-            <div class="section-heading section-heading--strategy">
+            <div class="section-heading">
               <div>
                 <span class="section-kicker">高级选项</span>
                 <h3>模型分工策略</h3>
                 <p>把通用默认模型与专项模型拆开管理，适合需要分别控制推理链路和评估链路的后台场景。</p>
               </div>
-              <div class="strategy-overview">
-                <div class="strategy-badge">
-                  <span>当前默认</span>
-                  <strong>{{ form.defaultModel || '未设置' }}</strong>
-                </div>
-                <div class="strategy-badge strategy-badge--soft">
-                  <span>专项覆盖</span>
-                  <strong>{{ [form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length }}/2</strong>
-                </div>
+              <div class="section-meta">
+                <span>默认：{{ form.defaultModel || '未设置' }}</span>
+                <span>专项覆盖：{{ [form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length }}/2</span>
               </div>
             </div>
 
-            <div class="strategy-tips">
-              <div class="strategy-tip">
-                <strong>推理优先</strong>
-                <span>适合长链路、复杂分析、步骤拆解</span>
-              </div>
-              <div class="strategy-tip">
-                <strong>评估优先</strong>
-                <span>适合评分、审核、总结与结果判定</span>
-              </div>
-            </div>
-
-            <div class="strategy-grid">
-              <div class="strategy-slot strategy-slot--reasoning">
-                <div class="strategy-slot__head">
-                  <div>
-                    <span class="strategy-slot__eyebrow">推理链路</span>
-                    <strong>默认推理模型</strong>
-                  </div>
-                  <em>{{ form.defaultReasoningModel || '沿用全局默认模型' }}</em>
-                </div>
-                <p class="strategy-slot__desc">用于复杂思考、路径规划和需要更多中间推理步骤的任务。</p>
+            <div class="flat-form-grid">
+              <div class="flat-field">
+                <label>默认推理模型</label>
+                <p>用于复杂思考、路径规划和需要更多中间推理步骤的任务。</p>
                 <el-select
                   v-model="form.defaultReasoningModel"
                   filterable
@@ -157,15 +134,9 @@
                 </el-select>
               </div>
 
-              <div class="strategy-slot strategy-slot--evaluation">
-                <div class="strategy-slot__head">
-                  <div>
-                    <span class="strategy-slot__eyebrow">评估链路</span>
-                    <strong>默认评估模型</strong>
-                  </div>
-                  <em>{{ form.defaultEvaluationModel || '沿用全局默认模型' }}</em>
-                </div>
-                <p class="strategy-slot__desc">用于评分、结果审阅、质量判断以及简洁的结果收束任务。</p>
+              <div class="flat-field">
+                <label>默认评估模型</label>
+                <p>用于评分、结果审阅、质量判断以及简洁的结果收束任务。</p>
                 <el-select
                   v-model="form.defaultEvaluationModel"
                   filterable
@@ -181,23 +152,22 @@
           </section>
 
           <section class="model-lab">
-            <div class="section-heading section-heading--lab">
+            <div class="section-heading">
               <div>
                 <span class="section-kicker">模型测试</span>
                 <h3>在线验证实验台</h3>
                 <p>直接发起一次真实调用，快速确认当前配置是否可用、响应速度是否正常，以及返回文本是否符合预期。</p>
               </div>
-              <div class="lab-status" :class="{ 'is-success': modelTestResult?.success, 'is-error': modelTestResult && !modelTestResult.success }">
-                <span>当前状态</span>
-                <strong>{{ modelTesting ? '测试中' : modelTestResult ? (modelTestResult.success ? '测试通过' : '测试失败') : '待执行' }}</strong>
+              <div class="section-meta section-meta--status" :class="{ 'is-success': modelTestResult?.success, 'is-error': modelTestResult && !modelTestResult.success }">
+                {{ modelTesting ? '测试中' : modelTestResult ? (modelTestResult.success ? '测试通过' : '测试失败') : '待执行' }}
               </div>
             </div>
 
-            <div class="lab-console">
-              <div class="lab-console__main">
-                <div class="lab-command-bar">
-                  <div class="lab-command-bar__field lab-command-bar__field--model">
-                    <span>测试模型</span>
+            <div class="lab-flat-layout">
+              <div class="lab-form-area">
+                <div class="flat-form-grid flat-form-grid--test">
+                  <div class="flat-field flat-field--wide">
+                    <label>测试模型</label>
                     <el-select
                       v-model="modelTestForm.model"
                       filterable
@@ -210,29 +180,23 @@
                     </el-select>
                   </div>
 
-                  <div class="lab-command-bar__metrics">
-                    <div class="lab-metric-card">
-                      <span>温度</span>
-                      <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" style="width: 100%" />
-                    </div>
-                    <div class="lab-metric-card">
-                      <span>最大输出</span>
-                      <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" style="width: 100%" />
-                    </div>
+                  <div class="flat-field">
+                    <label>温度</label>
+                    <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" style="width: 100%" />
+                  </div>
+
+                  <div class="flat-field">
+                    <label>最大输出</label>
+                    <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" style="width: 100%" />
                   </div>
                 </div>
 
-                <div class="prompt-workbench">
-                  <div class="prompt-workbench__head">
-                    <div>
-                      <strong>测试提示词</strong>
-                      <span>建议保持一句到两句，便于快速判断返回是否正常。</span>
-                    </div>
-                    <small>即时调用，不写入配置</small>
-                  </div>
+                <div class="flat-field flat-field--prompt">
+                  <label>测试提示词</label>
+                  <p>建议保持一句到两句，便于快速判断返回是否正常。即时调用，不写入配置。</p>
                   <el-input
                     v-model="modelTestForm.prompt"
-                    class="prompt-workbench__textarea"
+                    class="lab-textarea"
                     type="textarea"
                     :rows="5"
                     placeholder="例如：请用一句中文确认模型测试成功。"
@@ -247,29 +211,21 @@
                 </div>
               </div>
 
-              <div class="lab-console__result">
-                <div class="result-overview">
-                  <div class="result-overview__item">
-                    <span>测试模型</span>
-                    <strong>{{ modelTestResult?.model || modelTestForm.model || '未指定' }}</strong>
-                  </div>
-                  <div class="result-overview__item">
-                    <span>响应耗时</span>
-                    <strong>{{ modelTestResult?.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
-                  </div>
-                  <div class="result-overview__item">
-                    <span>Token 用量</span>
-                    <strong>{{ modelTestResult ? formatUsage(modelTestResult.usage) : '--' }}</strong>
-                  </div>
+              <div class="lab-result-area" :class="{ 'is-error': modelTestResult && !modelTestResult.success }">
+                <div class="result-line">
+                  <span>测试模型</span>
+                  <strong>{{ modelTestResult?.model || modelTestForm.model || '未指定' }}</strong>
                 </div>
-
-                <div class="result-output-card" :class="{ 'is-error': modelTestResult && !modelTestResult.success }">
-                  <div class="result-output-card__head">
-                    <div>
-                      <strong>返回内容</strong>
-                      <span>这里展示本次调用返回的文本，适合直接检查语言、完整性与可读性。</span>
-                    </div>
-                  </div>
+                <div class="result-line">
+                  <span>响应耗时</span>
+                  <strong>{{ modelTestResult?.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
+                </div>
+                <div class="result-line">
+                  <span>Token 用量</span>
+                  <strong>{{ modelTestResult ? formatUsage(modelTestResult.usage) : '--' }}</strong>
+                </div>
+                <div class="result-output">
+                  <label>返回内容</label>
                   <pre class="sample-json sample-json--light">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : '执行测试后，这里会展示模型返回内容。' }}</pre>
                 </div>
               </div>
@@ -701,13 +657,8 @@ onMounted(() => {
 .strategy-panel,
 .model-lab {
   margin-top: 18px;
-  padding: 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(211, 221, 239, 0.96);
-  background:
-    radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  padding: 18px 0 0;
+  border-top: 1px solid rgba(216, 224, 238, 0.9);
   display: grid;
   gap: 16px;
 }
@@ -748,211 +699,79 @@ onMounted(() => {
   letter-spacing: 0.04em;
 }
 
-.strategy-overview {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
+.section-meta {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  min-width: 260px;
-}
-
-.strategy-badge {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.12), rgba(52, 120, 246, 0.04));
-  border: 1px solid rgba(52, 120, 246, 0.14);
-  display: grid;
-  gap: 6px;
-}
-
-.strategy-badge--soft {
-  background: linear-gradient(135deg, rgba(100, 118, 255, 0.1), rgba(255, 255, 255, 0.7));
-}
-
-.strategy-badge span,
-.lab-status span,
-.result-overview__item span,
-.lab-metric-card span {
-  color: #7b8ba3;
-  font-size: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  color: #6f8098;
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
-.strategy-badge strong,
-.lab-status strong,
-.result-overview__item strong {
-  color: #22344d;
-  font-size: 0.95rem;
-  font-weight: 800;
+.section-meta span,
+.section-meta--status {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.07);
+  color: #335aa4;
 }
 
-.strategy-tips {
+.section-meta--status.is-success {
+  background: rgba(51, 181, 103, 0.1);
+  color: #1f7a4f;
+}
+
+.section-meta--status.is-error {
+  background: rgba(233, 82, 82, 0.1);
+  color: #c84b48;
+}
+
+.flat-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px 16px;
 }
 
-.strategy-tip {
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px dashed rgba(52, 120, 246, 0.18);
-  background: rgba(250, 252, 255, 0.88);
+.flat-form-grid--test {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr);
+}
+
+.flat-field {
   display: grid;
-  gap: 6px;
+  align-content: start;
+  gap: 8px;
 }
 
-.strategy-tip strong,
-.strategy-slot__head strong,
-.prompt-workbench__head strong,
-.result-output-card__head strong {
+.flat-field label,
+.result-output label {
   color: #22344d;
-  font-size: 0.95rem;
+  font-size: 0.86rem;
   font-weight: 800;
 }
 
-.strategy-tip span,
-.strategy-slot__desc,
-.strategy-slot__head em,
-.prompt-workbench__head span,
-.prompt-workbench__head small,
-.result-output-card__head span {
+.flat-field p {
+  margin: 0;
   color: #6f8098;
   font-size: 0.8rem;
   line-height: 1.6;
 }
 
-.strategy-grid {
+.flat-field--prompt {
+  padding-top: 2px;
+}
+
+.lab-flat-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.8fr);
+  gap: 18px;
+  align-items: stretch;
 }
 
-.strategy-slot {
-  padding: 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(216, 224, 238, 0.96);
-  background: rgba(255, 255, 255, 0.9);
-  display: grid;
-  gap: 12px;
-}
-
-.strategy-slot--reasoning {
-  background: linear-gradient(180deg, rgba(246, 249, 255, 0.96), rgba(255, 255, 255, 0.92));
-}
-
-.strategy-slot--evaluation {
-  background: linear-gradient(180deg, rgba(249, 248, 255, 0.96), rgba(255, 255, 255, 0.92));
-}
-
-.strategy-slot__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.strategy-slot__eyebrow {
-  display: inline-block;
-  margin-bottom: 6px;
-  color: #4b6da8;
-  font-size: 0.74rem;
-  font-weight: 800;
-}
-
-.strategy-slot__head em {
-  font-style: normal;
-  text-align: right;
-  max-width: 180px;
-}
-
-.strategy-slot__desc {
-  margin: 0;
-}
-
-.lab-status {
-  min-width: 132px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(216, 224, 238, 0.96);
-  background: rgba(255, 255, 255, 0.9);
-  display: grid;
-  gap: 6px;
-}
-
-.lab-status.is-success {
-  background: linear-gradient(180deg, rgba(235, 250, 241, 0.96), rgba(255, 255, 255, 0.92));
-  border-color: rgba(51, 181, 103, 0.2);
-}
-
-.lab-status.is-error {
-  background: linear-gradient(180deg, rgba(255, 243, 242, 0.96), rgba(255, 255, 255, 0.92));
-  border-color: rgba(233, 82, 82, 0.2);
-}
-
-.lab-console {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 16px;
-}
-
-.lab-console__main,
-.lab-console__result {
+.lab-form-area {
   display: grid;
   gap: 14px;
-}
-
-.lab-command-bar,
-.prompt-workbench,
-.result-output-card {
-  padding: 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(216, 224, 238, 0.96);
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.lab-command-bar {
-  display: grid;
-  gap: 14px;
-}
-
-.lab-command-bar__field,
-.lab-command-bar__metrics {
-  display: grid;
-  gap: 10px;
-}
-
-.lab-command-bar__field > span {
-  color: #4b6384;
-  font-size: 0.79rem;
-  font-weight: 800;
-}
-
-.lab-command-bar__metrics {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.lab-metric-card {
-  padding: 12px;
-  border-radius: 16px;
-  background: rgba(246, 249, 255, 0.88);
-  border: 1px solid rgba(224, 230, 242, 0.92);
-  display: grid;
-  gap: 8px;
-}
-
-.prompt-workbench {
-  display: grid;
-  gap: 12px;
-}
-
-.prompt-workbench__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.prompt-workbench__head small {
-  white-space: nowrap;
 }
 
 .lab-actions {
@@ -963,55 +782,58 @@ onMounted(() => {
 }
 
 .lab-feedback {
-  padding: 10px 14px;
-  border-radius: 14px;
-  background: rgba(245, 248, 255, 0.94);
-  border: 1px solid rgba(216, 224, 238, 0.96);
+  padding: 0;
+  background: transparent;
+  border: 0;
   font-size: 0.82rem;
   line-height: 1.55;
 }
 
 .lab-feedback.success {
   color: #1f7a4f;
-  background: rgba(237, 249, 242, 0.94);
-  border-color: rgba(51, 181, 103, 0.22);
 }
 
 .lab-feedback.error {
   color: #c84b48;
-  background: rgba(255, 244, 243, 0.94);
-  border-color: rgba(233, 82, 82, 0.2);
 }
 
-.result-overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.result-overview__item {
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(216, 224, 238, 0.96);
-  background: rgba(247, 250, 255, 0.9);
-  display: grid;
-  gap: 6px;
-}
-
-.result-output-card {
+.lab-result-area {
+  padding-left: 18px;
+  border-left: 1px solid rgba(216, 224, 238, 0.95);
   display: grid;
   gap: 12px;
-  min-height: 100%;
+  align-content: start;
 }
 
-.result-output-card.is-error {
-  border-color: rgba(233, 82, 82, 0.22);
-  background: linear-gradient(180deg, rgba(255, 247, 246, 0.98), rgba(255, 255, 255, 0.94));
+.lab-result-area.is-error {
+  border-left-color: rgba(233, 82, 82, 0.34);
 }
 
-.result-output-card__head {
+.result-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(216, 224, 238, 0.92);
+}
+
+.result-line span {
+  color: #7b8ba3;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.result-line strong {
+  color: #22344d;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: right;
+  word-break: break-word;
+}
+
+.result-output {
   display: grid;
-  gap: 6px;
+  gap: 10px;
 }
 
 .status-grid {
@@ -1083,7 +905,7 @@ onMounted(() => {
   border-radius: 12px;
 }
 
-:deep(.prompt-workbench__textarea .el-textarea__inner) {
+:deep(.lab-textarea .el-textarea__inner) {
   min-height: 144px;
   border-radius: 16px;
   background: rgba(248, 250, 255, 0.92);
@@ -1098,18 +920,25 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .section-heading,
-  .prompt-workbench__head,
-  .strategy-slot__head {
+  .section-heading {
     flex-direction: column;
   }
 
-  .strategy-overview,
-  .strategy-tips,
-  .strategy-grid,
-  .lab-console,
-  .result-overview {
+  .flat-form-grid,
+  .flat-form-grid--test,
+  .lab-flat-layout {
     grid-template-columns: 1fr;
+  }
+
+  .section-meta {
+    justify-content: flex-start;
+  }
+
+  .lab-result-area {
+    padding-left: 0;
+    padding-top: 16px;
+    border-left: 0;
+    border-top: 1px solid rgba(216, 224, 238, 0.95);
   }
 }
 

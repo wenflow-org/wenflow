@@ -8,21 +8,36 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import { getGateway } from '../../gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
-import { isExtraCapabilitySkill } from '../../services/skill-component-catalog';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
+import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { SESSION_KNOWLEDGE_DISTILLER_PROMPT } from '../../skills/session-knowledge-distiller';
 import { LABEL_GENERATOR_PROMPT } from '../../skills/label-generator';
+import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
+import { GOAL_PROFILE_INFERENCE_PROMPT } from '../../skills/goal-profile-inference';
+import { LEARNING_PATTERN_DISTILLER_PROMPT } from '../../skills/learning-pattern-distiller';
+import { DIALOGUE_CONCEPT_EXTRACTOR_PROMPT } from '../../skills/dialogue-concept-extractor';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
 import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
+import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
+import { VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT } from '../../skills/virtual-learner-path-evaluator';
+import { VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT } from '../../skills/virtual-learner-learn-turn-simulator';
 
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'label-generator': LABEL_GENERATOR_PROMPT,
   'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
+  'stage-designer': STAGE_DESIGNER_PROMPT,
+  'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
+  'goal-profile-inference': GOAL_PROFILE_INFERENCE_PROMPT,
+  'learning-pattern-distiller': LEARNING_PATTERN_DISTILLER_PROMPT,
   'session-knowledge-distiller': SESSION_KNOWLEDGE_DISTILLER_PROMPT,
+  'dialogue-concept-extractor': DIALOGUE_CONCEPT_EXTRACTOR_PROMPT,
   'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
   'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
+  'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
+  'virtual-learner-path-evaluator': VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
+  'virtual-learner-learn-turn-simulator': VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
 };
 
 type SkillRuntimeStats = {
@@ -151,6 +166,31 @@ function normalizePromptText(value: string | null | undefined): string {
   return typeof value === 'string'
     ? value.replace(/\r\n/g, '\n').trim()
     : '';
+}
+
+function buildGeneratedSkillPrompt(skill: any, name: string): string {
+  const definition = skill?.definition || {};
+  const capabilities = Array.isArray(definition.capabilities) && definition.capabilities.length
+    ? definition.capabilities.join('、')
+    : '暂无能力声明';
+
+  return [
+    `你是 WenFlow 平台中的 Skill：${definition.displayName || definition.name || name}。`,
+    '',
+    '职责：',
+    definition.description || '根据输入执行该 Skill 的平台能力。',
+    '',
+    '能力：',
+    capabilities,
+    '',
+    '输入协议：',
+    JSON.stringify(definition.inputSchema || {}, null, 2),
+    '',
+    '输出协议：',
+    JSON.stringify(definition.outputSchema || {}, null, 2),
+    '',
+    '请严格根据输入执行职责，并返回符合输出协议的结果。不要输出与任务无关的解释。',
+  ].join('\n');
 }
 
 /**
@@ -359,6 +399,16 @@ router.post('/:name/test', async (req: Request, res: Response) => {
 router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
+    const gateway = getGateway();
+    const skill = gateway.getSkill(name);
+
+    if (!skill) {
+      return res.status(404).json({
+        success: false,
+        error: 'Skill not found',
+      });
+    }
+
     const promptService = new AgentConfigService();
     const agentId = `skill:${name}`;
     const activePrompt = await promptService.getActivePrompt(agentId);
@@ -373,6 +423,7 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
         success: true,
         data: {
           source: 'db-active',
+          editable: true,
           agentId,
           prompt: activePrompt,
           fallbackPrompt,
@@ -392,6 +443,7 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
         data: {
           source: 'code-fallback',
           promptMode: 'code-fallback',
+          editable: true,
           agentId,
           prompt: {
             id: null,
@@ -416,28 +468,34 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
       });
     }
 
-    if (isExtraCapabilitySkill(name)) {
-      return res.json({
-        success: true,
-        data: {
-          source: 'no-prompt',
-          promptMode: 'no-prompt',
+    const generatedPrompt = buildGeneratedSkillPrompt(skill, name);
+    return res.json({
+      success: true,
+      data: {
+        source: 'generated-default',
+        promptMode: 'generated-default',
+        editable: true,
+        agentId,
+        prompt: {
+          id: null,
           agentId,
-          prompt: null,
-          fallbackPrompt: null,
-          promptDrift: false,
-          driftDetail: {
-            activeVersion: null,
-            fallbackAvailable: false,
-            activeMatchesCode: true,
-          },
+          version: null,
+          name: `${name} generated default prompt`,
+          description: '根据 Skill 定义生成的默认 Prompt 草案',
+          systemPrompt: generatedPrompt,
+          model: null,
+          temperature: null,
+          maxTokens: null,
+          status: 'GENERATED',
         },
-      });
-    }
-
-    res.status(404).json({
-      success: false,
-      error: 'No effective prompt found',
+        fallbackPrompt: generatedPrompt,
+        promptDrift: false,
+        driftDetail: {
+          activeVersion: null,
+          fallbackAvailable: true,
+          activeMatchesCode: true,
+        },
+      },
     });
   } catch (error) {
     res.status(500).json({

@@ -9,6 +9,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { agentConfigService } from '../../services/agentConfig.service';
 
 /**
  * Error Pattern Skill 定义
@@ -191,8 +192,10 @@ ${errorTypeInstruction}
 
 请用 Markdown 格式，清晰分隔两个部分。`;
 
+  const promptConfig = await agentConfigService.getActivePrompt('skill:error-pattern');
+  const systemPrompt = promptConfig?.systemPrompt?.trim() || '你是一位善于分析学习者错误的编程导师，能够精准定位常见错误并提供清晰的改正建议。';
   const messages: ChatMessage[] = [
-    { role: 'system', content: '你是一位善于分析学习者错误的编程导师，能够精准定位常见错误并提供清晰的改正建议。' },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: prompt }
   ];
   
@@ -401,8 +404,10 @@ async function diagnoseCode(
 
 如果没有错误，请说明代码是正确的。`;
 
+  const promptConfig = await agentConfigService.getActivePrompt('skill:error-pattern');
+  const systemPrompt = promptConfig?.systemPrompt?.trim() || '你是一位经验丰富的代码审查专家，善于发现代码中的各种错误并提供建设性的改进建议。';
   const messages: ChatMessage[] = [
-    { role: 'system', content: '你是一位经验丰富的代码审查专家，善于发现代码中的各种错误并提供建设性的改进建议。' },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: prompt }
   ];
   

@@ -367,6 +367,19 @@
                         </article>
                       </div>
                     </aside>
+
+                    <aside class="learn-round-closure" v-if="message.closureSignals">
+                      <div class="learn-round-closure__head">
+                        <strong>收束判定</strong>
+                        <span>{{ message.closureSignals.decision }}</span>
+                      </div>
+                      <div class="goal-round-signals goal-round-signals--inline">
+                        <span class="goal-round-signal"><em>教学系统</em><strong>{{ message.closureSignals.teacher }}</strong></span>
+                        <span class="goal-round-signal"><em>AI 学生</em><strong>{{ message.closureSignals.learner }}</strong></span>
+                        <span class="goal-round-signal"><em>满意度</em><strong>{{ message.closureSignals.satisfaction }}</strong></span>
+                      </div>
+                      <p>{{ message.closureSignals.reason }}</p>
+                    </aside>
                   </div>
                 </article>
                   </div>
@@ -881,6 +894,27 @@ const normalizeKnowledgePoints = (points: any[]) => {
     })
 }
 
+const formatPercent = (value: any) => {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return '--'
+  return `${Math.round(Math.max(0, Math.min(1, num)) * 100)}%`
+}
+
+const buildClosureSignals = (closureDecision?: any | null, learnerFeedback?: any | null) => {
+  if (!closureDecision && !learnerFeedback) return null
+  const teacherReady = closureDecision?.teacherReady === true
+  const learnerReady = closureDecision?.learnerReady === true
+  const feedback = closureDecision?.learnerFeedback || learnerFeedback || {}
+
+  return {
+    teacher: teacherReady ? '可收束' : '继续',
+    learner: learnerReady || feedback.selfReportedTaskDone === true ? '自评已完成' : feedback.wantsMoreHelp === true ? '仍需帮助' : '未完成',
+    satisfaction: formatPercent(feedback.satisfaction),
+    decision: closureDecision?.canCompleteTask ? '完成当前 task' : teacherReady && !learnerReady ? '等待学生确认' : !teacherReady && learnerReady ? '等待教学收束' : '继续学习',
+    reason: closureDecision?.reason || feedback.reason || '暂无收束原因'
+  }
+}
+
 const goalConversationRounds = computed(() => {
   const projectedMessages = selectedStorySession.value?.conversations?.goal?.messages
   if (Array.isArray(projectedMessages) && projectedMessages.length) {
@@ -1130,7 +1164,8 @@ const learnConversationRounds = computed(() => {
           knowledge: String(knowledgePoints[0]?.name || item?.knowledgePoint || '--'),
           strategies,
           knowledgePoints
-        }
+        },
+        closureSignals: buildClosureSignals(item?.closureDecision, item?.learnerFeedback)
       }
     })
   }
@@ -1163,7 +1198,8 @@ const learnConversationRounds = computed(() => {
             knowledge: currentKnowledgePointDisplay.value || '--',
             strategies: [],
             knowledgePoints: []
-          }
+          },
+          closureSignals: null
         })
         continue
       }
@@ -1193,7 +1229,8 @@ const learnConversationRounds = computed(() => {
             knowledge: String(currentKnowledgePointDisplay.value || '--'),
             strategies: [],
             knowledgePoints: []
-          }
+          },
+          closureSignals: null
         })
         pendingLearner = null
       }
@@ -1227,7 +1264,8 @@ const learnConversationRounds = computed(() => {
         cognitiveLevel: '--',
         knowledge: '--',
         strategies: []
-      }
+      },
+      closureSignals: null
     })
   }
 
@@ -1264,7 +1302,8 @@ const learnConversationRounds = computed(() => {
         knowledge: String(knowledgePoints[0]?.name || responseOutput?.knowledgePoint || '--'),
         strategies,
         knowledgePoints
-      }
+      },
+      closureSignals: buildClosureSignals(responseOutput?.closureDecision, learnerOutput?.learnerFeedback)
     })
   }
 
@@ -2110,8 +2149,11 @@ onMounted(() => {
 
 .story-stage-page--embedded .stage-card {
   gap: 10px;
-  padding: 12px 14px;
-  border-radius: 16px;
+  padding: 0 0 12px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  background: transparent;
 }
 
 .story-stage-page--embedded .story-stage-goal-card,
@@ -2171,7 +2213,19 @@ onMounted(() => {
 .story-stage-page--embedded .story-stage-goal-card,
 .story-stage-page--embedded .stage-card--path-hero,
 .story-stage-page--embedded .stage-card--learn {
-  background: #ffffff;
+  background: transparent;
+}
+
+.story-stage-page--embedded .detail-block {
+  padding: 14px 0;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid #edf1f6;
+  background: transparent;
+}
+
+.story-stage-page--embedded .detail-block:first-child {
+  border-top: 0;
 }
 
 .story-stage-main-panel--goal {
@@ -2499,6 +2553,19 @@ onMounted(() => {
   background: linear-gradient(180deg, rgba(247, 255, 248, 0.92), rgba(255, 255, 255, 0.96));
 }
 
+.story-stage-page--embedded .path-milestone-card {
+  padding: 0 0 14px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #e1eadf;
+  background: transparent;
+}
+
+.story-stage-page--embedded .path-milestone-card:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 .path-milestone-card__head,
 .path-task-chip__head {
   display: flex;
@@ -2544,6 +2611,37 @@ onMounted(() => {
   border-radius: 14px;
   border: 1px solid #e0e9e2;
   background: rgba(255, 255, 255, 0.9);
+}
+
+.story-stage-page--embedded .path-task-list {
+  gap: 0;
+  border-top: 1px solid #e7eee8;
+}
+
+.story-stage-page--embedded .path-task-chip {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #eef3ef;
+  background: transparent;
+}
+
+.story-stage-page--embedded .path-task-chip:last-child {
+  border-bottom: 0;
+}
+
+.story-stage-page--embedded .path-task-chip--current {
+  background: transparent;
+  box-shadow: inset 3px 0 0 #78bd8a;
+  padding-left: 10px;
+}
+
+.story-stage-page--embedded .path-task-chip--runnable {
+  box-shadow: inset 3px 0 0 rgba(43, 138, 87, 0.18);
+  padding-left: 10px;
 }
 
 .path-task-chip--current {
@@ -2633,6 +2731,42 @@ onMounted(() => {
   border: 1px solid rgba(231, 214, 177, 0.8);
   background: rgba(255, 255, 255, 0.86);
   min-height: 88px;
+}
+
+.story-stage-page--embedded .learn-status-grid,
+.story-stage-page--embedded .learn-metrics-stack,
+.story-stage-page--embedded .learn-summary-list,
+.story-stage-page--embedded .knowledge-progress-list {
+  gap: 0;
+  border-top: 1px solid #eee7d8;
+}
+
+.story-stage-page--embedded .learn-stat-card,
+.story-stage-page--embedded .learn-metric-tile,
+.story-stage-page--embedded .learn-summary-item,
+.story-stage-page--embedded .knowledge-progress-card,
+.story-stage-page--embedded .knowledge-inline-item {
+  min-height: 0;
+  padding: 10px 12px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #eee7d8;
+  background: transparent;
+}
+
+.story-stage-page--embedded .learn-stat-card:nth-child(2n),
+.story-stage-page--embedded .learn-metric-tile:nth-child(2n),
+.story-stage-page--embedded .learn-summary-item:nth-child(2n),
+.story-stage-page--embedded .knowledge-progress-card:nth-child(2n) {
+  border-left: 1px solid #eee7d8;
+}
+
+.story-stage-page--embedded .learn-focus-card {
+  padding: 10px 0 12px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #eee7d8;
+  background: transparent;
 }
 
 .learn-stat-card--accent {
@@ -2830,6 +2964,41 @@ onMounted(() => {
   border-radius: 16px;
   border: 1px solid #e7edf7;
   background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+}
+
+.learn-round-closure {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid #d9e8ff;
+  background: linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%);
+}
+
+.learn-round-closure__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.learn-round-closure__head strong {
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.learn-round-closure__head span {
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.learn-round-closure p {
+  margin: 0;
+  color: #526071;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .learn-round-knowledge__head {

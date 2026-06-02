@@ -173,7 +173,7 @@
                   <el-button @click="loadPromptManager">刷新</el-button>
                 </div>
 
-                <div v-if="supportsPromptManagement(currentSkill.skillId) && effectivePrompt" class="prompt-active-card">
+                <div v-if="effectivePrompt" class="prompt-active-card">
                   <div class="prompt-summary-card">
                     <div class="prompt-summary-card__row">
                       <span class="prompt-summary-card__label">当前版本</span>
@@ -224,10 +224,9 @@
                   </div>
                 </div>
 
-                <el-empty v-else-if="supportsPromptManagement(currentSkill.skillId)" description="当前没有可展示的 Prompt。" />
-                <el-empty v-else description="该外挂能力组件当前无需独立 Prompt，直接作为工具型能力运行。" />
+                <el-empty v-else description="当前没有可展示的 Prompt。" />
 
-                <div v-if="supportsPromptManagement(currentSkill.skillId)" class="prompt-versions-card">
+                <div class="prompt-versions-card">
                   <div class="prompt-versions-card__header">
                     <h4>最近版本</h4>
                     <span class="prompt-versions-card__meta">{{ promptVersions.length }} 条</span>
@@ -267,7 +266,7 @@
                   <el-empty v-else description="暂无 Prompt 版本" />
                 </div>
 
-                <div v-if="supportsPromptManagement(currentSkill.skillId)" class="prompt-versions-card">
+                <div class="prompt-versions-card">
                   <div class="prompt-versions-card__header">
                     <h4>Preview</h4>
                     <el-button @click="runSkillPreview" :loading="previewLoading">运行预览</el-button>
@@ -430,7 +429,7 @@ const currentPromptSkillId = ref('');
 const promptVersions = ref<any[]>([]);
 const activePrompt = ref<any | null>(null);
 const effectivePrompt = ref<any | null>(null);
-const effectivePromptSource = ref<'db-active' | 'code-fallback' | ''>('');
+const effectivePromptSource = ref<'db-active' | 'code-fallback' | 'generated-default' | ''>('');
 const promptDriftWarning = ref(false);
 const promptExpanded = ref(false);
 const promptEditDialogVisible = ref(false);
@@ -513,18 +512,6 @@ const SKILL_CN_NAMES: Record<string, string> = {
   'answer-generation': '答案生成器',
 };
 
-const supportsPromptManagement = (skillId?: string) => {
-  return skillId === 'path-scene-framing'
-    || skillId === 'stage-designer'
-    || skillId === 'label-generator'
-    || skillId === 'goal-profile-inference'
-    || skillId === 'learning-pattern-distiller'
-    || skillId === 'session-knowledge-distiller'
-    || skillId === 'dialogue-concept-extractor'
-    || skillId === 'adaptive-guidance-copy'
-    || skillId === 'virtual-learner-persona-designer'
-    || skillId === 'virtual-learner-scenario-designer';
-};
 const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`;
 
 const getSkillHint = (skillId?: string) => {
@@ -621,6 +608,7 @@ const getPromptStatusLabel = (status?: string | null) => {
   const normalized = status.toUpperCase();
   if (normalized === 'ACTIVE') return '已生效';
   if (normalized === 'BUILT_IN' || normalized === 'FALLBACK') return '代码内置';
+  if (normalized === 'GENERATED') return '默认草案';
   if (normalized === 'ARCHIVED') return '已归档';
   if (normalized === 'DRAFT') return '草稿';
   if (normalized === 'PUBLISHED') return '已发布';
@@ -633,20 +621,23 @@ const getPromptStatusTagType = (status?: string | null) => {
   const normalized = status.toUpperCase();
   if (normalized === 'ACTIVE' || normalized === 'PUBLISHED') return 'success';
   if (normalized === 'BUILT_IN' || normalized === 'FALLBACK') return 'info';
+  if (normalized === 'GENERATED') return 'warning';
   if (normalized === 'STAGING') return 'warning';
   if (normalized === 'ARCHIVED') return 'info';
   if (normalized === 'DRAFT') return 'info';
   return 'info';
 };
 
-const promptSourceLabel = (source: 'db-active' | 'code-fallback' | '') => {
+const promptSourceLabel = (source: 'db-active' | 'code-fallback' | 'generated-default' | '') => {
   if (source === 'db-active') return 'DB Active';
   if (source === 'code-fallback') return 'Code Fallback';
+  if (source === 'generated-default') return 'Generated Default';
   return 'Unknown';
 };
 
-const promptSourceTagType = (source: 'db-active' | 'code-fallback' | '') => {
+const promptSourceTagType = (source: 'db-active' | 'code-fallback' | 'generated-default' | '') => {
   if (source === 'db-active') return 'success';
+  if (source === 'generated-default') return 'warning';
   if (source === 'code-fallback') return 'info';
   return 'info';
 };
@@ -751,14 +742,7 @@ const openSkillWorkbench = async (row: SkillModelConfig) => {
   skillPreviewInputText.value = skillPreviewInput.value ? JSON.stringify(skillPreviewInput.value, null, 2) : '';
 
   try {
-    if (supportsPromptManagement(row.skillId)) {
-      await loadPromptManager();
-    } else {
-      promptVersions.value = [];
-      activePrompt.value = null;
-      effectivePrompt.value = null;
-      effectivePromptSource.value = '';
-    }
+    await loadPromptManager();
   } finally {
     skillWorkbenchLoading.value = false;
   }
