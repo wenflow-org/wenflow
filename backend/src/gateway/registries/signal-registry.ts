@@ -5,6 +5,7 @@
  */
 
 import { LearningSignalType, LearningSignal } from '../../agents/protocol';
+import { logger } from '../../utils/logger';
 
 // 信号检测器
 export interface SignalDetector {
@@ -142,7 +143,12 @@ export class SignalRegistry {
             intensities.push(intensity);
           }
         } catch (error) {
-          console.error(`Signal detector ${detector.name} error:`, error);
+          logger.error('[signal-registry] detector failed', {
+            detectorName: detector.name,
+            signalType,
+            userId: data.userId,
+            error,
+          });
         }
       }
 

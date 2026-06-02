@@ -1,6 +1,21 @@
 import winston from 'winston';
+import { getRequestContext } from '../gateway/api-gateway/context';
+
+const requestContextFormat = winston.format((info) => {
+  const context = getRequestContext();
+  if (context.traceId && !info.traceId) info.traceId = context.traceId;
+  if (context.userId && !info.userId) info.userId = context.userId;
+  if (context.sourceEntry && !info.sourceEntry) info.sourceEntry = context.sourceEntry;
+  if (context.callerAgent && !info.callerAgent) info.callerAgent = context.callerAgent;
+  if (context.userRole && !info.userRole) info.userRole = context.userRole;
+  if (context.agentId && !info.agentId) info.agentId = context.agentId;
+  if (context.skillId && !info.skillId) info.skillId = context.skillId;
+  if (context.action && !info.action) info.action = context.action;
+  return info;
+});
 
 const logFormat = winston.format.combine(
+  requestContextFormat(),
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
   winston.format.splat(),

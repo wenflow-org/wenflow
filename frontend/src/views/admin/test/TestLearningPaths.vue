@@ -41,7 +41,7 @@
 
         <section v-if="goalScenePath" class="paths-scene-banner glass-card" :class="`paths-scene-banner--${goalSceneState}`">
           <div class="paths-scene-banner__copy">
-            <span class="pill">Goal -> Path Scene</span>
+            <span class="pill">目标到路径</span>
             <h2>{{ goalSceneTitle }}</h2>
             <p>{{ goalSceneDescription }}</p>
           </div>
@@ -71,7 +71,7 @@
                 type="button"
                 class="btn btn-primary"
                 @click="goToPathDetail(goalScenePath.id)"
-              >查看这版路径</button>
+              >查看路径</button>
               <button
                 v-else
                 type="button"
@@ -84,12 +84,12 @@
 
         <section class="paths-hero glass-card">
           <div class="paths-hero__copy">
-            <span class="pill">测试工作台</span>
-            <h1>查看测试路径、scene 状态和阶段任务生成情况。</h1>
-            <p>这里承接 goal -> path 的测试链路，重点观察路径主结构、阶段任务生成和失败重试状态。</p>
+            <span class="pill">测试路径</span>
+            <h1>查看测试路径、阶段状态和任务生成情况。</h1>
+            <p>这里承接目标到路径的测试链路，重点观察路径主结构、阶段任务生成和失败重试状态。</p>
           </div>
           <div class="paths-hero__actions">
-            <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续学习</button>
+            <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续</button>
             <router-link to="/admin/test/goal-full" class="btn btn-ghost">创建测试目标</router-link>
           </div>
         </section>
@@ -143,7 +143,7 @@
                     <span v-if="path.generationStatus?.coreStep" class="path-state-pill path-state-pill--soft">{{ getCoreStepLabel(path) }}</span>
                   </div>
                   <strong>{{ getPathTitle(path) }}</strong>
-                  <p>{{ getPathSummary(path) || '这条测试学习路径正在生成。' }}</p>
+                  <p>{{ getPathSummary(path) || '这条学习路径正在生成。' }}</p>
                   <div class="path-overview-card__progress-bar">
                     <div
                       class="path-overview-card__progress-fill path-overview-card__progress-fill--loading"
@@ -234,7 +234,7 @@
 
                   <details v-if="path.sceneSummary" class="path-overview-card__pretransmit">
                     <summary class="path-overview-card__pretransmit-toggle">
-                      <span>预传递信息</span>
+                      <span>路径摘要</span>
                       <el-icon><ArrowDown /></el-icon>
                     </summary>
                     <div class="path-overview-card__pretransmit-content">
@@ -263,14 +263,14 @@
 
                   <details v-if="path.generationStatus?.sourceConversationId" class="path-overview-card__goal-input">
                     <summary class="path-overview-card__goal-toggle">
-                      <span>Goal输入数据</span>
+                      <span>目标输入</span>
                       <el-icon><ArrowDown /></el-icon>
                     </summary>
                     <div class="path-overview-card__goal-content">
-                      <div class="goal-row">
-                        <span class="goal-label">来源对话</span>
-                        <span class="goal-value goal-value--id">{{ path.generationStatus.sourceConversationId }}</span>
-                      </div>
+                <div class="goal-row">
+                  <span class="goal-label">来源对话</span>
+                  <span class="goal-value goal-value--id">{{ path.generationStatus.sourceConversationId }}</span>
+                </div>
                       <button 
                         v-if="!goalDataCache[path.generationStatus.sourceConversationId]" 
                         class="goal-load-btn" 
@@ -278,7 +278,7 @@
                         :disabled="loadingGoalId === path.generationStatus.sourceConversationId"
                       >
                         <el-icon v-if="loadingGoalId === path.generationStatus.sourceConversationId"><Loading /></el-icon>
-                        <span>{{ loadingGoalId === path.generationStatus.sourceConversationId ? '加载中...' : '加载目标数据' }}</span>
+                        <span>{{ loadingGoalId === path.generationStatus.sourceConversationId ? '加载中...' : '加载数据' }}</span>
                       </button>
                       <template v-else>
                         <div v-if="goalDataCache[path.generationStatus.sourceConversationId]?.understanding?.real_problem" class="goal-row goal-row--block">
@@ -326,7 +326,7 @@
                   </details>
 
                   <div class="path-overview-card__actions-row">
-                    <button type="button" class="btn btn-primary" @click="continuePath(path)">继续学习</button>
+                    <button type="button" class="btn btn-primary" @click="continuePath(path)">继续</button>
                     <button type="button" class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
                   </div>
                 </template>
@@ -334,9 +334,9 @@
             </div>
 
             <section v-else-if="!loading" class="paths-empty-state glass-card">
-              <span class="pill">还没有测试路径</span>
+              <span class="pill">暂无路径</span>
               <h2>还没有测试路径。</h2>
-              <p>先创建一个测试目标，生成第一条测试学习路径。</p>
+              <p>先创建一个测试目标，生成第一条学习路径。</p>
               <router-link to="/admin/test/goal-full" class="btn btn-primary">创建测试目标</router-link>
             </section>
           </div>
@@ -903,8 +903,8 @@ const confirmBatchRegenerate = async () => {
   if (selectedReadyPathIds.value.length === 0) return;
   try {
     await ElMessageBox.confirm(
-      `将批量重新生成 ${selectedReadyPathIds.value.length} 条测试学习路径。已完成任务和学习记录不会被删除，但路径结构可能变化。`,
-      '批量重新生成测试学习路径',
+      `将批量重新生成 ${selectedReadyPathIds.value.length} 条学习路径。已完成任务和学习记录不会被删除，但路径结构可能变化。`,
+      '批量重新生成学习路径',
       {
         type: 'warning',
         confirmButtonText: '确认重新生成',
@@ -920,7 +920,7 @@ const confirmBatchRegenerate = async () => {
     for (const pathId of selectedReadyPathIds.value) {
       await learningAPI.regeneratePath(pathId);
     }
-    toast.success(`已开始重新生成 ${selectedReadyPathIds.value.length} 条测试学习路径`);
+    toast.success(`已开始重新生成 ${selectedReadyPathIds.value.length} 条学习路径`);
     clearSelection();
     if (!pollingTimer) startPolling();
     schedulePolling(1500);
@@ -929,7 +929,7 @@ const confirmBatchRegenerate = async () => {
     if (error?.response?.status === 429) {
       stopPolling();
     }
-    toast.error(error.response?.data?.error?.message || '批量重新生成测试学习路径失败');
+    toast.error(error.response?.data?.error?.message || '批量重新生成学习路径失败');
   } finally {
     batchRegenerating.value = false;
   }
@@ -939,7 +939,7 @@ const deletePath = async () => {
   deleting.value = true;
   try {
     await request.delete(`/learning/paths/${pathToDelete.value.id}`);
-    toast.success('测试学习路径已删除');
+    toast.success('学习路径已删除');
     showDeleteDialog.value = false;
     pathToDelete.value = null;
     await loadPaths();
@@ -958,7 +958,7 @@ const regeneratePath = async () => {
   regenerating.value = true;
   try {
     await learningAPI.regeneratePath(pathToRegenerate.value.id);
-    toast.success('已开始重新生成测试学习路径');
+    toast.success('已开始重新生成学习路径');
     showRegenerateDialog.value = false;
     if (!pollingTimer) startPolling();
     schedulePolling(1500);
@@ -967,7 +967,7 @@ const regeneratePath = async () => {
     if (error?.response?.status === 429) {
       stopPolling();
     }
-    toast.error(error.response?.data?.error?.message || '重新生成测试学习路径失败');
+    toast.error(error.response?.data?.error?.message || '重新生成学习路径失败');
   } finally {
     regenerating.value = false;
     pathToRegenerate.value = null;
@@ -991,7 +991,7 @@ const retryPathGeneration = async (path: any) => {
       toast.success('已在后台继续生成阶段任务');
     } else {
       await request.patch(`/learning/paths/${path.id}/retry`);
-      toast.success('已开始重新生成测试学习路径');
+      toast.success('已开始重新生成学习路径');
     }
     if (!pollingTimer) startPolling();
     schedulePolling(1500);
@@ -1064,41 +1064,7 @@ onUnmounted(() => {
 }
 
 .paths-bg-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.paths-bg-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.35;
-}
-
-.paths-bg-orb--1 {
-  width: 900px;
-  height: 900px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.28), transparent 70%);
-  top: -280px;
-  right: -180px;
-  animation: paths-orb-float 24s ease-in-out infinite;
-}
-
-.paths-bg-orb--2 {
-  width: 700px;
-  height: 700px;
-  background: radial-gradient(circle, rgba(84, 199, 137, 0.22), transparent 70%);
-  bottom: -200px;
-  left: -120px;
-  animation: paths-orb-float 28s ease-in-out infinite reverse;
-}
-
-@keyframes paths-orb-float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(40px, 30px) scale(1.06); }
+  display: none;
 }
 
 /* ========== 头部导航 ========== */
@@ -1106,16 +1072,16 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(205, 216, 238, 0.9);
   transition: all 0.3s ease;
 }
 
 .dashboard-header--scrolled {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
+  background: rgba(255, 255, 255, 0.98);
+  border-bottom-color: rgba(205, 216, 238, 0.9);
+  box-shadow: 0 8px 20px rgba(42, 72, 128, 0.05);
 }
 
 .header-container {
@@ -1150,8 +1116,8 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: #f8fafc;
+  border: 1px solid rgba(205, 216, 238, 0.9);
   display: flex;
   align-items: center;
 }
@@ -1223,7 +1189,7 @@ onUnmounted(() => {
   padding: 0 14px;
   border-radius: 999px;
   color: #fff;
-  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  background: #3478f6;
   text-decoration: none;
   font-size: 13px;
   font-weight: 800;
@@ -1237,7 +1203,7 @@ onUnmounted(() => {
   z-index: 1;
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 28px 0 80px;
+  padding: 24px 0 72px;
   overflow-x: hidden;
 }
 
@@ -1248,11 +1214,10 @@ onUnmounted(() => {
 
 /* ========== 玻璃卡片 ========== */
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.94));
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  border-radius: 22px;
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
 }
 
 /* ========== 页面标题区 ========== */

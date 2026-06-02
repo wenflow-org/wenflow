@@ -309,6 +309,7 @@ export async function pathSceneFraming(
     const result = await callPrompt<PathSceneFramingInput, any>({
       agentId: 'skill:path-scene-framing',
       defaultSystemPrompt: PATH_SCENE_FRAMING_PROMPT,
+      requireActivePrompt: true,
       caller: { skillId: 'path-scene-framing' },
       modelDefaults: {
         maxTokens: PATH_SCENE_FRAMING_MAX_TOKENS,

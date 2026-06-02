@@ -9,6 +9,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { logger } from '../../utils/logger';
 
 /**
  * Exercise Generator Skill 定义
@@ -448,7 +449,11 @@ function parseSingleExercise(
       estimatedMinutes
     };
   } catch (error) {
-    console.error('解析练习题失败:', error);
+    logger.error('[exercise-generator] failed to parse exercise item', {
+      index,
+      type,
+      error,
+    });
     return null;
   }
 }

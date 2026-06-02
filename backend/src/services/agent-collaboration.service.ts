@@ -17,6 +17,7 @@ import { pathAdjustmentEngine, PathAdjustment } from '../agents/path-agent/adjus
 import { learnerModelAgent } from '../agents/learner-model-agent';
 import prisma from '../config/database';
 import { learnerProgressService } from './learner/LearnerProgressService';
+import { logger } from '../utils/logger';
 
 export interface AgentCollaborationConfig {
   enableAutoAdjustment: boolean;
@@ -45,11 +46,11 @@ export class AgentCollaborationService {
   
   start(): void {
     this.setupEventListeners();
-    console.log('[AgentCollaboration] Service started');
+    logger.info('[agent-collaboration] service started');
   }
   
   stop(): void {
-    console.log('[AgentCollaboration] Service stopped');
+    logger.info('[agent-collaboration] service stopped');
   }
   
   private setupEventListeners(): void {
@@ -129,12 +130,16 @@ export class AgentCollaborationService {
     
     const lastTime = this.lastAdjustmentTime.get(userId) || 0;
     if (Date.now() - lastTime < this.config.adjustmentCooldown) {
-      console.log(`[AgentCollaboration] Cooldown active for user ${userId}`);
+      logger.info('[agent-collaboration] adjustment cooldown active', { userId });
       return;
     }
     
     if (existingSignals.length < this.config.minSignalsForAdjustment) {
-      console.log(`[AgentCollaboration] Not enough signals for adjustment (${existingSignals.length}/${this.config.minSignalsForAdjustment})`);
+      logger.info('[agent-collaboration] not enough signals for adjustment', {
+        userId,
+        signalCount: existingSignals.length,
+        minSignalsForAdjustment: this.config.minSignalsForAdjustment,
+      });
       return;
     }
     
@@ -213,7 +218,7 @@ export class AgentCollaborationService {
     try {
       const activePath = await this.getActivePath(userId);
       if (!activePath) {
-        console.log(`[AgentCollaboration] No active path for user ${userId}`);
+        logger.info('[agent-collaboration] no active path for adjustment', { userId });
         return;
       }
       
@@ -245,10 +250,15 @@ export class AgentCollaborationService {
           }
         });
         
-        console.log(`[AgentCollaboration] Path adjusted for user ${userId}: ${result.reason}`);
+        logger.info('[agent-collaboration] path adjusted', {
+          userId,
+          pathId: activePath.id,
+          reason: result.reason,
+          adjustmentCount: result.adjustments.length,
+        });
       }
     } catch (error) {
-      console.error('[AgentCollaboration] Failed to adjust path:', error);
+      logger.error('[agent-collaboration] failed to adjust path', { userId, error });
     }
   }
   
@@ -286,7 +296,10 @@ export class AgentCollaborationService {
     const { userId, data } = event;
     if (!userId) return;
     
-    console.log(`[AgentCollaboration] Profile updated for user ${userId}: ${JSON.stringify(data.changes || [])}`);
+    logger.info('[agent-collaboration] profile updated', {
+      userId,
+      changes: data.changes || [],
+    });
   }
   
   /**
@@ -311,7 +324,7 @@ export class AgentCollaborationService {
         }
       });
     } catch (error) {
-      console.error('[AgentCollaboration] Failed to get personalization:', error);
+      logger.error('[agent-collaboration] failed to get personalization', { userId, error });
     }
   }
   
@@ -355,7 +368,7 @@ export class AgentCollaborationService {
         }))
       };
     } catch (error) {
-      console.error('[AgentCollaboration] Failed to get active path:', error);
+      logger.error('[agent-collaboration] failed to get active path', { userId, error });
       return null;
     }
   }
@@ -396,9 +409,12 @@ export class AgentCollaborationService {
         }
       }
       
-      console.log(`[AgentCollaboration] Saved ${adjustments.length} adjustments for path ${pathId}`);
+      logger.info('[agent-collaboration] saved path adjustments', {
+        pathId,
+        adjustmentCount: adjustments.length,
+      });
     } catch (error) {
-      console.error('[AgentCollaboration] Failed to save path adjustments:', error);
+      logger.error('[agent-collaboration] failed to save path adjustments', { pathId, error });
     }
   }
   

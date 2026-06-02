@@ -29,7 +29,7 @@
       <template v-else-if="path">
         <section class="test-path-detail-hero test-path-detail-card">
           <div class="test-path-detail-hero__copy">
-            <span class="test-path-detail-eyebrow">Path Workbench</span>
+            <span class="test-path-detail-eyebrow">路径详情</span>
             <h1>{{ path.name }}</h1>
             <p>{{ path.summary || path.description }}</p>
 
@@ -47,7 +47,7 @@
               {{ primaryActionLabel }}
             </button>
             <button v-if="enrichmentStatus === 'failed'" class="test-path-detail-btn test-path-detail-btn--ghost" :disabled="retryingEnrichment" @click="retryEnrichment">
-              继续生成阶段任务
+              继续生成
             </button>
           </div>
         </section>
@@ -55,8 +55,8 @@
         <section v-if="processDetail" class="test-path-detail-card test-path-detail-card--process test-path-detail-process-section">
           <div class="test-path-detail-section-head">
             <div>
-              <span class="test-path-detail-eyebrow">Path 调试</span>
-              <h2>Pipeline</h2>
+              <span class="test-path-detail-eyebrow">路径调试</span>
+              <h2>生成链路</h2>
             </div>
           </div>
 
@@ -67,7 +67,7 @@
               <p>{{ processDetail.goalFinalPayload?.conversationHistory?.length || 0 }} 条对话 · {{ getProcessSourceSummary(processDetail.goalFinalPayload?.provenance) }}</p>
             </article>
             <article class="test-path-process-overview-card">
-              <span>Orchestrator</span>
+              <span>编排层</span>
               <strong>{{ processDetail.mode || '--' }}</strong>
               <p>{{ processDetail.normalizedInput?.skillLevel || '--' }} · {{ processDetail.normalizedInput?.timePerDay || '--' }}</p>
             </article>
@@ -109,6 +109,7 @@
                 <div v-if="goalConversationRaw" class="test-path-detail-process-grid test-path-detail-process-grid--two">
                   <article class="test-path-detail-process-card">
                     <span class="test-path-detail-copy-block__label">Goal 摘要 `goalSummary`</span>
+                    <span class="test-path-detail-copy-block__label">Goal 摘要</span>
                     <pre>{{ JSON.stringify(goalConversationSummary, null, 2) }}</pre>
                   </article>
                   <article class="test-path-detail-process-card">
@@ -125,8 +126,8 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Orchestrator</span>
-                  <strong>Orchestrator</strong>
+                  <span class="test-path-detail-eyebrow">编排层</span>
+                  <strong>编排结果</strong>
                 </div>
               </div>
 
@@ -146,8 +147,8 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Framing</span>
-                  <strong>Framing · skill:path-scene-framing</strong>
+                  <span class="test-path-detail-eyebrow">场景生成</span>
+                  <strong>路径场景生成</strong>
                 </div>
               </div>
 
@@ -167,8 +168,8 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Cognitive Core</span>
-                  <strong>Cognitive Core · path-agent</strong>
+                  <span class="test-path-detail-eyebrow">认知核心</span>
+                  <strong>认知层 · path-agent</strong>
                 </div>
               </div>
 
@@ -186,7 +187,7 @@
 
               <div v-if="processDetail.cognitiveDiagnostics?.suspiciousDomain || processDetail.cognitiveDiagnostics?.suspiciousConcepts?.length" class="test-path-process-callout test-path-process-callout--warning">
                 <strong>认知层疑似失真</strong>
-                <p v-if="processDetail.cognitiveDiagnostics?.suspiciousDomain">当前 cognitiveDomain 更像用户问题描述，而不是底层能力。</p>
+                <p v-if="processDetail.cognitiveDiagnostics?.suspiciousDomain">当前 cognitiveDomain 更像问题描述，而不是底层能力。</p>
                 <p v-if="processDetail.cognitiveDiagnostics?.suspiciousConcepts?.length">疑似任务句概念：{{ processDetail.cognitiveDiagnostics.suspiciousConcepts.map((item: any) => item.name).join(' / ') }}</p>
               </div>
 
@@ -194,7 +195,7 @@
                 <article v-for="stage in stageConceptTree" :key="stage.milestoneId || stage.stageNumber" class="test-path-concept-stage-card">
                   <div class="test-path-concept-stage-card__head">
                     <div>
-                      <span class="test-path-detail-copy-block__label">Milestone {{ stage.stageNumber }}</span>
+                      <span class="test-path-detail-copy-block__label">阶段 {{ stage.stageNumber }}</span>
                       <strong>{{ stage.title || `第 ${stage.stageNumber} 阶段` }}</strong>
                       <p>{{ stage.goal || stage.description || '暂无阶段目标' }}</p>
                     </div>
@@ -239,8 +240,8 @@
             <section class="test-path-process-section-card">
               <div class="test-path-process-section-card__head">
                 <div>
-                  <span class="test-path-detail-eyebrow">Stage Designer</span>
-                  <strong>Stage Designer · skill:stage-designer</strong>
+                  <span class="test-path-detail-eyebrow">阶段设计</span>
+                  <strong>阶段任务设计</strong>
                 </div>
               </div>
 
@@ -275,8 +276,8 @@
                     <div class="test-path-detail-kv"><span>displayLabel</span><strong>{{ item.displayLabel || '--' }}</strong></div>
                     <div class="test-path-detail-kv"><span>knowledgeType</span><strong>{{ item.knowledgeType || '--' }}</strong></div>
                     <div class="test-path-detail-kv"><span>cognitiveLevel</span><strong>{{ item.cognitiveLevel || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>linkedConcept</span><strong>{{ item.coreConcept || item.name || '--' }}</strong></div>
-                    <div class="test-path-detail-kv"><span>annotationConfidence</span><strong>{{ formatTaskAnnotationConfidence(item.annotationConfidence) }}</strong></div>
+                    <div class="test-path-detail-kv"><span>关联概念</span><strong>{{ item.coreConcept || item.name || '--' }}</strong></div>
+                    <div class="test-path-detail-kv"><span>标注置信度</span><strong>{{ formatTaskAnnotationConfidence(item.annotationConfidence) }}</strong></div>
                   </div>
                   <p v-if="item.milestoneTitle">所属阶段：{{ item.milestoneTitle }}</p>
                 </article>
@@ -314,7 +315,7 @@
                       <strong>{{ stage.title }}</strong>
                       <p>{{ stage.description || stage.goal }}</p>
                       <div v-if="stage.coreConceptName || stage.coreConceptId" class="test-path-task__profile-copy">
-                        <span class="test-path-task__profile-line">Milestone 核心概念：{{ stage.coreConceptName || '--' }}</span>
+                        <span class="test-path-task__profile-line">阶段核心概念：{{ stage.coreConceptName || '--' }}</span>
                         <span class="test-path-task__profile-line">概念 ID：{{ stage.coreConceptId || '--' }}</span>
                       </div>
                     </div>
@@ -335,8 +336,8 @@
                             <p>{{ task.description }}</p>
                             <div v-if="task.displayLabel || task.coreConcept || task.linkedConceptId || normalizedTaskObjectives(task).length" class="test-path-task__profile-copy">
                               <span v-if="task.displayLabel" class="test-path-task__profile-line">任务标签：{{ task.displayLabel }}</span>
-                              <span v-if="task.coreConcept" class="test-path-task__profile-line">Task 命中概念：{{ task.coreConcept }}</span>
-                              <span v-if="task.linkedConceptId" class="test-path-task__profile-line">Task linkedConcept：{{ task.linkedConceptId }}</span>
+                              <span v-if="task.coreConcept" class="test-path-task__profile-line">任务命中概念：{{ task.coreConcept }}</span>
+                              <span v-if="task.linkedConceptId" class="test-path-task__profile-line">关联概念 ID：{{ task.linkedConceptId }}</span>
                               <span v-if="normalizedTaskObjectives(task).length">学习目标：{{ normalizedTaskObjectives(task).join(' / ') }}</span>
                             </div>
                           </div>
@@ -351,7 +352,7 @@
 
                         <div class="test-path-task__actions">
                           <button v-if="task.status !== 'completed'" class="test-path-detail-btn test-path-detail-btn--primary" :disabled="!canStartLearning" @click="startTask(task)">
-                            {{ canStartLearning ? (task.status === 'in_progress' ? '继续学习' : '开始学习') : '等待阶段任务生成' }}
+                            {{ canStartLearning ? (task.status === 'in_progress' ? '继续' : '开始') : '等待生成' }}
                           </button>
                           <button v-else-if="task.hasTeachingWrapup" class="test-path-detail-btn test-path-detail-btn--ghost" @click="viewTaskEvaluation(task)">查看当堂评估</button>
                         </div>
@@ -369,10 +370,10 @@
               <span class="test-path-detail-eyebrow">生成状态</span>
               <div class="test-path-detail-kv-list">
                 <div class="test-path-detail-kv"><span>core</span><strong>{{ generationStatus?.core || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>coreStep</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>stageDesign</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>sourceConversationId</span><strong>{{ generationStatus?.sourceConversationId || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>canStartLearning</span><strong>{{ canStartLearning ? 'true' : 'false' }}</strong></div>
+                <div class="test-path-detail-kv"><span>当前步骤</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>阶段任务状态</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>来源对话 ID</span><strong>{{ generationStatus?.sourceConversationId || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>可开始学习</span><strong>{{ canStartLearning ? '是' : '否' }}</strong></div>
               </div>
             </section>
 
@@ -555,7 +556,7 @@ const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
 const activeStage = computed(() => pathStages.value.find((stage: any) => normalizeTaskList(stage).some((task: any) => task.status !== 'completed')) || pathStages.value[0] || null);
 const activeStageTasks = computed(() => normalizeTaskList(activeStage.value));
 const primaryActionTask = computed(() => activeStageTasks.value.find((task: any) => task.status === 'todo') || activeStageTasks.value.find((task: any) => task.status === 'in_progress') || null);
-const primaryActionLabel = computed(() => !canStartLearning.value ? '等待阶段任务生成' : (primaryActionTask.value?.status === 'in_progress' ? '继续学习' : '开始学习'));
+const primaryActionLabel = computed(() => !canStartLearning.value ? '等待生成' : (primaryActionTask.value?.status === 'in_progress' ? '继续' : '开始'));
 const nextActionTasks = computed(() => {
   const upcoming = activeStageTasks.value.filter((task: any) => task.status !== 'completed');
   return (upcoming.length > 0 ? upcoming : activeStageTasks.value).slice(0, 3);
@@ -708,10 +709,10 @@ const retryEnrichment = async () => {
   retryingEnrichment.value = true;
   try {
     await learningAPI.retryPathEnrichment(path.value.id);
-    toast.success('已在后台继续生成阶段任务。');
+    toast.success('已继续生成阶段任务');
     await loadPathData();
   } catch (error: any) {
-    toast.error(error.message || '继续生成阶段任务失败');
+    toast.error(error.message || '继续生成失败');
   } finally {
     retryingEnrichment.value = false;
   }
@@ -818,13 +819,13 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(205, 216, 238, 0.9);
 }
 
 .test-path-detail-header--scrolled {
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(42, 72, 128, 0.05);
 }
 
 .test-path-detail-header__inner,
@@ -862,8 +863,8 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: #f8fafc;
+  border: 1px solid rgba(205, 216, 238, 0.9);
 }
 
 .test-path-detail-nav a {
@@ -882,17 +883,17 @@ onUnmounted(() => {
 }
 
 .test-path-detail-shell {
-  padding: 28px 0 80px;
+  padding: 24px 0 72px;
 }
 
 .test-path-detail-card,
 .test-path-detail-empty,
 .test-path-detail-hero,
 .test-path-detail-banner {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(23, 32, 51, 0.06);
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
-  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.94));
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
+  border-radius: 22px;
 }
 
 .test-path-detail-empty {
@@ -907,8 +908,8 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 18px;
   align-items: flex-start;
-  padding: 24px 26px;
-  margin-bottom: 18px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
 }
 
 .test-path-detail-eyebrow {
@@ -973,7 +974,7 @@ onUnmounted(() => {
 }
 
 .test-path-detail-card {
-  padding: 20px;
+  padding: 18px 20px;
 }
 
 .test-path-detail-card--process {

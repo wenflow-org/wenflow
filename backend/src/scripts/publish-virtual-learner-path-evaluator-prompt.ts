@@ -1,16 +1,20 @@
 import dotenv from 'dotenv';
 import prisma from '../config/database';
-import { DEFAULT_SIMULATION_PROMPT } from '../agents/virtual-learner-simulation-agent/prompt';
+import {
+  VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS,
+  VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
+  VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE,
+} from '../skills/virtual-learner-path-evaluator';
 
 dotenv.config();
 
-async function publishVirtualLearnerSimulationPrompt() {
+async function publishVirtualLearnerPathEvaluatorPrompt() {
   const model = (process.env.AI_MODEL || '').trim();
   if (!model) {
     throw new Error('AI_MODEL is required');
   }
 
-  const agentId = 'virtual-learner-simulation-agent';
+  const agentId = 'skill:virtual-learner-path-evaluator';
   const latest = await prisma.agent_prompts.findFirst({
     where: { agentId },
     orderBy: { version: 'desc' },
@@ -26,22 +30,23 @@ async function publishVirtualLearnerSimulationPrompt() {
 
   const created = await prisma.agent_prompts.create({
     data: {
-      id: `ap_virtual_learner_simulation_${Date.now()}`,
+      id: `ap_virtual_learner_path_evaluator_${Date.now()}`,
       agentId,
       version,
-      name: `v${version}-virtual-learner-simulation-stage-aware`,
-      description: '阶段感知的虚拟学习者提示词模板，覆盖画像生成、Goal 澄清、Path 评审与 Learn 阶段模拟。',
-      systemPrompt: DEFAULT_SIMULATION_PROMPT,
-      temperature: 0.8,
-      maxTokens: 500,
+      name: `v${version}-virtual-learner-path-reaction-visible-only`,
+      description: 'Path 阶段虚拟学习者评审提示词，只对平台输出学习者可见反应与显式修改点，内部判断下沉为 debug。',
+      systemPrompt: VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
+      temperature: VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE,
+      maxTokens: VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS,
       model,
       status: 'ACTIVE',
       createdBy: 'opencode',
       publishedAt: new Date(),
       updatedAt: new Date(),
       metadata: JSON.stringify({
-        role: 'virtual-learner-simulation',
-        notes: 'Runtime still builds stage-specific prompt in code; this ACTIVE record provides managed model/temperature/maxTokens and versioning.',
+        role: 'virtual-learner-path-evaluator',
+        outputMode: 'visible-reaction-only',
+        notes: 'Used by simulation orchestrator for path review. Public contract exposes reaction and visibleRequestedChanges only; internal decision is debug-only.',
       }),
     }
   });
@@ -55,7 +60,7 @@ async function publishVirtualLearnerSimulationPrompt() {
   }, null, 2));
 }
 
-publishVirtualLearnerSimulationPrompt()
+publishVirtualLearnerPathEvaluatorPrompt()
   .catch((error) => {
     console.error(error);
     process.exit(1);

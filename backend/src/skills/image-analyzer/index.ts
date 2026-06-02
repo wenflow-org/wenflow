@@ -9,6 +9,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
+import { logger } from '../../utils/logger';
 
 // 输入类型定义
 export interface ImageAnalyzerInput {
@@ -352,7 +353,10 @@ async function cropImage(
 ): Promise<Buffer> {
   // 这里应该使用 sharp 或其他图像处理库
   // 为了简化，这里返回原图，实际项目中应该实现真正的裁剪
-  console.log(`裁剪区域: (${region.x}, ${region.y}, ${region.width}, ${region.height}), 放大级别: ${zoomLevel}`);
+  logger.debug('[image-analyzer] crop image requested', {
+    region,
+    zoomLevel,
+  });
 
   // 如果安装了 sharp，可以使用:
   // const sharp = require('sharp');
@@ -374,7 +378,7 @@ async function performOCR(
   // 这里应该集成 OCR 服务，如 Tesseract.js 或云 OCR API
   // 简化实现，返回模拟结果
 
-  console.log(`执行 OCR，语言: ${language}`);
+  logger.debug('[image-analyzer] perform OCR requested', { language });
 
   // 模拟 OCR 结果
   return {

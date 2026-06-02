@@ -511,10 +511,6 @@ export const adminRuntimeDefinitionsApi = {
     return adminAxios.get('/admin/runtime-definitions/agents');
   },
 
-  getAgentDefinitionDetail: async (id: string) => {
-    return adminAxios.get(`/admin/runtime-definitions/agents/${encodeURIComponent(id)}`);
-  },
-
   getOrchestratorDefinitions: async () => {
     return adminAxios.get('/admin/runtime-definitions/orchestrators');
   },
@@ -554,6 +550,17 @@ export const adminApiConfigApi = {
 
   testConnection: async (data: { apiUrl: string; apiKey: string }) => {
     return adminAxios.post('/admin/api-config/test', data);
+  },
+
+  testModel: async (data: {
+    apiUrl?: string;
+    apiKey?: string;
+    model: string;
+    prompt: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => {
+    return adminAxios.post('/admin/api-config/test-model', data);
   }
 };
 
@@ -781,6 +788,18 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/${id}/stories`);
   },
 
+  getVirtualLearnerTestProjection: async (id: string) => {
+    return adminAxios.get(`/admin/virtual-learners/${id}/test-projection`);
+  },
+
+  createProjectionToken: async (id: string, data?: { storyId?: string; virtualSessionId?: string; scope?: 'dashboard' | 'full' }) => {
+    return adminAxios.post(`/admin/virtual-learners/${id}/projection-token`, data || {});
+  },
+
+  resolveProjectionToken: async (token: string) => {
+    return adminAxios.post('/admin/virtual-learners/projection/resolve', { token });
+  },
+
   draftVirtualLearnerProfile: async (id: string) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-profile`);
   },
@@ -789,8 +808,19 @@ draftVirtualLearnerStories: async (id: string) => {
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`);
   },
 
-  updateStoryStatus: async (profileId: string, storyIndex: number, status: string) => {
-    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, { status });
+  updateStoryStatus: async (
+    profileId: string,
+    storyIndex: number,
+    payload: {
+      status?: string;
+      title?: string;
+      storyOutline?: string;
+      storyTriggerEvent?: string;
+      visibleOpening?: string;
+      pressurePoints?: string[];
+    }
+  ) => {
+    return adminAxios.put(`/admin/virtual-learners/${profileId}/stories/${storyIndex}`, payload);
   },
 
   deleteStory: async (profileId: string, storyIndex: number) => {
@@ -856,6 +886,10 @@ draftVirtualLearnerStories: async (id: string) => {
 
   getVirtualSessionLearningTask: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-task`);
+  },
+
+  getVirtualSessionTeachingDetail: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/teaching-detail`);
   },
 
   virtualSessionStep: async (sessionId: string) => {

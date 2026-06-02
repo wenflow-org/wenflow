@@ -197,13 +197,7 @@ interface GoalToPathHandoffSnapshot {
   existingPathId: string | null;
   rawGoal: string;
   finalUserVisible: string | null;
-  stage: string | null;
-  confidence: number | null;
-  understanding: any;
-  collected: any;
-  structuredData: any;
-  confirmedProposal: any;
-  confidenceScores: any;
+  visibleSummary: any;
   conversationHistory: Array<{ role: string; content: string }>;
 }
 
@@ -265,9 +259,7 @@ interface PathNormalizedInputSnapshot {
   existingPathId: string | null;
   skillLevel: string | null;
   timePerDay: string | null;
-  structuredData: any;
   confirmedProposal: any;
-  confidenceScores: any;
   conversationHistory: Array<{ role: string; content: string }>;
 }
 
@@ -820,9 +812,7 @@ function buildNormalizedPathInputSnapshot(data: GeneratePathData): PathNormalize
     existingPathId: data.existingPathId || null,
     skillLevel: data.userProfile?.skillLevel || data.userProfile?.currentSkillLevel || null,
     timePerDay: data.userProfile?.timePerDay || null,
-    structuredData: data.userProfile?.structuredData || null,
     confirmedProposal: data.userProfile?.confirmedProposal || null,
-    confidenceScores: data.userProfile?.confidenceScores || null,
     conversationHistory,
   };
 }
@@ -841,13 +831,7 @@ function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPathHando
       existingPathId: handoff.existingPathId || data.existingPathId || null,
       rawGoal: typeof handoff.rawGoal === 'string' ? handoff.rawGoal : data.description,
       finalUserVisible: typeof handoff.finalUserVisible === 'string' ? handoff.finalUserVisible : null,
-      stage: typeof handoff.stage === 'string' ? handoff.stage : null,
-      confidence: typeof handoff.confidence === 'number' ? handoff.confidence : null,
-      understanding: handoff.understanding || {},
-      collected: handoff.collected || {},
-      structuredData: handoff.structuredData ?? data.userProfile?.structuredData ?? null,
-      confirmedProposal: handoff.confirmedProposal ?? data.userProfile?.confirmedProposal ?? null,
-      confidenceScores: handoff.confidenceScores ?? data.userProfile?.confidenceScores ?? null,
+      visibleSummary: handoff.visibleSummary || null,
       conversationHistory: Array.isArray(handoff.conversationHistory)
         ? handoff.conversationHistory
         : Array.isArray(data.userProfile?.conversationHistory)
@@ -863,13 +847,7 @@ function buildGoalToPathHandoffSnapshot(data: GeneratePathData): GoalToPathHando
     existingPathId: data.existingPathId || null,
     rawGoal: data.description,
     finalUserVisible: null,
-    stage: null,
-    confidence: null,
-    understanding: {},
-    collected: {},
-    structuredData: data.userProfile?.structuredData ?? null,
-    confirmedProposal: data.userProfile?.confirmedProposal ?? null,
-    confidenceScores: data.userProfile?.confidenceScores ?? null,
+    visibleSummary: null,
     conversationHistory: Array.isArray(data.userProfile?.conversationHistory) ? data.userProfile.conversationHistory : [],
   };
 }
@@ -989,13 +967,7 @@ class LearningService {
         },
         rawGoal: goalFinalPayload?.rawGoal || null,
         finalUserVisible: goalFinalPayload?.finalUserVisible || null,
-        stage: goalFinalPayload?.stage || null,
-        confidence: typeof goalFinalPayload?.confidence === 'number' ? goalFinalPayload.confidence : null,
-        understanding: goalFinalPayload?.understanding || null,
-        collected: goalFinalPayload?.collected || null,
-        structuredData: goalFinalPayload?.structuredData || null,
-        confirmedProposal: goalFinalPayload?.confirmedProposal || null,
-        confidenceScores: goalFinalPayload?.confidenceScores || null,
+        visibleSummary: goalFinalPayload?.visibleSummary || null,
         conversationHistory: Array.isArray(goalFinalPayload?.conversationHistory)
           ? goalFinalPayload.conversationHistory
           : [],
@@ -1017,9 +989,7 @@ class LearningService {
         existingPathId: normalizedInput?.existingPathId || null,
         skillLevel: normalizedInput?.skillLevel || null,
         timePerDay: normalizedInput?.timePerDay || null,
-        structuredData: normalizedInput?.structuredData || null,
         confirmedProposal: normalizedInput?.confirmedProposal || null,
-        confidenceScores: normalizedInput?.confidenceScores || null,
         conversationHistory: Array.isArray(normalizedInput?.conversationHistory)
           ? normalizedInput.conversationHistory
           : [],
@@ -1881,9 +1851,7 @@ class LearningService {
       goal: data.description,
       currentLevel: currentLevel || 'beginner',
       timePerDay: data.userProfile?.timePerDay,
-      structuredData: data.userProfile?.structuredData,
       confirmedProposal: data.userProfile?.confirmedProposal,
-      confidenceScores: data.userProfile?.confidenceScores,
       conversationHistory: data.userProfile?.conversationHistory,
       metadata: {
         availableTime: data.userProfile?.timePerDay,
@@ -1908,7 +1876,6 @@ class LearningService {
           goal: agentInput.goal,
           currentLevel: agentInput.currentLevel,
           timePerDay: agentInput.timePerDay,
-          structuredData: agentInput.structuredData,
           confirmedProposal: agentInput.confirmedProposal,
           metadata: agentInput.metadata || {},
         };
@@ -1962,9 +1929,7 @@ class LearningService {
         currentLevel: agentInput.currentLevel,
         timePerDay: agentInput.timePerDay,
         metadata: agentInput.metadata || {},
-        structuredData: agentInput.structuredData || null,
         confirmedProposal: agentInput.confirmedProposal || null,
-        confidenceScores: agentInput.confidenceScores || null,
         conversationHistory: Array.isArray(agentInput.conversationHistory) ? agentInput.conversationHistory : [],
       };
       logger.info('PathAgent 调用成功', { userId: data.userId, pathId: path.id });

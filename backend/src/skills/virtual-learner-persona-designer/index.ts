@@ -15,8 +15,8 @@ export const VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT = `你是一位“虚拟学
 1. 你的输出必须只包含 1 个 JSON 对象，不要使用任何代码块标记，不要输出 markdown，不要解释。
 2. 你生成的是“这个人是谁”，不是“这个人最近遇到了什么故事”。
 3. 不要输出 stories、situationSeed、goalSeed、consistencyNotes 等字段。
-4. 不要输出任何 system / developer / tool / reminder / mode 相关文本。
-5. 不要输出 XML/HTML 风格标签，例如 <system-reminder>。
+4. 不要输出与人物设定无关的运行环境或工具控制文本。
+5. 不要输出 XML/HTML 风格标签。
 6. 人物要真实、克制、有生活感，不要像问卷字段堆砌。
 7. 所有行为字段都必须写成“可观察的表现”，不要写抽象术语，例如不要写“元认知中等”“自我调节较弱”。
 8. 不要默认都是职场白领。可来自学生、求职转行者、门店店长、家长、客服、教师、社区工作者、自由职业者等。
@@ -25,12 +25,11 @@ export const VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT = `你是一位“虚拟学
 11. 保持字段精简，不要堆砌同义字段；如果两个字段表达接近，以更具体、更可观察的那个为准。
 
 可选输入：
-- preferredLevels: 倾向的知识水平
+- preferredLevels: 倾向的学习起点标签（仅作弱参考）
 - candidatePersonas: 可优先采样的人物池
 - recentPersonaHints: 最近已出现、应尽量避开的身份组合提示
 - existingPersonaSeed: 现有稳定人物底稿
 
-knowledgeLevel 只能是：beginner | intermediate | advanced
 availableTime 只能是：minimal | moderate | abundant
 techComfort 只能是：low | medium | high
 learningStyle 只能是：reading | watching | doing | listening
@@ -47,7 +46,6 @@ learningStyle 只能是：reading | watching | doing | listening
     "occupation": "职业",
     "education": "学历",
     "background": "背景描述，2-4句，只写人物长期背景，不写某个故事事件",
-    "knowledgeLevel": "beginner",
     "knownConcepts": ["概念1", "概念2"],
     "struggleConcepts": ["概念1", "概念2"],
     "learningStyle": "reading",
@@ -68,7 +66,7 @@ learningStyle 只能是：reading | watching | doing | listening
 export const virtualLearnerPersonaDesignerDefinition: SkillDefinition = {
   name: 'virtual-learner-persona-designer',
   displayName: '虚拟学习者身份设计器',
-  version: '1.0.0',
+  version: '1.1.0',
   category: 'generation',
   description: '为虚拟学习者生成稳定身份画像，不包含故事与情境',
   inputSchema: {
@@ -96,13 +94,7 @@ export const virtualLearnerPersonaDesignerDefinition: SkillDefinition = {
 
 function sanitizeGeneratedText(value: string): string {
   return value
-    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, ' ')
-    .replace(/<developer-reminder>[\s\S]*?<\/developer-reminder>/gi, ' ')
-    .replace(/<tool-reminder>[\s\S]*?<\/tool-reminder>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/your operational mode has changed[\s\S]*$/gi, ' ')
-    .replace(/you are no longer in read-only mode[\s\S]*$/gi, ' ')
-    .replace(/you are permitted to make file changes[\s\S]*$/gi, ' ')
     .replace(/\b(plan|build) mode\b/gi, ' ')
     .replace(/\s*CRITICAL:\s*/gi, ' ')
     .replace(/\r\n/g, '\n')
@@ -185,7 +177,6 @@ function normalizePersonaOutput(raw: any) {
       occupation: normalizeString(personaSeed.occupation) || '在职学习者',
       education: normalizeString(personaSeed.education) || '本科',
       background: normalizeString(personaSeed.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。',
-      knowledgeLevel: normalizeEnum(personaSeed.knowledgeLevel, ['beginner', 'intermediate', 'advanced'], 'beginner'),
       knownConcepts: normalizeConceptArray(personaSeed.knownConcepts),
       struggleConcepts: normalizeConceptArray(personaSeed.struggleConcepts),
       learningStyle: normalizeEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening'], 'reading'),
@@ -213,6 +204,7 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
     const result = await callPrompt<any, any>({
       agentId: 'skill:virtual-learner-persona-designer',
       defaultSystemPrompt: VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
+      requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-persona-designer' },
       modelDefaults: {
         maxTokens: VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS,

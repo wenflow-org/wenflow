@@ -10,6 +10,7 @@
  */
 
 import prisma from '../../config/database';
+import { logger } from '../../utils/logger';
 
 export interface CachedLabel {
   id: string;
@@ -91,10 +92,10 @@ export class AndersonLabelerCache {
         this.cache.set(key, cachedLabel);
       }
 
-      console.log(`[AndersonLabelerCache] 已加载 ${this.cache.size} 条缓存`);
+      logger.info('[anderson-labeler-cache] cache initialized', { size: this.cache.size });
       this.initialized = true;
     } catch (error) {
-      console.error('[AndersonLabelerCache] 初始化失败:', error);
+      logger.error('[anderson-labeler-cache] initialization failed', { error });
       this.initialized = true;
     }
   }
@@ -176,7 +177,10 @@ export class AndersonLabelerCache {
         }
       });
     } catch (error) {
-      console.error('[AndersonLabelerCache] 保存到数据库失败:', error);
+      logger.error('[anderson-labeler-cache] failed to save label to database', {
+        labelId: label.id,
+        error,
+      });
     }
   }
 
@@ -202,7 +206,10 @@ export class AndersonLabelerCache {
         });
       }
     } catch (error) {
-      console.error('[AndersonLabelerCache] 批量保存失败:', error);
+      logger.error('[anderson-labeler-cache] failed to batch save labels', {
+        count: labels.length,
+        error,
+      });
     }
   }
 
@@ -237,7 +244,7 @@ export class AndersonLabelerCache {
       try {
         return await computeSimilarity(taskA, taskB);
       } catch (error) {
-        console.warn('[AndersonLabelerCache] 外部相似度计算失败，使用内置方法');
+        logger.warn('[anderson-labeler-cache] external similarity failed, using fallback', { error });
       }
     }
 

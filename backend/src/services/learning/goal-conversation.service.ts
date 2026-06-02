@@ -78,6 +78,17 @@ class GoalConversationService {
   private readonly RECENT_CONTEXT_LIMIT = 20;
   private readonly MAX_FORMAT_RETRIES = 2;
 
+  private sanitizeVisibleContent(text: string): string {
+    if (!text) return '';
+
+    return text
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
+  }
+
   private hasContinueDiscussIntent(text: string) {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
@@ -644,9 +655,10 @@ async continueConversation(
 
     const data = JSON.parse(conversation.collectedData);
     data.messages = data.messages || [];
+    const sanitizedContent = this.sanitizeVisibleContent(content);
     data.messages.push({
       role,
-      content,
+      content: sanitizedContent,
       time: new Date().toISOString()
     });
 
@@ -732,9 +744,7 @@ async continueConversation(
     const goalExt = this.getGoalExt(aiResponse.internal);
     const core = this.getCore(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
-    const structuredData = goalExt.structuredData ?? data.structuredData ?? null;
     const confirmedProposal = goalExt.confirmedProposal ?? data.confirmedProposal ?? null;
-    const confidenceScores = goalExt.confidenceScores ?? data.confidenceScores ?? null;
     const conversationHistory = Array.isArray(data.messages)
       ? data.messages
           .map((message: any) => ({
@@ -751,16 +761,41 @@ async continueConversation(
       source: 'goal',
       mode: 'generate',
       rawGoal: conversation.description,
-      understanding,
-      collected: data.collected || {},
-      structuredData,
-      confirmedProposal,
-      confidenceScores,
-      normalizedGoalState: data.normalizedGoalState || buildGoalNormalizedState(data),
+      visibleSummary: {
+        surfaceGoal: understanding.surface_goal || null,
+        realProblem: understanding.real_problem || null,
+        motivation: understanding.motivation || null,
+        currentBaseline: understanding.current_baseline
+          ? {
+              level: understanding.current_baseline.level || null,
+              evidence: understanding.current_baseline.evidence || null,
+            }
+          : null,
+        resources: understanding.available_resources
+          ? {
+              timePerWeek: understanding.available_resources.time_budget || null,
+              timePerSession: data.collected?.timePerDay || null,
+              timeHorizon: understanding.available_resources.time_horizon || understanding.deadline_text || null,
+              deadlineText: understanding.deadline_text || null,
+            }
+          : null,
+        successCriteria: understanding.success_criteria
+          ? {
+              observableResult: understanding.success_criteria.observable_result || null,
+              acceptanceCheck: understanding.success_criteria.acceptance_check || null,
+            }
+          : null,
+        confirmedProposal: confirmedProposal
+          ? {
+              learningDirection: confirmedProposal.learning_direction || null,
+              firstDeliverable: confirmedProposal.first_deliverable || null,
+              keyStages: Array.isArray(confirmedProposal.key_stages) ? confirmedProposal.key_stages : [],
+              outOfScope: Array.isArray(confirmedProposal.out_of_scope) ? confirmedProposal.out_of_scope : [],
+            }
+          : null,
+      },
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
-      stage: core.stage,
-      confidence: core.confidence,
     };
   }
 

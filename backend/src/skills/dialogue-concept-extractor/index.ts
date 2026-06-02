@@ -1,5 +1,6 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
 
 export const dialogueConceptExtractorDefinition: SkillDefinition = {
   name: 'dialogue-concept-extractor',
@@ -49,7 +50,7 @@ export interface DialogueConceptExtractorOutput {
   }>;
 }
 
-const SYSTEM_PROMPT = `你是课堂对话概念抽取器。请根据课堂可见对话和事件，提炼学习者长期背景里值得记录的隐性知识线索。
+export const DIALOGUE_CONCEPT_EXTRACTOR_PROMPT = `你是课堂对话概念抽取器。请根据课堂可见对话和事件，提炼学习者长期背景里值得记录的隐性知识线索。
 
 要求：
 1. 输出 JSON。
@@ -57,6 +58,8 @@ const SYSTEM_PROMPT = `你是课堂对话概念抽取器。请根据课堂可见
 3. recurringConfusions 关注“反复卡住/混淆”的概念，不要凭空发明。
 4. transferSignals 关注“学习者已经显示出可以迁移或复用”的概念，不要夸大。
 5. 每条都要稳健，confidence 范围 0-1。`;
+
+const promptConfigService = new AgentConfigService();
 
 function fallback(input: DialogueConceptExtractorInput): DialogueConceptExtractorOutput {
   const currentKnowledgeState = Array.isArray(input.currentKnowledgeState) ? input.currentKnowledgeState : [];
@@ -92,11 +95,19 @@ export async function dialogueConceptExtractor(input: DialogueConceptExtractorIn
   try {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'dialogue-concept-extractor' };
+    const promptConfig = await promptConfigService.getActivePrompt('skill:dialogue-concept-extractor');
+    if (!promptConfig?.systemPrompt?.trim()) {
+      throw new Error('SKILL_PROMPT_MISSING: dialogue-concept-extractor');
+    }
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: promptConfig.systemPrompt },
       { role: 'user', content: JSON.stringify(input, null, 2) }
     ];
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({ messages }, caller, {
+      temperature: promptConfig.temperature,
+      maxTokens: promptConfig.maxTokens,
+      model: promptConfig.model,
+    });
     const content = response.choices[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};

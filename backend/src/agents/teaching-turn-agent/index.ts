@@ -77,80 +77,6 @@ export interface TeachingTurnInput {
     };
     pathBackgroundContext?: Record<string, any>;
   };
-  learner: {
-    profile?: any;
-    currentState?: {
-      lss: number;
-      ktl: number;
-      lf: number;
-      lsb: number;
-    } | null;
-    projection?: {
-      stableProfile: {
-        thinkingStyle: string;
-        preferredStyle: string;
-        theoryVsPractice: string;
-        sessionLength: string;
-        confidenceLevel: string;
-      };
-      liveState: {
-        lss: number;
-        ktl: number;
-        lf: number;
-        lsb: number;
-        recentTrend: string;
-        recommendedPacing: string;
-      };
-      pathContext: {
-        pathTitle: string;
-        pathSummary?: string | null;
-        currentMilestoneTitle: string;
-        currentStageNumber: number;
-        currentTaskOrder: number;
-        totalTasksInMilestone: number;
-        completedPrerequisiteTasks: string[];
-      };
-      relevantKnowledge: {
-        mastered: string[];
-        fragile: string[];
-        struggling: string[];
-      };
-      backgroundKnowledge?: {
-        reusableFoundations: string[];
-        blockedFoundations: string[];
-        recentConceptLedger: Array<{
-          conceptKey: string;
-          label: string;
-          familiarity: string;
-          transferReadiness: string;
-          misconceptionRisk: string;
-        }>;
-        recurringConfusions: Array<{
-          conceptKey: string;
-          label: string;
-          pattern: string;
-          confidence: number;
-        }>;
-      };
-      learningControlState?: {
-        paceMode: 'recover' | 'steady' | 'push';
-        conceptLoad: 'low' | 'medium' | 'high';
-        reviewPriority: 'high' | 'medium' | 'low';
-        challengeLevelCap: 'low' | 'medium' | 'high';
-        checkpointNeed: 'high' | 'medium' | 'low';
-        shouldAvoidNewConcepts: boolean;
-        shouldPreferConsolidation: boolean;
-        shouldOfferBreak: boolean;
-      };
-      teachingHints: {
-        promptEnhancement: string;
-        recommendedApproach: string;
-        emphasize: string[];
-        avoid: string[];
-      };
-    };
-    learnerStateContext?: Record<string, any>;
-  };
   knowledge: {
     points: Array<{
       name: string;
@@ -288,18 +214,14 @@ export const TEACHING_TURN_SYSTEM_PROMPT = `你是一位结构化教学回合生
 7. 不得要求学生通过图片、视频、音频、截图、图表、界面观察或外部演示来理解当前内容或完成本轮任务。
 8. 如果原本适合通过视觉、听觉或演示表达，必须改写为文字描述、分步文字示范或结构化文本示例。
 9. 不要在 reply 中出现“先去看一个视频”“看图就明白”“看截图”“听一段讲解再继续”这类依赖非文本媒介的推进方式。
-10. 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看 learner.learnerStateContext / knowledge / classroomEventContext / controls.teachingControlContext，最后才看 visibleDialogueContext 与 messages。不要因为最近一条对话就偏离当前任务要训练的认知关系。
+10. 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看 knowledge / classroomEventContext / controls.teachingControlContext，最后才看 visibleDialogueContext 与 messages。不要因为最近一条对话就偏离当前任务要训练的认知关系。
 11. knowledge.points 是“当前任务知识看板”，不是整条路径知识快照
 12. 如果输入提供了 scenario.taskKnowledgeScope 或 scenario.taskProfile.learningObjectives，knowledge.points 中的 name 必须来自这些输入字段。primaryConcepts 是主焦点候选；supportingConcepts 只用于构成多点看板，不可喧宾夺主；prerequisiteConcepts 只有在本轮被明确复习或解释时才允许出现；不要自行引入新知识点。
 13. 如果输入提供了 scenario.cognitiveFrame，请将它视为当前任务的局部认知图景：currentCoreConcept / targetRelation 决定这轮真正要帮助学生建构什么，prerequisiteConcepts 决定何时该回补基础，neighboringConcepts 只用于轻量迁移提示，不要扩展成新主题。
-14. 不要把 learner.projection.relevantKnowledge 中的全局 mastered/fragile/struggling 直接抄到 knowledge.points
-15. knowledge.points 最多输出 5 个。允许形成“单焦点主讲 + 多点看板”：必须有一个 currentPoint 作为当前主焦点，其余点只作为辅助、前置或待复习内容，不要并行展开多个主焦点。
-16. 如果输入提供了学习者投影（projection），优先结合学习者偏好、当前路径位置、脆弱知识点与教学提示来生成 reply、strategies 与知识解释，但不要扩大 knowledge.points 的任务范围
-17. 如果输入提供了 learner.projection.backgroundKnowledge，请把它视为跨 goal / 跨 path 的长期知识背景：reusableFoundations 表示可直接复用的已见基础，blockedFoundations 表示需要谨慎回补的不稳定前置，recurringConfusions 表示长期反复混淆模式。它们可以影响解释角度、回补方式和 challenge 强度，但不能替代当前任务知识看板。
-18. 如果输入提供了 learner.projection.learningControlState，请将其视为本轮教学控制信号：paceMode 决定推进节奏；conceptLoad 决定本轮新概念密度；reviewPriority 决定是否优先回补和巩固；challengeLevelCap 决定追问与挑战上限；shouldAvoidNewConcepts / shouldPreferConsolidation / shouldOfferBreak 必须直接影响 reply 与 pedagogy.strategies。
-19. 如果输入提供了 scenario.taskProfile，请将其视为任务画像：linkedConceptName / coreConcept 是当前任务在训练的隐藏认知目标。解释任务时，应联系它说明“为什么这么做”；学生卡住时，应围绕它换角度解释，而不是只重复操作步骤。
-20. knowledgeType 决定教学方式：factual 优先辨认与记忆巩固；conceptual 优先关系解释、类比、反例；procedural 优先分步示范与执行反馈；metacognitive 优先反思提问与策略澄清。
-21. cognitiveLevel 是本任务的目标深度：学生轻松达标时，可以给一个轻量更高层次的挑战；学生反复失败时，应主动降级到更低层次帮助其站稳，但不要偏离当前 linkedConceptName / coreConcept。
+14. knowledge.points 最多输出 5 个。允许形成“单焦点主讲 + 多点看板”：必须有一个 currentPoint 作为当前主焦点，其余点只作为辅助、前置或待复习内容，不要并行展开多个主焦点。
+15. 如果输入提供了 scenario.taskProfile，请将其视为任务画像：linkedConceptName / coreConcept 是当前任务在训练的隐藏认知目标。解释任务时，应联系它说明“为什么这么做”；学生卡住时，应围绕它换角度解释，而不是只重复操作步骤。
+16. knowledgeType 决定教学方式：factual 优先辨认与记忆巩固；conceptual 优先关系解释、类比、反例；procedural 优先分步示范与执行反馈；metacognitive 优先反思提问与策略澄清。
+17. cognitiveLevel 是本任务的目标深度：学生轻松达标时，可以给一个轻量更高层次的挑战；学生反复失败时，应主动降级到更低层次帮助其站稳，但不要偏离当前 linkedConceptName / coreConcept。
 22. 如果输入提供了 scenario.currentTaskContext.description 或 acceptanceCriteria，请优先围绕当前子任务本身来教学，不要把课堂讲成泛化概念课。
 23. 如果输入提供了 scenario.currentTaskContext.acceptanceCriteria，它就是当前任务的完成标准。只有当学生当前表现或最近证据已满足该标准时，control.isCompletionCandidate 才能为 true；否则必须为 false。
 24. 如果没有明确 acceptanceCriteria，则要结合 taskType、knowledgeType、cognitiveLevel、currentPoint 与最近学习证据来判断是否已达到“可收束”状态。
@@ -503,7 +425,6 @@ function buildPromptInput(input: TeachingTurnInput) {
   return {
     latestLearnerMessage: [...input.messages].reverse().find((message) => message.role === 'user')?.content || '',
     scenario: input.scenario,
-    learner: input.learner,
     classroomContext: input.classroomContext,
     classroomEventContext: input.classroomEventContext,
     knowledge: input.knowledge,

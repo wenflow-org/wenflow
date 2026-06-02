@@ -22,6 +22,13 @@
         <div class="header-right planning-header__actions">
           <span v-if="!isTestMode && virtualDebugSummary" class="session-badge stage-info">{{ virtualDebugSummary }}</span>
           <router-link :to="newConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <MobileSiteMenu
+            :user-name="userStore.user?.name || '同学'"
+            :user-initial="userInitial"
+            :nav-items="headerNavItems"
+            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: newConversationPath }"
+            @logout="handleLogout"
+          />
           <el-dropdown>
             <button type="button" class="user-chip planning-user-chip">
               <span>{{ userInitial }}</span>
@@ -473,6 +480,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import { ArrowRight, Loading, Promotion, RefreshRight, User, Switch, Delete } from '@element-plus/icons-vue';
+import MobileSiteMenu from '../components/MobileSiteMenu.vue';
 import { useUserStore } from '../stores/user';
 import MarkdownIt from 'markdown-it';
 import type { GoalConversationEnvelope } from '@/api/goalConversation';
@@ -520,6 +528,13 @@ const navDashboardPath = computed(() => (isTestMode.value ? testDashboardBasePat
 const navLearningPathsPath = computed(() => (isTestMode.value ? testLearningPathsBasePath.value : '/learning-paths'));
 const navLearningStatePath = computed(() => (isTestMode.value ? testLearningStateBasePath.value : '/learning-state'));
 const navAchievementsPath = computed(() => (isTestMode.value ? testAchievementsBasePath.value : '/achievements'));
+const headerNavItems = computed(() => [
+  { label: isTestMode.value ? '测试学习台' : '学习台', to: navDashboardPath.value, matchPrefixes: ['/dashboard'] },
+  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: conversationBasePath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
+  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: navLearningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
+  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: navLearningStatePath.value, matchPrefixes: ['/learning-state'] },
+  { label: isTestMode.value ? '测试成就' : '成就', to: navAchievementsPath.value, matchPrefixes: ['/achievements'] }
+]);
 const conversationStorageKey = computed(() => isTestMode.value ? ACTIVE_TEST_GOAL_CONVERSATION_KEY : ACTIVE_GOAL_CONVERSATION_KEY);
 const virtualSessionId = computed(() => typeof route.query.virtualSessionId === 'string' ? route.query.virtualSessionId.trim() : '');
 const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route.query.viewMode.trim() : '');
@@ -5921,6 +5936,9 @@ font-weight: 800;
 @media (max-width: 768px) {
   .header-container {
     padding: 1rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .header-nav {
@@ -5944,6 +5962,20 @@ font-weight: 800;
 
   .planning-main {
     width: min(100% - 20px, 1280px);
+  }
+
+  .planning-header__actions {
+    justify-content: flex-end;
+  }
+
+  .header-cta,
+  .planning-user-chip {
+    display: none;
+  }
+
+  .planning-user-chip {
+    min-width: auto;
+    padding-inline: 10px;
   }
 
   .planning-topbar-card p,

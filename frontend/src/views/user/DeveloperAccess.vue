@@ -117,16 +117,16 @@ async function copyQuickstart() {
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 255, 0.72));
+  border: 1px solid rgba(52, 120, 246, 0.1);
   backdrop-filter: blur(20px);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 20px 40px rgba(31, 87, 204, 0.08);
 }
 
 [data-theme="dark"] .glass-card {
-  background: rgba(26, 37, 47, 0.72);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
+  border-color: rgba(96, 165, 250, 0.1);
 }
 
 .hero {
@@ -154,7 +154,7 @@ async function copyQuickstart() {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-primary);
+  color: var(--color-secondary-dark);
 }
 
 .status-grid {
@@ -174,7 +174,8 @@ async function copyQuickstart() {
   align-items: center;
   padding: 0.6rem 0.75rem;
   border-radius: 10px;
-  background: var(--bg-muted);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.06), rgba(67, 176, 216, 0.04));
+  border: 1px solid rgba(52, 120, 246, 0.08);
 }
 
 .steps-list {
@@ -230,9 +231,9 @@ pre {
   margin: 0;
   padding: 0.9rem;
   border-radius: 12px;
-  background: var(--bg-muted);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.06), rgba(255, 255, 255, 0.52));
   color: var(--text-primary);
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(52, 120, 246, 0.1);
   overflow-x: auto;
   font-size: 0.8rem;
   line-height: 1.55;

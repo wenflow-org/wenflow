@@ -151,6 +151,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
     const result = await callPrompt<any, { subtasks: any[] }>({
       agentId: 'skill:stage-designer',
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
+      requireActivePrompt: true,
       caller: { skillId: 'stage-designer' },
       modelDefaults: {
         maxTokens: STAGE_DESIGNER_MAX_TOKENS,

@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import agentModelConfigService from '../../services/agentModelConfig.service';
-import { getAPIGateway } from '../../gateway/api-gateway';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
 
 const router = Router();
@@ -50,7 +49,6 @@ router.get('/:agentId', async (req, res) => {
 router.put('/:agentId', async (req, res) => {
   try {
     const config = await agentModelConfigService.upsert(req.params.agentId, pickEditableConfig(req.body));
-    getAPIGateway().invalidateCache(undefined, req.params.agentId);
     res.json({ success: true, data: toResponseShape(config), message: '配置已更新' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -60,7 +58,6 @@ router.put('/:agentId', async (req, res) => {
 router.delete('/:agentId', async (req, res) => {
   try {
     await agentModelConfigService.delete(req.params.agentId);
-    getAPIGateway().invalidateCache(undefined, req.params.agentId);
     res.json({ success: true, message: '配置已删除' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

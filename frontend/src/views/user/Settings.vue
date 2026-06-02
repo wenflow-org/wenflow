@@ -234,8 +234,15 @@ const disableConfig = async () => {
 
 .settings-card {
   border-radius: 18px;
-  border: 1px solid #dceaf3;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 252, 255, 0.92) 100%);
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 252, 255, 0.76) 100%);
+  box-shadow: 0 20px 38px rgba(31, 87, 204, 0.08);
+}
+
+[data-theme='dark'] .settings-card {
+  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
+  border-color: rgba(96, 165, 250, 0.1);
+  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
 }
 
 .card-header {
@@ -261,10 +268,24 @@ const disableConfig = async () => {
   max-width: 600px;
 }
 
+.api-form :deep(.el-form-item) {
+  margin-bottom: 24px;
+}
+
+.api-form :deep(.el-input__wrapper),
+.api-form :deep(.el-textarea__inner) {
+  box-shadow: 0 0 0 1px rgba(52, 120, 246, 0.1) inset;
+}
+
 .action-buttons {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.action-buttons :deep(.el-button--primary) {
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
 }
 
 .field-hint {

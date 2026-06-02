@@ -1,60 +1,77 @@
 <template>
   <div class="profile-page">
-    <header class="topbar">
-      <div class="topbar-left">
+    <header class="page-header">
+      <div class="page-header__main">
         <el-button text @click="router.push('/admin/virtual-learners')">
           <el-icon><ArrowLeft /></el-icon>
           返回总控台
         </el-button>
         <div class="title-wrap">
+          <span class="page-header__eyebrow">虚拟学习者详情</span>
           <h1>{{ profileData?.userName || '加载中' }}</h1>
           <div class="title-meta">
             <el-tag v-if="storyPool.length" size="small" type="warning" effect="plain">
               {{ storyPool.length }} 个故事
             </el-tag>
+            <span class="profile-entry-chip">{{ projectionCards[0]?.value || '未运行' }}</span>
+            <span class="profile-entry-chip">最近故事：{{ projectionCards[3]?.value || '--' }}</span>
+            <span class="profile-entry-chip">{{ profileData?.email || '账号待同步' }}</span>
           </div>
         </div>
       </div>
-      <div class="topbar-right">
-        <el-button @click="openEditDialog">编辑画像</el-button>
-        <el-button :loading="draftStoriesLoading" @click="generateStoryDraft">生成新故事</el-button>
-        <el-button type="primary" @click="handleStartSession()">
-          <el-icon><VideoPlay /></el-icon>
-          新建会话
-        </el-button>
+      <div class="page-header__actions">
+        <el-button type="primary" @click="showVirtualCredentials">登录账号</el-button>
+        <el-button plain @click="openLatestSessionInspector">最近诊断</el-button>
+        <el-dropdown trigger="click">
+          <el-button>
+            更多
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="openEditDialog">编辑画像</el-dropdown-item>
+              <el-dropdown-item :disabled="draftStoriesLoading" @click="generateStoryDraft">生成新故事</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </header>
 
-    <main class="layout">
+    <main class="layout-shell">
       <section class="main">
-        <section class="panel persona-hero">
-          <div class="persona-hero__main">
-            <div class="profile-header profile-header--hero">
-              <div class="profile-avatar profile-avatar--hero">{{ profileData?.userName?.charAt(0) || '?' }}</div>
-              <div class="profile-identity">
-                <strong>{{ profileData?.userName || '--' }}</strong>
-                <span>{{ profileData?.profile?.occupation || '虚拟学习者' }}</span>
-              </div>
-            </div>
-            <div class="persona-hero__intro">
-              <span class="persona-hero__eyebrow">稳定人物画像</span>
-              <h2>{{ personaHeadline }}</h2>
-              <p>{{ personaNarrative }}</p>
+        <section class="panel profile-overview">
+          <div class="panel-head panel-head--profile">
+            <div class="panel-head__title-wrap">
+              <div class="panel-title">人物概览</div>
+              <div class="panel-meta">保留长期人物底座，具体冲突和开场由故事目录承载。</div>
             </div>
           </div>
-          <div class="persona-hero__facts">
-            <article v-for="item in personaFactCards" :key="item.label" class="persona-fact-card">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-            </article>
+          <div class="profile-overview__content">
+            <div class="profile-summary-card">
+              <div class="profile-header profile-header--compact">
+                <div class="profile-avatar">{{ profileData?.userName?.charAt(0) || '?' }}</div>
+                <div class="profile-identity">
+                  <strong>{{ profileData?.userName || '--' }}</strong>
+                  <span>{{ profileData?.profile?.occupation || '虚拟学习者' }}</span>
+                </div>
+              </div>
+              <div class="profile-summary-card__intro">
+                <h2>{{ personaHeadline }}</h2>
+                <p>{{ personaNarrative }}</p>
+              </div>
+            </div>
+            <div class="profile-overview__facts">
+              <article v-for="item in personaFactCards" :key="item.label" class="persona-fact-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </article>
+            </div>
           </div>
         </section>
 
         <section class="panel trait-panel">
           <div class="panel-head">
             <div>
-              <div class="panel-title">这个人通常怎么反应</div>
-              <div class="panel-meta panel-meta--block">这里不是平台参数，而是这个人物长期稳定的表达习惯、求助方式和受压反应。</div>
+              <div class="panel-title">人物反应</div>
             </div>
           </div>
           <div class="trait-grid">
@@ -80,284 +97,56 @@
         <section class="panel story-pool-panel">
           <div class="panel-head">
             <div>
-              <div class="panel-title">故事条目</div>
-              <div class="panel-meta panel-meta--block">每个故事就是一条学习链路入口。先跑 Goal，看对话；Goal 完成后推进 Path，再选 task 让虚拟学习者进入 Learn。</div>
+              <div class="panel-title">故事目录</div>
             </div>
             <div class="draft-actions">
               <el-button :loading="draftStoriesLoading" @click="generateStoryDraft">生成新故事</el-button>
             </div>
           </div>
 
-          <div v-if="storySummaries.length" class="story-grid story-grid--compact">
+          <div v-if="storySummaries.length" class="story-list story-list--compact">
             <article
               v-for="(story, index) in storySummaries"
               :key="story.key || story.storyId || index"
               class="story-feature-card"
-              :class="{ active: selectedStoryKey === getStoryKey(story, index), 'story-feature-card--draft': story.status === 'draft' }"
+              :class="{ active: selectedStoryKey === getStoryKey(story, index) }"
             >
               <button type="button" class="story-feature-card__main" @click="selectStory(story, index)">
                 <div class="story-feature-card__head">
                   <span class="story-feature-card__index">
                     故事 {{ index + 1 }}
-                    <el-tag v-if="story.status === 'draft'" size="small" type="warning" effect="plain" style="margin-left: 6px;">草稿</el-tag>
-                    <el-tag v-else-if="story.status === 'confirmed'" size="small" type="success" effect="plain" style="margin-left: 6px;">已确认</el-tag>
                   </span>
                   <span class="story-feature-card__source">{{ getStorySourceLabel(story.sourceType) }}</span>
                 </div>
                 <strong>{{ story.storyTitle || story.title || `故事 ${index + 1}` }}</strong>
                 <p>{{ story.storyOutline || story.storyTriggerEvent || '暂无故事摘要' }}</p>
                 <div class="story-feature-card__lines story-feature-card__lines--inline">
-                  <span>Goal {{ story.stats?.goalCount || 0 }}</span>
-                  <span>Path {{ story.stats?.pathCount || 0 }}</span>
-                  <span>Learn {{ story.stats?.learnCount || 0 }}</span>
+                  <span>Goal 对话 {{ story.stats?.goalCount || 0 }}</span>
+                  <span>Path 路径 {{ story.stats?.pathCount || 0 }}</span>
+                  <span>Learn 记录 {{ story.stats?.learnCount || 0 }}</span>
                 </div>
               </button>
+              <div class="story-feature-card__actions">
+                <el-button size="small" type="primary" @click="openStoryOverview(story)">进入学情概览</el-button>
+                <el-button size="small" type="danger" plain @click="deleteStory(story, story.index)">删除</el-button>
+              </div>
             </article>
-          </div>
-
-          <div v-if="selectedStorySummary" class="story-workbench">
-            <section class="story-workbench__hero">
-              <div class="story-workbench__copy">
-                <div class="story-workbench__eyebrow">Story Workbench</div>
-                <h3>{{ selectedStorySummary.storyTitle || selectedStorySummary.title || '未命名故事' }}</h3>
-                <p>{{ selectedStorySummary.storyOutline || selectedStorySummary.storyTriggerEvent || '暂无故事摘要' }}</p>
-                <div class="story-workbench__chips">
-                  <el-tag size="small" effect="plain">{{ getStorySourceLabel(selectedStorySummary.sourceType) }}</el-tag>
-                  <el-tag size="small" effect="plain">{{ selectedStorySummary.latestRun ? `${getSessionStatusLabel(selectedStorySummary.latestRun.status)} / ${getSessionStageLabel(selectedStorySummary.latestRun.currentStage)}` : '尚未运行' }}</el-tag>
-                  <el-tag size="small" type="info" effect="plain">最近会话 {{ selectedStorySession ? shortId(selectedStorySession.id) : '--' }}</el-tag>
-                </div>
-              </div>
-              <div class="story-workbench__actions">
-                <el-button
-                  v-if="selectedStorySummary.status === 'draft'"
-                  size="small"
-                  type="success"
-                  plain
-                  :loading="submitting"
-                  @click="confirmStory(selectedStorySummary, selectedStorySummary.index)"
-                >
-                  确认故事
-                </el-button>
-                <el-button
-                  v-if="selectedStorySummary.index !== undefined"
-                  size="small"
-                  type="danger"
-                  plain
-                  @click="deleteStory(selectedStorySummary, selectedStorySummary.index)"
-                >
-                  删除
-                </el-button>
-                <el-button size="small" type="primary" @click="handleStartSession(selectedStorySummary, selectedStorySummary.index)">
-                  {{ selectedStorySession ? '基于该故事再开一局' : '从这个故事启动 Goal' }}
-                </el-button>
-              </div>
-            </section>
-
-            <section class="story-stage-grid">
-              <article class="story-stage-card story-stage-card--goal">
-                <div class="story-stage-card__head">
-                  <div>
-                    <span class="story-stage-card__eyebrow">Goal</span>
-                    <strong>{{ selectedStoryGoalStatusLabel }}</strong>
-                  </div>
-                  <span class="story-stage-card__meta">{{ selectedStorySession ? `session ${shortId(selectedStorySession.id)}` : '先创建一次运行' }}</span>
-                </div>
-                <p>{{ selectedStorySession?.storyContext?.triggerEvent || selectedStorySummary.storyTriggerEvent || '从故事开场进入 goal 对话。' }}</p>
-                <div class="story-stage-card__actions">
-                  <el-button size="small" type="primary" plain :disabled="!selectedStorySession?.bindings?.goalConversationId" @click="openDebugGoalFor(selectedStorySession)">看 Goal 对话</el-button>
-                  <el-button size="small" :disabled="!canRunGoalForSelectedStory" :loading="stepLoading" @click="runGoalStepFor(selectedStorySession)">手动跑</el-button>
-                  <el-button size="small" :disabled="!canRunGoalForSelectedStory" :loading="autoLoading" @click="runGoalAutoFor(selectedStorySession)">自动跑</el-button>
-                  <el-button size="small" type="success" plain :disabled="!selectedStorySession?.bindings?.goalConversationId" @click="openFormalGoalFor(selectedStorySession)">前台 Goal</el-button>
-                </div>
-              </article>
-
-              <article class="story-stage-card story-stage-card--path">
-                <div class="story-stage-card__head">
-                  <div>
-                    <span class="story-stage-card__eyebrow">Path</span>
-                    <strong>{{ selectedStoryPathStatusLabel }}</strong>
-                  </div>
-                  <span class="story-stage-card__meta">{{ selectedStoryPathSummary }}</span>
-                </div>
-                <p>{{ selectedStoryPathHint }}</p>
-                <div class="story-stage-card__actions">
-                  <el-button size="small" type="primary" plain :disabled="!selectedStorySession?.bindings?.learningPathId" @click="openDebugPathFor(selectedStorySession)">看 Path</el-button>
-                  <el-button size="small" :disabled="!canAdvancePathForSelectedStory" :loading="advanceLoading" @click="confirmGeneratePathFor(selectedStorySession)">生成 Path</el-button>
-                  <el-button size="small" plain :disabled="!selectedStorySession?.bindings?.learningPathId" @click="openFormalPathFor(selectedStorySession)">前台 Path</el-button>
-                </div>
-                <div v-if="selectedStoryTaskOptions.length" class="story-task-picker">
-                  <span>Task</span>
-                  <el-select v-model="selectedStoryTaskId" size="small" placeholder="选择要开始学习的 task">
-                    <el-option
-                      v-for="task in selectedStoryTaskOptions"
-                      :key="task.id"
-                      :label="task.label"
-                      :value="task.id"
-                      :disabled="!task.canStart && task.id !== selectedStoryCurrentTaskId"
-                    />
-                  </el-select>
-                </div>
-              </article>
-
-              <article class="story-stage-card story-stage-card--learn">
-                <div class="story-stage-card__head">
-                  <div>
-                    <span class="story-stage-card__eyebrow">Learn</span>
-                    <strong>{{ selectedStoryLearnStatusLabel }}</strong>
-                  </div>
-                  <span class="story-stage-card__meta">{{ selectedStoryTaskLabel }}</span>
-                </div>
-                <p>{{ selectedStoryLearnHint }}</p>
-                <div class="story-stage-card__actions">
-                  <el-button size="small" type="primary" plain :disabled="!selectedStorySession?.bindings?.currentTaskId" @click="openDebugLearnFor(selectedStorySession)">看 Learn 对话</el-button>
-                  <el-button size="small" type="primary" :disabled="!canStartLearningForSelectedStory" :loading="learningStartLoading" @click="startLearningFor(selectedStorySession, selectedStoryTaskId || undefined)">开始学习</el-button>
-                  <el-button size="small" :disabled="!canRunLearningForSelectedStory" :loading="learningStepLoading" @click="runLearningStepFor(selectedStorySession)">手动学</el-button>
-                  <el-button size="small" :disabled="!canRunLearningForSelectedStory" :loading="autoLearningLoading" @click="runLearningAutoFor(selectedStorySession)">自动学</el-button>
-                </div>
-              </article>
-            </section>
           </div>
 
           <div v-else class="empty-box">当前还没有故事条目。先生成 1 个故事，再从该故事开始观察。</div>
         </section>
 
-        <section class="panel projection-panel">
-          <div class="panel-head panel-head--stack">
-            <div>
-              <div class="panel-title">投影总览</div>
-              <div class="panel-meta panel-meta--block">同一虚拟学习者的三种视图：总体状态、阶段链路、前台账号视角。</div>
-            </div>
-          </div>
-
-          <div class="projection-grid">
-            <article v-for="item in projectionCards" :key="item.label" class="projection-card">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-              <em>{{ item.meta }}</em>
-            </article>
-          </div>
-
-          <div class="projection-split">
-            <article class="projection-card projection-card--wide">
-              <span>阶段投影</span>
-              <strong>Goal / Path / Learn</strong>
-              <div class="projection-chip-row">
-                <el-tag size="small" type="primary" effect="plain">Goal {{ stageProjection.goal }}</el-tag>
-                <el-tag size="small" type="success" effect="plain">Path {{ stageProjection.path }}</el-tag>
-                <el-tag size="small" type="warning" effect="plain">Learn {{ stageProjection.learning }}</el-tag>
-              </div>
-              <p>按阶段聚合查看这个学习者在不同故事背景下形成的目标、路径和学习记录。</p>
-              <div class="projection-actions">
-                <el-button size="small" type="primary" @click="scrollToSection('session-anchor')">看当前链路</el-button>
-                <el-button size="small" plain @click="scrollToSection('history-anchor')">看历史运行</el-button>
-              </div>
-            </article>
-
-            <article class="projection-card projection-card--wide">
-              <span>账号视角</span>
-              <strong>登录这个账号看前台</strong>
-              <div class="projection-chip-row">
-                <el-tag size="small" effect="plain">正式 Goal</el-tag>
-                <el-tag size="small" effect="plain">正式 Path</el-tag>
-                <el-tag size="small" effect="plain">正式 Learn</el-tag>
-              </div>
-              <p>从真实平台的登录态去看这个虚拟学习者在前台会看到什么，而不是只看后台绑定关系。</p>
-              <div class="projection-actions">
-                <el-button size="small" type="primary" :disabled="!canOpenFormalGoal" @click="openFormalGoal">打开 Goal 前台</el-button>
-                <el-button size="small" :disabled="!canOpenFormalPath" @click="openFormalPath">打开 Path 前台</el-button>
-                <el-button size="small" :disabled="!canOpenFormalLearn" @click="openFormalLearn">打开 Learn 前台</el-button>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel control-panel" id="session-anchor">
+        <section class="panel">
           <div class="panel-head">
-            <div>
-              <div class="panel-title">当前链路</div>
-              <div class="panel-meta">当前活动 session 的细节、阶段入口和调试动作。</div>
-            </div>
-            <el-button text :loading="loading" @click="loadProfile">刷新</el-button>
-          </div>
-
-          <div class="active-session-hero" :class="{ 'active-session-hero--empty': !activeSession }">
-            <div class="active-session-hero__main">
-              <span class="active-session-hero__eyebrow">Active Session</span>
-              <h2>{{ activeSession?.storyContext?.title || selectedStory?.title || '还没有活动 session' }}</h2>
-              <p>{{ activeSession?.storyContext?.triggerEvent || selectedStory?.triggerEvent || '先从上面的故事池选择一个故事开局。' }}</p>
-            </div>
-            <div class="active-session-hero__meta">
-              <div class="active-session-chip-group">
-                <span class="active-session-chip">{{ activeSession ? getSessionStatusLabel(activeSession.status) : '未创建' }}</span>
-                <span class="active-session-chip">{{ activeSession ? getSessionStageLabel(activeSession.currentStage) : 'Goal' }}</span>
-                <span class="active-session-chip">{{ activeBindingsSummary }}</span>
-              </div>
-              <el-button type="primary" :disabled="!activeSession" @click="openSessionInspector(activeSession.id)">进入诊断</el-button>
-            </div>
-          </div>
-
-          <div class="control-grid control-grid--session">
-            <article class="control-card control-card--focus">
-              <span>当前会话</span>
-              <strong>{{ activeSession?.id || '--' }}</strong>
-              <em>{{ activeSession ? `${getSessionStatusLabel(activeSession.status)} / ${getSessionStageLabel(activeSession.currentStage)}` : '尚未创建 session' }}</em>
-            </article>
-            <article class="control-card">
-              <span>当前故事</span>
-              <strong>{{ activeSession?.storyContext?.title || selectedStory?.title || '--' }}</strong>
-              <em>{{ activeSession?.storyContext?.triggerEvent || selectedStory?.triggerEvent || '尚未选择故事' }}</em>
-            </article>
-            <article class="control-card">
-              <span>绑定对象</span>
-              <strong>{{ activeBindingsSummary }}</strong>
-              <em>{{ activeBindingIdsText }}</em>
-            </article>
-          </div>
-
-          <div class="view-entry-grid">
-            <article class="entry-card entry-card--actions">
-              <div class="entry-card__head">
-                <strong>阶段入口</strong>
-                <span>按 Goal / Path / Learn 看聚合视图</span>
-              </div>
-              <div class="entry-card__actions">
-                <el-button type="primary" :disabled="!canOpenDebugGoal" @click="openDebugGoal">调试 Goal</el-button>
-                <el-button :disabled="!canOpenDebugPath" @click="openDebugPath">调试 Path</el-button>
-                <el-button :disabled="!canOpenDebugLearn" @click="openDebugLearn">调试 Learn</el-button>
-                <el-button plain :disabled="!canOpenFormalGoal" @click="openFormalGoal">正式 Goal</el-button>
-                <el-button plain :disabled="!canOpenFormalPath" @click="openFormalPath">正式 Path</el-button>
-                <el-button plain :disabled="!canOpenFormalLearn" @click="openFormalLearn">正式 Learn</el-button>
-              </div>
-            </article>
-
-            <article class="entry-card entry-card--actions">
-              <div class="entry-card__head">
-                <strong>调试动作</strong>
-                <span>仅保留工程级控制</span>
-              </div>
-              <div class="entry-card__actions entry-card__actions--wrap">
-                <el-button size="small" :disabled="!activeSession || activeSession.currentStage !== 'goal' || goalReady" :loading="stepLoading" @click="runGoalStep">Goal 单步</el-button>
-                <el-button size="small" :disabled="!activeSession || activeSession.currentStage !== 'goal' || goalReady" :loading="autoLoading" @click="runGoalAuto">Goal 自动</el-button>
-                <el-button size="small" type="primary" :disabled="!activeSession || !goalReady || activeSession.bindings?.learningPathId" :loading="advanceLoading" @click="confirmGeneratePath">确认生成 Path</el-button>
-                <el-button size="small" type="primary" plain :disabled="!activeSession || !activeSession.bindings?.learningPathId" :loading="learningStartLoading" @click="startLearning">启动 Learn</el-button>
-                <el-button size="small" :disabled="!activeSession || activeSession.currentStage !== 'learning'" :loading="learningStepLoading" @click="runLearningStep">Learn 单步</el-button>
-                <el-button size="small" :disabled="!activeSession || activeSession.currentStage !== 'learning'" :loading="autoLearningLoading" @click="runLearningAuto">Learn 自动</el-button>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel" id="history-anchor">
-          <div class="panel-head">
-            <div class="panel-title">历史运行</div>
-            <div class="panel-meta">共 {{ sessions.length }} 个会话</div>
+            <div class="panel-title">全部运行历史</div>
+            <div class="panel-meta">跨故事 · 共 {{ sessions.length }} 个会话</div>
           </div>
 
           <template v-if="sessions.length === 0 && !loading">
             <div class="empty-session-state">
               <div class="empty-session-icon">📋</div>
               <h3>还没有创建过会话</h3>
-              <p>先从当前人物或某个故事启动一次 session。</p>
+              <p>先从某个故事启动一次运行。</p>
               <el-button type="primary" @click="handleStartSession">创建第一个会话</el-button>
             </div>
           </template>
@@ -377,7 +166,16 @@
 
               <el-table-column label="故事" min-width="150">
                 <template #default="{ row }">
-                  {{ row.storyContext?.title || '--' }}
+                  <el-button
+                    v-if="row.storyContext?.storyId"
+                    type="primary"
+                    link
+                    size="small"
+                    @click.stop="openStoryOverviewById(row.storyContext.storyId)"
+                  >
+                    {{ row.storyContext?.title || row.storyContext?.storyTitle || '进入故事' }}
+                  </el-button>
+                  <span v-else>{{ row.storyContext?.title || '--' }}</span>
                 </template>
               </el-table-column>
 
@@ -464,46 +262,142 @@
         <el-button type="primary" :loading="submitting" @click="handleUpdateProfile">保存修改</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="storyEditDialogVisible" :title="storyEditDialogTitle" width="640px" destroy-on-close>
+      <el-form ref="storyFormRef" :model="storyFormData" :rules="storyFormRules" label-width="100px">
+        <el-form-item label="故事标题" prop="title">
+          <el-input v-model="storyFormData.title" maxlength="80" show-word-limit placeholder="如：第一次独立做复盘时卡住" />
+        </el-form-item>
+        <el-form-item label="故事摘要" prop="storyOutline">
+          <el-input v-model="storyFormData.storyOutline" type="textarea" :rows="4" maxlength="300" show-word-limit placeholder="用 2-4 句描述这个具体场景、前因后果和卡点。" />
+        </el-form-item>
+        <el-form-item label="触发事件" prop="storyTriggerEvent">
+          <el-input v-model="storyFormData.storyTriggerEvent" type="textarea" :rows="3" maxlength="160" show-word-limit placeholder="如：明天要向主管汇报，但她发现自己还说不清关键问题。" />
+        </el-form-item>
+        <el-form-item label="自然开场" prop="visibleOpening">
+          <el-input v-model="storyFormData.visibleOpening" type="textarea" :rows="3" maxlength="180" show-word-limit placeholder="如果是真人第一轮开口，他最可能怎么说。" />
+        </el-form-item>
+        <el-form-item label="压力点" prop="pressurePointsText">
+          <el-input v-model="storyFormData.pressurePointsText" type="textarea" :rows="3" maxlength="240" show-word-limit placeholder="每行一个压力点，如：害怕在主管面前讲不清楚&#10;担心临时被追问细节" />
+        </el-form-item>
+        <el-divider>问题基础</el-divider>
+        <el-form-item label="熟悉度">
+          <el-select v-model="storyFormData.problemKnowledge.domainFamiliarity" placeholder="当前问题熟悉度">
+            <el-option label="低" value="low" />
+            <el-option label="中" value="medium" />
+            <el-option label="高" value="high" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="已经会的">
+          <el-input v-model="storyFormData.problemKnowledge.knownConceptsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个，写这次问题里已经会的点" />
+        </el-form-item>
+        <el-form-item label="容易卡的">
+          <el-input v-model="storyFormData.problemKnowledge.struggleConceptsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个，写这次问题里容易卡的点" />
+        </el-form-item>
+        <el-form-item label="自我判断">
+          <el-input v-model="storyFormData.problemKnowledge.selfAssessment" type="textarea" :rows="2" maxlength="180" show-word-limit placeholder="这个人会怎么描述自己在这件事上的基础" />
+        </el-form-item>
+        <el-form-item label="隐藏缺口">
+          <el-input v-model="storyFormData.problemKnowledge.hiddenGapsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个，写他自己未必意识到的缺口" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="storyEditDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="storySubmitting" @click="saveStoryEdits">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="projectionDialogVisible" title="投影入口" width="720px" destroy-on-close>
+      <div class="projection-runtime" v-loading="projectionLoading">
+        <template v-if="testProjection">
+          <section class="projection-runtime__summary">
+            <article class="projection-runtime__card">
+              <span>当前账号</span>
+              <strong>{{ testProjection.profile?.userName || profileData?.userName || '--' }}</strong>
+              <em>{{ testProjection.profile?.email || profileData?.email || '账号待同步' }}</em>
+            </article>
+            <article class="projection-runtime__card">
+              <span>当前故事</span>
+              <strong>{{ testProjection.activeStory?.title || '未进入故事' }}</strong>
+              <em>{{ testProjection.activeStory?.triggerEvent || '当前还没有 story 运行态' }}</em>
+            </article>
+            <article class="projection-runtime__card">
+              <span>最近运行</span>
+              <strong>{{ projectionSessionLabel }}</strong>
+              <em>{{ projectionSessionMeta }}</em>
+            </article>
+          </section>
+
+          <section class="projection-runtime__focus">
+            <div>
+              <div class="panel-title">推荐入口</div>
+              <div class="panel-meta">{{ testProjection.recommendedReason }}</div>
+            </div>
+            <el-button type="primary" @click="openProjectionEntry(testProjection.recommendedEntry)">
+              打开{{ projectionEntryLabelMap[testProjection.recommendedEntry] }}
+            </el-button>
+          </section>
+
+          <section class="projection-runtime__section">
+            <div class="panel-title">前台投影</div>
+            <div class="projection-runtime__actions">
+              <el-button @click="openProjectionEntry('dashboard')">Dashboard</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.goal" @click="openProjectionEntry('goal')">Goal</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.path" @click="openProjectionEntry('path')">Path</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.learn" @click="openProjectionEntry('learn')">Learn</el-button>
+            </div>
+          </section>
+
+          <section class="projection-runtime__section">
+            <div class="panel-title">Test 调试</div>
+            <div class="projection-runtime__actions">
+              <el-button plain :disabled="!testProjection.entries?.test?.goal" @click="openTestDebugEntry('goal')">调试 Goal</el-button>
+              <el-button plain :disabled="!testProjection.entries?.test?.path" @click="openTestDebugEntry('path')">调试 Path</el-button>
+              <el-button plain :disabled="!testProjection.entries?.test?.learn" @click="openTestDebugEntry('learn')">调试 Learn</el-button>
+            </div>
+          </section>
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, VideoPlay } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
+import { setProjectionToken } from '@/utils/projection'
 
 const router = useRouter()
 const route = useRoute()
 const profileId = route.params.profileId as string
-const routeSessionId = computed(() => typeof route.query.sessionId === 'string' ? route.query.sessionId.trim() : '')
-
 const profileData = ref<any>(null)
 const sessions = ref<any[]>([])
 const storySummaries = ref<any[]>([])
 const loading = ref(false)
 const editDialogVisible = ref(false)
 const submitting = ref(false)
-const formRef = ref()
-const activeSessionId = ref<string | null>(null)
+const formRef = ref<FormInstance>()
+const storyFormRef = ref<FormInstance>()
 const selectedStoryKey = ref<string | null>(null)
 const draftProfileLoading = ref(false)
 const draftStoriesLoading = ref(false)
 const draftProfile = ref<any | null>(null)
+const storyEditDialogVisible = ref(false)
+const storySubmitting = ref(false)
+const editingStoryIndex = ref<number | null>(null)
+const projectionDialogVisible = ref(false)
+const projectionLoading = ref(false)
+const testProjection = ref<any | null>(null)
 
-const stepLoading = ref(false)
-const autoLoading = ref(false)
-const advanceLoading = ref(false)
-const learningStartLoading = ref(false)
-const learningStepLoading = ref(false)
-const autoLearningLoading = ref(false)
-const restartPathLoading = ref(false)
-const restartLearningLoading = ref(false)
-const stopLearningLoading = ref(false)
-const selectedStoryTaskId = ref<string | null>(null)
-const selectedStoryPathStatus = ref('idle')
-const selectedStoryPathData = ref<any | null>(null)
+const projectionEntryLabelMap: Record<string, string> = {
+  dashboard: 'Dashboard',
+  goal: 'Goal',
+  path: 'Path',
+  learn: 'Learn'
+}
 
 const formData = ref({
   name: '',
@@ -534,6 +428,33 @@ const formRules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
+const storyFormData = ref({
+  title: '',
+  storyOutline: '',
+  storyTriggerEvent: '',
+  visibleOpening: '',
+  pressurePointsText: '',
+  problemKnowledge: {
+    domainFamiliarity: 'low',
+    knownConceptsText: '',
+    struggleConceptsText: '',
+    selfAssessment: '',
+    hiddenGapsText: ''
+  }
+})
+
+const storyFormRules = {
+  title: [{ required: true, message: '请输入故事标题', trigger: 'blur' }],
+  storyOutline: [{ required: true, message: '请输入故事摘要', trigger: 'blur' }],
+  storyTriggerEvent: [{ required: true, message: '请输入触发事件', trigger: 'blur' }],
+  visibleOpening: [{ required: true, message: '请输入自然开场', trigger: 'blur' }],
+  pressurePointsText: [{ required: true, message: '请输入至少一个压力点', trigger: 'blur' }]
+}
+
+const storyEditDialogTitle = computed(() => {
+  return '编辑故事'
+})
+
 const storyPool = computed(() => {
   const pool = profileData.value?.profile?.storyPool
   return Array.isArray(pool) ? pool : []
@@ -550,226 +471,35 @@ const stageProjection = computed(() => ({
   learning: sessions.value.filter((item: any) => item.bindings?.teachingSessionId || item.bindings?.currentTaskId).length,
 }))
 
+const latestProjectionSession = computed(() => sessions.value[0] || null)
+
 const projectionCards = computed(() => [
   {
-    label: '学习者状态',
-    value: activeSession.value ? getSessionStatusLabel(activeSession.value.status) : '未运行',
-    meta: activeSession.value ? `阶段 ${getSessionStageLabel(activeSession.value.currentStage)}` : '暂无活动运行'
+    label: '账号状态',
+    value: latestProjectionSession.value ? getSessionStatusLabel(latestProjectionSession.value.status) : '未运行',
+    meta: latestProjectionSession.value ? `阶段 ${getSessionStageLabel(latestProjectionSession.value.currentStage)}` : '暂无运行记录'
   },
   {
-    label: '故事覆盖',
+    label: '故事数量',
     value: `${storyPool.value.length} 个`,
-    meta: `${storyPool.value.filter((item: any) => item.status === 'draft').length} 个草稿`
+    meta: '生成后即可直接进入 Goal'
   },
   {
-    label: '阶段绑定',
+    label: '平台投影',
     value: `${stageProjection.value.goal}/${stageProjection.value.path}/${stageProjection.value.learning}`,
-    meta: 'Goal / Path / Learn 运行数'
+    meta: 'Goal / Path / Learn 已生成数'
   },
   {
-    label: '账号视角',
+    label: '最近故事',
+    value: latestProjectionSession.value?.storyContext?.title || '--',
+    meta: latestProjectionSession.value?.storyContext?.triggerEvent || '尚未从故事进入平台'
+  },
+  {
+    label: '运行模式',
     value: profileData.value?.simulationMode === 'ai' ? 'AI 模式' : '正式/手动',
-    meta: '查看真实平台里的账号投影'
+    meta: profileData.value?.email || '查看这个账号在前台的投影入口'
   }
 ])
-
-const selectedStory = computed(() => {
-  if (!selectedStoryKey.value) return storySummaries.value[0] || storyPool.value[0] || null
-  return storySummaries.value.find((story: any, index: number) => getStoryKey(story, index) === selectedStoryKey.value)
-    || storyPool.value.find((story: any, index: number) => getStoryKey(story, index) === selectedStoryKey.value)
-    || storySummaries.value[0]
-    || storyPool.value[0]
-    || null
-})
-
-const selectedStorySession = computed(() => {
-  const story = selectedStorySummary.value
-  if (!story) return null
-
-  if (story.latestRun?.sessionId) {
-    const byId = sessions.value.find((item: any) => item.id === story.latestRun.sessionId)
-    if (byId) return byId
-  }
-
-  if (story.storyId) {
-    const byStoryId = sessions.value.find((item: any) => item.storyContext?.storyId === story.storyId)
-    if (byStoryId) return byStoryId
-  }
-
-  return null
-})
-
-const selectedStoryGoalReady = computed(() => {
-  const session = selectedStorySession.value
-  if (!session) return false
-  if (session.currentStage === 'path' || session.currentStage === 'learning') return true
-  return !!session.bindings?.goalConversationId
-})
-
-const selectedStoryCurrentTaskId = computed(() => {
-  return selectedStorySession.value?.bindings?.currentTaskId || null
-})
-
-const selectedStoryTaskOptions = computed(() => {
-  const milestones = selectedStoryPathData.value?.milestones || []
-  const currentTaskId = selectedStoryCurrentTaskId.value
-  return milestones.flatMap((milestone: any, milestoneIndex: number) => {
-    const stageNumber = Number(milestone.stageNumber || milestoneIndex + 1)
-    return (milestone.subtasks || []).map((task: any, taskIndex: number) => {
-      const status = String(task.status || '').toLowerCase()
-      const canStart = task.id === currentTaskId || ['active', 'ready', 'todo', 'in_progress'].includes(status)
-      return {
-        id: task.id,
-        label: `${stageNumber}.${taskIndex + 1} ${task.title || '未命名任务'}`,
-        canStart,
-        status,
-        milestoneTitle: milestone.title || `阶段 ${stageNumber}`
-      }
-    })
-  })
-})
-
-const selectedStoryGoalStatusLabel = computed(() => {
-  const session = selectedStorySession.value
-  if (!session) return '未启动'
-  if (selectedStoryGoalReady.value) return '已完成，可查看对话'
-  return `${getSessionStatusLabel(session.status)} / 对话进行中`
-})
-
-const selectedStoryPathStatusLabel = computed(() => {
-  const session = selectedStorySession.value
-  if (!session) return '等待 Goal'
-  if (!session.bindings?.learningPathId) {
-    if (selectedStoryGoalReady.value) {
-      if (selectedStoryPathStatus.value === 'generating') return '生成中'
-      return '待生成'
-    }
-    return '等待 Goal 完成'
-  }
-
-  switch (selectedStoryPathStatus.value) {
-    case 'completed':
-      return '已完成'
-    case 'active':
-    case 'ready':
-      return '已生成'
-    case 'failed':
-      return '生成失败'
-    case 'not_found':
-      return '路径丢失'
-    default:
-      return '已生成'
-  }
-})
-
-const selectedStoryPathSummary = computed(() => {
-  const path = selectedStoryPathData.value
-  if (!path?.milestones?.length) return '生成后可选 task'
-  const taskCount = path.milestones.reduce((sum: number, item: any) => sum + (item.subtasks || []).length, 0)
-  return `${path.milestones.length} 个阶段 / ${taskCount} 个 task`
-})
-
-const selectedStoryPathHint = computed(() => {
-  if (!selectedStorySession.value) return '这个故事还没有对应运行，先从这个故事启动 Goal。'
-  if (!selectedStorySession.value.bindings?.learningPathId) return 'Goal 完成后，在这里生成 Path，并挑一个 task 进入 Learn。'
-  return selectedStoryPathData.value?.summary || selectedStoryPathData.value?.description || 'Path 已生成，可以直接查看，或选一个 task 开始学习。'
-})
-
-const selectedStoryTaskLabel = computed(() => {
-  const selected = selectedStoryTaskOptions.value.find((item: any) => item.id === selectedStoryTaskId.value)
-  if (selected) return selected.label
-  const current = selectedStoryTaskOptions.value.find((item: any) => item.id === selectedStoryCurrentTaskId.value)
-  if (current) return current.label
-  return '尚未选择 task'
-})
-
-const selectedStoryLearnStatusLabel = computed(() => {
-  const session = selectedStorySession.value
-  if (!session?.bindings?.currentTaskId) {
-    return session?.currentStage === 'learning' ? '已进入学习' : '未开始'
-  }
-  return session.currentStage === 'learning' ? '学习进行中' : '已选定 task'
-})
-
-const selectedStoryLearnHint = computed(() => {
-  if (!selectedStorySession.value?.bindings?.learningPathId) return '先生成 Path，再从 task 开始 Learn。'
-  if (!selectedStorySession.value?.bindings?.currentTaskId) return '可以先选一个 task，再让虚拟学习者开始学。'
-  return 'Learn 阶段支持手动学或自动学，且可以直接查看该 task 的对话。'
-})
-
-const canRunGoalForSelectedStory = computed(() => {
-  const session = selectedStorySession.value
-  return !!session && session.currentStage === 'goal' && !selectedStoryGoalReady.value
-})
-
-const canAdvancePathForSelectedStory = computed(() => {
-  const session = selectedStorySession.value
-  return !!session && selectedStoryGoalReady.value && !session.bindings?.learningPathId
-})
-
-const canStartLearningForSelectedStory = computed(() => {
-  const session = selectedStorySession.value
-  if (!session?.bindings?.learningPathId) return false
-  if (session.currentStage === 'learning' && session.bindings?.currentTaskId) return false
-  return !!selectedStoryTaskId.value || selectedStoryTaskOptions.value.length > 0
-})
-
-const canRunLearningForSelectedStory = computed(() => {
-  const session = selectedStorySession.value
-  return !!session && session.currentStage === 'learning'
-})
-
-const scrollToSection = (id: string) => {
-  const el = document.getElementById(id)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-}
-
-const openStoryProjection = (story: any, stage: 'goal' | 'path' | 'learn', mode: 'test' | 'formal') => {
-  const target = story?.projection?.[mode]?.[stage]
-  if (!target) return
-  if (mode === 'formal') {
-    window.open(target, '_blank')
-    return
-  }
-  router.push(target)
-}
-
-const activeSession = computed(() => {
-  if (!sessions.value.length) return null
-  if (activeSessionId.value) {
-    const matched = sessions.value.find((item: any) => item.id === activeSessionId.value)
-    if (matched) return matched
-  }
-  return sessions.value[0]
-})
-
-const goalReady = computed(() => {
-  if (!activeSession.value) return false
-  if (activeSession.value.currentStage === 'path' || activeSession.value.currentStage === 'learning') return true
-  return !!activeSession.value.bindings?.goalConversationId
-})
-
-const activeBindingsSummary = computed(() => {
-  if (!activeSession.value) return '--'
-  const bindings = activeSession.value.bindings || {}
-  const boundCount = [bindings.goalConversationId, bindings.learningPathId, bindings.teachingSessionId].filter(Boolean).length
-  return `${boundCount}/3 已绑定`
-})
-
-const activeBindingIdsText = computed(() => {
-  if (!activeSession.value) return '尚未创建 session'
-  const bindings = activeSession.value.bindings || {}
-  return `goal:${shortId(bindings.goalConversationId)} path:${shortId(bindings.learningPathId)} learn:${shortId(bindings.teachingSessionId)}`
-})
-
-const canOpenDebugGoal = computed(() => !!activeSession.value?.bindings?.goalConversationId)
-const canOpenDebugPath = computed(() => !!activeSession.value?.bindings?.learningPathId)
-const canOpenDebugLearn = computed(() => !!activeSession.value?.bindings?.currentTaskId)
-const canOpenFormalGoal = computed(() => !!activeSession.value?.bindings?.goalConversationId)
-const canOpenFormalPath = computed(() => !!activeSession.value?.bindings?.learningPathId)
-const canOpenFormalLearn = computed(() => !!activeSession.value?.bindings?.currentTaskId)
 
 const personaHeadline = computed(() => {
   const occupation = profileData.value?.profile?.occupation || '学习者'
@@ -785,7 +515,6 @@ const personaNarrative = computed(() => {
 const personaFactCards = computed(() => [
   { label: '职业', value: profileData.value?.profile?.occupation || '--' },
   { label: '年龄', value: profileData.value?.profile?.age ? `${profileData.value.profile.age} 岁` : '--' },
-  { label: '知识水平', value: getKnowledgeLevelLabel(profileData.value?.knowledgeLevel) },
   { label: '可用时间', value: getAvailableTimeLabel(profileData.value?.profile?.availableTime) },
   { label: '故事数量', value: `${storyPool.value.length} 个` }
 ])
@@ -827,14 +556,15 @@ const profileRawJson = computed(() => {
   return JSON.stringify(profile, null, 2)
 })
 
-const getKnowledgeLevelLabel = (value?: string) => {
-  switch (value) {
-    case 'beginner': return '初学者'
-    case 'intermediate': return '中级'
-    case 'advanced': return '高级'
-    default: return value || '--'
-  }
-}
+const projectionSessionLabel = computed(() => {
+  if (!testProjection.value?.latestSession) return '未运行'
+  return `${getSessionStatusLabel(testProjection.value.latestSession.status)} · ${getSessionStageLabel(testProjection.value.latestSession.currentStage)}`
+})
+
+const projectionSessionMeta = computed(() => {
+  if (!testProjection.value?.latestSession?.updatedAt) return '当前还没有运行记录'
+  return `最近活跃 ${formatRelativeTime(testProjection.value.latestSession.updatedAt)}`
+})
 
 const getAvailableTimeLabel = (value?: string) => {
   switch (value) {
@@ -901,8 +631,6 @@ const getStorySourceLabel = (sourceType?: string) => {
       return '手动创建'
     case 'imported':
       return '外部导入'
-    case 'draft':
-      return '草稿'
     default:
       return sourceType || '未知来源'
   }
@@ -916,32 +644,71 @@ const selectStory = (story: any, index: number) => {
   selectedStoryKey.value = getStoryKey(story, index)
 }
 
-const loadSelectedStoryPathStatus = async () => {
-  const sessionId = selectedStorySession.value?.id
-  if (!sessionId) {
-    selectedStoryPathStatus.value = 'idle'
-    selectedStoryPathData.value = null
+const openStoryOverview = (story: any) => {
+  const targetId = String(story?.storyId || story?.id || story?.key || '')
+  if (!targetId) {
+    ElMessage.warning('这个故事暂时没有可用标识')
     return
   }
+  router.push(`/admin/virtual-learners/${profileId}/stories/${targetId}`)
+}
 
-  try {
-    const res = await adminApi.getVirtualSessionPathStatus(sessionId)
-    if (!res.data?.success) {
-      selectedStoryPathStatus.value = 'failed'
-      selectedStoryPathData.value = null
-      return
+const openStoryOverviewById = (storyId: string) => {
+  if (!storyId) {
+    ElMessage.warning('这个故事暂时没有可用标识')
+    return
+  }
+  router.push(`/admin/virtual-learners/${profileId}/stories/${storyId}`)
+}
+
+const openStoryEditDialog = (story: any, index: number) => {
+  editingStoryIndex.value = index
+  storyFormData.value = {
+    title: story?.storyTitle || story?.title || '',
+    storyOutline: story?.storyOutline || '',
+    storyTriggerEvent: story?.storyTriggerEvent || story?.triggerEvent || '',
+    visibleOpening: story?.visibleOpening || '',
+    pressurePointsText: Array.isArray(story?.pressurePoints) ? story.pressurePoints.join('\n') : '',
+    problemKnowledge: {
+      domainFamiliarity: story?.problemKnowledge?.domainFamiliarity || 'low',
+      knownConceptsText: Array.isArray(story?.problemKnowledge?.knownConcepts) ? story.problemKnowledge.knownConcepts.join('\n') : '',
+      struggleConceptsText: Array.isArray(story?.problemKnowledge?.struggleConcepts) ? story.problemKnowledge.struggleConcepts.join('\n') : '',
+      selfAssessment: story?.problemKnowledge?.selfAssessment || '',
+      hiddenGapsText: Array.isArray(story?.problemKnowledge?.hiddenGaps) ? story.problemKnowledge.hiddenGaps.join('\n') : ''
     }
+  }
+  storyEditDialogVisible.value = true
+}
 
-    selectedStoryPathStatus.value = res.data.data?.status || 'idle'
-    selectedStoryPathData.value = res.data.data?.path || null
-  } catch {
-    selectedStoryPathStatus.value = 'failed'
-    selectedStoryPathData.value = null
+const parsePressurePoints = (value: string) => {
+  return value
+    .split(/\r?\n|[;,，；]/)
+    .map((item) => item.trim())
+    .filter((item, index, list) => !!item && list.indexOf(item) === index)
+}
+
+const normalizeSession = (session: any) => {
+  const runtime = session?.runtime || {}
+  const bindings = runtime.bindings || session?.bindings || {}
+  const goalRuntime = runtime.stageStatus?.goal || {}
+  const learningRuntime = runtime.stageStatus?.learning || {}
+  const learnerStateRuntime = runtime.learnerState || {}
+
+  return {
+    ...session,
+    runtime,
+    bindings,
+    storyContext: session?.storyContext || runtime.story || null,
+    goalStage: session?.goalStage || goalRuntime.stage || null,
+    learnerState: session?.learnerState || learnerStateRuntime.goal || goalRuntime.learnerState || null,
+    currentTaskTitle: session?.currentTaskTitle || learningRuntime.currentTaskTitle || null,
+    currentMilestoneTitle: session?.currentMilestoneTitle || learningRuntime.currentMilestoneTitle || null,
+    stageResults: session?.stageResults || {},
   }
 }
 
 const normalizeSessions = (items: any[]) => {
-  return Array.isArray(items) ? items : []
+  return Array.isArray(items) ? items.map(normalizeSession) : []
 }
 
 const loadProfile = async () => {
@@ -955,9 +722,6 @@ const loadProfile = async () => {
     if (profileRes.data?.success) {
       profileData.value = profileRes.data.data
       sessions.value = normalizeSessions(profileRes.data.data.sessions || [])
-      activeSessionId.value = routeSessionId.value && sessions.value.some((item: any) => item.id === routeSessionId.value)
-        ? routeSessionId.value
-        : sessions.value[0]?.id || null
       if (storiesRes.data?.success) {
         storySummaries.value = Array.isArray(storiesRes.data.data?.stories) ? storiesRes.data.data.stories : []
       }
@@ -996,15 +760,14 @@ const generateStoryDraft = async () => {
   try {
     const res = await adminApi.draftVirtualLearnerStories(profileId)
     if (res.data?.success) {
-      ElMessage.success('故事已生成并自动保存到故事池')
+      ElMessage.success('故事已生成并自动保存')
       await loadProfile()
-      const lastDraftIndex = [...storyPool.value]
+      const lastStory = [...storyPool.value]
         .map((story: any, index: number) => ({ story, index }))
-        .filter((item: any) => item.story.status === 'draft')
         .at(-1)
 
-      if (lastDraftIndex) {
-        selectStory(lastDraftIndex.story, lastDraftIndex.index)
+      if (lastStory) {
+        selectStory(lastStory.story, lastStory.index)
       }
     } else {
       ElMessage.error(res.data?.error || '故事生成失败')
@@ -1016,20 +779,39 @@ const generateStoryDraft = async () => {
   }
 }
 
-const confirmStory = async (story: any, index: number) => {
-  submitting.value = true
+const saveStoryEdits = async () => {
+  if (editingStoryIndex.value === null) return
+  const valid = await storyFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  storySubmitting.value = true
   try {
-    const res = await adminApi.updateStoryStatus(profileId, index, 'confirmed')
-    if (res.data?.success) {
-      ElMessage.success('故事已确认')
-      await loadProfile()
-    } else {
-      ElMessage.error(res.data?.error || '确认失败')
+    const res = await adminApi.updateStoryStatus(profileId, editingStoryIndex.value, {
+      title: storyFormData.value.title,
+      storyOutline: storyFormData.value.storyOutline,
+      storyTriggerEvent: storyFormData.value.storyTriggerEvent,
+      visibleOpening: storyFormData.value.visibleOpening,
+      pressurePoints: parsePressurePoints(storyFormData.value.pressurePointsText),
+      problemKnowledge: {
+        domainFamiliarity: storyFormData.value.problemKnowledge.domainFamiliarity,
+        knownConcepts: parsePressurePoints(storyFormData.value.problemKnowledge.knownConceptsText),
+        struggleConcepts: parsePressurePoints(storyFormData.value.problemKnowledge.struggleConceptsText),
+        selfAssessment: storyFormData.value.problemKnowledge.selfAssessment.trim(),
+        hiddenGaps: parsePressurePoints(storyFormData.value.problemKnowledge.hiddenGapsText)
+      }
+    })
+
+    if (!res.data?.success) {
+      throw new Error(res.data?.error || '保存失败')
     }
+
+    ElMessage.success('故事已更新')
+    storyEditDialogVisible.value = false
+    await loadProfile()
   } catch (error: any) {
-    ElMessage.error(error.message || '确认失败')
+    ElMessage.error(error.message || '保存失败')
   } finally {
-    submitting.value = false
+    storySubmitting.value = false
   }
 }
 
@@ -1056,7 +838,6 @@ const applyProfileDraft = async () => {
   try {
     const payload = {
       learningGoal: profileData.value.learningGoal,
-      knowledgeLevel: profileData.value.knowledgeLevel,
       profile: {
         ...(profileData.value.profile || {}),
         ...draftProfile.value,
@@ -1089,19 +870,101 @@ const handleStartSession = async (story?: any, storyIndex?: number) => {
     if (res.data?.success) {
       ElMessage.success('会话已创建')
       await loadProfile()
-      activeSessionId.value = res.data.data?.id || sessions.value[0]?.id || null
     }
   } catch (error: any) {
     ElMessage.error(error.message || '创建会话失败')
   }
 }
 
-const setActiveSession = (session: any) => {
-  activeSessionId.value = session.id
-}
-
 const openSessionInspector = (sessionId: string) => {
   router.push(`/admin/virtual-session/${sessionId}`)
+}
+
+const openLatestSessionInspector = () => {
+  if (!latestProjectionSession.value?.id) {
+    ElMessage.info('这个账号还没有运行记录')
+    return
+  }
+  openSessionInspector(latestProjectionSession.value.id)
+}
+
+const showVirtualCredentials = async () => {
+  if (!profileData.value?.id) {
+    ElMessage.warning('当前账号信息不完整')
+    return
+  }
+
+  try {
+    projectionLoading.value = true
+    const res = await adminApi.getVirtualLearnerTestProjection(profileData.value.id)
+    if (!res.data?.success) {
+      throw new Error(res.data?.error || '获取投影入口失败')
+    }
+
+    testProjection.value = res.data.data || null
+    projectionDialogVisible.value = true
+  } catch (error: any) {
+    ElMessage.error(error.message || '获取投影入口失败')
+  } finally {
+    projectionLoading.value = false
+  }
+}
+
+const ensureProjectionToken = async () => {
+  if (!profileData.value?.id) {
+    throw new Error('当前账号信息不完整')
+  }
+
+  const latestSession = testProjection.value?.latestSession || null
+  const activeStory = testProjection.value?.activeStory || null
+  const res = await adminApi.createProjectionToken(profileData.value.id, {
+    scope: 'full',
+    virtualSessionId: latestSession?.id || undefined,
+    storyId: activeStory?.storyId || undefined
+  })
+
+  if (!res.data?.success) {
+    throw new Error(res.data?.error || '创建前台投影失败')
+  }
+
+  const projectionToken = res.data.data?.token
+  if (!projectionToken) {
+    throw new Error('投影 token 缺失')
+  }
+
+  setProjectionToken(projectionToken, {
+    profileId: profileData.value.id,
+    userName: profileData.value.userName,
+    email: profileData.value.email,
+    scope: 'full',
+    storyId: activeStory?.storyId || null,
+    virtualSessionId: latestSession?.id || null
+  })
+}
+
+const openProjectionEntry = async (entry: 'dashboard' | 'goal' | 'path' | 'learn') => {
+  const target = testProjection.value?.entries?.formal?.[entry]
+  if (!target) {
+    ElMessage.info(`当前没有可打开的 ${projectionEntryLabelMap[entry]} 入口`)
+    return
+  }
+
+  try {
+    await ensureProjectionToken()
+    window.open(target, '_blank')
+  } catch (error: any) {
+    ElMessage.error(error.message || '打开投影入口失败')
+  }
+}
+
+const openTestDebugEntry = (entry: 'goal' | 'path' | 'learn') => {
+  const target = testProjection.value?.entries?.test?.[entry]
+  if (!target) {
+    ElMessage.info(`当前没有可打开的 ${projectionEntryLabelMap[entry]} 调试入口`)
+    return
+  }
+
+  window.open(target, '_blank')
 }
 
 const openDebugGoalFor = (session?: any | null) => {
@@ -1134,260 +997,6 @@ const openFormalLearnFor = (session?: any | null) => {
   window.open(`/learn/${session.bindings.currentTaskId}?virtualSessionId=${session.id}&viewMode=formal`, '_blank')
 }
 
-const openDebugGoal = (sessionArg?: any) => {
-  openDebugGoalFor(sessionArg || activeSession.value)
-}
-
-const openDebugPath = () => {
-  openDebugPathFor(activeSession.value)
-}
-
-const openDebugLearn = () => {
-  openDebugLearnFor(activeSession.value)
-}
-
-const openFormalGoal = () => {
-  openFormalGoalFor(activeSession.value)
-}
-
-const openFormalPath = () => {
-  openFormalPathFor(activeSession.value)
-}
-
-const openFormalLearn = () => {
-  openFormalLearnFor(activeSession.value)
-}
-
-const withSession = async (sessionArg: any | null | undefined, runner: (sessionId: string) => Promise<void>) => {
-  if (!sessionArg?.id) {
-    ElMessage.warning('请先选择一个 session')
-    return
-  }
-  activeSessionId.value = sessionArg.id
-  await runner(sessionArg.id)
-  await loadProfile()
-}
-
-const withActiveSession = async (runner: (sessionId: string) => Promise<void>) => {
-  if (!activeSession.value?.id) {
-    ElMessage.warning('请先选择一个 session')
-    return
-  }
-  await runner(activeSession.value.id)
-  await loadProfile()
-}
-
-const runGoalStep = async () => {
-  stepLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.virtualSessionStep(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || 'Goal 单步失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Goal 单步失败')
-  } finally {
-    stepLoading.value = false
-  }
-}
-
-const runGoalStepFor = async (session?: any | null) => {
-  stepLoading.value = true
-  try {
-    await withSession(session, async (sessionId) => {
-      const res = await adminApi.virtualSessionStep(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || 'Goal 单步失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Goal 单步失败')
-  } finally {
-    stepLoading.value = false
-  }
-}
-
-const runGoalAuto = async () => {
-  autoLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.virtualSessionAuto(sessionId, { maxRounds: 20 })
-      if (!res.data?.success) throw new Error(res.data?.error || 'Goal 自动失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Goal 自动失败')
-  } finally {
-    autoLoading.value = false
-  }
-}
-
-const runGoalAutoFor = async (session?: any | null) => {
-  autoLoading.value = true
-  try {
-    await withSession(session, async (sessionId) => {
-      const res = await adminApi.virtualSessionAuto(sessionId, { maxRounds: 20 })
-      if (!res.data?.success) throw new Error(res.data?.error || 'Goal 自动失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Goal 自动失败')
-  } finally {
-    autoLoading.value = false
-  }
-}
-
-const confirmGeneratePath = async () => {
-  advanceLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.virtualSessionAdvancePath(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || '生成 Path 失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '生成 Path 失败')
-  } finally {
-    advanceLoading.value = false
-  }
-}
-
-const confirmGeneratePathFor = async (session?: any | null) => {
-  advanceLoading.value = true
-  try {
-    await withSession(session, async (sessionId) => {
-      const res = await adminApi.virtualSessionAdvancePath(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || '生成 Path 失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '生成 Path 失败')
-  } finally {
-    advanceLoading.value = false
-  }
-}
-
-const startLearning = async (taskId?: string) => {
-  learningStartLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.startVirtualLearning(sessionId, taskId ? { taskId } : undefined)
-      if (!res.data?.success) throw new Error(res.data?.error || '启动 Learn 失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '启动 Learn 失败')
-  } finally {
-    learningStartLoading.value = false
-  }
-}
-
-const startLearningFor = async (session?: any | null, taskId?: string) => {
-  learningStartLoading.value = true
-  try {
-    await withSession(session, async (sessionId) => {
-      const effectiveTaskId = taskId || selectedStoryTaskId.value || selectedStoryTaskOptions.value.find((item: any) => item.canStart)?.id
-      const res = await adminApi.startVirtualLearning(sessionId, effectiveTaskId ? { taskId: effectiveTaskId } : undefined)
-      if (!res.data?.success) throw new Error(res.data?.error || '启动 Learn 失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '启动 Learn 失败')
-  } finally {
-    learningStartLoading.value = false
-  }
-}
-
-const runLearningStep = async () => {
-  learningStepLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.virtualSessionLearningStep(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || 'Learn 单步失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Learn 单步失败')
-  } finally {
-    learningStepLoading.value = false
-  }
-}
-
-const runLearningStepFor = async (session?: any | null) => {
-  learningStepLoading.value = true
-  try {
-    await withSession(session, async (sessionId) => {
-      const res = await adminApi.virtualSessionLearningStep(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || 'Learn 单步失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Learn 单步失败')
-  } finally {
-    learningStepLoading.value = false
-  }
-}
-
-const runLearningAuto = async () => {
-  autoLearningLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.virtualSessionAutoLearning(sessionId, { maxMilestones: 10 })
-      if (!res.data?.success) throw new Error(res.data?.error || 'Learn 自动失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Learn 自动失败')
-  } finally {
-    autoLearningLoading.value = false
-  }
-}
-
-const runLearningAutoFor = async (session?: any | null) => {
-  autoLearningLoading.value = true
-  try {
-    await withSession(session, async (sessionId) => {
-      const res = await adminApi.virtualSessionAutoLearning(sessionId, { maxMilestones: 10 })
-      if (!res.data?.success) throw new Error(res.data?.error || 'Learn 自动失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Learn 自动失败')
-  } finally {
-    autoLearningLoading.value = false
-  }
-}
-
-const restartPath = async () => {
-  restartPathLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.restartVirtualSessionPath(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || '重启 Path 失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '重启 Path 失败')
-  } finally {
-    restartPathLoading.value = false
-  }
-}
-
-const restartLearning = async () => {
-  restartLearningLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.restartVirtualLearning(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || '重启 Learn 失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '重启 Learn 失败')
-  } finally {
-    restartLearningLoading.value = false
-  }
-}
-
-const stopLearning = async () => {
-  stopLearningLoading.value = true
-  try {
-    await withActiveSession(async (sessionId) => {
-      const res = await adminApi.stopVirtualLearning(sessionId)
-      if (!res.data?.success) throw new Error(res.data?.error || '紧急停止失败')
-    })
-  } catch (error: any) {
-    ElMessage.error(error.message || '紧急停止失败')
-  } finally {
-    stopLearningLoading.value = false
-  }
-}
-
 const deleteSession = async (sessionId: string) => {
   try {
     await ElMessageBox.confirm('确定删除此会话？相关数据将被清除。', '确认删除', { type: 'warning' })
@@ -1395,9 +1004,6 @@ const deleteSession = async (sessionId: string) => {
     if (res.data?.success) {
       ElMessage.success('会话已删除')
       sessions.value = sessions.value.filter((s: any) => s.id !== sessionId)
-      if (activeSessionId.value === sessionId) {
-        activeSessionId.value = sessions.value[0]?.id || null
-      }
     }
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -1460,29 +1066,6 @@ const handleUpdateProfile = async () => {
 onMounted(() => {
   loadProfile()
 })
-
-watch(
-  () => selectedStorySession.value?.id,
-  () => {
-    loadSelectedStoryPathStatus()
-  },
-  { immediate: true }
-)
-
-watch(
-  [selectedStoryTaskOptions, selectedStoryCurrentTaskId],
-  () => {
-    const currentTaskId = selectedStoryCurrentTaskId.value
-    if (currentTaskId && selectedStoryTaskOptions.value.some((item: any) => item.id === currentTaskId)) {
-      selectedStoryTaskId.value = currentTaskId
-      return
-    }
-
-    const firstRunnable = selectedStoryTaskOptions.value.find((item: any) => item.canStart)
-    selectedStoryTaskId.value = firstRunnable?.id || selectedStoryTaskOptions.value[0]?.id || null
-  },
-  { immediate: true }
-)
 </script>
 
 <style scoped>
@@ -1493,15 +1076,15 @@ watch(
   color: #1f2937;
 }
 
-.topbar,
-.layout {
+.page-header,
+.layout-shell {
   max-width: 1440px;
   margin: 0 auto;
 }
 
-.topbar {
+.page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
@@ -1511,8 +1094,8 @@ watch(
   border-radius: 16px;
 }
 
-.topbar-left,
-.topbar-right,
+.page-header__main,
+.page-header__actions,
 .title-meta,
 .panel-head,
 .profile-header,
@@ -1526,12 +1109,27 @@ watch(
   align-items: center;
 }
 
-.topbar-left,
-.topbar-right,
+.page-header__main,
+.page-header__actions,
 .title-meta,
 .entry-card__actions,
 .story-card__meta {
   gap: 8px;
+}
+
+.page-header__main {
+  align-items: flex-start;
+}
+
+.page-header__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #2355d8;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .title-wrap h1 {
@@ -1539,7 +1137,28 @@ watch(
   font-size: 20px;
 }
 
+.title-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-entry-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #607086;
+  font-size: 12px;
+}
+
 .layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.layout-shell {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1569,6 +1188,15 @@ watch(
   align-items: flex-start;
 }
 
+.panel-head--profile {
+  margin-bottom: 12px;
+}
+
+.panel-head__title-wrap {
+  display: grid;
+  gap: 4px;
+}
+
 .panel-meta {
   font-size: 12px;
   color: #8b94a6;
@@ -1577,6 +1205,69 @@ watch(
 .panel-meta--block {
   max-width: 560px;
   line-height: 1.55;
+}
+
+.projection-runtime {
+  display: grid;
+  gap: 16px;
+}
+
+.projection-runtime__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projection-runtime__card,
+.projection-runtime__focus,
+.projection-runtime__section {
+  border: 1px solid #e5eaf2;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.projection-runtime__card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.projection-runtime__card span {
+  font-size: 12px;
+  color: #8b94a6;
+}
+
+.projection-runtime__card strong {
+  font-size: 15px;
+  color: #1f2937;
+}
+
+.projection-runtime__card em {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #607086;
+  font-style: normal;
+}
+
+.projection-runtime__focus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.projection-runtime__section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.projection-runtime__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .draft-panel {
@@ -1662,10 +1353,9 @@ watch(
   border-bottom: 1px solid #edf1f6;
 }
 
-.profile-header--hero {
+.profile-header--compact {
   margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: 0;
+  padding-bottom: 12px;
 }
 
 .profile-avatar {
@@ -1680,13 +1370,6 @@ watch(
   font-size: 22px;
   font-weight: 700;
   flex-shrink: 0;
-}
-
-.profile-avatar--hero {
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  font-size: 28px;
 }
 
 .profile-identity {
@@ -1778,81 +1461,6 @@ watch(
   line-height: 1.55;
 }
 
-.control-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.active-session-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid #dbe6f6;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #f8fbff, #ffffff);
-}
-
-.active-session-hero--empty {
-  border-style: dashed;
-  background: #fbfcfe;
-}
-
-.active-session-hero__main {
-  min-width: 0;
-}
-
-.active-session-hero__eyebrow {
-  display: inline-flex;
-  margin-bottom: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #eaf2ff;
-  color: #2458d6;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.active-session-hero__main h2 {
-  margin: 0 0 6px;
-  font-size: 24px;
-  line-height: 1.2;
-}
-
-.active-session-hero__main p {
-  margin: 0;
-  color: #5f6b7d;
-  line-height: 1.6;
-}
-
-.active-session-hero__meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12px;
-}
-
-.active-session-chip-group {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.active-session-chip {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #607086;
-  font-size: 12px;
-}
-
-.control-grid--session {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .control-grid {
   gap: 10px;
   flex-wrap: wrap;
@@ -1886,20 +1494,10 @@ watch(
   line-height: 1.5;
 }
 
-.view-entry-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
 .entry-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.view-entry-grid--top {
-  grid-template-columns: 1.15fr 0.85fr;
 }
 
 .entry-card__head {
@@ -1986,56 +1584,54 @@ watch(
   color: #6b7280;
 }
 
-.persona-hero {
+.profile-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
-  gap: 16px;
+  gap: 12px;
   align-items: stretch;
 }
 
-.persona-hero__main {
+.profile-overview__content {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr);
+  gap: 12px;
 }
 
-.persona-hero__intro {
+.profile-summary-card {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid #e7ecf3;
+  background: #ffffff;
 }
 
-.persona-hero__eyebrow {
-  display: inline-flex;
-  width: fit-content;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #eef4ff;
-  color: #2355d8;
-  font-size: 11px;
-  font-weight: 700;
+.profile-summary-card__intro {
+  display: grid;
+  gap: 8px;
 }
 
-.persona-hero__intro h2 {
+.profile-summary-card__intro h2 {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.25;
+  font-size: 18px;
+  line-height: 1.35;
 }
 
-.persona-hero__intro p {
+.profile-summary-card__intro p {
   margin: 0;
   color: #5f6b7d;
-  line-height: 1.7;
-  font-size: 14px;
+  line-height: 1.6;
+  font-size: 13px;
 }
 
-.persona-hero__facts {
+.profile-overview__facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .persona-fact-card {
-  padding: 14px;
-  border-radius: 16px;
+  padding: 10px 12px;
+  border-radius: 14px;
   background: #fbfcfe;
   border: 1px solid #e7ecf3;
 }
@@ -2056,11 +1652,11 @@ watch(
 
 .story-pool-panel {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
-.story-grid--compact {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.story-list--compact {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
 }
 
 .story-workbench {
@@ -2201,22 +1797,9 @@ watch(
   color: #7b8597;
 }
 
-.projection-panel {
-  display: grid;
-  gap: 14px;
-  border-color: #dbe6f8;
-  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
-}
-
 .projection-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.projection-split {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -2272,23 +1855,18 @@ watch(
 
 .story-feature-card {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid #e7ecf3;
-  background: #fbfcfe;
+  background: #ffffff;
 }
 
 .story-feature-card.active {
   border-color: #c9dafd;
   background: linear-gradient(180deg, #f8fbff, #ffffff);
-}
-
-.story-feature-card--draft {
-  border-color: #fcd34d;
-  background: linear-gradient(180deg, #fefce8, #ffffff);
 }
 
 .story-feature-card__main {
@@ -2297,6 +1875,7 @@ watch(
   background: transparent;
   text-align: left;
   cursor: pointer;
+  flex: 1;
 }
 
 .story-feature-card__head,
@@ -2320,21 +1899,23 @@ watch(
 
 .story-feature-card strong {
   display: block;
-  margin-bottom: 10px;
-  font-size: 18px;
+  margin-bottom: 8px;
+  font-size: 15px;
   line-height: 1.35;
 }
 
 .story-feature-card p {
   margin: 0;
   color: #526074;
-  line-height: 1.65;
-  min-height: 72px;
+  line-height: 1.55;
+  min-height: auto;
+  font-size: 13px;
 }
 
 .story-feature-card__lines {
-  flex-direction: column;
-  margin-top: 12px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
 .story-feature-card__lines--inline {
@@ -2345,6 +1926,12 @@ watch(
 .story-feature-card__lines span {
   font-size: 12px;
   color: #6b7280;
+}
+
+.story-feature-card__actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .engine-panel {
@@ -2392,15 +1979,15 @@ watch(
 
 .trait-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .trait-card {
-  padding: 14px;
-  border-radius: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid #e7ecf3;
-  background: #fbfcfe;
+  background: #ffffff;
 }
 
 .trait-card span {
@@ -2461,52 +2048,40 @@ watch(
 }
 
 @media (max-width: 1200px) {
-  .persona-hero,
+  .profile-overview__content,
   .trait-grid,
   .engine-grid,
   .projection-grid,
-  .projection-split,
+  .projection-runtime__summary,
   .story-grid,
-  .story-stage-grid,
-  .view-entry-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .control-grid--session {
+  .story-stage-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 900px) {
-  .topbar {
+  .page-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .topbar-right,
+  .page-header__actions,
   .control-grid {
     width: 100%;
   }
 
-  .active-session-hero {
-    flex-direction: column;
+  .page-header__actions,
+  .title-meta {
+    flex-wrap: wrap;
   }
 
   .story-workbench__hero {
     flex-direction: column;
   }
 
-  .active-session-hero__meta {
-    width: 100%;
+  .projection-runtime__focus {
+    flex-direction: column;
     align-items: flex-start;
-  }
-
-  .story-workbench__actions {
-    justify-content: flex-start;
-  }
-
-  .active-session-chip-group {
-    justify-content: flex-start;
   }
 }
 </style>

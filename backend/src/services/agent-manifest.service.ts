@@ -3,10 +3,12 @@ export type AgentRuntimeKind = 'agent' | 'skill' | 'orchestrator' | 'alias';
 export type MonitoringGroupName =
   | 'RequirementCollection'
   | 'PathPlanning'
+  | 'LearnerOrchestration'
   | 'Teaching'
   | 'TeachingOrchestration'
   | 'LearningCompanion'
   | 'SessionWrapup'
+  | 'SimulationOrchestration'
   | 'Simulation';
 
 export interface AgentManifestEntry {
@@ -74,6 +76,24 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     }
   },
   {
+    id: 'learner-orchestrator',
+    name: '学习者编排器',
+    description: '统一编排学习者画像增强、背景知识沉淀与 snapshot/projection 刷新链路',
+    category: 'orchestration',
+    kind: 'orchestrator',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'LearnerOrchestration',
+    orchestratorMembers: [
+      'learner-orchestrator',
+      'learner-model-agent',
+      'skill:goal-profile-inference',
+      'skill:learning-pattern-distiller',
+      'skill:session-knowledge-distiller',
+      'skill:dialogue-concept-extractor'
+    ]
+  },
+  {
     id: 'skill:peer-reinforcement',
     name: '伴学 Skill',
     description: '同伴式引导讨论与理解补强能力',
@@ -120,19 +140,23 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     }
   },
   {
-    id: 'virtual-learner-simulation-agent',
-    name: '虚拟学习者模拟 Agent',
-    description: '扮演虚拟用户，模拟真实学习者对话行为',
+    id: 'simulation-orchestrator',
+    name: '虚拟学习者编排器',
+    description: '编排虚拟学习者从故事进入 Goal、Path 接受评估与 Learn 阶段的完整实验链路',
     category: 'simulation',
-    kind: 'agent',
+    kind: 'orchestrator',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Simulation',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: {
-      temperature: 0.8,
-      maxTokens: 500
-    }
+    monitoringGroup: 'SimulationOrchestration',
+    orchestratorMembers: [
+      'simulation-orchestrator',
+      'virtual-learner-goal-dialogue-simulator',
+      'goal-conversation-agent',
+      'path-orchestrator',
+      'virtual-learner-path-evaluator',
+      'virtual-learner-learn-turn-simulator',
+      'ai-teaching-agent'
+    ]
   },
   {
     id: 'requirement-orchestrator',

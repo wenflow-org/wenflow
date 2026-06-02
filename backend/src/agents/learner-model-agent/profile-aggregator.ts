@@ -28,6 +28,7 @@ import { studentBaselineService } from '../../services/student-baseline.service'
 import { executeSkill } from '../../skills';
 import { goalProfileInferenceDefinition } from '../../skills/goal-profile-inference';
 import { learningPatternDistillerDefinition } from '../../skills/learning-pattern-distiller';
+import { logger } from '../../utils/logger';
 
 function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
   return Array.from(new Set(values.flatMap((items) => Array.isArray(items) ? items.filter(Boolean) : [])));
@@ -241,7 +242,7 @@ export class ProfileAggregator {
         learnerBackground,
       };
     } catch (error) {
-      console.error('[ProfileAggregator] Failed to fetch goal conversation data:', error);
+      logger.error('[profile-aggregator] failed to fetch goal conversation data', { userId, error });
       return null;
     }
   }
@@ -257,7 +258,7 @@ export class ProfileAggregator {
         consistencyScore: this.calculateConsistency(baseline)
       };
     } catch (error) {
-      console.error('[ProfileAggregator] Failed to fetch baseline data:', error);
+      logger.error('[profile-aggregator] failed to fetch baseline data', { userId, error });
       return null;
     }
   }
@@ -280,7 +281,7 @@ export class ProfileAggregator {
         streak: 0
       };
     } catch (error) {
-      console.error('[ProfileAggregator] Failed to fetch metrics data:', error);
+      logger.error('[profile-aggregator] failed to fetch metrics data', { userId, error });
       return null;
     }
   }
@@ -306,7 +307,7 @@ export class ProfileAggregator {
         conceptsMastered: []
       };
     } catch (error) {
-      console.error('[ProfileAggregator] Failed to fetch session data:', error);
+      logger.error('[profile-aggregator] failed to fetch session data', { userId, error });
       return null;
     }
   }
@@ -836,7 +837,11 @@ export class ProfileAggregator {
       
       return { success: true, changes };
     } catch (error) {
-      console.error('[ProfileAggregator] Failed to apply update:', error);
+      logger.error('[profile-aggregator] failed to apply update', {
+        userId,
+        dataType: source.dataType,
+        error,
+      });
       return { success: false, changes: [] };
     }
   }

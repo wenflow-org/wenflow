@@ -78,6 +78,28 @@ function New-RandomSecret {
     return [Convert]::ToBase64String($bytes)
 }
 
+function Test-AIConfigValue {
+    param(
+        [AllowEmptyString()]
+        [string]$Value,
+        [Parameter(Mandatory = $true)]
+        [string[]]$InvalidValues
+    )
+
+    $trimmed = $Value.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return $false
+    }
+
+    foreach ($invalid in $InvalidValues) {
+        if ($trimmed -eq $invalid) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $backendPath = Join-Path $scriptDir 'backend'
 $envPath = Join-Path $backendPath '.env'
@@ -147,10 +169,21 @@ if (-not [string]::IsNullOrWhiteSpace($apiUrlInput)) {
 Set-EnvValue -Path $envPath -Key 'AI_API_URL' -Value $apiUrlCurrent
 
 $apiKeyCurrent = Get-EnvValue -Path $envPath -Key 'AI_API_KEY'
-$apiKeyInput = Read-Host 'AI_API_KEY (leave empty to keep current)'
+if (-not (Test-AIConfigValue -Value $apiKeyCurrent -InvalidValues @('sk-your-api-key', 'your-api-key'))) {
+    $apiKeyCurrent = ''
+}
+$apiKeyPrompt = 'AI_API_KEY'
+if (-not [string]::IsNullOrWhiteSpace($apiKeyCurrent)) {
+    $apiKeyPrompt = 'AI_API_KEY (leave empty to keep current)'
+}
+$apiKeyInput = Read-Host $apiKeyPrompt
 if (-not [string]::IsNullOrWhiteSpace($apiKeyInput)) {
     $apiKeyCurrent = $apiKeyInput
-    Set-EnvValue -Path $envPath -Key 'AI_API_KEY' -Value $apiKeyCurrent
+}
+Set-EnvValue -Path $envPath -Key 'AI_API_KEY' -Value $apiKeyCurrent
+
+if (-not (Test-AIConfigValue -Value $apiKeyCurrent -InvalidValues @('sk-your-api-key', 'your-api-key'))) {
+    Write-Host 'Warning: AI_API_KEY is still missing. start-dev.ps1 will block startup until you set a real key.' -ForegroundColor Yellow
 }
 
 $aiModelCurrent = Get-EnvValue -Path $envPath -Key 'AI_MODEL'
@@ -190,12 +223,13 @@ if (-not [string]::IsNullOrWhiteSpace($adminPasswordInput)) {
 
 $jwtMasked = (Get-EnvValue -Path $envPath -Key 'JWT_SECRET')
 $apiKeyMasked = (Get-EnvValue -Path $envPath -Key 'AI_API_KEY')
+$aiKeyConfigured = Test-AIConfigValue -Value $apiKeyMasked -InvalidValues @('sk-your-api-key', 'your-api-key')
 
 Write-Host ''
 Write-Host 'Environment ready.' -ForegroundColor Green
 Write-Host "  File: $envPath" -ForegroundColor DarkGray
 Write-Host "  JWT_SECRET: $(if ($jwtMasked) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
-Write-Host "  AI_API_KEY: $(if ($apiKeyMasked) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
+Write-Host "  AI_API_KEY: $(if ($aiKeyConfigured) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
 Write-Host "  FRONTEND_URL: $frontendUrlCurrent" -ForegroundColor DarkGray
 Write-Host "  CORS_ORIGIN: $corsOriginCurrent" -ForegroundColor DarkGray
 Write-Host 'You can run ./start-dev.ps1 to start services.' -ForegroundColor Cyan

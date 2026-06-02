@@ -186,18 +186,18 @@ const contentNav: NavItem[] = [
 
 const systemNav: NavItem[] = [
   { to: '/admin/api-config', label: 'API 管理', icon: Setting },
-  { to: '/admin/agent-registry', label: 'Agent 管理', icon: Grid },
-  { to: '/admin/orchestrator-registry', label: '编排器管理', icon: Connection },
-  { to: '/admin/agent-definitions', label: '运行时定义', icon: Document },
+  { to: '/admin/platform-capabilities', label: '能力地图', icon: Grid },
+  { to: '/admin/agent-registry', label: '运行节点管理', icon: Grid },
   { to: '/admin/orchestrator-definitions', label: '编排定义', icon: Connection },
-  { to: '/admin/skill-model-configs', label: 'Skill 模型配置', icon: Operation },
+  { to: '/admin/orchestrator-registry', label: '编排配置中心', icon: Connection },
+  { to: '/admin/skill-model-configs', label: '技能/组件配置', icon: Operation },
 ];
 
 const monitorNav: NavItem[] = [
   { to: '/admin/activity-stream', label: '活动流', icon: Clock },
   { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
   { to: '/admin/prompt-call-logs', label: 'Prompt 调用日志', icon: MagicStick },
-  { to: '/admin/orchestrators', label: '编排视图', icon: Connection },
+  { to: '/admin/orchestrators', label: '编排运行监控', icon: Connection },
 ];
 
 const devDebugNav: NavItem[] = [
@@ -234,10 +234,10 @@ const handleLogout = () => {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: var(--glass-bg-light);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(249, 251, 255, 0.95));
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid var(--glass-border-light);
+  border-bottom: 1px solid rgba(216, 224, 238, 0.85);
   position: sticky;
   top: 0;
   z-index: 101;
@@ -260,7 +260,7 @@ const handleLogout = () => {
 .admin-header__title {
   font-size: 0.9375rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #24364e;
   letter-spacing: -0.02em;
   white-space: nowrap;
 }
@@ -278,16 +278,16 @@ const handleLogout = () => {
   cursor: pointer;
   padding: 8px 14px;
   border-radius: 16px;
-  border: 1px solid transparent;
-  background: color-mix(in srgb, var(--bg-surface) 84%, white);
-  color: var(--text-secondary);
+  border: 1px solid rgba(214, 223, 240, 0.9);
+  background: rgba(255, 255, 255, 0.9);
+  color: #5f7187;
   transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
 .admin-header__user:hover {
-  background: color-mix(in srgb, var(--color-primary) 6%, white);
-  border-color: color-mix(in srgb, var(--color-primary) 14%, var(--border-default));
-  color: var(--text-primary);
+  background: rgba(247, 250, 255, 0.98);
+  border-color: rgba(52, 120, 246, 0.16);
+  color: #22344d;
 }
 
 .admin-header__user-name {
@@ -312,10 +312,10 @@ const handleLogout = () => {
   position: sticky;
   top: 0;
   align-self: flex-start;
-  background: var(--glass-bg-light);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 254, 0.95));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-right: 1px solid var(--glass-border-light);
+  border-right: 1px solid rgba(216, 224, 238, 0.85);
   display: flex;
   flex-direction: column;
   padding: 16px 0;
@@ -326,14 +326,14 @@ const handleLogout = () => {
 .admin-sidebar__brand {
   padding: 0 20px 16px;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--glass-border-light);
+  border-bottom: 1px solid rgba(223, 229, 241, 0.9);
 }
 
 .admin-sidebar__brand span {
   display: block;
   font-size: 0.7rem;
   font-weight: 800;
-  color: var(--color-primary);
+  color: #2d6df2;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -366,7 +366,7 @@ const handleLogout = () => {
   display: block;
   font-size: 0.68rem;
   font-weight: 700;
-  color: var(--text-muted);
+  color: #8696ab;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0 14px;
@@ -382,7 +382,7 @@ const handleLogout = () => {
   border-radius: 16px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-secondary);
+  color: #5f7187;
   text-decoration: none;
   font-size: 0.875rem;
   font-weight: 600;
@@ -392,15 +392,15 @@ const handleLogout = () => {
 }
 
 .admin-sidebar__item:hover {
-  background: color-mix(in srgb, var(--bg-surface) 82%, white);
-  border-color: var(--border-default);
-  color: var(--text-primary);
+  background: rgba(247, 250, 255, 0.96);
+  border-color: rgba(216, 224, 238, 0.95);
+  color: #22344d;
 }
 
 .admin-sidebar__item.active {
-  background: color-mix(in srgb, var(--color-primary) 10%, white);
-  border-color: color-mix(in srgb, var(--color-primary) 16%, var(--border-default));
-  color: var(--color-primary);
+  background: linear-gradient(180deg, rgba(235, 243, 255, 0.96), rgba(228, 239, 255, 0.96));
+  border-color: rgba(52, 120, 246, 0.18);
+  color: #2d6df2;
   font-weight: 700;
 }
 
@@ -429,9 +429,9 @@ const handleLogout = () => {
 }
 
 .admin-sidebar__toggle:hover {
-  background: color-mix(in srgb, var(--bg-surface) 82%, white);
-  border-color: var(--border-default);
-  color: var(--text-primary);
+  background: rgba(247, 250, 255, 0.96);
+  border-color: rgba(216, 224, 238, 0.95);
+  color: #22344d;
 }
 
 .admin-sidebar__toggle .el-icon {
@@ -440,15 +440,16 @@ const handleLogout = () => {
 
 /* ========== 主内容区 ========== */
 .admin-main {
-  padding: 24px;
-  background: var(--bg-body);
+  padding: 24px 28px 28px;
+  background:
+    linear-gradient(180deg, rgba(246, 249, 254, 0.96), rgba(240, 245, 252, 0.9));
   height: calc(100vh - 56px);
   overflow-y: auto;
   transition: background var(--transition-normal);
 }
 
 .admin-content {
-  max-width: 1400px;
+  max-width: 1480px;
   margin: 0 auto;
 }
 

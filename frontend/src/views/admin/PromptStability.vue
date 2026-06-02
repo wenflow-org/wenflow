@@ -32,6 +32,7 @@
               <el-option label="路径规划 Agent" value="path-agent" />
               <el-option label="AI 授课 Agent" value="ai-teaching-agent" />
               <el-option label="学习者画像与状态中心" value="learner-model-agent" />
+              <el-option label="学习者编排器" value="learner-orchestrator" />
             </el-select>
           </el-form-item>
 

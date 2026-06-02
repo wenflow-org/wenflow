@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { getDefaultAgentModelConfigs } from './agent-manifest.service';
 import { v4 as uuidv4 } from 'uuid';
+import { getAPIGateway } from '../gateway/api-gateway';
 
 export interface AgentModelConfig {
   agentId: string;
@@ -71,11 +72,13 @@ class AgentModelConfigService {
 
   async upsert(agentId: string, config: Partial<AgentModelConfig>): Promise<AgentModelConfig> {
     try {
-      return await prisma.agent_model_configs.upsert({
+      const result = await prisma.agent_model_configs.upsert({
         where: { agentId },
         update: { ...config, updatedAt: new Date() },
         create: { id: uuidv4(), agentId, ...config, updatedAt: new Date() }
       });
+      getAPIGateway().invalidateCache(undefined, agentId);
+      return result;
     } catch (error) {
       logger.error(`Failed to upsert agent config: ${agentId}`, error);
       throw error;
@@ -85,6 +88,7 @@ class AgentModelConfigService {
   async delete(agentId: string): Promise<void> {
     try {
       await prisma.agent_model_configs.delete({ where: { agentId } });
+      getAPIGateway().invalidateCache(undefined, agentId);
     } catch (error) {
       logger.error(`Failed to delete agent config: ${agentId}`, error);
       throw error;

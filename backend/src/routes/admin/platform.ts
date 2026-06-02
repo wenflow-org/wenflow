@@ -18,6 +18,7 @@ import {
   savePathOrchestratorInputConfig
 } from '../../services/orchestratorConfig.service';
 import pathOrchestrator from '../../orchestrators/path.orchestrator';
+import { logger } from '../../utils/logger';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -27,6 +28,7 @@ const AGENT_NAME_TO_IDS: Record<string, string[]> = getMonitoringGroupMappings()
 const MONITORED_AGENT_ORDER = [
   'RequirementCollection',
   'PathPlanning',
+  'LearnerOrchestration',
   'Teaching',
   'TeachingOrchestration',
   'LearningCompanion',
@@ -311,7 +313,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('获取 manifest 诊断失败:', error);
+    logger.error('[admin-platform] 获取 manifest 诊断失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -646,7 +648,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('获取平台概览失败:', error);
+    logger.error('[admin-platform] 获取平台概览失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -761,7 +763,7 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('获取 Agent 注册列表失败:', error);
+    logger.error('[admin-platform] 获取 Agent 注册列表失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -851,14 +853,42 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
           monitoringGroup: manifest?.monitoringGroup || null,
           ioContractVersion: manifest?.ioContractVersion || 'legacy',
           aliases: manifest?.aliases || [],
+          orchestratorFlow: canonicalAgentId === 'simulation-orchestrator'
+            ? {
+                description: '虚拟学习者生命周期总编排：故事触发 -> Goal learner turn -> Goal agent -> Path 生成 -> Path 接受评估 -> Learn learner turn -> Teaching orchestrator -> runtime projection。',
+                steps: [
+                  { agentId: 'virtual-learner-goal-dialogue-simulator', action: 'goal learner turn', condition: 'goal rounds' },
+                  { agentId: 'goal-conversation-agent', action: 'goal agent turn', condition: 'goal rounds' },
+                  { agentId: 'path-orchestrator', action: 'generate path', condition: 'when goal converges' },
+                  { agentId: 'virtual-learner-path-evaluator', action: 'accept/modify/reject path', condition: 'when path is available' },
+                  { agentId: 'virtual-learner-learn-turn-simulator', action: 'learn learner turn', condition: 'learning turns' },
+                  { agentId: 'ai-teaching-agent', action: 'teaching orchestration', condition: 'learning turns' },
+                ]
+              }
+            : canonicalAgentId === 'learner-orchestrator'
+              ? {
+                  description: '学习者状态主编排：接收 Goal/lesson 相关事件，串联 learner profile 更新、知识背景沉淀与 snapshot refresh。',
+                  steps: [
+                    { agentId: 'learner-model-agent', action: 'apply learner profile update', condition: 'when learning or goal understanding changes' },
+                    { agentId: 'skill:goal-profile-inference', action: 'enrich goal narrative/profile', condition: 'when goal understanding changes' },
+                    { agentId: 'skill:learning-pattern-distiller', action: 'distill learning patterns', condition: 'when learning traces are aggregated' },
+                    { agentId: 'skill:session-knowledge-distiller', action: 'distill lesson knowledge background', condition: 'when lesson ends' },
+                    { agentId: 'skill:dialogue-concept-extractor', action: 'extract recurring concepts/confusions', condition: 'when lesson ends' },
+                  ]
+                }
+            : undefined,
           promptManagement: {
             mode: canonicalAgentId === 'ai-teaching-agent'
+              ? 'orchestrator-no-direct-prompt'
+              : canonicalAgentId === 'learner-orchestrator'
               ? 'orchestrator-no-direct-prompt'
               : canonicalAgentId === 'tutor-agent'
                 ? 'legacy-service'
                 : 'agent-prompt',
             note: canonicalAgentId === 'ai-teaching-agent'
               ? '该编排器本身不直接持有单一 System Prompt，教学主输出由 teaching-turn-agent、skill:peer-reinforcement、session-wrapup-agent 等运行节点提供。'
+              : canonicalAgentId === 'learner-orchestrator'
+                ? '该编排器本身不直接持有单一 System Prompt，学习者画像增强与知识沉淀由 learner-model-agent 与内部 skill 链共同提供。'
               : canonicalAgentId === 'tutor-agent'
                 ? '该名称当前更像旧服务概念，不是已注册的独立 runtime agent。若需要 Prompt 管理，应先确认真实运行 ID。'
                 : null
@@ -894,7 +924,7 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('获取 Agent 设计详情失败:', error);
+    logger.error('[admin-platform] 获取 Agent 设计详情失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -958,7 +988,7 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('获取编排器关系失败:', error);
+    logger.error('[admin-platform] 获取编排器关系失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -1184,15 +1214,9 @@ router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request
       sourceConversationId: sample.sourceConversationId,
       existingPathId: sample.existingPathId,
       rawGoal: sample.rawGoal || '',
-      understanding: sample.understanding || {},
-      collected: sample.collected || {},
-      structuredData: sample.structuredData || null,
-      confirmedProposal: sample.confirmedProposal || null,
-      confidenceScores: sample.confidenceScores || null,
+      visibleSummary: sample.visibleSummary || null,
       conversationHistory: Array.isArray(sample.conversationHistory) ? sample.conversationHistory : [],
       finalUserVisible: sample.finalUserVisible || null,
-      stage: sample.stage || null,
-      confidence: typeof sample.confidence === 'number' ? sample.confidence : undefined,
     });
 
     res.json({
@@ -1207,9 +1231,7 @@ router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request
           existingPathId: normalized.existingPathId || null,
           skillLevel: normalized.userProfile?.skillLevel || null,
           timePerDay: normalized.userProfile?.timePerDay || null,
-          structuredData: normalized.userProfile?.structuredData || null,
           confirmedProposal: normalized.userProfile?.confirmedProposal || null,
-          confidenceScores: normalized.userProfile?.confidenceScores || null,
           conversationHistory: normalized.userProfile?.conversationHistory || [],
           normalizedInput: normalized.userProfile?.normalizedInput || null
         }
@@ -1237,6 +1259,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
       const defaultAgents = [
         { name: 'RequirementCollection', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'PathPlanning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
+        { name: 'LearnerOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'Teaching', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'TeachingOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearningCompanion', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
@@ -1373,7 +1396,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('获取 Agent 状态失败:', error);
+    logger.error('[admin-platform] 获取 Agent 状态失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -1398,8 +1421,11 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       traceId,
       sessionId,
       status,
+      sourceEntry,
       keyword,
-      timeRange
+      timeRange,
+      startTime,
+      endTime
     } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -1419,11 +1445,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       ]
     });
 
-    // Agent Name 到 Agent ID 的映射（反向查找）
-    const monitoredAgentIds = Array.from(new Set(Object.values(AGENT_NAME_TO_IDS).flat()));
-
     const where: any = {
-      agentId: { in: monitoredAgentIds },
       AND: [] as any[]
     };
 
@@ -1457,6 +1479,11 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     if (sessionId) {
       where.AND.push({ metadata: { contains: String(sessionId) } });
     }
+
+    if (sourceEntry) {
+      where.sourceEntry = String(sourceEntry);
+    }
+
     if (status) {
       if (status === 'success') {
         where.AND.push({ success: true });
@@ -1469,8 +1496,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       }
     }
 
-    // 时间范围筛选
-    if (timeRange && timeRange !== 'all') {
+    // 时间范围筛选。精确时间优先，快捷范围作为默认筛选。
+    if (startTime || endTime) {
+      const calledAt: any = {};
+      if (startTime) calledAt.gte = new Date(String(startTime));
+      if (endTime) calledAt.lte = new Date(String(endTime));
+      where.calledAt = calledAt;
+    } else if (timeRange && timeRange !== 'all') {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
@@ -1640,7 +1672,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       };
     };
 
-    const [logs, total, successCount, timeoutCount, errorCount] = await Promise.all([
+    const [logs, total, successCount, timeoutCount, errorCount, bySourceRows] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where,
         skip,
@@ -1674,7 +1706,17 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           ]
         }
       }),
+      prisma.agent_call_logs.groupBy({
+        by: ['sourceEntry'],
+        where,
+        _count: { _all: true },
+      }),
     ]);
+
+    const bySource = bySourceRows.reduce((acc, row) => {
+      acc[row.sourceEntry || 'platform'] = row._count._all;
+      return acc;
+    }, {} as Record<string, number>);
 
     // 转换日志格式以兼容前端
     const formattedLogs = logs.map(log => {
@@ -1725,7 +1767,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           total,
           success: successCount,
           timeout: timeoutCount,
-          error: errorCount
+          error: errorCount,
+          bySource
         },
         pagination: {
           total,
@@ -1735,7 +1778,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('获取 Agent 日志失败:', error);
+    logger.error('[admin-platform] 获取 Agent 日志失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -1801,7 +1844,7 @@ router.get('/conversations', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('获取对话列表失败:', error);
+    logger.error('[admin-platform] 获取对话列表失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -1849,7 +1892,7 @@ router.get('/conversations/:id', async (req: Request, res: Response) => {
       data: conversation,
     });
   } catch (error: any) {
-    console.error('获取对话详情失败:', error);
+    logger.error('[admin-platform] 获取对话详情失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -1945,7 +1988,7 @@ router.get('/activity', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('获取活动日志失败:', error);
+    logger.error('[admin-platform] 获取活动日志失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -2027,7 +2070,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('获取教学会话调试数据失败:', error);
+    logger.error('[admin-platform] 获取教学会话调试数据失败', { error });
     res.status(500).json({
       success: false,
       error: {
@@ -2061,7 +2104,7 @@ router.get('/student-state', async (req: Request, res: Response) => {
       data: baselineStats
     });
   } catch (error: any) {
-    console.error('获取学生状态基线失败:', error);
+    logger.error('[admin-platform] 获取学生状态基线失败', { error });
     res.status(500).json({
       success: false,
       error: { message: '获取学生状态基线失败' }

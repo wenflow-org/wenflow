@@ -1,11 +1,3 @@
-/**
- * Virtual Learner Simulation Agent - 类型定义
- * 
- * 兼容标准 AgentInput/AgentOutput 协议
- */
-
-import type { AgentInput, AgentOutput, AgentContext } from '../protocol';
-
 export interface VirtualLearnerProfileData {
   age?: number;
   occupation?: string;
@@ -50,7 +42,7 @@ export interface VirtualLearnerProfile {
   userId: string;
   profile: VirtualLearnerProfileData;
   learningGoal: string;
-  knowledgeLevel: 'beginner' | 'intermediate' | 'advanced';
+  knowledgeLevel?: 'beginner' | 'intermediate' | 'advanced';
   knownConcepts?: string[];
   struggleConcepts?: string[];
   personalityTraits?: PersonalityTraits;
@@ -93,6 +85,25 @@ export interface LearnerLatentState {
   remainingUnknowns?: string[];
   detectedMisconceptions?: string[];
   stableErrorStyle?: string[];
+  taskUnderstanding?: number;
+  conceptualMastery?: number;
+  proceduralMastery?: number;
+  transferConfidence?: number;
+  misconceptionRisk?: number;
+  helpSeekingReadiness?: number;
+  cognitiveLoad?: number;
+  wantsHint?: boolean;
+  wantsWorkedExample?: boolean;
+  readyForNextTask?: boolean;
+  remainingBlockers?: string[];
+  phaseFocus?: 'opening' | 'understanding' | 'proposal_evaluation' | 'trying' | 'blocked' | 'verifying' | 'ready_to_close' | string;
+  feltUnderstood?: number;
+  problemClarity?: number;
+  proposalFit?: number;
+  taskRelevance?: number;
+  executionConcern?: number;
+  willingToTry?: boolean;
+  readyToProceed?: boolean;
 }
 
 export interface GoalConcernPool {
@@ -117,6 +128,13 @@ export interface SimulationContext {
     misdiagnosis?: string;
     pressurePoints?: string[];
     behaviorHooks?: string[];
+    problemKnowledge?: {
+      domainFamiliarity?: 'low' | 'medium' | 'high';
+      knownConcepts?: string[];
+      struggleConcepts?: string[];
+      selfAssessment?: string;
+      hiddenGaps?: string[];
+    };
     goalSeed?: any;
     disclosurePlan?: any;
   } | null;
@@ -137,84 +155,6 @@ export interface SimulationContext {
     currentContent?: any;
     milestoneProgress?: number;
     totalMilestones?: number;
-  };
-}
-
-export interface ReactionContext {
-  reactionTarget: 'path_proposal' | 'task_content' | 'quiz_result';
-  targetData: any;
-  profile: VirtualLearnerProfile;
-  previousInteractions?: ConversationHistoryItem[];
-  learnerState?: LearnerLatentState;
-  knowledgeState?: KnowledgePointState[];
-}
-
-// AgentInput 扩展：通过 metadata 传递模拟相关数据
-export interface SimulationAgentInput extends AgentInput {
-  // 自定义操作类型
-  simulationType?: 'generate_profile' | 'simulate_goal_reply' | 'simulate_learning_reply' | 'simulate_reaction' | 'simulate_reply';
-  // 画像生成输入
-  generateProfileInput?: {
-    learningGoal: string;
-    knowledgeLevel: 'beginner' | 'intermediate' | 'advanced';
-    simulationMode?: 'manual' | 'ai';
-    personalityTraits?: PersonalityTraits;
-    existingProfile?: VirtualLearnerProfileData;
-  };
-  // 模拟对话上下文
-  simulationContext?: SimulationContext;
-}
-
-// AgentOutput 扩展
-export interface SimulationAgentOutput extends AgentOutput {
-  // 模拟回复
-  userReply?: string;
-  // 生成的画像（增强版）
-  generatedProfile?: {
-    age: number;
-    occupation: string;
-    education: string;
-    background: string;
-    learningStyle?: 'visual' | 'auditory' | 'reading' | 'kinesthetic';
-    motivationType?: 'career' | 'interest' | 'necessity' | 'social';
-    availableTime?: 'minimal' | 'moderate' | 'abundant';
-    techComfort?: 'low' | 'medium' | 'high';
-    priorAttempts?: string;
-    corePersonality?: string;
-    personalityDrivers?: string[];
-    communicationStyle?: string;
-    motivationOrientation?: string;
-    emotionalBaseline?: string;
-    emotionalTriggers?: string[];
-    resiliencePattern?: string;
-    metacognitiveProfile?: string;
-    cognitiveLoadTolerance?: string;
-    selfRegulationStyle?: string;
-    digitalLiteracy?: string;
-    helpSeekingPattern?: string;
-    adversarialPattern?: string;
-    memoryRepairPattern?: string;
-    behaviorBoundaries?: string[];
-    learningPreferences?: string[];
-    failurePatterns?: string[];
-    behavioralProfileSummary?: string;
-    personalityTraits?: PersonalityTraits;
-  };
-  learnerState?: LearnerLatentState;
-  // 模拟反应输出
-  reactionOutput?: {
-    reaction: string;
-    decision: 'accept' | 'modify' | 'reject';
-    modifyRequest?: string;
-    confidence: number;
-    reasons?: {
-      goalAlignment?: number;
-      difficultyFit?: number;
-      timeFit?: number;
-      prerequisiteFit?: number;
-      motivationFit?: number;
-    };
-    biggestConcern?: string;
   };
 }
 

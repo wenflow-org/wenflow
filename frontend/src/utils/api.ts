@@ -1,5 +1,6 @@
 ﻿// Axios API 客户端
 import axios from 'axios';
+import { clearProjectionToken, getProjectionToken, isProjectionMode } from './projection';
 
 const isDev = import.meta.env.DEV;
 export const API_BASE_URL = isDev ? '/api' : (import.meta.env.VITE_API_URL || '/api');
@@ -22,9 +23,14 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    const projectionToken = getProjectionToken();
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (projectionToken) {
+      config.headers['X-Projection-Token'] = projectionToken;
     }
 
     const isTestMode = localStorage.getItem('testMode') === 'true';
@@ -71,6 +77,9 @@ api.interceptors.response.use(
 
       // 401 未授权 - 跳转登录
       if (status === 401) {
+        if (isProjectionMode()) {
+          clearProjectionToken();
+        }
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';

@@ -6,12 +6,12 @@
     </div>
 
     <div class="page-hero">
-      <span class="pill">用户管理</span>
+      <span class="pill">账户管理</span>
       <h1 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><User /></el-icon>
         管理系统用户账号
       </h1>
-      <p class="page-hero__subtitle">管理用户角色、权限和学习进度</p>
+      <p class="page-hero__subtitle">查看账户身份、角色与登录情况</p>
     </div>
 
     <!-- 筛选工具栏 -->
@@ -19,7 +19,7 @@
       <div class="toolbar-left admin-list-toolbar__group">
         <el-input
           v-model="filterForm.search"
-          placeholder="搜索用户名称或邮箱"
+          placeholder="搜索昵称或邮箱"
           style="width: 260px"
           clearable
           @input="handleSearch"
@@ -61,51 +61,46 @@
         stripe
         @selection-change="handleSelectionChange"
         style="min-width: 100%"
-      >
-        <template #empty>
-          <el-empty description="暂无用户数据" />
-        </template>
-        <el-table-column type="selection" width="48" />
-        <el-table-column prop="id" label="ID" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="name" label="昵称" min-width="100" />
-        <el-table-column prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
-        <el-table-column label="角色" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.isAdmin ? 'danger' : 'primary'" size="small">
-              {{ row.isAdmin ? '管理员' : '用户' }}
-            </el-tag>
+        >
+          <template #empty>
+            <el-empty description="暂无用户数据" />
           </template>
-        </el-table-column>
-        <el-table-column label="XP / 等级" width="100" align="center">
-          <template #default="{ row }">
-            <div class="xp-level-info">
-              <span class="xp-value">{{ row.xp || 0 }}</span>
-              <span class="level-badge">Lv.{{ row.level }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="学习进度" min-width="160" align="center">
-          <template #default="{ row }">
-            <div class="progress-info">
-              <span>{{ row._count?.learningPaths || 0 }} 路径</span>
-              <span>{{ row._count?.tasks || 0 }} 任务</span>
-              <el-tag size="small" effect="plain">{{ getSkillLevelText(row.skillLevel) }}</el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="最后登录" width="150">
-          <template #default="{ row }">
-            {{ row.lastLoginAt ? formatTime(row.lastLoginAt) : '从未登录' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right" align="center">
-          <template #default="{ row }">
-            <div class="row-actions">
-              <el-button type="primary" link @click="openLearnerModel(row)">学习者模型</el-button>
-              <el-button type="primary" link @click="openEditDialog(row)">编辑</el-button>
-            </div>
-          </template>
-        </el-table-column>
+          <el-table-column type="selection" width="48" />
+          <el-table-column prop="name" label="昵称" min-width="220">
+            <template #default="{ row }">
+              <div class="user-primary-cell">
+                <strong>{{ row.name || '-' }}</strong>
+                <span class="user-id-cell">{{ row.id }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="email" label="邮箱" min-width="280" show-overflow-tooltip />
+          <el-table-column label="角色" width="96" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.isAdmin ? 'danger' : 'primary'" size="small">
+                {{ row.isAdmin ? '管理员' : '用户' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="登录状态" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.lastLoginAt ? 'success' : 'info'" size="small" effect="plain">
+                {{ row.lastLoginAt ? '已登录' : '未登录' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="最后登录" min-width="180">
+            <template #default="{ row }">
+              {{ row.lastLoginAt ? formatTime(row.lastLoginAt) : '从未登录' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="116" fixed="right" align="center">
+            <template #default="{ row }">
+              <div class="row-actions">
+                <el-button class="users-action-btn" @click="openEditDialog(row)">编辑</el-button>
+              </div>
+            </template>
+          </el-table-column>
       </el-table>
     </div>
 
@@ -193,7 +188,6 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import { adminUsersApi } from '@/api/adminApi';
 import { User, Search } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
@@ -204,7 +198,6 @@ const createFormRef = ref<FormInstance>();
 const editFormRef = ref<FormInstance>();
 
 const loading = ref(false);
-const router = useRouter();
 const users = ref<any[]>([]);
 const tableRef = ref<any>(null);
 const createVisible = ref(false);
@@ -338,15 +331,6 @@ const handlePageChange = () => {
   loadUsers();
 };
 
-const getSkillLevelText = (level: string) => {
-  const texts: any = {
-    beginner: '初学者',
-    intermediate: '中级',
-    advanced: '高级'
-  };
-  return texts[level] || level || '未设置';
-};
-
 const formatTime = (time: string) => {
   return new Date(time).toLocaleString('zh-CN');
 };
@@ -426,13 +410,6 @@ const handleDeleteFromEdit = async () => {
 
 const handleSelectionChange = (rows: any[]) => {
   selectedUserIds.value = rows.map(row => row.id);
-};
-
-const openLearnerModel = (row: any) => {
-  router.push({
-    name: 'AdminLearnerModelDetail',
-    params: { userId: row.id }
-  });
 };
 
 const handleBatchDelete = async () => {
@@ -675,34 +652,26 @@ onMounted(() => {
   overflow-x: auto;
 }
 
-.progress-info {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
+.user-primary-cell {
+  display: grid;
+  gap: 4px;
 }
 
-.xp-level-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.xp-value {
-  font-size: 0.875rem;
-  font-weight: 700;
+.user-primary-cell strong {
+  font-size: 0.92rem;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
-.level-badge {
-  font-size: 0.6875rem;
+.user-id-cell {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.72rem;
+  line-height: 1.3;
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--color-primary) 8%, white);
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
+}
+
+:deep(.el-table .cell) {
+  word-break: break-word;
 }
 
 .row-actions {
@@ -710,6 +679,23 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
+}
+
+.users-action-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  background: rgba(245, 249, 255, 0.96);
+  color: var(--color-primary-dark, #1f57cc);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.users-action-btn:hover {
+  border-color: rgba(52, 120, 246, 0.28);
+  background: rgba(238, 244, 255, 0.98);
+  color: var(--color-primary-dark, #1f57cc);
 }
 
 :deep(.el-table th.el-table__cell) {

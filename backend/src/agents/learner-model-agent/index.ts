@@ -10,7 +10,7 @@ import {
   AgentOutput,
   AgentContext
 } from '../protocol';
-import { EventBus, getEventBus } from '../../gateway/event-bus';
+import { getEventBus } from '../../gateway/event-bus';
 import { profileAggregator } from './profile-aggregator';
 import { personalizationEngine } from './personalization';
 import {
@@ -20,6 +20,7 @@ import {
   ProfileUpdateSource
 } from './types';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
+import { logger } from '../../utils/logger';
 
 export const learnerModelAgentDefinition: AgentDefinition = {
   id: 'learner-model-agent',
@@ -145,7 +146,11 @@ class LearnerModelAgent {
         }
       };
     } catch (error) {
-      console.error('[LearnerModelAgent] Error:', error);
+      logger.error('[learner-model-agent] execution failed', {
+        userId: context.userId,
+        action,
+        error,
+      });
       
       return {
         success: false,
@@ -239,36 +244,6 @@ class LearnerModelAgent {
       snapshot,
       confidence: snapshot.freshness.confidence,
     };
-  }
-  
-  setupEventListeners(eventBus: EventBus): void {
-    eventBus.on('learning:completed', async (event) => {
-      if (!event.userId) return;
-      
-      await this.updateProfile(event.userId, {
-        agentId: 'learner-model-agent',
-        timestamp: new Date().toISOString(),
-        dataType: 'learning',
-        data: {
-          ktl: event.data.ktl,
-          lf: event.data.lf,
-          lss: event.data.lss
-        },
-        confidence: 0.8
-      });
-    });
-    
-    eventBus.on('goal:understanding:updated', async (event) => {
-      if (!event.userId) return;
-      
-      await this.updateProfile(event.userId, {
-        agentId: 'goal-conversation',
-        timestamp: new Date().toISOString(),
-        dataType: 'cognitive',
-        data: event.data.understanding || {},
-        confidence: 0.7
-      });
-    });
   }
   
   clearCache(userId?: string): void {

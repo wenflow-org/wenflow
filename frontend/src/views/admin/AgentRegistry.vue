@@ -10,14 +10,14 @@
       <span class="pill">Admin</span>
       <h2 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Grid /></el-icon>
-        Agent 管理
+        运行节点管理
       </h2>
-      <p class="page-hero__subtitle">管理 Agent 的 Prompt 版本、模型配置与运行状态</p>
+      <p class="page-hero__subtitle">这里只展示平台核心节点，包括 Goal / Path / Learner / Teaching / Simulation 主链中的 Agent、编排器与内部 Skill。外挂能力请前往“技能/组件配置”。</p>
     </div>
 
     <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
       <el-card class="summary-card summary-card--blue" shadow="hover">
-        <div class="label">Agent 数量</div>
+        <div class="label">运行节点数量</div>
         <div class="value">{{ summary?.total }}</div>
       </el-card>
       <el-card class="summary-card summary-card--green" shadow="hover">
@@ -36,7 +36,12 @@
 
     <div class="filters admin-list-toolbar">
       <div class="admin-list-toolbar__group">
-        <el-input v-model="keyword" placeholder="搜索 Agent ID / 名称" clearable class="search" />
+        <el-input v-model="keyword" placeholder="搜索运行节点 ID / 名称" clearable class="search" />
+        <el-select v-model="nodeKind" placeholder="节点类型" clearable class="select">
+          <el-option label="Agent" value="agent" />
+          <el-option label="Skill" value="skill" />
+          <el-option label="Orchestrator" value="orchestrator" />
+        </el-select>
         <el-select v-model="lifecycle" placeholder="发布状态" clearable class="select">
           <el-option label="草稿" value="draft" />
           <el-option label="预发布" value="staging" />
@@ -63,7 +68,7 @@
 
     <div class="admin-list-card">
       <el-table :data="filteredAgents" v-loading="loading" stripe style="width: 100%;">
-      <el-table-column label="Agent" min-width="280">
+      <el-table-column label="节点" min-width="280">
         <template #default="{ row }">
           <div class="agent-cell">
             <div class="agent-cell__title-row">
@@ -71,17 +76,21 @@
               <el-tag size="small" :type="getKindTagType(row.kind)">{{ getKindLabel(row.kind) }}</el-tag>
             </div>
             <span class="agent-cell__id">{{ row.agentId }}</span>
-            <span v-if="row.aliases?.length" class="agent-cell__alias">aliases: {{ row.aliases.join(', ') }}</span>
             <span class="agent-cell__meta">{{ row.type }} · v{{ row.version }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" min-width="140">
+      <el-table-column label="运行状态" min-width="190">
         <template #default="{ row }">
           <div class="status-cell">
-            <el-tag :type="getRuntimeRoleTagType(row)" size="small">{{ getRuntimeRoleLabel(row) }}</el-tag>
-            <el-tag :type="getLifecycleTagType(row.lifecycleStatus)" size="small">{{ row.lifecycleStatus }}</el-tag>
-            <el-tag :type="getHealthTagType(row.status)" size="small">{{ row.status }}</el-tag>
+            <div class="status-cell__row">
+              <span class="status-cell__label">发布</span>
+              <el-tag :type="getLifecycleTagType(row.lifecycleStatus)" size="small">{{ getLifecycleLabel(row.lifecycleStatus) }}</el-tag>
+            </div>
+            <div class="status-cell__row">
+              <span class="status-cell__label">健康</span>
+              <el-tag :type="getHealthTagType(row.status)" size="small">{{ getHealthLabel(row.status) }}</el-tag>
+            </div>
           </div>
         </template>
       </el-table-column>
@@ -99,7 +108,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="Prompt版本" min-width="120">
+      <el-table-column label="Prompt版本" min-width="180">
         <template #default="{ row }">
           <div class="prompt-cell">
             <template v-if="getPromptSummary(row.agentId)?.loading">
@@ -119,83 +128,233 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center">
-        <template #default="{ row }">
-          <el-button type="primary" link @click="openDesign(row)">查看设计</el-button>
-        </template>
-      </el-table-column>
-      </el-table>
+        <el-table-column label="操作" width="108" fixed="right" align="center">
+          <template #default="{ row }">
+          <el-button class="table-link-btn" @click="openNode(row)">{{ row.kind === 'skill' ? '查看配置' : '查看设计' }}</el-button>
+          </template>
+        </el-table-column>
+       </el-table>
     </div>
 
     <el-drawer
       v-model="designDrawerVisible"
-      :title="`Agent 设计详情 · ${currentDesign?.agentId || ''}`"
-      size="min(60%, 800px)"
+      :title="`运行定义 · ${currentDesign?.basic.name || currentDesign?.agentId || ''}`"
+      size="min(72%, 1080px)"
       destroy-on-close
     >
       <div v-loading="designLoading" class="design-drawer">
         <template v-if="currentDesign">
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="名称">{{ currentDesign.basic.name }}</el-descriptions-item>
-            <el-descriptions-item label="版本">{{ currentDesign.basic.version }}</el-descriptions-item>
-            <el-descriptions-item label="类型">{{ currentDesign.basic.type }}</el-descriptions-item>
-            <el-descriptions-item label="分类">{{ currentDesign.basic.category }}</el-descriptions-item>
-            <el-descriptions-item label="角色">{{ currentDesign.runtime.role }}</el-descriptions-item>
-            <el-descriptions-item label="运行类型">{{ getKindLabel(currentDesign.runtime.kind) }}</el-descriptions-item>
-            <el-descriptions-item label="启用状态">
-              <el-tag :type="currentDesign.runtime.runtimeEnabled ? 'success' : 'info'" size="small">
-                {{ currentDesign.runtime.runtimeEnabled ? 'enabled' : 'disabled' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="输出协议">
-              <el-tag :type="currentDesign.runtime.ioContractVersion === 'agent-output-v1' ? 'success' : 'warning'" size="small">
-                {{ currentDesign.runtime.ioContractVersion }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="监控分组">{{ currentDesign.runtime.monitoringGroup || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="别名">{{ currentDesign.runtime.aliases.join(', ') || '-' }}</el-descriptions-item>
-            <el-descriptions-item v-if="isLegacyAliasDesign(currentDesign)" label="兼容说明" :span="2">
-              当前请求 ID 属于历史兼容别名，真实运行身份已迁移到新的 canonical ID。
-            </el-descriptions-item>
-            <el-descriptions-item label="描述" :span="2">{{ currentDesign.basic.description || '-' }}</el-descriptions-item>
-          </el-descriptions>
+          <section class="design-hero">
+            <div class="design-hero__main">
+              <span class="pill">运行定义</span>
+              <div class="design-hero__title-row">
+                <h3>{{ currentDesign.basic.name }}</h3>
+                <el-tag size="small" effect="plain" :type="getKindTagType(currentDesign.runtime.kind)">
+                  {{ getKindLabel(currentDesign.runtime.kind) }}
+                </el-tag>
+              </div>
+              <p class="design-hero__subtitle">{{ currentDesign.basic.description || '当前 Agent 暂无补充说明。' }}</p>
+              <div class="design-hero__meta">
+                <span>运行 ID：{{ currentDesign.agentId }}</span>
+                <span>版本：{{ currentDesign.basic.version || '-' }}</span>
+                <span>类型：{{ formatTypeLabel(currentDesign.basic.type) }}</span>
+                <span>分类：{{ formatCategoryLabel(currentDesign.basic.category) }}</span>
+              </div>
+            </div>
+            <div class="design-hero__summary">
+              <div class="design-summary-card">
+                <span class="design-summary-card__label">运行状态</span>
+                <div class="design-summary-card__value-row">
+                  <el-tag :type="currentDesign.runtime.runtimeEnabled ? 'success' : 'info'" size="small">
+                    {{ currentDesign.runtime.runtimeEnabled ? '已启用' : '未启用' }}
+                  </el-tag>
+                  <el-tag size="small" effect="plain" :type="getPromptStatusTagType(currentPromptActive?.status)">
+                    {{ currentPromptActive ? getPromptStatusLabel(currentPromptActive.status) : '提示词待确认' }}
+                  </el-tag>
+                </div>
+                <p>{{ formatPromptSourceSummary(currentPromptSource) }}</p>
+              </div>
+              <div class="design-summary-card">
+                <span class="design-summary-card__label">模型运行时</span>
+                <strong class="design-summary-card__value">{{ currentModelConfig?.model || '平台默认模型' }}</strong>
+                <p>{{ currentModelConfig ? `${formatTierLabel(currentModelConfig.tier)} · ${formatThinkingMode(currentModelConfig.thinkingMode)} / ${formatReasoningEffort(currentModelConfig.reasoningEffort)}` : '当前未配置独立模型策略' }}</p>
+              </div>
+            </div>
+          </section>
 
-          <div class="chip-section">
-            <div class="chip-row">
-              <span class="chip-label">capabilities</span>
-              <el-tag v-for="item in currentDesign.definition.capabilities" :key="`cap-${item}`" size="small" effect="plain">{{ item }}</el-tag>
-              <span v-if="!currentDesign.definition.capabilities.length" class="empty">-</span>
-            </div>
-            <div class="chip-row">
-              <span class="chip-label">subscribes</span>
-              <el-tag v-for="item in currentDesign.definition.subscribes" :key="`sub-${item}`" size="small" effect="plain">{{ item }}</el-tag>
-              <span v-if="!currentDesign.definition.subscribes.length" class="empty">-</span>
-            </div>
-            <div class="chip-row">
-              <span class="chip-label">publishes</span>
-              <el-tag v-for="item in currentDesign.definition.publishes" :key="`pub-${item}`" size="small" effect="plain">{{ item }}</el-tag>
-              <span v-if="!currentDesign.definition.publishes.length" class="empty">-</span>
-            </div>
+          <el-alert
+            v-if="isLegacyAliasDesign(currentDesign)"
+            title="当前打开的是历史兼容别名，系统真实运行身份已迁移到新的规范 ID。"
+            type="info"
+            :closable="false"
+            show-icon
+            class="design-banner"
+          />
+
+          <div class="design-overview-grid">
+            <section class="design-panel">
+              <div class="design-panel__header">
+                <div>
+                  <h4>基础信息</h4>
+                  <p>用于识别这条运行定义的身份与用途。</p>
+                </div>
+              </div>
+              <div class="kv-grid">
+                <div class="kv-item">
+                  <span class="kv-item__label">显示名称</span>
+                  <strong class="kv-item__value">{{ currentDesign.basic.name }}</strong>
+                </div>
+                <div class="kv-item">
+                  <span class="kv-item__label">运行类型</span>
+                  <strong class="kv-item__value">{{ getKindLabel(currentDesign.runtime.kind) }}</strong>
+                </div>
+                <div class="kv-item">
+                  <span class="kv-item__label">角色定位</span>
+                  <strong class="kv-item__value">{{ formatRuntimeRoleLabel(currentDesign.runtime.role) }}</strong>
+                </div>
+                <div class="kv-item">
+                  <span class="kv-item__label">输出协议</span>
+                  <strong class="kv-item__value">{{ formatIoContractLabel(currentDesign.runtime.ioContractVersion) }}</strong>
+                </div>
+                <div class="kv-item">
+                  <span class="kv-item__label">监控分组</span>
+                  <strong class="kv-item__value">{{ currentDesign.runtime.monitoringGroup || '未分组' }}</strong>
+                </div>
+                <div class="kv-item">
+                  <span class="kv-item__label">兼容别名</span>
+                  <strong class="kv-item__value">{{ currentDesign.runtime.aliases.join('、') || '无' }}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="design-panel">
+              <div class="design-panel__header">
+                <div>
+                  <h4>运行摘要</h4>
+                  <p>把常用判断项收成同一屏，减少来回切换。</p>
+                </div>
+              </div>
+              <div class="runtime-glance-grid">
+                <div class="runtime-glance-card">
+                  <span class="runtime-glance-card__label">启用状态</span>
+                  <el-tag :type="currentDesign.runtime.runtimeEnabled ? 'success' : 'info'" size="small">
+                    {{ currentDesign.runtime.runtimeEnabled ? '已启用' : '未启用' }}
+                  </el-tag>
+                </div>
+                <div class="runtime-glance-card">
+                  <span class="runtime-glance-card__label">提示词来源</span>
+                  <el-tag size="small" :type="promptSourceTagType(currentPromptSource)">
+                    {{ promptSourceLabel(currentPromptSource) }}
+                  </el-tag>
+                </div>
+                <div class="runtime-glance-card">
+                  <span class="runtime-glance-card__label">模型层级</span>
+                  <strong>{{ currentModelConfig ? formatTierLabel(currentModelConfig.tier) : '未配置' }}</strong>
+                </div>
+                <div class="runtime-glance-card">
+                  <span class="runtime-glance-card__label">最近调用</span>
+                  <strong>{{ currentDesign.samples.agentCallLogs.length ? formatTime(currentDesign.samples.agentCallLogs[0].calledAt) : '暂无记录' }}</strong>
+                </div>
+              </div>
+            </section>
           </div>
 
+          <section class="design-panel design-panel--chips">
+            <div class="design-panel__header">
+              <div>
+                <h4>接口契约</h4>
+                <p>说明这个 Agent 能做什么、会接收什么、会产出什么。</p>
+              </div>
+            </div>
+            <div class="chip-section chip-section--contract">
+              <div class="chip-row chip-row--stacked">
+                <span class="chip-label">能力</span>
+                <div class="chip-list">
+                  <el-tag v-for="item in currentDesign.definition.capabilities" :key="`cap-${item}`" size="small" effect="plain">{{ item }}</el-tag>
+                  <span v-if="!currentDesign.definition.capabilities.length" class="empty">暂无能力声明</span>
+                </div>
+              </div>
+              <div class="chip-row chip-row--stacked">
+                <span class="chip-label">接收事件</span>
+                <div class="chip-list">
+                  <el-tag v-for="item in currentDesign.definition.subscribes" :key="`sub-${item}`" size="small" effect="plain">{{ item }}</el-tag>
+                  <span v-if="!currentDesign.definition.subscribes.length" class="empty">当前没有订阅事件</span>
+                </div>
+              </div>
+              <div class="chip-row chip-row--stacked">
+                <span class="chip-label">输出事件</span>
+                <div class="chip-list">
+                  <el-tag v-for="item in currentDesign.definition.publishes" :key="`pub-${item}`" size="small" effect="plain">{{ item }}</el-tag>
+                  <span v-if="!currentDesign.definition.publishes.length" class="empty">当前没有输出事件</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <el-tabs class="design-tabs">
-            <el-tab-pane label="Input Schema">
-              <el-table :data="inputSchemaRows" border size="small" empty-text="无 input schema">
-                <el-table-column prop="path" label="字段路径" min-width="240" />
-                <el-table-column prop="type" label="类型" width="120" />
-                <el-table-column prop="required" label="必填" width="90" />
-                <el-table-column prop="description" label="说明" min-width="220" />
-              </el-table>
+            <el-tab-pane label="输入协议">
+              <section class="protocol-panel">
+                <div class="design-panel__header design-panel__header--tight">
+                  <div>
+                    <h4>输入协议</h4>
+                    <p>这部分定义调用方应传入哪些字段、字段类型和必填项，不等同于提示词全文。</p>
+                  </div>
+                </div>
+                <div class="protocol-overview-grid">
+                  <section class="contract-card protocol-tip-card">
+                    <span class="chip-label">协议说明</span>
+                    <ul class="protocol-tip-list">
+                      <li>用于说明这条 Agent 接收内容的接口约定。</li>
+                      <li>提示词会围绕这份约定组织行为，但不会自动生成这份协议。</li>
+                      <li>运行时是否严格遵守，还取决于调用代码和后处理逻辑。</li>
+                    </ul>
+                  </section>
+                  <section class="contract-card protocol-json-card">
+                    <span class="chip-label">JSON 骨架</span>
+                    <pre class="sample-json">{{ inputSchemaPreview }}</pre>
+                  </section>
+                </div>
+                <el-table :data="inputSchemaRows" border size="small" empty-text="暂无输入协议">
+                  <el-table-column prop="path" label="字段路径" min-width="240" />
+                  <el-table-column prop="semanticLabel" label="字段含义" min-width="180" />
+                  <el-table-column prop="type" label="类型" width="120" />
+                  <el-table-column prop="requiredLabel" label="必填" width="90" />
+                  <el-table-column prop="description" label="作用说明" min-width="220" />
+                </el-table>
+              </section>
             </el-tab-pane>
-            <el-tab-pane label="Output Schema">
-              <el-table :data="outputSchemaRows" border size="small" empty-text="无 output schema">
-                <el-table-column prop="path" label="字段路径" min-width="240" />
-                <el-table-column prop="type" label="类型" width="120" />
-                <el-table-column prop="required" label="必填" width="90" />
-                <el-table-column prop="description" label="说明" min-width="220" />
-              </el-table>
+            <el-tab-pane label="输出协议">
+              <section class="protocol-panel">
+                <div class="design-panel__header design-panel__header--tight">
+                  <div>
+                    <h4>输出协议</h4>
+                    <p>这部分定义该 Agent 理论上应返回哪些字段，是运行约定，不是最近一次真实输出快照。</p>
+                  </div>
+                </div>
+                <div class="protocol-overview-grid">
+                  <section class="contract-card protocol-tip-card">
+                    <span class="chip-label">协议说明</span>
+                    <ul class="protocol-tip-list">
+                      <li>提示词通常会要求模型围绕这些字段组织输出。</li>
+                      <li>如果真实返回与这里不一致，通常需要同时检查提示词和后处理代码。</li>
+                      <li>建议结合下方“最近调用样本”一起看，判断约定是否真正落地。</li>
+                    </ul>
+                  </section>
+                  <section class="contract-card protocol-json-card">
+                    <span class="chip-label">JSON 骨架</span>
+                    <pre class="sample-json">{{ outputSchemaPreview }}</pre>
+                  </section>
+                </div>
+                <el-table :data="outputSchemaRows" border size="small" empty-text="暂无输出协议">
+                  <el-table-column prop="path" label="字段路径" min-width="240" />
+                  <el-table-column prop="semanticLabel" label="字段含义" min-width="180" />
+                  <el-table-column prop="type" label="类型" width="120" />
+                  <el-table-column prop="requiredLabel" label="必填" width="90" />
+                  <el-table-column prop="description" label="作用说明" min-width="220" />
+                </el-table>
+              </section>
             </el-tab-pane>
-            <el-tab-pane label="Prompt 配置">
+            <el-tab-pane label="提示词版本">
               <div class="prompt-panel" v-loading="promptDrawerLoading">
                 <div class="prompt-actions">
                   <el-button type="primary" size="small" @click="openCreatePromptDialog">
@@ -248,7 +407,7 @@
 
                   <div class="prompt-text-card">
                     <div class="prompt-text-card__header">
-                      <h4>System Prompt</h4>
+                      <h4>系统提示词</h4>
                       <el-button v-if="promptPreviewText" type="primary" link @click="promptExpanded = !promptExpanded">
                         {{ promptExpanded ? '收起全文' : '展开全文' }}
                       </el-button>
@@ -325,12 +484,12 @@
 
                 <div class="prompt-versions-card">
                   <div class="prompt-versions-card__header">
-                    <h4>运行 Preview</h4>
+                    <h4>运行预览</h4>
                     <el-button type="primary" :loading="agentPreviewLoading" @click="runAgentPreview">运行预览</el-button>
                   </div>
                   <div class="contract-grid contract-grid--preview">
                     <section class="contract-card">
-                      <span class="chip-label">Sample Input</span>
+                      <span class="chip-label">示例输入</span>
                       <el-input
                         v-model="agentPreviewInputText"
                         type="textarea"
@@ -339,7 +498,7 @@
                       />
                     </section>
                     <section class="contract-card">
-                      <span class="chip-label">Sample Output</span>
+                      <span class="chip-label">示例输出</span>
                       <pre v-if="agentPreviewOutput" class="sample-json">{{ prettyJson(agentPreviewOutput) }}</pre>
                       <el-empty v-else description="点击运行预览查看输出" />
                     </section>
@@ -353,7 +512,7 @@
                   <div class="model-config-card">
                     <div class="model-config-card__row">
                       <span class="model-config-card__label">层级</span>
-                      <el-tag size="small">{{ currentModelConfig.tier }}</el-tag>
+                      <el-tag size="small">{{ formatTierLabel(currentModelConfig.tier) }}</el-tag>
                     </div>
                     <div class="model-config-card__row">
                       <span class="model-config-card__label">模型</span>
@@ -383,19 +542,39 @@
                 <el-empty v-else-if="!modelConfigLoading" description="当前 Agent 暂无模型配置" />
               </div>
             </el-tab-pane>
-            <el-tab-pane label="Recent Samples">
+            <el-tab-pane label="最近调用样本">
               <div class="sample-block">
-                <h4>agent_call_logs</h4>
-                <el-collapse>
+                <div class="design-panel__header design-panel__header--tight">
+                  <div>
+                    <h4>最近调用</h4>
+                    <p>用于快速核对这条运行定义最近一次真实输入输出。</p>
+                  </div>
+                </div>
+                <el-empty v-if="!currentDesign.samples.agentCallLogs.length" description="最近暂无调用记录" />
+                <el-collapse v-else>
                   <el-collapse-item
                     v-for="item in currentDesign.samples.agentCallLogs"
                     :key="`call-${item.id}`"
-                    :title="`${formatTime(item.calledAt)} · ${item.success ? 'success' : 'error'} · ${item.durationMs || 0}ms`"
+                    :title="`${formatTime(item.calledAt)} · ${item.success ? '成功' : '失败'} · ${item.durationMs || 0}ms`"
                   >
-                    <pre class="sample-json">{{ prettyJson({ input: item.input, output: item.output, error: item.error }) }}</pre>
+                    <div class="sample-call-meta">
+                      <el-tag size="small" :type="item.success ? 'success' : 'danger'">{{ item.success ? '运行成功' : '运行失败' }}</el-tag>
+                      <span>耗时 {{ formatDuration(item.durationMs) }}</span>
+                      <span v-if="item.error">错误：{{ item.error }}</span>
+                    </div>
+                    <div class="contract-grid contract-grid--preview">
+                      <section class="contract-card">
+                        <span class="chip-label">输入载荷</span>
+                        <pre class="sample-json">{{ prettyJson(item.input) }}</pre>
+                      </section>
+                      <section class="contract-card">
+                        <span class="chip-label">输出载荷</span>
+                        <pre class="sample-json">{{ prettyJson(item.output) }}</pre>
+                      </section>
+                    </div>
                   </el-collapse-item>
                 </el-collapse>
-</div>
+              </div>
             </el-tab-pane>
           </el-tabs>
         </template>
@@ -507,28 +686,48 @@
         <el-button type="primary" :loading="modelConfigSaving" @click="saveModelConfig">保存</el-button>
       </template>
     </el-dialog>
+
+    <SkillNodeWorkbench v-model:visible="skillWorkbenchVisible" :skill-id="currentSkillNodeId" @changed="loadRegistry" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Grid, Refresh, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
-import { adminAgentsApi, adminAgentPromptsApi, adminAxios, type AdminRegistryAgent, type AgentDesignDetail } from '@/api/adminApi';
+import { adminAgentsApi, adminAgentPromptsApi, adminAxios, adminSkillsApi, type AdminRegistryAgent, type AgentDesignDetail } from '@/api/adminApi';
+import SkillNodeWorkbench from './components/SkillNodeWorkbench.vue';
 import { toast } from '../../utils/toast';
+import { PLATFORM_NODE_SKILLS } from './capabilityCatalog';
 
 const loading = ref(false);
 const summary = ref<{ total: number; active24h: number; neverCalled: number; unhealthy: number } | null>(null);
 const agents = ref<AdminRegistryAgent[]>([]);
+const route = useRoute();
+const router = useRouter();
+const skillWorkbenchVisible = ref(false);
+const currentSkillNodeId = ref('');
 const designDrawerVisible = ref(false);
 const designLoading = ref(false);
 const currentDesign = ref<AgentDesignDetail | null>(null);
 const promptDrawerLoading = ref(false);
 const promptExpanded = ref(false);
 const keyword = ref('');
+const nodeKind = ref('');
 const lifecycle = ref('');
 const health = ref('');
 const onlyAttention = ref(false);
+
+interface SkillConfigSummaryRow {
+  skillId: string;
+  displayName?: string;
+  status?: 'working' | 'placeholder' | 'simplified' | 'mock';
+  lastCalledAt?: string | null;
+  tier: string;
+  model?: string;
+  enabled: boolean;
+}
 
 interface PromptVersionSummary {
   id: string;
@@ -550,6 +749,20 @@ interface PromptSummaryState {
   status: string;
   statusLabel: string;
   existsWithoutActive: boolean;
+}
+
+interface AdminSkillRuntimeInfo {
+  name: string;
+  version: string;
+  category?: string;
+  description?: string;
+  stats?: {
+    callCount?: number;
+    successRate?: number;
+    avgLatency?: number;
+  };
+  lastCalledAt?: string | null;
+  registeredAt?: string | null;
 }
 
 interface AgentModelConfig {
@@ -600,23 +813,77 @@ const newPromptForm = ref({
   maxTokens: 4000
 });
 
-const isAgentRuntime = (agent: AdminRegistryAgent) => {
-  const roleHint = `${agent.role || ''} ${agent.type || ''}`.toLowerCase();
-  if (roleHint.includes('orchestrator')) return false;
-  if (agent.agentId.endsWith('-orchestrator')) return false;
-  if (agent.agentId === 'ai-teaching' || agent.agentId === 'ai-teaching-agent') return false;
-  if (agent.kind === 'skill') return false;
-  return true;
+const skillNameMap: Record<string, string> = {
+  'text-structure-analyzer': '文本结构分析器',
+  'retrieval': '内容检索器',
+  'web-extractor': '网页内容提取器',
+  'image-analyzer': '图片分析器',
+  'memory-search': '学习记忆搜索器',
+  'smart-search': '智能搜索器',
+  'label-generator': '动态标签生成器',
+  'adaptive-guidance-copy': '动态引导文案生成器',
+  'goal-profile-inference': '目标阶段画像推断器',
+  'learning-pattern-distiller': '学习模式蒸馏器',
+  'session-knowledge-distiller': '课堂知识蒸馏器',
+  'dialogue-concept-extractor': '对话概念抽取器',
+  'goal-type-identifier': '目标类型识别器',
+  'batch-anderson-labeler': '批量安德森标注器',
+  'time-estimator': '时间估算器',
+  'quiz-generation': '测验生成器',
+  'pdf-parser': 'PDF 解析器',
+  'exercise-generator': '练习生成器',
+  'error-pattern': '错误模式分析器',
+  'content-generation': '内容生成器',
+  'code-explainer': '代码解释器',
+  'answer-generation': '答案生成器',
+  'path-scene-framing': '路径场景构图',
+  'stage-designer': '阶段任务设计器',
+  'peer-reinforcement': '同伴强化',
+  'virtual-learner-persona-designer': '虚拟学习者身份设计器',
+  'virtual-learner-scenario-designer': '虚拟学习者故事设计器',
+  'virtual-learner-goal-dialogue-simulator': '虚拟学习者 Goal 对话模拟器',
+  'virtual-learner-path-evaluator': '虚拟学习者路径评估器',
+  'virtual-learner-learn-turn-simulator': '虚拟学习者 Learn 回合模拟器',
+};
+
+const statusToHealth = (status?: SkillConfigSummaryRow['status']): AdminRegistryAgent['status'] => {
+  if (status === 'working') return 'healthy';
+  if (status === 'simplified') return 'warning';
+  if (status === 'placeholder' || status === 'mock') return 'error';
+  return 'idle';
+};
+
+const toSkillRuntimeNode = (skill: SkillConfigSummaryRow, runtimeInfo?: AdminSkillRuntimeInfo): AdminRegistryAgent => {
+  const callCount = Number(runtimeInfo?.stats?.callCount || 0);
+  const successRate = Number.isFinite(Number(runtimeInfo?.stats?.successRate))
+    ? Number((Number(runtimeInfo?.stats?.successRate || 0) * 100).toFixed(1))
+    : (skill.status === 'placeholder' || skill.status === 'mock' ? 0 : 100);
+  const avgDuration = Number(runtimeInfo?.stats?.avgLatency || 0);
+  return {
+    agentId: skill.skillId,
+    name: skillNameMap[skill.skillId] || skill.displayName || skill.skillId,
+    type: skill.tier || runtimeInfo?.category || 'chat',
+    role: 'skill',
+    kind: 'skill',
+    aliases: [],
+    lifecycleStatus: 'published',
+    status: statusToHealth(skill.status),
+    callCount,
+    successRate,
+    avgDuration,
+    lastActivity: runtimeInfo?.lastCalledAt || skill.lastCalledAt || null,
+    version: runtimeInfo?.version || '1.0.0',
+  };
 };
 
 const filteredAgents = computed(() => {
   return agents.value.filter(agent => {
-    if (!isAgentRuntime(agent)) return false;
     const byKeyword = !keyword.value || `${agent.agentId} ${agent.name}`.toLowerCase().includes(keyword.value.toLowerCase());
+    const byKind = !nodeKind.value || agent.kind === nodeKind.value;
     const byLifecycle = !lifecycle.value || agent.lifecycleStatus === lifecycle.value;
     const byHealth = !health.value || agent.status === health.value;
     const byAttention = !onlyAttention.value || isAttentionAgent(agent);
-    return byKeyword && byLifecycle && byHealth && byAttention;
+    return byKeyword && byKind && byLifecycle && byHealth && byAttention;
   });
 });
 
@@ -627,10 +894,24 @@ const isAttentionAgent = (agent: AdminRegistryAgent) => {
 const loadRegistry = async () => {
   loading.value = true;
   try {
-    const response: any = await adminAgentsApi.getRegistry();
-    agents.value = (response.data.data.agents || []).filter(isAgentRuntime);
+    const [response, skillResponse, skillRuntimeResponse]: any = await Promise.all([
+      adminAgentsApi.getRegistry(),
+      adminSkillsApi.getSkillModelConfigs(),
+      adminAxios.get('/admin/skills'),
+    ]);
+
+    const runtimeAgents = response.data.data.agents || [];
+    const runtimeSkillList = skillRuntimeResponse.data?.data || [];
+    const runtimeSkillMap = new Map<string, AdminSkillRuntimeInfo>(
+      (Array.isArray(runtimeSkillList) ? runtimeSkillList : []).map((item: AdminSkillRuntimeInfo) => [item.name, item])
+    );
+    const skillNodes = ((skillResponse.data?.data || []) as SkillConfigSummaryRow[])
+      .filter((skill) => PLATFORM_NODE_SKILLS.has(skill.skillId))
+      .map((skill) => toSkillRuntimeNode(skill, runtimeSkillMap.get(skill.skillId)));
+
+    agents.value = [...runtimeAgents, ...skillNodes];
     summary.value = buildAgentSummary(agents.value);
-    void loadPromptSummaries(agents.value);
+    void loadPromptSummaries(agents.value.filter((item) => item.kind !== 'orchestrator'));
   } catch (error) {
     console.error('加载 Agent 注册列表失败:', error);
     toast.error('加载 Agent 注册列表失败');
@@ -773,11 +1054,19 @@ const buildCodeFallbackPrompt = (agentId: string): PromptVersionSummary | null =
 };
 
 const promptSourceLabel = (source: 'db-active' | 'db-versioned-no-active' | 'code-fallback' | 'orchestrator-no-direct-prompt' | 'legacy-service') => {
-  if (source === 'db-active') return 'DB Active';
-  if (source === 'db-versioned-no-active') return 'DB Inactive';
-  if (source === 'orchestrator-no-direct-prompt') return 'Unsupported';
-  if (source === 'legacy-service') return 'Legacy Service';
-  return 'Code Fallback';
+  if (source === 'db-active') return '数据库已生效';
+  if (source === 'db-versioned-no-active') return '数据库未生效';
+  if (source === 'orchestrator-no-direct-prompt') return '不直接管理';
+  if (source === 'legacy-service') return '旧服务映射';
+  return '代码内置';
+};
+
+const formatPromptSourceSummary = (source: 'db-active' | 'db-versioned-no-active' | 'code-fallback' | 'orchestrator-no-direct-prompt' | 'legacy-service') => {
+  if (source === 'db-active') return '当前线上已接管到数据库中的生效版本。';
+  if (source === 'db-versioned-no-active') return '数据库里已有版本，但当前还没有明确切到生效版本。';
+  if (source === 'orchestrator-no-direct-prompt') return '这条运行定义本身不直接持有单一提示词，请到编排监控或高级编排配置查看。';
+  if (source === 'legacy-service') return '当前名称更接近旧服务概念，需要先确认真实运行 ID。';
+  return '当前大概率仍走代码内置提示词，适合尽快迁到版本化管理。';
 };
 
 const promptSourceTagType = (source: 'db-active' | 'db-versioned-no-active' | 'code-fallback' | 'orchestrator-no-direct-prompt' | 'legacy-service') => {
@@ -786,6 +1075,20 @@ const promptSourceTagType = (source: 'db-active' | 'db-versioned-no-active' | 'c
   if (source === 'orchestrator-no-direct-prompt') return 'warning';
   if (source === 'legacy-service') return 'info';
   return 'info';
+};
+
+const getPromptLookupId = (node: AdminRegistryAgent) => {
+  if (node.kind === 'skill') {
+    if (node.agentId.startsWith('skill:')) {
+      return node.agentId;
+    }
+    return `skill:${node.agentId}`;
+  }
+  return node.agentId;
+};
+
+const getSkillRuntimeName = (nodeId: string) => {
+  return nodeId.startsWith('skill:') ? nodeId.slice('skill:'.length) : nodeId;
 };
 
 const promptEmptyDescription = computed(() => {
@@ -804,6 +1107,7 @@ const promptEmptyDescription = computed(() => {
 const loadPromptSummaries = async (registryAgents: AdminRegistryAgent[]) => {
   await Promise.allSettled(
     registryAgents.map(async (agent) => {
+      const promptLookupId = getPromptLookupId(agent);
       setPromptSummary(agent.agentId, {
         loading: true,
         versionLabel: '',
@@ -813,7 +1117,7 @@ const loadPromptSummaries = async (registryAgents: AdminRegistryAgent[]) => {
       });
 
       try {
-        const versionsResponse: any = await adminAgentPromptsApi.getPromptVersions({ agentId: agent.agentId });
+        const versionsResponse: any = await adminAgentPromptsApi.getPromptVersions({ agentId: promptLookupId });
         const promptList = versionsResponse.data?.data?.list || versionsResponse.data?.data || [];
         const prompts = Array.isArray(promptList)
           ? promptList.map(normalizePromptRecord).filter(Boolean) as PromptVersionSummary[]
@@ -821,6 +1125,44 @@ const loadPromptSummaries = async (registryAgents: AdminRegistryAgent[]) => {
         const prompt = pickBestPrompt(prompts);
 
         if (!prompt) {
+          if (agent.kind === 'skill') {
+            try {
+              const effectiveSkillResponse: any = await adminSkillsApi.getEffectiveSkillPrompt(getSkillRuntimeName(agent.agentId));
+              const effectiveSource = effectiveSkillResponse.data?.data?.data?.source || effectiveSkillResponse.data?.data?.source || '';
+
+              if (effectiveSource === 'no-prompt') {
+                setPromptSummary(agent.agentId, {
+                  loading: false,
+                  versionLabel: 'rule-only',
+                  status: 'NO_PROMPT',
+                  statusLabel: '规则型',
+                  existsWithoutActive: false,
+                });
+                return;
+              }
+
+              if (!effectiveSource) {
+                setPromptSummary(agent.agentId, {
+                  loading: false,
+                  versionLabel: '',
+                  status: 'PROMPT_MISSING',
+                  statusLabel: '缺少 Prompt',
+                  existsWithoutActive: false,
+                });
+                return;
+              }
+            } catch {
+              setPromptSummary(agent.agentId, {
+                loading: false,
+                versionLabel: '',
+                status: 'PROMPT_MISSING',
+                statusLabel: '缺少 Prompt',
+                existsWithoutActive: false,
+              });
+              return;
+            }
+          }
+
           setPromptSummary(agent.agentId, {
             loading: false,
             versionLabel: '',
@@ -909,8 +1251,65 @@ interface SchemaRow {
   path: string;
   type: string;
   required: 'yes' | 'no';
+  requiredLabel: string;
   description: string;
+  semanticLabel: string;
 }
+
+const schemaFieldLabelMap: Record<string, string> = {
+  goal: '学习目标',
+  metadata: '补充元信息',
+  conversationHistory: '对话历史',
+  success: '执行结果',
+  userVisible: '用户可见回复',
+  internal: '内部结构',
+  'internal.core': '核心判断',
+  'internal.core.stage': '当前阶段',
+  'internal.core.confidence': '置信度',
+  'internal.core.isCompleted': '是否完成',
+  'internal.ext': '扩展结构',
+  'internal.ext.goalConversation': '目标对话扩展数据',
+  renderHints: '渲染提示',
+  schemaVersion: '协议版本'
+};
+
+const inferSchemaFieldLabel = (path: string) => {
+  if (!path) return '根节点';
+  if (schemaFieldLabelMap[path]) return schemaFieldLabelMap[path];
+  const leafKey = path.replace(/\[\]$/g, '').split('.').pop() || path;
+  if (schemaFieldLabelMap[leafKey]) return schemaFieldLabelMap[leafKey];
+  return leafKey
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .replace(/^./, (char) => char.toUpperCase());
+};
+
+const buildSchemaPreview = (schema: any): string => {
+  const walk = (node: any): any => {
+    if (!node || typeof node !== 'object') return 'any';
+
+    if (node.type === 'object' && node.properties) {
+      const result: Record<string, any> = {};
+      Object.keys(node.properties).forEach((key) => {
+        result[key] = walk(node.properties[key]);
+      });
+      return result;
+    }
+
+    if (node.type === 'array') {
+      return [walk(node.items || { type: 'any' })];
+    }
+
+    if (Array.isArray(node.enum) && node.enum.length > 0) {
+      return `${node.type || 'enum'} (${node.enum.join(' | ')})`;
+    }
+
+    return node.type || 'any';
+  };
+
+  if (!schema) return '暂无协议定义';
+  return JSON.stringify(walk(schema), null, 2);
+};
 
 const toSchemaRows = (schema: any): SchemaRow[] => {
   if (!schema || typeof schema !== 'object') return [];
@@ -928,7 +1327,9 @@ const toSchemaRows = (schema: any): SchemaRow[] => {
         path: childPath,
         type: child.type || (child.properties ? 'object' : 'any'),
         required: currentRequired.includes(key) ? 'yes' : 'no',
-        description: child.description || ''
+        requiredLabel: currentRequired.includes(key) ? '是' : '否',
+        description: child.description || '',
+        semanticLabel: inferSchemaFieldLabel(childPath)
       });
 
       if (child.type === 'object' && child.properties) {
@@ -946,6 +1347,14 @@ const toSchemaRows = (schema: any): SchemaRow[] => {
 
 const inputSchemaRows = computed(() => toSchemaRows(currentDesign.value?.definition.inputSchema));
 const outputSchemaRows = computed(() => toSchemaRows(currentDesign.value?.definition.outputSchema));
+const inputSchemaPreview = computed(() => buildSchemaPreview(currentDesign.value?.definition.inputSchema));
+const outputSchemaPreview = computed(() => buildSchemaPreview(currentDesign.value?.definition.outputSchema));
+const designSurfaceLabel = computed(() => {
+  const kind = currentDesign.value?.runtime.kind;
+  if (kind === 'orchestrator') return '编排视图';
+  if (kind === 'skill') return '能力节点';
+  return '运行定义';
+});
 
 const prettyJson = (value: any) => {
   if (value === null || value === undefined) return '-';
@@ -994,6 +1403,32 @@ const openDesign = async (agent: AdminRegistryAgent) => {
   } finally {
     designLoading.value = false;
   }
+};
+
+const openNode = async (agent: AdminRegistryAgent) => {
+  if (agent.kind === 'skill') {
+    currentSkillNodeId.value = agent.agentId;
+    skillWorkbenchVisible.value = true;
+    return;
+  }
+
+  await openDesign(agent);
+};
+
+const openRequestedAgentFromQuery = async () => {
+  const agentId = typeof route.query.agentId === 'string' ? route.query.agentId.trim() : '';
+  if (!agentId || !agents.value.length) return;
+
+  const matchedAgent = agents.value.find((item) => item.agentId === agentId);
+  if (!matchedAgent) return;
+
+  if (currentDesign.value?.agentId === agentId && designDrawerVisible.value) return;
+
+  await openNode(matchedAgent);
+
+  const nextQuery = { ...route.query };
+  delete nextQuery.agentId;
+  router.replace({ path: route.path, query: nextQuery });
 };
 
 const loadModelConfig = async (agentId: string) => {
@@ -1096,8 +1531,8 @@ const formatThinkingMode = (thinkingMode?: 'default' | 'enabled' | 'disabled') =
 };
 
 const formatReasoningEffort = (reasoningEffort?: 'default' | 'high' | 'max') => {
-  if (reasoningEffort === 'high') return 'high';
-  if (reasoningEffort === 'max') return 'max';
+  if (reasoningEffort === 'high') return '高强度';
+  if (reasoningEffort === 'max') return '最高强度';
   return '模型默认';
 };
 
@@ -1118,6 +1553,13 @@ const getLifecycleTagType = (status: string) => {
   return 'info';
 };
 
+const getLifecycleLabel = (status: string) => {
+  if (status === 'published') return '已发布';
+  if (status === 'staging') return '预发布';
+  if (status === 'draft') return '草稿';
+  return status || '未知';
+};
+
 const getHealthTagType = (status: string) => {
   if (status === 'healthy') return 'success';
   if (status === 'warning') return 'warning';
@@ -1125,13 +1567,51 @@ const getHealthTagType = (status: string) => {
   return 'info';
 };
 
+const getHealthLabel = (status: string) => {
+  if (status === 'healthy') return '健康';
+  if (status === 'warning') return '预警';
+  if (status === 'error') return '异常';
+  if (status === 'idle') return '空闲';
+  return status || '未知';
+};
+
 const getRuntimeRole = (_agent: AdminRegistryAgent): 'agent' => 'agent';
 
 const getKindLabel = (kind?: string) => {
-  if (kind === 'skill') return 'Skill';
+  if (kind === 'skill') return '主链 Skill';
   if (kind === 'orchestrator') return '编排器';
-  if (kind === 'alias') return '别名';
-  return 'Agent';
+  if (kind === 'alias') return '兼容别名';
+  return 'Agent 节点';
+};
+
+const formatTypeLabel = (type?: string) => {
+  if (!type) return '-';
+  if (type === 'custom') return '自定义';
+  if (type === 'system') return '系统';
+  return type;
+};
+
+const formatCategoryLabel = (category?: string) => {
+  if (!category) return '-';
+  if (category === 'standard') return '标准';
+  return category;
+};
+
+const formatRuntimeRoleLabel = (role?: 'agent' | 'orchestrator') => {
+  if (role === 'orchestrator') return '编排角色';
+  return '执行角色';
+};
+
+const formatIoContractLabel = (version?: 'legacy' | 'agent-output-v1') => {
+  if (version === 'agent-output-v1') return 'Agent 输出协议 v1';
+  if (version === 'legacy') return '历史协议';
+  return '-';
+};
+
+const formatTierLabel = (tier?: string) => {
+  if (tier === 'reasoning') return '推理层';
+  if (tier === 'chat') return '对话层';
+  return tier || '未配置';
 };
 
 const getKindTagType = (kind?: string) => {
@@ -1369,7 +1849,17 @@ const buildAgentSummary = (items: AdminRegistryAgent[]) => {
   };
 };
 
-onMounted(loadRegistry);
+onMounted(async () => {
+  await loadRegistry();
+  await openRequestedAgentFromQuery();
+});
+
+watch(
+  () => [route.query.agentId, agents.value.length] as const,
+  async () => {
+    await openRequestedAgentFromQuery();
+  }
+);
 </script>
 
 <style scoped>
@@ -1386,33 +1876,66 @@ onMounted(loadRegistry);
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 24px; border: 1px solid rgba(205, 216, 238, 0.9); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94)); backdrop-filter: blur(16px); margin-bottom: 16px; box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08); }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
 .admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+.page-hero__subtitle { margin: 6px 0 0; color: #62758f; font-size: 0.95rem; line-height: 1.65; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(52, 120, 246, 0.08); color: #2d6df2; font-size: 12px; font-weight: 700; }
 
 
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
-.summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }
+.summary-card { border-radius: 18px; border: 1px solid rgba(205, 216, 238, 0.9); background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.96)); box-shadow: 0 12px 28px rgba(42, 72, 128, 0.08); overflow: hidden; }
+.registry-btn,
+.table-link-btn {
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.registry-btn--primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #3478f6, #3f86ff);
+}
+
+.registry-btn--ghost {
+  color: #335aa4;
+  border: 1px solid rgba(52, 120, 246, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.table-link-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  color: var(--color-primary-dark, #1f57cc);
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  background: rgba(244, 249, 255, 0.96);
+}
+
+.registry-btn--primary:hover,
+.registry-btn--ghost:hover,
+.table-link-btn:hover {
+  transform: translateY(-1px);
+}
 
 .summary-card .label {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: #7b8ba3;
   font-weight: 600;
 }
 
 .summary-card .value {
-  font-size: 1.75rem;
+  font-size: 2rem;
   font-weight: 800;
-  margin-top: 0.25rem;
-  color: var(--text-primary);
+  margin-top: 0.35rem;
+  color: #22344d;
+  line-height: 1;
+  letter-spacing: -0.04em;
 }
 
 .summary-card .value.danger {
@@ -1426,14 +1949,14 @@ onMounted(loadRegistry);
 
 .admin-list-card {
   width: 100%;
-  background: color-mix(in srgb, #ffffff 90%, white);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
   border: 1px solid #d2dbf3;
   border-radius: 28px;
-  padding: 1rem;
+  padding: 0.75rem;
   position: relative;
   z-index: 1;
   backdrop-filter: blur(20px);
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  box-shadow: 0 18px 40px rgba(42, 72, 128, 0.1);
 }
 
 .admin-list-card :deep(.el-table) {
@@ -1477,6 +2000,11 @@ onMounted(loadRegistry);
 
 .filters {
   margin-bottom: 1rem;
+  padding: 16px 18px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 255, 0.92));
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.08);
 }
 
 .search {
@@ -1521,29 +2049,36 @@ onMounted(loadRegistry);
 }
 
 .agent-cell__name {
-  color: var(--text-primary);
-  font-size: 13px;
+  color: #22344d;
+  font-size: 0.95rem;
+  line-height: 1.3;
 }
 
 .agent-cell__id,
 .agent-cell__meta {
-  color: var(--text-secondary);
+  color: #73839a;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.agent-cell__alias {
-  color: var(--color-warning);
-  font-size: 12px;
+.status-cell {
+  display: grid;
+  gap: 6px;
 }
 
-.status-cell {
+.status-cell__row {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-cell__label {
+  min-width: 28px;
+  color: #7b8ba3;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .metrics-cell {
@@ -1555,12 +2090,12 @@ onMounted(loadRegistry);
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: var(--text-primary);
+  color: #22344d;
   font-size: 12px;
 }
 
 .metrics-cell__row--sub {
-  color: var(--text-secondary);
+  color: #73839a;
 }
 
 .prompt-cell {
@@ -1569,24 +2104,316 @@ onMounted(loadRegistry);
 }
 
 .prompt-cell__version {
-  color: var(--text-primary);
-  font-size: 13px;
+  color: #22344d;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .prompt-cell__muted {
-  color: var(--text-muted);
+  color: #8b9ab0;
   font-size: 12px;
+}
+
+:deep(.summary-card .el-card__body) {
+  padding: 16px 18px;
+}
+
+:deep(.filters .el-input__wrapper),
+:deep(.filters .el-select__wrapper) {
+  border-radius: 12px;
 }
 
 .design-drawer {
   padding-right: 0.4rem;
+  display: grid;
+  gap: 16px;
+}
+
+.design-masthead {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: 28px;
+  border: 1px solid rgba(196, 210, 236, 0.95);
+  background:
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.12), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(243, 247, 255, 0.96));
+  box-shadow: 0 18px 42px rgba(42, 72, 128, 0.1);
+}
+
+.design-masthead__main,
+.design-masthead__status {
+  min-width: 0;
+}
+
+.design-masthead__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.design-masthead__title-row h3 {
+  margin: 0;
+  font-size: 1.65rem;
+  line-height: 1.2;
+  color: #22344d;
+  letter-spacing: -0.03em;
+}
+
+.design-masthead__subtitle {
+  margin: 10px 0 0;
+  color: #62758f;
+  line-height: 1.7;
+  max-width: 760px;
+}
+
+.design-masthead__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 16px;
+  color: #7085a6;
+  font-size: 0.875rem;
+}
+
+.design-masthead__status {
+  display: grid;
+  gap: 12px;
+}
+
+.design-signal-card,
+.design-panel,
+.runtime-glance-card,
+.overview-strip-card,
+.story-card,
+.flow-story-step {
+  border: 1px solid rgba(205, 216, 238, 0.86);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.95));
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
+}
+
+.design-signal-card {
+  border-radius: 22px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.design-signal-card__label,
+.runtime-glance-card__label,
+.kv-item__label,
+.overview-strip-card__label,
+.story-card__label {
+  color: #7b8ba3;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.design-signal-card strong,
+.overview-strip-card strong,
+.story-card strong {
+  color: #22344d;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.design-signal-card p,
+.design-panel__header p,
+.runtime-glance-card p,
+.overview-strip-card p,
+.story-card p,
+.flow-story-step__body p,
+.flow-story-step__body span {
+  margin: 0;
+  color: #7085a6;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.design-banner {
+  margin-top: -2px;
+}
+
+.design-overview-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.overview-strip-card {
+  border-radius: 20px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.design-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.75fr);
+  gap: 16px;
+}
+
+.design-layout-grid__main,
+.design-layout-grid__aside {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.design-panel {
+  border-radius: 22px;
+  padding: 18px 20px;
+}
+
+.design-panel--story {
+  padding-bottom: 20px;
+}
+
+.design-panel--aside {
+  position: sticky;
+  top: 0;
+}
+
+.design-panel--chips {
+  padding-bottom: 16px;
+}
+
+.design-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.design-panel__header--tight {
+  margin-bottom: 10px;
+}
+
+.design-panel__header h4 {
+  margin: 0;
+  color: #22344d;
+  font-size: 1rem;
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.story-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 0.9fr));
+  gap: 12px;
+}
+
+.story-card {
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.story-card--primary {
+  background:
+    radial-gradient(circle at top left, rgba(52, 120, 246, 0.14), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(243, 247, 255, 0.97));
+}
+
+.kv-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(245, 248, 255, 0.82);
+  border: 1px solid rgba(214, 223, 239, 0.86);
+}
+
+.kv-item__value {
+  color: #22344d;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.runtime-glance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtime-glance-grid--stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.runtime-glance-card {
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.runtime-glance-card strong {
+  color: #22344d;
+  line-height: 1.5;
+}
+
+.design-inline-note {
+  margin-top: 12px;
+}
+
+.flow-story-rail {
+  display: grid;
+  gap: 10px;
+}
+
+.flow-story-step {
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.flow-story-step__index {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.14), rgba(141, 107, 255, 0.16));
+  color: #2350b8;
+  font-weight: 800;
+}
+
+.flow-story-step__body {
+  display: grid;
+  gap: 4px;
+}
+
+.flow-story-step__body strong {
+  color: #22344d;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .chip-section {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: color-mix(in srgb, var(--bg-surface) 60%, white);
-  border-radius: var(--radius-md);
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.chip-section--contract {
+  display: grid;
+  gap: 12px;
 }
 
 .chip-row {
@@ -1600,19 +2427,70 @@ onMounted(loadRegistry);
   margin-bottom: 0;
 }
 
+.chip-row--stacked {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
 .chip-label {
-  min-width: 80px;
-  color: var(--text-muted);
-  font-size: 0.75rem;
+  min-width: 84px;
+  color: #7b8ba3;
+  font-size: 0.78rem;
   font-weight: 700;
 }
 
 .empty {
-  color: var(--text-muted);
+  color: #8b9ab0;
 }
 
 .design-tabs {
-  margin-top: 1.5rem;
+  margin-top: 2px;
+}
+
+.design-tabs :deep(.el-tabs__header) {
+  margin-bottom: 14px;
+}
+
+.design-tabs :deep(.el-tabs__item) {
+  font-weight: 700;
+}
+
+.protocol-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.protocol-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+}
+
+.protocol-tip-card,
+.protocol-json-card {
+  min-height: 100%;
+}
+
+.protocol-tip-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #62758f;
+  line-height: 1.7;
+}
+
+.protocol-tip-list li + li {
+  margin-top: 6px;
+}
+
+.protocol-json-card .sample-json {
+  margin: 0;
 }
 
 .sample-block {
@@ -1633,6 +2511,16 @@ onMounted(loadRegistry);
   border-radius: var(--radius-md);
   overflow: auto;
   max-height: 300px;
+}
+
+.sample-call-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  margin-bottom: 12px;
+  color: #7085a6;
+  font-size: 0.85rem;
 }
 
 .prompt-panel {
@@ -1735,13 +2623,14 @@ onMounted(loadRegistry);
 }
 
 .model-config-panel {
-  padding: 1rem 0;
+  padding: 0.25rem 0 0;
 }
 
 .model-config-card {
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 8px;
-  padding: 1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.95));
+  border: 1px solid rgba(205, 216, 238, 0.86);
+  border-radius: 18px;
+  padding: 1rem 1rem 0.9rem;
   margin-bottom: 1rem;
 }
 
@@ -1794,6 +2683,40 @@ onMounted(loadRegistry);
   border-radius: 16px;
   background: rgba(52, 120, 246, 0.03);
   border-color: rgba(52, 120, 246, 0.08);
+}
+
+@media (max-width: 960px) {
+  .design-masthead,
+  .design-overview-strip,
+  .design-layout-grid,
+  .protocol-overview-grid,
+  .story-grid,
+  .kv-grid,
+  .runtime-glance-grid,
+  .contract-grid--preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-masthead {
+    padding: 18px;
+  }
+
+  .design-panel {
+    padding: 16px;
+  }
+
+  .design-panel--aside {
+    position: static;
+  }
+
+  .chip-row--stacked {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chip-label {
+    min-width: 0;
+  }
 }
 
 </style>

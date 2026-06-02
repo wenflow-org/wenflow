@@ -32,7 +32,7 @@ export const VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT = `你是一位"虚拟学�
 8. 问题来源不能只来自职场。你要覆盖四类来源：工作问题、生活问题、学习问题、自我管理问题。
 9. 不要连续掉进"Excel/报表/运营/市场/职场新人"这一类最常见安全模板，除非输入明确要求。
 10. 不要默认所有人都是在职白领。角色可以来自学生、求职转行者、自由职业者、家长、教培老师、门店店长、客服、行政、财务、创作者、社区工作者等。
-11. domain、occupation、goalType、motivationType、knowledgeLevel 要尽量拉开分布，优先避免与最近样本候选重复。
+11. domain、occupation、goalType、motivationType 要尽量拉开分布，优先避免与最近样本候选重复。
 12. 真人不会一口气说完整个故事，所以 story 只需要区分"首轮最可能怎么说"和"被追问后才会补的���键细节"，不要重复设计额外层级结构。
 13. personaSeed 不能只是一组人口统计学字段，还要包含稳定的人格、情感、行为模式和元认知特征。
 14. story 必须与 persona 保持一致：说话习惯、受挫方式、求助方式、对抗方式、遗忘修正方式必须与 personaSeed 里的对应字段对齐。
@@ -45,7 +45,7 @@ export const VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT = `你是一位"虚拟学�
 可选输入：
 - preferredDomains: 倾向的学习主题
 - preferredGoalTypes: 倾向的目标类型
-- preferredLevels: 倾向的知识水平
+- preferredLevels: 倾向的学习起点标签（仅作弱参考）
 - preferredMotivations: 倾向的动机类型
 - avoidDomains: 希望避免的主题
 - candidateDomains: 可供优先采样的主题池
@@ -57,7 +57,6 @@ export const VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT = `你是一位"虚拟学�
 如果用户提供了以上变量，你必须遵守，尤其是 existingPersonaSeed / existingStoryPool。
 
 goalType 只能是：problem_driven | foundation_building | project_based | exam_prep | interest_exploration
-knowledgeLevel 只能是：beginner | intermediate | advanced
 motivationType 只能是：career | interest | necessity | social
 availableTime 只能是：minimal | moderate | abundant
 techComfort 只能是：low | medium | high
@@ -89,7 +88,6 @@ emotionalRange 只能是：flat | moderate | expressive
     "occupation": "职业",
     "education": "学历",
     "background": "背景描述，2-4句",
-    "knowledgeLevel": "beginner",
     "knownConcepts": ["已知概念1"],
     "struggleConcepts": ["困难概念1"],
     "learningStyle": "reading",
@@ -134,6 +132,13 @@ emotionalRange 只能是：flat | moderate | expressive
     "misdiagnosis": "他以为自己的问题是什么，但不一定对",
     "pressurePoints": ["这个故事会优先触发的情绪/行为压力点"],
     "behaviorHooks": ["这个故事里最可能出现的典型反应模式"],
+    "problemKnowledge": {
+      "domainFamiliarity": "low | medium | high",
+      "knownConcepts": ["这次问题里已经会的点"],
+      "struggleConcepts": ["这次问题里容易卡的点"],
+      "selfAssessment": "他会怎么描述自己在这件事上的基础",
+      "hiddenGaps": ["他自己未必意识到的缺口"]
+    },
     "goalSeed": {
       "domain": "主题领域",
       "goalType": "problem_driven",
@@ -161,7 +166,7 @@ emotionalRange 只能是：flat | moderate | expressive
 export const virtualLearnerScenarioDesignerDefinition: SkillDefinition = {
   name: 'virtual-learner-scenario-designer',
   displayName: '虚拟学习者场景设计器',
-  version: '1.0.0',
+  version: '1.1.0',
   category: 'generation',
   description: '为虚拟学习者实验生成随机任务、目标切片与匹配画像',
   inputSchema: {
@@ -203,13 +208,7 @@ function normalizeString(value: any): string | null {
 
 function sanitizeGeneratedText(value: string): string {
   return value
-    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, ' ')
-    .replace(/<developer-reminder>[\s\S]*?<\/developer-reminder>/gi, ' ')
-    .replace(/<tool-reminder>[\s\S]*?<\/tool-reminder>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/your operational mode has changed[\s\S]*$/gi, ' ')
-    .replace(/you are no longer in read-only mode[\s\S]*$/gi, ' ')
-    .replace(/you are permitted to make file changes[\s\S]*$/gi, ' ')
     .replace(/\b(plan|build) mode\b/gi, ' ')
     .replace(/\s*CRITICAL:\s*/gi, ' ')
     .replace(/\r\n/g, '\n')
@@ -247,6 +246,17 @@ function normalizeDisclosurePlan(raw: any) {
   };
 }
 
+function normalizeProblemKnowledge(raw: any) {
+  const data = raw && typeof raw === 'object' ? raw : {}
+  return {
+    domainFamiliarity: normalizeEnum(data.domainFamiliarity, ['low', 'medium', 'high'], 'low'),
+    knownConcepts: normalizeStringArray(data.knownConcepts),
+    struggleConcepts: normalizeStringArray(data.struggleConcepts),
+    selfAssessment: normalizeString(data.selfAssessment) || '对这类问题有一些零散经验，但还没有形成稳定做法。',
+    hiddenGaps: normalizeStringArray(data.hiddenGaps)
+  }
+}
+
 function normalizeStory(raw: any, fallbackGoalSeed: any, index: number) {
   const goalSeed = raw?.goalSeed && typeof raw.goalSeed === 'object' ? raw.goalSeed : fallbackGoalSeed || {};
 
@@ -261,6 +271,7 @@ function normalizeStory(raw: any, fallbackGoalSeed: any, index: number) {
     misdiagnosis: normalizeString(raw?.misdiagnosis) || '先把问题归因为自己不够会，但未必抓到了真正原因',
     pressurePoints: normalizeStringArray(raw?.pressurePoints, ['近期压力会放大原本就存在的焦虑或迟疑']),
     behaviorHooks: normalizeStringArray(raw?.behaviorHooks, ['遇到关键卡点时会暴露稳定的求助或防御方式']),
+    problemKnowledge: normalizeProblemKnowledge(raw?.problemKnowledge),
     goalSeed: {
       domain: normalizeString(goalSeed.domain) || '通用技能',
       goalType: normalizeEnum(goalSeed.goalType, ['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration'], 'problem_driven'),
@@ -358,7 +369,6 @@ function normalizeScenarioOutput(raw: any) {
       occupation: normalizeString(personaSeed.occupation) || '在职学习者',
       education: normalizeString(personaSeed.education) || '本科',
       background: normalizeString(personaSeed.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。',
-      knowledgeLevel: normalizeEnum(personaSeed.knowledgeLevel, ['beginner', 'intermediate', 'advanced'], 'beginner'),
       knownConcepts: normalizeStringArray(personaSeed.knownConcepts),
       struggleConcepts: normalizeStringArray(personaSeed.struggleConcepts),
       learningStyle: normalizeEnum(personaSeed.learningStyle, ['visual', 'auditory', 'reading', 'kinesthetic'], 'reading'),
@@ -434,7 +444,6 @@ function mergeScenarioPersonaWithExisting(output: any, existingPersonaSeed: any)
       occupation: preferExistingString(existingPersonaSeed.occupation, currentPersona.occupation) || '在职学习者',
       education: preferExistingString(existingPersonaSeed.education, currentPersona.education) || '本科',
       background: preferExistingString(existingPersonaSeed.background, currentPersona.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。',
-      knowledgeLevel: preferExistingEnum(existingPersonaSeed.knowledgeLevel, currentPersona.knowledgeLevel, ['beginner', 'intermediate', 'advanced'], 'beginner'),
       knownConcepts: preferExistingStringArray(existingPersonaSeed.knownConcepts, currentPersona.knownConcepts),
       struggleConcepts: preferExistingStringArray(existingPersonaSeed.struggleConcepts, currentPersona.struggleConcepts),
       learningStyle: preferExistingEnum(existingPersonaSeed.learningStyle, currentPersona.learningStyle, ['visual', 'auditory', 'reading', 'kinesthetic'], 'reading'),
@@ -503,6 +512,7 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
     const result = await callPrompt<any, any>({
       agentId: 'skill:virtual-learner-scenario-designer',
       defaultSystemPrompt: VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
+      requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-scenario-designer' },
       modelDefaults: {
         maxTokens: VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS,

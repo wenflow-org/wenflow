@@ -30,7 +30,6 @@ export const virtualLearnerPersonaDesignerRuntimeDefinition: RuntimeDefinitionRe
     ],
     produces: [
       'personaSeed.occupation',
-      'personaSeed.knowledgeLevel',
       'personaSeed.corePersonality',
       'personaSeed.helpSeekingPattern',
       'personaSeed.adversarialPattern',

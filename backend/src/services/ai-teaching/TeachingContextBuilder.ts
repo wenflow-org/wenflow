@@ -1,39 +1,7 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
 import { learnerModelAgent } from '../../agents/learner-model-agent';
-import type { LearnerSnapshot, TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
-import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
-
-export interface LearnNormalizedContextV1 {
-  version: '1.0';
-  task: {
-    id: string;
-    title: string;
-    type: 'reading' | 'practice' | 'project' | 'quiz';
-    description: string | null;
-    acceptanceCriteria: string | null;
-  };
-  path: {
-    pathId: string;
-    title: string;
-    summary: string | null;
-    currentMilestoneTitle: string;
-    currentStageNumber: number;
-    currentTaskOrder: number;
-  };
-  learner: {
-    liveState: TeachingLearnerProjection['liveState'];
-    stableProfile: TeachingLearnerProjection['stableProfile'];
-    backgroundKnowledge: TeachingLearnerProjection['backgroundKnowledge'];
-    learningControlState: TeachingLearnerProjection['learningControlState'];
-  };
-  knowledge: {
-    primaryConcepts: string[];
-    prerequisiteConcepts: string[];
-    supportingConcepts: string[];
-  };
-}
 
 export interface TeachingScenarioContext {
   userId: string;
@@ -88,12 +56,14 @@ export interface TeachingScenarioContext {
   };
   canStartLearning: boolean;
   learningBlockedReason: string | null;
-  learnerSnapshot: LearnerSnapshot;
-  teachingProjection: TeachingLearnerProjection;
-  learningControlState: TeachingLearnerProjection['learningControlState'];
-  backgroundKnowledge: TeachingLearnerProjection['backgroundKnowledge'];
-  normalizedLearnContext: LearnNormalizedContextV1;
-  userProfile: any;
+  pathProgress: {
+    pathTitle: string;
+    pathSummary: string | null;
+    currentMilestoneTitle: string;
+    currentStageNumber: number;
+    currentTaskOrder: number;
+    totalTasksInMilestone: number;
+  };
   learningState: {
     lss: number;
     ktl: number;
@@ -352,6 +322,9 @@ export async function buildTeachingScenarioContext(
     include: {
       milestones: {
         include: {
+          subtasks: {
+            orderBy: { order: 'asc' },
+          },
           learning_paths: true,
         }
       }
@@ -376,11 +349,9 @@ export async function buildTeachingScenarioContext(
     mode: 'teaching',
   });
   const learnerSnapshot = learnerResult.snapshot;
-  const teachingProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const primaryConcepts = dedupeConcepts([
     resolvedConcept.name,
-    (task as any).displayLabel,
     ...parseLearningObjectives((task as any).learningObjectives),
   ]);
   const prerequisiteConcepts = (learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps || [])
@@ -414,6 +385,10 @@ export async function buildTeachingScenarioContext(
     ...cognitiveFrame.neighboringConcepts,
     ...prerequisiteConcepts,
   ]).filter((concept) => !primaryConcepts.includes(concept)).slice(0, 3);
+  const orderedTasks = Array.isArray(milestone?.subtasks) ? milestone.subtasks : [];
+  const currentTaskOrder = typeof (task as any).order === 'number'
+    ? (task as any).order
+    : Math.max(1, orderedTasks.findIndex((item: any) => item.id === task.id) + 1);
 
   return {
     userId,
@@ -439,40 +414,14 @@ export async function buildTeachingScenarioContext(
     cognitiveFrame,
     canStartLearning,
     learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习。',
-    learnerSnapshot,
-    teachingProjection,
-    learningControlState: teachingProjection.learningControlState,
-    backgroundKnowledge: teachingProjection.backgroundKnowledge,
-    normalizedLearnContext: {
-      version: '1.0',
-      task: {
-        id: task.id,
-        title: task.title,
-        type: ((task.taskType as 'reading' | 'practice' | 'project' | 'quiz') || 'practice'),
-        description: task.description || null,
-        acceptanceCriteria: (task as any).acceptanceCriteria || null,
-      },
-      path: {
-        pathId: path.id,
-        title: path.title || path.name || '当前学习路径',
-        summary: parsePathSummary(path.aiPromptTemplate),
-        currentMilestoneTitle: teachingProjection.pathContext.currentMilestoneTitle,
-        currentStageNumber: teachingProjection.pathContext.currentStageNumber,
-        currentTaskOrder: teachingProjection.pathContext.currentTaskOrder,
-      },
-      learner: {
-        liveState: teachingProjection.liveState,
-        stableProfile: teachingProjection.stableProfile,
-        backgroundKnowledge: teachingProjection.backgroundKnowledge,
-        learningControlState: teachingProjection.learningControlState,
-      },
-      knowledge: {
-        primaryConcepts,
-        prerequisiteConcepts,
-        supportingConcepts,
-      },
+    pathProgress: {
+      pathTitle: path.title || path.name || '当前学习路径',
+      pathSummary: parsePathSummary(path.aiPromptTemplate),
+      currentMilestoneTitle: milestone.title || milestone.goal || '当前阶段',
+      currentStageNumber: Number.isFinite(Number(milestone.stageNumber)) ? Number(milestone.stageNumber) : 1,
+      currentTaskOrder,
+      totalTasksInMilestone: orderedTasks.length,
     },
-    userProfile: learnerSnapshot.profile,
     learningState: learningState ? {
       lss: learningState.lss,
       ktl: learningState.ktl,

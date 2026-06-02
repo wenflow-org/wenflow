@@ -15,8 +15,6 @@
           </div>
           <p class="topbar-goal">{{ profile?.learningGoal || '--' }}</p>
           <div class="topbar-meta">
-            <span>{{ getKnowledgeLevelLabel(profile?.knowledgeLevel) }}</span>
-            <span>·</span>
             <span>{{ profile?.simulationMode === 'ai' ? 'AI 模式' : '手动模式' }}</span>
           </div>
         </div>
@@ -81,10 +79,10 @@
                 <div class="section-head__meta">主链路对象</div>
               </div>
               <div class="kv-list">
-                <div class="kv-item"><span>goalConversationId</span><strong>{{ session?.goalConversationId || '--' }}</strong></div>
-                <div class="kv-item"><span>learningPathId</span><strong>{{ session?.learningPathId || '--' }}</strong></div>
-                <div class="kv-item"><span>currentTask</span><strong>{{ learningProgress.currentTask || '--' }}</strong></div>
-                <div class="kv-item"><span>story</span><strong>{{ session?.stageResults?.story?.title || session?.stageResults?.story?.triggerEvent || '--' }}</strong></div>
+                <div class="kv-item"><span>goalConversationId</span><strong>{{ session?.bindings?.goalConversationId || session?.goalConversationId || '--' }}</strong></div>
+                <div class="kv-item"><span>learningPathId</span><strong>{{ session?.bindings?.learningPathId || session?.learningPathId || '--' }}</strong></div>
+                <div class="kv-item"><span>currentTask</span><strong>{{ session?.runtime?.stageStatus?.learning?.currentTaskTitle || learningProgress.currentTask || '--' }}</strong></div>
+                <div class="kv-item"><span>story</span><strong>{{ session?.storyContext?.title || session?.storyContext?.triggerEvent || '--' }}</strong></div>
                 <div class="kv-item"><span>pressurePoints</span><strong>{{ storyPressurePointsText }}</strong></div>
                 <div class="kv-item"><span>behaviorHooks</span><strong>{{ storyBehaviorHooksText }}</strong></div>
               </div>
@@ -96,11 +94,11 @@
                 <div class="section-head__meta">调试 / 正式</div>
               </div>
               <div class="entry-actions">
-                <el-button size="small" type="primary" :disabled="!session?.goalConversationId" @click="openGoalDebugView">调试 Goal</el-button>
-                <el-button size="small" type="primary" :disabled="!session?.learningPathId" @click="openPathDebugView">调试 Path</el-button>
+                <el-button size="small" type="primary" :disabled="!session?.bindings?.goalConversationId && !session?.goalConversationId" @click="openGoalDebugView">调试 Goal</el-button>
+                <el-button size="small" type="primary" :disabled="!session?.bindings?.learningPathId && !session?.learningPathId" @click="openPathDebugView">调试 Path</el-button>
                 <el-button size="small" type="primary" :disabled="!currentLesson?.id" @click="openLearnDebugView">调试 Learn</el-button>
-                <el-button size="small" plain :disabled="!session?.goalConversationId" @click="openGoalFormalView">正式 Goal</el-button>
-                <el-button size="small" plain :disabled="!session?.learningPathId" @click="openPathFormalView">正式 Path</el-button>
+                <el-button size="small" plain :disabled="!session?.bindings?.goalConversationId && !session?.goalConversationId" @click="openGoalFormalView">正式 Goal</el-button>
+                <el-button size="small" plain :disabled="!session?.bindings?.learningPathId && !session?.learningPathId" @click="openPathFormalView">正式 Path</el-button>
                 <el-button size="small" plain :disabled="!currentLesson?.id" @click="openLearnFormalView">正式 Learn</el-button>
               </div>
             </section>
@@ -114,6 +112,21 @@
                 <span v-for="action in diagnosisSummary.actions" :key="action">{{ action }}</span>
               </div>
               <pre class="inspector-pre">{{ JSON.stringify(session?.stageResults || {}, null, 2) }}</pre>
+            </section>
+
+            <section class="inspector-card inspector-card--full">
+              <div class="section-head">
+                <div class="section-head__title">Path 接受评估</div>
+                <div class="section-head__meta">{{ pathReviewDecisionLabel }}</div>
+              </div>
+              <div v-if="pathReviewState" class="kv-list kv-list--stack">
+                <div class="kv-item"><span>decision</span><strong>{{ pathReviewDecisionLabel }}</strong></div>
+                <div class="kv-item"><span>confidence</span><strong>{{ pathReviewConfidenceLabel }}</strong></div>
+                <div class="kv-item"><span>biggestConcern</span><strong>{{ pathReviewConcernLabel }}</strong></div>
+                <div class="kv-item"><span>reaction</span><strong>{{ pathReviewReactionText }}</strong></div>
+                <div class="kv-item"><span>modifyRequest</span><strong>{{ pathReviewModifyLabel }}</strong></div>
+              </div>
+              <div v-else class="empty-box">当前还没有 Path 接受评估记录。</div>
             </section>
           </div>
         </section>
@@ -130,8 +143,8 @@
                 <div class="section-head__meta">{{ goalSummary.status }}</div>
               </div>
               <div class="entry-actions">
-                <el-button size="small" type="primary" :disabled="!session?.goalConversationId" @click="openGoalDebugView">调试 Goal</el-button>
-                <el-button size="small" plain :disabled="!session?.goalConversationId" @click="openGoalFormalView">正式 Goal</el-button>
+                <el-button size="small" type="primary" :disabled="!session?.bindings?.goalConversationId && !session?.goalConversationId" @click="openGoalDebugView">调试 Goal</el-button>
+                <el-button size="small" plain :disabled="!session?.bindings?.goalConversationId && !session?.goalConversationId" @click="openGoalFormalView">正式 Goal</el-button>
               </div>
             </section>
             <section class="inspector-card">
@@ -140,8 +153,8 @@
                 <div class="section-head__meta">{{ pathStatusLabel }}</div>
               </div>
               <div class="entry-actions">
-                <el-button size="small" type="primary" :disabled="!session?.learningPathId" @click="openPathDebugView">调试 Path</el-button>
-                <el-button size="small" plain :disabled="!session?.learningPathId" @click="openPathFormalView">正式 Path</el-button>
+                <el-button size="small" type="primary" :disabled="!session?.bindings?.learningPathId && !session?.learningPathId" @click="openPathDebugView">调试 Path</el-button>
+                <el-button size="small" plain :disabled="!session?.bindings?.learningPathId && !session?.learningPathId" @click="openPathFormalView">正式 Path</el-button>
               </div>
             </section>
             <section class="inspector-card">
@@ -307,6 +320,45 @@ const tabs = [
   { key: 'logs', label: '日志' }
 ] as const
 
+const normalizeSessionContext = (data: any) => {
+  const runtime = data?.runtime || data?.virtualSession?.runtime || data?.session?.runtime || {}
+  const bindings = runtime.bindings || data?.bindings || data?.virtualSession?.bindings || {}
+  const story = runtime.story || data?.storyContext || data?.virtualSession?.storyContext || data?.stageResults?.story || null
+  const stageResults = data?.stageResults || data?.virtualSession?.stageResults || {}
+  const learningRuntime = runtime.stageStatus?.learning || stageResults.learning || {}
+  const goalRuntime = runtime.stageStatus?.goal || {}
+  const pathRuntime = runtime.stageStatus?.path || {}
+  const learnerStateRuntime = runtime.learnerState || {}
+  const knowledgeStateRuntime = runtime.knowledgeState || {}
+
+  return {
+    ...data,
+    runtime,
+    bindings,
+    goalConversationId: data?.goalConversationId || bindings.goalConversationId || null,
+    learningPathId: data?.learningPathId || bindings.learningPathId || null,
+    currentStage: data?.currentStage || runtime.currentStage || null,
+    storyContext: story,
+    stageResults: {
+      ...stageResults,
+      story,
+      learning: learningRuntime,
+      goal: {
+        ...(stageResults.goal || {}),
+        ...goalRuntime,
+      },
+      path_review: pathRuntime.review ? {
+        ...(stageResults.path_review || {}),
+        ...pathRuntime.review,
+      } : (stageResults.path_review || {}),
+    },
+    learningState: learningRuntime,
+    learnerState: learnerStateRuntime,
+    knowledgeState: knowledgeStateRuntime,
+    conversations: data?.conversations || data?.virtualSession?.conversations || { goal: { messages: [] }, learning: { messages: [] } },
+  }
+}
+
 const isGoalConvergedStage = (stage?: string | null) => stage === 'ready' || stage === 'completed'
 
 const formatTime = (time: string | null | undefined) => {
@@ -316,12 +368,22 @@ const formatTime = (time: string | null | undefined) => {
 }
 
 const goalReady = computed(() => {
+  if (session.value?.runtime?.stageStatus?.goal?.ready) return true
   if (session.value?.currentStage === 'path' || session.value?.currentStage === 'learning') return true
   return isGoalConvergedStage(logs.value.filter(l => l.phase === 'goal-response').pop()?.details?.output?.stage)
 })
 
 const pathReady = computed(() => ['active', 'ready', 'completed'].includes(pathStatus.value))
-const totalRounds = computed(() => logs.value.filter(l => l.phase === 'virtual-reply' || l.phase === 'learning-reply').length)
+const totalRounds = computed(() => {
+  const goalCount = Array.isArray(session.value?.conversations?.goal?.messages)
+    ? session.value.conversations.goal.messages.filter((item: any) => item.role === 'user').length
+    : 0
+  const learningCount = Array.isArray(session.value?.conversations?.learning?.messages)
+    ? session.value.conversations.learning.messages.filter((item: any) => item.role === 'user').length
+    : 0
+  if (goalCount > 0 || learningCount > 0) return goalCount + learningCount
+  return logs.value.filter(l => l.phase === 'virtual-reply' || l.phase === 'learning-reply').length
+})
 const errorCount = computed(() => logs.value.filter(l => l.phase === 'error').length)
 
 const filteredLogs = computed(() => (logFilter.value === 'all' ? logs.value : logs.value.filter(l => l.phase === logFilter.value)))
@@ -510,8 +572,10 @@ const cognitiveConceptCards = computed(() => {
 })
 
 const goalSummary = computed(() => {
-  const rounds = logs.value.filter(l => l.phase === 'virtual-reply').length
-  const finalStage = logs.value.filter(l => l.phase === 'goal-response').pop()?.details?.output?.stage || '进行中'
+  const rounds = Array.isArray(session.value?.conversations?.goal?.messages)
+    ? session.value.conversations.goal.messages.filter((item: any) => item.role === 'user').length
+    : logs.value.filter(l => l.phase === 'virtual-reply').length
+  const finalStage = session.value?.runtime?.stageStatus?.goal?.stage || logs.value.filter(l => l.phase === 'goal-response').pop()?.details?.output?.stage || '进行中'
   return { status: goalReady.value ? '已收敛' : '待收敛', finalStage, quickReplyCount: lastQuickReplies.value.length, rounds }
 })
 
@@ -526,11 +590,7 @@ const learnSummary = computed(() => {
 })
 
 const latestLearningTaskTitle = computed(() => {
-  const latestLearningLog = logs.value.slice().reverse().find(log =>
-    log.phase === 'learning-reply' || log.phase === 'learning-start'
-  )
-
-  return latestLearningLog?.details?.output?.currentTask || null
+  return session.value?.runtime?.stageStatus?.learning?.currentTaskTitle || null
 })
 
 const learnLessons = computed<LearnLesson[]>(() => milestoneCards.value.flatMap(item => item.tasks.map((task: any, index: number) => ({
@@ -585,6 +645,18 @@ const currentLessonDebugRound = computed<ReplayRound | null>(() => {
 const currentLessonKnowledgeRows = computed(() => currentLessonDebugRound.value?.knowledgeRows || [])
 
 const currentLessonLearnerRows = computed(() => currentLessonDebugRound.value?.learnerRows || [])
+const runtimeLearningLearnerRows = computed(() => {
+  const learnerState = session.value?.learnerState?.learning || session.value?.learnerState?.latest || null
+  if (!learnerState || typeof learnerState !== 'object') return []
+
+  return [
+    { label: '困惑', value: learnerState.confusionLevel !== undefined ? String(learnerState.confusionLevel) : '--' },
+    { label: '真掌握', value: learnerState.actualMastery !== undefined ? String(learnerState.actualMastery) : '--' },
+    { label: '自感掌握', value: learnerState.selfPerceivedMastery !== undefined ? String(learnerState.selfPerceivedMastery) : '--' },
+    { label: '注意力', value: learnerState.attentionLevel !== undefined ? String(learnerState.attentionLevel) : '--' },
+    { label: '可推进', value: learnerState.readyToAdvance !== undefined ? String(learnerState.readyToAdvance) : '--' },
+  ]
+})
 
 const learnSessionStats = computed(() => [
   { label: 'stage', value: session.value?.currentStage || '--' },
@@ -633,17 +705,86 @@ const overviewCards = computed(() => [
   { label: '故事压力点', value: storyPressurePointsText.value, meta: storyBehaviorHooksText.value }
 ])
 
+const pathReviewState = computed(() => session.value?.runtime?.stageStatus?.path?.review || null)
+const pathReviewDecisionLabel = computed(() => {
+  const decision = pathReviewState.value?.decision
+  switch (decision) {
+    case 'accept': return '接受当前 Path'
+    case 'modify': return '希望修改后再走'
+    case 'reject': return '暂不接受'
+    default: return '待评估'
+  }
+})
+const pathReviewConfidenceLabel = computed(() => {
+  const confidence = pathReviewState.value?.confidence
+  return typeof confidence === 'number' && Number.isFinite(confidence)
+    ? `${Math.round(confidence * 100)}%`
+    : '--'
+})
+const pathReviewConcernLabel = computed(() => pathReviewState.value?.biggestConcern || '--')
+const pathReviewReactionText = computed(() => pathReviewState.value?.reaction || '--')
+const pathReviewModifyLabel = computed(() => session.value?.stageResults?.path_review?.modifyRequest || '--')
+
 const storyPressurePointsText = computed(() => {
-  const items = session.value?.stageResults?.story?.pressurePoints
+  const items = session.value?.storyContext?.pressurePoints || session.value?.runtime?.story?.pressurePoints
   return Array.isArray(items) && items.length ? items.slice(0, 2).join('；') : '--'
 })
 
 const storyBehaviorHooksText = computed(() => {
-  const items = session.value?.stageResults?.story?.behaviorHooks
+  const items = session.value?.storyContext?.behaviorHooks || session.value?.runtime?.story?.behaviorHooks
   return Array.isArray(items) && items.length ? items.slice(0, 2).join('；') : '--'
 })
 
 const goalRounds = computed<ReplayRound[]>(() => {
+  const projectedMessages = session.value?.conversations?.goal?.messages
+  if (Array.isArray(projectedMessages) && projectedMessages.length) {
+    const rounds: ReplayRound[] = []
+    let pendingUser: any = null
+    let visibleRound = 0
+
+    for (const message of projectedMessages) {
+      if (message.role === 'user') {
+        pendingUser = message
+        continue
+      }
+
+      if (message.role === 'assistant') {
+        if (pendingUser) {
+          visibleRound += 1
+          rounds.push({
+            id: `goal-projected-${visibleRound}`,
+            round: visibleRound,
+            title: `第 ${visibleRound} 轮`,
+            time: formatTime(message.timestamp || pendingUser.timestamp),
+            userMessage: pendingUser.content || '',
+            assistantMessage: message.content || '',
+            badges: [],
+            signalRows: [],
+            learnerRows: [],
+            kind: 'round',
+            roleLabel: '画像用户'
+          })
+          pendingUser = null
+          continue
+        }
+
+        rounds.push({
+          id: `goal-projected-opening-${rounds.length + 1}`,
+          round: rounds.length + 1,
+          title: '系统开场',
+          time: formatTime(message.timestamp),
+          assistantMessage: message.content || '',
+          badges: [{ text: 'opening', tone: 'info' }],
+          signalRows: [],
+          kind: 'opening',
+          roleLabel: '系统开场'
+        })
+      }
+    }
+
+    return rounds
+  }
+
   const rounds: ReplayRound[] = []
   let pendingRound: ReplayRound | null = null
 
@@ -733,6 +874,143 @@ const goalRounds = computed<ReplayRound[]>(() => {
 })
 
 const learnRounds = computed<ReplayRound[]>(() => {
+  const projectedRounds = session.value?.conversations?.learning?.rounds
+  if (Array.isArray(projectedRounds) && projectedRounds.length) {
+    return projectedRounds.map((item: any, index: number) => {
+      const taskName = item?.currentTask || learningProgress.value.currentTask || '课堂任务'
+      const matchedLesson = learnLessons.value.find(entry => entry.title === taskName) || null
+      const learnerState = item?.learnerState || null
+      const knowledgeRows = Array.isArray(item?.knowledgePoints)
+        ? item.knowledgePoints.slice(0, 6).map((point: any) => ({
+            label: point.name || point.key || '知识点',
+            value: `${point.masteryLevel || point.status || '--'}`
+          }))
+        : []
+
+      if (item?.isOpening) {
+        return {
+          id: `learn-opening-${index + 1}`,
+          round: typeof item?.round === 'number' ? item.round : 0,
+          title: '开场',
+          time: formatTime(item?.timestamp || item?.assistantMessage?.timestamp),
+          assistantMessage: item?.assistantMessage?.content || '',
+          badges: [
+            ...(taskName ? [{ text: taskName, tone: 'neutral' as const }] : []),
+            { text: 'opening', tone: 'info' as const }
+          ],
+          signalRows: [
+            { label: 'task', value: '开场' },
+            { label: 'level', value: '--' },
+            { label: 'mile', value: item?.currentMilestone || '--' }
+          ],
+          learnerRows: [],
+          monitorRows: [],
+          knowledgeRows,
+          taskId: matchedLesson?.id || null,
+          kind: 'opening',
+          roleLabel: 'AI 开场'
+        }
+      }
+
+      return {
+        id: `learn-round-${index + 1}`,
+        round: typeof item?.round === 'number' ? item.round : index + 1,
+        title: taskName,
+        time: formatTime(item?.timestamp || item?.assistantMessage?.timestamp || item?.learnerMessage?.timestamp),
+        userMessage: item?.learnerMessage?.content || '',
+        assistantMessage: item?.assistantMessage?.content || '',
+        badges: [
+          { text: taskName, tone: 'neutral' as const },
+          ...(item?.isCompletion ? [{ text: 'done', tone: 'success' as const }] : [{ text: 'run', tone: 'warning' as const }]),
+          ...(item?.autoEnded ? [{ text: 'auto-end', tone: 'info' as const }] : []),
+          ...(item?.peerTriggered ? [{ text: 'peer', tone: 'warning' as const }] : [])
+        ],
+        signalRows: [
+          { label: 'task', value: item?.isCompletion ? '完成' : '继续' },
+          { label: 'level', value: item?.cognitiveLevel || '--' },
+          { label: 'mile', value: item?.currentMilestone || '--' }
+        ],
+        learnerRows: learnerState ? [
+          { label: '困惑', value: learnerState.confusionLevel !== undefined ? String(learnerState.confusionLevel) : '--' },
+          { label: '真掌握', value: learnerState.actualMastery !== undefined ? String(learnerState.actualMastery) : '--' },
+          { label: '自感掌握', value: learnerState.selfPerceivedMastery !== undefined ? String(learnerState.selfPerceivedMastery) : '--' },
+          { label: '注意力', value: learnerState.attentionLevel !== undefined ? String(learnerState.attentionLevel) : '--' },
+          { label: '想追问', value: learnerState.wantsToAsk !== undefined ? String(learnerState.wantsToAsk) : '--' },
+          { label: '可推进', value: learnerState.readyToAdvance !== undefined ? String(learnerState.readyToAdvance) : '--' }
+        ] : [],
+        monitorRows: [
+          { label: '完成候选', value: item?.isCompletion ? 'true' : 'false' },
+          { label: '自动结束', value: item?.autoEnded ? 'true' : 'false' },
+          { label: '伴学', value: item?.peerTriggered ? 'true' : 'false' },
+          { label: '当前点', value: item?.knowledgePoint || '--' },
+          { label: 'LSS', value: item?.currentState?.lss !== undefined ? String(item.currentState.lss) : '--' }
+        ],
+        knowledgeRows,
+        peerMessage: item?.peerMessage || '',
+        taskId: matchedLesson?.id || null,
+        kind: 'round',
+        roleLabel: '画像用户'
+      }
+    })
+  }
+
+  const projectedMessages = session.value?.conversations?.learning?.messages
+  if (Array.isArray(projectedMessages) && projectedMessages.length) {
+    const rounds: ReplayRound[] = []
+    let pendingUser: any = null
+
+    for (const message of projectedMessages) {
+      if (message.role === 'assistant' && !pendingUser) {
+        rounds.push({
+          id: `learn-opening-${rounds.length + 1}`,
+          round: rounds.length + 1,
+          title: '开场',
+          time: formatTime(message.timestamp),
+          assistantMessage: message.content || '',
+          badges: [{ text: 'opening', tone: 'info' }],
+          signalRows: [],
+          learnerRows: [],
+          monitorRows: [],
+          knowledgeRows: [],
+          kind: 'opening',
+          roleLabel: 'AI 开场'
+        })
+        continue
+      }
+
+      if (message.role === 'user') {
+        pendingUser = message
+        continue
+      }
+
+      if (message.role === 'assistant' && pendingUser) {
+        rounds.push({
+          id: `learn-round-${rounds.length + 1}`,
+          round: rounds.length + 1,
+          title: learningProgress.value.currentTask || '课堂任务',
+          time: formatTime(message.timestamp || pendingUser.timestamp),
+          userMessage: pendingUser.content || '',
+          assistantMessage: message.content || '',
+          badges: [{ text: 'run', tone: 'warning' }],
+          signalRows: [],
+          learnerRows: runtimeLearningLearnerRows.value,
+          monitorRows: [],
+          knowledgeRows: Array.isArray(session.value?.knowledgeState?.learning?.knowledgePoints)
+            ? session.value.knowledgeState.learning.knowledgePoints.slice(0, 6).map((item: any) => ({
+                label: item.name || item.key || '知识点',
+                value: `${item.masteryLevel || item.status || '--'}`
+              }))
+            : [],
+          kind: 'round',
+          roleLabel: '画像用户'
+        })
+        pendingUser = null
+      }
+    }
+
+    return rounds
+  }
+
   const rounds: ReplayRound[] = []
   let pendingRound: ReplayRound | null = null
 
@@ -883,7 +1161,6 @@ const getStatusType = (status: string) => ({ running: 'success', completed: 'inf
 const getStatusLabel = (status: string) => ({ created: '已创建', running: '运行中', completed: '已完成', failed: '失败' }[status] || status || '未知')
 const getStageLabel = (stage: string) => ({ goal: 'Goal 对话', path: 'Path 生成', learning: 'Learn 课堂' }[stage] || '待开始')
 const getLogLabel = (phase: string) => ({ 'virtual-reply': '虚拟回复', 'goal-response': 'Goal 响应', 'stage-transition': '阶段切换', 'learning-start': '学习开始', 'learning-reply': '学习回复', 'learning-response': '学习响应', error: '错误' }[phase] || phase)
-const getKnowledgeLevelLabel = (value?: string) => ({ beginner: '初学者', intermediate: '中级', advanced: '高级' }[value || ''] || value || '--')
 const getTaskTypeText = (type: string) => ({
   reading: '阅读',
   practice: '练习',
@@ -925,13 +1202,15 @@ const buildViewQuery = () => new URLSearchParams({
 }).toString()
 
 const openGoalDebugView = () => {
-  if (!session.value?.goalConversationId) return
-  router.push(`/admin/test/goal-full/${session.value.goalConversationId}?${buildViewQuery()}`)
+  const goalConversationId = session.value?.bindings?.goalConversationId || session.value?.goalConversationId
+  if (!goalConversationId) return
+  router.push(`/admin/test/goal-full/${goalConversationId}?${buildViewQuery()}`)
 }
 
 const openPathDebugView = () => {
-  if (!session.value?.learningPathId) return
-  router.push(`/admin/test/learning-path/${session.value.learningPathId}?${buildViewQuery()}`)
+  const learningPathId = session.value?.bindings?.learningPathId || session.value?.learningPathId
+  if (!learningPathId) return
+  router.push(`/admin/test/learning-path/${learningPathId}?${buildViewQuery()}`)
 }
 
 const openLearnDebugView = () => {
@@ -941,13 +1220,15 @@ const openLearnDebugView = () => {
 }
 
 const openGoalFormalView = () => {
-  if (!session.value?.goalConversationId) return
-  window.open(`/goal-conversation/${session.value.goalConversationId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
+  const goalConversationId = session.value?.bindings?.goalConversationId || session.value?.goalConversationId
+  if (!goalConversationId) return
+  window.open(`/goal-conversation/${goalConversationId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
 }
 
 const openPathFormalView = () => {
-  if (!session.value?.learningPathId) return
-  window.open(`/learning-path/${session.value.learningPathId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
+  const learningPathId = session.value?.bindings?.learningPathId || session.value?.learningPathId
+  if (!learningPathId) return
+  window.open(`/learning-path/${learningPathId}?virtualSessionId=${sessionId}&viewMode=formal`, '_blank')
 }
 
 const openLearnFormalView = () => {
@@ -1031,10 +1312,10 @@ const loadSession = async () => {
       ElMessage.error(res.data?.error || '加载会话失败')
       return
     }
-    session.value = res.data.data
+    session.value = normalizeSessionContext(res.data.data)
     profile.value = res.data.data.profile
     logs.value = res.data.data.logs || []
-    const learningState = res.data.data.stageResults?.learning
+    const learningState = session.value?.learningState || res.data.data.stageResults?.learning
     if (learningState) {
       learningProgress.value = {
         currentMilestone: typeof learningState.currentMilestone === 'number' ? learningState.currentMilestone + 1 : 0,
@@ -1055,7 +1336,7 @@ const refreshSessionState = async () => {
   try {
     await loadSession()
 
-    if (session.value?.learningPathId) {
+    if (session.value?.bindings?.learningPathId || session.value?.learningPathId) {
       await pollPathStatus()
       return
     }
@@ -1248,11 +1529,15 @@ const pollPathStatus = async () => {
         }
       }
       if (res.data.data.learningPathId && !session.value?.learningPathId) {
-        session.value = {
+        session.value = normalizeSessionContext({
           ...session.value,
           learningPathId: res.data.data.learningPathId,
+          bindings: {
+            ...(session.value?.bindings || {}),
+            learningPathId: res.data.data.learningPathId,
+          },
           currentStage: session.value?.currentStage === 'goal' ? 'path' : session.value?.currentStage
-        }
+        })
       }
       syncLearningProgressFromPath()
       if (pathReady.value || pathStatus.value === 'failed') stopPathPolling()

@@ -6,18 +6,18 @@
     </div>
 
     <div class="page-hero">
-      <span class="pill">Admin</span>
+      <span class="pill">学习诊断</span>
       <h2 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Reading /></el-icon>
         学习者模型
       </h2>
-      <p class="page-hero__subtitle">查看和分析用户的学习模型与状态</p>
+      <p class="page-hero__subtitle">查看用户当前学习状态、风险趋势与模型快照</p>
     </div>
 
     <div class="toolbar admin-list-toolbar">
       <div class="toolbar-left admin-list-toolbar__group">
-        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 180px" @input="handleSearch" />
-        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 180px" @input="handleSearch" />
+        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
+        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
         <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
         <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
       </div>
@@ -28,7 +28,7 @@
 
     <div class="table-container admin-list-card">
       <el-table :data="items" stripe v-loading="loading">
-        <el-table-column label="用户" min-width="140">
+        <el-table-column label="用户" min-width="180">
           <template #default="{ row }">
             <div class="user-cell">
               <strong>{{ row.userName || row.userId || '--' }}</strong>
@@ -36,16 +36,16 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="学习进度" min-width="260" show-overflow-tooltip>
+        <el-table-column label="学习进度" min-width="320">
           <template #default="{ row }">
             <div class="progress-cell">
-              <div class="progress-cell__line" :title="row.pathTitle || '--'">路径：{{ truncateText(row.pathTitle, 20) }}</div>
-              <div class="progress-cell__line" :title="row.currentMilestone || '--'">阶段：{{ truncateText(row.currentMilestone, 20) }}</div>
-              <div class="progress-cell__line" :title="row.currentTask || '--'">任务：{{ truncateText(row.currentTask, 20) }}</div>
+              <div class="progress-cell__line">路径：{{ truncateText(row.pathTitle, 28) }}</div>
+              <div class="progress-cell__line">阶段：{{ truncateText(row.currentMilestone, 28) }}</div>
+              <div class="progress-cell__line">任务：{{ truncateText(row.currentTask, 28) }}</div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" width="92" align="center">
           <template #default="{ row }">
             <div class="status-cell">
               <el-tag size="small" :type="row.recentTrend === 'improving' ? 'success' : row.recentTrend === 'declining' ? 'danger' : 'info'">
@@ -57,27 +57,27 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="风险摘要" min-width="180" show-overflow-tooltip>
+        <el-table-column label="风险摘要" min-width="220">
           <template #default="{ row }">
             <div class="risk-cell">
               <div class="risk-cell__tags">
                 <el-tag size="small" type="info">脆弱 {{ (row.fragileConcepts || []).length }}</el-tag>
                 <el-tag size="small" type="warning">挣扎 {{ (row.strugglingConcepts || []).length }}</el-tag>
               </div>
-              <div class="risk-cell__text" :title="riskSummary(row)">{{ riskSummary(row) }}</div>
+              <div class="risk-cell__text">{{ riskSummary(row) }}</div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="更新时间" width="80">
+        <el-table-column label="更新时间" width="110">
           <template #default="{ row }">
             {{ formatRelativeTime(row.generatedAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right" align="center">
+        <el-table-column label="操作" width="128" fixed="right" align="center">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button type="primary" link @click="openDetail(row)">详情</el-button>
-              <el-button type="primary" link @click="recompute(row)">重算</el-button>
+              <el-button class="model-action-btn" @click="openDetail(row)">详情</el-button>
+              <el-button class="model-action-btn model-action-btn--ghost" @click="recompute(row)">重算</el-button>
             </div>
           </template>
         </el-table-column>
@@ -243,9 +243,11 @@ onMounted(loadData);
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72));
   backdrop-filter: blur(12px);
+  box-shadow: 0 12px 28px rgba(31, 87, 204, 0.08);
+  padding: 4px;
 }
 
-.toolbar { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; border: 1px solid rgba(52, 120, 246, 0.08); border-radius: 18px; backdrop-filter: blur(12px); padding: 16px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72)); }
+.toolbar { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; border: 1px solid rgba(52, 120, 246, 0.08); border-radius: 18px; backdrop-filter: blur(12px); padding: 16px 18px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72)); box-shadow: 0 10px 24px rgba(31, 87, 204, 0.06); }
 .toolbar-left { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .toolbar-right { display: flex; gap: 12px; }
 .pagination-container { position: relative; z-index: 1; display: flex; justify-content: flex-end; margin-top: 16px; }
@@ -274,7 +276,28 @@ onMounted(loadData);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
+  gap: 0.5rem;
+}
+
+.model-action-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  background: rgba(244, 249, 255, 0.96);
+  color: var(--color-primary-dark, #1f57cc);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.model-action-btn:hover {
+  border-color: rgba(52, 120, 246, 0.3);
+  background: rgba(236, 244, 255, 0.98);
+  color: var(--color-primary-dark, #1f57cc);
+}
+
+.model-action-btn--ghost {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .status-cell {
@@ -314,9 +337,7 @@ onMounted(loadData);
   font-size: 12px;
   line-height: 1.3;
   color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .risk-cell {
@@ -334,8 +355,16 @@ onMounted(loadData);
 .risk-cell__text {
   color: var(--text-secondary);
   font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+:deep(.el-table th.el-table__cell) {
+  background: rgba(52, 120, 246, 0.03);
+  font-weight: 700;
+}
+
+:deep(.el-table .el-table__row:hover > td.el-table__cell) {
+  background: rgba(52, 120, 246, 0.03);
 }
 </style>

@@ -7,6 +7,8 @@
 // 协议
 export * from './protocol';
 
+import prisma from '../config/database';
+
 // 文本结构分析
 export { textStructureAnalyzerDefinition } from './text-structure-analyzer';
 import { textStructureAnalyzer as textStructureAnalyzerFn } from './text-structure-analyzer';
@@ -71,6 +73,18 @@ import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } fr
 export { virtualLearnerPersonaDesignerDefinition, VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT, VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE } from './virtual-learner-persona-designer';
 import { virtualLearnerPersonaDesigner as virtualLearnerPersonaDesignerFn } from './virtual-learner-persona-designer';
 
+// 虚拟学习者 Goal 对话模拟
+export { virtualLearnerGoalDialogueSimulatorDefinition, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE } from './virtual-learner-goal-dialogue-simulator';
+import { virtualLearnerGoalDialogueSimulator as virtualLearnerGoalDialogueSimulatorFn } from './virtual-learner-goal-dialogue-simulator';
+
+// 虚拟学习者 Path 评估
+export { virtualLearnerPathEvaluatorDefinition, VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT, VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS, VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE } from './virtual-learner-path-evaluator';
+import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './virtual-learner-path-evaluator';
+
+// 虚拟学习者 Learn 回合模拟
+export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './virtual-learner-learn-turn-simulator';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -92,6 +106,9 @@ import { sessionKnowledgeDistillerDefinition } from './session-knowledge-distill
 import { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
+import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
+import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
+import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   textStructureAnalyzerDefinition,
@@ -109,7 +126,10 @@ export const allSkillDefinitions: SkillDefinition[] = [
   sessionKnowledgeDistillerDefinition,
   dialogueConceptExtractorDefinition,
   virtualLearnerPersonaDesignerDefinition,
-  virtualLearnerScenarioDesignerDefinition
+  virtualLearnerScenarioDesignerDefinition,
+  virtualLearnerGoalDialogueSimulatorDefinition,
+  virtualLearnerPathEvaluatorDefinition,
+  virtualLearnerLearnTurnSimulatorDefinition
 ];
 
 // Skill 名称映射
@@ -129,7 +149,10 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'session-knowledge-distiller': sessionKnowledgeDistillerFn,
   'dialogue-concept-extractor': dialogueConceptExtractorFn,
   'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
-  'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn
+  'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
+  'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,
+  'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
+  'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn
 };
 
 import { setRequestContext } from '../gateway/api-gateway/context';
@@ -185,20 +208,55 @@ export async function executeSkill(definition: SkillDefinition, input: any): Pro
       throw new Error(errorMsg);
     }
 
+    const durationMs = Date.now() - startedAt;
+    await recordDirectSkillStats(skillId, true, durationMs);
+
     const output = result?.output || result;
     logger.info('[skill-executor] 执行完成', {
       skillId,
-      durationMs: Date.now() - startedAt,
+      durationMs,
       outputSummary: summarizeSkillPayload(output),
     });
 
     return output;
   } catch (error: any) {
+    await recordDirectSkillStats(skillId, false, Date.now() - startedAt);
     logger.error('[skill-executor] 执行失败', {
       skillId,
       durationMs: Date.now() - startedAt,
       error: error?.message || String(error),
     });
     throw error;
+  }
+}
+
+async function recordDirectSkillStats(skillId: string, success: boolean, durationMs: number): Promise<void> {
+  try {
+    const current = await prisma.skill_registrations.findUnique({
+      where: { name: skillId },
+      select: { callCount: true, successRate: true }
+    });
+
+    if (!current) return;
+
+    const nextCallCount = current.callCount + 1;
+    const previousSuccesses = current.successRate * current.callCount;
+    const nextSuccessRate = (previousSuccesses + (success ? 1 : 0)) / nextCallCount;
+
+    await prisma.skill_registrations.update({
+      where: { name: skillId },
+      data: {
+        callCount: nextCallCount,
+        successRate: nextSuccessRate,
+        updatedAt: new Date()
+      }
+    });
+  } catch (error: any) {
+    logger.warn('[skill-executor] 更新 Skill 统计失败', {
+      skillId,
+      success,
+      durationMs,
+      error: error?.message || String(error)
+    });
   }
 }

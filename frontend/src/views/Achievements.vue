@@ -23,6 +23,13 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <MobileSiteMenu
+            :user-name="userStore.user?.name || '同学'"
+            :user-initial="userInitial"
+            :nav-items="headerNavItems"
+            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            @logout="handleLogout"
+          />
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -135,6 +142,8 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import request from '../utils/request';
 import { useUserStore } from '../stores/user';
+import { isProjectionMode } from '../utils/projection';
+import MobileSiteMenu from '../components/MobileSiteMenu.vue';
 import {
   User,
   Switch,
@@ -178,6 +187,13 @@ const achievementsPath = computed(() => {
 });
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
+const headerNavItems = computed(() => [
+  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
+  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
+  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
+  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
+  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+]);
 const scrolled = ref(false);
 const loading = ref(true);
 const achievements = ref<Achievement[]>([]);
@@ -279,7 +295,15 @@ const loadAchievements = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  if (isProjectionMode()) {
+    try {
+      await userStore.fetchProfile();
+    } catch (error) {
+      console.error('获取投影视角用户信息失败:', error);
+    }
+  }
+
   loadAchievements();
   window.addEventListener('scroll', handleScroll);
 });
@@ -1101,6 +1125,9 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .header-container {
     padding: 1rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .header-nav {
@@ -1167,9 +1194,32 @@ onUnmounted(() => {
     border-radius: 20px;
   }
 
+  .header-right {
+    justify-content: flex-end;
+  }
+
+  .header-cta,
+  .user-chip {
+    display: none;
+  }
+
+  .user-chip {
+    min-width: auto;
+    padding-inline: 10px;
+  }
+
   .achievement-filter-tabs,
   .achievement-filter-tags {
     justify-content: flex-start;
+  }
+
+  .achievement-filter-row {
+    gap: 12px;
+  }
+
+  .achievement-filter-chip {
+    width: 100%;
+    justify-content: center;
   }
 
   .achievement-card-item__desc {

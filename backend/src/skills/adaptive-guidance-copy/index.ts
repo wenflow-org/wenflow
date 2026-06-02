@@ -7,6 +7,7 @@
 
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
 
 export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
   name: 'adaptive-guidance-copy',
@@ -71,7 +72,7 @@ export interface AdaptiveGuidanceCopyOutput {
   warningCopy: string;
 }
 
-const SYSTEM_PROMPT = `你是一个学习产品的动态引导文案生成器。
+export const ADAPTIVE_GUIDANCE_COPY_PROMPT = `你是一个学习产品的动态引导文案生成器。
 
 目标：
 1. 根据学习者状态和路径上下文，生成适合 Dashboard / 路径页展示的动态文案。
@@ -92,6 +93,8 @@ const SYSTEM_PROMPT = `你是一个学习产品的动态引导文案生成器。
 9. warningCopy 用于疲劳、卡点、进度滞后等情况的提醒。
 10. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么。
 11. learning-state 页面要避免重复解释指标公式，更聚焦“当前状态意味着什么”。`;
+
+const promptConfigService = new AgentConfigService();
 
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -165,13 +168,21 @@ export async function adaptiveGuidanceCopy(
   try {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'adaptive-guidance-copy' };
+    const promptConfig = await promptConfigService.getActivePrompt('skill:adaptive-guidance-copy');
+    if (!promptConfig?.systemPrompt?.trim()) {
+      throw new Error('SKILL_PROMPT_MISSING: adaptive-guidance-copy');
+    }
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: promptConfig.systemPrompt },
       { role: 'user', content: buildPrompt(input) }
     ];
 
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({ messages }, caller, {
+      temperature: promptConfig.temperature,
+      maxTokens: promptConfig.maxTokens,
+      model: promptConfig.model,
+    });
     const content = response.choices[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};

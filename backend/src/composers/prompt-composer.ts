@@ -29,6 +29,28 @@ export async function callPrompt<TInput, TOutput>(
   context: PromptCallContext = {}
 ): Promise<PromptCallResult<TOutput>> {
   const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
+  if (spec.requireActivePrompt && !promptConfig?.systemPrompt?.trim()) {
+    return {
+      success: false,
+      error: {
+        code: `${spec.agentId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_PROMPT_MISSING`,
+        message: `Missing active prompt for ${spec.agentId}`,
+      },
+      debug: {
+        agentId: spec.agentId,
+        systemPrompt: '',
+        systemPromptVersion: null,
+        userPayload: stringifyPayload(spec.buildUserPayload(input)),
+        rawModelOutput: '',
+        extractedJson: null,
+        normalizedOutput: null,
+        promptDrift: null,
+        attempts: [],
+        durationMs: 0,
+        tokenUsage: null,
+      },
+    };
+  }
   const systemPrompt = promptConfig?.systemPrompt || spec.defaultSystemPrompt;
   const userPayload = stringifyPayload(spec.buildUserPayload(input));
   const promptDrift = detectPromptDrift(spec.defaultSystemPrompt, promptConfig?.systemPrompt || null);

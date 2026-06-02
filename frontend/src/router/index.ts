@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { setTestMode } from '../utils/api';
+import { getProjectionToken } from '../utils/projection';
 
 const THEME_STORAGE_KEY = 'wenflow-theme';
 
@@ -328,23 +329,23 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/ApiConfig.vue'),
         meta: { title: 'API 管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
-{
+      {
+        path: 'platform-capabilities',
+        name: 'AdminPlatformCapabilities',
+        component: () => import('@/views/admin/PlatformCapabilities.vue'),
+        meta: { title: '能力地图', requiresAdminAuth: true, adminGroup: 'system' }
+      },
+      {
         path: 'agent-registry',
         name: 'AdminAgentRegistry',
         component: () => import('@/views/admin/AgentRegistry.vue'),
-        meta: { title: 'Agent 注册管理', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: '运行节点管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'orchestrator-registry',
         name: 'AdminOrchestratorRegistry',
         component: () => import('@/views/admin/OrchestratorRegistry.vue'),
-        meta: { title: '编排器管理', requiresAdminAuth: true, adminGroup: 'system' }
-      },
-      {
-        path: 'agent-definitions',
-        name: 'AdminAgentDefinitions',
-        component: () => import('@/views/admin/AgentDefinitions.vue'),
-        meta: { title: '运行时定义', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: '编排配置中心', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'orchestrator-definitions',
@@ -479,6 +480,30 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         meta: { title: '虚拟用户模拟', requiresAdminAuth: true, adminGroup: 'devDebug' }
       },
       {
+        path: 'virtual-learners/:profileId/stories/:storyId',
+        name: 'AdminVirtualStoryOverview',
+        component: () => import('@/views/admin/VirtualStoryOverview.vue'),
+        meta: { title: '学情概览', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
+        path: 'virtual-learners/:profileId/stories/:storyId/goal',
+        name: 'AdminVirtualStoryGoal',
+        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}?tab=goal`,
+        meta: { title: 'Goal 学情', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
+        path: 'virtual-learners/:profileId/stories/:storyId/path',
+        name: 'AdminVirtualStoryPath',
+        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}?tab=path`,
+        meta: { title: 'Path 学情', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
+        path: 'virtual-learners/:profileId/stories/:storyId/learn',
+        name: 'AdminVirtualStoryLearn',
+        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}?tab=learn`,
+        meta: { title: 'Learn 学情', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
         path: 'virtual-learners/:profileId',
         name: 'AdminVirtualProfile',
         component: () => import('@/views/admin/VirtualProfile.vue'),
@@ -518,7 +543,7 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         path: 'orchestrators',
         name: 'AdminOrchestrators',
         component: () => import('@/views/admin/Orchestrators.vue'),
-        meta: { title: '编排器视图', requiresAdminAuth: true, adminGroup: 'monitor' }
+        meta: { title: '编排运行监控', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
         path: 'manifest-diagnostics',
@@ -537,7 +562,7 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         path: 'skill-model-configs',
         name: 'AdminSkillModelConfigs',
         component: () => import('@/views/admin/SkillModelConfig.vue'),
-        meta: { title: 'Skill 模型配置', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: '技能/组件配置', requiresAdminAuth: true, adminGroup: 'system' }
       },
     ]
   }
@@ -555,6 +580,7 @@ router.beforeEach((to, from, next) => {
   setTestMode(to.meta.isTestMode === true);
   
   const token = localStorage.getItem('token');
+  const projectionToken = getProjectionToken();
   const adminToken = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
   
   // 管理平台路由检查
@@ -568,13 +594,13 @@ router.beforeEach((to, from, next) => {
   }
   
   // 普通用户路由检查
-  if (to.meta.requiresAuth && !token) {
+  if (to.meta.requiresAuth && !token && !projectionToken) {
     next('/login');
     return;
   }
   
   // 已登录用户访问登录/注册页
-  if ((to.name === 'Login' || to.name === 'Register') && token) {
+  if ((to.name === 'Login' || to.name === 'Register') && (token || projectionToken)) {
     next('/dashboard');
     return;
   }

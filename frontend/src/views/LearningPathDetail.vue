@@ -23,6 +23,13 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <MobileSiteMenu
+            :user-name="userStore.user?.name || '同学'"
+            :user-initial="userInitial"
+            :nav-items="headerNavItems"
+            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            @logout="handleLogout"
+          />
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -75,8 +82,8 @@
                     <span v-if="subjectTagLabel" class="path-detail-hero__tag">{{ subjectTagLabel }}</span>
                     <span v-if="virtualPathSummary" class="path-detail-hero__tag">{{ virtualPathSummary }}</span>
                   </div>
-                  <h1 class="path-title">{{ path.name }}</h1>
-                  <p class="path-description">{{ path.summary || path.description }}</p>
+                  <h1 class="path-title">{{ sanitizeDisplayText(path.name) }}</h1>
+                  <p class="path-description">{{ sanitizeDisplayText(path.summary || path.description) }}</p>
                   <div class="path-detail-overview-grid">
                     <article v-for="item in pathOverviewMetrics" :key="item.label" class="path-detail-overview-card">
                       <span>{{ item.label }}</span>
@@ -176,7 +183,7 @@
                   <div class="week-header" @click="toggleWeek(week)">
                     <div class="week-title-wrapper">
                       <div class="week-number">阶段 {{ week.stageNumber || week.weekNumber }}</div>
-                      <div class="week-title">{{ week.title }}</div>
+                      <div class="week-title">{{ sanitizeDisplayText(week.title) }}</div>
                     </div>
                     <div class="week-meta">
                       <div class="week-progress">
@@ -190,7 +197,7 @@
                   </div>
 
                   <div v-show="activeWeeks.includes(week.stageNumber || week.weekNumber)" class="week-content">
-                    <p class="week-description">{{ week.description || week.goal }}</p>
+                    <p class="week-description">{{ sanitizeDisplayText(week.description || week.goal) }}</p>
 
                     <div
                       v-if="enrichmentStatus !== 'succeeded'"
@@ -233,7 +240,7 @@
 
                         <div class="task-info">
                           <div class="task-header">
-                            <h4 class="task-title">{{ task.title }}</h4>
+                          <h4 class="task-title">{{ sanitizeDisplayText(task.title) }}</h4>
                             <div class="task-tags">
                               <el-tag :type="getStatusType(task.status)" size="small">
                                 {{ getStatusText(task.status) }}
@@ -265,7 +272,7 @@
                               </span>
                             </div>
                           </div>
-                          <p class="task-desc">{{ task.description }}</p>
+                          <p class="task-desc">{{ sanitizeDisplayText(task.description) }}</p>
                           <div class="task-footer">
                             <div class="task-time">
                               <el-icon><Clock /></el-icon>
@@ -335,7 +342,7 @@
                 <div class="path-detail-plan-list">
                   <article v-for="item in pathDetailPlan" :key="item.title" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
-                    <p>{{ item.desc }}</p>
+                    <p>{{ sanitizeDisplayText(item.desc) }}</p>
                   </article>
                 </div>
                 <button class="btn btn-primary btn--full" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
@@ -351,7 +358,7 @@
                 <div class="path-detail-plan-list">
                   <article v-for="item in paceSuggestionCards" :key="item.title" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
-                    <p>{{ item.desc }}</p>
+                    <p>{{ sanitizeDisplayText(item.desc) }}</p>
                   </article>
                 </div>
               </article>
@@ -364,7 +371,7 @@
                 <div class="path-detail-plan-list">
                   <article v-for="item in pathSceneCards" :key="item.title" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
-                    <p>{{ item.desc }}</p>
+                    <p>{{ sanitizeDisplayText(item.desc) }}</p>
                   </article>
                 </div>
                 <div v-if="pathSceneMetaChips.length > 0" class="path-detail-chip-row path-detail-chip-row--wrap">
@@ -495,6 +502,7 @@ import {
 } from '@element-plus/icons-vue';
 import { useUserStore } from '../stores/user';
 import CompletionCard from '../components/CompletionCard.vue';
+import MobileSiteMenu from '../components/MobileSiteMenu.vue';
 import api from '../utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import type { TaskEvaluationDetail } from '@/api/aiTeaching';
@@ -550,6 +558,13 @@ const achievementsPath = computed(() => {
 });
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
+const headerNavItems = computed(() => [
+  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
+  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
+  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsBasePath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
+  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
+  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+]);
 const headerScrolled = ref(false);
 const loading = ref(true);
 const path = ref<any>(null);
@@ -626,14 +641,24 @@ const pathOverviewMetrics = computed(() => {
 
 const effectivePathId = computed(() => String(virtualContext.value?.bindings?.learningPathId || pathId || ''));
 
+const sanitizeDisplayText = (value: unknown) => {
+  if (typeof value !== 'string') return ''
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
 const virtualPathSummary = computed(() => {
   if (!virtualContext.value) return '';
   const profile = virtualContext.value.profile || {};
   const story = virtualContext.value.storyContext || {};
   return [
-    profile.userName ? `画像：${profile.userName}` : '',
-    story.title ? `故事：${story.title}` : '',
-    viewMode.value ? `模式：${viewMode.value}` : ''
+    profile.userName ? `画像：${sanitizeDisplayText(profile.userName)}` : '',
+    story.title ? `故事：${sanitizeDisplayText(story.title)}` : '',
+    viewMode.value ? `模式：${sanitizeDisplayText(viewMode.value)}` : ''
   ].filter(Boolean).join(' · ');
 });
 
@@ -949,8 +974,16 @@ const loadPathData = async () => {
       await loadVirtualContext();
     }
 
-    const response = await api.get(`/learning/paths/${effectivePathId.value}`);
-    path.value = response.data;
+    if (isVirtualSessionView.value && virtualSessionId.value) {
+      const response = await adminApi.getVirtualSessionLearningPath(virtualSessionId.value);
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || '加载虚拟正式 Path 失败');
+      }
+      path.value = response.data.data;
+    } else {
+      const response = await api.get(`/learning/paths/${effectivePathId.value}`);
+      path.value = response.data;
+    }
 
     // 兼容 weeks 和 milestones 两种数据格式
     if (path.value.milestones && !path.value.weeks) {
@@ -2719,6 +2752,9 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .header-container {
     padding: 1rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .header-nav {
@@ -2801,6 +2837,20 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .header-right {
+    justify-content: flex-end;
+  }
+
+  .header-cta,
+  .user-chip {
+    display: none;
+  }
+
+  .user-chip {
+    min-width: auto;
+    padding-inline: 10px;
+  }
+
   .path-detail-main-grid {
     gap: 16px;
   }
@@ -2821,6 +2871,7 @@ onUnmounted(() => {
   .progress-ring-wrapper {
     transform: scale(0.88);
     transform-origin: top center;
+    width: 100%;
   }
 
   .week-title-wrapper,
@@ -2842,6 +2893,13 @@ onUnmounted(() => {
   .btn--full {
     width: 100%;
     justify-content: center;
+  }
+
+  .path-detail-hero__tags,
+  .replan-advisory-banner__meta,
+  .replan-result-banner__actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

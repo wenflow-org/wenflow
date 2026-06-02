@@ -141,6 +141,86 @@ router.post('/test', async (req, res) => {
   }
 });
 
+router.post('/test-model', async (req, res) => {
+  try {
+    const {
+      apiUrl,
+      apiKey,
+      model,
+      prompt,
+      temperature,
+      maxTokens
+    } = req.body || {};
+
+    const currentConfig = await apiConfigService.getConfig();
+    const resolvedUrl = String(apiUrl || currentConfig.apiUrl || '').trim();
+    const resolvedKey = String(apiKey || currentConfig.apiKey || '').trim();
+    const resolvedModel = String(model || currentConfig.defaultModel || '').trim();
+    const resolvedPrompt = String(prompt || '请用一句中文确认模型测试成功。').trim();
+
+    if (!resolvedUrl || !resolvedKey || !resolvedModel) {
+      return res.status(400).json({
+        success: false,
+        error: '服务地址、API Key 或测试模型未配置'
+      });
+    }
+
+    const normalizedBase = resolvedUrl.replace(/\/$/, '');
+    const endpoint = normalizedBase.endsWith('/v1')
+      ? `${normalizedBase}/chat/completions`
+      : `${normalizedBase}/v1/chat/completions`;
+
+    const startedAt = Date.now();
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${resolvedKey}`,
+      },
+      body: JSON.stringify({
+        model: resolvedModel,
+        temperature: typeof temperature === 'number' ? temperature : currentConfig.defaultTemperature ?? 0.2,
+        max_tokens: typeof maxTokens === 'number' ? maxTokens : currentConfig.defaultMaxTokens ?? 256,
+        messages: [
+          { role: 'system', content: '你是 API 模型连通性测试助手。请简洁返回。' },
+          { role: 'user', content: resolvedPrompt }
+        ]
+      })
+    });
+
+    const durationMs = Date.now() - startedAt;
+    const payload: any = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return res.status(400).json({
+        success: false,
+        error: payload?.error?.message || `HTTP ${response.status}: ${response.statusText}`,
+        data: {
+          model: resolvedModel,
+          durationMs,
+        }
+      });
+    }
+
+    const content = payload?.choices?.[0]?.message?.content || '';
+    return res.json({
+      success: true,
+      data: {
+        model: payload?.model || resolvedModel,
+        durationMs,
+        content,
+        usage: payload?.usage || null,
+        raw: payload,
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error.message || '模型测试失败'
+    });
+  }
+});
+
 router.post('/reset', async (req, res) => {
   try {
     await apiConfigService.resetConfig();

@@ -1,5 +1,6 @@
 import { AgentContext, MilestoneOutput, SubtaskOutput, LearningSignal } from '../protocol';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { logger } from '../../utils/logger';
 
 export type AdjustmentType = 'insert' | 'remove' | 'modify' | 'reorder';
 export type AdjustmentTarget = 'milestone' | 'subtask';
@@ -132,7 +133,14 @@ export class PathAdjustmentEngine {
         const milestoneData = JSON.parse(jsonMatch[0]);
         return { stageNumber: (adjustment.position || 0) + 1, title: milestoneData.title, description: milestoneData.description, goal: milestoneData.goal, estimatedHours: milestoneData.estimatedHours, subtasks: milestoneData.subtasks.map((s: any, i: number) => ({ id: `subtask_${Date.now()}_${i}`, ...s })) };
       }
-    } catch (error) { console.error('[PathAdjustment] Failed to generate milestone:', error); }
+    } catch (error) {
+      logger.error('[path-adjustment] failed to generate milestone', {
+        userId: context.userId,
+        reason: adjustment.reason,
+        position: adjustment.position,
+        error,
+      });
+    }
     return null;
   }
   private async generateSubtaskForInsertion(milestone: MilestoneOutput, existingSubtasks: SubtaskOutput[], adjustment: PathAdjustment, context: AgentContext): Promise<SubtaskOutput | null> {
@@ -148,7 +156,15 @@ export class PathAdjustmentEngine {
         const subtaskData = JSON.parse(jsonMatch[0]);
         return { id: `subtask_${Date.now()}`, ...subtaskData };
       }
-    } catch (error) { console.error('[PathAdjustment] Failed to generate subtask:', error); }
+    } catch (error) {
+      logger.error('[path-adjustment] failed to generate subtask', {
+        userId: context.userId,
+        reason: adjustment.reason,
+        position: adjustment.position,
+        milestoneTitle: milestone.title,
+        error,
+      });
+    }
     return null;
   }
   private renumberMilestones(milestones: MilestoneOutput[]): void { milestones.forEach((milestone, index) => { milestone.stageNumber = index + 1; }); }

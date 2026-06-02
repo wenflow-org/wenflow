@@ -398,6 +398,7 @@ const viewMode = computed(() => typeof route.query.viewMode === 'string' ? route
 const isTestMode = computed(() => route.meta.isTestMode === true);
 const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
 const isVirtualSessionView = computed(() => !!virtualSessionId.value);
+const isAdminVirtualSessionView = computed(() => isAdminRoute.value && isVirtualSessionView.value);
 const dashboardPath = computed(() => {
   if (isTestMode.value) {
     return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
@@ -1083,8 +1084,16 @@ const loadTaskData = async () => {
       throw new Error('当前虚拟 session 还没有绑定学习任务');
     }
 
-    const response = await api.get(`/learning/tasks/${effectiveTaskId.value}`);
-    task.value = response.data || response;
+    if (isAdminVirtualSessionView.value) {
+      const response = await adminApi.getVirtualSessionLearningTask(virtualSessionId.value);
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || '加载虚拟学习任务失败');
+      }
+      task.value = response.data.data;
+    } else {
+      const response = await api.get(`/learning/tasks/${effectiveTaskId.value}`);
+      task.value = response.data || response;
+    }
     
     if (task.value?.week?.learningObjectives) {
       const objectives = task.value.week.learningObjectives;
@@ -1832,7 +1841,15 @@ const resumeSession = async (sessionId: string) => {
   sessionInitializing.value = true;
   
   try {
-    const detail = await aiTeachingAPI.getSessionDetail(sessionId);
+    const detail = isAdminVirtualSessionView.value
+      ? await (async () => {
+          const response = await adminApi.getVirtualSessionTeachingDetail(virtualSessionId.value);
+          if (!response.data?.success) {
+            throw new Error(response.data?.error || '获取虚拟授课会话详情失败');
+          }
+          return response.data.data;
+        })()
+      : await aiTeachingAPI.getSessionDetail(sessionId);
     if (!detail) {
       toast.error('获取会话详情失败');
       sessionInitializing.value = false;
@@ -2882,6 +2899,10 @@ onUnmounted(() => {
     padding: 16px;
   }
 
+  .learning-sidebar__nav {
+    max-height: 240px;
+  }
+
   .learning-msg {
     max-width: 95%;
     min-width: 0;
@@ -2918,6 +2939,7 @@ onUnmounted(() => {
   .learning-messages {
     gap: 12px;
     padding-right: 0;
+    overscroll-behavior: contain;
   }
 
   .learning-msg,
@@ -2942,6 +2964,10 @@ onUnmounted(() => {
 
   .learning-msg-debug__grid {
     grid-template-columns: 1fr;
+  }
+
+  .learning-bottom {
+    gap: 12px;
   }
 
   .learning-composer {
@@ -2973,8 +2999,19 @@ onUnmounted(() => {
     padding: 14px;
   }
 
+  .learning-sidebar__progress-meta,
+  .learning-msg__actions,
+  .learning-completion__actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .learning-msg {
     padding: 14px;
+  }
+
+  .learning-msg__body {
+    min-width: 0;
   }
 
   .quick-replies {

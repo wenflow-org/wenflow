@@ -7,6 +7,7 @@
 
 import { EventEmitter } from 'events';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 // 事件类型定义
 export type LearningEventType =
@@ -231,7 +232,13 @@ export class EventBus {
         }
       });
     } catch (error) {
-      console.error('Failed to persist event:', error);
+      logger.error('[event-bus] failed to persist event', {
+        eventId: event.id,
+        eventType: event.type,
+        source: event.source,
+        userId: event.userId,
+        error,
+      });
       // 不抛出错误，允许事件继续传播
     }
   }
@@ -268,7 +275,7 @@ export class EventBus {
         }
       });
     } catch (error) {
-      console.error('Failed to cleanup old events:', error);
+      logger.error('[event-bus] failed to cleanup old events', { error });
     }
   }
 

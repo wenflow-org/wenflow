@@ -2,6 +2,7 @@
 import express from 'express';
 import stateTrackingService from '../services/learning/state-tracking.service';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.get('/current', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('获取当前学习状态失败:', error);
+    logger.error('[state-tracking-route] 获取当前学习状态失败', { error });
     res.status(500).json({
       success: false,
       error: error.message
@@ -80,7 +81,7 @@ router.get('/trends', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('获取学习趋势失败:', error);
+    logger.error('[state-tracking-route] 获取学习趋势失败', { error });
     res.status(500).json({
       success: false,
       error: error.message
@@ -134,7 +135,7 @@ router.post('/calculate', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('计算学习状态指标失败:', error);
+    logger.error('[state-tracking-route] 计算学习状态指标失败', { error });
     res.status(500).json({
       success: false,
       error: error.message
@@ -168,7 +169,7 @@ router.get('/warnings', async (req: any, res) => {
       }
     });
   } catch (error: any) {
-    console.error('获取学习预警失败:', error);
+    logger.error('[state-tracking-route] 获取学习预警失败', { error });
     res.status(500).json({
       success: false,
       error: error.message

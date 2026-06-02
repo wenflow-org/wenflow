@@ -1,14 +1,11 @@
 <template>
   <div class="execution-logs-page">
-    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div><div class="bg-orb bg-orb--3"></div></div>
-
     <div class="page-hero">
-      <span class="pill">Admin</span>
       <h2 class="page-hero__title">
         <el-icon class="title-icon"><Cpu /></el-icon>
-        Agent 监控与日志
+        运行执行日志
       </h2>
-      <p class="page-hero__subtitle">实时监控 Agent 运行状态，查看执行日志</p>
+      <p class="page-hero__subtitle">查看运行节点的真实执行链路：从哪里触发、执行是否成功、输入输出是什么，以及是否需要继续下钻到 Prompt 调用日志。</p>
     </div>
 
     <!-- 统计信息 -->
@@ -66,6 +63,12 @@
 
     <!-- 筛选器 -->
     <div class="filter-section">
+      <div class="filter-section__intro">
+        <div>
+          <h3>链路筛选</h3>
+          <p>先按节点、Trace、会话、来源和状态收窄问题范围，再查看单次执行详情。</p>
+        </div>
+      </div>
       <div class="filter-row">
         <div class="filter-item">
           <label>Agent</label>
@@ -258,6 +261,12 @@
             <span class="preview-label">错误:</span>
             <span class="preview-content">{{ log.error }}</span>
           </div>
+          <div class="preview-row preview-row--hint" v-if="log.pathId || log.phase || log.triggerSource">
+            <span class="preview-label">摘要:</span>
+            <span class="preview-chip" v-if="log.pathId">路径 {{ log.pathId }}</span>
+            <span class="preview-chip" v-if="log.phase">阶段 {{ log.phase }}<template v-if="log.phaseStatus"> / {{ log.phaseStatus }}</template></span>
+            <span class="preview-chip" v-if="log.triggerSource">触发 {{ log.triggerSource }}</span>
+          </div>
           <div class="preview-row" v-if="log.traceId">
             <span class="preview-label">Trace:</span>
             <el-button type="primary" link size="small" class="trace-link" @click="filterByTraceId(log.traceId)">
@@ -282,6 +291,14 @@
           <el-button type="primary" size="small" @click="showDetail(log)">
             <el-icon><View /></el-icon>
             查看详情
+          </el-button>
+          <el-button
+            v-if="canOpenPromptLogs(log)"
+            type="default"
+            size="small"
+            @click="openPromptLogs(log)"
+          >
+            Prompt 调用日志
           </el-button>
           <el-button type="default" size="small" @click="copyLog(log)">
             <el-icon><DocumentCopy /></el-icon>
@@ -419,6 +436,11 @@
               <span>{{ selectedLog.triggerSource }}</span>
             </div>
           </div>
+          <div class="detail-inline-actions" v-if="canOpenPromptLogs(selectedLog)">
+            <el-button type="primary" size="small" @click="openPromptLogs(selectedLog!)">
+              打开 Prompt 调用日志
+            </el-button>
+          </div>
         </div>
 
         <!-- 输入 -->
@@ -494,7 +516,7 @@ import {
   WarningFilled,
   Service
 } from '@element-plus/icons-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { adminAxios } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 
@@ -597,6 +619,7 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 const detailVisible = ref(false);
 const selectedLog = ref<Log | null>(null);
 const route = useRoute();
+const router = useRouter();
 
 // 加载日志
 const loadLogs = async () => {
@@ -658,6 +681,7 @@ const getAgentDisplayName = (name: string) => {
     'path-orchestrator': '路径编排',
     'ai-teaching-agent': 'AI 授课',
     'learner-model-agent': '学习者模型',
+    'learner-orchestrator': '学习者编排器',
     'content-generator': '内容生成',
     'peer-agent': '伴学介入(旧ID)',
     'skill:peer-reinforcement': '伴学介入',
@@ -724,6 +748,18 @@ const handleSizeChange = (size: number) => {
 const showDetail = (log: Log) => {
   selectedLog.value = log;
   detailVisible.value = true;
+};
+
+const canOpenPromptLogs = (log: Pick<Log, 'agentId' | 'pathId'> | null | undefined) => {
+  if (!log) return false;
+  return Boolean(log.agentId || log.pathId);
+};
+
+const openPromptLogs = (log: Pick<Log, 'agentId' | 'pathId'>) => {
+  const query: Record<string, string> = {};
+  if (log.agentId) query.agentId = log.agentId;
+  if (log.pathId) query.pathId = log.pathId;
+  router.push({ path: '/admin/prompt-call-logs', query });
 };
 
 // 复制日志
@@ -898,12 +934,12 @@ const getSourceLabel = (source?: string) => {
 
 const getExecutionLayerLabel = (layer?: string | null) => {
   const map: Record<string, string> = {
-    orchestrator: 'Orchestrator',
-    agent: 'Agent',
-    skill: 'Skill',
-    'api-gateway': 'Gateway',
-    service: 'Service',
-    system: 'System'
+    orchestrator: '编排层',
+    agent: 'Agent 层',
+    skill: 'Skill 层',
+    'api-gateway': '网关层',
+    service: '服务层',
+    system: '系统层'
   };
   return map[layer || ''] || (layer || '未知层');
 };
@@ -924,8 +960,8 @@ const getActorTypeLabel = (actorType?: string | null) => {
   const map: Record<string, string> = {
     agent: 'Agent',
     skill: 'Skill',
-    orchestrator: 'Orchestrator',
-    system: 'System'
+    orchestrator: '编排器',
+    system: '系统'
   };
   return map[actorType || ''] || (actorType || '未知主体');
 };
@@ -947,8 +983,8 @@ const getInvokerLabel = (log: Pick<Log, 'invokerType' | 'invokerId'>) => {
     : log.invokerType === 'skill'
       ? 'Skill'
       : log.invokerType === 'orchestrator'
-        ? 'Orchestrator'
-        : 'Invoker';
+        ? '编排器'
+        : '发起方';
   return `${prefix}: ${log.invokerId}`;
 };
 
@@ -1000,17 +1036,35 @@ onUnmounted(() => {
 }
 
 /* Background orbs */
-.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
-@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
-
 /* Hero */
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: flex; align-items: center; gap: 0.5rem; }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+.page-hero {
+  position: relative;
+  z-index: 1;
+  padding: 18px 22px;
+  border-radius: 22px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94));
+  margin-bottom: 12px;
+  box-shadow: 0 12px 30px rgba(42, 72, 128, 0.06);
+}
+
+.page-hero__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-hero__subtitle {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
 
 .title-icon {
   font-size: 1.75rem;
@@ -1022,13 +1076,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.04), rgba(141, 107, 255, 0.03), color-mix(in srgb, #ffffff 90%, white));
-  border-radius: 28px;
-  border: 1px solid #d2dbf3;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(246, 249, 255, 0.95));
+  border-radius: 20px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  margin-bottom: 1rem;
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
   position: relative;
   z-index: 1;
 }
@@ -1121,16 +1173,35 @@ onUnmounted(() => {
 
 /* 筛选器 */
 .filter-section {
-  background: color-mix(in srgb, #ffffff 90%, white);
-  padding: 1.25rem;
-  border-radius: 28px;
-  border: 1px solid #d2dbf3;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 255, 0.92));
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  margin-bottom: 1rem;
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
   position: relative;
   z-index: 1;
+}
+
+.filter-section__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.filter-section__intro h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #22344d;
+}
+
+.filter-section__intro p {
+  margin: 6px 0 0;
+  color: #7085a6;
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .filter-row {
@@ -1179,7 +1250,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   position: relative;
   z-index: 1;
 }
@@ -1200,19 +1271,17 @@ onUnmounted(() => {
 }
 
 .log-card {
-  background: color-mix(in srgb, #ffffff 90%, white);
-  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 255, 0.95));
+  border-radius: 18px;
   padding: 1rem;
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
-  border: 1px solid #d2dbf3;
+  box-shadow: 0 10px 22px rgba(42, 72, 128, 0.05);
+  border: 1px solid rgba(205, 216, 238, 0.9);
   border-left: 4px solid transparent;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   transition: all var(--fluent-duration-fast) var(--fluent-easing);
 }
 
 .log-card:hover {
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.22);
+  box-shadow: 0 14px 28px rgba(42, 72, 128, 0.08);
 }
 
 .log-card.log-error {
@@ -1314,10 +1383,27 @@ onUnmounted(() => {
   color: var(--color-danger);
 }
 
+.preview-row--hint {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .preview-label {
   color: var(--text-secondary);
   font-weight: 500;
   flex-shrink: 0;
+}
+
+.preview-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: #2f65d9;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .preview-content {
@@ -1337,6 +1423,7 @@ onUnmounted(() => {
 .log-actions {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 /* 分页 */
@@ -1429,6 +1516,12 @@ onUnmounted(() => {
 .detail-item label {
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+.detail-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .json-block,

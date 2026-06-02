@@ -13,6 +13,7 @@ import { SignalRegistry } from './registries/signal-registry';
 import { StrategyRegistry } from './registries/strategy-registry';
 import { getAPIGateway } from './api-gateway';
 import { runWithContext } from './api-gateway/context';
+import { logger } from '../utils/logger';
 import {
   AgentInput,
   AgentOutput,
@@ -103,7 +104,12 @@ export class EduClawGateway {
         try {
           await this.handleSignalEvent(event);
         } catch (error) {
-          console.error(`[Gateway] Error handling signal event ${eventType}:`, error);
+          logger.error('[gateway] failed to handle signal event', {
+            eventType,
+            eventId: event.id,
+            userId: event.userId,
+            error,
+          });
           // 错误边界：不抛出异常，避免影响主流程
         }
       });
@@ -124,9 +130,19 @@ export class EduClawGateway {
       if (agent.handler) {
         try {
           // 这里可以触发 Agent 的重新规划逻辑
-          console.log(`Notifying agent ${agent.definition.name} of event ${event.type}`);
+          logger.info('[gateway] signal event matched agent', {
+            agentId: agent.definition.id,
+            agentName: agent.definition.name,
+            eventType: event.type,
+            userId: event.userId,
+          });
         } catch (error) {
-          console.error(`Error notifying agent ${agent.definition.name}:`, error);
+          logger.error('[gateway] signal event notification failed', {
+            agentId: agent.definition.id,
+            agentName: agent.definition.name,
+            eventType: event.type,
+            error,
+          });
         }
       }
     }

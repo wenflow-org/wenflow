@@ -1,7 +1,9 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { getGateway } from '../gateway';
+import { getAPIGateway } from '../gateway/api-gateway';
 import { v4 as uuidv4 } from 'uuid';
+import { isExtraCapabilitySkill } from './skill-component-catalog';
 
 export interface SkillModelConfig {
   skillId: string;
@@ -21,6 +23,66 @@ export interface SkillModelConfig {
 }
 
 class SkillModelConfigService {
+  private buildDefaultConfig(skill: any): SkillModelConfig {
+    const skillId = skill.definition.name;
+    const displayName = skill.definition.displayName;
+    const status = skill.definition.status;
+    const isExternal = isExtraCapabilitySkill(skillId);
+
+    return {
+      skillId,
+      displayName,
+      status,
+      lastCalledAt: skill.lastCalledAt || null,
+      tier: 'chat',
+      thinkingMode: 'default',
+      reasoningEffort: 'default',
+      temperature: 0.7,
+      maxTokens: 2000,
+      requestTimeoutMs: null,
+      // 外挂能力组件默认就作为独立能力对象管理，不再落回继承态。
+      enabled: isExternal,
+    } satisfies SkillModelConfig;
+  }
+
+  private async ensurePersistedDefaultConfig(skill: any): Promise<SkillModelConfig> {
+    const skillId = skill.definition.name;
+    const defaultConfig = this.buildDefaultConfig(skill);
+
+    if (!isExtraCapabilitySkill(skillId)) {
+      return defaultConfig;
+    }
+
+    const persisted = await prisma.skill_model_configs.upsert({
+      where: { skillId },
+      update: { updatedAt: new Date() },
+      create: {
+        id: uuidv4(),
+        skillId,
+        tier: defaultConfig.tier,
+        model: defaultConfig.model,
+        thinkingMode: defaultConfig.thinkingMode,
+        reasoningEffort: defaultConfig.reasoningEffort,
+        endpoint: defaultConfig.endpoint,
+        apiKey: defaultConfig.apiKey,
+        temperature: defaultConfig.temperature,
+        maxTokens: defaultConfig.maxTokens,
+        requestTimeoutMs: defaultConfig.requestTimeoutMs,
+        enabled: defaultConfig.enabled,
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      ...persisted,
+      displayName: defaultConfig.displayName,
+      status: defaultConfig.status,
+      lastCalledAt: defaultConfig.lastCalledAt,
+      thinkingMode: persisted.thinkingMode || 'default',
+      reasoningEffort: persisted.reasoningEffort || 'default',
+    };
+  }
+
   async getAll(): Promise<SkillModelConfig[]> {
     try {
       const persistedConfigs = await prisma.skill_model_configs.findMany();
@@ -28,26 +90,14 @@ class SkillModelConfigService {
       const gateway = getGateway();
       const skills = gateway.matchSkills({});
 
-      const mergedConfigs = skills.map((skill: any) => {
+      const mergedConfigs = await Promise.all(skills.map(async (skill: any) => {
         const skillId = skill.definition.name;
         const displayName = skill.definition.displayName;
         const status = skill.definition.status;
         const persisted = persistedMap.get(skillId);
 
         if (!persisted) {
-          return {
-            skillId,
-            displayName,
-            status,
-            lastCalledAt: skill.lastCalledAt || null,
-            tier: 'chat',
-            thinkingMode: 'default',
-            reasoningEffort: 'default',
-            temperature: 0.7,
-            maxTokens: 2000,
-            requestTimeoutMs: null,
-            enabled: false,
-          } satisfies SkillModelConfig;
+          return this.ensurePersistedDefaultConfig(skill);
         }
 
         return {
@@ -58,7 +108,7 @@ class SkillModelConfigService {
           thinkingMode: persisted.thinkingMode || 'default',
           reasoningEffort: persisted.reasoningEffort || 'default',
         };
-      });
+      }));
 
       const missingConfigs = persistedConfigs.filter(
         (config) => !mergedConfigs.some((merged) => merged.skillId === config.skillId)
@@ -82,7 +132,12 @@ class SkillModelConfigService {
   async get(skillId: string): Promise<SkillModelConfig | null> {
     try {
       const config = await prisma.skill_model_configs.findUnique({ where: { skillId } });
-      if (!config) return null;
+      if (!config) {
+        const gateway = getGateway();
+        const skill = gateway.getSkill(skillId);
+        if (!skill) return null;
+        return this.ensurePersistedDefaultConfig(skill);
+      }
       return {
         ...config,
         thinkingMode: config.thinkingMode || 'default',
@@ -96,11 +151,13 @@ class SkillModelConfigService {
 
   async upsert(skillId: string, config: Partial<SkillModelConfig>): Promise<SkillModelConfig> {
     try {
-      return await prisma.skill_model_configs.upsert({
+      const result = await prisma.skill_model_configs.upsert({
         where: { skillId },
         update: { ...config, updatedAt: new Date() },
         create: { id: uuidv4(), skillId, ...config, updatedAt: new Date() },
       });
+      getAPIGateway().invalidateCache(undefined, undefined, skillId);
+      return result;
     } catch (error) {
       logger.error(`Failed to upsert skill config: ${skillId}`, error);
       throw error;
@@ -110,6 +167,7 @@ class SkillModelConfigService {
   async delete(skillId: string): Promise<void> {
     try {
       await prisma.skill_model_configs.delete({ where: { skillId } });
+      getAPIGateway().invalidateCache(undefined, undefined, skillId);
     } catch (error) {
       logger.error(`Failed to delete skill config: ${skillId}`, error);
       throw error;

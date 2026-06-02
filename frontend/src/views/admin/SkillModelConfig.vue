@@ -6,13 +6,22 @@
     </div>
 
     <div class="page-hero">
-      <span class="pill">Skill 模型配置</span>
+      <span class="pill">Component Config</span>
       <h2 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Operation /></el-icon>
-        Skill 模型配置
+        技能/组件配置
       </h2>
-      <p class="page-hero__subtitle">配置 Skill 使用的模型、思考模式、思考强度与超时</p>
+      <p class="page-hero__subtitle">这里仅保留外挂能力组件配置，例如网络搜索、网页提取、图片分析、记忆搜索等不属于平台主链的额外能力。</p>
     </div>
+
+    <el-alert
+      class="page-notice"
+      type="info"
+      :closable="false"
+      show-icon
+      title="此页只展示外挂能力组件"
+      description="Goal / Path / Learner / Teaching / Simulation 主链里的内部 skill 已统一纳入“运行节点管理”。这里主要保留检索、网页提取、图片分析、记忆搜索等外挂能力组件。"
+    />
 
     <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
       <el-card class="summary-card summary-card--blue" shadow="hover">
@@ -35,7 +44,7 @@
 
     <div class="filters admin-list-toolbar">
       <div class="admin-list-toolbar__group">
-        <el-input v-model="keyword" placeholder="搜索 Skill ID / 名称" clearable class="search" />
+        <el-input v-model="keyword" placeholder="搜索组件 ID / 名称" clearable class="search" />
         <el-select v-model="statusFilter" placeholder="工作状态" clearable class="select">
           <el-option label="正常" value="working" />
           <el-option label="占位" value="placeholder" />
@@ -87,7 +96,7 @@
         <el-table-column label="配置策略" min-width="240">
           <template #default="{ row }">
             <div class="strategy-cell">
-              <span class="strategy-cell__model">{{ row.model || '继承 Agent / 平台默认' }}</span>
+              <span class="strategy-cell__model">{{ row.model || '平台默认独立配置' }}</span>
               <div class="strategy-cell__tags">
                 <el-tag :type="thinkingTagType(row.thinkingMode)">{{ formatThinkingMode(row.thinkingMode) }}</el-tag>
                 <el-tag :type="effortTagType(row.reasoningEffort)">{{ formatReasoningEffort(row.reasoningEffort) }}</el-tag>
@@ -133,7 +142,7 @@
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="模型层级">{{ currentSkill.tier || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="模型">{{ currentSkill.model || '平台默认' }}</el-descriptions-item>
+            <el-descriptions-item label="模型">{{ currentSkill.model || '平台默认独立配置' }}</el-descriptions-item>
             <el-descriptions-item label="说明" :span="2">{{ getSkillHint(currentSkill.skillId) || '-' }}</el-descriptions-item>
           </el-descriptions>
 
@@ -216,7 +225,7 @@
                 </div>
 
                 <el-empty v-else-if="supportsPromptManagement(currentSkill.skillId)" description="当前没有可展示的 Prompt。" />
-                <el-empty v-else description="该 Skill 当前未开放独立 Prompt 管理" />
+                <el-empty v-else description="该外挂能力组件当前无需独立 Prompt，直接作为工具型能力运行。" />
 
                 <div v-if="supportsPromptManagement(currentSkill.skillId)" class="prompt-versions-card">
                   <div class="prompt-versions-card__header">
@@ -302,7 +311,7 @@
                   </el-form-item>
                   <el-form-item label="独立配置">
                     <el-switch v-model="editForm.enabled" />
-                    <div class="field-hint">关闭后将继承当前调用 Agent 的配置；若无 Agent 上下文，则回落平台默认</div>
+                    <div class="field-hint">关闭后将继承当前调用方配置；若无调用方上下文，则回落平台默认。</div>
                   </el-form-item>
                   <el-form-item label="模型层级">
                     <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%" :disabled="!editForm.enabled">
@@ -311,7 +320,7 @@
                     </el-select>
                   </el-form-item>
                   <el-form-item label="模型">
-                    <el-input v-model="editForm.model" :disabled="!editForm.enabled" placeholder="留空继承 Agent / 平台默认" />
+                    <el-input v-model="editForm.model" :disabled="!editForm.enabled" placeholder="留空使用平台默认独立配置" />
                   </el-form-item>
                   <el-form-item label="思考模式">
                     <el-select v-model="editForm.thinkingMode" placeholder="选择思考模式" style="width: 100%" :disabled="!editForm.enabled">
@@ -382,11 +391,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { Operation, Refresh } from '@element-plus/icons-vue';
 import { adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 import { ElMessageBox } from 'element-plus';
 import type { FormInstance } from 'element-plus';
+import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog';
 
 interface SkillModelConfig {
   skillId: string;
@@ -455,13 +466,15 @@ const editForm = ref<SkillModelConfig>({
   requestTimeoutMs: null,
   enabled: false,
 });
+const route = useRoute();
 
 const filteredConfigs = computed(() => {
   return configs.value.filter(config => {
+    const visibleByScope = EXTRA_COMPONENT_VISIBLE_SKILLS.has(config.skillId);
     const byKeyword = !keyword.value || `${config.skillId} ${config.displayName || ''}`.toLowerCase().includes(keyword.value.toLowerCase());
     const byStatus = !statusFilter.value || config.status === statusFilter.value;
     const byEnabled = !onlyEnabled.value || config.enabled;
-    return byKeyword && byStatus && byEnabled;
+    return visibleByScope && byKeyword && byStatus && byEnabled;
   });
 });
 
@@ -503,6 +516,12 @@ const SKILL_CN_NAMES: Record<string, string> = {
 const supportsPromptManagement = (skillId?: string) => {
   return skillId === 'path-scene-framing'
     || skillId === 'stage-designer'
+    || skillId === 'label-generator'
+    || skillId === 'goal-profile-inference'
+    || skillId === 'learning-pattern-distiller'
+    || skillId === 'session-knowledge-distiller'
+    || skillId === 'dialogue-concept-extractor'
+    || skillId === 'adaptive-guidance-copy'
     || skillId === 'virtual-learner-persona-designer'
     || skillId === 'virtual-learner-scenario-designer';
 };
@@ -530,12 +549,18 @@ const fetchConfigs = async () => {
   loading.value = true;
   try {
     const res = await adminSkillsApi.getSkillModelConfigs();
-    configs.value = res.data?.data || [];
+    configs.value = (res.data?.data || []).filter((config: SkillModelConfig) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(config.skillId));
     updateSummary();
   } catch {
     toast.error('获取 Skill 配置失败');
   }
   loading.value = false;
+};
+
+const syncKeywordFromRoute = () => {
+  const raw = typeof route.query.scope === 'string' ? route.query.scope : '';
+  if (!raw) return;
+  keyword.value = raw;
 };
 
 const updateSummary = () => {
@@ -1008,7 +1033,10 @@ const runSkillPreview = async () => {
   }
 };
 
-onMounted(() => fetchConfigs());
+onMounted(() => {
+  syncKeywordFromRoute();
+  fetchConfigs();
+});
 </script>
 
 <style scoped>
@@ -1023,12 +1051,38 @@ onMounted(() => fetchConfigs());
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 .page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
 .admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+
+.page-notice {
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.skill-btn,
+.table-link-btn {
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.skill-btn--ghost {
+  color: #335aa4;
+  border: 1px solid rgba(52, 120, 246, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.table-link-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  color: var(--color-primary-dark, #1f57cc);
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  background: rgba(244, 249, 255, 0.96);
+}
 .summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }
 .summary-card .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
 .summary-card .value { font-size: 1.75rem; font-weight: 800; margin-top: 0.25rem; }

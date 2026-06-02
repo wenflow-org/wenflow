@@ -11,6 +11,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { logger } from '../../utils/logger';
 
 /**
  * 内容生成 Skill 定义
@@ -243,8 +244,12 @@ export async function contentGeneration(
   } catch (e) {
     error = e;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[ContentGeneration] 生成失败:', errorMessage);
-    console.error('[ContentGeneration] 请求参数:', { topic: input.topic, type: input.type, targetLevel: input.targetLevel });
+    logger.error('[content-generation] generation failed', {
+      topic: input.topic,
+      type: input.type,
+      targetLevel: input.targetLevel,
+      errorMessage,
+    });
     return {
       success: false,
       error: {
@@ -280,9 +285,16 @@ export async function contentGeneration(
             })
           }
         });
-        console.log('[ContentGeneration] Agent调用日志已记录', { agentId: input.agentId, userId: input.userId });
+        logger.info('[content-generation] agent call log persisted', {
+          agentId: input.agentId,
+          userId: input.userId,
+        });
       } catch (logError) {
-        console.error('[ContentGeneration] 记录Agent调用日志失败:', logError);
+        logger.error('[content-generation] failed to persist agent call log', {
+          agentId: input.agentId,
+          userId: input.userId,
+          error: logError,
+        });
       }
     }
   }

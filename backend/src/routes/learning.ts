@@ -76,15 +76,9 @@ const buildStoredGoalPathRequest = (path: {
     rawGoal: typeof goalFinalPayload.rawGoal === 'string' && goalFinalPayload.rawGoal.trim()
       ? goalFinalPayload.rawGoal
       : (path.description || ''),
-    understanding: goalFinalPayload.understanding || {},
-    collected: goalFinalPayload.collected || {},
-    structuredData: goalFinalPayload.structuredData ?? null,
-    confirmedProposal: goalFinalPayload.confirmedProposal ?? null,
-    confidenceScores: goalFinalPayload.confidenceScores ?? null,
+    visibleSummary: goalFinalPayload.visibleSummary || null,
     conversationHistory: Array.isArray(goalFinalPayload.conversationHistory) ? goalFinalPayload.conversationHistory : [],
     finalUserVisible: typeof goalFinalPayload.finalUserVisible === 'string' ? goalFinalPayload.finalUserVisible : undefined,
-    stage: typeof goalFinalPayload.stage === 'string' ? goalFinalPayload.stage : undefined,
-    confidence: typeof goalFinalPayload.confidence === 'number' ? goalFinalPayload.confidence : undefined,
   };
 };
 
@@ -128,11 +122,39 @@ const buildGoalPathRequestFromConversation = async (path: {
     sourceConversationId: conversation.id,
     existingPathId: path.id,
     rawGoal: conversation.description || path.description || '',
-    understanding: collectedData.understanding || {},
-    collected: collectedData.collected || {},
-    structuredData: collectedData.structuredData ?? null,
-    confirmedProposal: collectedData.confirmedProposal ?? null,
-    confidenceScores: collectedData.confidenceScores ?? null,
+    visibleSummary: {
+      surfaceGoal: collectedData.understanding?.surface_goal || null,
+      realProblem: collectedData.understanding?.real_problem || null,
+      motivation: collectedData.understanding?.motivation || null,
+      currentBaseline: collectedData.understanding?.current_baseline
+        ? {
+            level: collectedData.understanding.current_baseline.level || null,
+            evidence: collectedData.understanding.current_baseline.evidence || null,
+          }
+        : null,
+      resources: collectedData.understanding?.available_resources
+        ? {
+            timePerWeek: collectedData.understanding.available_resources.time_budget || null,
+            timePerSession: collectedData.collected?.timePerDay || null,
+            timeHorizon: collectedData.understanding.available_resources.time_horizon || collectedData.understanding.deadline_text || null,
+            deadlineText: collectedData.understanding.deadline_text || null,
+          }
+        : null,
+      successCriteria: collectedData.understanding?.success_criteria
+        ? {
+            observableResult: collectedData.understanding.success_criteria.observable_result || null,
+            acceptanceCheck: collectedData.understanding.success_criteria.acceptance_check || null,
+          }
+        : null,
+      confirmedProposal: collectedData.confirmedProposal
+        ? {
+            learningDirection: collectedData.confirmedProposal.learning_direction || null,
+            firstDeliverable: collectedData.confirmedProposal.first_deliverable || null,
+            keyStages: Array.isArray(collectedData.confirmedProposal.key_stages) ? collectedData.confirmedProposal.key_stages : [],
+            outOfScope: Array.isArray(collectedData.confirmedProposal.out_of_scope) ? collectedData.confirmedProposal.out_of_scope : [],
+          }
+        : null,
+    },
     conversationHistory: messages
       .map((message: any) => ({
         role: message?.role === 'user' ? 'user' : 'assistant',
@@ -140,8 +162,6 @@ const buildGoalPathRequestFromConversation = async (path: {
       }))
       .filter((message: { role: string; content: string }) => message.content),
     finalUserVisible: typeof collectedData.finalUserVisible === 'string' ? collectedData.finalUserVisible : undefined,
-    stage: typeof conversation.stage === 'string' ? conversation.stage : undefined,
-    confidence: typeof collectedData.confidence === 'number' ? collectedData.confidence : undefined,
   };
 };
 
@@ -190,9 +210,7 @@ const generatePathSchema = z.object({
     problemContext: z.any().optional(),
     priorKnowledge: z.array(z.any()).optional(),
     daysPerWeek: z.number().min(1).max(7).optional(),
-    structuredData: z.record(z.any()).optional(),
     confirmedProposal: z.record(z.any()).optional(),
-    confidenceScores: z.record(z.any()).optional(),
     conversationHistory: z.array(z.object({ role: z.string(), content: z.string() })).optional()
   }).optional()
 });

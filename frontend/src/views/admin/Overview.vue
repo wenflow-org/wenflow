@@ -1,302 +1,476 @@
 <template>
   <div class="admin-overview">
-    <!-- 背景装饰层 -->
-    <div class="overview-bg-layer">
-      <div class="overview-bg-orb overview-bg-orb--1"></div>
-      <div class="overview-bg-orb overview-bg-orb--2"></div>
-      <div class="overview-bg-orb overview-bg-orb--3"></div>
-      <div class="overview-bg-grid"></div>
-    </div>
+    <section class="page-hero">
+      <div class="page-hero__copy">
+        <span class="page-hero__eyebrow">Admin Overview</span>
+        <h1 class="page-hero__title">平台运行总览</h1>
+        <p class="page-hero__subtitle">聚焦今日活跃、Agent 运行健康度与最近平台动态。</p>
 
-    <!-- Hero 区域 -->
-    <div class="overview-hero surface-card">
-      <div class="overview-hero__glow"></div>
-      <div class="overview-hero__content">
-        <div class="overview-hero__left">
-          <span class="pill">后台概览</span>
-          <h1 class="overview-hero__title">平台运行状态</h1>
-          <p class="overview-hero__subtitle">查看用户、路径、Agent 和系统状态</p>
-        </div>
-        <div class="overview-hero__right">
-          <el-button class="hero-refresh-btn" @click="refreshAll" :loading="refreshing">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-            刷新数据
-          </el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
-      <div class="stat-card stat-card--users">
-        <div class="stat-card__icon-wrap stat-card__icon-wrap--users">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <div class="stat-card__body">
-          <span class="stat-card__label">总用户数</span>
-          <strong class="stat-card__value">{{ stats.users?.total || 0 }}</strong>
-          <div class="stat-card__trend">
-            <span class="trend-badge trend-badge--success">+{{ stats.users?.newToday || 0 }}</span>
-            <span class="trend-label">今日新增</span>
-          </div>
+        <div class="page-hero__highlights">
+          <span class="hero-pill">最近刷新 {{ lastRefreshLabel }}</span>
+          <span class="hero-pill">今日调用 {{ stats.agents?.todayCalls || 0 }}</span>
+          <span class="hero-pill">24h 异常 {{ totalTrendIssues }}</span>
         </div>
       </div>
 
-      <div class="stat-card stat-card--active">
-        <div class="stat-card__icon-wrap stat-card__icon-wrap--active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        </div>
-        <div class="stat-card__body">
-          <span class="stat-card__label">活跃用户</span>
-          <strong class="stat-card__value">{{ stats.users?.activeToday || 0 }}</strong>
-          <div class="stat-card__trend">
-            <span class="trend-badge trend-badge--primary">{{ stats.users?.activeRate || 0 }}%</span>
-            <span class="trend-label">活跃率</span>
-          </div>
-        </div>
+      <div class="page-hero__actions">
+        <el-button class="page-hero__refresh" @click="refreshAll" :loading="refreshing">
+          <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          ><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+          刷新数据
+        </el-button>
       </div>
+    </section>
 
-      <div class="stat-card stat-card--paths">
-        <div class="stat-card__icon-wrap stat-card__icon-wrap--paths">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    <section class="summary-grid summary-grid--headline">
+      <article class="summary-card summary-card--primary">
+        <div class="summary-card__header">
+          <span class="summary-card__label">活跃用户</span>
+          <span class="summary-card__caption">今日学习活跃</span>
         </div>
-        <div class="stat-card__body">
-          <span class="stat-card__label">学习路径</span>
-          <strong class="stat-card__value">{{ stats.learning?.totalPaths || 0 }}</strong>
-          <div class="stat-card__trend">
-            <span class="trend-badge trend-badge--primary">{{ stats.learning?.activePaths || 0 }}</span>
-            <span class="trend-label">活跃路径</span>
-          </div>
+        <div class="summary-card__value-row">
+          <strong>{{ stats.users?.activeToday || 0 }}</strong>
+          <span class="summary-card__hint">{{ stats.users?.activeRate || 0 }}% 活跃率</span>
         </div>
-      </div>
+      </article>
 
-      <div class="stat-card stat-card--tasks">
-        <div class="stat-card__icon-wrap stat-card__icon-wrap--tasks">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <article class="summary-card summary-card--highlight">
+        <div class="summary-card__header">
+          <span class="summary-card__label">Agent 成功率</span>
+          <span class="summary-card__caption">24h 调用健康</span>
         </div>
-        <div class="stat-card__body">
-          <span class="stat-card__label">任务完成</span>
-          <strong class="stat-card__value">{{ stats.learning?.completedTasks || 0 }}</strong>
-          <div class="stat-card__trend">
-            <span class="trend-badge trend-badge--success">{{ stats.learning?.completionRate || 0 }}%</span>
-            <span class="trend-label">完成率</span>
-          </div>
+        <div class="summary-card__value-row">
+          <strong>{{ stats.agents?.successRate || 100 }}%</strong>
+          <span class="summary-card__hint">今日调用 {{ stats.agents?.todayCalls || 0 }}</span>
         </div>
-      </div>
+      </article>
 
-      <div class="stat-card stat-card--conversations">
-        <div class="stat-card__icon-wrap stat-card__icon-wrap--conversations">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <article class="summary-card">
+        <div class="summary-card__header">
+          <span class="summary-card__label">风险告警</span>
+          <span class="summary-card__caption">异常与超时</span>
         </div>
-        <div class="stat-card__body">
-          <span class="stat-card__label">目标对话</span>
-          <strong class="stat-card__value">{{ stats.conversations?.total || 0 }}</strong>
-          <div class="stat-card__trend">
-            <span class="trend-badge trend-badge--accent">{{ stats.conversations?.active || 0 }}</span>
-            <span class="trend-label">进行中</span>
-          </div>
+        <div class="summary-card__value-row">
+          <strong>{{ totalIssueCount }}</strong>
+          <span class="summary-card__hint">今日超时 {{ stats.agents?.todayTimeouts || 0 }} 次</span>
         </div>
-      </div>
+      </article>
 
-      <div class="stat-card stat-card--agents">
-        <div class="stat-card__icon-wrap stat-card__icon-wrap--agents">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+      <article class="summary-card">
+        <div class="summary-card__header">
+          <span class="summary-card__label">任务完成</span>
+          <span class="summary-card__caption">学习进度</span>
         </div>
-        <div class="stat-card__body">
-          <span class="stat-card__label">Agent 调用</span>
-          <strong class="stat-card__value">{{ stats.agents?.totalCalls || 0 }}</strong>
-          <div class="stat-card__trend">
-            <span class="trend-badge trend-badge--success">{{ stats.agents?.successRate || 100 }}%</span>
-            <span class="trend-label">成功率</span>
-            <span class="trend-badge trend-badge--subtle">{{ stats.agents?.todayCalls || 0 }}</span>
-            <span class="trend-label">今日调用</span>
-          </div>
-          <div class="stat-card__meta">
-            <span>24h 活跃：{{ stats.agents?.activeAgents24h || 0 }}</span>
-            <span>今日超时：{{ stats.agents?.todayTimeouts || 0 }}</span>
-          </div>
-          <div v-if="stats.agents?.wrapup?.sampleSize" class="stat-card__meta">
-            <span>Wrapup 样本：{{ stats.agents.wrapup.sampleSize }}</span>
-          </div>
+        <div class="summary-card__value-row">
+          <strong>{{ stats.learning?.completedTasks || 0 }}</strong>
+          <span class="summary-card__hint">{{ stats.learning?.completionRate || 0 }}% 完成率</span>
         </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
-    <!-- Agent 运行状态 -->
-    <div class="section">
-      <h3 class="section-title">
-        <el-icon><Cpu /></el-icon>
-        Agent / 编排器 运行状态
-      </h3>
-      <el-table :data="agentStatuses" stripe class="agent-status-table">
-        <el-table-column prop="name" label="Agent" min-width="140">
-          <template #default="{ row }">
-            <div class="agent-name">
-              <el-tag :type="getAgentTagType(row.status)" size="small" class="agent-tag">
-                {{ row.status }}
-              </el-tag>
-              <span class="agent-name-text">{{ getAgentDisplayName(row.name) }}</span>
+    <section class="insight-grid">
+      <article class="insight-card insight-card--primary">
+        <div class="hero-kpi__copy">
+          <span class="hero-kpi__eyebrow">业务概览</span>
+          <h2>{{ overviewHeadline.title }}</h2>
+          <p>
+            {{ overviewHeadline.description }}
+          </p>
+        </div>
+
+        <div class="hero-kpi__facts">
+          <div class="hero-kpi__fact">
+            <span>总用户数</span>
+            <strong>{{ stats.users?.total || 0 }}</strong>
+            <em>今日新增 {{ stats.users?.newToday || 0 }}</em>
+          </div>
+          <div class="hero-kpi__fact">
+            <span>学习路径</span>
+            <strong>{{ stats.learning?.totalPaths || 0 }}</strong>
+            <em>{{ stats.learning?.activePaths || 0 }} 条活跃</em>
+          </div>
+          <div class="hero-kpi__fact">
+            <span>目标对话</span>
+            <strong>{{ stats.conversations?.total || 0 }}</strong>
+            <em>{{ stats.conversations?.active || 0 }} 进行中</em>
+          </div>
+        </div>
+      </article>
+
+      <article class="insight-card insight-card--secondary">
+        <div class="section-head section-head--tight">
+          <div>
+            <h3 class="section-title">运行健康摘要</h3>
+            <p class="section-subtitle">把首页重点放在健康度和需要处理的风险上。</p>
+          </div>
+        </div>
+
+        <div class="health-list">
+          <div class="health-item" :class="healthSummary.successRate.tone">
+            <span class="health-item__dot"></span>
+            <div>
+              <strong>{{ healthSummary.successRate.title }}</strong>
+              <p>{{ healthSummary.successRate.description }}</p>
             </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="successRate" label="成功率" width="150">
-          <template #default="{ row }">
-            <el-progress :percentage="parseFloat(row.successRate)" :status="parseFloat(row.successRate) >= 90 ? 'success' : 'warning'" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="avgDuration" label="平均耗时" width="100" align="center">
-          <template #default="{ row }">
-            {{ row.avgDuration }}ms
-          </template>
-        </el-table-column>
-        <el-table-column prop="totalCalls" label="总调用" width="80" align="center" />
-        <el-table-column prop="successCalls" label="成功" width="80" align="center">
-          <template #default="{ row }">
-            <span class="success-count">{{ row.successCalls }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="errorCalls" label="失败" width="80" align="center">
-          <template #default="{ row }">
-            <span class="error-count">{{ row.errorCalls }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="lastActivity" label="最后活跃" width="140">
-          <template #default="{ row }">
-            {{ formatTime(row.lastActivity) }}
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-
-    <div class="section">
-      <h3 class="section-title">
-        <el-icon><TrendCharts /></el-icon>
-        最近 24 小时异常趋势
-      </h3>
-      <div class="trend-panel" v-if="trendPoints.length > 0">
-        <div class="trend-row trend-row--head">
-          <span class="trend-time">时间</span>
-          <span class="trend-bars-label">调用 / 异常</span>
-          <span class="trend-values">数量</span>
-        </div>
-        <div class="trend-row" v-for="point in trendPoints" :key="point.time">
-          <span class="trend-time">{{ point.label }}</span>
-          <div class="trend-bars">
-            <div class="trend-bar trend-bar--calls" :style="{ width: `${(point.total / maxCalls) * 100}%` }"></div>
-            <div class="trend-bar trend-bar--issues" :style="{ width: `${((point.error + point.timeout) / maxIssues) * 100}%` }"></div>
           </div>
-          <span class="trend-values">{{ point.total }} / {{ point.error + point.timeout }}</span>
-        </div>
-      </div>
-      <el-empty v-else description="暂无 24 小时趋势数据" />
-    </div>
-
-    <!-- 最近活动 -->
-    <div class="section">
-      <div class="section-head">
-        <h3 class="section-title">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-          最近活动
-        </h3>
-        <router-link class="section-link" to="/admin/activity-stream">查看全部活动</router-link>
-      </div>
-      <el-timeline>
-        <el-timeline-item
-          v-for="activity in recentActivitySummary"
-          :key="activity.id"
-          :timestamp="formatTime(activity.createdAt)"
-          placement="top"
-          :type="activity.type"
-        >
-          <div class="activity-card">
-            <h4>{{ activity.title }}</h4>
-            <p>{{ activity.description }}</p>
+          <div class="health-item" :class="healthSummary.timeout.tone">
+            <span class="health-item__dot"></span>
+            <div>
+              <strong>{{ healthSummary.timeout.title }}</strong>
+              <p>{{ healthSummary.timeout.description }}</p>
+            </div>
           </div>
-        </el-timeline-item>
-      </el-timeline>
-    </div>
+          <div class="health-item" :class="healthSummary.activity.tone">
+            <span class="health-item__dot"></span>
+            <div>
+              <strong>{{ healthSummary.activity.title }}</strong>
+              <p>{{ healthSummary.activity.description }}</p>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="dashboard-main">
+        <section class="section panel-card">
+          <div class="section-head">
+            <div>
+              <h3 class="section-title">
+                <el-icon><Cpu /></el-icon>
+                Agent / 编排器 运行状态
+              </h3>
+              <p class="section-subtitle">聚焦成功率、平均耗时与最近活跃时间，首页仅保留核心观测信息。</p>
+            </div>
+          </div>
+
+          <el-table :data="agentStatuses" stripe class="agent-status-table">
+            <el-table-column prop="name" label="Agent" min-width="180">
+              <template #default="{ row }">
+                <div class="agent-name">
+                  <el-tag :type="getAgentTagType(row.status)" size="small" class="agent-tag">
+                    {{ row.status }}
+                  </el-tag>
+                  <span class="agent-name-text">{{ getAgentDisplayName(row.name) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="successRate" label="成功率" width="170">
+              <template #default="{ row }">
+                <div class="table-progress-cell">
+                  <el-progress
+                    :percentage="parseFloat(row.successRate)"
+                    :status="parseFloat(row.successRate) >= 90 ? 'success' : 'warning'"
+                  />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avgDuration" label="平均耗时" width="120" align="center">
+              <template #default="{ row }">
+                {{ row.avgDuration }}ms
+              </template>
+            </el-table-column>
+            <el-table-column prop="totalCalls" label="总调用" width="96" align="center" />
+            <el-table-column label="成功 / 失败" width="120" align="center">
+              <template #default="{ row }">
+                <div class="call-metrics">
+                  <span class="success-count">{{ row.successCalls }}</span>
+                  <span class="call-metrics__divider">/</span>
+                  <span class="error-count">{{ row.errorCalls }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="lastActivity" label="最后活跃" width="140">
+              <template #default="{ row }">
+                {{ formatTime(row.lastActivity) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section class="section panel-card">
+          <div class="section-head">
+            <div>
+              <h3 class="section-title">
+                <el-icon><TrendCharts /></el-icon>
+                最近 24 小时调用概览
+              </h3>
+              <p class="section-subtitle">聚焦调用高峰、异常率与最近活跃时段，给首页一个更清晰的运行结论。</p>
+            </div>
+          </div>
+
+          <div class="trend-summary" v-if="activeTrendPoints.length > 0">
+            <article class="trend-summary-card">
+              <span>24h 总调用</span>
+              <strong>{{ totalTrendCalls }}</strong>
+              <em>最近 {{ activeTrendPoints.length }} 个活跃时段</em>
+            </article>
+            <article class="trend-summary-card">
+              <span>整体异常率</span>
+              <strong>{{ overallIssueRateLabel }}</strong>
+              <em>{{ totalTrendIssues }} 次异常 / 超时</em>
+            </article>
+            <article class="trend-summary-card">
+              <span>调用高峰</span>
+              <strong>{{ peakTrendLabel }}</strong>
+              <em>{{ peakTrendPoint ? `${peakTrendPoint.total} 次调用` : '暂无数据' }}</em>
+            </article>
+          </div>
+
+          <div class="trend-panel" v-if="activeTrendPoints.length > 0">
+            <div class="trend-row trend-row--head">
+              <span class="trend-time">时间</span>
+              <span class="trend-bars-label">调用量 / 异常率</span>
+              <span class="trend-values">结论</span>
+            </div>
+            <div class="trend-row" v-for="point in activeTrendPoints" :key="point.time">
+              <span class="trend-time">{{ point.label }}</span>
+              <div class="trend-bars">
+                <div class="trend-bar-track">
+                  <div class="trend-bar trend-bar--calls" :style="{ width: `${(point.total / maxCalls) * 100}%` }"></div>
+                </div>
+                <div class="trend-meta-line">
+                  <span>{{ point.total }} 次调用</span>
+                  <span :class="['trend-rate-badge', point.issueRate > 0 ? 'is-warning' : 'is-good']">
+                    {{ formatRate(point.issueRate) }} 异常率
+                  </span>
+                </div>
+              </div>
+              <span class="trend-values">{{ point.summary }}</span>
+            </div>
+          </div>
+          <el-empty v-else description="暂无 24 小时调用趋势数据" />
+        </section>
+      </div>
+
+      <aside class="dashboard-side">
+        <section class="section panel-card">
+          <div class="section-head">
+            <h3 class="section-title">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="10" /></svg>
+              最近活动
+            </h3>
+            <router-link class="section-link" to="/admin/activity-stream">查看全部活动</router-link>
+          </div>
+
+          <div class="activity-feed" v-if="recentActivitySummary.length > 0">
+            <article v-for="activity in recentActivitySummary" :key="activity.id" class="activity-card">
+              <div class="activity-card__head">
+                <strong>{{ activity.title }}</strong>
+                <span>{{ formatTime(activity.createdAt) }}</span>
+              </div>
+              <p>{{ activity.description }}</p>
+            </article>
+          </div>
+          <el-empty v-else description="暂无最近活动" />
+        </section>
+      </aside>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi';
-import { Cpu, TrendCharts } from '@element-plus/icons-vue';
-import { toast } from '../../utils/toast';
+import { ref, onMounted, computed } from 'vue'
+import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi'
+import { Cpu, TrendCharts } from '@element-plus/icons-vue'
+import { toast } from '../../utils/toast'
 
-const stats = ref<any>({});
-const agentStatuses = ref<any[]>([]);
-const recentActivities = ref<any[]>([]);
-const refreshing = ref(false);
+const stats = ref<any>({})
+const agentStatuses = ref<any[]>([])
+const recentActivities = ref<any[]>([])
+const refreshing = ref(false)
+const lastRefreshAt = ref<Date | null>(null)
 
-const recentActivitySummary = computed(() => recentActivities.value.slice(0, 5));
+const recentActivitySummary = computed(() => recentActivities.value.slice(0, 5))
 
 const trendPoints = computed(() => {
-  const points = stats.value?.agents?.last24h || [];
-  return points.slice(-12);
-});
+  const points = stats.value?.agents?.last24h || []
+  return points.slice(-12)
+})
+
+const activeTrendPoints = computed(() => {
+  return trendPoints.value
+    .filter((point: any) => (point.total || 0) > 0 || (point.error || 0) + (point.timeout || 0) > 0)
+    .map((point: any) => {
+      const issueCount = Number(point.error || 0) + Number(point.timeout || 0)
+      const total = Number(point.total || 0)
+      const issueRate = total > 0 ? issueCount / total : 0
+
+      return {
+        ...point,
+        total,
+        issueCount,
+        issueRate,
+        summary: issueCount > 0 ? `${issueCount} 次异常/超时` : '运行稳定'
+      }
+    })
+})
 
 const maxCalls = computed(() => {
-  const max = trendPoints.value.reduce((acc: number, item: any) => Math.max(acc, item.total || 0), 0);
-  return max > 0 ? max : 1;
-});
+  const max = activeTrendPoints.value.reduce((acc: number, item: any) => Math.max(acc, item.total || 0), 0)
+  return max > 0 ? max : 1
+})
 
-const maxIssues = computed(() => {
-  const max = trendPoints.value.reduce(
-    (acc: number, item: any) => Math.max(acc, (item.error || 0) + (item.timeout || 0)),
-    0
-  );
-  return max > 0 ? max : 1;
-});
+const totalTrendCalls = computed(() => {
+  return activeTrendPoints.value.reduce((sum: number, item: any) => sum + Number(item.total || 0), 0)
+})
+
+const totalTrendIssues = computed(() => {
+  return activeTrendPoints.value.reduce((sum: number, item: any) => sum + Number(item.issueCount || 0), 0)
+})
+
+const overallIssueRate = computed(() => {
+  return totalTrendCalls.value > 0 ? totalTrendIssues.value / totalTrendCalls.value : 0
+})
+
+const overallIssueRateLabel = computed(() => formatRate(overallIssueRate.value))
+
+const peakTrendPoint = computed(() => {
+  if (!activeTrendPoints.value.length) return null
+
+  return activeTrendPoints.value.reduce((peak: any, point: any) => {
+    if (!peak) return point
+    return point.total > peak.total ? point : peak
+  }, null)
+})
+
+const peakTrendLabel = computed(() => {
+  return peakTrendPoint.value?.label || '暂无数据'
+})
+
+const totalIssueCount = computed(() => {
+  const timeoutCount = Number(stats.value?.agents?.todayTimeouts || 0)
+  const errorCount = agentStatuses.value.reduce((sum, item) => sum + Number(item.errorCalls || 0), 0)
+  return timeoutCount + errorCount
+})
+
+const latestAgentActivityLabel = computed(() => {
+  const times = agentStatuses.value
+    .map((item) => item.lastActivity)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+
+  if (!times.length) return '暂无数据'
+  return formatTime(times[0])
+})
+
+const lastRefreshLabel = computed(() => {
+  if (!lastRefreshAt.value) return '尚未刷新'
+  return formatTime(lastRefreshAt.value)
+})
+
+const healthSummary = computed(() => {
+  const successRate = Number(stats.value?.agents?.successRate || 100)
+  const timeouts = Number(stats.value?.agents?.todayTimeouts || 0)
+  const activeUsers = Number(stats.value?.users?.activeToday || 0)
+
+  return {
+    successRate: {
+      tone: successRate >= 90 ? 'is-good' : 'is-warning',
+      title: successRate >= 90 ? '成功率稳定' : '成功率需要关注',
+      description: `当前 Agent 成功率 ${successRate}%`
+    },
+    timeout: {
+      tone: timeouts === 0 ? 'is-good' : 'is-warning',
+      title: timeouts === 0 ? '暂无超时告警' : '存在超时调用',
+      description: `今日超时 ${timeouts} 次`
+    },
+    activity: {
+      tone: activeUsers > 0 ? 'is-neutral' : 'is-warning',
+      title: activeUsers > 0 ? '今日有学习活跃' : '学习活跃偏低',
+      description: `当前活跃学习用户 ${activeUsers} 人`
+    }
+  }
+})
+
+const overviewHeadline = computed(() => {
+  const activeUsers = Number(stats.value?.users?.activeToday || 0)
+  const successRate = Number(stats.value?.agents?.successRate || 100)
+  const issueCount = totalIssueCount.value
+
+  if (issueCount > 0) {
+    return {
+      title: '今天平台整体可用，但有风险点需要关注',
+      description: '当前仍有稳定调用产出，但出现了异常或失败调用，建议优先查看运行状态中的风险项。'
+    }
+  }
+
+  if (activeUsers === 0) {
+    return {
+      title: '平台运行稳定，但今日学习活跃偏低',
+      description: '系统侧暂无明显异常，当前更值得关注的是学习活跃和用户转化，而不是运行故障。'
+    }
+  }
+
+  if (successRate >= 90) {
+    return {
+      title: '今天平台整体运行平稳',
+      description: '学习活跃、路径推进与 Agent 成功率都处在可接受区间，首页重点放在业务进展和异常趋势。'
+    }
+  }
+
+  return {
+    title: '平台有运行负载，成功率需要继续观察',
+    description: '系统仍在持续提供服务，但成功率已有下滑迹象，建议结合调用趋势和运行状态继续检查。'
+  }
+})
 
 const refreshAll = async () => {
-  refreshing.value = true;
+  refreshing.value = true
   try {
-    await Promise.all([loadOverview(), loadAgentStatus(), loadActivity()]);
+    await Promise.all([loadOverview(), loadAgentStatus(), loadActivity()])
+    lastRefreshAt.value = new Date()
   } finally {
-    refreshing.value = false;
+    refreshing.value = false
   }
-};
+}
 
 const loadOverview = async () => {
   try {
-    const response: any = await adminDashboardApi.getStats();
-    stats.value = response.data.data || {};
+    const response: any = await adminDashboardApi.getStats()
+    stats.value = response.data.data || {}
   } catch (error: any) {
-    console.error('加载概览数据失败:', error);
-    toast.error('加载概览数据失败');
+    console.error('加载概览数据失败:', error)
+    toast.error('加载概览数据失败')
   }
-};
+}
 
 const loadAgentStatus = async () => {
   try {
-    const response: any = await adminAgentsApi.status();
-    agentStatuses.value = response.data.data?.agents || [];
+    const response: any = await adminAgentsApi.status()
+    agentStatuses.value = response.data.data?.agents || []
   } catch (error: any) {
-    console.error('加载 Agent 状态失败:', error);
+    console.error('加载 Agent 状态失败:', error)
   }
-};
+}
 
 const loadActivity = async () => {
   try {
-    const response: any = await adminDashboardApi.getActivity(20);
-    const data = response.data.data || {};
-    
-    const activities: any[] = [];
-    
+    const response: any = await adminDashboardApi.getActivity(20)
+    const data = response.data.data || {}
+
+    const activities: any[] = []
+
     if (data.recentSessions) {
       data.recentSessions.forEach((session: any) => {
-        const taskTitle = session.task?.title || session.topic || session.taskId || '未知任务';
+        const taskTitle = session.task?.title || session.topic || session.taskId || '未知任务'
         activities.push({
           id: session.id,
           type: 'success',
           title: '学习会话',
           description: `${session.user?.name || session.users?.name || '用户'} 开始了任务 "${taskTitle}"`,
           createdAt: session.startTime
-        });
-      });
+        })
+      })
     }
-    
+
     if (data.recentUsers) {
       data.recentUsers.forEach((user: any) => {
         activities.push({
@@ -305,10 +479,10 @@ const loadActivity = async () => {
           title: '新用户注册',
           description: `${user.name || user.email} 加入了平台`,
           createdAt: user.createdAt
-        });
-      });
+        })
+      })
     }
-    
+
     if (data.completedTasks) {
       data.completedTasks.forEach((task: any) => {
         activities.push({
@@ -317,29 +491,29 @@ const loadActivity = async () => {
           title: '任务完成',
           description: `${task.user?.name || '用户'} 完成了任务 "${task.title}"`,
           createdAt: task.completedAt
-        });
-      });
+        })
+      })
     }
-    
-    activities.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    recentActivities.value = activities.slice(0, 50);
+
+    activities.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    recentActivities.value = activities.slice(0, 50)
   } catch (error: any) {
-    console.error('加载活动日志失败:', error);
+    console.error('加载活动日志失败:', error)
   }
-};
+}
 
 const getAgentTagType = (status: string) => {
   switch (status) {
     case 'success':
-      return 'success';
+      return 'success'
     case 'running':
-      return 'warning';
+      return 'warning'
     case 'error':
-      return 'danger';
+      return 'danger'
     default:
-      return 'info';
+      return 'info'
   }
-};
+}
 
 const getAgentDisplayName = (name: string) => {
   const map: Record<string, string> = {
@@ -349,244 +523,469 @@ const getAgentDisplayName = (name: string) => {
     TeachingOrchestration: '教学编排',
     LearningCompanion: '伴学介入',
     SessionWrapup: '课后产出'
-  };
+  }
 
-  return map[name] || name;
-};
+  return map[name] || name
+}
 
 const formatTime = (time: any) => {
-  if (!time) return '暂无数据';
-  const date = new Date(time);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
+  if (!time) return '暂无数据'
+  const date = new Date(time)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
 
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  return `${days}天前`;
-};
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (hours < 24) return `${hours}小时前`
+  return `${days}天前`
+}
 
-onMounted(() => {
-  loadOverview();
-  loadAgentStatus();
-  loadActivity();
-});
+const formatRate = (value: number) => {
+  return `${(value * 100).toFixed(value > 0 && value < 0.1 ? 1 : 0)}%`
+}
+
+onMounted(async () => {
+  await refreshAll()
+})
 </script>
 
 <style scoped>
-/* ==========================================
-   背景装饰层
-   ========================================== */
 .admin-overview {
-  position: relative;
-  padding: 0;
+  display: grid;
+  gap: 16px;
   padding-bottom: 24px;
-  overflow: hidden;
 }
 
-.overview-bg-layer {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  overflow: hidden;
+.page-hero,
+.panel-card,
+.insight-card {
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
+  box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08);
 }
 
-.overview-bg-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(110px);
-  opacity: 0.15;
-}
-
-.overview-bg-orb--1 {
-  width: 460px;
-  height: 460px;
-  top: -180px;
-  right: -120px;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%);
-  animation: admin-orb-drift 26s ease-in-out infinite;
-}
-
-.overview-bg-orb--2 {
-  width: 380px;
-  height: 380px;
-  left: -100px;
-  bottom: 120px;
-  background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
-  animation: admin-orb-drift 30s ease-in-out infinite reverse;
-}
-
-.overview-bg-orb--3 {
-  width: 320px;
-  height: 320px;
-  bottom: -70px;
-  left: 24%;
-  background: radial-gradient(circle, rgba(67, 176, 216, 0.18), transparent 70%);
-  animation: admin-orb-drift 28s ease-in-out infinite alternate;
-}
-
-.overview-bg-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(52, 120, 246, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(52, 120, 246, 0.02) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: radial-gradient(circle at 50% 22%, black 20%, transparent 76%);
-}
-
-@keyframes admin-orb-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(30px, -20px) scale(1.05); }
-  66% { transform: translate(-20px, 30px) scale(0.95); }
-}
-
-/* ==========================================
-   Hero 区域
-   ========================================== */
-.overview-hero {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 1.5rem;
-  padding: 24px 28px;
-  border-radius: 20px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92));
-  backdrop-filter: blur(16px);
-  overflow: hidden;
-}
-
-.overview-hero__glow {
-  position: absolute;
-  top: -60px;
-  right: -40px;
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(52, 120, 246, 0.04), transparent 70%);
-  pointer-events: none;
-}
-
-.overview-hero__content {
-  position: relative;
-  z-index: 1;
+.page-hero {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
+  padding: 24px 28px;
+  margin-bottom: 2px;
 }
 
-.overview-hero__left {
+.page-hero__copy {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
-.overview-hero__title {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-}
-
-.overview-hero__subtitle {
-  margin: 0;
-  font-size: 0.9375rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.hero-refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(52, 120, 246, 0.12);
-  background: color-mix(in srgb, var(--bg-surface) 84%, white);
-  color: var(--color-primary);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 180ms ease;
-}
-
-.hero-refresh-btn:hover {
-  background: color-mix(in srgb, var(--color-primary) 8%, white);
-  border-color: color-mix(in srgb, var(--color-primary) 16%, rgba(52, 120, 246, 0.2));
-  color: var(--color-primary-dark);
-}
-
-/* pill 标签 */
-.pill {
+.page-hero__eyebrow {
   display: inline-flex;
   align-items: center;
   width: fit-content;
   min-height: 26px;
   padding: 0 12px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-primary) 10%, white);
-  color: var(--color-primary-dark, #1f57cc);
-  font-size: 12px;
+  background: rgba(52, 120, 246, 0.08);
+  color: #2d6df2;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.page-hero__title {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: #23344d;
+}
+
+.page-hero__subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #64748b;
+  max-width: 760px;
+}
+
+.page-hero__highlights {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(244, 247, 254, 0.92);
+  border: 1px solid rgba(216, 224, 238, 0.92);
+  color: #5f738f;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.page-hero__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.page-hero__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  color: #2d6df2;
   font-weight: 700;
 }
 
-/* surface-card 基础 */
-.surface-card {
-  border: 1px solid #d2dbf3;
-  border-radius: 28px;
-  background: color-mix(in srgb, #ffffff 90%, white);
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
-  backdrop-filter: blur(20px);
-}
-
-/* ==========================================
-   统计卡片
-   ========================================== */
-.stats-grid {
-  position: relative;
-  z-index: 1;
+.summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.875rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.stats-grid > .stat-card--conversations,
-.stats-grid > .stat-card--agents {
-  grid-column: span 2;
+.summary-grid--headline {
+  margin-bottom: 2px;
 }
 
-.stat-card {
+.summary-card {
+  min-height: 138px;
+  padding: 18px 20px;
+  border: 1px solid rgba(209, 218, 235, 0.92);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.96));
+  box-shadow: 0 14px 34px rgba(57, 85, 138, 0.08);
+  display: grid;
+  align-content: space-between;
+  gap: 18px;
+}
+
+.summary-card--primary {
+  background: linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(237, 244, 255, 0.98));
+}
+
+.summary-card--highlight {
+  background: linear-gradient(180deg, rgba(248, 249, 255, 0.98), rgba(239, 243, 255, 0.98));
+}
+
+.summary-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-card__label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #2f4059;
+}
+
+.summary-card__caption {
+  font-size: 0.75rem;
+  color: #8b9ab0;
+}
+
+.summary-card__value-row {
+  display: grid;
+  gap: 6px;
+}
+
+.summary-card__value-row strong {
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #21354f;
+}
+
+.summary-card__hint {
+  font-size: 0.875rem;
+  color: #697a91;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 16px;
+}
+
+.insight-card {
+  padding: 22px 24px;
+}
+
+.insight-card--primary {
+  display: grid;
+  gap: 20px;
+}
+
+.hero-kpi__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.hero-kpi__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7b8ba3;
+}
+
+.hero-kpi__copy h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #21344b;
+}
+
+.hero-kpi__copy p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.65;
+}
+
+.hero-kpi__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hero-kpi__fact {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(244, 247, 254, 0.88);
+  border: 1px solid rgba(215, 224, 241, 0.94);
+  display: grid;
+  gap: 6px;
+}
+
+.hero-kpi__fact span,
+.stat-card__label {
+  font-size: 0.8rem;
+  color: #7a899f;
+}
+
+.hero-kpi__fact strong,
+.stat-card__value {
+  font-size: 1.9rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #1f314b;
+}
+
+.hero-kpi__fact em,
+.stat-card__meta {
+  font-style: normal;
+  color: #5f738f;
+  font-size: 0.86rem;
+}
+
+.health-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.health-item {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(215, 224, 241, 0.94);
+  background: rgba(248, 250, 255, 0.9);
+}
+
+.health-item__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 6px;
+  background: #94a3b8;
+}
+
+.health-item strong {
+  color: #27374f;
+  font-size: 0.92rem;
+}
+
+.health-item p {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  color: #697a91;
+  line-height: 1.55;
+}
+
+.health-item.is-good {
+  border-color: rgba(93, 195, 128, 0.3);
+  background: rgba(244, 251, 246, 0.96);
+}
+
+.health-item.is-good .health-item__dot {
+  background: #3db36d;
+}
+
+.health-item.is-warning {
+  border-color: rgba(244, 170, 70, 0.3);
+  background: rgba(255, 249, 241, 0.96);
+}
+
+.health-item.is-warning .health-item__dot {
+  background: #f0a13b;
+}
+
+.health-item.is-neutral .health-item__dot {
+  background: #5a94f8;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.dashboard-main,
+.dashboard-side {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-side {
+  align-content: start;
+}
+
+.section {
+  padding: 20px 22px;
+}
+
+.section-head {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  border-radius: 28px;
-  border: 1px solid rgba(52, 120, 246, 0.06);
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(20px);
-  padding: 1.25rem 1.5rem;
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
-  transition: transform 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-head--tight {
+  margin-bottom: 12px;
+}
+
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.02rem;
+  color: #1f3857;
+}
+
+.section-subtitle {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  color: #73839a;
+  line-height: 1.55;
+}
+
+.section-link {
+  color: #2d6df2;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.agent-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-name-text {
+  color: #23344d;
+  font-weight: 600;
+}
+
+.table-progress-cell {
+  padding-right: 10px;
+}
+
+.call-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.call-metrics__divider {
+  color: #90a0b6;
+  font-weight: 500;
+}
+
+.success-count {
+  color: #2f9a58;
+}
+
+.error-count {
+  color: #d36a54;
+}
+
+.trend-panel {
+  display: grid;
+  gap: 2px;
+}
+
+.trend-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.trend-summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 224, 238, 0.94);
+  background: rgba(247, 250, 255, 0.9);
+}
+
+.trend-summary-card span {
+  font-size: 0.8rem;
+  color: #78889f;
+}
+
+.trend-summary-card strong {
+  font-size: 1.5rem;
+  line-height: 1.1;
+  color: #23344d;
+}
+
+.trend-summary-card em {
+  font-style: normal;
+  font-size: 0.82rem;
+  color: #62758f;
 }
 
 .trend-row {
   align-items: center;
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 82px;
-  gap: 12px;
-  padding: 0.5rem 0;
-  border-bottom: 1px dashed rgba(52, 120, 246, 0.06);
+  grid-template-columns: 72px minmax(0, 1fr) 92px;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(226, 232, 244, 0.86);
 }
 
 .trend-row:last-child {
@@ -594,154 +993,181 @@ onMounted(() => {
 }
 
 .trend-row--head {
-  color: var(--text-secondary);
+  padding-top: 0;
+  color: #7b8ba3;
   font-size: 0.75rem;
   font-weight: 700;
-  border-bottom-style: solid;
-  border-bottom-color: rgba(52, 120, 246, 0.1);
 }
 
 .trend-time {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.8125rem;
-  color: var(--text-primary);
+  font-size: 0.82rem;
+  color: #33465f;
 }
 
 .trend-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.trend-meta-line {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #6e8099;
+  font-size: 0.8rem;
+}
+
+.trend-bar-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(216, 224, 238, 0.55);
 }
 
 .trend-bar {
-  height: 8px;
-  border-radius: 999px;
+  height: 100%;
+  border-radius: inherit;
   min-width: 2px;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.35s ease;
 }
 
 .trend-bar--calls {
-  background: linear-gradient(90deg, #3478f6, #5a94f8);
-  box-shadow: 0 0 8px rgba(52, 120, 246, 0.2);
-}
-
-.trend-bar--issues {
-  background: linear-gradient(90deg, #ef7578, #f49a9c);
-  box-shadow: 0 0 6px rgba(239, 117, 120, 0.15);
+  background: linear-gradient(90deg, #3d7cff, #6aa0ff);
 }
 
 .trend-bars-label,
 .trend-values {
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
+  color: #6e8099;
+  font-size: 0.82rem;
 }
 
-/* ==========================================
-   活动时间轴
-   ========================================== */
+.trend-rate-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.trend-rate-badge.is-good {
+  background: rgba(233, 248, 238, 0.95);
+  color: #2f9a58;
+}
+
+.trend-rate-badge.is-warning {
+  background: rgba(255, 242, 234, 0.96);
+  color: #d98252;
+}
+
+.activity-feed {
+  display: grid;
+  gap: 12px;
+}
+
 .activity-card {
-  padding: 14px 18px;
-  border-radius: 14px;
-  border: 1px solid rgba(52, 120, 246, 0.06);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(8px);
-  transition: all 0.2s ease;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(215, 224, 241, 0.94);
+  background: rgba(249, 251, 255, 0.92);
 }
 
-.activity-card:hover {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(52, 120, 246, 0.1);
+.activity-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
-.activity-card h4 {
-  margin: 0 0 4px 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text-primary);
+.activity-card__head strong {
+  color: #243750;
+  font-size: 0.92rem;
+}
+
+.activity-card__head span {
+  color: #8696ab;
+  font-size: 0.76rem;
+  white-space: nowrap;
 }
 
 .activity-card p {
   margin: 0;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  line-height: 1.55;
+  font-size: 0.84rem;
+  color: #64748b;
+  line-height: 1.6;
 }
 
-/* :deep 覆盖 el-timeline */
-:deep(.el-timeline) {
-  padding-left: 8px;
+:deep(.agent-status-table) {
+  --el-table-border-color: rgba(223, 230, 242, 0.9);
+  --el-table-header-bg-color: rgba(244, 247, 252, 0.92);
+  --el-table-row-hover-bg-color: rgba(244, 248, 255, 0.8);
+  border-radius: 18px;
+  overflow: hidden;
 }
 
-:deep(.el-timeline-item__node) {
-  background: linear-gradient(135deg, #3478f6, #8d6bff);
-  border: none;
-  box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.1);
+:deep(.agent-status-table .el-table__cell) {
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
-:deep(.el-timeline-item__node--success) {
-  background: linear-gradient(135deg, #31b16f, #5cc98b);
-  box-shadow: 0 0 0 4px rgba(49, 177, 111, 0.1);
+:deep(.el-progress-bar__outer) {
+  background-color: rgba(215, 224, 241, 0.8);
 }
 
-:deep(.el-timeline-item__node--primary) {
-  background: linear-gradient(135deg, #3478f6, #5a94f8);
-  box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.1);
-}
-
-:deep(.el-timeline-item__node--warning) {
-  background: linear-gradient(135deg, #f4aa46, #f7c07a);
-  box-shadow: 0 0 0 4px rgba(244, 170, 70, 0.1);
-}
-
-:deep(.el-timeline-item__tail) {
-  border-left-color: rgba(52, 120, 246, 0.08);
-}
-
-:deep(.el-timeline-item__timestamp) {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-:deep(.el-timeline-item__wrapper) {
-  padding-left: 20px;
-}
-
-/* ==========================================
-    响应式
-   ========================================== */
-@media (max-width: 1024px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 1280px) {
+  .summary-grid,
+  .hero-kpi__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .stats-grid > .stat-card--conversations,
-  .stats-grid > .stat-card--agents {
-    grid-column: span 2;
+  .trend-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .overview-hero__content {
-    flex-direction: column;
-    align-items: flex-start;
+  .insight-grid,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
+  .admin-overview {
+    gap: 14px;
   }
 
-  .stats-grid > .stat-card--conversations,
-  .stats-grid > .stat-card--agents {
-    grid-column: span 1;
-  }
-
-  .overview-hero {
+  .page-hero,
+  .insight-card,
+  .section {
     padding: 16px;
   }
 
-  .section {
-    padding: 1rem;
+  .page-hero {
+    flex-direction: column;
+  }
+
+  .page-hero__actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .summary-grid,
+  .hero-kpi__facts,
+  .trend-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card {
+    min-height: 120px;
+  }
+
+  .trend-row {
+    grid-template-columns: 62px minmax(0, 1fr) 72px;
+    gap: 10px;
   }
 }
 </style>

@@ -102,7 +102,7 @@ export interface AgentOutput {
     suggestedActions?: string[];
   };
   
-  // 反应输出（virtual-learner-simulation-agent）
+  // 虚拟学习者路径反应输出
   reactionOutput?: {
     reaction: string;
     decision: 'accept' | 'modify' | 'reject';
@@ -126,10 +126,10 @@ export interface AgentOutput {
     generatedAt: string; // ISO 8601
   };
 
-  // 虚拟学习者画像输出（virtual-learner-simulation-agent）
+  // 虚拟学习者画像输出
   generatedProfile?: Record<string, any>;
 
-  // 虚拟学习者回复（virtual-learner-simulation-agent）
+  // 虚拟学习者回复
   userReply?: string;
 
   // 虚拟学习者潜在状态（simulation）

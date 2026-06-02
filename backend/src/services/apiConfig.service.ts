@@ -1,6 +1,7 @@
 // API配置管理服务 - 持久化版本
 import { logger } from '../utils/logger';
 import { PrismaClient } from '@prisma/client';
+import { getAPIGateway } from '../gateway/api-gateway';
 
 const prisma = new PrismaClient();
 
@@ -125,6 +126,7 @@ class APIConfigService {
         availableModels: mergedConfig.availableModels.length,
         defaultModel: mergedConfig.defaultModel,
       });
+      getAPIGateway().invalidateCache();
 
       return mergedConfig;
     } catch (error) {
@@ -143,6 +145,7 @@ class APIConfigService {
       });
 
       logger.info('API 配置已重置为默认值');
+      getAPIGateway().invalidateCache();
       return defaultConfig;
     } catch (error) {
       logger.error('重置 API 配置失败:', error);

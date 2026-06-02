@@ -7,11 +7,11 @@
         <el-icon class="admin-page-title__icon"><Setting /></el-icon>
         API 管理
       </h2>
-      <p class="page-hero__subtitle">输入地址和 Key，拉取端点模型并快速配置默认模型</p>
+      <p class="page-hero__subtitle">配置服务地址、访问凭证与默认模型，统一平台的模型连接与调用基础设置。</p>
     </div>
 
     <div class="summary-grid">
-      <div class="summary-item">
+      <div class="summary-item summary-item--primary">
         <span class="summary-label">默认模型</span>
         <strong class="summary-value">{{ form.defaultModel || '未设置' }}</strong>
       </div>
@@ -35,8 +35,8 @@
           <div class="card-header">
             <span class="card-title">连接与模型配置</span>
             <div class="card-actions">
-              <el-button @click="loadConfig" :loading="loading">刷新</el-button>
-              <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
+              <el-button class="api-btn api-btn--ghost" @click="loadConfig" :loading="loading">刷新</el-button>
+              <el-button class="api-btn api-btn--primary" @click="saveConfig" :loading="saving">保存配置</el-button>
             </div>
           </div>
         </template>
@@ -59,7 +59,7 @@
 
           <el-form-item>
             <div class="form-actions">
-              <el-button type="primary" @click="fetchModels" :loading="testing">获取模型列表</el-button>
+              <el-button class="api-btn api-btn--primary" @click="fetchModels" :loading="testing">获取模型列表</el-button>
               <span v-if="testResult" class="test-result" :class="{ success: testResult.connected, error: !testResult.connected }">
                 {{ testResult.message }}
               </span>
@@ -87,7 +87,7 @@
               placeholder="输入模型名，多个用英文逗号分隔"
             >
               <template #append>
-                <el-button @click="appendManualModels">添加</el-button>
+                <el-button class="api-append-btn" @click="appendManualModels">添加</el-button>
               </template>
             </el-input>
           </el-form-item>
@@ -105,9 +105,46 @@
             </el-select>
           </el-form-item>
 
-          <el-collapse class="advanced-collapse">
-            <el-collapse-item title="高级配置" name="advanced">
-              <el-form-item label="默认推理模型">
+          <section class="strategy-panel">
+            <div class="section-heading section-heading--strategy">
+              <div>
+                <span class="section-kicker">高级选项</span>
+                <h3>模型分工策略</h3>
+                <p>把通用默认模型与专项模型拆开管理，适合需要分别控制推理链路和评估链路的后台场景。</p>
+              </div>
+              <div class="strategy-overview">
+                <div class="strategy-badge">
+                  <span>当前默认</span>
+                  <strong>{{ form.defaultModel || '未设置' }}</strong>
+                </div>
+                <div class="strategy-badge strategy-badge--soft">
+                  <span>专项覆盖</span>
+                  <strong>{{ [form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length }}/2</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="strategy-tips">
+              <div class="strategy-tip">
+                <strong>推理优先</strong>
+                <span>适合长链路、复杂分析、步骤拆解</span>
+              </div>
+              <div class="strategy-tip">
+                <strong>评估优先</strong>
+                <span>适合评分、审核、总结与结果判定</span>
+              </div>
+            </div>
+
+            <div class="strategy-grid">
+              <div class="strategy-slot strategy-slot--reasoning">
+                <div class="strategy-slot__head">
+                  <div>
+                    <span class="strategy-slot__eyebrow">推理链路</span>
+                    <strong>默认推理模型</strong>
+                  </div>
+                  <em>{{ form.defaultReasoningModel || '沿用全局默认模型' }}</em>
+                </div>
+                <p class="strategy-slot__desc">用于复杂思考、路径规划和需要更多中间推理步骤的任务。</p>
                 <el-select
                   v-model="form.defaultReasoningModel"
                   filterable
@@ -118,9 +155,17 @@
                 >
                   <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
                 </el-select>
-              </el-form-item>
+              </div>
 
-              <el-form-item label="默认评估模型">
+              <div class="strategy-slot strategy-slot--evaluation">
+                <div class="strategy-slot__head">
+                  <div>
+                    <span class="strategy-slot__eyebrow">评估链路</span>
+                    <strong>默认评估模型</strong>
+                  </div>
+                  <em>{{ form.defaultEvaluationModel || '沿用全局默认模型' }}</em>
+                </div>
+                <p class="strategy-slot__desc">用于评分、结果审阅、质量判断以及简洁的结果收束任务。</p>
                 <el-select
                   v-model="form.defaultEvaluationModel"
                   filterable
@@ -131,9 +176,105 @@
                 >
                   <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
                 </el-select>
-              </el-form-item>
-            </el-collapse-item>
-          </el-collapse>
+              </div>
+            </div>
+          </section>
+
+          <section class="model-lab">
+            <div class="section-heading section-heading--lab">
+              <div>
+                <span class="section-kicker">模型测试</span>
+                <h3>在线验证实验台</h3>
+                <p>直接发起一次真实调用，快速确认当前配置是否可用、响应速度是否正常，以及返回文本是否符合预期。</p>
+              </div>
+              <div class="lab-status" :class="{ 'is-success': modelTestResult?.success, 'is-error': modelTestResult && !modelTestResult.success }">
+                <span>当前状态</span>
+                <strong>{{ modelTesting ? '测试中' : modelTestResult ? (modelTestResult.success ? '测试通过' : '测试失败') : '待执行' }}</strong>
+              </div>
+            </div>
+
+            <div class="lab-console">
+              <div class="lab-console__main">
+                <div class="lab-command-bar">
+                  <div class="lab-command-bar__field lab-command-bar__field--model">
+                    <span>测试模型</span>
+                    <el-select
+                      v-model="modelTestForm.model"
+                      filterable
+                      allow-create
+                      default-first-option
+                      placeholder="选择或输入测试模型"
+                      style="width: 100%"
+                    >
+                      <el-option v-for="model in modelOptions" :key="`test-${model}`" :label="model" :value="model" />
+                    </el-select>
+                  </div>
+
+                  <div class="lab-command-bar__metrics">
+                    <div class="lab-metric-card">
+                      <span>温度</span>
+                      <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" style="width: 100%" />
+                    </div>
+                    <div class="lab-metric-card">
+                      <span>最大输出</span>
+                      <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" style="width: 100%" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="prompt-workbench">
+                  <div class="prompt-workbench__head">
+                    <div>
+                      <strong>测试提示词</strong>
+                      <span>建议保持一句到两句，便于快速判断返回是否正常。</span>
+                    </div>
+                    <small>即时调用，不写入配置</small>
+                  </div>
+                  <el-input
+                    v-model="modelTestForm.prompt"
+                    class="prompt-workbench__textarea"
+                    type="textarea"
+                    :rows="5"
+                    placeholder="例如：请用一句中文确认模型测试成功。"
+                  />
+                </div>
+
+                <div class="lab-actions">
+                  <el-button class="api-btn api-btn--primary" @click="runModelTest" :loading="modelTesting">运行模型测试</el-button>
+                  <div v-if="modelTestResult" class="lab-feedback" :class="{ success: modelTestResult.success, error: !modelTestResult.success }">
+                    {{ modelTestResult.success ? '已返回有效响应，可继续观察输出内容。' : modelTestResult.message }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="lab-console__result">
+                <div class="result-overview">
+                  <div class="result-overview__item">
+                    <span>测试模型</span>
+                    <strong>{{ modelTestResult?.model || modelTestForm.model || '未指定' }}</strong>
+                  </div>
+                  <div class="result-overview__item">
+                    <span>响应耗时</span>
+                    <strong>{{ modelTestResult?.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
+                  </div>
+                  <div class="result-overview__item">
+                    <span>Token 用量</span>
+                    <strong>{{ modelTestResult ? formatUsage(modelTestResult.usage) : '--' }}</strong>
+                  </div>
+                </div>
+
+                <div class="result-output-card" :class="{ 'is-error': modelTestResult && !modelTestResult.success }">
+                  <div class="result-output-card__head">
+                    <div>
+                      <strong>返回内容</strong>
+                      <span>这里展示本次调用返回的文本，适合直接检查语言、完整性与可读性。</span>
+                    </div>
+                  </div>
+                  <pre class="sample-json sample-json--light">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : '执行测试后，这里会展示模型返回内容。' }}</pre>
+                </div>
+              </div>
+            </div>
+          </section>
         </el-form>
       </el-card>
 
@@ -187,6 +328,15 @@ const manualModelInput = ref('');
 const lastFetchAt = ref('');
 const testResult = ref<{ connected: boolean; message: string } | null>(null);
 const modelOptions = ref<string[]>([]);
+const modelTesting = ref(false);
+const modelTestResult = ref<{
+  success: boolean;
+  message: string;
+  model?: string;
+  durationMs?: number;
+  content?: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+} | null>(null);
 
 const form = reactive({
   apiUrl: '',
@@ -197,6 +347,13 @@ const form = reactive({
   defaultModel: '',
   defaultReasoningModel: '',
   defaultEvaluationModel: ''
+});
+
+const modelTestForm = reactive({
+  model: '',
+  prompt: '请用一句中文确认模型测试成功。',
+  temperature: 0.2,
+  maxTokens: 256
 });
 
 async function loadConfig() {
@@ -212,6 +369,7 @@ async function loadConfig() {
     form.defaultModel = data.defaultModel || '';
     form.defaultReasoningModel = data.defaultReasoningModel || '';
     form.defaultEvaluationModel = data.defaultEvaluationModel || '';
+    modelTestForm.model = data.defaultModel || modelTestForm.model || '';
     modelOptions.value = Array.from(new Set(form.availableModels.filter(Boolean)));
   } catch (error: any) {
     toast.error(error.message || '加载 API 配置失败');
@@ -246,6 +404,11 @@ const mergeModelOptions = (models: string[]) => {
   modelOptions.value = Array.from(new Set([...(modelOptions.value || []), ...merged]));
 };
 
+function formatUsage(usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null | undefined) {
+  if (!usage) return '--';
+  return `P ${usage.prompt_tokens ?? 0} / C ${usage.completion_tokens ?? 0} / T ${usage.total_tokens ?? 0}`;
+}
+
 async function fetchModels() {
   testing.value = true;
   testResult.value = null;
@@ -279,6 +442,46 @@ async function fetchModels() {
   }
 }
 
+async function runModelTest() {
+  if (!modelTestForm.model.trim()) {
+    toast.error('请先选择或输入测试模型');
+    return;
+  }
+
+  modelTesting.value = true;
+  modelTestResult.value = null;
+
+  try {
+    const response: any = await adminApiConfigApi.testModel({
+      apiUrl: form.apiUrl,
+      apiKey: form.apiKeyInput,
+      model: modelTestForm.model.trim(),
+      prompt: modelTestForm.prompt.trim(),
+      temperature: modelTestForm.temperature,
+      maxTokens: modelTestForm.maxTokens
+    });
+
+    const data = response.data?.data || {};
+    modelTestResult.value = {
+      success: true,
+      message: '模型测试成功',
+      model: data.model,
+      durationMs: data.durationMs,
+      content: data.content,
+      usage: data.usage || null
+    };
+    toast.success('模型测试成功');
+  } catch (error: any) {
+    modelTestResult.value = {
+      success: false,
+      message: error.response?.data?.error || error.message || '模型测试失败'
+    };
+    toast.error('模型测试失败');
+  } finally {
+    modelTesting.value = false;
+  }
+}
+
 function appendManualModels() {
   const value = manualModelInput.value.trim();
   if (!value) return;
@@ -298,8 +501,10 @@ onMounted(() => {
 
 <style scoped>
 .api-config-page {
-  padding: 1.25rem;
+  padding: 0;
   position: relative;
+  display: grid;
+  gap: 16px;
 }
 
 /* Background orbs */
@@ -310,40 +515,50 @@ onMounted(() => {
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
+.page-hero,
+.summary-item,
+.config-card {
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
+  box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08);
+}
+
+.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 24px; background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94)); margin-bottom: 0; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
 .admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+.page-hero__subtitle { margin: 6px 0 0; color: #62758f; font-size: 0.95rem; line-height: 1.65; }
+.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(52, 120, 246, 0.08); color: #2d6df2; font-size: 12px; font-weight: 700; }
 
 .summary-grid {
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 14px;
+  margin-bottom: 0;
 }
 
 .summary-item {
-  border-radius: var(--radius-lg, 12px);
-  border: 1px solid var(--border-default, rgba(52, 120, 246, 0.08));
-  background: var(--glass-bg-light, rgba(255, 255, 255, 0.72));
+  border-radius: 18px;
   padding: 1rem 1.25rem;
   display: grid;
   gap: 0.25rem;
 }
 
+.summary-item--primary {
+  background: linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(237, 244, 255, 0.98));
+}
+
 .summary-label {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: #7b8ba3;
   font-weight: 600;
 }
 
 .summary-value {
   font-size: 1.75rem;
   font-weight: 800;
-  color: var(--text-primary);
+  color: #22344d;
   line-height: 1.2;
 }
 
@@ -351,17 +566,14 @@ onMounted(() => {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 16px;
 }
 
 .config-card {
-  background: color-mix(in srgb, #ffffff 90%, white);
-  border: 1px solid #d2dbf3;
-  border-radius: 28px;
+  border-radius: 24px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
 }
 
 .config-card :deep(.el-card__header) {
@@ -382,8 +594,8 @@ onMounted(() => {
 
 .card-title {
   font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: 700;
+  color: #22344d;
 }
 
 .card-actions,
@@ -408,14 +620,398 @@ onMounted(() => {
   font-weight: 700;
 }
 
-.advanced-collapse {
-  margin: 6px 0 2px;
+.api-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 
-.advanced-collapse :deep(.el-collapse-item__header) {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
+.api-btn--primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3478f6, #3f86ff);
+  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24);
+}
+
+.api-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.3);
+}
+
+.api-btn--ghost {
+  color: #335aa4;
+  border-color: rgba(52, 120, 246, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.api-btn--ghost:hover {
+  color: #22478f;
+  border-color: rgba(52, 120, 246, 0.38);
+  background: rgba(238, 245, 255, 0.92);
+}
+
+.api-append-btn {
+  font-weight: 700;
+  color: #335aa4;
+}
+
+.sample-json {
+  margin: 0;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sample-json--light {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(247, 250, 255, 0.9);
+  border: 1px solid rgba(216, 224, 238, 0.9);
+  color: #22344d;
+}
+
+.advanced-field-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 224, 238, 0.9);
+  background: rgba(248, 250, 255, 0.88);
+  display: grid;
+  gap: 10px;
+}
+
+.advanced-field-card__head {
+  display: grid;
+  gap: 4px;
+}
+
+.advanced-field-card__head strong {
+  color: #22344d;
+  font-size: 0.9rem;
+}
+
+.advanced-field-card__head span {
+  color: #7b8ba3;
+  font-size: 0.78rem;
+}
+
+.strategy-panel,
+.model-lab {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(211, 221, 239, 0.96);
+  background:
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  display: grid;
+  gap: 16px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.section-heading h3 {
+  margin: 4px 0 0;
+  color: #22344d;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.section-heading p {
+  margin: 8px 0 0;
+  max-width: 680px;
+  color: #62758f;
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: #2d6df2;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.strategy-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 10px;
+  min-width: 260px;
+}
+
+.strategy-badge {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.12), rgba(52, 120, 246, 0.04));
+  border: 1px solid rgba(52, 120, 246, 0.14);
+  display: grid;
+  gap: 6px;
+}
+
+.strategy-badge--soft {
+  background: linear-gradient(135deg, rgba(100, 118, 255, 0.1), rgba(255, 255, 255, 0.7));
+}
+
+.strategy-badge span,
+.lab-status span,
+.result-overview__item span,
+.lab-metric-card span {
+  color: #7b8ba3;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.strategy-badge strong,
+.lab-status strong,
+.result-overview__item strong {
+  color: #22344d;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.strategy-tips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.strategy-tip {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px dashed rgba(52, 120, 246, 0.18);
+  background: rgba(250, 252, 255, 0.88);
+  display: grid;
+  gap: 6px;
+}
+
+.strategy-tip strong,
+.strategy-slot__head strong,
+.prompt-workbench__head strong,
+.result-output-card__head strong {
+  color: #22344d;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.strategy-tip span,
+.strategy-slot__desc,
+.strategy-slot__head em,
+.prompt-workbench__head span,
+.prompt-workbench__head small,
+.result-output-card__head span {
+  color: #6f8098;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.strategy-slot {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(216, 224, 238, 0.96);
+  background: rgba(255, 255, 255, 0.9);
+  display: grid;
+  gap: 12px;
+}
+
+.strategy-slot--reasoning {
+  background: linear-gradient(180deg, rgba(246, 249, 255, 0.96), rgba(255, 255, 255, 0.92));
+}
+
+.strategy-slot--evaluation {
+  background: linear-gradient(180deg, rgba(249, 248, 255, 0.96), rgba(255, 255, 255, 0.92));
+}
+
+.strategy-slot__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.strategy-slot__eyebrow {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #4b6da8;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.strategy-slot__head em {
+  font-style: normal;
+  text-align: right;
+  max-width: 180px;
+}
+
+.strategy-slot__desc {
+  margin: 0;
+}
+
+.lab-status {
+  min-width: 132px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 224, 238, 0.96);
+  background: rgba(255, 255, 255, 0.9);
+  display: grid;
+  gap: 6px;
+}
+
+.lab-status.is-success {
+  background: linear-gradient(180deg, rgba(235, 250, 241, 0.96), rgba(255, 255, 255, 0.92));
+  border-color: rgba(51, 181, 103, 0.2);
+}
+
+.lab-status.is-error {
+  background: linear-gradient(180deg, rgba(255, 243, 242, 0.96), rgba(255, 255, 255, 0.92));
+  border-color: rgba(233, 82, 82, 0.2);
+}
+
+.lab-console {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 16px;
+}
+
+.lab-console__main,
+.lab-console__result {
+  display: grid;
+  gap: 14px;
+}
+
+.lab-command-bar,
+.prompt-workbench,
+.result-output-card {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(216, 224, 238, 0.96);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.lab-command-bar {
+  display: grid;
+  gap: 14px;
+}
+
+.lab-command-bar__field,
+.lab-command-bar__metrics {
+  display: grid;
+  gap: 10px;
+}
+
+.lab-command-bar__field > span {
+  color: #4b6384;
+  font-size: 0.79rem;
+  font-weight: 800;
+}
+
+.lab-command-bar__metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lab-metric-card {
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(246, 249, 255, 0.88);
+  border: 1px solid rgba(224, 230, 242, 0.92);
+  display: grid;
+  gap: 8px;
+}
+
+.prompt-workbench {
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-workbench__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.prompt-workbench__head small {
+  white-space: nowrap;
+}
+
+.lab-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lab-feedback {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(245, 248, 255, 0.94);
+  border: 1px solid rgba(216, 224, 238, 0.96);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.lab-feedback.success {
+  color: #1f7a4f;
+  background: rgba(237, 249, 242, 0.94);
+  border-color: rgba(51, 181, 103, 0.22);
+}
+
+.lab-feedback.error {
+  color: #c84b48;
+  background: rgba(255, 244, 243, 0.94);
+  border-color: rgba(233, 82, 82, 0.2);
+}
+
+.result-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.result-overview__item {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 224, 238, 0.96);
+  background: rgba(247, 250, 255, 0.9);
+  display: grid;
+  gap: 6px;
+}
+
+.result-output-card {
+  display: grid;
+  gap: 12px;
+  min-height: 100%;
+}
+
+.result-output-card.is-error {
+  border-color: rgba(233, 82, 82, 0.22);
+  background: linear-gradient(180deg, rgba(255, 247, 246, 0.98), rgba(255, 255, 255, 0.94));
+}
+
+.result-output-card__head {
+  display: grid;
+  gap: 6px;
 }
 
 .status-grid {
@@ -431,9 +1027,9 @@ onMounted(() => {
   gap: 1rem;
   margin-bottom: 0.9rem;
   padding: 0.9rem;
-  border-radius: var(--fluent-radius-md);
-  background: color-mix(in srgb, var(--glass-bg-light) 90%, transparent);
-  border: 1px solid var(--glass-border-light);
+  border-radius: 16px;
+  background: rgba(247, 250, 255, 0.88);
+  border: 1px solid rgba(216, 224, 238, 0.9);
 }
 
 .registration-actions {
@@ -444,19 +1040,19 @@ onMounted(() => {
 
 .status-item {
   padding: 1rem;
-  border-radius: var(--fluent-radius-md);
-  background: color-mix(in srgb, var(--glass-bg-light) 90%, transparent);
-  border: 1px solid var(--glass-border-light);
+  border-radius: 16px;
+  background: rgba(247, 250, 255, 0.88);
+  border: 1px solid rgba(216, 224, 238, 0.9);
 }
 
 .status-label {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: #7b8ba3;
   margin-bottom: 0.35rem;
 }
 
 .status-value {
-  color: var(--text-primary);
+  color: #22344d;
   font-weight: 600;
 }
 
@@ -482,12 +1078,37 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
+:deep(.config-card .el-select__wrapper),
+:deep(.config-card .el-input__wrapper) {
+  border-radius: 12px;
+}
+
+:deep(.prompt-workbench__textarea .el-textarea__inner) {
+  min-height: 144px;
+  border-radius: 16px;
+  background: rgba(248, 250, 255, 0.92);
+}
+
 @media (max-width: 1024px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .config-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading,
+  .prompt-workbench__head,
+  .strategy-slot__head {
+    flex-direction: column;
+  }
+
+  .strategy-overview,
+  .strategy-tips,
+  .strategy-grid,
+  .lab-console,
+  .result-overview {
     grid-template-columns: 1fr;
   }
 }

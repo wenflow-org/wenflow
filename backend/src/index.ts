@@ -13,10 +13,9 @@ import { registerOfficialAgents, registerAllPlugins } from './agents';
 import { allSkillDefinitions, skillHandlers } from './skills';
 
 import { createAgentCollaborationService } from './services/agent-collaboration.service';
-import { learnerModelAgent } from './agents/learner-model-agent';
 import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
-import { learnerBackgroundOrchestrator } from './services/learner/LearnerBackgroundOrchestrator';
+import { learnerOrchestrator } from './orchestrators/learner.orchestrator';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
 
@@ -235,7 +234,6 @@ app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('tes
 // 其他路由（保持原有认证）
 // 注意：具体路由必须在通用路由之前注册！
 app.use('/api/auth', authRoutes);
-app.use('/api/admin-auth/login', adminAccessRestrictMiddleware, adminAuthRoutes);
 app.use('/api/admin-auth', adminAuthRoutes);
 app.use('/api/admin/api-config', authMiddleware, acpContextMiddleware('admin'), adminApiConfigRoutes);
 app.use('/api/admin/skills', authMiddleware, acpContextMiddleware('admin'), adminSkillsRoutes);
@@ -362,8 +360,7 @@ async function initializeAgentCollaboration() {
   
   service.start();
   
-  learnerModelAgent.setupEventListeners(eventBus);
-  learnerBackgroundOrchestrator.setupEventListeners(eventBus);
+  learnerOrchestrator.setupEventListeners(eventBus);
   
   logger.info('✅ Agent Collaboration Service started');
   

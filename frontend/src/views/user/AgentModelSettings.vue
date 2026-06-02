@@ -172,6 +172,22 @@ onUnmounted(() => {
 .agent-model-settings__intro {
   display: grid;
   gap: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(246, 250, 255, 0.74));
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  box-shadow: 0 20px 38px rgba(31, 87, 204, 0.08);
+}
+
+.agent-model-settings__panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(248, 250, 255, 0.72));
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  box-shadow: 0 18px 32px rgba(31, 87, 204, 0.07);
+}
+
+[data-theme='dark'] .agent-model-settings__intro,
+[data-theme='dark'] .agent-model-settings__panel {
+  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
+  border-color: rgba(96, 165, 250, 0.1);
+  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
 }
 
 .agent-model-settings__intro h2,
@@ -188,6 +204,11 @@ onUnmounted(() => {
   margin: 8px 0 0;
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+.agent-model-settings__intro :deep(.el-alert) {
+  border: 1px solid rgba(67, 176, 216, 0.16);
+  background: rgba(255, 255, 255, 0.52);
 }
 
 .agent-model-settings__table {
@@ -209,6 +230,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.dialog-actions :deep(.el-button--primary) {
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
 }
 
 @media (max-width: 768px) {

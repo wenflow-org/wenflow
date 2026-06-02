@@ -1,5 +1,6 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
 
 export const goalProfileInferenceDefinition: SkillDefinition = {
   name: 'goal-profile-inference',
@@ -42,7 +43,7 @@ export interface GoalProfileInferenceOutput {
   selfAssessmentNote: string;
 }
 
-const SYSTEM_PROMPT = `你是学习者画像分析器。请根据 goal 阶段理解结果，提炼学习者画像中的叙述型字段。
+export const GOAL_PROFILE_INFERENCE_PROMPT = `你是学习者画像分析器。请根据 goal 阶段理解结果，提炼学习者画像中的叙述型字段。
 
 要求：
 1. 输出 JSON。
@@ -50,6 +51,8 @@ const SYSTEM_PROMPT = `你是学习者画像分析器。请根据 goal 阶段理
 3. 不要发明不存在的经历，只能基于输入做稳健推断。
 4. 语气要像内部建模说明，不要像对用户说话。
 5. goalNarrative 关注真实要解决的问题，不要重复表面目标。`;
+
+const promptConfigService = new AgentConfigService();
 
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -77,11 +80,19 @@ export async function goalProfileInference(input: GoalProfileInferenceInput): Pr
   try {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'goal-profile-inference' };
+    const promptConfig = await promptConfigService.getActivePrompt('skill:goal-profile-inference');
+    if (!promptConfig?.systemPrompt?.trim()) {
+      throw new Error('SKILL_PROMPT_MISSING: goal-profile-inference');
+    }
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: promptConfig.systemPrompt },
       { role: 'user', content: JSON.stringify(input, null, 2) }
     ];
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({ messages }, caller, {
+      temperature: promptConfig.temperature,
+      maxTokens: promptConfig.maxTokens,
+      model: promptConfig.model,
+    });
     const content = response.choices[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};

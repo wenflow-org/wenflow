@@ -13,6 +13,8 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
+import { logger } from '../../utils/logger';
 
 export const labelGeneratorDefinition: SkillDefinition = {
   name: 'label-generator',
@@ -96,9 +98,9 @@ export interface LabelGeneratorOutput {
   color: string;
 }
 
-const LABEL_GENERATOR_MAX_TOKENS = 2000;
+export const LABEL_GENERATOR_MAX_TOKENS = 2000;
 
-const LABEL_TEMPLATE_SYSTEM_PROMPT = `你是教育标签设计师，负责将学术框架转化为用户友好的白话标签。
+export const LABEL_GENERATOR_PROMPT = `你是教育标签设计师，负责将学术框架转化为用户友好的白话标签。
 
 【知识类型 -> 白话】
 - factual -> "了解"、"记住"、"认识"
@@ -139,6 +141,8 @@ const LABEL_TEMPLATE_SYSTEM_PROMPT = `你是教育标签设计师，负责将学
 - evaluate: ⭐ star, #F1C40F (黄色 - 评估)
 - metacognitive: 🧠 brain, #1ABC9C (青色 - 元认知)`;
 
+const promptConfigService = new AgentConfigService();
+
 export async function labelGenerator(
   input: LabelGeneratorInput
 ): Promise<SkillExecutionResult<LabelGeneratorOutput>> {
@@ -146,20 +150,7 @@ export async function labelGenerator(
   
   try {
     const { knowledgeType, cognitiveLevel, goalType, taskTitle, domain } = input;
-    
-    // 快速路径：只有基础字段时，直接返回预定义标签（不调用 AI）
-    // 只有当需要定制化时（有 domain/taskTitle），才调用 AI
-    if (!goalType && !taskTitle && !domain) {
-      const fallback = generateFallbackLabel(knowledgeType, cognitiveLevel);
-      return {
-        success: true,
-        output: fallback,
-        duration: Date.now() - startTime,
-        cached: true  // 标记为缓存结果
-      };
-    }
-    
-    // 有定制化需求时，才调用 AI
+
     const contextPrompt = `请为以下任务生成用户友好的标签：
 
 【知识类型】${knowledgeType}
@@ -170,8 +161,13 @@ ${domain ? `【领域】${domain}` : ''}
 
 请生成白话标签。`;
 
+    const promptConfig = await promptConfigService.getActivePrompt('skill:label-generator');
+    if (!promptConfig?.systemPrompt?.trim()) {
+      throw new Error('SKILL_PROMPT_MISSING: label-generator');
+    }
+
     const messages: ChatMessage[] = [
-      { role: 'system', content: LABEL_TEMPLATE_SYSTEM_PROMPT },
+      { role: 'system', content: promptConfig.systemPrompt },
       { role: 'user', content: contextPrompt }
     ];
     
@@ -179,7 +175,9 @@ ${domain ? `【领域】${domain}` : ''}
     const caller: CallerInfo = { skillId: 'label-generator' };
     const response = await gateway.execute({
       messages,
-      max_tokens: LABEL_GENERATOR_MAX_TOKENS
+      max_tokens: promptConfig.maxTokens || LABEL_GENERATOR_MAX_TOKENS,
+      temperature: promptConfig.temperature,
+      model: promptConfig.model,
     }, caller, {});
     const content = response.choices[0]?.message.content || '';
     
@@ -191,7 +189,11 @@ ${domain ? `【领域】${domain}` : ''}
       duration: Date.now() - startTime
     };
   } catch (error: any) {
-    console.error('[LabelGenerator] 生成失败:', error.message);
+    logger.error('[label-generator] generation failed, using fallback', {
+      knowledgeType: input.knowledgeType,
+      cognitiveLevel: input.cognitiveLevel,
+      errorMessage: error?.message || String(error),
+    });
     
     const fallback = generateFallbackLabel(input.knowledgeType, input.cognitiveLevel);
     return {

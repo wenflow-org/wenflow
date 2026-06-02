@@ -10,7 +10,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
-import { virtualLearnerSimulationAgentHandler } from '../agents/virtual-learner-simulation-agent';
 import goalConversationService from '../services/learning/goal-conversation.service';
 import pathOrchestrator, { type GoalPathRequest } from './path.orchestrator';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingOrchestrator';
@@ -18,6 +17,7 @@ import {
   getSimulationOrchestratorConfig,
   type SimulationOrchestratorConfig
 } from '../services/orchestratorConfig.service';
+import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition } from '../skills';
 import type { 
   SimulationContext,
   SimulationStepResult,
@@ -25,7 +25,7 @@ import type {
   VirtualLearnerProfile,
   GoalConcernPool,
   LearnerLatentState
-} from '../agents/virtual-learner-simulation-agent/types';
+} from './simulation.types';
 
 const ORCHESTRATOR_ID = 'simulation-orchestrator';
 
@@ -42,6 +42,44 @@ export interface AutoLoopOptions {
 
 class SimulationOrchestrator {
   readonly id = ORCHESTRATOR_ID;
+
+  private sanitizeVisibleDialogue(text: string): string {
+    if (!text) return '';
+
+    return text
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
+  }
+
+  private sanitizeVisibleContextMessage(message: any, role: 'learner' | 'goal_agent') {
+    const content = this.sanitizeVisibleDialogue(typeof message?.content === 'string' ? message.content : '');
+    if (!content) return null;
+    return { role, content };
+  }
+
+  private trimLearningConversationHistory(history: any[] = []) {
+    if (!Array.isArray(history) || history.length === 0) return [];
+    return history.slice(-6).map((item: any) => ({
+      role: item?.role,
+      content: this.sanitizeVisibleDialogue(typeof item?.content === 'string' ? item.content : '')
+    })).filter((item: any) => item.content);
+  }
+
+  private inferLearningPhase(learnerState: LearnerLatentState | null | undefined): 'trying' | 'blocked' | 'verifying' | 'ready_to_close' {
+    const state = learnerState || {};
+    const blockerCount = Array.isArray(state.remainingBlockers) ? state.remainingBlockers.length : 0;
+    const cognitiveLoad = typeof state.cognitiveLoad === 'number' ? state.cognitiveLoad : 0;
+    const misconceptionRisk = typeof state.misconceptionRisk === 'number' ? state.misconceptionRisk : 0;
+    const taskUnderstanding = typeof state.taskUnderstanding === 'number' ? state.taskUnderstanding : 0;
+
+    if (state.readyForNextTask === true) return 'ready_to_close';
+    if (blockerCount > 0 || cognitiveLoad >= 0.72 || misconceptionRisk >= 0.7) return 'blocked';
+    if (taskUnderstanding >= 0.7) return 'verifying';
+    return 'trying';
+  }
 
   private getRunnableTasks(tasks: any[] = []) {
     return tasks.filter(task => task.status !== 'completed');
@@ -169,7 +207,6 @@ class SimulationOrchestrator {
 
     if (text.includes('保留') || text.includes('质疑') || text.includes('防御')) {
       partial.readyToAdvance = false;
-      partial.goalReadiness = 0.42;
     }
 
     if (text.includes('装懂') || text.includes('先猜') || text.includes('模糊带过')) {
@@ -221,11 +258,124 @@ class SimulationOrchestrator {
     currentStage: 'goal' | 'path' | 'learning',
     storyContext?: any
   ): LearnerLatentState {
-    return {
+    const merged = {
       ...this.buildDefaultLearnerState(profile, currentStage),
       ...this.buildStoryBehaviorBias(storyContext),
       ...(learnerState || {})
     };
+
+    if (currentStage === 'goal') {
+      if (typeof merged.goalReadiness !== 'number' || !Number.isFinite(merged.goalReadiness)) {
+        merged.goalReadiness = this.buildDefaultLearnerState(profile, currentStage).goalReadiness;
+      }
+
+      if (merged.goalReadiness >= 0.78 && merged.wantsClarification === false && merged.readyToAdvance !== false) {
+        merged.readyToAdvance = true;
+      }
+
+      if (merged.goalReadiness < 0.55) {
+        merged.readyToAdvance = false;
+      }
+    }
+
+    if (currentStage === 'learning') {
+      if (typeof merged.taskUnderstanding !== 'number' || !Number.isFinite(merged.taskUnderstanding)) {
+        merged.taskUnderstanding = merged.understandingLevel;
+      }
+
+      if (typeof merged.helpSeekingReadiness !== 'number' || !Number.isFinite(merged.helpSeekingReadiness)) {
+        merged.helpSeekingReadiness = merged.wantsClarification ? 0.7 : 0.35;
+      }
+
+      if (typeof merged.readyForNextTask !== 'boolean') {
+        merged.readyForNextTask = !!(merged.taskUnderstanding !== undefined && merged.taskUnderstanding >= 0.72 && merged.misconceptionRisk !== undefined && merged.misconceptionRisk < 0.45);
+      }
+    }
+
+    return merged;
+  }
+
+  private mapGoalStageToLearnerPhase(goalStage?: string | null) {
+    const normalized = String(goalStage || '').toLowerCase();
+    if (normalized === 'proposing' || normalized === 'ready' || normalized === 'completed') {
+      return 'proposal_evaluation' as const;
+    }
+    return 'understanding' as const;
+  }
+
+  private buildGoalVisibleContext(history: Array<{ role: 'user' | 'assistant'; content: string }>, lastAssistantMessage: string) {
+    const visibleHistory = history.flatMap((item) => {
+      if (item.role === 'user') {
+        const learner = this.sanitizeVisibleContextMessage(item, 'learner');
+        return learner ? [learner] : [];
+      }
+      const goalAgent = this.sanitizeVisibleContextMessage(item, 'goal_agent');
+      return goalAgent ? [goalAgent] : [];
+    });
+
+    return {
+      history: visibleHistory,
+      lastGoalAgentMessage: this.sanitizeVisibleDialogue(lastAssistantMessage || visibleHistory.filter((item) => item.role === 'goal_agent').slice(-1)[0]?.content || '')
+    };
+  }
+
+  private async simulateGoalLearnerReply(params: {
+    profile: VirtualLearnerProfile;
+    storyContext?: any;
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+    lastAssistantMessage: string;
+    currentPhase: 'opening' | 'understanding' | 'proposal_evaluation';
+    previousLearnerState?: any;
+    goalState?: any;
+  }) {
+    const output = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
+      learner: {
+        profile: params.profile.profile || {},
+        learningGoal: params.profile.learningGoal,
+        knownConcepts: params.profile.knownConcepts || [],
+        struggleConcepts: params.profile.struggleConcepts || [],
+        personalityTraits: params.profile.personalityTraits || {},
+      },
+      story: params.storyContext || null,
+      visibleContext: this.buildGoalVisibleContext(params.conversationHistory, params.lastAssistantMessage),
+      currentPhase: params.currentPhase,
+      previousLearnerState: params.previousLearnerState || null,
+      task: {
+        mode: 'simulate-goal-learner-turn',
+        requirements: [
+          'only use learner-visible content',
+          'ignore system/developer/tool/reminder text',
+          'reply as the learner',
+          'use proposal_evaluation to judge proposal fit and task relevance'
+        ]
+      }
+    });
+
+    return {
+      success: !!output?.reply,
+      output
+    };
+  }
+
+  private finalizeGoalLearnerState(
+    profile: VirtualLearnerProfile,
+    learnerState: any,
+    storyContext?: any,
+    finalStage?: string | null
+  ): LearnerLatentState {
+    const merged = this.mergeLearnerState(profile, learnerState, 'goal', storyContext);
+
+    if (finalStage === 'ready' || finalStage === 'completed') {
+      return {
+        ...merged,
+        goalReadiness: Math.max(typeof merged.goalReadiness === 'number' ? merged.goalReadiness : 0.28, 0.86),
+        wantsClarification: false,
+        readyToAdvance: true,
+        remainingUnknowns: []
+      };
+    }
+
+    return merged;
   }
 
   private buildGoalConcernPool(profile: VirtualLearnerProfile, goalState: any): GoalConcernPool {
@@ -392,6 +542,72 @@ class SimulationOrchestrator {
     });
   }
 
+  private async resetSessionRuntime(
+    sessionId: string,
+    options: {
+      keepGoalConversation?: boolean;
+      keepLearningPath?: boolean;
+      nextStage: 'goal' | 'path' | 'learning';
+      nextStatus?: 'created' | 'running' | 'completed' | 'failed';
+      removeStageResults?: string[];
+      logPhasesToRemove?: string[];
+      resetTaskProgress?: boolean;
+      clearCompletedAt?: boolean;
+    }
+  ) {
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId }
+    })
+
+    if (!session) {
+      throw new Error('模拟会话不存在')
+    }
+
+    let stageResults: any = {}
+    try {
+      stageResults = JSON.parse(session.stageResults || '{}')
+    } catch {}
+
+    for (const key of options.removeStageResults || []) {
+      delete stageResults[key]
+    }
+
+    let logs: any[] = []
+    try {
+      logs = JSON.parse(session.logs || '[]')
+    } catch {}
+
+    const logPhasesToRemove = new Set(options.logPhasesToRemove || [])
+    const nextLogs = logPhasesToRemove.size
+      ? logs.filter((entry: any) => !logPhasesToRemove.has(String(entry?.phase || '')))
+      : logs
+
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: {
+        status: options.nextStatus || 'running',
+        currentStage: options.nextStage,
+        goalConversationId: options.keepGoalConversation ? session.goalConversationId || undefined : null,
+        learningPathId: options.keepLearningPath ? session.learningPathId || undefined : null,
+        currentTaskId: null,
+        completedTasks: options.resetTaskProgress ? 0 : session.completedTasks,
+        totalTasks: options.resetTaskProgress ? 0 : session.totalTasks,
+        stageResults: JSON.stringify(stageResults),
+        logs: JSON.stringify(nextLogs),
+        completedAt: options.clearCompletedAt ? null : session.completedAt,
+        updatedAt: new Date()
+      }
+    })
+  }
+
+  private parseStageResultsPayload(raw: string | null | undefined) {
+    try {
+      return JSON.parse(raw || '{}') || {}
+    } catch {
+      return {}
+    }
+  }
+
   private parseStoryContextFromStageResults(stageResults: any): any {
     return stageResults?.story || null;
   }
@@ -415,41 +631,18 @@ class SimulationOrchestrator {
       const storyContext = this.parseStoryContextFromStageResults(initialStageResults);
       
       if (!session.goalConversationId) {
-        const openingContext = this.buildSimulationContext(
-          profile,
-          [],
-          '',
-          'goal',
-          storyContext,
-          undefined,
-          undefined,
-          undefined,
-          undefined
-        );
-
-        const openingInput = {
-          type: 'custom' as const,
-          goal: '模拟虚拟用户首次开场',
-          metadata: {
-            simulationType: 'simulate_goal_reply',
-            simulationContext: openingContext
-          }
-        };
-
-        const openingAgentContext = {
-          userId: input.userId,
-          sourceEntry: 'simulation' as const,
-          metadata: {
-            traceId: uuidv4(),
-            sessionId: input.sessionId,
-            turnType: 'goal-opening'
-          }
-        };
-
         const openingStart = Date.now();
-        const openingResult = await virtualLearnerSimulationAgentHandler(openingInput, openingAgentContext);
-        const openingReply = openingResult.success && openingResult.userVisible
-          ? openingResult.userVisible
+        const openingResult = await this.simulateGoalLearnerReply({
+          profile,
+          storyContext,
+          conversationHistory: [],
+          lastAssistantMessage: '',
+          currentPhase: 'opening',
+          previousLearnerState: undefined,
+          goalState: undefined
+        });
+        const openingReply = openingResult.success && openingResult.output?.reply
+          ? openingResult.output.reply
           : profile.learningGoal;
 
         logs.push({
@@ -459,9 +652,9 @@ class SimulationOrchestrator {
           details: {
             output: {
               reply: openingReply,
-              thoughtProcess: openingResult.internal?.thoughtProcess,
-              learnerState: this.mergeLearnerState(profile, openingResult.learnerState || openingResult.internal?.learnerState, 'goal', storyContext),
-              emotion: openingResult.internal?.emotion,
+              thoughtProcess: openingResult.output?.debug?.stateChangeReason,
+              learnerState: this.finalizeGoalLearnerState(profile, openingResult.output?.learnerState || {}, storyContext, 'understanding'),
+              emotion: openingResult.output?.emotion,
               opening: true
             }
           }
@@ -528,8 +721,8 @@ class SimulationOrchestrator {
         const rawMessages = collectedData.messages || [];
         conversationHistory = rawMessages.map((m: any) => ({
           role: m.role === 'user' ? 'user' : 'assistant',
-          content: m.content
-        }));
+          content: this.sanitizeVisibleDialogue(typeof m.content === 'string' ? m.content : '')
+        })).filter((m: { role: 'user' | 'assistant'; content: string }) => !!m.content);
       } catch {}
       
       const lastAssistantMessage = conversationHistory.length > 0
@@ -576,33 +769,27 @@ class SimulationOrchestrator {
         undefined
       );
       
-      const agentInput = {
-        type: 'custom' as const,
-        goal: '模拟虚拟用户回复',
-        metadata: {
-          simulationType: 'simulate_goal_reply',
-          simulationContext
-        }
-      };
-      
-      const agentContext = {
-        userId: input.userId,
-        sourceEntry: 'simulation' as const,
-        metadata: {
-          traceId: uuidv4(),
-          sessionId: input.sessionId
-        }
-      };
-      
       const virtualReplyStart = Date.now();
-      const virtualReplyResult = await virtualLearnerSimulationAgentHandler(agentInput, agentContext);
+      const virtualReplyResult = await this.simulateGoalLearnerReply({
+        profile,
+        storyContext: activeStoryContext,
+        conversationHistory,
+        lastAssistantMessage,
+        currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage),
+        previousLearnerState: stageResults.goal?.learnerState,
+        goalState
+      });
       
-      if (!virtualReplyResult.success || !virtualReplyResult.userVisible) {
-        const errorMsg = typeof virtualReplyResult.error === 'string' 
-          ? virtualReplyResult.error 
-          : virtualReplyResult.error?.message || '虚拟用户回复生成失败';
-        throw new Error(errorMsg);
+      if (!virtualReplyResult.success || !virtualReplyResult.output?.reply) {
+        throw new Error('虚拟用户回复生成失败');
       }
+
+      const currentGoalLearnerState = this.finalizeGoalLearnerState(
+        profile,
+        virtualReplyResult.output?.learnerState || {},
+        activeStoryContext,
+        existingGoalState.finalStage || existingGoalState.stage || goalState?.stage
+      );
       
       logs.push({
         timestamp: new Date().toISOString(),
@@ -610,16 +797,16 @@ class SimulationOrchestrator {
         durationMs: Date.now() - virtualReplyStart,
         details: {
           output: {
-            reply: virtualReplyResult.userVisible,
-            thoughtProcess: virtualReplyResult.internal?.thoughtProcess,
-            learnerState: this.mergeLearnerState(profile, virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState, 'goal', activeStoryContext),
-            emotion: virtualReplyResult.internal?.emotion
+              reply: virtualReplyResult.output?.reply,
+            thoughtProcess: virtualReplyResult.output?.debug?.stateChangeReason,
+            learnerState: currentGoalLearnerState,
+            emotion: virtualReplyResult.output?.emotion
           }
         }
       });
 
       const nextDisclosedConcerns = this.inferDisclosedGoalConcerns(
-        virtualReplyResult.userVisible,
+        virtualReplyResult.output.reply,
         concernPool,
         disclosedConcerns
       );
@@ -628,13 +815,13 @@ class SimulationOrchestrator {
         ...existingGoalState,
         concernPool,
         disclosedConcerns: nextDisclosedConcerns,
-        learnerState: this.mergeLearnerState(profile, virtualReplyResult.internal?.learnerState, 'goal', activeStoryContext)
+        learnerState: currentGoalLearnerState
       });
       
       const goalResponseStart = Date.now();
       const goalResult = await goalConversationService.continueConversation(
         session.goalConversationId,
-        virtualReplyResult.userVisible,
+        virtualReplyResult.output.reply,
         input.userId
       );
       
@@ -655,6 +842,12 @@ class SimulationOrchestrator {
       });
 
       const goalReady = this.isGoalConverged(goalResult.internal.core.stage);
+      const finalGoalLearnerState = this.finalizeGoalLearnerState(
+        profile,
+        virtualReplyResult.output?.learnerState || {},
+        activeStoryContext,
+        goalResult.internal.core.stage
+      );
 
       if (goalReady) {
         // 同步 learningPathId 到 virtual_session（goalConversationService 已自动触发 path 生成）
@@ -677,7 +870,7 @@ class SimulationOrchestrator {
           conversationId: session.goalConversationId,
           finalStage: goalResult.internal.core.stage,
           learningPathId: updatedConversation?.learningPathId,
-          learnerState: this.mergeLearnerState(profile, virtualReplyResult.internal?.learnerState, 'goal', activeStoryContext),
+          learnerState: finalGoalLearnerState,
           concernPool,
           disclosedConcerns: nextDisclosedConcerns
         });
@@ -709,7 +902,7 @@ class SimulationOrchestrator {
       
         return {
           success: true,
-          virtualUserReply: virtualReplyResult.userVisible,
+          virtualUserReply: virtualReplyResult.output.reply,
         goalConversationResponse: {
           userVisible: goalResult.userVisible,
           stage: goalResult.internal.core.stage,
@@ -844,10 +1037,39 @@ class SimulationOrchestrator {
         sourceConversationId: session.goalConversationId,
         source: 'goal',
         rawGoal: session.virtual_learner_profiles.learningGoal,
-        understanding: collectedData.understanding,
-        structuredData: collectedData.structuredData,
-        confirmedProposal: collectedData.confirmedProposal,
-        confidenceScores: collectedData.confidenceScores,
+        visibleSummary: {
+          surfaceGoal: collectedData.understanding?.surface_goal || null,
+          realProblem: collectedData.understanding?.real_problem || null,
+          motivation: collectedData.understanding?.motivation || null,
+          currentBaseline: collectedData.understanding?.current_baseline
+            ? {
+                level: collectedData.understanding.current_baseline.level || null,
+                evidence: collectedData.understanding.current_baseline.evidence || null,
+              }
+            : null,
+          resources: collectedData.understanding?.available_resources
+            ? {
+                timePerWeek: collectedData.understanding.available_resources.time_budget || null,
+                timePerSession: collectedData.collected?.timePerDay || null,
+                timeHorizon: collectedData.understanding.available_resources.time_horizon || collectedData.understanding.deadline_text || null,
+                deadlineText: collectedData.understanding.deadline_text || null,
+              }
+            : null,
+          successCriteria: collectedData.understanding?.success_criteria
+            ? {
+                observableResult: collectedData.understanding.success_criteria.observable_result || null,
+                acceptanceCheck: collectedData.understanding.success_criteria.acceptance_check || null,
+              }
+            : null,
+          confirmedProposal: collectedData.confirmedProposal
+            ? {
+                learningDirection: collectedData.confirmedProposal.learning_direction || null,
+                firstDeliverable: collectedData.confirmedProposal.first_deliverable || null,
+                keyStages: Array.isArray(collectedData.confirmedProposal.key_stages) ? collectedData.confirmedProposal.key_stages : [],
+                outOfScope: Array.isArray(collectedData.confirmedProposal.out_of_scope) ? collectedData.confirmedProposal.out_of_scope : [],
+              }
+            : null,
+        },
         conversationHistory: collectedData.messages || []
       };
       
@@ -901,9 +1123,7 @@ class SimulationOrchestrator {
   async reviewPathProposal(sessionId: string): Promise<{
     success: boolean;
     reaction?: string;
-    decision?: 'accept' | 'modify' | 'reject';
-    modifyRequest?: string;
-    confidence?: number;
+    visibleRequestedChanges?: string[];
     error?: string;
   }> {
     try {
@@ -933,52 +1153,30 @@ class SimulationOrchestrator {
         orderBy: { stageNumber: 'asc' }
       });
       
-      const reactionInput = {
-        type: 'custom' as const,
-        goal: '评审学习路径方案',
-        metadata: {
-          simulationType: 'simulate_reaction',
-          reactionContext: {
-            reactionTarget: 'path_proposal',
-            targetData: {
-              title: learningPath.title,
-              description: learningPath.description,
-              totalMilestones: learningPath.totalMilestones,
-              estimatedHours: learningPath.estimatedHours,
-              difficulty: learningPath.difficulty,
-              milestones: milestones.map(m => ({
-                stageNumber: m.stageNumber,
-                title: m.title,
-                description: m.description,
-                estimatedHours: m.estimatedHours
-              }))
-            },
-            profile,
-            learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults)),
-            knowledgeState: stageResults.goal?.knowledgeState
-          }
-        }
-      };
-      
-      const reactionContext = {
-        userId: session.userId,
-        sourceEntry: 'simulation' as const,
-        metadata: {
-          traceId: uuidv4(),
-          sessionId
-        }
-      };
-      
       const reactionStart = Date.now();
-      const reactionResult = await virtualLearnerSimulationAgentHandler(reactionInput, reactionContext);
-      
-      const reactionOutput = reactionResult.reactionOutput || reactionResult.internal?.reaction;
-      
-      if (!reactionResult.success || !reactionOutput) {
-        const errorMsg = typeof reactionResult.error === 'string'
-          ? reactionResult.error
-          : reactionResult.error?.message || '虚拟用户反应生成失败';
-        throw new Error(errorMsg);
+      const reactionOutput = await executeSkill(virtualLearnerPathEvaluatorDefinition, {
+        learner: profile,
+        story: this.parseStoryContextFromStageResults(stageResults),
+        pathProposal: {
+          title: learningPath.title,
+          description: learningPath.description,
+          totalMilestones: learningPath.totalMilestones,
+          estimatedHours: learningPath.estimatedHours,
+          difficulty: learningPath.difficulty,
+          milestones: milestones.map(m => ({
+            stageNumber: m.stageNumber,
+            title: m.title,
+            description: m.description,
+            estimatedHours: m.estimatedHours
+          }))
+        },
+        goalState: null,
+        previousReaction: stageResults.path_review || null,
+        learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults))
+      });
+
+      if (!reactionOutput?.reaction) {
+        throw new Error('虚拟用户 Path 评审结果无效');
       }
       
       await this.addSessionLog(sessionId, {
@@ -988,10 +1186,7 @@ class SimulationOrchestrator {
         details: {
           output: {
             reaction: reactionOutput.reaction,
-            decision: reactionOutput.decision,
-            confidence: reactionOutput.confidence,
-            reasons: reactionOutput.reasons,
-            biggestConcern: reactionOutput.biggestConcern
+            visibleRequestedChanges: reactionOutput.visibleRequestedChanges || []
           }
         }
       });
@@ -999,26 +1194,20 @@ class SimulationOrchestrator {
       await this.updateStageResults(sessionId, 'path_review', {
         success: true,
         reaction: reactionOutput.reaction,
-        decision: reactionOutput.decision,
-        modifyRequest: reactionOutput.modifyRequest,
-        confidence: reactionOutput.confidence,
-        reasons: reactionOutput.reasons,
-        biggestConcern: reactionOutput.biggestConcern,
-        learnerState: this.mergeLearnerState(profile, reactionResult.internal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults))
+        visibleRequestedChanges: reactionOutput.visibleRequestedChanges || [],
+        learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults))
       });
       
       logger.info('[simulation-orchestrator] 路径评审完成', {
         sessionId,
-        decision: reactionOutput.decision,
-        confidence: reactionOutput.confidence
+        hasReaction: !!reactionOutput.reaction,
+        requestedChangeCount: Array.isArray(reactionOutput.visibleRequestedChanges) ? reactionOutput.visibleRequestedChanges.length : 0
       });
       
       return {
         success: true,
         reaction: reactionOutput.reaction,
-        decision: reactionOutput.decision,
-        modifyRequest: reactionOutput.modifyRequest,
-        confidence: reactionOutput.confidence
+        visibleRequestedChanges: reactionOutput.visibleRequestedChanges || []
       };
     } catch (error: any) {
       logger.error('[simulation-orchestrator] 路径评审失败', {
@@ -1073,18 +1262,26 @@ class SimulationOrchestrator {
       let firstTaskIdx = 0;
 
       if (options.taskId) {
-        firstMilestoneIdx = learningPath.milestones.findIndex(m => this.getRunnableTasks(m.subtasks || []).some(task => task.id === options.taskId));
+        firstMilestoneIdx = learningPath.milestones.findIndex(m => Array.isArray(m.subtasks) && m.subtasks.some(task => task.id === options.taskId));
         const selectedMilestone = firstMilestoneIdx >= 0 ? learningPath.milestones[firstMilestoneIdx] : undefined;
         runnableTasks = this.getRunnableTasks(selectedMilestone?.subtasks || []);
-        const selectedTask = runnableTasks.find(task => task.id === options.taskId);
+        const selectedTask = selectedMilestone?.subtasks?.find((task: any) => task.id === options.taskId);
 
         if (!selectedMilestone || !selectedTask) {
-          throw new Error('指定任务不存在或当前不可启动');
+          throw new Error('指定任务不存在');
+        }
+
+        if (String(selectedTask.status || '').toLowerCase() === 'completed') {
+          throw new Error('指定任务已完成，不能重新启动');
         }
 
         firstMilestone = selectedMilestone;
         firstTask = selectedTask;
         firstTaskIdx = runnableTasks.findIndex(task => task.id === options.taskId);
+
+        if (firstTaskIdx < 0) {
+          throw new Error('指定任务当前不可启动');
+        }
       }
       
       if (!firstTask) {
@@ -1177,14 +1374,16 @@ class SimulationOrchestrator {
         throw new Error('学习路径不存在');
       }
       
-      const stageResults: any = {};
-      try {
-        const sr = session.stageResults || '{}';
-        const parsed = JSON.parse(sr);
-        Object.assign(stageResults, parsed);
-      } catch {}
-      
+      const stageResults: any = this.parseStageResultsPayload(session.stageResults)
+
       const learningState = stageResults.learning || {};
+      if (learningState.manualStop || session.status === 'failed') {
+        return {
+          success: false,
+          error: learningState.stoppedReason ? `学习已停止: ${learningState.stoppedReason}` : '学习已停止'
+        }
+      }
+
       const currentMilestoneIdx = learningState.currentMilestone || 0;
       const currentTaskIdx = learningState.currentTaskIdx || 0;
       
@@ -1242,16 +1441,21 @@ class SimulationOrchestrator {
         return await this.executeLearningStep(sessionId);
       }
       
-      const lastAssistantMessage = [...(learningState.conversationHistory || [])]
+      const trimmedConversationHistory = this.trimLearningConversationHistory(learningState.conversationHistory || [])
+      const lastAssistantMessage = [...trimmedConversationHistory]
         .reverse()
         .find((item: any) => item.role === 'assistant')?.content || '';
 
+      const mergedLearnerState = this.mergeLearnerState(profile, learningState.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults))
       const simulationContext = {
         profile,
-        conversationHistory: learningState.conversationHistory || [],
+        conversationHistory: trimmedConversationHistory,
         lastAssistantMessage,
         currentStage: 'learning',
-        learnerState: this.mergeLearnerState(profile, learningState.learnerState, 'learning', this.parseStoryContextFromStageResults(stageResults)),
+        learnerState: {
+          ...mergedLearnerState,
+          phaseFocus: this.inferLearningPhase(mergedLearnerState)
+        },
         learningState: {
           currentMilestone: currentMilestone.title,
           currentTask: currentTask.title,
@@ -1260,33 +1464,44 @@ class SimulationOrchestrator {
         }
       };
       
-      const agentInput = {
-        type: 'custom' as const,
-        goal: '模拟学习者回复任务',
-        metadata: {
-          simulationType: 'simulate_learning_reply',
-          simulationContext
-        }
-      };
-      
-      const agentContext = {
-        userId: session.userId,
-        sourceEntry: 'simulation' as const,
-        metadata: {
-          traceId: uuidv4(),
-          sessionId,
-          taskId: currentTask.id,
-          milestoneId: currentMilestone.id
-        }
-      };
-      
       const virtualReplyStart = Date.now();
-      const virtualReplyResult = await virtualLearnerSimulationAgentHandler(agentInput, agentContext);
+      const virtualReplyOutput = await executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
+        learner: {
+          profile: profile.profile || {},
+          learningGoal: profile.learningGoal,
+          knownConcepts: profile.knownConcepts || [],
+          struggleConcepts: profile.struggleConcepts || [],
+          personalityTraits: profile.personalityTraits || {},
+        },
+        story: this.parseStoryContextFromStageResults(stageResults),
+        visibleContext: {
+          history: trimmedConversationHistory.map((item: any) => ({
+            role: item.role === 'assistant' ? 'teacher' : 'learner',
+            content: item.content,
+          })),
+          lastTeacherMessage: lastAssistantMessage,
+        },
+        currentPhase: simulationContext.learnerState.phaseFocus,
+        previousLearnerState: mergedLearnerState,
+        currentTask: {
+          title: currentTask.title,
+          milestoneTitle: currentMilestone.title,
+        },
+        knowledgeSnapshot: [],
+      });
+
+      const virtualReplyResult = {
+        success: !!virtualReplyOutput?.reply,
+        userVisible: virtualReplyOutput?.reply || '',
+        learnerState: virtualReplyOutput?.learnerState,
+        internal: {
+          emotion: virtualReplyOutput?.emotion,
+          learnerState: virtualReplyOutput?.learnerState,
+        }
+      };
       
       if (!virtualReplyResult.success || !virtualReplyResult.userVisible) {
-        const errorMsg = typeof virtualReplyResult.error === 'string'
-          ? virtualReplyResult.error
-          : virtualReplyResult.error?.message || '学习者回复生成失败';
+        const errorMsg = !virtualReplyOutput?.reply ? '学习者回复生成失败' : '学习者回复为空';
         throw new Error(errorMsg);
       }
       
@@ -1468,23 +1683,42 @@ class SimulationOrchestrator {
     const maxMilestones = options.maxMilestones || 10;
     
     try {
-      const session = await this.getVirtualSession(sessionId);
-      
+      let session = await this.getVirtualSession(sessionId);
+
       if (session.status === 'completed') {
         return { success: true, totalSteps: 0, completedMilestones: 0 };
       }
-      
+
+      const initialStageResults = this.parseStageResultsPayload(session.stageResults)
+      if (initialStageResults.learning?.manualStop || session.status === 'failed') {
+        return {
+          success: false,
+          error: initialStageResults.learning?.stoppedReason ? `学习已停止: ${initialStageResults.learning.stoppedReason}` : '学习已停止'
+        }
+      }
+
       if (session.currentStage !== 'learning') {
         const startResult = await this.startLearningPhase(sessionId);
         if (!startResult.success) {
           return { success: false, error: startResult.error };
         }
+        session = await this.getVirtualSession(sessionId)
       }
       
       let steps = 0;
       const maxSteps = maxMilestones * 3;
       
       for (let i = 0; i < maxSteps; i++) {
+        const latestSession = await this.getVirtualSession(sessionId)
+        const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
+        if (latestStageResults.learning?.manualStop || latestSession.status === 'failed') {
+          return {
+            success: false,
+            totalSteps: steps,
+            error: latestStageResults.learning?.stoppedReason ? `学习已停止: ${latestStageResults.learning.stoppedReason}` : '学习已停止'
+          }
+        }
+
         const stepResult = await this.executeLearningStep(sessionId);
         steps++;
         
@@ -1575,6 +1809,121 @@ class SimulationOrchestrator {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  async restartPathPhase(sessionId: string): Promise<{
+    success: boolean;
+    learningPathId?: string;
+    error?: string;
+  }> {
+    try {
+      const session = await this.getVirtualSession(sessionId)
+
+      let stageResults: any = {}
+      try {
+        stageResults = JSON.parse(session.stageResults || '{}')
+      } catch {}
+
+      const learningState = stageResults.learning || {}
+      const teachingSessionId = learningState.teachingSessionId
+
+      if (teachingSessionId) {
+        await aiTeachingOrchestrator.resetSession(teachingSessionId, session.userId).catch(() => {})
+      }
+
+      if (session.learningPathId) {
+        await prisma.learning_paths.delete({
+          where: { id: session.learningPathId }
+        }).catch(() => {})
+      }
+
+      await this.resetSessionRuntime(sessionId, {
+        keepGoalConversation: true,
+        keepLearningPath: false,
+        nextStage: 'path',
+        nextStatus: 'running',
+        removeStageResults: ['path', 'path_review', 'learning'],
+        logPhasesToRemove: ['learning-start', 'learning-step', 'stage-transition'],
+        resetTaskProgress: true,
+        clearCompletedAt: true
+      })
+
+      return await this.advanceToPathGeneration(sessionId)
+    } catch (error: any) {
+      logger.error('[simulation-orchestrator] 重建路径失败', {
+        sessionId,
+        error: error.message
+      })
+
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  }
+
+  async restartLearningPhase(sessionId: string, options: { taskId?: string } = {}): Promise<{
+    success: boolean;
+    teachingSessionId?: string;
+    welcomeMessage?: string;
+    milestones?: any[];
+    selectedTaskId?: string;
+    error?: string;
+  }> {
+    try {
+      const session = await this.getVirtualSession(sessionId)
+
+      let stageResults: any = {}
+      try {
+        stageResults = JSON.parse(session.stageResults || '{}')
+      } catch {}
+
+      const learningState = stageResults.learning || {}
+      const teachingSessionId = learningState.teachingSessionId
+      const preferredTaskId = options.taskId || learningState.currentTaskId || undefined
+
+      if (teachingSessionId) {
+        await aiTeachingOrchestrator.resetSession(teachingSessionId, session.userId).catch(() => {})
+      }
+
+      await this.resetSessionRuntime(sessionId, {
+        keepGoalConversation: true,
+        keepLearningPath: true,
+        nextStage: 'learning',
+        nextStatus: 'running',
+        removeStageResults: ['learning'],
+        logPhasesToRemove: ['learning-start', 'learning-step', 'learning-reply', 'learning-response', 'stage-transition'],
+        resetTaskProgress: true,
+        clearCompletedAt: true
+      })
+
+      const restartResult = await this.startLearningPhase(sessionId, preferredTaskId ? { taskId: preferredTaskId } : {})
+      if (restartResult.success) {
+        return restartResult
+      }
+
+      if (preferredTaskId && ['指定任务不存在', '指定任务已完成，不能重新启动', '指定任务当前不可启动'].includes(String(restartResult.error || ''))) {
+        logger.warn('[simulation-orchestrator] 重新开始学习时指定任务不可用，回退到首个可启动任务', {
+          sessionId,
+          preferredTaskId,
+          error: restartResult.error
+        })
+
+        return await this.startLearningPhase(sessionId)
+      }
+
+      return restartResult
+    } catch (error: any) {
+      logger.error('[simulation-orchestrator] 重开学习失败', {
+        sessionId,
+        error: error.message
+      })
+
+      return {
+        success: false,
+        error: error.message
+      }
     }
   }
 }

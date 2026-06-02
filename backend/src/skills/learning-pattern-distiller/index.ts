@@ -1,5 +1,6 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
+import { AgentConfigService } from '../../services/agentConfig.service';
 
 export const learningPatternDistillerDefinition: SkillDefinition = {
   name: 'learning-pattern-distiller',
@@ -46,13 +47,15 @@ export interface LearningPatternDistillerOutput {
   taskGranularityNote: string;
 }
 
-const SYSTEM_PROMPT = `你是学习模式蒸馏器。请根据学习者近期状态、知识证据和课后总结，提炼学习偏好与教学模式。
+export const LEARNING_PATTERN_DISTILLER_PROMPT = `你是学习模式蒸馏器。请根据学习者近期状态、知识证据和课后总结，提炼学习偏好与教学模式。
 
 要求：
 1. 输出 JSON。
 2. 字段可以是一句话或一小段话。
 3. 不要夸大，把结论写成稳健推断。
 4. 重点回答：这个人怎么学更轻松、怎么教更有效。`;
+
+const promptConfigService = new AgentConfigService();
 
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -89,11 +92,19 @@ export async function learningPatternDistiller(input: LearningPatternDistillerIn
   try {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { skillId: 'learning-pattern-distiller' };
+    const promptConfig = await promptConfigService.getActivePrompt('skill:learning-pattern-distiller');
+    if (!promptConfig?.systemPrompt?.trim()) {
+      throw new Error('SKILL_PROMPT_MISSING: learning-pattern-distiller');
+    }
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: promptConfig.systemPrompt },
       { role: 'user', content: JSON.stringify(input, null, 2) }
     ];
-    const response = await gateway.execute({ messages }, caller, {});
+    const response = await gateway.execute({ messages }, caller, {
+      temperature: promptConfig.temperature,
+      maxTokens: promptConfig.maxTokens,
+      model: promptConfig.model,
+    });
     const content = response.choices[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};

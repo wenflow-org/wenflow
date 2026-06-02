@@ -21,12 +21,12 @@
     </header>
 
     <main class="test-evaluation-shell">
-      <section class="test-evaluation-hero test-evaluation-card">
-        <div>
-          <span class="test-evaluation-eyebrow">Evaluation Workbench</span>
+        <section class="test-evaluation-hero test-evaluation-card">
+          <div>
+          <span class="test-evaluation-eyebrow">课程评估</span>
           <h1>本节学习反馈</h1>
-          <p>这里展示 wrapup、advisory、评估轮询状态和原始结构化结果，便于测试 `learn -> evaluation -> replan` 链路。</p>
-        </div>
+          <p>这里展示课堂总结、建议状态、评估轮询状态和原始结构化结果，便于检查学习到调整路径的链路。</p>
+          </div>
         <div class="test-evaluation-hero__actions">
           <button class="test-evaluation-btn test-evaluation-btn--ghost" :disabled="exportingImage" @click="exportImage">导出图片</button>
           <button class="test-evaluation-btn test-evaluation-btn--ghost" @click="exportPdf">导出 PDF</button>
@@ -35,7 +35,7 @@
 
       <section v-if="loading" class="test-evaluation-card test-evaluation-empty">
         <el-icon class="spin"><Loading /></el-icon>
-        <p>正在生成课程评估，请稍候...</p>
+        <p>正在生成评估，请稍候...</p>
       </section>
 
       <section v-else-if="error" class="test-evaluation-card test-evaluation-empty">
@@ -52,32 +52,32 @@
             <section class="test-evaluation-card">
               <span class="test-evaluation-eyebrow">会话信息</span>
               <div class="test-evaluation-kv-list">
-                <div class="test-evaluation-kv"><span>sessionId</span><strong>{{ sessionId }}</strong></div>
-                <div class="test-evaluation-kv"><span>taskId</span><strong>{{ taskId }}</strong></div>
-                <div class="test-evaluation-kv"><span>topic</span><strong>{{ sessionDetail.topic }}</strong></div>
-                <div class="test-evaluation-kv"><span>duration</span><strong>{{ formatTime(durationSeconds) }}</strong></div>
-                <div class="test-evaluation-kv"><span>messageCount</span><strong>{{ sessionDetail.messages?.length || 0 }}</strong></div>
-                <div class="test-evaluation-kv"><span>polling</span><strong>{{ shouldContinuePolling(sessionDetail) ? 'running' : 'stopped' }}</strong></div>
+                <div class="test-evaluation-kv"><span>会话 ID</span><strong>{{ sessionId }}</strong></div>
+                <div class="test-evaluation-kv"><span>任务 ID</span><strong>{{ taskId }}</strong></div>
+                <div class="test-evaluation-kv"><span>主题</span><strong>{{ sessionDetail.topic }}</strong></div>
+                <div class="test-evaluation-kv"><span>时长</span><strong>{{ formatTime(durationSeconds) }}</strong></div>
+                <div class="test-evaluation-kv"><span>消息数</span><strong>{{ sessionDetail.messages?.length || 0 }}</strong></div>
+                <div class="test-evaluation-kv"><span>轮询状态</span><strong>{{ shouldContinuePolling(sessionDetail) ? '进行中' : '已停止' }}</strong></div>
               </div>
             </section>
 
             <section class="test-evaluation-card">
-              <span class="test-evaluation-eyebrow">Wrapup 状态</span>
+              <span class="test-evaluation-eyebrow">课堂总结状态</span>
               <div class="test-evaluation-kv-list">
-                <div class="test-evaluation-kv"><span>status</span><strong>{{ wrapup.status }}</strong></div>
-                <div class="test-evaluation-kv"><span>summary source</span><strong>{{ wrapup.sources.summary }}</strong></div>
-                <div class="test-evaluation-kv"><span>evaluation source</span><strong>{{ wrapup.sources.evaluation }}</strong></div>
-                <div class="test-evaluation-kv"><span>knowledge points</span><strong>{{ knowledgePoints.length }}</strong></div>
+                <div class="test-evaluation-kv"><span>状态</span><strong>{{ wrapup.status }}</strong></div>
+                <div class="test-evaluation-kv"><span>总结来源</span><strong>{{ wrapup.sources.summary }}</strong></div>
+                <div class="test-evaluation-kv"><span>评估来源</span><strong>{{ wrapup.sources.evaluation }}</strong></div>
+                <div class="test-evaluation-kv"><span>知识点数</span><strong>{{ knowledgePoints.length }}</strong></div>
               </div>
             </section>
 
             <section v-if="sessionDetail.advisory" class="test-evaluation-card">
-              <span class="test-evaluation-eyebrow">Advisory</span>
+              <span class="test-evaluation-eyebrow">调整建议</span>
               <div class="test-evaluation-kv-list">
-                <div class="test-evaluation-kv"><span>shouldSuggest</span><strong>{{ sessionDetail.advisory.shouldSuggest ? 'true' : 'false' }}</strong></div>
-                <div class="test-evaluation-kv"><span>priority</span><strong>{{ sessionDetail.advisory.priority }}</strong></div>
-                <div class="test-evaluation-kv"><span>recommendation</span><strong>{{ sessionDetail.advisory.recommendation }}</strong></div>
-                <div class="test-evaluation-kv"><span>scope</span><strong>{{ sessionDetail.advisory.scope }}</strong></div>
+                <div class="test-evaluation-kv"><span>是否建议调整</span><strong>{{ sessionDetail.advisory.shouldSuggest ? '是' : '否' }}</strong></div>
+                <div class="test-evaluation-kv"><span>优先级</span><strong>{{ sessionDetail.advisory.priority }}</strong></div>
+                <div class="test-evaluation-kv"><span>建议</span><strong>{{ sessionDetail.advisory.recommendation }}</strong></div>
+                <div class="test-evaluation-kv"><span>调整范围</span><strong>{{ sessionDetail.advisory.scope }}</strong></div>
               </div>
             </section>
           </aside>
@@ -87,7 +87,7 @@
               <div class="test-evaluation-section-head">
                 <div>
                   <span class="test-evaluation-eyebrow">可见结果</span>
-                  <h2>Completion Card</h2>
+                  <h2>课程完成卡</h2>
                 </div>
               </div>
 
@@ -108,22 +108,22 @@
               <div class="test-evaluation-section-head">
                 <div>
                   <span class="test-evaluation-eyebrow">原始结构</span>
-                  <h2>Wrapup / Advisory / Session Detail</h2>
+                  <h2>课堂总结 / 建议 / 会话详情</h2>
                 </div>
               </div>
 
               <details class="test-evaluation-details" open>
-                <summary>展开 Wrapup</summary>
+                <summary>展开课堂总结</summary>
                 <pre>{{ JSON.stringify(wrapup, null, 2) }}</pre>
               </details>
 
               <details class="test-evaluation-details">
-                <summary>展开 Advisory</summary>
+                <summary>展开建议</summary>
                 <pre>{{ JSON.stringify(sessionDetail.advisory || null, null, 2) }}</pre>
               </details>
 
               <details class="test-evaluation-details">
-                <summary>展开 Session Detail</summary>
+                <summary>展开会话详情</summary>
                 <pre>{{ JSON.stringify(sessionDetail, null, 2) }}</pre>
               </details>
             </section>
@@ -357,9 +357,9 @@ onUnmounted(stopPolling);
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(205, 216, 238, 0.9);
 }
 
 .test-evaluation-header__inner,
@@ -397,8 +397,8 @@ onUnmounted(stopPolling);
   gap: 6px;
   padding: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: #f8fafc;
+  border: 1px solid rgba(205, 216, 238, 0.9);
 }
 
 .test-evaluation-nav a {
@@ -417,19 +417,19 @@ onUnmounted(stopPolling);
 }
 
 .test-evaluation-shell {
-  padding: 28px 0 64px;
+  padding: 24px 0 64px;
   display: grid;
-  gap: 20px;
+  gap: 16px;
 }
 
 .test-evaluation-card,
 .test-evaluation-hero,
 .test-evaluation-empty {
-  padding: 22px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+  padding: 18px 20px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.94));
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
 }
 
 .test-evaluation-empty {

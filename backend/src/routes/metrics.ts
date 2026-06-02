@@ -11,6 +11,7 @@ import {
   getLearningHistory,
   generateLearningStateAdvice,
 } from '../services/metrics/LearningMetricService';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 
@@ -39,7 +40,7 @@ router.get('/current', authMiddleware, async (req: any, res) => {
       },
     });
   } catch (error) {
-    console.error('Error getting current metrics:', error);
+    logger.error('[metrics-route] failed to get current metrics', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to get learning metrics',
@@ -59,7 +60,7 @@ router.get('/history', authMiddleware, async (req: any, res) => {
       data: history,
     });
   } catch (error) {
-    console.error('Error getting learning history:', error);
+    logger.error('[metrics-route] failed to get learning history', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to get learning history',
@@ -89,7 +90,7 @@ router.get('/advice', authMiddleware, async (req: any, res) => {
       data: advice,
     });
   } catch (error) {
-    console.error('Error getting learning advice:', error);
+    logger.error('[metrics-route] failed to get learning advice', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to get learning advice',

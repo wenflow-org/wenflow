@@ -34,29 +34,29 @@
 
       <div v-else-if="sessionPaused" class="test-learn-card test-learn-blocked">
         <h2>授课已暂停</h2>
-        <p>点击“恢复授课”继续刚才的测试会话。</p>
-        <button class="test-learn-btn test-learn-btn--primary" @click="resumeSessionFromPause">恢复授课</button>
+        <p>点击“继续”恢复刚才的测试会话。</p>
+        <button class="test-learn-btn test-learn-btn--primary" @click="resumeSessionFromPause">继续</button>
       </div>
 
       <template v-else-if="task">
         <section class="test-learn-hero test-learn-card">
           <div>
-            <span class="test-learn-eyebrow">Learning Session Workbench</span>
+            <span class="test-learn-eyebrow">测试授课</span>
             <h1>{{ task.title }}</h1>
             <p>{{ task.learningPath?.name || '当前任务测试页' }}</p>
             <div class="test-learn-chip-row">
-              <span class="test-learn-chip">taskId: {{ taskId }}</span>
-              <span class="test-learn-chip">sessionId: {{ sessionInfo.sessionId || '--' }}</span>
-              <span class="test-learn-chip">sessionActive: {{ sessionActive ? 'true' : 'false' }}</span>
-              <span class="test-learn-chip">checkpoint: {{ activeCheckpoint ? 'open' : 'none' }}</span>
+              <span class="test-learn-chip">任务 ID: {{ taskId }}</span>
+              <span class="test-learn-chip">会话 ID: {{ sessionInfo.sessionId || '--' }}</span>
+              <span class="test-learn-chip">授课状态: {{ sessionActive ? '进行中' : '未开始' }}</span>
+              <span class="test-learn-chip">检查点: {{ activeCheckpoint ? '进行中' : '无' }}</span>
             </div>
           </div>
 
           <div class="test-learn-hero__actions">
-            <button v-if="!sessionActive && !sessionPaused" class="test-learn-btn test-learn-btn--primary" @click="startSession">开始测试授课</button>
-            <button v-if="sessionPaused" class="test-learn-btn test-learn-btn--primary" @click="resumeSessionFromPause">恢复授课</button>
+            <button v-if="!sessionActive && !sessionPaused" class="test-learn-btn test-learn-btn--primary" @click="startSession">开始</button>
+            <button v-if="sessionPaused" class="test-learn-btn test-learn-btn--primary" @click="resumeSessionFromPause">继续</button>
             <button v-if="sessionActive" class="test-learn-btn test-learn-btn--ghost" @click="pauseSession">暂停</button>
-            <button v-if="sessionInfo.sessionId" class="test-learn-btn test-learn-btn--ghost" @click="resetSession">重置</button>
+            <button v-if="sessionInfo.sessionId" class="test-learn-btn test-learn-btn--ghost" @click="resetSession">重新开始</button>
           </div>
         </section>
 
@@ -65,21 +65,21 @@
             <section class="test-learn-card">
               <span class="test-learn-eyebrow">会话状态</span>
               <div class="test-learn-kv-list">
-                <div class="test-learn-kv"><span>topic</span><strong>{{ sessionInfo.topic || '--' }}</strong></div>
-                <div class="test-learn-kv"><span>messages</span><strong>{{ messages.length }}</strong></div>
-                <div class="test-learn-kv"><span>elapsed</span><strong>{{ formatTime(activeTime) }}</strong></div>
-                <div class="test-learn-kv"><span>knowledgePoints</span><strong>{{ knowledgePoints.length }}</strong></div>
+                <div class="test-learn-kv"><span>主题</span><strong>{{ sessionInfo.topic || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>消息数</span><strong>{{ messages.length }}</strong></div>
+                <div class="test-learn-kv"><span>已用时长</span><strong>{{ formatTime(activeTime) }}</strong></div>
+                <div class="test-learn-kv"><span>知识点数</span><strong>{{ knowledgePoints.length }}</strong></div>
               </div>
             </section>
 
             <section class="test-learn-card">
               <span class="test-learn-eyebrow">任务上下文</span>
               <div class="test-learn-kv-list">
-                <div class="test-learn-kv"><span>taskType</span><strong>{{ task.taskType || '--' }}</strong></div>
-                <div class="test-learn-kv"><span>displayLabel</span><strong>{{ task.displayLabel || '--' }}</strong></div>
-                <div class="test-learn-kv"><span>knowledgeType</span><strong>{{ task.knowledgeType || '--' }}</strong></div>
-                <div class="test-learn-kv"><span>cognitiveLevel</span><strong>{{ task.cognitiveLevel || '--' }}</strong></div>
-                <div class="test-learn-kv"><span>coreConcept</span><strong>{{ task.coreConcept || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>任务类型</span><strong>{{ task.taskType || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>任务标签</span><strong>{{ task.displayLabel || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>知识类型</span><strong>{{ task.knowledgeType || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>认知层级</span><strong>{{ task.cognitiveLevel || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>核心概念</span><strong>{{ task.coreConcept || '--' }}</strong></div>
               </div>
             </section>
 
@@ -226,8 +226,8 @@
               <div v-if="showCompletionPrompt" class="test-learn-completion">
                 <span>已达到本节完成条件</span>
                 <div class="test-learn-chip-row">
-                  <button class="test-learn-btn test-learn-btn--ghost" @click="dismissCompletionPrompt">继续学习</button>
-                  <button class="test-learn-btn test-learn-btn--primary" @click="confirmCompletionEnd">结束并评估</button>
+                  <button class="test-learn-btn test-learn-btn--ghost" @click="dismissCompletionPrompt">继续</button>
+                  <button class="test-learn-btn test-learn-btn--primary" @click="confirmCompletionEnd">完成并评估</button>
                 </div>
               </div>
             </section>
@@ -235,16 +235,16 @@
             <section v-if="latestPromptDebug" class="test-learn-card">
               <div class="test-learn-section-head">
                 <div>
-                  <span class="test-learn-eyebrow">Prompt Debug</span>
-                  <h2>最近一轮 Teaching Turn</h2>
+                  <span class="test-learn-eyebrow">提示词调试</span>
+                  <h2>最近一轮教学调用</h2>
                 </div>
               </div>
 
               <div class="test-learn-kv-list">
-                <div class="test-learn-kv"><span>agentId</span><strong>{{ latestPromptDebug.agentId || '--' }}</strong></div>
-                <div class="test-learn-kv"><span>version</span><strong>{{ latestPromptDebug.systemPromptVersion ?? '--' }}</strong></div>
-                <div class="test-learn-kv"><span>durationMs</span><strong>{{ latestPromptDebug.durationMs ?? '--' }}</strong></div>
-                <div class="test-learn-kv"><span>attempts</span><strong>{{ latestPromptDebug.attempts?.length || 0 }}</strong></div>
+                <div class="test-learn-kv"><span>Agent ID</span><strong>{{ latestPromptDebug.agentId || '--' }}</strong></div>
+                <div class="test-learn-kv"><span>提示词版本</span><strong>{{ latestPromptDebug.systemPromptVersion ?? '--' }}</strong></div>
+                <div class="test-learn-kv"><span>耗时</span><strong>{{ latestPromptDebug.durationMs ?? '--' }}</strong></div>
+                <div class="test-learn-kv"><span>尝试次数</span><strong>{{ latestPromptDebug.attempts?.length || 0 }}</strong></div>
               </div>
 
               <div v-if="latestTeachingTraceCard" class="test-learn-trace-panel">
@@ -310,7 +310,7 @@
                 <div class="test-learn-trace-panel__head">
                   <div>
                     <span class="test-learn-eyebrow">课堂状态</span>
-                    <strong>当前会话结构化内部状态</strong>
+                    <strong>当前会话状态</strong>
                   </div>
                 </div>
 
@@ -339,7 +339,7 @@
             <section v-if="activeCheckpoint" class="test-learn-card">
               <div class="test-learn-section-head">
                 <div>
-                  <span class="test-learn-eyebrow">Checkpoint Workbench</span>
+                  <span class="test-learn-eyebrow">检查点</span>
                   <h2>{{ activeCheckpoint.title }}</h2>
                 </div>
               </div>
@@ -362,7 +362,7 @@
                   v-model="userInput"
                   type="textarea"
                   :autosize="{ minRows: 1, maxRows: 4 }"
-                  placeholder="输入你的测试消息… (Ctrl+Enter 发送)"
+                  placeholder="输入测试消息… (Ctrl+Enter 发送)"
                   @keydown.ctrl.enter="sendMessage"
                   :disabled="aiLoading || !sessionInfo.sessionId"
                 />
@@ -826,7 +826,7 @@ const stopTimer = () => {
 const resumeSession = async (sessionId: string) => {
   const detail = await aiTeachingAPI.getSessionDetail(sessionId);
   if (!detail) {
-    throw new Error('恢复授课失败，未找到会话详情');
+    throw new Error('继续授课失败，未找到会话详情');
   }
   resetSessionState();
   sessionInfo.value = {
@@ -1103,9 +1103,9 @@ const resetSession = async () => {
     sessionInfo.value = { sessionId: '', subject: '', topic: '', difficulty: 5 };
     sessionActive.value = false;
     sessionPaused.value = false;
-    toast.success('已重置授课会话');
+    toast.success('已重新开始授课会话');
   } catch (error: any) {
-    toast.error(error.message || '重置授课失败');
+    toast.error(error.message || '重新开始授课失败');
   }
 };
 
@@ -1115,10 +1115,10 @@ const resumeSessionFromPause = async () => {
   sessionInitializing.value = true;
   try {
     await resumeSession(sessionInfo.value.sessionId);
-    toast.success('已恢复授课');
+    toast.success('已继续授课');
   } catch (error: any) {
     sessionInitializing.value = false;
-    toast.error(error.message || '恢复授课失败');
+    toast.error(error.message || '继续授课失败');
   }
 };
 
@@ -1166,13 +1166,13 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(205, 216, 238, 0.9);
 }
 
 .test-learn-header--scrolled {
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(42, 72, 128, 0.05);
 }
 
 .test-learn-header__inner,
@@ -1210,8 +1210,8 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: #f8fafc;
+  border: 1px solid rgba(205, 216, 238, 0.9);
 }
 
 .test-learn-nav a {
@@ -1230,7 +1230,7 @@ onUnmounted(() => {
 }
 
 .test-learn-shell {
-  padding: 28px 0 80px;
+  padding: 24px 0 72px;
 }
 
 .test-learn-card,
@@ -1240,10 +1240,10 @@ onUnmounted(() => {
 .test-learn-message,
 .test-learn-debug-box,
 .test-learn-raw-panel {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(23, 32, 51, 0.06);
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
-  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.94));
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
+  border-radius: 22px;
 }
 
 .test-learn-raw-panel {
@@ -1274,7 +1274,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   gap: 10px;
-  padding: 24px;
+  padding: 22px;
   text-align: center;
 }
 
@@ -1305,7 +1305,7 @@ onUnmounted(() => {
 
 .test-learn-hero,
 .test-learn-card {
-  padding: 22px;
+  padding: 18px 20px;
 }
 
 .test-learn-hero {
@@ -1313,7 +1313,7 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .test-learn-eyebrow {

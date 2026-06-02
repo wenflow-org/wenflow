@@ -62,6 +62,7 @@ export interface PromptRetryStrategy<TInput> {
 export interface PromptCallSpec<TInput, TOutput> {
   agentId: string;
   defaultSystemPrompt: string;
+  requireActivePrompt?: boolean;
   caller: {
     agentId?: string;
     skillId?: string;

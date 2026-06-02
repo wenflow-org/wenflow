@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { getAPIGateway } from '../gateway/api-gateway';
 
 export interface UserAgentModelConfig {
   userId: string;
@@ -36,11 +37,13 @@ class UserAgentModelConfigService {
 
   async upsert(userId: string, agentId: string, config: Partial<UserAgentModelConfig>): Promise<UserAgentModelConfig> {
     try {
-      return await prisma.user_agent_model_configs.upsert({
+      const result = await prisma.user_agent_model_configs.upsert({
         where: { userId_agentId: { userId, agentId } },
         update: { ...config, updatedAt: new Date() },
         create: { id: uuidv4(), userId, agentId, ...config, updatedAt: new Date() }
       });
+      getAPIGateway().invalidateCache(userId, agentId);
+      return result;
     } catch (error) {
       logger.error(`Failed to upsert user config: ${userId}/${agentId}`, error);
       throw error;
@@ -52,6 +55,7 @@ class UserAgentModelConfigService {
       await prisma.user_agent_model_configs.delete({
         where: { userId_agentId: { userId, agentId } }
       });
+      getAPIGateway().invalidateCache(userId, agentId);
     } catch (error) {
       logger.error(`Failed to delete user config: ${userId}/${agentId}`, error);
       throw error;
@@ -64,6 +68,7 @@ class UserAgentModelConfigService {
         where: { userId_agentId: { userId, agentId } },
         data: { enabled: false, updatedAt: new Date() }
       });
+      getAPIGateway().invalidateCache(userId, agentId);
     } catch (error) {
       logger.error(`Failed to disable user config: ${userId}/${agentId}`, error);
       throw error;
@@ -72,7 +77,6 @@ class UserAgentModelConfigService {
 
   async clearCache(userId: string): Promise<void> {
     try {
-      const { getAPIGateway } = require('../gateway/api-gateway');
       getAPIGateway().invalidateCache(userId);
     } catch (error) {
       logger.error(`Failed to clear cache for user: ${userId}`, error);

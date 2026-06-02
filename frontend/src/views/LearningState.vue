@@ -23,6 +23,13 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <MobileSiteMenu
+            :user-name="userStore.user?.name || '同学'"
+            :user-initial="userInitial"
+            :nav-items="headerNavItems"
+            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            @logout="handleLogout"
+          />
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -122,34 +129,7 @@
                 </div>
               </article>
 
-              <aside class="state-side-panels">
-                <article v-if="learnerCenter" class="glass-card state-insight-card state-insight-card--primary">
-                  <div class="state-panel__head">
-                    <span class="section-kicker">学习档案</span>
-                  </div>
-                  <div class="state-definition-list">
-                    <div class="state-definition-item">
-                      <strong>系统当前如何理解你的学习方式</strong>
-                      <p>{{ learnerNarrativeSummary }}</p>
-                    </div>
-                    <div class="state-definition-item">
-                      <strong>可复用基础</strong>
-                      <p>{{ reusableFoundationsText }}</p>
-                    </div>
-                    <div class="state-definition-item">
-                      <strong>不稳定前置</strong>
-                      <p>{{ blockedFoundationsText }}</p>
-                    </div>
-                  </div>
-                  <div class="state-hero__actions-strip state-hero__actions-strip--stacked">
-                    <router-link :to="'/user/account'" class="state-hero__action-card">
-                      <strong>查看账户设置</strong>
-                      <p>账户资料和学习状态入口已经集中整理。</p>
-                      <span>前往设置</span>
-                    </router-link>
-                  </div>
-                </article>
-
+              <section class="state-main-followups">
                 <article v-if="learnerReplanSignal?.shouldSuggest" class="glass-card state-insight-card state-insight-card--warning">
                   <div class="state-panel__head">
                     <span class="section-kicker">路径调整建议</span>
@@ -185,6 +165,35 @@
                   </div>
                   <div v-if="warnings.length > 3" class="state-insight-card__summary">其余 {{ warnings.length - 3 }} 条预警可在后续版本展开查看。</div>
                 </article>
+              </section>
+
+              <aside class="state-side-panels">
+                <article v-if="learnerCenter" class="glass-card state-insight-card state-insight-card--primary">
+                  <div class="state-panel__head">
+                    <span class="section-kicker">学习档案</span>
+                  </div>
+                  <div class="state-definition-list">
+                    <div class="state-definition-item">
+                      <strong>系统当前如何理解你的学习方式</strong>
+                      <p>{{ learnerNarrativeSummary }}</p>
+                    </div>
+                    <div class="state-definition-item">
+                      <strong>可复用基础</strong>
+                      <p>{{ reusableFoundationsText }}</p>
+                    </div>
+                    <div class="state-definition-item">
+                      <strong>不稳定前置</strong>
+                      <p>{{ blockedFoundationsText }}</p>
+                    </div>
+                  </div>
+                  <div class="state-hero__actions-strip state-hero__actions-strip--stacked">
+                    <router-link :to="'/user/account'" class="state-hero__action-card">
+                      <strong>查看账户设置</strong>
+                      <p>账户资料和学习状态入口已经集中整理。</p>
+                      <span>前往设置</span>
+                    </router-link>
+                  </div>
+                </article>
 
                 <article class="glass-card state-insight-card">
                   <div class="state-panel__head">
@@ -204,6 +213,155 @@
         </div>
       </div>
     </main>
+
+    <button v-if="isTestMode" type="button" class="state-debug-float-btn" @click="stateDebugDrawerVisible = true">
+      <strong>状态调试</strong>
+      <span>{{ stateDebugQuickChipText }}</span>
+    </button>
+
+    <el-drawer
+      v-if="isTestMode"
+      v-model="stateDebugDrawerVisible"
+      title="学习状态详细调试"
+      size="min(52vw, 820px)"
+      destroy-on-close
+      class="state-debug-drawer"
+    >
+      <div class="state-debug-drawer__body">
+        <div class="state-debug-panel__actions state-debug-panel__actions--top">
+          <button class="btn btn-ghost" :disabled="loading" @click="refreshStatePage({ forceTrends: true })">刷新调试数据</button>
+        </div>
+
+        <div class="state-debug-toolbar">
+          <span v-for="item in stateDebugQuickChips" :key="item.label" class="state-debug-quick-chip">
+            <strong>{{ item.label }}</strong>
+            <em>{{ item.value }}</em>
+          </span>
+        </div>
+
+        <details class="state-debug-collapse" open>
+          <summary>
+            <div class="state-debug-collapse__head">
+              <div>
+                <span class="section-kicker">自然天模拟</span>
+                <strong>观察衰减是否影响 learner 策略</strong>
+              </div>
+              <span class="state-debug-collapse__badge">{{ simulatedAdvanceDays }} 天</span>
+            </div>
+          </summary>
+
+          <div class="state-debug-day-chips">
+            <button
+              v-for="days in advanceDayOptions"
+              :key="days"
+              type="button"
+              class="trend-btn"
+              :class="{ active: simulatedAdvanceDays === days }"
+              @click="simulatedAdvanceDays = days"
+            >
+              {{ days }}天
+            </button>
+          </div>
+
+          <div class="state-debug-panel__actions">
+            <button class="btn btn-primary" :disabled="advancePreviewLoading" @click="runAdvancePreview">
+              {{ advancePreviewLoading ? '模拟中...' : `模拟推进 ${simulatedAdvanceDays} 天` }}
+            </button>
+            <button class="btn btn-ghost" :disabled="!advancePreviewResult" @click="clearAdvancePreview">清空预览</button>
+          </div>
+
+          <div v-if="advancePreviewResult" class="state-debug-preview">
+            <div class="state-debug-preview__meta">
+              <span>推进天数：{{ advancePreviewResult.dayDiff }} 天</span>
+              <span>模拟时间：{{ formatPreviewDateTime(advancePreviewResult.simulatedAsOf) }}</span>
+              <span v-if="advancePreviewResult.latestMetricAt">最新真实指标：{{ formatPreviewDateTime(advancePreviewResult.latestMetricAt) }}</span>
+            </div>
+
+            <div v-if="!advancePreviewResult.hasMetricRecord || !advancePreviewResult.after" class="state-debug-empty">
+              当前没有学习指标记录，暂无法模拟自然天衰减。
+            </div>
+
+            <template v-else>
+              <div class="state-debug-compare-grid">
+                <article v-for="card in advanceMetricCompareCards" :key="card.label" class="state-debug-compare-card">
+                  <span>{{ card.label }}</span>
+                  <strong>{{ card.after }}</strong>
+                  <p>推进前 {{ card.before }} · {{ card.delta }}</p>
+                </article>
+              </div>
+
+              <div class="state-debug-sections">
+                <article class="state-debug-section">
+                  <strong>学习控制状态变化</strong>
+                  <div class="state-debug-kv-grid">
+                    <div v-for="item in advanceControlStateDiffs" :key="item.label" class="state-debug-kv-item">
+                      <span>{{ item.label }}</span>
+                      <p>{{ item.before }} -> {{ item.after }}</p>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="state-debug-section">
+                  <strong>路径调整信号变化</strong>
+                  <div class="state-debug-kv-grid">
+                    <div v-for="item in advanceSignalDiffItems" :key="item.label" class="state-debug-kv-item">
+                      <span>{{ item.label }}</span>
+                      <p>{{ item.before }} -> {{ item.after }}</p>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </template>
+          </div>
+        </details>
+
+        <details class="state-debug-collapse">
+          <summary>
+            <div class="state-debug-collapse__head">
+              <div>
+                <span class="section-kicker">JSON 输出</span>
+                <strong>AI / 规则 / learner snapshot / 模拟预览</strong>
+              </div>
+              <span class="state-debug-collapse__badge">{{ advancePreviewResult ? '4 组' : '3 组' }}</span>
+            </div>
+          </summary>
+
+          <div class="state-debug-json-grid">
+            <details class="state-debug-json-card">
+              <summary>
+                <span>AI Guidance JSON</span>
+                <em>skill: adaptive-guidance-copy</em>
+              </summary>
+              <pre>{{ stateDebugAdaptiveCopyJson }}</pre>
+            </details>
+
+            <details class="state-debug-json-card">
+              <summary>
+                <span>Rule Summary JSON</span>
+                <em>service: learnerStateSummary</em>
+              </summary>
+              <pre>{{ stateDebugAdaptiveSummaryJson }}</pre>
+            </details>
+
+            <details class="state-debug-json-card">
+              <summary>
+                <span>Learner Snapshot JSON</span>
+                <em>route: learner-center</em>
+              </summary>
+              <pre>{{ stateDebugLearnerCenterJson }}</pre>
+            </details>
+
+            <details class="state-debug-json-card" v-if="advancePreviewResult">
+              <summary>
+                <span>Advance Preview JSON</span>
+                <em>admin devtools</em>
+              </summary>
+              <pre>{{ stateDebugAdvancePreviewJson }}</pre>
+            </details>
+          </div>
+        </details>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -216,9 +374,12 @@ import request from '../utils/request';
 import { metricsAPI } from '../api/metrics';
 import { learningAPI } from '../api/learning';
 import { userAPI, type LearnerCenterSnapshot } from '../api/user';
+import { adminDevtoolsApi, type AdvanceTimePreviewResponse } from '../api/adminApi';
 import { getReplanActionText, getReplanPriorityText } from '../utils/replanSignal';
 import { Chart } from 'chart.js/auto';
 import { useUserStore } from '../stores/user';
+import { isProjectionMode } from '../utils/projection';
+import MobileSiteMenu from '../components/MobileSiteMenu.vue';
 import {
   User,
   Switch,
@@ -262,6 +423,13 @@ const achievementsPath = computed(() => {
 });
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
+const headerNavItems = computed(() => [
+  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
+  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
+  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
+  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
+  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+]);
 const scrolled = ref(false);
 const loading = ref(true);
 const state = ref<StateMetrics | null>(null);
@@ -279,8 +447,13 @@ const adaptiveGuidance = ref<any | null>(null);
 const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
 const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
 const learnerCenter = ref<LearnerCenterSnapshot | null>(null);
+const stateDebugDrawerVisible = ref(false);
+const simulatedAdvanceDays = ref(7);
+const advancePreviewLoading = ref(false);
+const advancePreviewResult = ref<AdvanceTimePreviewResponse | null>(null);
 let chartInstance: Chart | null = null;
 const trendCache = new Map<number, TrendData[]>();
+const advanceDayOptions = [1, 3, 7, 14, 30];
 
 const statePageTitle = computed(() => adaptiveCopy.value?.headline || '看见最近的学习状态，再决定下一步怎么学。');
 const statePageSubtitle = computed(() => adaptiveCopy.value?.subtitle || '这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。');
@@ -342,6 +515,79 @@ const reusableFoundationsText = computed(() => {
 const blockedFoundationsText = computed(() => {
   const values = learnerCenter.value?.knowledgeMemory?.globalBackground?.blockedFoundations || [];
   return values.length > 0 ? values.slice(0, 6).join('、') : '暂无高风险前置。';
+});
+
+const stateDebugQuickChips = computed(() => {
+  const metrics = learnerCenter.value?.dynamicState?.metrics || state.value;
+  const control = learnerCenter.value?.learningControlState;
+  const signal = learnerCenter.value?.replanSignal;
+  return [
+    metrics ? { label: 'LSB', value: Number(metrics.lsb || 0).toFixed(2) } : null,
+    control ? { label: 'paceMode', value: control.paceMode } : null,
+    signal ? { label: 'replan', value: signal.recommendation || 'keep' } : null,
+    learnerCenter.value?.freshness?.basedOn?.latestMetricAt ? { label: '最新指标', value: formatPreviewDateTime(learnerCenter.value.freshness.basedOn.latestMetricAt) } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+});
+
+const stateDebugQuickChipText = computed(() => {
+  return stateDebugQuickChips.value.map((item) => `${item.label} ${item.value}`).join(' · ') || '打开状态调试';
+});
+
+const stateDebugAdaptiveCopyJson = computed(() => JSON.stringify(adaptiveCopy.value || null, null, 2));
+const stateDebugAdaptiveSummaryJson = computed(() => JSON.stringify(adaptiveSummary.value || null, null, 2));
+const stateDebugLearnerCenterJson = computed(() => JSON.stringify(learnerCenter.value || null, null, 2));
+const stateDebugAdvancePreviewJson = computed(() => JSON.stringify(advancePreviewResult.value || null, null, 2));
+
+const advanceMetricCompareCards = computed(() => {
+  const before = advancePreviewResult.value?.before?.dynamicState?.metrics;
+  const after = advancePreviewResult.value?.after?.dynamicState?.metrics;
+  if (!before || !after) return [];
+
+  const buildCard = (label: string, key: 'lss' | 'ktl' | 'lf' | 'lsb') => {
+    const beforeValue = Number(before[key] || 0);
+    const afterValue = Number(after[key] || 0);
+    const delta = afterValue - beforeValue;
+    const deltaPrefix = delta > 0 ? '+' : '';
+    return {
+      label,
+      before: beforeValue.toFixed(2),
+      after: afterValue.toFixed(2),
+      delta: `${deltaPrefix}${delta.toFixed(2)}`,
+    };
+  };
+
+  return [
+    buildCard('LSS 学习压力', 'lss'),
+    buildCard('KTL 知识掌握', 'ktl'),
+    buildCard('LF 学习疲劳', 'lf'),
+    buildCard('LSB 状态平衡', 'lsb'),
+  ];
+});
+
+const advanceControlStateDiffs = computed(() => {
+  const before = advancePreviewResult.value?.before?.learningControlState;
+  const after = advancePreviewResult.value?.after?.learningControlState;
+  if (!before || !after) return [];
+  return [
+    { label: 'paceMode', before: before.paceMode, after: after.paceMode },
+    { label: 'conceptLoad', before: before.conceptLoad, after: after.conceptLoad },
+    { label: 'reviewPriority', before: before.reviewPriority, after: after.reviewPriority },
+    { label: 'challengeLevelCap', before: before.challengeLevelCap, after: after.challengeLevelCap },
+    { label: 'checkpointNeed', before: before.checkpointNeed, after: after.checkpointNeed },
+  ];
+});
+
+const advanceSignalDiffItems = computed(() => {
+  const before = advancePreviewResult.value?.before?.replanSignal;
+  const after = advancePreviewResult.value?.after?.replanSignal;
+  if (!before || !after) return [];
+  return [
+    { label: 'shouldSuggest', before: before.shouldSuggest ? 'true' : 'false', after: after.shouldSuggest ? 'true' : 'false' },
+    { label: 'priority', before: before.priority || 'none', after: after.priority || 'none' },
+    { label: 'recommendation', before: before.recommendation || 'keep', after: after.recommendation || 'keep' },
+    { label: 'scope', before: before.scope || 'none', after: after.scope || 'none' },
+    { label: 'reasonCodes', before: Array.isArray(before.reasonCodes) && before.reasonCodes.length ? before.reasonCodes.join('、') : '无', after: Array.isArray(after.reasonCodes) && after.reasonCodes.length ? after.reasonCodes.join('、') : '无' },
+  ];
 });
 
 const stateMetricCards = computed(() => {
@@ -664,6 +910,31 @@ const loadLearnerCenter = async () => {
   }
 };
 
+const runAdvancePreview = async () => {
+  advancePreviewLoading.value = true;
+  try {
+    advancePreviewResult.value = await adminDevtoolsApi.advanceTimePreview({
+      days: simulatedAdvanceDays.value,
+      pathId: learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId,
+    });
+  } catch (error: any) {
+    toast.error(error?.message || '模拟自然天推进失败');
+  } finally {
+    advancePreviewLoading.value = false;
+  }
+};
+
+const clearAdvancePreview = () => {
+  advancePreviewResult.value = null;
+};
+
+const formatPreviewDateTime = (value?: string) => {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', { hour12: false });
+};
+
 // get level types
 const getLSBValueClass = (lsb: number) => {
   if (lsb < 0) return 'value-danger';
@@ -699,6 +970,14 @@ watch(trendDays, (newDays) => {
 
 onMounted(() => {
   const init = async () => {
+    if (isProjectionMode()) {
+      try {
+        await userStore.fetchProfile();
+      } catch (error) {
+        console.error('获取投影视角用户信息失败:', error);
+      }
+    }
+
     await refreshStatePage();
 
     // 预警放到首屏之后，降低图表首屏阻塞
@@ -1375,6 +1654,11 @@ onUnmounted(() => {
   align-items: start;
 }
 
+.state-main-followups {
+  display: grid;
+  gap: 18px;
+}
+
 .state-trend-panel,
 .state-side-panels,
 .state-insight-card {
@@ -1391,10 +1675,139 @@ onUnmounted(() => {
   margin-top: 20px;
 }
 
+.state-debug-float-btn {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 1100;
+  display: grid;
+  gap: 4px;
+  min-width: 148px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
+  color: #fff;
+  text-align: left;
+}
+
+.state-debug-float-btn strong {
+  font-size: 14px;
+}
+
+.state-debug-float-btn span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.state-debug-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+}
+
+.state-debug-drawer :deep(.el-drawer__body) {
+  padding-top: 0;
+}
+
+.state-debug-drawer__body {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.state-debug-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.state-debug-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.state-debug-quick-chip strong {
+  font-size: 12px;
+  color: #172033;
+}
+
+.state-debug-quick-chip em {
+  font-style: normal;
+  font-size: 12px;
+  color: #66758d;
+  font-weight: 700;
+}
+
+.state-debug-collapse {
+  border-radius: 20px;
+  background: rgba(243, 246, 251, 0.72);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  padding: 14px 16px;
+}
+
+.state-debug-collapse + .state-debug-collapse {
+  margin-top: 14px;
+}
+
+.state-debug-collapse summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.state-debug-collapse summary::-webkit-details-marker {
+  display: none;
+}
+
+.state-debug-collapse__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.state-debug-collapse__head strong {
+  display: block;
+  color: #172033;
+  line-height: 1.4;
+}
+
+.state-debug-collapse__badge {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.state-debug-day-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .state-debug-panel__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 16px;
+}
+
+.state-debug-panel__actions--top {
+  margin-top: 0;
 }
 
 .state-debug-preview {
@@ -1451,6 +1864,50 @@ onUnmounted(() => {
 .state-debug-sections {
   display: grid;
   gap: 14px;
+}
+
+.state-debug-json-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.state-debug-json-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+}
+
+.state-debug-json-card summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.state-debug-json-card summary em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  color: #66758d;
+}
+
+.state-debug-json-card pre {
+  margin: 12px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(243, 246, 251, 0.92);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .state-debug-section {
@@ -2265,6 +2722,9 @@ section {
 @media (max-width: 768px) {
   .header-container {
     padding: 1rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .header-nav {
@@ -2297,7 +2757,18 @@ section {
     grid-template-columns: 1fr;
   }
 
+  .state-main-followups {
+    order: 2;
+  }
+
+  .state-debug-compare-grid,
+  .state-debug-kv-grid,
+  .state-debug-json-grid {
+    grid-template-columns: 1fr;
+  }
+
   .state-side-panels {
+    order: 3;
     position: static;
   }
 
@@ -2354,6 +2825,12 @@ section {
   .chart-container {
     height: 300px;
   }
+
+  .state-debug-float-btn {
+    right: 16px;
+    bottom: 16px;
+    min-width: 132px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2387,6 +2864,20 @@ section {
 
   .app-page-head__actions {
     width: 100%;
+  }
+
+  .header-right {
+    justify-content: flex-end;
+  }
+
+  .header-cta,
+  .user-chip {
+    display: none;
+  }
+
+  .user-chip {
+    min-width: auto;
+    padding-inline: 10px;
   }
 
   .app-page-head__actions > * {

@@ -10,9 +10,9 @@
       <span class="pill">Admin</span>
       <h2 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Connection /></el-icon>
-        编排器管理
+        编排配置中心
       </h2>
-      <p class="page-hero__subtitle">管理编排器的成员 Agent、执行流程与运行状态</p>
+      <p class="page-hero__subtitle">集中维护编排器的成员、流程、输入接入和数据契约。这里用于配置编排实现，不用于判断实时运行健康。</p>
     </div>
 
     <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
@@ -21,15 +21,15 @@
         <div class="value">{{ summary?.total }}</div>
       </el-card>
       <el-card class="summary-card summary-card--green" shadow="hover">
-        <div class="label">24h 活跃</div>
-        <div class="value">{{ summary?.active24h }}</div>
+        <div class="label">可编辑成员</div>
+        <div class="value">{{ summary?.enabledCount }}</div>
       </el-card>
       <el-card class="summary-card summary-card--orange" shadow="hover">
-        <div class="label">平均编排耗时</div>
-        <div class="value">{{ formatAvgDuration(summary?.avgOrchestrationTime) }}</div>
+        <div class="label">输入接入配置</div>
+        <div class="value">{{ summary?.configurableCount }}</div>
       </el-card>
       <el-card class="summary-card summary-card--purple" shadow="hover">
-        <div class="label">成员 Agent</div>
+        <div class="label">可挂接成员</div>
         <div class="value">{{ summary?.totalMemberAgents }}</div>
       </el-card>
     </div>
@@ -63,11 +63,13 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" min-width="140">
+        <el-table-column label="配置状态" min-width="160">
           <template #default="{ row }">
             <div class="status-cell">
               <el-tag :type="getLifecycleTagType(row.lifecycleStatus)" size="small">{{ row.lifecycleStatus }}</el-tag>
-              <el-tag :type="getHealthTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              <el-tag size="small" effect="plain" :type="row.runtimeEnabled ? 'success' : 'info'">
+                {{ row.runtimeEnabled ? '已启用' : '未启用' }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
@@ -81,15 +83,15 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="运行指标" min-width="200">
+        <el-table-column label="配置概览" min-width="220">
           <template #default="{ row }">
             <div class="metrics-cell">
               <div class="metrics-cell__row">
-                <span>{{ row.callCount }} 编排</span>
-                <span :class="rateClass(row.successRate)">{{ row.successRate }}%</span>
+                <span>{{ getMemberCount(row.agentId) }} 个成员</span>
+                <span>{{ row.version ? `v${row.version}` : '未标注版本' }}</span>
               </div>
               <div class="metrics-cell__row metrics-cell__row--sub">
-                <span>{{ formatDuration(row.avgDuration) }} 平均</span>
+                <span>{{ row.type }} · {{ row.kind || 'orchestrator' }}</span>
                 <span>{{ formatTime(row.lastActivity) }}</span>
               </div>
             </div>
@@ -143,7 +145,7 @@
 
     <el-drawer
       v-model="designDrawerVisible"
-      :title="`编排器详情 · ${currentDesign?.agentId || ''}`"
+      :title="`编排配置 · ${currentDesign?.basic.name || currentDesign?.agentId || ''}`"
       size="min(60%, 800px)"
       destroy-on-close
     >
@@ -188,7 +190,7 @@
           </div>
 
           <el-tabs class="design-tabs">
-            <el-tab-pane label="成员 Agent 配置">
+            <el-tab-pane label="成员配置">
               <div class="member-config-panel">
                 <div class="member-config-header">
                   <h4>成员 Agent 列表</h4>
@@ -239,10 +241,28 @@
                 </div>
               </div>
             </el-tab-pane>
-            <el-tab-pane label="编排流程">
+            <el-tab-pane label="流程配置">
               <div class="flow-panel">
                 <div class="flow-description">
                   <p>{{ currentDesign.runtime.orchestratorFlow?.description || '暂无编排流程描述' }}</p>
+                </div>
+                <div v-if="currentDesign?.agentId === 'simulation-orchestrator'" class="flow-description">
+                  <p>
+                    这条编排链不是单个 Agent 的增强版，而是围绕虚拟学习者生命周期组织的总视图：
+                    先有稳定 persona，再进入某个 story，随后以 session 为单位推进 Goal、Path 接受判断与 Learn，
+                    最终把运行态投影成 admin 管理视图和前台平台视图。
+                  </p>
+                </div>
+                <div v-if="currentDesign?.agentId === 'simulation-orchestrator'" class="chip-section">
+                  <div class="chip-row">
+                    <span class="chip-label">lifecycle</span>
+                    <el-tag size="small" effect="plain">persona</el-tag>
+                    <el-tag size="small" effect="plain">story</el-tag>
+                    <el-tag size="small" effect="plain">goal</el-tag>
+                    <el-tag size="small" effect="plain">path acceptance</el-tag>
+                    <el-tag size="small" effect="plain">learn</el-tag>
+                    <el-tag size="small" effect="plain">runtime projection</el-tag>
+                  </div>
                 </div>
                 <div class="flow-steps" v-if="currentDesign.runtime.orchestratorFlow?.steps?.length">
                   <div class="flow-step" v-for="(step, index) in currentDesign.runtime.orchestratorFlow.steps" :key="index">
@@ -259,7 +279,7 @@
                 <el-empty v-else description="暂无编排流程配置" />
               </div>
             </el-tab-pane>
-            <el-tab-pane v-if="currentDesign?.agentId === 'path-orchestrator'" label="输入接入配置">
+            <el-tab-pane v-if="currentDesign?.agentId === 'path-orchestrator'" label="输入接入">
               <div class="flow-panel">
                 <div class="flow-description">
                   <p>配置 Path orchestrator 从 Goal Final Payload 接入哪些字段到 normalized input。当前版本会将可见对话消息全部透传为运行上下文。</p>
@@ -413,7 +433,7 @@
                 <el-empty v-else description="暂无数据契约信息" />
               </div>
             </el-tab-pane>
-            <el-tab-pane label="Recent Samples">
+            <el-tab-pane label="最近样本">
               <div class="sample-block">
                 <h4>orchestrator_call_logs</h4>
                 <el-collapse>
@@ -566,7 +586,7 @@ const getMemberCount = (orchestratorId: string) => {
     'requirement-orchestrator': 2,
     'path-orchestrator': 3,
     'goal-conversation-orchestrator': 2,
-    'simulation-orchestrator': 1
+    'simulation-orchestrator': 7
   };
   return countMap[orchestratorId] || 0;
 };
@@ -622,7 +642,9 @@ const openMemberDrawer = async (orchestrator: AdminRegistryAgent) => {
         { agentId: 'validation-agent', name: '路径验证 Agent', role: 'validator', enabled: false, callCount: 0 }
       ],
       'simulation-orchestrator': [
-        { agentId: 'virtual-learner-simulation-agent', name: '虚拟学习者模拟 Agent', role: 'worker', enabled: true, callCount: 0 }
+        { agentId: 'virtual-learner-goal-dialogue-simulator', name: '虚拟学习者 Goal Skill', role: 'worker', enabled: true, callCount: 0 },
+        { agentId: 'virtual-learner-path-evaluator', name: '虚拟学习者 Path Skill', role: 'worker', enabled: true, callCount: 0 },
+        { agentId: 'virtual-learner-learn-turn-simulator', name: '虚拟学习者 Learn Skill', role: 'worker', enabled: true, callCount: 0 }
       ]
     };
     memberAgents.value = mockMembers[orchestrator.agentId] || [];
@@ -883,11 +905,36 @@ onMounted(loadRegistry);
 
 .page-hero { position: relative; z-index: 1; margin-bottom: 1.5rem; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 8px; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
 .admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+
+.orchestrator-btn,
+.table-link-btn {
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.orchestrator-btn--primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #3478f6, #3f86ff);
+}
+
+.table-link-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  color: var(--color-primary-dark, #1f57cc);
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  background: rgba(244, 249, 255, 0.96);
+}
+
+.table-link-btn--sm {
+  min-height: 28px;
+  padding: 0 10px;
+}
 .summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }
 .summary-card .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
 .summary-card .value { font-size: 1.75rem; font-weight: 800; margin-top: 0.25rem; }

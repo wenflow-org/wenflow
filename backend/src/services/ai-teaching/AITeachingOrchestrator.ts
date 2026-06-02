@@ -78,7 +78,7 @@ function parseSessionArtifacts(teachingState: Record<string, any> | null | undef
   return teachingState?.sessionArtifacts || {};
 }
 
-type LearnStage = 'opening' | 'teaching' | 'intervention' | 'checkpoint' | 'wrapup';
+type LearnStage = 'opening' | 'teaching' | 'intervention' | 'checkpoint' | 'ready_to_close' | 'wrapup';
 
 function mapOpeningModeToStage(openingMode: string | null | undefined): LearnStage {
   return openingMode ? 'opening' : 'opening';
@@ -95,12 +95,12 @@ function getLatestUserMessage(messages: TeachingSessionMessage[]): string {
 function buildPathBackgroundContext(context: TeachingScenarioContext) {
   return {
     pathPosition: {
-      pathTitle: context.pathContext.pathTitle || context.teachingProjection.pathContext.pathTitle,
-      pathSummary: context.pathContext.pathSummary || context.teachingProjection.pathContext.pathSummary || null,
-      currentMilestoneTitle: context.teachingProjection.pathContext.currentMilestoneTitle,
-      currentStageNumber: context.teachingProjection.pathContext.currentStageNumber,
-      currentTaskOrder: context.teachingProjection.pathContext.currentTaskOrder,
-      totalTasksInMilestone: context.teachingProjection.pathContext.totalTasksInMilestone,
+      pathTitle: context.pathProgress.pathTitle,
+      pathSummary: context.pathProgress.pathSummary,
+      currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+      currentStageNumber: context.pathProgress.currentStageNumber,
+      currentTaskOrder: context.pathProgress.currentTaskOrder,
+      totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
     },
     taskIntent: {
       subject: context.subject,
@@ -136,11 +136,38 @@ function buildLearnerStateContext(
     currentConfusionPoints: latestAnalysis?.confusionPoints || previous.currentConfusionPoints || [],
     emotionalState: latestAnalysis?.emotionalState || previous.emotionalState || null,
     engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
-    recentTrend: context.teachingProjection.liveState.recentTrend,
-    recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
-    confidenceLevel: context.teachingProjection.stableProfile.confidenceLevel,
-    preferredStyle: context.teachingProjection.stableProfile.preferredStyle,
     struggleDetected: previous.struggleDetected === true,
+  };
+}
+
+function deriveTeachingRuntimeSignals(context: TeachingScenarioContext) {
+  const lss = Number(context.learningState?.lss ?? 0);
+  const ktl = Number(context.learningState?.ktl ?? 0);
+  const lf = Number(context.learningState?.lf ?? 0);
+  const lsb = Number(context.learningState?.lsb ?? 0);
+
+  const recommendedPacing: 'slow' | 'moderate' | 'fast' = lf >= 6 || lss >= 6
+    ? 'slow'
+    : ktl >= 5 && lf <= 3 && lss <= 4
+      ? 'fast'
+      : 'moderate';
+
+  const recentTrend: 'improving' | 'stable' | 'declining' = lf >= 6 || lsb < 0
+    ? 'declining'
+    : ktl >= 6 && lf <= 3 && lss <= 4
+      ? 'improving'
+      : 'stable';
+
+  const confidenceLevel: 'confident' | 'moderate' | 'anxious' = lsb < 0 || lf >= 6
+    ? 'anxious'
+    : ktl >= 6 && lf <= 3 && lss <= 4
+      ? 'confident'
+      : 'moderate';
+
+  return {
+    confidenceLevel,
+    recentTrend,
+    recommendedPacing,
   };
 }
 
@@ -151,22 +178,36 @@ function buildTeachingControlContext(
   sessionArtifacts: Record<string, any>,
 ) {
   const canTriggerPeer = stage === 'intervention' || learnerStateContext.struggleDetected === true;
+  const runtimeSignals = deriveTeachingRuntimeSignals(context);
+  const recommendedApproach = runtimeSignals.confidenceLevel === 'anxious'
+    ? '先给低压切入口，确认学生能跟上后再继续推进'
+    : context.taskType === 'project' || context.taskType === 'practice'
+      ? '以小步执行和即时反馈推进'
+      : context.taskProfile.knowledgeType === 'procedural'
+        ? '先示范步骤，再引导学生完成关键一步'
+        : context.taskProfile.knowledgeType === 'conceptual'
+          ? '先澄清关系，再用贴题例子验证'
+          : context.taskProfile.knowledgeType === 'metacognitive'
+            ? '先让学生说出判断与策略，再帮助其澄清和校正'
+            : '先简洁解释，再做一次小检核';
   return {
     priority: stage === 'opening'
       ? '定位首个焦点知识点'
       : stage === 'intervention'
         ? '先脱离卡点并恢复推进'
+        : stage === 'ready_to_close'
+          ? '确认本任务已达到收束条件'
         : stage === 'checkpoint'
           ? '验证当前知识点是否真正建立'
           : stage === 'wrapup'
             ? '收束当前课堂并准备评估'
             : '围绕当前焦点知识点继续推进',
-    recommendedApproach: context.teachingProjection.teachingHints.recommendedApproach,
+    recommendedApproach,
     targetDepth: context.teachingStrategyGuidance.targetDepth,
     allowPrerequisiteRecovery: true,
     allowPeerSupport: canTriggerPeer,
-    allowCheckpoint: stage === 'checkpoint' || stage === 'teaching',
-    nearWrapup: sessionArtifacts.endReason === 'completion-candidate' || stage === 'wrapup',
+    allowCheckpoint: stage === 'checkpoint' || stage === 'teaching' || stage === 'ready_to_close',
+    nearWrapup: sessionArtifacts.endReason === 'completion-candidate' || stage === 'ready_to_close' || stage === 'wrapup',
   };
 }
 
@@ -221,7 +262,7 @@ function determineNextStage(params: {
   const completionCandidate = teachingOutput.control?.isCompletionCandidate === true;
 
   if (completionCandidate) {
-    return { stage: 'checkpoint', reason: '检测到完成候选，先进入检核确认' };
+    return { stage: 'ready_to_close', reason: '检测到完成候选，当前任务已接近收束' };
   }
 
   if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2) {
@@ -236,7 +277,7 @@ function determineNextStage(params: {
     return { stage: 'teaching', reason: '卡点已缓解，回到授课推进' };
   }
 
-  if (currentStage === 'checkpoint' && understanding < 0.5) {
+  if ((currentStage === 'checkpoint' || currentStage === 'ready_to_close') && understanding < 0.5) {
     return { stage: 'teaching', reason: '检核信号不足，回到授课推进' };
   }
 
@@ -286,6 +327,8 @@ function buildClassroomContext(params: {
         ? '完成本节课切入点定位'
         : stage === 'intervention'
           ? '先处理当前卡点并恢复可推进状态'
+          : stage === 'ready_to_close'
+            ? '确认本任务已达到结束课堂条件'
           : stage === 'checkpoint'
             ? '验证当前焦点知识点是否真正建立'
             : stage === 'wrapup'
@@ -316,6 +359,8 @@ function buildClassroomContext(params: {
         ? '继续定位首个焦点知识点'
         : stage === 'intervention'
           ? '先降阶讲解或触发伴学'
+          : stage === 'ready_to_close'
+            ? '结束课堂并进入评估'
           : stage === 'checkpoint'
             ? '组织验证性追问或小检核'
             : stage === 'wrapup'
@@ -510,12 +555,12 @@ function buildTeachingTurnInput(
       currentTaskContext: context.currentTaskContext,
       cognitiveFrame: context.cognitiveFrame,
       teachingStrategyGuidance: context.teachingStrategyGuidance,
-      pathTitle: context.teachingProjection.pathContext.pathTitle,
-      pathSummary: context.teachingProjection.pathContext.pathSummary,
-      currentMilestoneTitle: context.teachingProjection.pathContext.currentMilestoneTitle,
-      currentStageNumber: context.teachingProjection.pathContext.currentStageNumber,
-      currentTaskOrder: context.teachingProjection.pathContext.currentTaskOrder,
-      totalTasksInMilestone: context.teachingProjection.pathContext.totalTasksInMilestone,
+      pathTitle: context.pathProgress.pathTitle,
+      pathSummary: context.pathProgress.pathSummary,
+      currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+      currentStageNumber: context.pathProgress.currentStageNumber,
+      currentTaskOrder: context.pathProgress.currentTaskOrder,
+      totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
       taskKnowledgeScope: context.taskKnowledgeScope,
       pathBackgroundContext: buildPathBackgroundContext(context),
       contextCompression: compression.compressed ? {
@@ -524,12 +569,6 @@ function buildTeachingTurnInput(
         triggerTokens: compression.triggerTokens,
         recap: compression.recap,
       } : undefined,
-    },
-    learner: {
-      profile: context.userProfile,
-      currentState: context.learningState,
-      projection: context.teachingProjection,
-      learnerStateContext,
     },
     classroomContext,
     classroomEventContext,
@@ -776,12 +815,13 @@ export class AITeachingOrchestrator {
   private async generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
     const gateway = getAPIGateway();
     const caller: CallerInfo = { agentId: AI_TEACHING_AGENT_ID };
+    const runtimeSignals = deriveTeachingRuntimeSignals(context);
     const openingMode: TeachingOpening['mode'] = context.taskType === 'project'
       || context.taskType === 'practice'
-      || context.teachingProjection.stableProfile.confidenceLevel === 'anxious'
+      || runtimeSignals.confidenceLevel === 'anxious'
       ? 'example-first'
-      : context.teachingProjection.liveState.recentTrend === 'improving'
-        && context.teachingProjection.liveState.recommendedPacing !== 'slow'
+      : runtimeSignals.recentTrend === 'improving'
+        && runtimeSignals.recommendedPacing !== 'slow'
         ? 'predict'
         : 'self-assess';
     let response: any = null;
@@ -817,15 +857,12 @@ export class AITeachingOrchestrator {
             taskTitle: context.taskTitle,
             taskDescription: context.taskDescription,
             taskType: context.taskType,
-            pathSummary: context.pathContext.pathSummary,
-            currentMilestoneTitle: context.teachingProjection.pathContext.currentMilestoneTitle,
+            pathSummary: context.pathProgress.pathSummary,
+            currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
             learner: {
-              preferredStyle: context.teachingProjection.stableProfile.preferredStyle,
-              confidenceLevel: context.teachingProjection.stableProfile.confidenceLevel,
-              recentTrend: context.teachingProjection.liveState.recentTrend,
-              recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
-              fragile: context.teachingProjection.relevantKnowledge.fragile.slice(0, 3),
-              struggling: context.teachingProjection.relevantKnowledge.struggling.slice(0, 3),
+              confidenceLevel: runtimeSignals.confidenceLevel,
+              recentTrend: runtimeSignals.recentTrend,
+              recommendedPacing: runtimeSignals.recommendedPacing,
             },
             openingMode,
           })
@@ -1051,12 +1088,9 @@ export class AITeachingOrchestrator {
 
     const learnDebug = {
       input: {
-        normalizedLearnContext: context.normalizedLearnContext,
         pathBackgroundContext: buildPathBackgroundContext(context),
         classroomContext,
         learnerStateContext,
-        backgroundKnowledge: context.backgroundKnowledge,
-        learningControlState: context.learningControlState,
         classroomEventContext: {
           recentEvents: classroomEvents.slice(-5),
         },
@@ -1152,7 +1186,7 @@ export class AITeachingOrchestrator {
       peerDebug,
     };
 
-    if (endIntent.isEndIntent) {
+    if (endIntent.isEndIntent || teachingOutput.control.isCompletionCandidate) {
       const ended = await this.endSession(sessionId);
       return {
         ...baseResult,
@@ -1217,8 +1251,7 @@ export class AITeachingOrchestrator {
       },
       learningState: context.learningState ? {
         ...context.learningState,
-        recentTrend: context.teachingProjection.liveState.recentTrend,
-        recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
+        ...deriveTeachingRuntimeSignals(context),
       } : undefined,
       knowledgeContext: {
         initialPoints: initialKnowledgeState,
@@ -1251,8 +1284,7 @@ export class AITeachingOrchestrator {
       },
       learningState: context.learningState ? {
         ...context.learningState,
-        recentTrend: context.teachingProjection.liveState.recentTrend,
-        recommendedPacing: context.teachingProjection.liveState.recommendedPacing,
+        ...deriveTeachingRuntimeSignals(context),
       } : undefined,
       knowledgeContext: {
         initialPoints: initialKnowledgeState,

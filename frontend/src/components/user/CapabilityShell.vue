@@ -25,6 +25,14 @@
 
         <div class="shell-header__actions">
           <ThemeSwitcher />
+          <MobileSiteMenu
+            title="能力中心"
+            :user-name="userStore.user?.name || '用户'"
+            :user-initial="userStore.user?.name?.charAt(0) || 'U'"
+            :nav-items="shellNavItems"
+            :show-account-link="false"
+            @logout="handleLogout"
+          />
           <el-dropdown>
             <div class="shell-user">
               <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
@@ -70,12 +78,17 @@ import { ArrowLeft } from '@element-plus/icons-vue';
 import { toast } from '../../utils/toast';
 import { useRouter } from 'vue-router';
 import ThemeSwitcher from '../ThemeSwitcher.vue';
+import MobileSiteMenu from '../MobileSiteMenu.vue';
 import { useUserStore } from '@/stores/user';
 
 defineProps<{ title: string; description?: string }>();
 
 const router = useRouter();
 const userStore = useUserStore();
+const shellNavItems = [
+  { label: '返回学习', to: '/learning-paths', matchPrefixes: ['/learning-paths', '/learning-path/', '/dashboard', '/goal-conversation', '/learning-state', '/achievements'] },
+  { label: '账户', to: '/user/account', matchPrefixes: ['/user', '/user/account'] }
+];
 
 async function handleLogout() {
   try {
@@ -100,7 +113,10 @@ async function handleLogout() {
   min-height: 100dvh;
   position: relative;
   overflow-x: hidden;
-  background: var(--bg-body);
+  background:
+    radial-gradient(circle at top right, rgba(67, 176, 216, 0.16), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(141, 107, 255, 0.12), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-body) 94%, #fff) 0%, var(--bg-body) 100%);
 }
 
 .animated-bg {
@@ -117,15 +133,15 @@ async function handleLogout() {
 .gradient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.4;
+  filter: blur(120px);
+  opacity: 0.5;
   animation: float 20s ease-in-out infinite;
 }
 
 .gradient-orb-1 {
   width: 800px;
   height: 800px;
-  background: var(--gradient-primary);
+  background: radial-gradient(circle, rgba(67, 176, 216, 0.42) 0%, rgba(52, 120, 246, 0.18) 42%, transparent 72%);
   top: -300px;
   right: -200px;
 }
@@ -133,7 +149,7 @@ async function handleLogout() {
 .gradient-orb-2 {
   width: 600px;
   height: 600px;
-  background: var(--gradient-achievement);
+  background: radial-gradient(circle, rgba(141, 107, 255, 0.3) 0%, rgba(67, 176, 216, 0.14) 46%, transparent 76%);
   bottom: -200px;
   left: -100px;
   animation-delay: -10s;
@@ -153,14 +169,16 @@ async function handleLogout() {
   top: 0;
   z-index: 1000;
   backdrop-filter: blur(20px);
-  background: rgba(255, 255, 255, 0.8);
-  border-bottom: 1px solid transparent;
+  background: color-mix(in srgb, var(--glass-bg-light) 92%, white);
+  border-bottom: 1px solid rgba(52, 120, 246, 0.08);
+  box-shadow: 0 10px 30px rgba(31, 87, 204, 0.06);
   transition: all 0.3s ease;
 }
 
 [data-theme="dark"] .shell-header {
-  background: rgba(26, 37, 47, 0.8);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--glass-bg-dark) 88%, #0f1820);
+  border-bottom-color: rgba(96, 165, 250, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
 }
 
 .shell-header__inner,
@@ -185,13 +203,23 @@ async function handleLogout() {
 }
 
 .shell-brand__icon {
-  font-size: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  font-size: 1.4rem;
+  background: linear-gradient(135deg, rgba(67, 176, 216, 0.18), rgba(52, 120, 246, 0.18));
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 .shell-brand__title {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .shell-brand__subtitle {
@@ -217,13 +245,28 @@ async function handleLogout() {
   text-decoration: none;
   font-size: 0.95rem;
   font-weight: 500;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.36);
   transition: all 0.2s ease;
 }
 
 .shell-nav__item:hover,
 .shell-nav__item.router-link-active {
-  color: var(--text-primary);
-  background: var(--bg-muted);
+  color: var(--color-primary-dark);
+  background: rgba(52, 120, 246, 0.1);
+  border-color: rgba(52, 120, 246, 0.12);
+  box-shadow: 0 8px 20px rgba(52, 120, 246, 0.1);
+}
+
+[data-theme="dark"] .shell-nav__item {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+[data-theme="dark"] .shell-nav__item:hover,
+[data-theme="dark"] .shell-nav__item.router-link-active {
+  color: #9fc3ff;
+  background: rgba(52, 120, 246, 0.18);
+  border-color: rgba(96, 165, 250, 0.16);
 }
 
 .shell-nav__item--back {
@@ -247,7 +290,8 @@ async function handleLogout() {
   border-radius: 50%;
   overflow: hidden;
   cursor: pointer;
-  border: 2px solid var(--border-light);
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.12);
 }
 
 .shell-user img {
@@ -262,7 +306,7 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, var(--color-secondary), var(--color-primary));
   color: white;
   font-weight: 600;
   font-size: 1rem;
@@ -282,16 +326,19 @@ async function handleLogout() {
   gap: 24px;
   padding: 2.25rem;
   margin-bottom: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(52, 120, 246, 0.1);
   border-radius: var(--radius-2xl);
-  background: rgba(255, 255, 255, 0.7);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(247, 250, 255, 0.72)),
+    rgba(255, 255, 255, 0.68);
   backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 22px 44px rgba(31, 87, 204, 0.09);
 }
 
 [data-theme="dark"] .shell-hero {
-  background: rgba(26, 37, 47, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(26, 37, 47, 0.86), rgba(15, 24, 32, 0.74));
+  border-color: rgba(96, 165, 250, 0.12);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.24);
 }
 
 .shell-hero__eyebrow {
@@ -300,13 +347,14 @@ async function handleLogout() {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-primary);
+  color: var(--color-secondary-dark);
 }
 
 .shell-hero__title {
   margin: 0 0 8px;
   font-size: clamp(1.8rem, 3vw, 2.4rem);
   color: var(--text-primary);
+  letter-spacing: -0.03em;
 }
 
 .shell-hero__description {
@@ -330,10 +378,16 @@ async function handleLogout() {
 }
 
 .shell-body :deep(.glass-card) {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 255, 0.7));
+  border: 1px solid rgba(52, 120, 246, 0.08);
   backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 18px 36px rgba(31, 87, 204, 0.08);
+}
+
+[data-theme="dark"] .shell-body :deep(.glass-card) {
+  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
+  border-color: rgba(96, 165, 250, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
 }
 
 @media (max-width: 1024px) {
@@ -376,8 +430,13 @@ async function handleLogout() {
   }
 
   .shell-header__actions {
-    justify-content: space-between;
-    width: 100%;
+    justify-content: flex-end;
+    width: auto;
+  }
+
+  .shell-nav,
+  .shell-user {
+    display: none;
   }
 
   .shell-hero {
@@ -404,9 +463,11 @@ async function handleLogout() {
   .shell-header__inner {
     gap: 12px;
     padding-inline: 14px;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .shell-nav {
+    grid-column: 1 / -1;
     justify-content: flex-start;
     flex-wrap: nowrap;
     overflow-x: auto;

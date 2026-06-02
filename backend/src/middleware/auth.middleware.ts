@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
+import { verifyProjectionToken } from '../utils/projection-token';
 
 interface JwtPayload {
   userId: string;
@@ -16,6 +17,15 @@ declare global {
         userId: string;
         email: string;
         isAdmin?: boolean;
+        projection?: {
+          active: boolean;
+          targetUserId: string;
+          sourceProfileId: string;
+          issuedByAdminId: string;
+          storyId?: string | null;
+          virtualSessionId?: string | null;
+          scope?: string;
+        };
       };
     }
   }
@@ -41,6 +51,29 @@ export const authMiddleware = async (
   next: NextFunction
 ) => {
   try {
+    const projectionToken = typeof req.headers['x-projection-token'] === 'string'
+      ? req.headers['x-projection-token']
+      : undefined;
+
+    if (projectionToken) {
+      const projection = verifyProjectionToken(projectionToken);
+      req.user = {
+        userId: projection.targetUserId,
+        email: `${projection.targetUserId}@projection.local`,
+        projection: {
+          active: true,
+          targetUserId: projection.targetUserId,
+          sourceProfileId: projection.sourceProfileId,
+          issuedByAdminId: projection.issuedByAdminId,
+          storyId: projection.storyId || null,
+          virtualSessionId: projection.virtualSessionId || null,
+          scope: projection.scope,
+        }
+      };
+      next();
+      return;
+    }
+
     // 从header获取token
     const authHeader = req.headers.authorization;
 
@@ -59,7 +92,8 @@ export const authMiddleware = async (
     // 将用户信息附加到request
     req.user = {
       userId: decoded.userId,
-      email: decoded.email
+      email: decoded.email,
+      isAdmin: (decoded as any).isAdmin || false
     };
 
     next();

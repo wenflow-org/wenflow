@@ -22,6 +22,13 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <MobileSiteMenu
+            :user-name="userStore.user?.name || '同学'"
+            :user-initial="userInitial"
+            :nav-items="headerNavItems"
+            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            @logout="handleLogout"
+          />
           <el-dropdown>
             <button type="button" class="user-chip">
               <span>{{ userInitial }}</span>
@@ -114,6 +121,86 @@
       </section>
 
       <section class="dashboard-calendar-section">
+        <section v-if="isTestMode" class="dashboard-state-workbench surface-card">
+          <div class="dashboard-state-workbench__head">
+            <div>
+              <span class="section-kicker">State Workbench</span>
+              <h2>学习状态测试视图</h2>
+              <p class="dashboard-state-workbench__intro">这里保留轻量入口和当前摘要。自然天模拟、JSON 输出和详细调试已收口到测试学习状态页。</p>
+            </div>
+            <div class="dashboard-state-workbench__actions">
+              <button class="btn btn--ghost" :disabled="stateWorkbenchLoading" @click="refreshStateWorkbench">刷新状态</button>
+              <router-link :to="learningStatePath" class="btn btn--primary">打开详细调试</router-link>
+            </div>
+          </div>
+
+          <div class="dashboard-state-workbench__toolbar">
+            <span v-for="item in stateWorkbenchQuickChips" :key="item.label" class="dashboard-state-workbench__quick-chip">
+              <strong>{{ item.label }}</strong>
+              <em>{{ item.value }}</em>
+            </span>
+          </div>
+
+          <details class="dashboard-state-workbench__collapse-card">
+            <summary>
+              <div class="dashboard-state-workbench__collapse-head">
+                <div>
+                  <span class="section-kicker">当前摘要</span>
+                  <strong>当前指标、控制信号与路径调整信号</strong>
+                </div>
+                <span class="dashboard-state-workbench__panel-badge">{{ stateWorkbenchMetricCards.length }} + {{ stateWorkbenchControlItems.length }} + {{ stateWorkbenchSignalItems.length }}</span>
+              </div>
+            </summary>
+
+            <div class="dashboard-state-workbench__summary-grid">
+              <article v-for="item in stateWorkbenchMetricCards" :key="item.label" class="dashboard-state-workbench__metric-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <p>{{ item.note }}</p>
+              </article>
+            </div>
+
+            <div class="dashboard-state-workbench__control-grid">
+              <article class="dashboard-state-workbench__panel">
+                <div class="dashboard-state-workbench__panel-head dashboard-state-workbench__panel-head--stacked">
+                  <div>
+                    <span class="section-kicker">当前控制信号</span>
+                    <strong>learningControlState</strong>
+                  </div>
+                </div>
+                <div v-if="stateWorkbenchControlItems.length" class="dashboard-state-workbench__kv-grid">
+                  <div v-for="item in stateWorkbenchControlItems" :key="item.label" class="dashboard-state-workbench__kv-item">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                  </div>
+                </div>
+                <div v-else class="dashboard-state-workbench__panel-empty">当前还没有 learner control state 数据。</div>
+              </article>
+
+              <article class="dashboard-state-workbench__panel">
+                <div class="dashboard-state-workbench__panel-head dashboard-state-workbench__panel-head--stacked">
+                  <div>
+                    <span class="section-kicker">当前路径调整信号</span>
+                    <strong>replanSignal</strong>
+                  </div>
+                </div>
+                <div v-if="stateWorkbenchSignalItems.length" class="dashboard-state-workbench__kv-grid">
+                  <div v-for="item in stateWorkbenchSignalItems" :key="item.label" class="dashboard-state-workbench__kv-item">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                  </div>
+                </div>
+                <div v-else class="dashboard-state-workbench__panel-empty">当前还没有路径调整信号。</div>
+              </article>
+            </div>
+          </details>
+
+          <div class="dashboard-state-workbench__footer">
+            <router-link :to="learningStatePath" class="btn btn--primary">进入测试学习状态页</router-link>
+            <p>详细自然天模拟、JSON 输出和策略变化对比，统一放在测试学习状态页，避免干扰学习台主视图。</p>
+          </div>
+        </section>
+
         <div class="dashboard-calendar-layout">
           <article class="surface-card dashboard-calendar-panel">
             <LoadCalendar @day-select="handleCalendarDaySelect" />
@@ -172,8 +259,13 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import { Switch, User } from '@element-plus/icons-vue';
 import LoadCalendar from '../components/LoadCalendar.vue';
+import MobileSiteMenu from '../components/MobileSiteMenu.vue';
 import { learningAPI, type LearningPath, type LearningStats, type Stage, type Task, type Week } from '../api/learning';
+import { metricsAPI } from '../api/metrics';
+import { userAPI, type LearnerCenterSnapshot } from '../api/user';
 import { useUserStore } from '../stores/user';
+import { isProjectionMode } from '../utils/projection';
+import { getReplanPriorityText, getReplanRecommendationText, getReplanScopeText } from '../utils/replanSignal';
 
 const router = useRouter();
 const route = useRoute();
@@ -220,8 +312,18 @@ const selectedCalendarDay = ref<any>(null);
 const adaptiveGuidance = ref<any | null>(null);
 const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
 const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
+const learnerCenter = ref<LearnerCenterSnapshot | null>(null);
+const currentState = ref<any | null>(null);
+const stateWorkbenchLoading = ref(false);
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
+const headerNavItems = computed(() => [
+  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
+  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
+  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
+  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
+  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+]);
 const pathCount = computed(() => stats.value?.paths?.total || 0);
 const hasLearningPath = computed(() => pathCount.value > 0);
 const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.value?.subtasks?.completed || 0);
@@ -364,6 +466,56 @@ const learnerStateChips = computed(() => {
   }
 
   return items.slice(0, 3);
+});
+
+const stateWorkbenchMetricCards = computed(() => {
+  const metrics = learnerCenter.value?.dynamicState?.metrics || currentState.value;
+  if (!metrics) return [];
+  return [
+    { label: 'LSS 学习压力', value: Number(metrics.lss || 0).toFixed(2), note: '当前即时压力' },
+    { label: 'KTL 知识掌握', value: Number(metrics.ktl || 0).toFixed(2), note: '长期掌握负荷' },
+    { label: 'LF 学习疲劳', value: Number(metrics.lf || 0).toFixed(2), note: '当前疲劳程度' },
+    { label: 'LSB 状态平衡', value: Number(metrics.lsb || 0).toFixed(2), note: '掌握与疲劳平衡值' },
+  ];
+});
+
+const stateWorkbenchControlItems = computed(() => {
+  const control = learnerCenter.value?.learningControlState;
+  if (!control) return [];
+  return [
+    { label: 'paceMode', value: control.paceMode },
+    { label: 'conceptLoad', value: control.conceptLoad },
+    { label: 'reviewPriority', value: control.reviewPriority },
+    { label: 'challengeLevelCap', value: control.challengeLevelCap },
+    { label: 'checkpointNeed', value: control.checkpointNeed },
+    { label: 'avoidNewConcepts', value: control.shouldAvoidNewConcepts ? 'true' : 'false' },
+    { label: 'preferConsolidation', value: control.shouldPreferConsolidation ? 'true' : 'false' },
+    { label: 'offerBreak', value: control.shouldOfferBreak ? 'true' : 'false' },
+  ];
+});
+
+const stateWorkbenchSignalItems = computed(() => {
+  const signal = learnerCenter.value?.replanSignal;
+  if (!signal) return [];
+  return [
+    { label: 'shouldSuggest', value: signal.shouldSuggest ? 'true' : 'false' },
+    { label: 'priority', value: getReplanPriorityText(signal.priority) },
+    { label: 'recommendation', value: getReplanRecommendationText(signal.recommendation) },
+    { label: 'scope', value: getReplanScopeText(signal.scope) },
+    { label: 'reasonCodes', value: Array.isArray(signal.reasonCodes) && signal.reasonCodes.length ? signal.reasonCodes.join('、') : '无' },
+    { label: 'rationale', value: signal.rationale || '无' },
+  ];
+});
+
+const stateWorkbenchQuickChips = computed(() => {
+  const metrics = learnerCenter.value?.dynamicState?.metrics || currentState.value;
+  const control = learnerCenter.value?.learningControlState;
+  const signal = learnerCenter.value?.replanSignal;
+  return [
+    metrics ? { label: 'LSB', value: Number(metrics.lsb || 0).toFixed(2) } : null,
+    control ? { label: '节奏', value: control.paceMode } : null,
+    signal ? { label: '重调建议', value: signal.recommendation || 'keep' } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
 });
 
 const todayActionItems = computed(() => {
@@ -525,8 +677,33 @@ const handleLogout = async () => {
   }
 };
 
+async function refreshStateWorkbench() {
+  if (!isTestMode.value) return;
+  stateWorkbenchLoading.value = true;
+  try {
+    const [stateResult, learnerCenterResult] = await Promise.all([
+      metricsAPI.getCurrentState(),
+      userAPI.getLearnerCenter({ scope: 'global' }),
+    ]);
+    currentState.value = stateResult;
+    learnerCenter.value = learnerCenterResult;
+  } catch (error) {
+    console.error('刷新学习状态测试工作台失败:', error);
+  } finally {
+    stateWorkbenchLoading.value = false;
+  }
+}
+
 onMounted(async () => {
+  if (isProjectionMode()) {
+    try {
+      await userStore.fetchProfile();
+    } catch (error) {
+      console.error('获取投影视角用户信息失败:', error);
+    }
+  }
   await fetchDashboardData();
+  await refreshStateWorkbench();
   window.addEventListener('scroll', handleScroll, { passive: true });
   handleScroll();
 });
@@ -1217,7 +1394,151 @@ a.dashboard-list__item:hover .dashboard-list__action {
 
 /* ========== 学习负荷日历 ========== */
 .dashboard-calendar-section {
+  display: grid;
+  gap: 24px;
   margin-bottom: 24px;
+}
+
+.dashboard-state-workbench {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 28px;
+}
+
+.dashboard-state-workbench__head,
+.dashboard-state-workbench__actions,
+.dashboard-state-workbench__panel-head,
+.dashboard-state-workbench__simulate-actions,
+.dashboard-state-workbench__meta-row {
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-state-workbench__head,
+.dashboard-state-workbench__panel-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-state-workbench__actions,
+.dashboard-state-workbench__simulate-actions,
+.dashboard-state-workbench__meta-row,
+.dashboard-state-workbench__day-chips {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-state-workbench__summary-grid,
+.dashboard-state-workbench__control-grid,
+.dashboard-state-workbench__json-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-state-workbench__summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-state-workbench__control-grid,
+.dashboard-state-workbench__json-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-state-workbench__metric-card,
+.dashboard-state-workbench__panel,
+.dashboard-state-workbench__json-card {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(243, 246, 251, 0.82);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.dashboard-state-workbench__metric-card {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-state-workbench__metric-card span,
+.dashboard-state-workbench__kv-item span,
+.dashboard-state-workbench__meta-row span {
+  font-size: 12px;
+  color: var(--dash-muted);
+}
+
+.dashboard-state-workbench__metric-card strong {
+  font-size: 24px;
+  color: var(--dash-ink);
+}
+
+.dashboard-state-workbench__metric-card p,
+.dashboard-state-workbench__empty {
+  margin: 0;
+  color: var(--dash-muted);
+  line-height: 1.6;
+}
+
+.dashboard-state-workbench__kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dashboard-state-workbench__kv-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.dashboard-state-workbench__kv-item strong,
+.dashboard-state-workbench__panel-head strong {
+  color: var(--dash-ink);
+  line-height: 1.5;
+}
+
+.dashboard-state-workbench__day-chip {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dash-ink);
+}
+
+.dashboard-state-workbench__day-chip--active {
+  background: rgba(52, 120, 246, 0.1);
+  border-color: rgba(52, 120, 246, 0.18);
+  color: var(--dash-blue-deep);
+}
+
+.dashboard-state-workbench__simulate-result {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-state-workbench__json-card summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--dash-ink);
+}
+
+.dashboard-state-workbench__json-card pre {
+  margin: 12px 0 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .dashboard-calendar-layout {
@@ -1381,6 +1702,13 @@ a.dashboard-list__item:hover .dashboard-list__action {
   .dashboard-calendar-status {
     position: static;
   }
+
+  .dashboard-state-workbench__summary-grid,
+  .dashboard-state-workbench__control-grid,
+  .dashboard-state-workbench__json-grid,
+  .dashboard-state-workbench__kv-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 700px) {
@@ -1389,9 +1717,24 @@ a.dashboard-list__item:hover .dashboard-list__action {
     width: min(100% - 28px, 1240px);
   }
 
+  .header-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
   .header-cta,
-  .user-chip strong {
+  .user-chip {
     display: none;
+  }
+
+  .header-right {
+    justify-content: flex-end;
+  }
+
+  .user-chip {
+    min-width: auto;
+    padding-inline: 10px;
   }
 
   .dashboard-hero,
@@ -1422,6 +1765,10 @@ a.dashboard-list__item:hover .dashboard-list__action {
   .header-container,
   .dashboard-main {
     width: min(100% - 20px, 1240px);
+  }
+
+  .header-container {
+    gap: 10px;
   }
 
   .dashboard-main {
@@ -1475,6 +1822,29 @@ a.dashboard-list__item:hover .dashboard-list__action {
 
   .achievement-note {
     grid-template-columns: 1fr;
+  }
+
+  .focus-card__stats,
+  .dashboard-calendar-status__cards {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-state-workbench__head,
+  .dashboard-state-workbench__actions,
+  .dashboard-calendar-status__head,
+  .focus-card__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-state-workbench__actions,
+  .dashboard-state-workbench__footer {
+    width: 100%;
+  }
+
+  .dashboard-state-workbench__actions .btn,
+  .dashboard-state-workbench__footer .btn {
+    width: 100%;
   }
 }
 </style>

@@ -1,22 +1,18 @@
 <template>
   <div class="learner-lab-page">
-    <div class="lab-backdrop">
-      <div class="lab-glow lab-glow--blue"></div>
-      <div class="lab-glow lab-glow--amber"></div>
-    </div>
-
-    <section class="lab-hero">
-      <div class="lab-hero__copy">
-        <span class="lab-pill">Virtual Learner Lab</span>
-        <h1>虚拟学习者总控台</h1>
+    <section class="page-header">
+      <div class="page-header__copy">
+        <span class="page-header__eyebrow">Admin</span>
+        <h1>虚拟学习者</h1>
+        <p>集中管理画像、故事池与 Goal / Path / Learn 运行样本。</p>
       </div>
 
-      <div class="lab-hero__actions">
-        <el-button type="primary" size="large" @click="openCreateDialog">
+      <div class="page-header__actions">
+        <el-button type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
           新建虚拟学习者
         </el-button>
-        <el-button size="large" :loading="loading" @click="loadProfiles">
+        <el-button :loading="loading" @click="loadProfiles">
           <el-icon><Refresh /></el-icon>
           刷新数据
         </el-button>
@@ -24,72 +20,36 @@
     </section>
 
     <section class="summary-grid">
-      <article v-for="item in summaryCards" :key="item.label" class="summary-card" :class="item.tone">
+      <article
+        v-for="item in summaryCards"
+        :key="item.label"
+        class="summary-card"
+        :class="item.tone"
+      >
         <span class="summary-card__label">{{ item.label }}</span>
         <strong class="summary-card__value">{{ item.value }}</strong>
         <span class="summary-card__helper">{{ item.helper }}</span>
       </article>
     </section>
 
-    <main class="lab-shell">
-      <aside class="lab-sidebar">
-        <section class="lab-panel">
-          <div class="lab-panel__title">筛选器</div>
-          <div class="filter-stack">
-            <el-input
-              v-model="searchKeyword"
-              placeholder="搜索名称 / 学习目标"
-              clearable
-              @input="debouncedSearch"
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
+    <div class="toolbar-card">
+      <div class="toolbar-card__group">
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索名称 / 学习目标"
+          clearable
+          class="toolbar-card__search"
+          @input="debouncedSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+      <div class="toolbar-card__group toolbar-card__group--hint">先缩小范围，再进入详情或开局。</div>
+    </div>
 
-            <el-select v-model="filterLevel" placeholder="知识水平" clearable>
-              <el-option label="初学者" value="beginner" />
-              <el-option label="中级" value="intermediate" />
-              <el-option label="高级" value="advanced" />
-            </el-select>
-          </div>
-        </section>
-
-        <section class="lab-panel lab-panel--sessions">
-          <div class="lab-panel__head">
-            <div>
-              <div class="lab-panel__title">最近诊断样本</div>
-            </div>
-          </div>
-
-          <div v-if="recentSessions.length === 0" class="empty-state small">还没有可回看的样本</div>
-          <div v-else class="session-list">
-            <article v-for="item in recentSessions" :key="item.id" class="session-row">
-              <div class="session-row__top">
-                <div class="session-row__main">
-                  <strong>{{ item.profileName }}</strong>
-                  <p>{{ item.goal || '暂无学习目标' }}</p>
-                  <div class="session-funnel">
-                    <span class="session-funnel__node" :class="item.goalReady ? 'done' : 'active'">Goal</span>
-                    <span class="session-funnel__line" :class="{ done: item.goalReady }"></span>
-                    <span class="session-funnel__node" :class="item.pathReady ? 'done' : (item.goalReady ? 'active' : '')">Path</span>
-                    <span class="session-funnel__line" :class="{ done: item.pathReady }"></span>
-                    <span class="session-funnel__node" :class="item.learnStarted ? (item.learnCompleted ? 'done' : 'active') : ''">Learn</span>
-                  </div>
-                </div>
-                <el-button type="primary" link @click="goToSession(item.id)">进入诊断</el-button>
-              </div>
-              <div class="session-row__meta">
-                <el-tag size="small" :type="getSessionStatusType(item.status)">{{ getSessionStatusLabel(item.status) }}</el-tag>
-                <el-tag size="small" type="info" effect="plain">{{ getSessionStageLabel(item.currentStage) }}</el-tag>
-                <span v-if="item.roundCount !== null">{{ item.roundCount }} 轮</span>
-                <span class="session-row__active">最后活跃 {{ formatRelativeTime(item.updatedAt) }}</span>
-              </div>
-            </article>
-          </div>
-        </section>
-      </aside>
-
+    <main class="page-shell">
       <section class="lab-main">
         <section class="lab-panel lab-panel--profiles">
           <div class="lab-panel__head">
@@ -99,7 +59,10 @@
                 :model-value="isAllSelected"
                 @change="toggleSelectAll"
               />
-              <div class="lab-panel__title">虚拟学习者库</div>
+              <div>
+                <div class="lab-panel__title">虚拟学习者列表</div>
+                <div class="lab-panel__meta lab-panel__meta--stack">按样本查看画像、故事准备度和最近运行状态。</div>
+              </div>
             </div>
             <div class="lab-panel__head-right">
               <template v-if="selectedIds.size > 0">
@@ -113,47 +76,59 @@
           <div v-if="loading" class="empty-state">正在加载虚拟学习者...</div>
           <div v-else-if="filteredProfiles.length === 0" class="empty-state">暂无匹配的虚拟学习者</div>
           <div v-else class="profile-grid">
-            <article v-for="row in pagedProfiles" :key="row.id" class="profile-card" :class="{ 'profile-card--selected': selectedIds.has(row.id) }">
-              <div class="profile-card__head">
-                <el-checkbox
-                  :model-value="selectedIds.has(row.id)"
-                  @change="toggleSelect(row.id)"
-                  @click.stop
-                />
-                <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
-                <div class="profile-card__identity">
-                  <strong>{{ row.userName }}</strong>
-                  <span>{{ row.profile?.occupation || '未填写职业' }}</span>
+            <article
+              v-for="row in pagedProfiles"
+              :key="row.id"
+              class="profile-card"
+              :class="{ 'profile-card--selected': selectedIds.has(row.id) }"
+            >
+              <div class="profile-card__primary">
+                <div class="profile-card__head">
+                  <el-checkbox
+                    :model-value="selectedIds.has(row.id)"
+                    @change="toggleSelect(row.id)"
+                    @click.stop
+                  />
+                  <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
+                  <div class="profile-card__identity">
+                    <strong>{{ row.userName }}</strong>
+                    <span>{{ row.profile?.occupation || '未填写职业' }}</span>
+                  </div>
                 </div>
-              </div>
 
-              <div class="profile-card__body">
                 <div class="profile-meta-row">
                   <span v-if="row.profile?.age">{{ row.profile.age }}岁</span>
                   <span>{{ getStoryPool(row).length }} 个故事</span>
+                  <span>{{ row.simulationMode === 'ai' ? 'AI画像' : '手动画像' }}</span>
                 </div>
 
-                <div class="profile-stats">
-                  <div class="mini-stat">
-                    <span>会话数</span>
-                    <strong>{{ row.sessionCount || 0 }}</strong>
-                  </div>
+                <p class="profile-card__summary">{{ row.profile?.background || row.profile?.corePersonality || '进入详情查看人物画像与故事目录。' }}</p>
+              </div>
+
+              <div class="profile-card__stats">
+                <div class="mini-stat">
+                  <span>会话数</span>
+                  <strong>{{ row.sessionCount || 0 }}</strong>
+                </div>
+                <div class="mini-stat mini-stat--soft">
+                  <span>最近阶段</span>
+                  <strong>{{ row.sessions?.[0] ? getSessionStageLabel(row.sessions[0].currentStage) : '未开始' }}</strong>
                 </div>
               </div>
 
-                <div class="profile-card__footer">
-                  <el-button type="primary" @click="goToProfile(row)">进入详情</el-button>
-                  <el-button @click="openStartSessionDialog(row)">快速开局</el-button>
-                  <el-dropdown trigger="click">
-                    <el-button>
-                      更多
+              <div class="profile-card__footer">
+                <el-button type="primary" @click="goToProfile(row)">详情</el-button>
+                <el-button @click="openStartSessionDialog(row)">开局</el-button>
+                <el-dropdown trigger="click">
+                  <el-button>
+                    更多
                   </el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item @click="openSessionDrawer(row)">查看会话</el-dropdown-item>
-                        <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
-                        <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
-                      </el-dropdown-menu>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="openSessionDrawer(row)">查看会话</el-dropdown-item>
+                      <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
+                      <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
+                    </el-dropdown-menu>
                   </template>
                 </el-dropdown>
               </div>
@@ -168,6 +143,35 @@
               layout="total, prev, pager, next"
               @current-change="handlePageChange"
             />
+          </div>
+        </section>
+
+        <section class="lab-panel lab-panel--sessions">
+          <div class="lab-panel__head">
+            <div>
+              <div class="lab-panel__title">最近诊断样本</div>
+              <div class="lab-panel__meta lab-panel__meta--stack">快速回到最近一次虚拟学习者运行。</div>
+            </div>
+          </div>
+
+          <div v-if="recentSessions.length === 0" class="empty-state small">还没有可回看的样本</div>
+          <div v-else class="session-list session-list--compact">
+            <article v-for="item in recentSessions" :key="item.id" class="session-row">
+              <div class="session-row__top">
+                <div class="session-row__main">
+                  <div class="session-row__identity">
+                    <strong>{{ item.profileName }}</strong>
+                    <span>{{ getSessionStatusLabel(item.status) }} / {{ getSessionStageLabel(item.currentStage) }}</span>
+                  </div>
+                  <p>{{ item.goal || '暂无学习目标' }}</p>
+                </div>
+                <el-button type="primary" link @click="goToSession(item.id)">进入诊断</el-button>
+              </div>
+              <div class="session-row__meta">
+                <span v-if="item.roundCount !== null">{{ item.roundCount }} 轮</span>
+                <span class="session-row__active">最后活跃 {{ formatRelativeTime(item.updatedAt) }}</span>
+              </div>
+            </article>
           </div>
         </section>
       </section>
@@ -363,7 +367,6 @@ const submitting = ref(false)
 const generatingScenario = ref(false)
 const profiles = ref<any[]>([])
 const searchKeyword = ref('')
-const filterLevel = ref('')
 const selectedIds = ref<Set<string>>(new Set())
 const isAllSelected = computed(() => {
   return pagedProfiles.value.length > 0 && pagedProfiles.value.every(p => selectedIds.value.has(p.id))
@@ -418,9 +421,6 @@ const filteredProfiles = computed(() => {
     if (searchKeyword.value && !searchTarget.includes(searchKeyword.value.toLowerCase())) {
       return false
     }
-    if (filterLevel.value && p.knowledgeLevel !== filterLevel.value) {
-      return false
-    }
     return true
   })
 })
@@ -455,10 +455,12 @@ const summaryCards = computed(() => {
   const totalSessions = profiles.value.reduce((sum: number, item: any) => sum + (item.sessionCount || 0), 0)
   const autoProfiles = profiles.value.filter((item: any) => item.simulationMode === 'ai').length
   const activeProfiles = profiles.value.filter((item: any) => (item.sessionCount || 0) > 0).length
+  const withStories = profiles.value.filter((item: any) => getStoryPool(item).length > 0).length
 
   const allSessions = profiles.value.flatMap((item: any) => item.sessions || [])
   const completedSessions = allSessions.filter((item: any) => item.status === 'completed').length
   const failedSessions = allSessions.filter((item: any) => item.status === 'failed').length
+  const runningSessions = allSessions.filter((item: any) => item.status === 'running').length
   const goalReadySessions = allSessions.filter((item: any) => item.currentStage === 'path' || item.currentStage === 'learning' || item.status === 'completed').length
   const pathReadySessions = allSessions.filter((item: any) => item.learningPathId || item.currentStage === 'learning' || item.status === 'completed').length
   const learnCompletedSessions = completedSessions
@@ -470,56 +472,56 @@ const summaryCards = computed(() => {
 
   return [
     {
-      label: '样本池规模',
-      value: String(totalProfiles),
-      helper: '当前可用于实验的虚拟学习者数量',
+      label: '样本与故事',
+      value: `${totalProfiles}`,
+      helper: `${withStories} 个有故事，${totalProfiles - withStories} 个待补故事`,
       tone: 'tone-blue'
     },
     {
-      label: '实验总会话',
+      label: '实验进度',
       value: String(totalSessions),
-      helper: `${completedSessions} 完成 / ${failedSessions} 失败`,
+      helper: `${runningSessions} 运行中 / ${completedSessions} 完成 / ${failedSessions} 失败`,
       tone: 'tone-dark'
     },
     {
-      label: 'Goal Ready 率',
-      value: goalReadyRate,
-      helper: `${goalReadySessions}/${allSessions.length || 0} 个样本进入 Path`,
+      label: 'Goal / Path',
+      value: `${goalReadyRate} / ${pathReadyRate}`,
+      helper: `${goalReadySessions}/${allSessions.length || 0} 进入 Path，${pathReadySessions}/${allSessions.length || 0} 生成路径`,
       tone: 'tone-green'
-    },
-    {
-      label: 'Path 成功率',
-      value: pathReadyRate,
-      helper: `${pathReadySessions}/${allSessions.length || 0} 个样本生成路径`,
-      tone: 'tone-amber'
     },
     {
       label: 'Learn 完成率',
       value: learnCompletionRate,
-      helper: `${learnCompletedSessions}/${allSessions.length || 0} 个样本完整跑通`,
-      tone: 'tone-blue'
-    },
-    {
-      label: 'AI 自动画像',
-      value: String(autoProfiles),
-      helper: `${activeProfiles} 个已开始积累实验记录`,
-      tone: 'tone-green'
+      helper: `${learnCompletedSessions}/${allSessions.length || 0} 完整跑通，${autoProfiles} 个 AI 画像样本`,
+      tone: 'tone-amber'
     }
   ]
 })
 
-const getKnowledgeLevelLabel = (value: string) => {
-  switch (value) {
-    case 'beginner':
-      return '初学者'
-    case 'intermediate':
-      return '中级'
-    case 'advanced':
-      return '高级'
-    default:
-      return value || '-'
-  }
-}
+const profileBuckets = computed(() => {
+  const total = profiles.value.length
+  const withStories = profiles.value.filter((item: any) => getStoryPool(item).length > 0).length
+  const inProgress = profiles.value.filter((item: any) => (item.sessions || []).some((session: any) => session.status === 'running')).length
+  const completed = profiles.value.filter((item: any) => (item.sessions || []).some((session: any) => session.status === 'completed')).length
+
+  return [
+    {
+      label: '有故事可跑',
+      value: String(withStories),
+      helper: `${total - withStories} 个仍需补故事`
+    },
+    {
+      label: '实验进行中',
+      value: String(inProgress),
+      helper: '当前仍有运行中的样本'
+    },
+    {
+      label: '已有完成样本',
+      value: String(completed),
+      helper: '至少完成过一次 Learn'
+    }
+  ]
+})
 
 const formatTime = (time: string | Date | null) => {
   if (!time) return '-'
@@ -899,176 +901,174 @@ onMounted(() => {
 <style scoped>
 .learner-lab-page {
   min-height: 100vh;
-  padding: 24px;
-  position: relative;
-  background: #f6f7fb;
+  padding: 16px;
+  background: #f3f5f9;
 }
 
-.lab-backdrop {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.lab-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(110px);
-  opacity: 0.18;
-}
-
-.lab-glow--blue {
-  width: 420px;
-  height: 420px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.35), transparent 70%);
-  top: -140px;
-  left: -80px;
-}
-
-.lab-glow--amber {
-  width: 360px;
-  height: 360px;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.22), transparent 70%);
-  right: -40px;
-  bottom: -30px;
-}
-
-.lab-hero,
+.page-header,
 .summary-grid,
-.lab-shell {
-  position: relative;
-  z-index: 1;
+.page-shell {
+  max-width: 1440px;
+  margin: 0 auto;
 }
 
-.lab-hero {
+.page-header {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
-  padding: 28px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(244, 247, 252, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.06);
-  margin-bottom: 16px;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #e5eaf2;
+  margin-bottom: 12px;
 }
 
-.lab-pill {
+.page-header__eyebrow {
   display: inline-flex;
-  padding: 5px 12px;
+  width: fit-content;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: #eef4ff;
+  background: #eaf0fb;
   color: #2355d8;
   font-size: 12px;
   font-weight: 700;
-  margin-bottom: 10px;
 }
 
-.lab-hero h1 {
-  margin: 0 0 8px;
-  font-size: 32px;
-  line-height: 1.1;
+.page-header__copy {
+  display: grid;
+  gap: 6px;
 }
 
-.lab-hero__actions {
+.page-header h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.page-header p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #66758b;
+}
+
+.page-header__actions {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-  align-items: stretch;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .summary-card {
-  min-height: 132px;
-  padding: 16px 16px 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(222, 228, 239, 0.9);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  min-height: 96px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e5eaf2;
 }
 
 .summary-card__label {
   display: block;
   font-size: 12px;
   color: #7b8598;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .summary-card__value {
   display: block;
-  font-size: 34px;
+  font-size: 22px;
   line-height: 1.1;
 }
 
 .summary-card__helper {
   display: block;
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 12px;
   line-height: 1.45;
   color: #5f6b7d;
 }
 
 .tone-blue {
-  background: linear-gradient(180deg, #f3f8ff, #ffffff);
+  background: linear-gradient(180deg, #f7faff, #ffffff);
 }
 
 .tone-dark {
-  background: linear-gradient(180deg, #f8fafc, #ffffff);
+  background: linear-gradient(180deg, #fafbfd, #ffffff);
 }
 
 .tone-green {
-  background: linear-gradient(180deg, #f2fbf5, #ffffff);
+  background: linear-gradient(180deg, #f7fcf8, #ffffff);
 }
 
 .tone-amber {
-  background: linear-gradient(180deg, #fff8ee, #ffffff);
+  background: linear-gradient(180deg, #fffaf3, #ffffff);
 }
 
-.lab-shell {
+.toolbar-card {
+  max-width: 1440px;
+  margin: 0 auto 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #e5eaf2;
+}
+
+.toolbar-card__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-card__group--hint {
+  font-size: 12px;
+  color: #8b94a6;
+}
+
+.toolbar-card__search {
+  width: min(360px, 100%);
+}
+
+.page-shell {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 
-.lab-sidebar,
 .lab-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.lab-sidebar {
-  position: sticky;
-  top: 24px;
-  align-self: flex-start;
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
+  gap: 12px;
 }
 
 .lab-panel {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(223, 228, 238, 0.92);
-  border-radius: 20px;
-  padding: 18px;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.04);
+  background: #fff;
+  border: 1px solid #e5eaf2;
+  border-radius: 16px;
+  padding: 16px;
 }
 
 .lab-panel__head {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .lab-panel__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #1f2937;
 }
@@ -1077,6 +1077,13 @@ onMounted(() => {
   font-size: 12px;
   color: #8b94a6;
   white-space: nowrap;
+}
+
+.lab-panel__meta--stack {
+  display: block;
+  margin-top: 4px;
+  white-space: normal;
+  line-height: 1.5;
 }
 
 .lab-panel__head-left,
@@ -1266,7 +1273,7 @@ onMounted(() => {
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .hint-compact {
@@ -1276,23 +1283,23 @@ onMounted(() => {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  align-items: start;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .profile-card {
   border: 1px solid #e7ecf3;
   border-radius: 16px;
   padding: 14px;
-  background: #fbfcfe;
-  overflow: hidden;
-  min-height: 220px;
-  display: flex;
-  flex-direction: column;
+  background: #fff;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 0.85fr) auto;
+  gap: 14px;
+  align-items: center;
 }
 
 .profile-card__head,
+.profile-card__primary,
 .profile-card__footer,
 .profile-meta-row,
 .profile-stats,
@@ -1304,20 +1311,26 @@ onMounted(() => {
 
 .profile-card__head {
   gap: 10px;
-  align-items: flex-start;
-  margin-bottom: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.profile-card__primary {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 
 .avatar-badge {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #1f4fd6, #7c3aed);
+  background: linear-gradient(135deg, #315fd7, #5b8cff);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -1330,7 +1343,7 @@ onMounted(() => {
 }
 
 .profile-card__identity strong {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .profile-card__identity span {
@@ -1341,31 +1354,32 @@ onMounted(() => {
 .profile-meta-row {
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
   font-size: 11px;
   color: #6b7280;
-  min-height: 24px;
-  display: flex;
-  align-items: flex-start;
 }
 
 .profile-meta-row span {
-  padding: 3px 7px;
+  padding: 2px 7px;
   border-radius: 999px;
-  background: #f1f5f9;
+  background: #f4f6fa;
 }
 
-.profile-stats {
-  gap: 8px;
+.profile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .mini-stat {
-  flex: 0 0 auto;
-  min-width: 88px;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 10px 12px;
   border-radius: 12px;
-  background: white;
+  background: #fff;
   border: 1px solid #edf1f6;
+}
+
+.mini-stat--soft {
+  background: #fafbfd;
 }
 
 .mini-stat span {
@@ -1382,11 +1396,21 @@ onMounted(() => {
 
 .profile-card__footer {
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
+  align-items: center;
   gap: 6px;
-  margin-top: auto;
-  padding-top: 12px;
   flex-wrap: wrap;
+}
+
+.profile-card__summary {
+  margin: 0;
+  color: #5f6b7d;
+  font-size: 12px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .profile-card__footer .el-button {
@@ -1404,8 +1428,8 @@ onMounted(() => {
 .session-row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 0;
+  gap: 7px;
+  padding: 10px 0;
   border-bottom: 1px solid #edf1f6;
 }
 
@@ -1422,6 +1446,19 @@ onMounted(() => {
   gap: 6px;
   min-width: 0;
   flex: 1;
+}
+
+.session-row__identity {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-row__identity span {
+  font-size: 11px;
+  color: #8b94a6;
+  white-space: nowrap;
 }
 
 .session-row:last-child {
@@ -1448,44 +1485,7 @@ onMounted(() => {
 }
 
 .session-funnel {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.session-funnel__node {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #eef2f7;
-  color: #7a8597;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.session-funnel__node.active {
-  background: #eef5ff;
-  color: #1f4fd6;
-}
-
-.session-funnel__node.done {
-  background: #e7f8eb;
-  color: #1f8a4d;
-}
-
-.session-funnel__line {
-  width: 16px;
-  height: 2px;
-  background: #d9e0ea;
-  border-radius: 999px;
-}
-
-.session-funnel__line.done {
-  background: #8fd0a8;
+  display: none;
 }
 
 .session-row__meta {
@@ -1506,13 +1506,13 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.lab-sidebar .session-list {
+.session-list--compact {
   gap: 0;
 }
 
 .empty-state {
-  padding: 32px;
-  border-radius: 18px;
+  padding: 26px;
+  border-radius: 16px;
   text-align: center;
   background: #fbfcfe;
   border: 1px dashed #dce4ee;
@@ -1574,11 +1574,25 @@ onMounted(() => {
 
 @media (max-width: 1280px) {
   .summary-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .profile-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .profile-card {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .profile-card__footer {
+    justify-content: flex-start;
+  }
+
+  .toolbar-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-card__search {
+    width: 100%;
   }
 }
 
@@ -1587,18 +1601,12 @@ onMounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .lab-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .lab-hero {
+  .page-header {
     flex-direction: column;
   }
 
-  .lab-sidebar {
-    position: static;
-    max-height: none;
-    overflow-y: visible;
+  .page-header__actions {
+    width: 100%;
   }
 }
 

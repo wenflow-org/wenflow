@@ -22,7 +22,7 @@ function Test-ServiceReady {
     for ($i = 0; $i -lt $RetryCount; $i++) {
         try {
             $response = Invoke-WebRequest -Uri $Url -Method Get -UseBasicParsing
-            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
                 return $true
             }
         } catch {
@@ -105,11 +105,10 @@ function Get-LocalIPAddress {
         $ip = (Get-NetIPAddress -AddressFamily IPv4 |
                Where-Object {
                    $_.InterfaceAlias -notlike "Loopback*" -and
-                   $_.InterfaceAlias -notlike "vEthernet*" -and
                    $_.IPAddress -notlike "169.254.*" -and
-                   ($_.IPAddress -like "192.168.*" -or $_.IPAddress -like "10.*")
-               } |
-               Select-Object -First 1 -ExpandProperty IPAddress)
+                   ($_.IPAddress -like "192.168.*" -or $_.IPAddress -like "10.*" -or $_.IPAddress -like "172.16.*" -or $_.IPAddress -like "172.17.*" -or $_.IPAddress -like "172.18.*" -or $_.IPAddress -like "172.19.*" -or $_.IPAddress -like "172.20.*" -or $_.IPAddress -like "172.21.*" -or $_.IPAddress -like "172.22.*" -or $_.IPAddress -like "172.23.*" -or $_.IPAddress -like "172.24.*" -or $_.IPAddress -like "172.25.*" -or $_.IPAddress -like "172.26.*" -or $_.IPAddress -like "172.27.*" -or $_.IPAddress -like "172.28.*" -or $_.IPAddress -like "172.29.*" -or $_.IPAddress -like "172.30.*" -or $_.IPAddress -like "172.31.*")
+                } |
+                Select-Object -First 1 -ExpandProperty IPAddress)
 
         if (-not [string]::IsNullOrWhiteSpace($ip)) {
             return $ip
@@ -179,6 +178,101 @@ function Ensure-PrismaReady {
     }
 }
 
+function Get-PortOwnerProcess {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$Port
+    )
+
+    try {
+        $connections = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+        foreach ($connection in $connections) {
+            if ($connection.OwningProcess) {
+                return Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        return $null
+    }
+
+    return $null
+}
+
+function Assert-PortAvailable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$Port,
+        [Parameter(Mandatory = $true)]
+        [string]$Purpose
+    )
+
+    $owner = Get-PortOwnerProcess -Port $Port
+    if ($null -eq $owner) {
+        return
+    }
+
+    Write-Host "Port $Port is already in use by $($owner.ProcessName) (PID: $($owner.Id))." -ForegroundColor Red
+    Write-Host "Stop that process before starting WenFlow $Purpose." -ForegroundColor Yellow
+    exit 1
+}
+
+function Test-AIConfigValue {
+    param(
+        [AllowEmptyString()]
+        [string]$Value,
+        [Parameter(Mandatory = $true)]
+        [string[]]$InvalidValues
+    )
+
+    $trimmed = $Value.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return $false
+    }
+
+    foreach ($invalid in $InvalidValues) {
+        if ($trimmed -eq $invalid) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Assert-RequiredEnvConfiguration {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EnvPath
+    )
+
+    $jwtSecret = Get-EnvValue -Path $EnvPath -Key 'JWT_SECRET'
+    if ([string]::IsNullOrWhiteSpace($jwtSecret) -or $jwtSecret.Length -lt 32) {
+        Write-Host 'JWT_SECRET is missing or shorter than 32 characters.' -ForegroundColor Red
+        Write-Host 'Run ./setup-env.ps1 first.' -ForegroundColor Yellow
+        exit 1
+    }
+
+    $aiApiUrl = Get-EnvValue -Path $EnvPath -Key 'AI_API_URL'
+    if (-not (Test-AIConfigValue -Value $aiApiUrl -InvalidValues @('https://api.deepseek.com/'))) {
+        Write-Host 'AI_API_URL is missing or invalid.' -ForegroundColor Red
+        Write-Host 'Run ./setup-env.ps1 and provide a valid AI endpoint.' -ForegroundColor Yellow
+        exit 1
+    }
+
+    $aiApiKey = Get-EnvValue -Path $EnvPath -Key 'AI_API_KEY'
+    if (-not (Test-AIConfigValue -Value $aiApiKey -InvalidValues @('sk-your-api-key', 'your-api-key'))) {
+        Write-Host 'AI_API_KEY is missing or still using the example placeholder.' -ForegroundColor Red
+        Write-Host 'Run ./setup-env.ps1 and provide a real AI API key.' -ForegroundColor Yellow
+        exit 1
+    }
+
+    $aiModel = Get-EnvValue -Path $EnvPath -Key 'AI_MODEL'
+    if (-not (Test-AIConfigValue -Value $aiModel -InvalidValues @(''))) {
+        Write-Host 'AI_MODEL is missing.' -ForegroundColor Red
+        Write-Host 'Run ./setup-env.ps1 and provide a default chat model.' -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 Write-Host "Starting WenFlow (LAN Mode)..." -ForegroundColor Cyan
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -234,6 +328,8 @@ if ($needsEnvSetup) {
     }
 }
 
+Assert-RequiredEnvConfiguration -EnvPath $backendEnvPath
+
 $localIP = Get-LocalIPAddress -PreferredIP $LanIP
 if ([string]::IsNullOrWhiteSpace($localIP)) {
     Write-Host "Warning: Could not detect local IP address. Using localhost instead." -ForegroundColor Yellow
@@ -273,6 +369,10 @@ if (-not $SkipPrisma) {
 } else {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }
+
+Write-Host "Checking ports..." -ForegroundColor Yellow
+Assert-PortAvailable -Port 3001 -Purpose 'backend'
+Assert-PortAvailable -Port 5173 -Purpose 'frontend'
 
 Write-Host "Starting backend on port 3001..." -ForegroundColor Green
 Start-Process -FilePath 'powershell' -ArgumentList '-NoExit', '-Command', 'npm run dev' -WorkingDirectory $backendPath | Out-Null

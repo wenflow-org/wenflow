@@ -63,6 +63,7 @@ export interface StrategyDefinition {
   name: string;
   type: StrategyType;
   description: string;
+  priority?: number;
   triggers: StrategyTrigger[];
   
   // 策略执行函数
@@ -172,8 +173,7 @@ export class StrategyRegistry {
       }
     }
 
-    // 按优先级排序（通过执行函数确定）
-    return matchedStrategies;
+    return matchedStrategies.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   }
 
   /**
@@ -276,6 +276,7 @@ export class StrategyRegistry {
 export const compressStrategy: StrategyDefinition = {
   name: 'compress-path',
   type: 'compress',
+  priority: 50,
   description: '当学习加速时，压缩路径时间',
   triggers: [
     {
@@ -305,6 +306,7 @@ export const compressStrategy: StrategyDefinition = {
 export const extendStrategy: StrategyDefinition = {
   name: 'extend-path',
   type: 'extend',
+  priority: 70,
   description: '当学习减速时，延长路径时间',
   triggers: [
     {
@@ -333,6 +335,7 @@ export const extendStrategy: StrategyDefinition = {
 export const fatigueAdjustStrategy: StrategyDefinition = {
   name: 'reduce-difficulty',
   type: 'difficulty-adjust',
+  priority: 90,
   description: '当疲劳度高时，降低内容难度',
   triggers: [
     {
@@ -357,6 +360,7 @@ export const fatigueAdjustStrategy: StrategyDefinition = {
 export const challengeBoostStrategy: StrategyDefinition = {
   name: 'increase-challenge',
   type: 'challenge-boost',
+  priority: 40,
   description: '当挫败感出现但能力足够时，提高挑战',
   triggers: [
     {
@@ -382,6 +386,7 @@ export const challengeBoostStrategy: StrategyDefinition = {
 export const deviationResponseStrategy: StrategyDefinition = {
   name: 'handle-lane-change',
   type: 'deviation-response',
+  priority: 80,
   description: '当学习重点转移时，调整路径',
   triggers: [
     {

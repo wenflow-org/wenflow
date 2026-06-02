@@ -12,6 +12,7 @@ import { agentHandlers, allAgentDefinitions } from '../agents';
 import { AgentExecutionRequest, AgentContext } from '../agents/protocol';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
 import { getRequestContext } from '../gateway/api-gateway/context';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -220,7 +221,12 @@ router.post('/execute/:agentId', authMiddleware, async (req: Request, res: Respo
         }
       });
     } catch (logError) {
-      console.error('[Agent Route] Failed to persist agent call log:', logError);
+      logger.error('[agents-route] failed to persist agent call log', {
+        agentId,
+        userId,
+        traceId: requestContext.traceId,
+        error: logError,
+      });
     }
   }
 });

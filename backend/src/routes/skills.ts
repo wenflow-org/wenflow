@@ -8,8 +8,28 @@ import { getGateway } from '../gateway';
 import { skillHandlers, allSkillDefinitions } from '../skills';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router();
+
+function summarizePayload(value: any, depth = 0): any {
+  if (depth > 2) return '[max-depth]';
+  if (value == null) return value;
+  if (typeof value === 'string') return value.length > 160 ? `${value.slice(0, 160)}...` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) {
+    return {
+      count: value.length,
+      sample: value.slice(0, 2).map((item) => summarizePayload(item, depth + 1)),
+    };
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).slice(0, 10).map(([key, item]) => [key, summarizePayload(item, depth + 1)])
+    );
+  }
+  return String(value);
+}
 
 /**
  * 获取所有 Skill 列表
@@ -83,12 +103,20 @@ router.post('/execute/:skillName', async (req: Request, res: Response) => {
     const { skillName } = req.params;
     const input = req.body;
     
-    console.log(`[Skill] Executing: ${skillName}`, JSON.stringify(input, null, 2));
+    logger.info('[skills-route] executing skill', {
+      skillName,
+      inputSummary: summarizePayload(input),
+    });
     
     const gateway = getGateway();
     const result = await gateway.executeSkill(skillName, input);
     
-    console.log(`[Skill] Result: ${result.success}`, result.output ? 'has output' : 'no output');
+    logger.info('[skills-route] skill execution completed', {
+      skillName,
+      success: result.success,
+      hasOutput: !!result.output,
+      duration: result.duration,
+    });
     
     res.json({
       success: result.success,
@@ -99,7 +127,10 @@ router.post('/execute/:skillName', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error(`[Skill] Error executing ${req.params.skillName}:`, error);
+    logger.error('[skills-route] skill execution failed', {
+      skillName: req.params.skillName,
+      error,
+    });
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

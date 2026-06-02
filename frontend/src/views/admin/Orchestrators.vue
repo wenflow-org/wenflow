@@ -8,111 +8,138 @@
     <div class="page-hero">
       <span class="pill">Admin</span>
       <h2 class="page-hero__title">
-        <el-icon class="page-title-icon"><Connection /></el-icon>
-        编排器视图
+        编排监控
       </h2>
-      <p class="page-hero__subtitle">监控 Agent 编排流程和执行链路</p>
+      <p class="page-hero__subtitle">监控编排链路的调用趋势、成功率、超时与成员活跃情况。</p>
     </div>
 
-    <div class="toolbar" style="position: relative; z-index: 1;">
-      <el-select v-model="timeRange" class="time-select" size="large">
+    <div class="toolbar-panel" style="position: relative; z-index: 1;">
+      <div class="toolbar-panel__intro">
+        <div>
+          <h3>监控范围</h3>
+          <p>默认先看各编排器的整体健康，再按需展开成员和最近趋势，结构设计请前往编排定义。</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <el-select v-model="timeRange" class="time-select">
         <el-option label="今天" value="today" />
         <el-option label="昨天" value="yesterday" />
         <el-option label="近 7 天" value="week" />
         <el-option label="近 30 天" value="month" />
         <el-option label="全部" value="all" />
-      </el-select>
-      <el-switch
-        v-model="showAggregated"
-        inline-prompt
-        active-text="看全编排链路"
-        inactive-text="仅编排器本体"
-      />
-      <el-button type="primary" :loading="loading" @click="loadData">刷新</el-button>
+        </el-select>
+        <el-switch
+          v-model="showAggregated"
+          inline-prompt
+          active-text="看全编排链路"
+          inactive-text="仅编排器本体"
+        />
+        <el-button type="primary" :loading="loading" @click="loadData">刷新</el-button>
+      </div>
     </div>
 
-    <div class="cards-grid" v-loading="loading" style="position: relative; z-index: 1;">
-      <el-card v-for="item in orchestratorStats" :key="item.id" shadow="hover" class="stats-card">
-        <div class="card-head">
-          <div>
-            <div class="card-title">{{ item.name }}</div>
-            <div class="card-id">{{ item.id }}</div>
-          </div>
-          <el-tag :type="statusTagType(item.health)" size="small">{{ statusText(item.health) }}</el-tag>
-        </div>
+    <div class="overview-strip" v-if="orchestratorStats.length" style="position: relative; z-index: 1;">
+      <div class="overview-pill">
+        <span class="overview-pill__label">编排器</span>
+        <strong>{{ orchestratorStats.length }}</strong>
+      </div>
+      <div class="overview-pill">
+        <span class="overview-pill__label">健康</span>
+        <strong>{{ orchestratorStats.filter(item => item.health === 'healthy').length }}</strong>
+      </div>
+      <div class="overview-pill">
+        <span class="overview-pill__label">预警/异常</span>
+        <strong>{{ orchestratorStats.filter(item => item.health === 'warning' || item.health === 'error').length }}</strong>
+      </div>
+      <div class="overview-pill">
+        <span class="overview-pill__label">总调用</span>
+        <strong>{{ orchestratorStats.reduce((sum, item) => sum + item.total, 0) }}</strong>
+      </div>
+    </div>
 
-        <div class="metrics">
-          <div class="metric"><span>总调用</span><strong>{{ item.total }}</strong></div>
-          <div class="metric"><span>成功率</span><strong>{{ item.successRate.toFixed(1) }}%</strong></div>
-          <div class="metric"><span>平均耗时</span><strong>{{ item.avgDuration }}ms</strong></div>
-          <div class="metric"><span>超时数</span><strong>{{ item.timeout }}</strong></div>
-        </div>
+    <div class="orchestrator-list-card" v-loading="loading" style="position: relative; z-index: 1;">
+      <div v-if="orchestratorStats.length" class="orchestrator-list">
+        <article v-for="item in orchestratorStats" :key="item.id" class="orchestrator-row" :class="`orchestrator-row--${item.health}`">
+          <div class="orchestrator-row__summary">
+            <div class="orchestrator-row__identity">
+              <div class="orchestrator-row__title-row">
+                <strong class="orchestrator-row__name">{{ item.name }}</strong>
+                <el-tag :type="statusTagType(item.health)" size="small">{{ statusText(item.health) }}</el-tag>
+              </div>
+              <div class="orchestrator-row__meta">
+                <span>{{ item.id }}</span>
+                <span>成员 {{ item.members.length }}</span>
+                <span>{{ showAggregated ? '聚合全编排链路' : '仅编排器本体' }}</span>
+              </div>
+            </div>
 
-        <div class="member-row">
-          <div class="member-head">
-            <span class="member-title">所属 Agent</span>
-            <div class="member-actions">
-              <el-button text type="primary" @click="toggleMembers(item.id)">
-                {{ expandedIds.has(item.id) ? '收起' : `查看(${item.members.length})` }}
+            <div class="orchestrator-row__metrics">
+              <div class="orchestrator-metric">
+                <span>总调用</span>
+                <strong>{{ item.total }}</strong>
+              </div>
+              <div class="orchestrator-metric">
+                <span>成功率</span>
+                <strong>{{ item.successRate.toFixed(1) }}%</strong>
+              </div>
+              <div class="orchestrator-metric">
+                <span>平均耗时</span>
+                <strong>{{ item.avgDuration }}ms</strong>
+              </div>
+              <div class="orchestrator-metric">
+                <span>超时</span>
+                <strong>{{ item.timeout }}</strong>
+              </div>
+            </div>
+
+            <div class="orchestrator-row__actions">
+              <el-button class="table-link-btn" @click="toggleMembers(item.id)">
+                {{ expandedIds.has(item.id) ? '收起详情' : '展开详情' }}
               </el-button>
-              <el-button text type="primary" @click="goExecutionLogs(item)">查看日志</el-button>
+              <el-button class="table-link-btn" @click="goExecutionLogs(item)">查看日志</el-button>
             </div>
           </div>
 
-          <div class="member-tags" v-if="expandedIds.has(item.id)">
-            <el-tag
-              v-for="member in item.members"
-              :key="`${item.id}-${member.agentId}`"
-              size="small"
-              effect="plain"
-              class="member-tag"
-              @click="goExecutionLogsByMember(member.agentId)"
-            >
-              {{ member.name }}
-            </el-tag>
-          </div>
-          <div class="member-tags" v-else>
-            <el-tag
-              v-for="member in item.members.slice(0, 4)"
-              :key="`${item.id}-${member.agentId}`"
-              size="small"
-              effect="plain"
-              class="member-tag"
-              @click="goExecutionLogsByMember(member.agentId)"
-            >
-              {{ member.name }}
-            </el-tag>
-            <el-tag v-if="item.members.length > 4" size="small" effect="plain">+{{ item.members.length - 4 }}</el-tag>
-          </div>
-        </div>
+          <div v-if="expandedIds.has(item.id)" class="orchestrator-row__details">
+            <section class="detail-panel">
+              <div class="detail-panel__header">
+                <h4>成员 Agent</h4>
+                <span>{{ item.members.length }} 个</span>
+              </div>
+              <div class="member-tags">
+                <el-tag
+                  v-for="member in item.members"
+                  :key="`${item.id}-${member.agentId}`"
+                  size="small"
+                  effect="plain"
+                  class="member-tag"
+                  @click="goExecutionLogsByMember(member.agentId)"
+                >
+                  {{ member.name }}
+                </el-tag>
+              </div>
+            </section>
 
-        <div v-if="item.id === 'path-orchestrator'" class="member-row member-row--pipeline">
-          <div class="member-head">
-            <span class="member-title">Path Pipeline</span>
+            <section class="detail-panel">
+              <div class="detail-panel__header">
+                <h4>最近调用趋势</h4>
+                <span>{{ item.trend.length ? '近 8 个采样点' : '暂无数据' }}</span>
+              </div>
+              <div class="trend-list" v-if="item.trend.length > 0">
+                <div class="trend-row" v-for="point in item.trend" :key="`${item.id}-${point.label}`">
+                  <span class="trend-time">{{ point.label }}</span>
+                  <div class="trend-bar-wrap">
+                    <div class="trend-bar" :style="{ width: `${point.width}%` }"></div>
+                  </div>
+                  <span class="trend-value">{{ point.value }}</span>
+                </div>
+              </div>
+              <el-empty v-else description="暂无趋势数据" :image-size="42" />
+            </section>
           </div>
-          <div class="pipeline-tags">
-            <el-tag size="small" effect="plain" class="member-tag">Goal source</el-tag>
-            <span class="pipeline-arrow">→</span>
-            <el-tag size="small" effect="plain" class="member-tag">path-scene-framing</el-tag>
-            <span class="pipeline-arrow">→</span>
-            <el-tag size="small" effect="plain" class="member-tag">path-agent</el-tag>
-            <span class="pipeline-arrow">→</span>
-            <el-tag size="small" effect="plain" class="member-tag">stage-designer</el-tag>
-          </div>
-        </div>
-
-        <div class="trend-title">最近调用趋势</div>
-        <div class="trend-list" v-if="item.trend.length > 0">
-          <div class="trend-row" v-for="point in item.trend" :key="`${item.id}-${point.label}`">
-            <span class="trend-time">{{ point.label }}</span>
-            <div class="trend-bar-wrap">
-              <div class="trend-bar" :style="{ width: `${point.width}%` }"></div>
-            </div>
-            <span class="trend-value">{{ point.value }}</span>
-          </div>
-        </div>
-        <el-empty v-else description="暂无趋势数据" :image-size="46" />
-      </el-card>
+        </article>
+      </div>
+      <el-empty v-else description="暂无编排器监控数据" />
     </div>
   </div>
 </template>
@@ -152,6 +179,7 @@ interface OrchestratorStats {
 }
 
 const ORCHESTRATOR_DISPLAY_NAME: Record<string, string> = {
+  'simulation-orchestrator': '虚拟学习者编排器',
   'requirement-orchestrator': '需求编排器',
   'path-orchestrator': '路径编排器',
   'ai-teaching-agent': '教学编排器'
@@ -265,6 +293,7 @@ const toggleMembers = (orchestratorId: string) => {
   expandedIds.value = next;
 };
 
+
 const goExecutionLogs = (item: OrchestratorStats) => {
   router.push({
     name: 'AdminExecutionLogs',
@@ -293,8 +322,8 @@ const loadData = async () => {
     const result = await Promise.all(orchestrators.map(loadOne));
     orchestratorStats.value = result;
   } catch (error) {
-    console.error('加载编排器视图失败:', error);
-    toast.error('加载编排器视图失败');
+    console.error('加载编排监控失败:', error);
+    toast.error('加载编排监控失败');
   } finally {
     loading.value = false;
   }
@@ -323,143 +352,229 @@ onMounted(loadData);
 
 /* Hero */
 .page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 0.5rem; }
+.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
 
-.page-title-icon {
-  color: var(--color-primary);
-}
-
 .toolbar {
-  margin-bottom: 1rem;
   display: flex;
   gap: 0.7rem;
   align-items: center;
   flex-wrap: wrap;
 }
 
+.toolbar-panel {
+  margin-bottom: 1rem;
+  padding: 16px 18px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 255, 0.92));
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.08);
+}
+
+.toolbar-panel__intro {
+  margin-bottom: 12px;
+}
+
+.toolbar-panel__intro h3 {
+  margin: 0;
+  color: #22344d;
+  font-size: 1rem;
+}
+
+.toolbar-panel__intro p {
+  margin: 6px 0 0;
+  color: #7085a6;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
 .time-select {
   width: 180px;
 }
 
-.cards-grid {
+.overview-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
-/* Glass card effect */
-.stats-card {
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(244, 247, 252, 0.88));
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
+.overview-pill {
+  border-radius: 18px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.96));
+  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.08);
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
 }
 
-.stats-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(52, 120, 246, 0.1);
+.overview-pill__label {
+  color: #7b8ba3;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
-.card-head {
+.overview-pill strong {
+  color: #22344d;
+  font-size: 1.6rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.orchestrator-list-card {
+  width: 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
+  border: 1px solid #d2dbf3;
+  border-radius: 28px;
+  padding: 0.8rem;
+  box-shadow: 0 18px 40px rgba(42, 72, 128, 0.1);
+}
+
+.orchestrator-list {
+  display: grid;
+  gap: 12px;
+}
+
+.orchestrator-row {
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  border-radius: 22px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 255, 0.95));
+  display: grid;
+  gap: 14px;
+}
+
+.orchestrator-row--warning {
+  box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.22);
+}
+
+.orchestrator-row--error {
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, 0.22);
+}
+
+.orchestrator-row__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.orchestrator-row__identity,
+.orchestrator-row__metrics {
+  min-width: 0;
+}
+
+.orchestrator-row__title-row {
   display: flex;
-  justify-content: space-between;
-  align-items: start;
-  margin-bottom: 0.8rem;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.card-title {
-  font-size: 1rem;
+.orchestrator-row__name {
+  color: #22344d;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.orchestrator-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 6px;
+  color: #7085a6;
+  font-size: 12px;
+}
+
+.orchestrator-row__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.orchestrator-metric {
+  border: 1px solid rgba(205, 216, 238, 0.86);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.94));
+  padding: 10px 12px;
+  display: grid;
+  gap: 3px;
+}
+
+.orchestrator-metric span {
+  color: #7b8ba3;
+  font-size: 12px;
   font-weight: 700;
-  color: var(--text-primary);
 }
 
-.card-id {
-  margin-top: 0.15rem;
-  font-family: monospace;
-  color: var(--text-muted);
-  font-size: 0.8rem;
+.orchestrator-metric strong {
+  color: #22344d;
+  font-size: 13px;
 }
 
-.metrics {
+.orchestrator-row__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.table-link-btn {
+  border-radius: 14px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--color-primary-dark, #1f57cc);
+  border: 1px solid rgba(52, 120, 246, 0.16);
+  background: rgba(244, 249, 255, 0.96);
+}
+
+.orchestrator-row__details {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
-  margin-bottom: 0.9rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.metric {
-  border: 1px solid var(--border-default);
-  border-radius: var(--fluent-radius-md);
-  padding: 0.55rem 0.65rem;
+.detail-panel {
+  border: 1px solid rgba(205, 216, 238, 0.86);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.95));
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.detail-panel__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
-.metric span {
-  color: var(--text-secondary);
-  font-size: 0.84rem;
+.detail-panel__header h4 {
+  margin: 0;
+  color: #22344d;
+  font-size: 0.95rem;
 }
 
-.metric strong {
-  color: var(--text-primary);
-}
-
-.member-row {
-  margin-bottom: 0.8rem;
-}
-
-.member-row--pipeline {
-  margin-top: -0.2rem;
-}
-
-.member-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.45rem;
-}
-
-.member-title {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-
-.member-actions {
-  display: flex;
-  gap: 0.35rem;
+.detail-panel__header span,
+.member-title,
+.trend-title {
+  color: #7b8ba3;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .member-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.45rem;
 }
 
 .member-tag {
   cursor: pointer;
-}
-
-.pipeline-tags {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.pipeline-arrow {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.trend-title {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  margin-bottom: 0.45rem;
 }
 
 .trend-list {
@@ -498,5 +613,40 @@ onMounted(loadData);
   text-align: right;
   color: var(--text-primary);
   font-size: 0.8rem;
+}
+
+@media (max-width: 1080px) {
+  .overview-strip,
+  .orchestrator-row__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .orchestrator-row__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .orchestrator-row__actions {
+    justify-content: flex-start;
+  }
+
+  .orchestrator-row__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .overview-strip,
+  .orchestrator-row__details,
+  .orchestrator-row__metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page-hero,
+  .toolbar-panel,
+  .orchestrator-row,
+  .detail-panel {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 </style>

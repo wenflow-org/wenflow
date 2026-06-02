@@ -12,11 +12,12 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
 import simulationOrchestrator from '../../orchestrators/simulation.orchestrator';
 import { getGateway } from '../../gateway';
-import type { SimulationAgentInput } from '../../agents/virtual-learner-simulation-agent/types';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
 import { executeSkill } from '../../skills';
 import learningService from '../../services/learning/learning.service';
+import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
+import { signProjectionToken, verifyProjectionToken } from '../../utils/projection-token';
 
 const router = express.Router();
 const VIRTUAL_USER_PASSWORD = 'VirtualTest123';
@@ -90,10 +91,98 @@ function parseJson<T = any>(value: string | null | undefined, fallback: T): T {
   }
 }
 
+function normalizeText(value: any) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeStoryId(value: any) {
+  return normalizeText(value).toLowerCase();
+}
+
+function normalizeStoryPoolData(profileData: any) {
+  const rawStoryPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
+  const usedIds = new Set<string>();
+  let changed = false;
+
+  const storyPool = rawStoryPool
+    .filter((story: any) => story && typeof story === 'object')
+    .map((story: any, index: number) => {
+      const nextStory = { ...story };
+      const rawId = normalizeStoryId(story.id);
+
+      if (!rawId || usedIds.has(rawId)) {
+        nextStory.id = `story_${uuidv4()}`;
+        changed = true;
+      }
+
+      const nextId = normalizeStoryId(nextStory.id);
+      usedIds.add(nextId);
+
+      if (!normalizeText(nextStory.title)) {
+        nextStory.title = `故事 ${index + 1}`;
+        changed = true;
+      }
+
+      return nextStory;
+    });
+
+  return {
+    changed,
+    profileData: {
+      ...(profileData && typeof profileData === 'object' ? profileData : {}),
+      storyPool,
+    },
+    storyPool,
+  };
+}
+
+async function ensureProfileStoryPool(profile: any) {
+  const profileData = parseJson<any>(profile?.profile, {});
+  const normalized = normalizeStoryPoolData(profileData);
+
+  if (normalized.changed && profile?.id) {
+    await prisma.virtual_learner_profiles.update({
+      where: { id: profile.id },
+      data: { profile: JSON.stringify(normalized.profileData) },
+    });
+    profile.profile = JSON.stringify(normalized.profileData);
+  }
+
+  return normalized;
+}
+
+function buildStorySignature(story: any) {
+  return {
+    title: normalizeText(story?.title || story?.storyTitle),
+    triggerEvent: normalizeText(story?.storyTriggerEvent || story?.triggerEvent),
+  };
+}
+
+function isSameStory(story: any, sessionStory: any) {
+  if (!story || !sessionStory) return false;
+
+  const storyId = normalizeStoryId(story.id || story.storyId);
+  const sessionStoryId = normalizeStoryId(sessionStory.storyId || sessionStory.id);
+  const storySignature = buildStorySignature(story);
+  const sessionSignature = buildStorySignature(sessionStory);
+
+  if (storyId && sessionStoryId && storyId === sessionStoryId) {
+    if (!storySignature.title || !sessionSignature.title || storySignature.title === sessionSignature.title) {
+      if (!storySignature.triggerEvent || !sessionSignature.triggerEvent || storySignature.triggerEvent === sessionSignature.triggerEvent) {
+        return true;
+      }
+    }
+  }
+
+  return !!storySignature.title
+    && !!storySignature.triggerEvent
+    && storySignature.title === sessionSignature.title
+    && storySignature.triggerEvent === sessionSignature.triggerEvent;
+}
+
 function getStoryPool(profile: any) {
   const profileData = parseJson<any>(profile?.profile, {});
-  const storyPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
-  return storyPool.filter((story: any) => story && typeof story === 'object');
+  return normalizeStoryPoolData(profileData).storyPool;
 }
 
 function pickStoryFromPool(profile: any, storyId?: string, storyIndex?: number) {
@@ -148,6 +237,262 @@ function parseLogs(session: any) {
   }
 }
 
+function buildLearningConversationProjection(logs: any[] = []) {
+  const conversation: Array<{ role: 'assistant' | 'user'; content: string; phase: string; timestamp?: string | null }> = [];
+
+  for (const log of logs) {
+    if (log?.phase === 'learning-start' && log?.details?.output?.welcomeMessage) {
+      conversation.push({
+        role: 'assistant',
+        content: String(log.details.output.welcomeMessage),
+        phase: 'learning-start',
+        timestamp: log.timestamp || null,
+      });
+    }
+
+    if (log?.phase === 'learning-reply' && log?.details?.output?.reply) {
+      conversation.push({
+        role: 'user',
+        content: String(log.details.output.reply),
+        phase: 'learning-reply',
+        timestamp: log.timestamp || null,
+      });
+    }
+
+    if (log?.phase === 'learning-response' && log?.details?.output?.aiResponse) {
+      conversation.push({
+        role: 'assistant',
+        content: String(log.details.output.aiResponse),
+        phase: 'learning-response',
+        timestamp: log.timestamp || null,
+      });
+    }
+  }
+
+  return conversation;
+}
+
+function buildLearningConversationRoundsProjection(logs: any[] = []) {
+  const rounds: Array<{
+    round: number;
+    isOpening: boolean;
+    timestamp?: string | null;
+    learnerMessage: { role: 'user'; content: string; timestamp?: string | null } | null;
+    assistantMessage: { role: 'assistant'; content: string; timestamp?: string | null } | null;
+    knowledgePoints: any[];
+    currentState: any | null;
+    currentTask: string | null;
+    currentMilestone: string | null;
+    strategies: string[];
+    cognitiveLevel: string | null;
+    knowledgePoint: string | null;
+    isCompletion: boolean;
+    autoEnded: boolean;
+    peerTriggered: boolean;
+    peerMessage: string | null;
+    learnerState: any | null;
+    emotion: string | null;
+  }> = [];
+
+  let pendingLearner: any | null = null;
+  let roundNumber = 0;
+
+  for (const log of logs) {
+    if (log?.phase === 'learning-start' && log?.details?.output?.welcomeMessage) {
+      rounds.push({
+        round: roundNumber,
+        isOpening: true,
+        timestamp: log.timestamp || null,
+        learnerMessage: null,
+        assistantMessage: {
+          role: 'assistant',
+          content: String(log.details.output.welcomeMessage),
+          timestamp: log.timestamp || null,
+        },
+        knowledgePoints: [],
+        currentState: null,
+        currentTask: log?.details?.output?.currentTask ? String(log.details.output.currentTask) : null,
+        currentMilestone: log?.details?.output?.currentMilestone ? String(log.details.output.currentMilestone) : null,
+        strategies: [],
+        cognitiveLevel: null,
+        knowledgePoint: null,
+        isCompletion: false,
+        autoEnded: false,
+        peerTriggered: false,
+        peerMessage: null,
+        learnerState: null,
+        emotion: null,
+      });
+      continue;
+    }
+
+    if (log?.phase === 'learning-reply' && log?.details?.output?.reply) {
+      pendingLearner = {
+        timestamp: log.timestamp || null,
+        content: String(log.details.output.reply),
+        currentTask: log?.details?.output?.currentTask ? String(log.details.output.currentTask) : null,
+        currentMilestone: log?.details?.output?.currentMilestone ? String(log.details.output.currentMilestone) : null,
+        learnerState: log?.details?.output?.learnerState || null,
+        emotion: log?.details?.output?.emotion ? String(log.details.output.emotion) : null,
+      };
+      continue;
+    }
+
+    if (log?.phase === 'learning-response' && pendingLearner) {
+      roundNumber += 1;
+      const output = log?.details?.output || {};
+      rounds.push({
+        round: roundNumber,
+        isOpening: false,
+        timestamp: log.timestamp || pendingLearner.timestamp || null,
+        learnerMessage: {
+          role: 'user',
+          content: pendingLearner.content,
+          timestamp: pendingLearner.timestamp || null,
+        },
+        assistantMessage: {
+          role: 'assistant',
+          content: output?.aiResponse ? String(output.aiResponse) : '',
+          timestamp: log.timestamp || null,
+        },
+        knowledgePoints: Array.isArray(output?.knowledgePoints) ? output.knowledgePoints : [],
+        currentState: output?.currentState && typeof output.currentState === 'object' ? output.currentState : null,
+        currentTask: pendingLearner.currentTask,
+        currentMilestone: pendingLearner.currentMilestone,
+        strategies: Array.isArray(output?.strategies)
+          ? output.strategies.filter((item: any) => typeof item === 'string' && item.trim())
+          : [],
+        cognitiveLevel: output?.cognitiveLevel ? String(output.cognitiveLevel) : null,
+        knowledgePoint: output?.knowledgePoint ? String(output.knowledgePoint) : null,
+        isCompletion: !!output?.isCompletion,
+        autoEnded: !!output?.autoEnded,
+        peerTriggered: !!output?.peerTriggered,
+        peerMessage: output?.peerMessage ? String(output.peerMessage) : null,
+        learnerState: pendingLearner.learnerState,
+        emotion: pendingLearner.emotion,
+      });
+      pendingLearner = null;
+    }
+  }
+
+  if (pendingLearner) {
+    roundNumber += 1;
+    rounds.push({
+      round: roundNumber,
+      isOpening: false,
+      timestamp: pendingLearner.timestamp || null,
+      learnerMessage: {
+        role: 'user',
+        content: pendingLearner.content,
+        timestamp: pendingLearner.timestamp || null,
+      },
+      assistantMessage: null,
+      knowledgePoints: [],
+      currentState: null,
+      currentTask: pendingLearner.currentTask,
+      currentMilestone: pendingLearner.currentMilestone,
+      strategies: [],
+      cognitiveLevel: null,
+      knowledgePoint: null,
+      isCompletion: false,
+      autoEnded: false,
+      peerTriggered: false,
+      peerMessage: null,
+      learnerState: pendingLearner.learnerState,
+      emotion: pendingLearner.emotion,
+    });
+  }
+
+  const latestRound = [...rounds].reverse().find((item) => !item.isOpening) || null;
+
+  return {
+    rounds,
+    latest: latestRound
+      ? {
+          knowledgePoints: latestRound.knowledgePoints,
+          currentState: latestRound.currentState,
+          currentTask: latestRound.currentTask,
+          currentMilestone: latestRound.currentMilestone,
+          strategies: latestRound.strategies,
+          cognitiveLevel: latestRound.cognitiveLevel,
+        }
+      : {
+          knowledgePoints: [],
+          currentState: null,
+          currentTask: null,
+          currentMilestone: null,
+          strategies: [],
+          cognitiveLevel: null,
+        },
+  };
+}
+
+function buildGoalConversationProjection(goalConversation: any, fallbackLogs: any[] = []) {
+  if (goalConversation) {
+    const data = parseJson<any>(goalConversation.collectedData, {});
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+
+    return {
+      source: 'goal-conversation',
+      stage: goalConversation.stage || null,
+      status: goalConversation.status || null,
+      messages: messages.map((message: any, index: number) => ({
+        id: message?.id || `goal-${index}`,
+        role: message?.role === 'user' ? 'user' : 'assistant',
+        content: typeof message?.content === 'string' ? message.content : '',
+        timestamp: message?.timestamp || null,
+      })).filter((message: any) => message.content),
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+      quickReplies: Array.isArray(data.questions_to_ask) ? data.questions_to_ask : [],
+    };
+  }
+
+  const goalLogs = Array.isArray(fallbackLogs) ? fallbackLogs : [];
+  const messages: any[] = [];
+
+  for (const log of goalLogs) {
+    if (log?.phase === 'virtual-reply' && log?.details?.output?.reply) {
+      messages.push({
+        id: `goal-fallback-user-${messages.length}`,
+        role: 'user',
+        content: String(log.details.output.reply),
+        timestamp: log.timestamp || null,
+      });
+    }
+
+    if (log?.phase === 'goal-response' && log?.details?.output?.userVisible) {
+      messages.push({
+        id: `goal-fallback-ai-${messages.length}`,
+        role: 'assistant',
+        content: String(log.details.output.userVisible),
+        timestamp: log.timestamp || null,
+      });
+    }
+  }
+
+  return {
+    source: 'logs-fallback',
+    stage: null,
+    status: null,
+    messages,
+    confidence: 0,
+    quickReplies: [],
+  };
+}
+
+function buildSessionConversations(session: any, logs: any[] = [], goalConversation?: any) {
+  const learningProjection = buildLearningConversationRoundsProjection(logs);
+  return {
+    goal: buildGoalConversationProjection(goalConversation, logs),
+    learning: {
+      source: 'session-logs',
+      messages: buildLearningConversationProjection(logs),
+      rounds: learningProjection.rounds,
+      latest: learningProjection.latest,
+    }
+  };
+}
+
 function buildSessionBindings(session: any) {
   const stageResults = parseStageResults(session);
   const learningState = stageResults.learning || {};
@@ -160,12 +505,241 @@ function buildSessionBindings(session: any) {
   };
 }
 
+function buildSessionLearnerStateProjection(session: any, stageResults: any, storyContext: any) {
+  const goalState = stageResults.goal || {};
+  const pathReviewState = stageResults.path_review || {};
+  const learningState = stageResults.learning || {};
+  const goalLearnerState = goalState.learnerState && typeof goalState.learnerState === 'object' ? goalState.learnerState : null;
+  const pathReviewLearnerState = pathReviewState.learnerState && typeof pathReviewState.learnerState === 'object' ? pathReviewState.learnerState : null;
+  const learningLearnerState = learningState.learnerState && typeof learningState.learnerState === 'object' ? learningState.learnerState : null;
+
+  const common = {
+    emotion: learningLearnerState?.emotion || goalLearnerState?.emotion || null,
+    confusionLevel: learningLearnerState?.confusionLevel ?? goalLearnerState?.confusionLevel ?? null,
+    frustrationLevel: learningLearnerState?.frustrationLevel ?? goalLearnerState?.frustrationLevel ?? null,
+    motivationLevel: learningLearnerState?.motivationLevel ?? goalLearnerState?.motivationLevel ?? null,
+    attentionLevel: learningLearnerState?.attentionLevel ?? goalLearnerState?.attentionLevel ?? null,
+    persistenceLevel: learningLearnerState?.persistenceLevel ?? goalLearnerState?.persistenceLevel ?? null,
+    selfPerceivedMastery: learningLearnerState?.selfPerceivedMastery ?? goalLearnerState?.selfPerceivedMastery ?? null,
+    actualMastery: learningLearnerState?.actualMastery ?? goalLearnerState?.actualMastery ?? null,
+    remainingUnknowns: Array.isArray(goalLearnerState?.remainingUnknowns)
+      ? goalLearnerState.remainingUnknowns
+      : Array.isArray(learningLearnerState?.remainingBlockers)
+        ? learningLearnerState.remainingBlockers
+        : [],
+    storyPressurePoints: Array.isArray(storyContext?.pressurePoints) ? storyContext.pressurePoints : [],
+    storyBehaviorHooks: Array.isArray(storyContext?.behaviorHooks) ? storyContext.behaviorHooks : [],
+  };
+
+  return {
+    currentStage: session.currentStage,
+    common,
+    goal: goalLearnerState,
+    pathReview: pathReviewLearnerState,
+    learning: learningLearnerState,
+    latest: learningLearnerState || pathReviewLearnerState || goalLearnerState || common,
+  };
+}
+
+function buildSessionKnowledgeProjection(stageResults: any, logs: any[] = [], teachingSession?: any) {
+  const learningState = stageResults.learning || {};
+  const learningConversation = Array.isArray(learningState.conversationHistory) ? learningState.conversationHistory : [];
+  const latestLearningResponse = [...logs].reverse().find((log: any) => log?.phase === 'learning-response')?.details?.output || {};
+  const teachingKnowledgePoints = Array.isArray(teachingSession?.knowledgeState) ? teachingSession.knowledgeState : [];
+  const knowledgePoints = teachingKnowledgePoints.length
+    ? teachingKnowledgePoints
+    : (Array.isArray(latestLearningResponse.knowledgePoints) ? latestLearningResponse.knowledgePoints : []);
+  const currentState = teachingSession?.teachingState && typeof teachingSession.teachingState === 'object'
+    ? {
+        lss: teachingSession.teachingState.lss ?? null,
+        ktl: teachingSession.teachingState.ktl ?? null,
+        lf: teachingSession.teachingState.lf ?? null,
+        lsb: teachingSession.teachingState.lsb ?? null,
+      }
+    : (latestLearningResponse.currentState && typeof latestLearningResponse.currentState === 'object'
+      ? latestLearningResponse.currentState
+      : null);
+  const latestKnowledgePoint = teachingSession?.messages?.slice?.().reverse?.().find((message: any) => message?.knowledgePoint)?.knowledgePoint
+    || latestLearningResponse.knowledgePoint
+    || knowledgePoints[0]?.name
+    || null;
+
+  return {
+    goal: Array.isArray(stageResults.goal?.knowledgeState) ? stageResults.goal.knowledgeState : [],
+    learning: {
+      knowledgePoints,
+      currentState,
+      latestKnowledgePoint,
+      conversationHistory: learningConversation,
+    },
+    latest: knowledgePoints,
+  };
+}
+
+function buildSessionRuntime(session: any, teachingSession?: any) {
+  const storyContext = parseStoryContext(session);
+  const stageResults = parseStageResults(session);
+  const logs = parseLogs(session);
+  const goalState = stageResults.goal || {};
+  const pathState = stageResults.path || {};
+  const pathReviewState = stageResults.path_review || {};
+  const learningState = stageResults.learning || {};
+  const bindings = buildSessionBindings(session);
+  const learnerState = buildSessionLearnerStateProjection(session, stageResults, storyContext);
+  const knowledgeState = buildSessionKnowledgeProjection(stageResults, logs, teachingSession);
+
+  return {
+    learnerId: session.virtualLearnerProfileId || session.virtualLearnerId || null,
+    currentStage: session.currentStage,
+    status: session.status,
+    story: storyContext,
+    bindings,
+    learnerState,
+    knowledgeState,
+    stageStatus: {
+      goal: {
+        conversationId: bindings.goalConversationId,
+        stage: goalState.finalStage || goalState.stage || null,
+        ready: ['ready', 'completed'].includes(String(goalState.finalStage || goalState.stage || '').toLowerCase()) || !!bindings.learningPathId,
+        learnerState: goalState.learnerState || null,
+        concernPool: goalState.concernPool || null,
+        disclosedConcerns: goalState.disclosedConcerns || [],
+      },
+      path: {
+        learningPathId: bindings.learningPathId,
+        generated: !!bindings.learningPathId,
+        totalMilestones: pathState.totalMilestones || null,
+        review: pathReviewState && Object.keys(pathReviewState).length ? {
+          decision: pathReviewState.decision || null,
+          reaction: pathReviewState.reaction || null,
+          confidence: pathReviewState.confidence || null,
+          biggestConcern: pathReviewState.biggestConcern || null,
+          learnerState: pathReviewState.learnerState || null,
+        } : null,
+      },
+      learning: {
+        teachingSessionId: bindings.teachingSessionId,
+        currentMilestone: learningState.currentMilestone ?? null,
+        currentMilestoneTitle: learningState.currentMilestoneTitle || null,
+        currentTaskId: learningState.currentTaskId || null,
+        currentTaskTitle: learningState.currentTaskTitle || null,
+        totalMilestones: learningState.totalMilestones || null,
+        learnerState: learningState.learnerState || null,
+        knowledgeState: knowledgeState.learning.knowledgePoints,
+        currentState: knowledgeState.learning.currentState,
+        latestKnowledgePoint: knowledgeState.learning.latestKnowledgePoint,
+        manualStop: !!learningState.manualStop,
+      }
+    }
+  };
+}
+
+function buildVirtualLearnerTestProjection(profile: any) {
+  const storyPool = getStoryPool(profile);
+  const sessions = Array.isArray(profile?.sessions)
+    ? [...profile.sessions].sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    : [];
+  const latestSession = sessions[0] || null;
+  const latestStoryContext = latestSession ? parseStoryContext(latestSession) : null;
+  const latestBindings = latestSession ? buildSessionBindings(latestSession) : null;
+  const activeStory = latestStoryContext?.storyId
+    ? storyPool.find((story: any) => story?.id === latestStoryContext.storyId) || latestStoryContext
+    : latestStoryContext || storyPool[0] || null;
+
+  let recommendedEntry: 'dashboard' | 'goal' | 'path' | 'learn' = 'dashboard';
+  let recommendedReason = '当前还没有运行记录，先进入前台总览。';
+
+  if (latestSession && latestBindings?.currentTaskId) {
+    recommendedEntry = 'learn';
+    recommendedReason = '最近一次运行已经进入 Learn，直接查看当前学习任务最贴近真实状态。';
+  } else if (latestSession && latestBindings?.learningPathId) {
+    recommendedEntry = 'path';
+    recommendedReason = '最近一次运行已经生成 Path，先查看路径内容与阶段承接。';
+  } else if (latestSession && latestBindings?.goalConversationId) {
+    recommendedEntry = 'goal';
+    recommendedReason = '最近一次运行停留在 Goal，对话上下文最值得优先查看。';
+  }
+
+  return {
+    profile: {
+      id: profile.id,
+      userId: profile.userId,
+      userName: profile.users?.name || '',
+      email: profile.users?.email || '',
+    },
+    latestSession: latestSession ? {
+      id: latestSession.id,
+      status: latestSession.status,
+      currentStage: latestSession.currentStage,
+      updatedAt: latestSession.updatedAt,
+      storyContext: latestStoryContext,
+      bindings: latestBindings,
+    } : null,
+    activeStory: activeStory ? {
+      storyId: activeStory.id || activeStory.storyId || null,
+      title: activeStory.title || activeStory.storyTitle || null,
+      triggerEvent: activeStory.storyTriggerEvent || activeStory.triggerEvent || null,
+    } : null,
+    recommendedEntry,
+    recommendedReason,
+    entries: {
+      formal: {
+        dashboard: '/dashboard?projection=1',
+        goal: latestBindings?.goalConversationId
+          ? `/goal-conversation/${latestBindings.goalConversationId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
+          : null,
+        path: latestBindings?.learningPathId
+          ? `/learning-path/${latestBindings.learningPathId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
+          : null,
+        learn: latestBindings?.currentTaskId
+          ? `/learn/${latestBindings.currentTaskId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
+          : null,
+      },
+      test: {
+        goal: latestBindings?.goalConversationId
+          ? `/admin/test/goal-full/${latestBindings.goalConversationId}?virtualSessionId=${latestSession.id}&viewMode=debug`
+          : null,
+        path: latestBindings?.learningPathId
+          ? `/admin/test/learning-path/${latestBindings.learningPathId}?virtualSessionId=${latestSession.id}&viewMode=debug`
+          : null,
+        learn: latestBindings?.currentTaskId
+          ? `/admin/test/learn/${latestBindings.currentTaskId}?virtualSessionId=${latestSession.id}&viewMode=debug`
+          : null,
+      }
+    }
+  };
+}
+
+function normalizeGoalLearnerStateForSummary(session: any, goalState: any) {
+  const learnerState = goalState?.learnerState;
+  if (!learnerState || typeof learnerState !== 'object') return learnerState || null;
+
+  const finalStage = String(goalState?.finalStage || goalState?.stage || '').toLowerCase();
+  const goalCompleted = ['ready', 'completed'].includes(finalStage)
+    || session?.currentStage === 'path'
+    || session?.currentStage === 'learning'
+    || !!session?.learningPathId;
+
+  if (!goalCompleted) return learnerState;
+
+  return {
+    ...learnerState,
+    goalReadiness: Math.max(typeof learnerState.goalReadiness === 'number' ? learnerState.goalReadiness : 0, 0.86),
+    wantsClarification: false,
+    readyToAdvance: true,
+    remainingUnknowns: []
+  };
+}
+
 function buildSessionSummary(session: any) {
   const storyContext = parseStoryContext(session);
   const stageResults = parseStageResults(session);
+  const goalState = stageResults.goal || {};
   const learningProgress = stageResults.learning || {};
   const logs = parseLogs(session);
   const roundCount = logs.filter((log: any) => log?.phase === 'virtual-reply' || log?.phase === 'learning-reply').length;
+  const runtime = buildSessionRuntime(session);
+  const conversations = buildSessionConversations(session, logs);
 
   return {
     id: session.id,
@@ -175,9 +749,17 @@ function buildSessionSummary(session: any) {
     updatedAt: session.updatedAt,
     storyContext,
     roundCount,
-    bindings: buildSessionBindings(session),
+    goalStage: goalState.stage || null,
+    learnerState: normalizeGoalLearnerStateForSummary(session, goalState),
+    logs,
+    bindings: runtime.bindings,
+    stageResults,
+    conversations,
+    completedTasks: session.completedTasks || 0,
+    totalTasks: session.totalTasks || 0,
     currentTaskTitle: learningProgress.currentTaskTitle || null,
     currentMilestoneTitle: learningProgress.currentMilestoneTitle || null,
+    runtime,
   };
 }
 
@@ -254,14 +836,13 @@ router.get('/:id/stories', async (req: any, res) => {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
 
-    const profileData = parseJson<any>(profile.profile, {});
-    const storyPool = getStoryPool(profile);
+    const { profileData, storyPool } = await ensureProfileStoryPool(profile);
     const stories = storyPool.map((story: any, index: number) => {
       const runs = Array.isArray(profile.sessions)
         ? profile.sessions
             .filter((session: any) => {
               const sessionStory = parseStoryContext(session);
-              return story?.id ? sessionStory?.storyId === story.id : index === 0;
+              return isSameStory(story, sessionStory);
             })
             .map((session: any) => ({
               sessionId: session.id,
@@ -282,7 +863,7 @@ router.get('/:id/stories', async (req: any, res) => {
         storyId: story?.id || null,
         storyTitle: story?.title || `故事 ${index + 1}`,
         storyOutline: story?.storyOutline || story?.outline || '',
-        storyTriggerEvent: story?.triggerEvent || '',
+        storyTriggerEvent: story?.storyTriggerEvent || story?.triggerEvent || '',
         stats: {
           totalRuns: runs.length,
           goalCount: runs.filter((item: any) => !!item.bindings?.goalConversationId).length,
@@ -415,57 +996,27 @@ router.post('/generate-profile', async (req: any, res) => {
   try {
     const { learningGoal, knowledgeLevel, simulationMode, personalityTraits } = req.body;
     
-    if (!learningGoal || !knowledgeLevel) {
+    if (!learningGoal) {
       return res.status(400).json({
         success: false,
-        error: '学习目标和知识水平不能为空'
+        error: '学习目标不能为空'
       });
     }
     
-    logger.info('[generate-profile] 开始生成画像', { learningGoal, knowledgeLevel });
+    logger.info('[generate-profile] 开始生成画像', { learningGoal, knowledgeLevel: knowledgeLevel || null });
     
-    const gateway = getGateway();
-    const agentInput = {
-      type: 'custom' as const,
-      goal: `生成学习目标为"${learningGoal}"的虚拟用户画像`,
-      metadata: {
-        simulationType: 'generate_profile',
-        generateProfileInput: {
-          learningGoal,
-          knowledgeLevel,
-          simulationMode,
-          personalityTraits
-        }
-      }
-    };
-    
-    const result = await gateway.executeAgent({
-      agentId: 'virtual-learner-simulation-agent',
-      input: agentInput,
-      context: {
-        userId: req.user?.userId,
-        metadata: { source: 'admin-generate-profile' }
+    const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
+      preferredLevels: knowledgeLevel ? [knowledgeLevel] : undefined,
+      existingPersonaSeed: {
+        learningGoal,
+        personalityTraits,
+        simulationMode,
       }
     });
-    
-    logger.info('[generate-profile] Gateway返回', { result: JSON.stringify(result).substring(0, 1000) });
-    
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        error: result.error?.message || 'AI生成画像失败'
-      });
-    }
-    
-    if (!result.output) {
-      return res.status(500).json({
-        success: false,
-        error: 'AI生成画像失败：未返回输出'
-      });
-    }
-    
-    const output = result.output as any;
-    if (!output.generatedProfile) {
+
+    logger.info('[generate-profile] Skill返回', { result: JSON.stringify(result).substring(0, 1000) });
+
+    if (!result?.personaSeed) {
       return res.status(500).json({
         success: false,
         error: 'AI生成画像失败：未返回画像数据'
@@ -475,12 +1026,12 @@ router.post('/generate-profile', async (req: any, res) => {
     logger.info('AI生成画像成功', {
       userId: req.user?.userId,
       learningGoal,
-      generatedProfile: output.generatedProfile
+      generatedProfile: result.personaSeed
     });
     
     res.json({
       success: true,
-      data: output.generatedProfile
+      data: result.personaSeed
     });
   } catch (error: any) {
     logger.error('AI生成画像失败:', error);
@@ -536,8 +1087,6 @@ router.get('/sessions/:sessionId/learning-path', async (req: any, res) => {
       || null;
     const contextTask = activeTask || firstTask;
     const contextMilestone = activeTask?.milestone || firstMilestone;
-    const coreConcept = contextTask?.coreConcept || contextTask?.displayLabel || contextTask?.title || null;
-
     const pathContext = {
       storyContext,
       pathTitle: learningPath.title,
@@ -553,36 +1102,19 @@ router.get('/sessions/:sessionId/learning-path', async (req: any, res) => {
         knowledgeType: contextTask.knowledgeType || null,
         cognitiveLevel: contextTask.cognitiveLevel || null,
         displayLabel: contextTask.displayLabel || null,
-        coreConcept,
+        coreConcept: contextTask.coreConcept || null,
         learningObjectives: Array.isArray(contextTask.learningObjectives)
           ? contextTask.learningObjectives
           : typeof contextTask.learningObjectives === 'string' && contextTask.learningObjectives.trim()
             ? contextTask.learningObjectives.split(/[,，\n]/).map((item: string) => item.trim()).filter(Boolean)
             : [],
-        linkedConceptName: coreConcept,
+        linkedConceptName: contextTask.linkedConceptName || contextTask.coreConcept || null,
       } : null,
-      taskKnowledgeScope: contextTask ? {
-        primaryConcepts: coreConcept ? [coreConcept] : [],
-        prerequisiteConcepts: [],
-        supportingConcepts: contextTask.displayLabel ? [contextTask.displayLabel] : [],
-      } : null,
-      cognitiveFrame: contextTask ? {
-        currentCoreConcept: coreConcept ? { name: coreConcept } : null,
-        targetRelation: contextTask.description || learningPath.summary || learningPath.description || null,
-        milestoneIntent: contextMilestone?.description || null,
-        transferGoal: contextTask.displayLabel || contextTask.title || null,
-        neighboringConcepts: contextTask.displayLabel ? [contextTask.displayLabel] : [],
-      } : null,
-      teachingStrategyGuidance: contextTask ? {
-        explanationStyle: contextTask.cognitiveLevel === 'advanced' ? 'concept-first' : 'step-by-step',
-        interactionPattern: contextTask.taskType === 'quiz' ? 'question-response' : 'guided-practice',
-        targetDepth: contextTask.cognitiveLevel || 'balanced',
-        preferredStrategies: contextTask.taskType ? [contextTask.taskType] : ['guided-practice'],
-        responseConstraints: storyContext?.visibleOpening ? ['先围绕故事中的真实场景解释，再给抽象总结'] : ['先从当前任务切入，再回到整体路径'],
-        coreConcept,
-        storyPressurePoints: Array.isArray(storyContext?.pressurePoints) ? storyContext.pressurePoints : [],
-        storyBehaviorHooks: Array.isArray(storyContext?.behaviorHooks) ? storyContext.behaviorHooks : [],
-      } : null
+      currentMilestoneTitle: contextMilestone?.title || null,
+      currentTaskTitle: contextTask?.title || null,
+      taskKnowledgeScope: null,
+      cognitiveFrame: null,
+      teachingStrategyGuidance: null
     };
 
     res.json({
@@ -653,7 +1185,7 @@ router.get('/sessions/:sessionId/learning-task', async (req: any, res) => {
       return res.status(404).json({ success: false, error: '当前虚拟会话尚未绑定学习任务' });
     }
 
-    const task = await prisma.learning_tasks.findUnique({
+    const task = await prisma.subtasks.findUnique({
       where: { id: String(taskId) }
     });
 
@@ -668,6 +1200,53 @@ router.get('/sessions/:sessionId/learning-task', async (req: any, res) => {
   } catch (error: any) {
     logger.error('获取虚拟会话 Learning Task 失败:', error);
     res.status(500).json({ success: false, error: error.message || '获取虚拟会话 Learning Task 失败' });
+  }
+});
+
+router.get('/sessions/:sessionId/teaching-detail', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await prisma.virtual_sessions.findUnique({
+      where: { id: sessionId }
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: '模拟会话不存在' });
+    }
+
+    const learningProgress = parseLearningProgress(session);
+    const teachingSessionId = learningProgress.teachingSessionId || null;
+    if (!teachingSessionId) {
+      return res.status(404).json({ success: false, error: '当前虚拟会话尚未绑定 Learn 会话' });
+    }
+
+    const teachingSession = await teachingSessionRepository.getById(String(teachingSessionId));
+    if (!teachingSession) {
+      return res.status(404).json({ success: false, error: '授课会话不存在' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: teachingSession.id,
+        subject: teachingSession.subject,
+        topic: teachingSession.topic,
+        taskId: teachingSession.taskId,
+        startTime: teachingSession.startTime,
+        endTime: teachingSession.endTime,
+        duration: teachingSession.duration,
+        status: teachingSession.status,
+        messages: teachingSession.messages,
+        state: teachingSession.teachingState || {},
+        knowledgePoints: teachingSession.knowledgeState,
+        wrapup: teachingSession.wrapup,
+        advisory: teachingSession.advisory || null,
+      }
+    });
+  } catch (error: any) {
+    logger.error('获取虚拟会话授课详情失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取虚拟会话授课详情失败' });
   }
 });
 
@@ -749,39 +1328,24 @@ router.post('/:id/draft-profile', async (req: any, res) => {
 
     const existingProfile = parseJson<any>(profile.profile, {});
     const existingTraits = parseJson<any>(profile.personalityTraits, {});
-    const gateway = getGateway();
-
-    const result = await gateway.executeAgent({
-      agentId: 'virtual-learner-simulation-agent',
-      input: {
-        type: 'custom' as const,
-        goal: `增强学习目标为"${profile.learningGoal}"的虚拟用户画像`,
-        metadata: {
-          simulationType: 'generate_profile',
-          generateProfileInput: {
-            learningGoal: profile.learningGoal,
-            knowledgeLevel: profile.knowledgeLevel || 'beginner',
-            simulationMode: profile.simulationMode || 'ai',
-            personalityTraits: existingTraits,
-            existingProfile,
-          }
-        }
-      },
-      context: {
-        userId: req.user?.userId,
-        metadata: { source: 'admin-draft-profile', virtualProfileId: id }
+    const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
+      preferredLevels: profile.knowledgeLevel ? [profile.knowledgeLevel] : undefined,
+      existingPersonaSeed: {
+        ...existingProfile,
+        personalityTraits: existingTraits,
+        learningGoal: profile.learningGoal,
       }
     });
 
-    const output = result.output as any;
-    if (!result.success || !output?.generatedProfile) {
-      return res.status(500).json({ success: false, error: result.error?.message || '增强画像生成失败' });
+    const personaSeed = result?.personaSeed;
+    if (!personaSeed) {
+      return res.status(500).json({ success: false, error: '增强画像生成失败' });
     }
 
     res.json({
       success: true,
       data: {
-        generatedProfile: output.generatedProfile,
+        generatedProfile: personaSeed,
       }
     });
   } catch (error: any) {
@@ -799,21 +1363,19 @@ router.post('/:id/draft-stories', async (req: any, res) => {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
 
-    const profileData = parseJson<any>(profile.profile, {});
+    const { profileData } = await ensureProfileStoryPool(profile);
     const existingStoryPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
     const recentScenarioHints = await buildRecentScenarioHints();
 
-    logger.info('[admin-draft-stories] 开始生成故事草稿', {
+    logger.info('[admin-generate-stories] 开始生成故事', {
       virtualProfileId: id,
       profileUserId: profile.userId,
-      knowledgeLevel: profile.knowledgeLevel || 'beginner',
       existingStoryPoolCount: existingStoryPool.length,
       hasExistingPersonaSeed: !!profileData && Object.keys(profileData).length > 0,
       requestedStoryCount: 3,
     });
 
     const result = await executeSkill(virtualLearnerScenarioDesignerDefinition, {
-      preferredLevels: [profile.knowledgeLevel || 'beginner'],
       preferredMotivations: profileData?.motivationType ? [profileData.motivationType] : undefined,
       candidateDomains: DEFAULT_SCENARIO_CANDIDATE_DOMAINS,
       candidatePersonas: DEFAULT_SCENARIO_CANDIDATE_PERSONAS,
@@ -823,7 +1385,7 @@ router.post('/:id/draft-stories', async (req: any, res) => {
       targetStoryCount: 1,
     });
 
-    logger.info('[admin-draft-stories] 故事草稿生成完成', {
+    logger.info('[admin-generate-stories] 故事生成完成', {
       virtualProfileId: id,
       generatedStoryTitle: result?.story?.title || null,
       systemPromptVersion: result?._debug?.systemPromptVersion || null,
@@ -833,21 +1395,21 @@ router.post('/:id/draft-stories', async (req: any, res) => {
     if (newStory) {
       const storyWithStatus = {
         ...newStory,
-        status: 'draft',
         createdAt: new Date().toISOString(),
       };
-      const updatedStoryPool = [...existingStoryPool, storyWithStatus];
-      const updatedProfile = {
+      const normalizedUpdated = normalizeStoryPoolData({
         ...profileData,
-        storyPool: updatedStoryPool,
-      };
+        storyPool: [...existingStoryPool, storyWithStatus],
+      });
+      const updatedStoryPool = normalizedUpdated.storyPool;
+      const updatedProfile = normalizedUpdated.profileData;
 
       await prisma.virtual_learner_profiles.update({
         where: { id },
         data: { profile: JSON.stringify(updatedProfile) },
       });
 
-      logger.info('[admin-draft-stories] 故事草稿已自动持久化', {
+      logger.info('[admin-generate-stories] 故事已自动持久化', {
         virtualProfileId: id,
         storyPoolCount: updatedStoryPool.length,
       });
@@ -872,14 +1434,14 @@ router.post('/:id/draft-stories', async (req: any, res) => {
 router.put('/:id/stories/:storyIndex', async (req: any, res) => {
   try {
     const { id, storyIndex } = req.params;
-    const { status } = req.body;
+    const { title, storyOutline, storyTriggerEvent, visibleOpening, pressurePoints, problemKnowledge } = req.body || {};
 
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { id } });
     if (!profile) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
 
-    const profileData = parseJson<any>(profile.profile, {});
+    const { profileData } = await ensureProfileStoryPool(profile);
     const storyPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
     const index = parseInt(storyIndex, 10);
 
@@ -887,19 +1449,56 @@ router.put('/:id/stories/:storyIndex', async (req: any, res) => {
       return res.status(400).json({ success: false, error: '无效的故事索引' });
     }
 
-    if (status && !['draft', 'confirmed'].includes(status)) {
-      return res.status(400).json({ success: false, error: '无效的状态值' });
-    }
-
     const updatedStoryPool = [...storyPool];
-    if (status) {
-      updatedStoryPool[index] = { ...updatedStoryPool[index], status };
+    const currentStory = updatedStoryPool[index] || {};
+    const nextStory = { ...currentStory };
+
+    if (typeof title === 'string') {
+      nextStory.title = title.trim();
     }
 
-    const updatedProfile = {
+    if (typeof storyOutline === 'string') {
+      nextStory.storyOutline = storyOutline.trim();
+    }
+
+    if (typeof storyTriggerEvent === 'string') {
+      nextStory.storyTriggerEvent = storyTriggerEvent.trim();
+      nextStory.triggerEvent = storyTriggerEvent.trim();
+    }
+
+    if (typeof visibleOpening === 'string') {
+      nextStory.visibleOpening = visibleOpening.trim();
+    }
+
+    if (Array.isArray(pressurePoints)) {
+      nextStory.pressurePoints = pressurePoints
+        .map((item: any) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item: string) => !!item);
+    }
+
+    if (problemKnowledge && typeof problemKnowledge === 'object') {
+      nextStory.problemKnowledge = {
+        domainFamiliarity: ['low', 'medium', 'high'].includes(String(problemKnowledge.domainFamiliarity)) ? String(problemKnowledge.domainFamiliarity) : 'low',
+        knownConcepts: Array.isArray(problemKnowledge.knownConcepts)
+          ? problemKnowledge.knownConcepts.map((item: any) => (typeof item === 'string' ? item.trim() : '')).filter((item: string) => !!item)
+          : [],
+        struggleConcepts: Array.isArray(problemKnowledge.struggleConcepts)
+          ? problemKnowledge.struggleConcepts.map((item: any) => (typeof item === 'string' ? item.trim() : '')).filter((item: string) => !!item)
+          : [],
+        selfAssessment: typeof problemKnowledge.selfAssessment === 'string' ? problemKnowledge.selfAssessment.trim() : '',
+        hiddenGaps: Array.isArray(problemKnowledge.hiddenGaps)
+          ? problemKnowledge.hiddenGaps.map((item: any) => (typeof item === 'string' ? item.trim() : '')).filter((item: string) => !!item)
+          : []
+      }
+    }
+
+    updatedStoryPool[index] = nextStory;
+
+    const normalizedUpdated = normalizeStoryPoolData({
       ...profileData,
       storyPool: updatedStoryPool,
-    };
+    });
+    const updatedProfile = normalizedUpdated.profileData;
 
     await prisma.virtual_learner_profiles.update({
       where: { id },
@@ -909,7 +1508,7 @@ router.put('/:id/stories/:storyIndex', async (req: any, res) => {
     res.json({
       success: true,
       data: {
-        storyPool: updatedStoryPool,
+        storyPool: normalizedUpdated.storyPool,
       },
     });
   } catch (error: any) {
@@ -927,7 +1526,7 @@ router.delete('/:id/stories/:storyIndex', async (req: any, res) => {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
 
-    const profileData = parseJson<any>(profile.profile, {});
+    const { profileData } = await ensureProfileStoryPool(profile);
     const storyPool = Array.isArray(profileData.storyPool) ? profileData.storyPool : [];
     const index = parseInt(storyIndex, 10);
 
@@ -937,10 +1536,11 @@ router.delete('/:id/stories/:storyIndex', async (req: any, res) => {
 
     const updatedStoryPool = storyPool.filter((_: any, i: number) => i !== index);
 
-    const updatedProfile = {
+    const normalizedUpdated = normalizeStoryPoolData({
       ...profileData,
       storyPool: updatedStoryPool,
-    };
+    });
+    const updatedProfile = normalizedUpdated.profileData;
 
     await prisma.virtual_learner_profiles.update({
       where: { id },
@@ -950,7 +1550,7 @@ router.delete('/:id/stories/:storyIndex', async (req: any, res) => {
     res.json({
       success: true,
       data: {
-        storyPool: updatedStoryPool,
+        storyPool: normalizedUpdated.storyPool,
       },
     });
   } catch (error: any) {
@@ -991,7 +1591,7 @@ router.post('/', async (req: any, res) => {
     const normalizedLearningGoal = typeof learningGoal === 'string' ? learningGoal.trim() : '';
     const normalizedKnowledgeLevel = typeof knowledgeLevel === 'string' && knowledgeLevel.trim()
       ? knowledgeLevel.trim()
-      : 'beginner';
+      : null;
     
     const email = `virtual_${uuidv4().substring(0, 8)}@test.local`;
     const hashedPassword = await bcrypt.hash(VIRTUAL_USER_PASSWORD, 10);
@@ -1003,7 +1603,7 @@ router.post('/', async (req: any, res) => {
         name,
         password: hashedPassword,
         role: 'user',
-        currentLevel: normalizedKnowledgeLevel,
+        currentLevel: normalizedKnowledgeLevel || 'beginner',
         isAdmin: false,
         updatedAt: new Date()
       }
@@ -1165,8 +1765,8 @@ router.get('/:id', async (req: any, res) => {
           }
         },
         sessions: {
-          orderBy: { createdAt: 'desc' },
-          take: 10
+          orderBy: { updatedAt: 'desc' },
+          take: 200
         }
       }
     });
@@ -1177,6 +1777,8 @@ router.get('/:id', async (req: any, res) => {
         error: '虚拟用户不存在'
       });
     }
+
+    const { profileData } = await ensureProfileStoryPool(profile);
     
     res.json({
       success: true,
@@ -1185,7 +1787,7 @@ router.get('/:id', async (req: any, res) => {
         email: profile.users.email,
         userName: profile.users.name,
         password: VIRTUAL_USER_PASSWORD,
-        profile: JSON.parse(profile.profile || '{}'),
+        profile: profileData,
         knownConcepts: profile.knownConcepts ? JSON.parse(profile.knownConcepts) : [],
         struggleConcepts: profile.struggleConcepts ? JSON.parse(profile.struggleConcepts) : [],
         personalityTraits: profile.personalityTraits ? JSON.parse(profile.personalityTraits) : {},
@@ -1327,6 +1929,8 @@ router.post('/:id/start-session', async (req: any, res) => {
       });
     }
 
+    await ensureProfileStoryPool(profile);
+
     const story = pickStoryFromPool(profile, storyId, storyIndex);
     const storyContext = story
       ? {
@@ -1340,6 +1944,7 @@ router.post('/:id/start-session', async (req: any, res) => {
           misdiagnosis: story.misdiagnosis || '',
           pressurePoints: Array.isArray(story.pressurePoints) ? story.pressurePoints : [],
           behaviorHooks: Array.isArray(story.behaviorHooks) ? story.behaviorHooks : [],
+          problemKnowledge: story.problemKnowledge || null,
           goalSeed: story.goalSeed || null,
           disclosurePlan: story.disclosurePlan || null,
         }
@@ -1431,6 +2036,22 @@ router.get('/sessions/:sessionId', async (req: any, res) => {
     } catch {
       // ignore malformed stageResults payload
     }
+
+    let goalConversation: any = null;
+    if (session.goalConversationId) {
+      goalConversation = await prisma.goal_conversations.findFirst({
+        where: { id: session.goalConversationId }
+      });
+    }
+
+    let teachingSession: any = null;
+    const teachingSessionId = stageResults?.learning?.teachingSessionId;
+    if (typeof teachingSessionId === 'string' && teachingSessionId.trim()) {
+      teachingSession = await teachingSessionRepository.getById(teachingSessionId.trim());
+    }
+
+    const conversations = buildSessionConversations(session, logs, goalConversation);
+    const runtime = buildSessionRuntime(session, teachingSession);
     
     res.json({
       success: true,
@@ -1438,6 +2059,10 @@ router.get('/sessions/:sessionId', async (req: any, res) => {
         ...session,
         logs,
         stageResults,
+        conversations,
+        runtime,
+        bindings: buildSessionBindings(session),
+        storyContext: parseStoryContext(session),
         profile: {
           ...session.virtual_learner_profiles,
           profile: JSON.parse(session.virtual_learner_profiles.profile || '{}'),
@@ -1454,6 +2079,128 @@ router.get('/sessions/:sessionId', async (req: any, res) => {
     });
   }
 });
+
+router.post('/:id/projection-token', async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const operatorId = req.user?.userId;
+
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id },
+      include: {
+        users: {
+          select: { id: true, email: true, name: true }
+        }
+      }
+    });
+
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    const token = signProjectionToken({
+      targetUserId: profile.userId,
+      sourceProfileId: profile.id,
+      issuedByAdminId: operatorId,
+      storyId: typeof req.body?.storyId === 'string' && req.body.storyId.trim() ? req.body.storyId.trim() : null,
+      virtualSessionId: typeof req.body?.virtualSessionId === 'string' && req.body.virtualSessionId.trim() ? req.body.virtualSessionId.trim() : null,
+      scope: req.body?.scope === 'full' ? 'full' : 'dashboard',
+      type: 'projection'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        targetUserId: profile.userId,
+        profileId: profile.id,
+        userName: profile.users.name,
+        email: profile.users.email,
+        expiresIn: '30m'
+      }
+    });
+  } catch (error: any) {
+    logger.error('创建前台投影 token 失败:', error)
+    res.status(500).json({ success: false, error: error.message || '创建前台投影 token 失败' })
+  }
+})
+
+router.get('/:id/test-projection', async (req: any, res) => {
+  try {
+    const { id } = req.params;
+
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id },
+      include: {
+        users: {
+          select: { id: true, email: true, name: true }
+        },
+        sessions: {
+          orderBy: { updatedAt: 'desc' },
+          take: 200,
+        },
+      },
+    });
+
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    res.json({
+      success: true,
+      data: buildVirtualLearnerTestProjection(profile)
+    });
+  } catch (error: any) {
+    logger.error('获取虚拟学习者 test 投影失败:', error)
+    res.status(500).json({ success: false, error: error.message || '获取虚拟学习者 test 投影失败' })
+  }
+})
+
+router.post('/projection/resolve', async (req: any, res) => {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : ''
+    if (!token) {
+      return res.status(400).json({ success: false, error: '缺少投影 token' })
+    }
+
+    const payload = verifyProjectionToken(token)
+
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id: payload.sourceProfileId },
+      include: {
+        users: {
+          select: { id: true, email: true, name: true }
+        }
+      }
+    })
+
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '投影用户不存在' })
+    }
+
+    res.json({
+      success: true,
+      data: {
+        targetUserId: payload.targetUserId,
+        sourceProfileId: payload.sourceProfileId,
+        issuedByAdminId: payload.issuedByAdminId,
+        storyId: payload.storyId || null,
+        virtualSessionId: payload.virtualSessionId || null,
+        scope: payload.scope,
+        profile: {
+          id: profile.id,
+          userId: profile.userId,
+          userName: profile.users.name,
+          email: profile.users.email,
+          password: VIRTUAL_USER_PASSWORD
+        }
+      }
+    })
+  } catch (error: any) {
+    logger.error('解析前台投影 token 失败:', error)
+    res.status(401).json({ success: false, error: error.message || '解析前台投影 token 失败' })
+  }
+})
 
 /**
  * 获取模拟会话上下文
@@ -1490,6 +2237,23 @@ router.get('/sessions/:sessionId/context', async (req: any, res) => {
     const storyContext = parseStoryContext(session);
     const bindings = buildSessionBindings(session);
     const stageResults = parseStageResults(session);
+    const logs = parseLogs(session);
+    let goalConversation: any = null;
+    let teachingSession: any = null;
+
+    if (session.goalConversationId) {
+      goalConversation = await prisma.goal_conversations.findFirst({
+        where: { id: session.goalConversationId }
+      });
+    }
+
+    const teachingSessionId = stageResults?.learning?.teachingSessionId;
+    if (typeof teachingSessionId === 'string' && teachingSessionId.trim()) {
+      teachingSession = await teachingSessionRepository.getById(teachingSessionId.trim());
+    }
+
+    const conversations = buildSessionConversations(session, logs, goalConversation);
+    const runtime = buildSessionRuntime(session, teachingSession);
 
     res.json({
       success: true,
@@ -1509,6 +2273,8 @@ router.get('/sessions/:sessionId/context', async (req: any, res) => {
         currentStage: session.currentStage,
         status: session.status,
         stageResults,
+        runtime,
+        conversations,
       }
     });
   } catch (error: any) {
@@ -1690,8 +2456,6 @@ router.get('/sessions/:sessionId/path-status', async (req: any, res) => {
       || null;
     const contextTask = activeTask || firstTask;
     const contextMilestone = activeTask?.milestone || firstMilestone;
-    const coreConcept = contextTask?.coreConcept || contextTask?.displayLabel || contextTask?.title || null;
-
     const pathContext = {
       storyContext,
       pathTitle: learningPath.title,
@@ -1707,36 +2471,19 @@ router.get('/sessions/:sessionId/path-status', async (req: any, res) => {
         knowledgeType: contextTask.knowledgeType || null,
         cognitiveLevel: contextTask.cognitiveLevel || null,
         displayLabel: contextTask.displayLabel || null,
-        coreConcept,
+        coreConcept: contextTask.coreConcept || null,
         learningObjectives: Array.isArray(contextTask.learningObjectives)
           ? contextTask.learningObjectives
           : typeof contextTask.learningObjectives === 'string' && contextTask.learningObjectives.trim()
             ? contextTask.learningObjectives.split(/[,，\n]/).map((item: string) => item.trim()).filter(Boolean)
             : [],
-        linkedConceptName: coreConcept,
+        linkedConceptName: contextTask.linkedConceptName || contextTask.coreConcept || null,
       } : null,
-        taskKnowledgeScope: contextTask ? {
-        primaryConcepts: coreConcept ? [coreConcept] : [],
-        prerequisiteConcepts: [],
-        supportingConcepts: contextTask.displayLabel ? [contextTask.displayLabel] : [],
-      } : null,
-      cognitiveFrame: contextTask ? {
-        currentCoreConcept: coreConcept ? { name: coreConcept } : null,
-        targetRelation: contextTask.description || learningPath.summary || learningPath.description || null,
-        milestoneIntent: contextMilestone?.description || null,
-        transferGoal: contextTask.displayLabel || contextTask.title || null,
-        neighboringConcepts: contextTask.displayLabel ? [contextTask.displayLabel] : [],
-      } : null,
-      teachingStrategyGuidance: contextTask ? {
-        explanationStyle: contextTask.cognitiveLevel === 'advanced' ? 'concept-first' : 'step-by-step',
-        interactionPattern: contextTask.taskType === 'quiz' ? 'question-response' : 'guided-practice',
-        targetDepth: contextTask.cognitiveLevel || 'balanced',
-        preferredStrategies: contextTask.taskType ? [contextTask.taskType] : ['guided-practice'],
-        responseConstraints: storyContext?.visibleOpening ? ['先围绕故事中的真实场景解释，再给抽象总结'] : ['先从当前任务切入，再回到整体路径'],
-        coreConcept,
-        storyPressurePoints: Array.isArray(storyContext?.pressurePoints) ? storyContext.pressurePoints : [],
-        storyBehaviorHooks: Array.isArray(storyContext?.behaviorHooks) ? storyContext.behaviorHooks : [],
-      } : null
+      currentMilestoneTitle: contextMilestone?.title || null,
+      currentTaskTitle: contextTask?.title || null,
+      taskKnowledgeScope: null,
+      cognitiveFrame: null,
+      teachingStrategyGuidance: null
     };
 
     res.json({
@@ -1862,7 +2609,7 @@ router.post('/sessions/:sessionId/auto-learning', async (req: any, res) => {
 router.post('/sessions/:sessionId/restart-path', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await simulationOrchestrator.advanceToPathGeneration(sessionId);
+    const result = await simulationOrchestrator.restartPathPhase(sessionId);
 
     res.json({
       success: result.success,
@@ -1879,7 +2626,7 @@ router.post('/sessions/:sessionId/restart-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
-    const result = await simulationOrchestrator.startLearningPhase(sessionId, { taskId });
+    const result = await simulationOrchestrator.restartLearningPhase(sessionId, { taskId });
 
     res.json({
       success: result.success,

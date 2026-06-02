@@ -771,11 +771,11 @@ const copyText = async (text: string, successMessage: string) => {
 
   .logs-list {
     padding: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(52, 120, 246, 0.08);
     border-radius: 24px;
-    background: rgba(255, 255, 255, 0.7);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 255, 0.72));
     backdrop-filter: blur(20px);
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 18px 34px rgba(31, 87, 204, 0.07);
 
     .log-card-grid {
       display: grid;
@@ -801,11 +801,11 @@ const copyText = async (text: string, successMessage: string) => {
     }
 
     :deep(.stats .el-card) {
-      background: rgba(255, 255, 255, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 250, 255, 0.78));
+      border: 1px solid rgba(52, 120, 246, 0.08);
       backdrop-filter: blur(20px);
       border-radius: 20px;
-      box-shadow: var(--shadow-md);
+      box-shadow: 0 16px 30px rgba(31, 87, 204, 0.07);
     }
 
     .log-card {
@@ -920,6 +920,7 @@ const copyText = async (text: string, successMessage: string) => {
           margin: 0;
           color: var(--el-text-color-secondary);
           line-height: 1.6;
+          max-width: 680px;
         }
       }
 
@@ -964,6 +965,20 @@ const copyText = async (text: string, successMessage: string) => {
       margin-top: 20px;
       display: flex;
       justify-content: flex-end;
+    }
+  }
+
+  [data-theme='dark'] {
+    .logs-list {
+      background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
+      border-color: rgba(96, 165, 250, 0.1);
+      box-shadow: 0 20px 38px rgba(0, 0, 0, 0.22);
+    }
+
+    .logs-list :deep(.stats .el-card) {
+      background: linear-gradient(180deg, rgba(26, 37, 47, 0.88), rgba(15, 24, 32, 0.8));
+      border-color: rgba(96, 165, 250, 0.1);
+      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.22);
     }
   }
 

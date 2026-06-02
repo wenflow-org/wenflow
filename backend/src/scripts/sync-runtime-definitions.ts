@@ -12,6 +12,7 @@ import { virtualLearnerPersonaDesignerRuntimeDefinition } from '../skills/virtua
 import { virtualLearnerScenarioDesignerRuntimeDefinition } from '../skills/virtual-learner-scenario-designer/definition';
 import { pathOrchestratorRuntimeDefinition } from '../orchestrators/definition';
 import { aiTeachingOrchestratorRuntimeDefinition } from '../orchestrators/ai-teaching.definition';
+import { learnerOrchestratorRuntimeDefinition } from '../orchestrators/learner.definition';
 import { simulationOrchestratorRuntimeDefinition } from '../orchestrators/simulation.definition';
 
 dotenv.config();
@@ -40,6 +41,7 @@ async function main() {
   const orchestratorDefinitions = [
     pathOrchestratorRuntimeDefinition,
     aiTeachingOrchestratorRuntimeDefinition,
+    learnerOrchestratorRuntimeDefinition,
     simulationOrchestratorRuntimeDefinition,
   ];
 

@@ -60,15 +60,6 @@ export {
   sessionWrapupAgentHandler,
 } from './session-wrapup-agent';
 
-// Virtual Learner Simulation Agent
-export {
-  virtualLearnerSimulationAgentDefinition,
-  virtualLearnerSimulationAgentHandler,
-  type SimulationAgentInput,
-  type SimulationAgentOutput,
-  type SimulationContext
-} from './virtual-learner-simulation-agent';
-
 // Simulation Orchestrator Agent
 export {
   simulationOrchestratorAgentDefinition,
@@ -116,9 +107,9 @@ import { goalConversationAgentDefinition, goalConversationAgentHandler } from '.
 import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from './teaching-turn-agent';
 import { peerAgentHandler } from './peer-agent';
 import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from './session-wrapup-agent';
-import { virtualLearnerSimulationAgentDefinition, virtualLearnerSimulationAgentHandler } from './virtual-learner-simulation-agent';
 import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-orchestrator-agent';
 import { getAgentManifest } from '../services/agent-manifest.service';
+import { logger } from '../utils/logger';
 
 export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
@@ -126,7 +117,6 @@ export const allAgentDefinitions: AgentDefinition[] = [
   goalConversationAgentDefinition,
   teachingTurnAgentDefinition,
   sessionWrapupAgentDefinition,
-  virtualLearnerSimulationAgentDefinition,
   simulationOrchestratorAgentDefinition
 ];
 
@@ -137,7 +127,6 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
   'teaching-turn-agent': teachingTurnAgentHandler,
   'skill:peer-reinforcement': peerAgentHandler,
   'session-wrapup-agent': sessionWrapupAgentHandler,
-  'virtual-learner-simulation-agent': virtualLearnerSimulationAgentHandler,
   'simulation-orchestrator': simulationOrchestratorAgentHandler
 };
 
@@ -150,14 +139,20 @@ export async function registerOfficialAgents(gateway: {
   for (const definition of allAgentDefinitions) {
     const manifest = getAgentManifest(definition.id);
     if (manifest && !manifest.runtimeEnabled) {
-      console.log(`[Agents] Skipped (disabled): ${definition.name}`);
+      logger.info('[agents] skipped disabled official agent', {
+        agentId: definition.id,
+        agentName: definition.name,
+      });
       continue;
     }
 
     const handler = agentHandlers[definition.id];
     if (handler) {
       await gateway.registerAgent(definition, handler);
-      console.log(`[Agents] Registered: ${definition.name}`);
+      logger.info('[agents] registered official agent', {
+        agentId: definition.id,
+        agentName: definition.name,
+      });
     }
   }
 }

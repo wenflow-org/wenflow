@@ -1,33 +1,118 @@
 <template>
   <CapabilityShell
     title="账户设置"
-    description="学习者画像、知识背景与路径调整建议已并入学习状态页。这里保留账户概览与快捷入口。"
+    description="查看你的账户信息、当前学习节奏与最近的学习入口。学习者画像和更细的诊断信息已统一收口到学习状态页。"
   >
     <div class="profile-page">
-      <section class="overview-grid">
-        <article class="glass-card overview-card overview-card--hero">
-          <div class="card-header">账户概览</div>
-          <div class="profile-info">
-            <el-avatar :size="72" class="user-avatar-large">
+      <section class="profile-grid">
+        <article class="glass-card profile-card profile-card--hero">
+          <div class="profile-card__head">
+            <span class="section-kicker">账户概览</span>
+          </div>
+
+          <div class="profile-identity">
+            <el-avatar :size="76" class="profile-avatar">
               {{ user.name?.charAt(0) || '用' }}
             </el-avatar>
-            <h3 class="user-name-large">{{ user.name || '未命名用户' }}</h3>
-            <p class="user-email">{{ user.email || '未绑定邮箱' }}</p>
-            <div class="user-stats">
-              <div class="stat-item"><span class="stat-label">XP</span><span class="stat-value">{{ user.xp || 0 }}</span></div>
-              <div class="stat-item"><span class="stat-label">等级</span><span class="stat-value">{{ user.level || 1 }}</span></div>
-              <div class="stat-item"><span class="stat-label">节奏</span><span class="stat-value">{{ paceLabel }}</span></div>
+            <div>
+              <h2>{{ user.name || '未命名用户' }}</h2>
+              <p>{{ user.email || '未绑定邮箱' }}</p>
             </div>
+          </div>
+
+          <div class="profile-stats">
+            <article class="stat-card">
+              <span>XP</span>
+              <strong>{{ user.xp || 0 }}</strong>
+            </article>
+            <article class="stat-card">
+              <span>等级</span>
+              <strong>Lv. {{ user.level || 1 }}</strong>
+            </article>
+            <article class="stat-card">
+              <span>当前节奏</span>
+              <strong>{{ paceLabel }}</strong>
+            </article>
           </div>
         </article>
 
-        <article class="glass-card overview-card">
-          <div class="card-header">学习档案已迁移</div>
-          <div class="stats-content">
-            <p class="stats-tip">学习者画像、知识背景、重调建议等内容现在统一放在「学习状态」页，减少主导航中的重复页面。</p>
-            <div class="action-row">
-              <el-button type="primary" @click="router.push('/learning-state')">前往学习状态</el-button>
-              <el-button @click="goCurrentPath">查看当前路径</el-button>
+        <article class="glass-card profile-card">
+          <div class="profile-card__head profile-card__head--spread">
+            <div>
+              <span class="section-kicker">当前学习</span>
+              <h3>{{ currentPathTitle }}</h3>
+            </div>
+            <span class="status-chip">{{ paceLabel }}</span>
+          </div>
+
+          <p class="card-copy">{{ currentPathDescription }}</p>
+
+          <div class="snapshot-list">
+            <div class="snapshot-item">
+              <span>路径状态</span>
+              <strong>{{ currentPathMeta }}</strong>
+            </div>
+            <div class="snapshot-item">
+              <span>下一步</span>
+              <strong>{{ nextActionLabel }}</strong>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <el-button type="primary" @click="goCurrentPath">查看当前路径</el-button>
+            <el-button @click="router.push('/learning-state')">前往学习状态</el-button>
+          </div>
+        </article>
+      </section>
+
+      <section class="profile-grid profile-grid--bottom">
+        <article class="glass-card profile-card">
+          <div class="profile-card__head">
+            <div>
+              <span class="section-kicker">快捷入口</span>
+              <h3>继续当前学习闭环</h3>
+            </div>
+          </div>
+
+          <div class="shortcut-list">
+            <button type="button" class="shortcut-card" @click="router.push('/learning-state')">
+              <span>学习状态</span>
+              <strong>查看节奏、掌握度与建议</strong>
+              <p>统一查看学习者画像、状态趋势和重调建议。</p>
+            </button>
+            <button type="button" class="shortcut-card" @click="goCurrentPath">
+              <span>当前路径</span>
+              <strong>回到正在推进的学习路径</strong>
+              <p>如果还没有激活路径，会跳转到学习路径总览。</p>
+            </button>
+            <button type="button" class="shortcut-card" @click="router.push('/goal-conversation')">
+              <span>新目标</span>
+              <strong>从一个新问题重新开始规划</strong>
+              <p>切换主题或重新整理方向时，从这里发起新的目标规划。</p>
+            </button>
+          </div>
+        </article>
+
+        <article class="glass-card profile-card">
+          <div class="profile-card__head">
+            <div>
+              <span class="section-kicker">状态摘要</span>
+              <h3>学习快照</h3>
+            </div>
+          </div>
+
+          <div class="snapshot-list snapshot-list--stacked">
+            <div class="snapshot-item">
+              <span>路径状态</span>
+              <strong>{{ currentPathMeta }}</strong>
+            </div>
+            <div class="snapshot-item">
+              <span>节奏模式</span>
+              <strong>{{ paceLabel }}</strong>
+            </div>
+            <div class="snapshot-item">
+              <span>推荐动作</span>
+              <strong>{{ nextActionLabel }}</strong>
             </div>
           </div>
         </article>
@@ -37,14 +122,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import CapabilityShell from '@/components/user/CapabilityShell.vue';
-import { useUserStore } from '../stores/user';
-import { userAPI, type LearnerCenterSnapshot } from '../api/user';
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import CapabilityShell from '@/components/user/CapabilityShell.vue'
+import { useUserStore } from '../stores/user'
+import { userAPI, type LearnerCenterSnapshot } from '../api/user'
 
-const router = useRouter();
-const userStore = useUserStore();
+const router = useRouter()
+const userStore = useUserStore()
 
 const user = ref({
   name: '',
@@ -52,31 +137,41 @@ const user = ref({
   xp: 0,
   level: 1,
   role: 'user'
-});
-const learnerCenter = ref<LearnerCenterSnapshot | null>(null);
+})
+const learnerCenter = ref<LearnerCenterSnapshot | null>(null)
 
 const paceLabel = computed(() => {
-  const pace = learnerCenter.value?.learningControlState?.paceMode;
-  if (pace === 'recover') return '恢复';
-  if (pace === 'push') return '推进';
-  return '稳定';
-});
+  const pace = learnerCenter.value?.learningControlState?.paceMode
+  if (pace === 'recover') return '恢复'
+  if (pace === 'push') return '推进'
+  return '稳定'
+})
+
+const currentPathId = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId || '')
+const currentPathTitle = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.pathTitle || '还没有激活中的学习路径')
+const currentPathDescription = computed(() => {
+  if (currentPathId.value) {
+    return '从这里快速回到当前路径，继续推进最近正在学的任务和阶段。'
+  }
+  return '你还没有激活中的路径，可以先去目标规划或学习路径总览创建新的学习路线。'
+})
+const currentPathMeta = computed(() => (currentPathId.value ? '进行中的学习路径' : '暂无进行中路径'))
+const nextActionLabel = computed(() => (currentPathId.value ? '回到当前路径继续学习' : '先创建或选择一条路径'))
 
 const goCurrentPath = () => {
-  const pathId = learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId;
-  if (pathId) {
-    router.push(`/learning-path/${pathId}`);
-    return;
+  if (currentPathId.value) {
+    router.push(`/learning-path/${currentPathId.value}`)
+    return
   }
-  router.push('/learning-paths');
-};
+  router.push('/learning-paths')
+}
 
 onMounted(async () => {
-  await Promise.all([loadUserProfile(), loadLearnerCenter()]);
-});
+  await Promise.all([loadUserProfile(), loadLearnerCenter()])
+})
 
 async function loadUserProfile() {
-  await userStore.fetchProfile();
+  await userStore.fetchProfile()
   if (userStore.user) {
     user.value = {
       name: userStore.user.name,
@@ -84,12 +179,12 @@ async function loadUserProfile() {
       xp: userStore.user.xp,
       level: userStore.user.level,
       role: (userStore.user as any).role || 'user'
-    };
+    }
   }
 }
 
 async function loadLearnerCenter() {
-  learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' });
+  learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' })
 }
 </script>
 
@@ -100,174 +195,209 @@ async function loadLearnerCenter() {
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 255, 0.72));
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  border-radius: 24px;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 36px rgba(31, 87, 204, 0.07);
 }
 
 [data-theme='dark'] .glass-card {
-  background: rgba(26, 37, 47, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
+  border-color: rgba(96, 165, 250, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
 }
 
-.overview-grid,
-.content-grid {
+.profile-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
   gap: 1.25rem;
 }
 
-.overview-card,
-.section-card {
-  padding: 1.125rem;
+.profile-grid--bottom {
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
 }
 
-.overview-card--hero {
-  min-height: 240px;
+.profile-card {
+  padding: 1.4rem;
 }
 
-.card-header,
-.section-card__head h3 {
-  color: var(--text-primary);
-}
-
-.card-header {
+.profile-card__head {
   margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border-light);
-  font-weight: 700;
 }
 
-.section-card__head {
+.profile-card__head--spread {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
 }
 
 .section-kicker {
+  display: inline-flex;
+  margin-bottom: 8px;
   font-size: 12px;
-  color: var(--text-secondary);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-secondary-dark);
 }
 
-.section-copy {
-  margin: 0 0 14px;
+.profile-card h2,
+.profile-card h3 {
+  margin: 0;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+.profile-avatar {
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.16);
+}
+
+.profile-identity p,
+.card-copy,
+.shortcut-card p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
   line-height: 1.7;
 }
 
-.profile-info {
-  text-align: center;
-}
-
-.user-avatar-large {
-  margin-bottom: 1rem;
-}
-
-.user-name-large {
-  margin: 0 0 0.5rem;
-  color: var(--text-primary);
-}
-
-.user-email {
-  margin: 0 0 1rem;
-  color: var(--text-secondary);
-}
-
-.user-stats,
-.state-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.stat-item,
-.state-card,
-.note-card,
-.mini-card {
-  padding: 10px;
-  background: var(--bg-muted);
-  border-radius: var(--radius-lg);
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-label,
-.state-card__label,
-.subhead,
-.empty-inline {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.stat-value,
-.state-card__value {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.state-card__desc,
-.note-card p,
-.mini-card p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.profile-notes,
-.list-grid,
-.knowledge-sections {
+.profile-stats,
+.shortcut-list,
+.snapshot-list {
   display: grid;
   gap: 12px;
 }
 
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.profile-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.chip {
-  padding: 4px 10px;
-  border-radius: 999px;
+.stat-card,
+.snapshot-item,
+.shortcut-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(67, 176, 216, 0.035));
+}
+
+[data-theme='dark'] .stat-card,
+[data-theme='dark'] .snapshot-item,
+[data-theme='dark'] .shortcut-card {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.1), rgba(67, 176, 216, 0.05));
+  border-color: rgba(96, 165, 250, 0.1);
+}
+
+.stat-card span,
+.snapshot-item span,
+.shortcut-card span {
+  display: block;
   font-size: 12px;
-  background: var(--bg-muted);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
-.chip--good {
-  background: rgba(103, 194, 58, 0.12);
-  color: #3a8b20;
+.stat-card strong,
+.snapshot-item strong,
+.shortcut-card strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--color-primary-dark);
+  line-height: 1.45;
 }
 
-.chip--warn {
-  background: rgba(245, 108, 108, 0.12);
-  color: #c45656;
+[data-theme='dark'] .stat-card strong,
+[data-theme='dark'] .snapshot-item strong,
+[data-theme='dark'] .shortcut-card strong {
+  color: #9fc3ff;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(67, 176, 216, 0.12);
+  color: #2f89a8;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .action-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: 16px;
 }
 
-.section-card--warning {
-  border-color: rgba(245, 108, 108, 0.25);
+.action-row :deep(.el-button--primary) {
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+}
+
+.action-row :deep(.el-button:not(.el-button--primary)) {
+  border-color: rgba(52, 120, 246, 0.16);
+  color: var(--color-primary-dark);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+[data-theme='dark'] .action-row :deep(.el-button:not(.el-button--primary)) {
+  border-color: rgba(96, 165, 250, 0.16);
+  color: #b8d2ff;
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.shortcut-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.shortcut-card {
+  text-align: left;
+  cursor: pointer;
+}
+
+.shortcut-card:hover {
+  border-color: rgba(52, 120, 246, 0.16);
+}
+
+.snapshot-list--stacked {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1100px) {
+  .profile-grid,
+  .profile-grid--bottom,
+  .shortcut-list,
+  .profile-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
-  .overview-grid,
-  .content-grid,
-  .user-stats,
-  .state-grid {
-    grid-template-columns: 1fr;
+  .profile-card {
+    padding: 1.15rem;
+  }
+
+  .profile-card__head--spread,
+  .profile-identity,
+  .action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-row :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>
