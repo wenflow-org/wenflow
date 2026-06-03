@@ -3606,6 +3606,11 @@ onUnmounted(() => {
   margin-top: 0;
 }
 
+.planning-start-card {
+  display: grid;
+  gap: 18px;
+}
+
 .planning-composer__suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -3699,6 +3704,19 @@ onUnmounted(() => {
 
 .planning-composer__box textarea::placeholder {
   color: var(--planning-muted);
+}
+
+.planning-composer--entry .planning-composer__box {
+  box-shadow: 0 20px 42px rgba(15, 23, 42, 0.08);
+}
+
+.planning-composer--entry .planning-composer__box textarea {
+  min-height: 3.4em;
+}
+
+.planning-chat-flow {
+  display: grid;
+  gap: 16px;
 }
 
 .planning-attach-btn {
@@ -6146,6 +6164,19 @@ font-weight: 800;
     padding: 16px;
   }
 
+  .planning-chat-card__head--workbench {
+    gap: 12px;
+  }
+
+  .planning-chat-card__copy {
+    gap: 10px;
+  }
+
+  .planning-chat-card__head h2 {
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+  }
+
   .planning-proposal {
     padding: 16px;
   }
@@ -6161,6 +6192,35 @@ font-weight: 800;
   .planning-message-wrapper,
   .planning-msg {
     max-width: 100%;
+  }
+
+  .planning-start-card {
+    gap: 14px;
+  }
+
+  .planning-start-card__copy strong {
+    font-size: 1.9rem;
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+  }
+
+  .planning-start-card__copy p {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .planning-start-card__examples {
+    display: grid;
+    gap: 10px;
+  }
+
+  .planning-start-card__example {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 16px;
+    line-height: 1.45;
   }
 
   .planning-composer__box {
@@ -6196,9 +6256,7 @@ font-weight: 800;
   }
 
   .planning-composer__row {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 10px;
+    display: block;
     width: 100%;
   }
 
@@ -6216,10 +6274,13 @@ font-weight: 800;
   }
 
   .planning-send-btn {
+    min-height: 46px;
     height: auto;
     justify-content: center;
     gap: 0.45rem;
     padding: 0 16px;
+    border-radius: 16px;
+    box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
   }
 
   .planning-attach-btn span,
@@ -6331,10 +6392,90 @@ font-weight: 800;
     font-size: 1.25rem;
   }
 
+  .planning-main {
+    width: min(100% - 16px, 1280px);
+    padding-top: 14px;
+    padding-bottom: calc(14px + var(--safe-area-bottom));
+  }
+
+  .planning-conversation-layout,
+  .planning-conversation-layout--entry {
+    gap: 12px;
+  }
+
+  .planning-chat-card,
+  .planning-side-card,
+  .planning-topbar-card,
+  .planning-proposal,
+  .planning-start-card {
+    border-radius: 18px;
+  }
+
+  .planning-chat-card,
+  .planning-conversation-layout--entry .planning-chat-card,
+  .planning-conversation-layout:not(.planning-conversation-layout--entry) .planning-chat-card {
+    padding: 14px;
+  }
+
   .planning-proposal,
   .planning-start-card,
   .planning-upload-panel--compact {
     padding: 14px;
+  }
+
+  .planning-chat-card__intro {
+    font-size: 0.92rem;
+    line-height: 1.6;
+  }
+
+  .planning-start-card__copy strong {
+    font-size: 1.65rem;
+  }
+
+  .planning-messages {
+    gap: 12px;
+  }
+
+  .planning-msg {
+    gap: 8px;
+  }
+
+  .planning-msg__meta {
+    gap: 8px;
+  }
+
+  .planning-msg p {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .planning-composer {
+    position: sticky;
+    bottom: calc(10px + var(--safe-area-bottom));
+    z-index: 4;
+  }
+
+  .planning-composer__box {
+    padding: 10px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(16px);
+  }
+
+  .planning-composer__field {
+    gap: 8px;
+  }
+
+  .planning-composer__box textarea {
+    font-size: 0.98rem;
+    line-height: 1.55;
+    min-height: 3.2em;
+  }
+
+  .planning-send-btn {
+    min-height: 48px;
+    font-size: 15px;
   }
 
   .planning-upload-item__meta,

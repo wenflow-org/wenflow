@@ -47,17 +47,17 @@ class LearnerStateSummaryService {
     const trendLevel = snapshot.dynamicState.recentTrend;
     const pacingLevel = snapshot.dynamicState.recommendedPacing;
 
-    const pressureLevel: LearnerGlobalStateSummary['pressureLevel'] = metrics.lss >= 70
+    const pressureLevel: LearnerGlobalStateSummary['pressureLevel'] = metrics.lss >= 7
       ? 'high'
-      : metrics.lss >= 40
+      : metrics.lss >= 4
         ? 'medium'
         : 'low';
 
     const stateLevel: LearnerGlobalStateSummary['stateLevel'] = metrics.lsb < 0
       ? 'recover'
-      : metrics.lsb < 20
+      : metrics.lsb < 2
         ? 'caution'
-        : metrics.lsb >= 40
+        : metrics.lsb >= 4
           ? 'strong'
           : 'balanced';
 

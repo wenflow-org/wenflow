@@ -134,6 +134,30 @@ function Assert-RequiredEnvConfiguration {
     }
 }
 
+function Assert-SafeSqliteDatabaseUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EnvPath
+    )
+
+    $databaseUrl = Get-EnvValue -Path $EnvPath -Key 'DATABASE_URL'
+    if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
+        return
+    }
+
+    $trimmed = $databaseUrl.Trim()
+    if ($trimmed -notmatch '^file:') {
+        return
+    }
+
+    if ($trimmed -match '^file:\./prisma/') {
+        Write-Host "DATABASE_URL=$trimmed is not a safe local SQLite path for WenFlow." -ForegroundColor Red
+        Write-Host 'Use DATABASE_URL=file:./dev.db for the local development database.' -ForegroundColor Yellow
+        Write-Host 'Values under file:./prisma/... can resolve to a nested prisma/prisma/*.db during startup and split your data.' -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 function Ensure-NpmDependencies {
     param(
         [Parameter(Mandatory = $true)]
@@ -178,6 +202,25 @@ function Ensure-PrismaReady {
         npx prisma db push
         if ($LASTEXITCODE -ne 0) {
             Write-Host "prisma db push failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+function Ensure-CoreAgentPromptsSync {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackendPath
+    )
+
+    Write-Host "Syncing core agent prompts from code..." -ForegroundColor Yellow
+    Push-Location $BackendPath
+    try {
+        npm run prompts:sync-core
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "core agent prompt sync failed" -ForegroundColor Red
             exit $LASTEXITCODE
         }
     } finally {
@@ -616,12 +659,14 @@ if ($needsEnvSetup) {
 }
 
 Assert-RequiredEnvConfiguration -EnvPath $backendEnvPath
+Assert-SafeSqliteDatabaseUrl -EnvPath $backendEnvPath
 
 Ensure-NpmDependencies -ProjectPath $backendPath -ProjectName 'Backend'
 Ensure-NpmDependencies -ProjectPath $frontendPath -ProjectName 'Frontend'
 
 if (-not $SkipPrisma) {
     Ensure-PrismaReady -BackendPath $backendPath
+    Ensure-CoreAgentPromptsSync -BackendPath $backendPath
 } else {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }

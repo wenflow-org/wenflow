@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { DEFAULT_SYSTEM_PROMPT as GOAL_CONVERSATION_SYSTEM_PROMPT } from '../agents/goal-conversation-agent/index';
 import { DEFAULT_PATH_GENERATION_PROMPT } from '../agents/path-agent/index';
 import { TEACHING_TURN_SYSTEM_PROMPT } from '../agents/teaching-turn-agent/index';
 import { WRAPUP_PROMPT } from '../agents/session-wrapup-agent/index';
@@ -26,6 +27,7 @@ export interface CoreAgentPromptSeed {
   systemPrompt: string;
   temperature: number;
   maxTokens: number;
+  acceptableAgentIds?: string[];
 }
 
 export interface CoreAgentPromptSeedResult {
@@ -33,7 +35,29 @@ export interface CoreAgentPromptSeedResult {
   skipped: string[];
 }
 
+export type CoreAgentPromptEnsureMode = 'bootstrap' | 'backfill' | 'sync';
+
+export interface CoreAgentPromptEnsureResult {
+  mode: CoreAgentPromptEnsureMode;
+  totalPromptCountBefore: number;
+  performed: boolean;
+  created: string[];
+  skipped: string[];
+  missingBefore: string[];
+  updated?: string[];
+  reason: 'seeded-empty-table' | 'table-not-empty' | 'backfilled-missing' | 'no-missing-prompts' | 'synced-from-code' | 'already-in-sync';
+}
+
 export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
+  {
+    agentId: 'goal-conversation-agent',
+    name: 'v1-default-goal-conversation',
+    description: '从 goal-conversation-agent 当前代码默认 Prompt 初始化',
+    systemPrompt: GOAL_CONVERSATION_SYSTEM_PROMPT,
+    temperature: 0.7,
+    maxTokens: 4000,
+    acceptableAgentIds: ['goal-conversation-agent', 'goal-conversation'],
+  },
   {
     agentId: 'path-agent',
     name: 'v1-default-path-generation',
@@ -172,6 +196,173 @@ export const CORE_AGENT_PROMPT_SEEDS: CoreAgentPromptSeed[] = [
   },
 ];
 
+function getAcceptableAgentIds(seed: CoreAgentPromptSeed): string[] {
+  const rawIds = Array.isArray(seed.acceptableAgentIds) && seed.acceptableAgentIds.length > 0
+    ? seed.acceptableAgentIds
+    : [seed.agentId];
+  return Array.from(new Set(rawIds.map((value) => value.trim()).filter(Boolean)));
+}
+
+function buildPromptName(name: string, version: number): string {
+  if (/^v\d+-/.test(name)) {
+    return name.replace(/^v\d+-/, `v${version}-`);
+  }
+  return `v${version}-${name}`;
+}
+
+async function createPromptSeedRecord(
+  prisma: PrismaClient,
+  seed: CoreAgentPromptSeed,
+  version: number,
+  createdBy: string
+) {
+  await prisma.agent_prompts.create({
+    data: {
+      id: `ap_seed_${seed.agentId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      agentId: seed.agentId,
+      version,
+      name: buildPromptName(seed.name, version),
+      description: seed.description,
+      systemPrompt: seed.systemPrompt,
+      temperature: seed.temperature,
+      maxTokens: seed.maxTokens,
+      model: DEFAULT_MODEL,
+      status: 'ACTIVE',
+      createdBy,
+      publishedAt: new Date(),
+    },
+  });
+}
+
+function normalizePromptText(value: string | null | undefined): string {
+  return (value || '').replace(/\r\n/g, '\n').trim();
+}
+
+function matchesSeedConfig(activePrompt: {
+  systemPrompt: string | null;
+  temperature: number | null;
+  maxTokens: number | null;
+  model: string | null;
+}, seed: CoreAgentPromptSeed): boolean {
+  return normalizePromptText(activePrompt.systemPrompt) === normalizePromptText(seed.systemPrompt)
+    && Number(activePrompt.temperature ?? seed.temperature) === Number(seed.temperature)
+    && Number(activePrompt.maxTokens ?? seed.maxTokens) === Number(seed.maxTokens)
+    && String(activePrompt.model || DEFAULT_MODEL) === String(DEFAULT_MODEL);
+}
+
+async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
+  created: string[];
+  updated: string[];
+  skipped: string[];
+}> {
+  const created: string[] = [];
+  const updated: string[] = [];
+  const skipped: string[] = [];
+
+  for (const seed of CORE_AGENT_PROMPT_SEEDS) {
+    const acceptableIds = getAcceptableAgentIds(seed);
+    const activePrompt = await prisma.agent_prompts.findFirst({
+      where: {
+        agentId: { in: acceptableIds },
+        status: 'ACTIVE',
+      },
+      orderBy: [
+        { publishedAt: 'desc' },
+        { updatedAt: 'desc' },
+        { version: 'desc' },
+      ],
+      select: {
+        id: true,
+        agentId: true,
+        version: true,
+        systemPrompt: true,
+        temperature: true,
+        maxTokens: true,
+        model: true,
+      }
+    });
+
+    if (!activePrompt) {
+      const latest = await prisma.agent_prompts.findFirst({
+        where: { agentId: seed.agentId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      const nextVersion = (latest?.version || 0) + 1;
+      await createPromptSeedRecord(prisma, seed, nextVersion, 'system-sync');
+      created.push(seed.agentId);
+      continue;
+    }
+
+    if (matchesSeedConfig(activePrompt, seed)) {
+      skipped.push(seed.agentId);
+      continue;
+    }
+
+    const latest = await prisma.agent_prompts.findFirst({
+      where: { agentId: seed.agentId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    const nextVersion = Math.max((latest?.version || 0) + 1, (activePrompt.version || 0) + 1);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.agent_prompts.updateMany({
+        where: {
+          agentId: { in: acceptableIds },
+          status: 'ACTIVE',
+        },
+        data: {
+          status: 'ARCHIVED',
+          updatedAt: new Date(),
+        },
+      });
+
+      await tx.agent_prompts.create({
+        data: {
+          id: `ap_seed_${seed.agentId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          agentId: seed.agentId,
+          version: nextVersion,
+          name: buildPromptName(seed.name, nextVersion),
+          description: seed.description,
+          systemPrompt: seed.systemPrompt,
+          temperature: seed.temperature,
+          maxTokens: seed.maxTokens,
+          model: DEFAULT_MODEL,
+          status: 'ACTIVE',
+          createdBy: 'system-sync',
+          publishedAt: new Date(),
+        },
+      });
+    });
+
+    updated.push(seed.agentId);
+  }
+
+  return { created, updated, skipped };
+}
+
+export async function findMissingCorePromptSeeds(prisma: PrismaClient): Promise<CoreAgentPromptSeed[]> {
+  const acceptableIds = Array.from(new Set(
+    CORE_AGENT_PROMPT_SEEDS.flatMap((seed) => getAcceptableAgentIds(seed))
+  ));
+
+  const activePrompts = await prisma.agent_prompts.findMany({
+    where: {
+      agentId: { in: acceptableIds },
+      status: 'ACTIVE',
+    },
+    select: { agentId: true },
+  });
+
+  const activeIdSet = new Set(activePrompts.map((prompt) => prompt.agentId));
+
+  return CORE_AGENT_PROMPT_SEEDS.filter((seed) => {
+    const candidates = getAcceptableAgentIds(seed);
+    return !candidates.some((agentId) => activeIdSet.has(agentId));
+  });
+}
+
 export async function seedCoreAgentPrompts(prisma: PrismaClient): Promise<CoreAgentPromptSeedResult> {
   if (!DEFAULT_MODEL) {
     throw new Error('AI_MODEL is required to seed core agent prompts');
@@ -198,25 +389,105 @@ export async function seedCoreAgentPrompts(prisma: PrismaClient): Promise<CoreAg
       continue;
     }
 
-    await prisma.agent_prompts.create({
-      data: {
-        id: `ap_seed_${seed.agentId}_${Date.now()}`,
-        agentId: seed.agentId,
-        version: 1,
-        name: seed.name,
-        description: seed.description,
-        systemPrompt: seed.systemPrompt,
-        temperature: seed.temperature,
-        maxTokens: seed.maxTokens,
-        model: DEFAULT_MODEL,
-        status: 'ACTIVE',
-        createdBy: 'system-seed',
-        publishedAt: new Date(),
-      },
-    });
+    await createPromptSeedRecord(prisma, seed, 1, 'system-seed');
 
     result.created.push(seed.agentId);
   }
 
   return result;
+}
+
+export async function ensureCoreAgentPrompts(
+  prisma: PrismaClient,
+  mode: CoreAgentPromptEnsureMode
+): Promise<CoreAgentPromptEnsureResult> {
+  if (!DEFAULT_MODEL) {
+    throw new Error('AI_MODEL is required to ensure core agent prompts');
+  }
+
+  const totalPromptCountBefore = await prisma.agent_prompts.count();
+  const missingBefore = (await findMissingCorePromptSeeds(prisma)).map((seed) => seed.agentId);
+
+  if (mode === 'bootstrap') {
+    if (totalPromptCountBefore > 0) {
+      return {
+        mode,
+        totalPromptCountBefore,
+      performed: false,
+      created: [],
+      skipped: CORE_AGENT_PROMPT_SEEDS.map((seed) => seed.agentId),
+      missingBefore,
+      updated: [],
+      reason: 'table-not-empty',
+    };
+  }
+
+    const seeded = await seedCoreAgentPrompts(prisma);
+    return {
+      mode,
+      totalPromptCountBefore,
+      performed: true,
+      created: seeded.created,
+      skipped: seeded.skipped,
+      missingBefore,
+      updated: [],
+      reason: 'seeded-empty-table',
+    };
+  }
+
+  if (mode === 'sync') {
+    const synced = await syncCoreAgentPrompts(prisma);
+    const performed = synced.created.length > 0 || synced.updated.length > 0;
+    return {
+      mode,
+      totalPromptCountBefore,
+      performed,
+      created: synced.created,
+      skipped: synced.skipped,
+      missingBefore,
+      updated: synced.updated,
+      reason: performed ? 'synced-from-code' : 'already-in-sync',
+    };
+  }
+
+  const missingSeeds = await findMissingCorePromptSeeds(prisma);
+  if (missingSeeds.length === 0) {
+    return {
+      mode,
+      totalPromptCountBefore,
+      performed: false,
+      created: [],
+      skipped: CORE_AGENT_PROMPT_SEEDS.map((seed) => seed.agentId),
+      missingBefore,
+      updated: [],
+      reason: 'no-missing-prompts',
+    };
+  }
+
+  const created: string[] = [];
+  const skipped = CORE_AGENT_PROMPT_SEEDS
+    .map((seed) => seed.agentId)
+    .filter((agentId) => !missingSeeds.some((seed) => seed.agentId === agentId));
+
+  for (const seed of missingSeeds) {
+    const latest = await prisma.agent_prompts.findFirst({
+      where: { agentId: seed.agentId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    const nextVersion = (latest?.version || 0) + 1;
+    await createPromptSeedRecord(prisma, seed, nextVersion, 'system-backfill');
+    created.push(seed.agentId);
+  }
+
+  return {
+    mode,
+    totalPromptCountBefore,
+    performed: true,
+    created,
+    skipped,
+    missingBefore,
+    updated: [],
+    reason: 'backfilled-missing',
+  };
 }

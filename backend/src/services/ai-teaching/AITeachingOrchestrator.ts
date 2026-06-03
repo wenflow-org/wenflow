@@ -18,6 +18,7 @@ import { knowledgeStateService } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { teachingContextCompressionService } from './TeachingContextCompressionService';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
 import learningService from '../learning/learning.service';
@@ -138,6 +139,10 @@ function buildLearnerStateContext(
     engagement: latestAnalysis?.engagement ?? previous.engagement ?? null,
     struggleDetected: previous.struggleDetected === true,
   };
+}
+
+function extractTeachingStateMetrics(teachingState: Record<string, any> | null | undefined): LearningStateMetrics | null {
+  return learningStateService.coerceMetrics(teachingState);
 }
 
 function deriveTeachingRuntimeSignals(context: TeachingScenarioContext) {
@@ -592,43 +597,55 @@ function normalizeConcept(value: string | null | undefined): string | null {
   return normalized || null;
 }
 
-function buildTaskKnowledgeCandidates(context: TeachingScenarioContext, currentPoint: string | null): string[] {
-  return Array.from(new Set([
-    ...context.taskKnowledgeScope.primaryConcepts,
-    ...context.taskKnowledgeScope.prerequisiteConcepts,
-    currentPoint,
-  ].map((item) => normalizeConcept(item)).filter(Boolean) as string[]));
+function pruneOverlyBroadCoreConceptPoints(
+  points: TeachingKnowledgePointState[],
+  coreConcept: string | null,
+): TeachingKnowledgePointState[] {
+  const normalizedCoreConcept = normalizeConcept(coreConcept);
+  const normalizedPoints = points.filter((point) => normalizeConcept(point.name));
+
+  if (!normalizedCoreConcept) {
+    return normalizedPoints;
+  }
+
+  const hasFinerPoint = normalizedPoints.some((point) => normalizeConcept(point.name) !== normalizedCoreConcept);
+  if (!hasFinerPoint) {
+    return normalizedPoints;
+  }
+
+  const filtered = normalizedPoints.filter((point) => normalizeConcept(point.name) !== normalizedCoreConcept);
+  return filtered.length > 0 ? filtered : normalizedPoints;
 }
 
-function isTaskScopedKnowledgePoint(name: string, candidates: string[]): boolean {
-  const normalized = normalizeConcept(name);
-  if (!normalized) return false;
-  return candidates.some((candidate) => {
-    const lowerName = normalized.toLowerCase();
-    const lowerCandidate = candidate.toLowerCase();
-    return lowerName === lowerCandidate || lowerName.includes(lowerCandidate) || lowerCandidate.includes(lowerName);
-  });
-}
-
-function filterTaskScopedKnowledgePoints(
+function reconcileTeachingKnowledgeState(
   context: TeachingScenarioContext,
   output: TeachingTurnOutput,
   existingPoints: TeachingKnowledgePointState[]
 ) {
-  const candidates = buildTaskKnowledgeCandidates(context, output.knowledge.currentPoint);
-  const filteredOutputPoints = output.knowledge.points.filter((point) => isTaskScopedKnowledgePoint(point.name, candidates));
-  const filteredExistingPoints = existingPoints.filter((point) => isTaskScopedKnowledgePoint(point.name, candidates));
+  const coreConcept = context.taskProfile.coreConcept || context.taskProfile.linkedConceptName || null;
+  const filteredOutputPoints = pruneOverlyBroadCoreConceptPoints(output.knowledge.points, coreConcept).slice(0, 5);
+  const filteredExistingPoints = pruneOverlyBroadCoreConceptPoints(existingPoints, coreConcept);
+  const normalizedCurrentPoint = normalizeConcept(output.knowledge.currentPoint || null);
+  const currentPointExists = !!normalizedCurrentPoint && [
+    ...filteredOutputPoints,
+    ...filteredExistingPoints,
+  ].some((point) => normalizeConcept(point.name) === normalizedCurrentPoint);
+
+  const currentPoint = currentPointExists
+    ? output.knowledge.currentPoint
+    : filteredOutputPoints[0]?.name || filteredExistingPoints[0]?.name || null;
 
   return {
-    ...output,
-    knowledge: {
-      ...output.knowledge,
-      currentPoint: isTaskScopedKnowledgePoint(output.knowledge.currentPoint || '', candidates)
-        ? output.knowledge.currentPoint
-        : filteredOutputPoints[0]?.name || filteredExistingPoints[0]?.name || null,
-      points: filteredOutputPoints.slice(0, 5),
-    }
-  } as TeachingTurnOutput;
+    teachingOutput: {
+      ...output,
+      knowledge: {
+        ...output.knowledge,
+        currentPoint,
+        points: filteredOutputPoints,
+      }
+    } as TeachingTurnOutput,
+    existingPoints: filteredExistingPoints,
+  };
 }
 
 function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
@@ -969,9 +986,9 @@ export class AITeachingOrchestrator {
 
     const rawTeachingOutput = extractTeachingOutput(turnResult);
     const promptDebug = extractTeachingPromptDebug(turnResult);
-    const teachingOutput = filterTaskScopedKnowledgePoints(context, rawTeachingOutput, session.knowledgeState);
+    const { teachingOutput, existingPoints } = reconcileTeachingKnowledgeState(context, rawTeachingOutput, session.knowledgeState);
     const mergedKnowledge = knowledgeStateService.merge(
-      session.knowledgeState.filter((point) => isTaskScopedKnowledgePoint(point.name, buildTaskKnowledgeCandidates(context, teachingOutput.knowledge.currentPoint))),
+      existingPoints,
       teachingOutput.knowledge.points
     );
     const previousTeachingState = session.teachingState || {};
@@ -1133,7 +1150,10 @@ export class AITeachingOrchestrator {
     };
 
     const persistedMessages = [...updatedMessages, assistantMessage];
-    const currentState = await learningStateService.calculateAndUpdate(session.userId, {
+    const previousMetrics = extractTeachingStateMetrics(previousTeachingState)
+      || learningStateService.coerceMetrics(context.learningState)
+      || null;
+    const currentState = learningStateService.calculateRuntimeState(previousMetrics, {
       difficulty: Math.max(1, Math.min(10, teachingOutput.analysis.levelScore + 2)),
       cognitiveLoad: Math.max(1, Math.min(10, (1 - teachingOutput.analysis.understanding + 0.3) * 8)),
       efficiency: teachingOutput.analysis.engagement,
@@ -1314,6 +1334,9 @@ export class AITeachingOrchestrator {
           sessionLf: evaluationResult.evaluation.sessionLf,
           durationMinutes,
           confidence: evaluationResult.evaluation.confidence,
+          pathId: session.learningPathId || null,
+          taskId: session.taskId,
+          sessionId,
         })
       : null;
 
@@ -1416,6 +1439,8 @@ export class AITeachingOrchestrator {
           advisory,
         },
       });
+
+    void dashboardGuidanceSnapshotService.refresh(session.userId, 'lesson-wrapup');
 
     return {
       wrapup: finalWrapup,

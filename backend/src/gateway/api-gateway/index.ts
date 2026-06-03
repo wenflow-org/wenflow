@@ -35,7 +35,7 @@ export class APIGateway {
     const normalizedCaller: CallerInfo = {
       ...caller,
       agentId: caller.agentId || requestContext.agentId,
-      skillId: caller.skillId || requestContext.skillId,
+      skillId: caller.skillId || (!caller.agentId ? requestContext.skillId : undefined),
       userId: executionContext.userId
     };
 

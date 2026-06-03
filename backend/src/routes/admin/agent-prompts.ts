@@ -9,9 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../utils/logger';
 import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
-  seedCoreAgentPrompts,
   CORE_AGENT_PROMPT_SEEDS,
-  type CoreAgentPromptSeedResult,
+  ensureCoreAgentPrompts,
 } from '../../scripts/seed-core-agent-prompts';
 
 const router = Router();
@@ -165,7 +164,7 @@ router.get('/detail/:id', async (req: Request, res: Response) => {
 
 router.post('/seed-core', async (_req: Request, res: Response) => {
   try {
-    const result = await seedCoreAgentPrompts(prisma);
+    const result = await ensureCoreAgentPrompts(prisma, 'backfill');
     res.json({
       success: true,
       data: {

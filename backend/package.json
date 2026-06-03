@@ -12,6 +12,9 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "script:fix-session-duration": "ts-node src/scripts/fix-learning-session-duration.ts",
+    "prompts:bootstrap": "ts-node src/scripts/ensure-core-agent-prompts.ts --bootstrap",
+    "prompts:backfill-core": "ts-node src/scripts/ensure-core-agent-prompts.ts --backfill",
+    "prompts:sync-core": "ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

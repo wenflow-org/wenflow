@@ -43,6 +43,7 @@ router.get('/current', async (req: any, res) => {
         ktl: currentState.ktl,
         lf: currentState.lf,
         lsb: currentState.lsb,
+        updatedAt: currentState.updatedAt,
         suggestion
       }
     });

@@ -18,12 +18,19 @@ const AGENT_ID = 'skill:peer-reinforcement';
 
 export const DEFAULT_PEER_AGENT_PROMPT = `你是学习伙伴，和学生一起探索问题。
 
+请输出严格 JSON：
+{
+  "message": "一段自然、口语化、像同学讨论的伴学消息",
+  "followUpQuestions": ["可选的后续追问"]
+}
+
 【对话原则】
 - 语气平等，像同学讨论，不要像老师
 - 不要直接给正确答案，引导用户自己发现
 - 可以提出疑问、分享想法、请学生讲解
-- 每次只问一个问题，不要连续追问
-- 使用口语化表达，适当使用表情符号`;
+- 每次只问一个关键问题，不要连续追问
+- 使用口语化表达，但不要输出 markdown、解释说明或 JSON 之外的内容
+- message 必须非空，长度控制在 1-4 句`;
 
 export const peerAgentDefinition: AgentDefinition = {
   id: AGENT_ID,
@@ -112,6 +119,18 @@ export interface PeerDiscussionOutput {
   inputEcho?: PeerDiscussionInput;
 }
 
+function getStrategyInstruction(strategy: PeerDiscussionInput['strategy']): string {
+  const strategyPrompts: Record<PeerDiscussionInput['strategy'], string> = {
+    feynman: '请像同学一样请学生把概念讲给你听，并用一个追问检验他是否真的理解。',
+    debate: '请提出一个轻量对立视角，让学生比较哪种说法更合理。',
+    counterexample: '请给一个边界情况或反例，促使学生检查结论是否还成立。',
+    analogy: '请引导学生联想一个相近概念，帮助他做类比迁移。',
+    'error-analysis': '请围绕学生刚才的错误或偏差，温和地引导他分析错因。',
+  };
+
+  return strategyPrompts[strategy] || strategyPrompts.feynman;
+}
+
 function buildPeerUserPayload(input: PeerDiscussionInput) {
   const contextSection = input.tutorContext.length > 0
     ? `\n【最近对话】\n${input.tutorContext.slice(-5).map((m) => `${m.role}: ${m.content.substring(0, 100)}`).join('\n')}`
@@ -121,7 +140,27 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
     ? `\n【学生消息】${input.studentMessage}`
     : '';
 
-  return `请生成一段同伴讨论消息：${contextSection}${studentMessageSection}`;
+  const understandingSection = typeof input.understanding === 'number'
+    ? `\n【理解度】${input.understanding}`
+    : '';
+
+  return `请生成一段同伴讨论消息：
+【主题】${input.topic}
+【策略】${input.strategy}
+【策略要求】${getStrategyInstruction(input.strategy)}
+【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${contextSection}${studentMessageSection}`;
+}
+
+function validatePeerParsedOutput(parsed: any) {
+  if (!parsed || typeof parsed !== 'object') {
+    return { valid: false as const, failureReason: 'PEER_OUTPUT_NOT_OBJECT' };
+  }
+
+  if (typeof parsed.message !== 'string' || !parsed.message.trim()) {
+    return { valid: false as const, failureReason: 'PEER_MESSAGE_MISSING' };
+  }
+
+  return { valid: true as const };
 }
 
 const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
@@ -131,6 +170,7 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
     agentId: AGENT_ID,
   },
   buildUserPayload: (input) => buildPeerUserPayload(input),
+  validateParsedOutput: (parsed) => validatePeerParsedOutput(parsed),
   normalizeOutput: (parsed, input) => {
     if (typeof parsed === 'string' && parsed.trim()) {
       return parsed.trim();
@@ -149,14 +189,6 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
 };
 
 export class PeerAgent {
-  private readonly strategyPrompts: Record<string, string> = {
-    feynman: '你采用费曼技巧：请学生给你讲解这个概念，通过提问检验理解深度。语气好奇、谦逊。',
-    debate: '你采用观点辨析：提出两种对立观点，让学生分析哪种更合理。语气探讨性。',
-    counterexample: '你采用反例挑战：提出边界情况或反例，让学生思考结论是否仍然成立。语气挑战性。',
-    analogy: '你采用类比迁移：引导学生联想之前学过的类似概念，建立知识联系。语气启发性。',
-    'error-analysis': '你采用错误分析：指出学生刚才的错误，引导分析错因。语气温和、建设性。',
-  };
-
   private readonly config = {
     timeout: 30000,
   };
@@ -171,22 +203,15 @@ export class PeerAgent {
     let result: PeerDiscussionOutput | null = null;
 
     try {
-      const strategyPrompt = `${DEFAULT_PEER_AGENT_PROMPT}
-${this.strategyPrompts[input.strategy] || this.strategyPrompts.feynman}
-
-当前讨论主题：${input.topic}
-学生认知层级：${input.cognitiveLevel || 'understand'}
-学生理解度：${input.understanding || 0.5}
-`;
-
-      const promptResult = await callPrompt({
-        ...peerPromptSpec,
-        defaultSystemPrompt: strategyPrompt,
-      }, input, {
+      const promptResult = await callPrompt(peerPromptSpec, input, {
         userId: 'system',
       });
 
-      const message = promptResult.success && promptResult.output ? promptResult.output : '';
+      if (!promptResult.success) {
+        throw new Error(promptResult.error?.message || 'PEER_PROMPT_FAILED');
+      }
+
+      const message = promptResult.output || '';
 
       if (!message.trim()) {
         throw new Error('PEER_RESPONSE_EMPTY');

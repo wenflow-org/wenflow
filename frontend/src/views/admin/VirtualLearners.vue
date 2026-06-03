@@ -160,7 +160,7 @@
 
               <div class="profile-card__footer">
                 <el-button type="primary" @click="goToProfile(row)">详情</el-button>
-                <el-button @click="openStartSessionDialog(row)">{{ getProfileActionLabel(row) }}</el-button>
+                <el-button @click="handleProfileSecondaryAction(row)">{{ getProfileActionLabel(row) }}</el-button>
                 <el-dropdown trigger="click">
                   <el-button class="profile-card__more" aria-label="更多操作">
                     <el-icon><MoreFilled /></el-icon>
@@ -246,7 +246,7 @@
           </el-button>
         </div>
         <div class="ai-generate-hint ai-generate-hint--block">
-          这里只创建虚拟学习者身份。AI 一键生成会补全基础身份与稳定特质；故事池请在创建后进入人物详情页单独生成和维护。
+          创建时如果画像信息不足，系统会自动补全基础身份与稳定特质，并自动生成 1 个故事；也可以先点按钮预览后再创建。
         </div>
 
         <el-form-item label="年龄">
@@ -306,11 +306,11 @@
 
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          {{ editingProfile ? '保存修改' : '创建样本' }}
-        </el-button>
-      </template>
-    </el-dialog>
+          <el-button type="primary" :loading="submitting" @click="handleSubmit">
+            {{ editingProfile ? '保存修改' : '创建并生成故事' }}
+          </el-button>
+        </template>
+      </el-dialog>
 
     <el-drawer
       v-model="sessionDrawerVisible"
@@ -422,6 +422,47 @@ import { adminApi } from '@/api/adminApi'
 
 type ProfileFilter = 'all' | 'ready' | 'needsStory' | 'running' | 'completed'
 
+const PERSONA_PROFILE_TEXT_FIELDS = [
+  'occupation',
+  'education',
+  'background',
+  'corePersonality',
+  'emotionalBaseline',
+  'helpSeekingPattern',
+  'adversarialPattern',
+  'metacognitiveProfile',
+  'cognitiveLoadTolerance',
+  'memoryRepairPattern'
+] as const
+
+const createEmptyFormData = () => ({
+  name: '',
+  profile: {
+    age: undefined as number | undefined,
+    occupation: '',
+    education: '',
+    background: '',
+    corePersonality: '',
+    emotionalBaseline: '',
+    helpSeekingPattern: '',
+    adversarialPattern: '',
+    metacognitiveProfile: '',
+    cognitiveLoadTolerance: '',
+    memoryRepairPattern: ''
+  },
+  simulationMode: 'manual',
+  simulationTemperature: 0.8,
+  personalityTraits: {
+    verbosity: 'normal',
+    enthusiasm: 'normal',
+    confusionStyle: 'direct'
+  },
+  notes: ''
+})
+
+type VirtualLearnerForm = ReturnType<typeof createEmptyFormData>
+type VirtualLearnerProfileDraft = VirtualLearnerForm['profile']
+
 const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
@@ -455,23 +496,7 @@ const startSessionPrimaryActionLabel = computed(() => {
   return getStoryPool(startSessionTarget.value).length ? '用该故事进入详情' : '进入详情生成故事'
 })
 
-const formData = ref({
-  name: '',
-  profile: {
-    age: undefined as number | undefined,
-    occupation: '',
-    education: '',
-    background: ''
-  },
-  simulationMode: 'manual',
-  simulationTemperature: 0.8,
-  personalityTraits: {
-    verbosity: 'normal',
-    enthusiasm: 'normal',
-    confusionStyle: 'direct'
-  },
-  notes: ''
-})
+const formData = ref<VirtualLearnerForm>(createEmptyFormData())
 
 const formRules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
@@ -538,7 +563,7 @@ const recentSessions = computed(() => {
   )
 
   return sessions
-    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
     .slice(0, 8)
 })
 
@@ -653,28 +678,89 @@ const handlePageChange = (page: number) => {
   pagination.value.page = page
 }
 
+const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+
+const hasCompletePersonaProfile = (profile: VirtualLearnerProfileDraft) => {
+  return PERSONA_PROFILE_TEXT_FIELDS.every((field) => normalizeText(profile[field]))
+}
+
+const buildExistingPersonaSeed = () => {
+  const currentProfile = formData.value.profile
+  return {
+    nameHint: normalizeText(formData.value.name) || undefined,
+    age: typeof currentProfile.age === 'number' ? currentProfile.age : undefined,
+    occupation: normalizeText(currentProfile.occupation) || undefined,
+    education: normalizeText(currentProfile.education) || undefined,
+    background: normalizeText(currentProfile.background) || undefined,
+    corePersonality: normalizeText(currentProfile.corePersonality) || undefined,
+    emotionalBaseline: normalizeText(currentProfile.emotionalBaseline) || undefined,
+    helpSeekingPattern: normalizeText(currentProfile.helpSeekingPattern) || undefined,
+    adversarialPattern: normalizeText(currentProfile.adversarialPattern) || undefined,
+    metacognitiveProfile: normalizeText(currentProfile.metacognitiveProfile) || undefined,
+    cognitiveLoadTolerance: normalizeText(currentProfile.cognitiveLoadTolerance) || undefined,
+    memoryRepairPattern: normalizeText(currentProfile.memoryRepairPattern) || undefined,
+    personalityTraits: {
+      ...formData.value.personalityTraits
+    }
+  }
+}
+
+const applyPersonaSeedToForm = (personaSeed: Record<string, any>, options: { preferExisting?: boolean } = {}) => {
+  const preferExisting = options.preferExisting ?? false
+  const currentForm = formData.value
+  const currentProfile = currentForm.profile
+  const currentTraits = currentForm.personalityTraits
+  const generatedProfile = personaSeed && typeof personaSeed === 'object' ? { ...personaSeed } : {}
+  delete generatedProfile.personalityTraits
+
+  const pickText = (currentValue: string, generatedValue: any) => {
+    if (preferExisting && normalizeText(currentValue)) {
+      return currentValue
+    }
+    return normalizeText(generatedValue) || currentValue || ''
+  }
+
+  const nextProfile: VirtualLearnerProfileDraft & Record<string, any> = {
+    ...generatedProfile,
+    age: preferExisting && typeof currentProfile.age === 'number'
+      ? currentProfile.age
+      : (typeof generatedProfile.age === 'number' ? generatedProfile.age : currentProfile.age),
+    occupation: pickText(currentProfile.occupation, generatedProfile.occupation),
+    education: pickText(currentProfile.education, generatedProfile.education),
+    background: pickText(currentProfile.background, generatedProfile.background),
+    corePersonality: pickText(currentProfile.corePersonality, generatedProfile.corePersonality),
+    emotionalBaseline: pickText(currentProfile.emotionalBaseline, generatedProfile.emotionalBaseline),
+    helpSeekingPattern: pickText(currentProfile.helpSeekingPattern, generatedProfile.helpSeekingPattern),
+    adversarialPattern: pickText(currentProfile.adversarialPattern, generatedProfile.adversarialPattern),
+    metacognitiveProfile: pickText(currentProfile.metacognitiveProfile, generatedProfile.metacognitiveProfile),
+    cognitiveLoadTolerance: pickText(currentProfile.cognitiveLoadTolerance, generatedProfile.cognitiveLoadTolerance),
+    memoryRepairPattern: pickText(currentProfile.memoryRepairPattern, generatedProfile.memoryRepairPattern)
+  }
+
+  formData.value = {
+    ...currentForm,
+    name: preferExisting && normalizeText(currentForm.name)
+      ? currentForm.name
+      : (normalizeText(personaSeed?.nameHint) || currentForm.name || normalizeText(generatedProfile.occupation) || '随机样本'),
+    profile: nextProfile,
+    simulationMode: 'ai',
+    personalityTraits: {
+      verbosity: preferExisting && normalizeText(currentTraits.verbosity)
+        ? currentTraits.verbosity
+        : (personaSeed?.personalityTraits?.verbosity || currentTraits.verbosity || 'normal'),
+      enthusiasm: preferExisting && normalizeText(currentTraits.enthusiasm)
+        ? currentTraits.enthusiasm
+        : (personaSeed?.personalityTraits?.enthusiasm || currentTraits.enthusiasm || 'normal'),
+      confusionStyle: preferExisting && normalizeText(currentTraits.confusionStyle)
+        ? currentTraits.confusionStyle
+        : (personaSeed?.personalityTraits?.confusionStyle || currentTraits.confusionStyle || 'direct')
+    }
+  }
+}
+
 const resetForm = () => {
   scenarioDraft.value = null
-  formData.value = {
-    name: '',
-    profile: {
-      age: undefined,
-      occupation: '',
-      education: '',
-      background: '',
-      corePersonality: '',
-      emotionalBaseline: '',
-      helpSeekingPattern: '',
-      adversarialPattern: '',
-      metacognitiveProfile: '',
-      cognitiveLoadTolerance: '',
-      memoryRepairPattern: ''
-    },
-    simulationMode: 'manual',
-    simulationTemperature: 0.8,
-    personalityTraits: { verbosity: 'normal', enthusiasm: 'normal', confusionStyle: 'direct' },
-    notes: ''
-  }
+  formData.value = createEmptyFormData()
 }
 
 const openCreateDialog = () => {
@@ -716,23 +802,13 @@ const openEditDialog = (profile: any) => {
 const handleGeneratePersona = async () => {
   generatingScenario.value = true
   try {
-    const res = await adminApi.generatePersona()
+    const res = await adminApi.generatePersona({
+      existingPersonaSeed: buildExistingPersonaSeed()
+    })
     const persona = res.data?.data
     if (res.data?.success && persona?.personaSeed) {
       scenarioDraft.value = null
-      const personaSeed = persona.personaSeed
-      formData.value.name = formData.value.name || personaSeed.nameHint || personaSeed.occupation || '随机样本'
-      formData.value.profile.age = personaSeed.age
-      formData.value.profile.occupation = personaSeed.occupation || ''
-      formData.value.profile.education = personaSeed.education || ''
-      formData.value.profile.background = personaSeed.background || ''
-      formData.value.profile.corePersonality = personaSeed.corePersonality || ''
-      formData.value.profile.emotionalBaseline = personaSeed.emotionalBaseline || ''
-      formData.value.profile.helpSeekingPattern = personaSeed.helpSeekingPattern || ''
-      formData.value.profile.adversarialPattern = personaSeed.adversarialPattern || ''
-      formData.value.profile.metacognitiveProfile = personaSeed.metacognitiveProfile || ''
-      formData.value.profile.cognitiveLoadTolerance = personaSeed.cognitiveLoadTolerance || ''
-      formData.value.profile.memoryRepairPattern = personaSeed.memoryRepairPattern || ''
+      applyPersonaSeedToForm(persona.personaSeed)
       ElMessage.success('学习者身份已生成')
     } else {
       ElMessage.error(res.data?.error || '学习者身份生成失败')
@@ -810,6 +886,14 @@ const getProfileActionLabel = (profile: any) => {
   return getStoryPool(profile).length > 0 ? '开局' : '补故事'
 }
 
+const handleProfileSecondaryAction = (profile: any) => {
+  if (getStoryPool(profile).length === 0) {
+    goToProfile(profile)
+    return
+  }
+  openStartSessionDialog(profile)
+}
+
 const getSessionStatusClass = (status: string) => {
   switch (status) {
     case 'running':
@@ -840,9 +924,38 @@ const handleSubmit = async () => {
         loadProfiles()
       }
     } else {
+      let autoPersonaApplied = false
+      if (!hasCompletePersonaProfile(formData.value.profile)) {
+        const personaRes = await adminApi.generatePersona({
+          existingPersonaSeed: buildExistingPersonaSeed()
+        })
+        const persona = personaRes.data?.data
+        if (!personaRes.data?.success || !persona?.personaSeed) {
+          throw new Error(personaRes.data?.error || '学习者身份生成失败')
+        }
+        applyPersonaSeedToForm(persona.personaSeed, { preferExisting: true })
+        autoPersonaApplied = true
+      }
+
       const res = await adminApi.createVirtualLearner(formData.value)
       if (res.data?.success) {
-        ElMessage.success('创建成功')
+        const createdProfileId = res.data?.data?.id
+        let storyCreated = false
+
+        if (createdProfileId) {
+          try {
+            const storyRes = await adminApi.draftVirtualLearnerStories(createdProfileId)
+            storyCreated = !!storyRes.data?.success
+          } catch {
+            storyCreated = false
+          }
+        }
+
+        if (storyCreated) {
+          ElMessage.success(autoPersonaApplied ? '创建成功，已自动补全画像并生成故事' : '创建成功，已自动生成 1 个故事')
+        } else {
+          ElMessage.warning(autoPersonaApplied ? '创建成功，已自动补全画像；故事生成失败，请进入详情页重试' : '创建成功，但自动生成故事失败，请进入详情页重试')
+        }
         createDialogVisible.value = false
         loadProfiles()
       }
@@ -1283,7 +1396,7 @@ watch(filteredProfiles, () => {
 
 .page-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
   gap: 12px;
   align-items: start;
 }
@@ -1371,7 +1484,7 @@ watch(filteredProfiles, () => {
 .profile-card {
   position: relative;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(210px, 0.55fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(180px, 0.5fr) auto;
   gap: 14px;
   align-items: center;
   padding: 16px;
@@ -1538,7 +1651,7 @@ watch(filteredProfiles, () => {
 
 .profile-card__signals {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(58px, 1fr));
   gap: 8px;
 }
 
@@ -1647,6 +1760,7 @@ watch(filteredProfiles, () => {
 
 .session-row__top .el-button {
   flex-shrink: 0;
+  padding: 0;
 }
 
 .session-funnel {
@@ -1832,7 +1946,9 @@ watch(filteredProfiles, () => {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
+@media (max-width: 900px) {
   .page-shell {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1842,7 +1958,7 @@ watch(filteredProfiles, () => {
   }
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1380px) {
   .profile-card {
     grid-template-columns: 24px minmax(0, 1fr);
   }
@@ -1856,6 +1972,12 @@ watch(filteredProfiles, () => {
     justify-content: flex-start;
   }
 
+  .profile-card__summary {
+    -webkit-line-clamp: 3;
+  }
+}
+
+@media (max-width: 1080px) {
   .toolbar-card {
     flex-direction: column;
     align-items: stretch;

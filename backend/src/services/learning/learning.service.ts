@@ -10,6 +10,7 @@ import type { AgentInput } from '../../agents/protocol';
 import { runWithContext } from '../../gateway/api-gateway/context';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerProgressService } from '../learner/LearnerProgressService';
 
@@ -2350,6 +2351,7 @@ class LearningService {
         triggerSource,
         updatedAt: new Date().toISOString()
       });
+      void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-created');
     } catch (andersonError: any) {
       logger.warn('阶段任务设计失败，路径保持骨架可用', {
         pathId,
@@ -2519,6 +2521,7 @@ class LearningService {
       pathId: fullPath.id,
       scope: 'path',
     });
+    void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-created');
 
     return fullPath;
   }
@@ -2910,6 +2913,8 @@ const learningPath = await prisma.learning_paths.findUnique({
         where: { id: pathId }
       });
 
+      void dashboardGuidanceSnapshotService.refresh(userId, 'path-deleted');
+
       logger.info(`学习路径删除：${pathId}`);
     } catch (error) {
       logger.error('删除学习路径失败:', error);
@@ -3077,7 +3082,7 @@ const learningPath = await prisma.learning_paths.findUnique({
       .filter((task: any) => task.status === 'completed')
       .map((task: any) => task.id);
 
-    const learnerSnapshot = await learnerSnapshotRefreshService.getLatest({
+    const learnerSnapshot = await learnerSnapshotRefreshService.refresh({
       userId: data.userId,
       pathId: data.pathId,
       scope: 'path',
@@ -3129,6 +3134,8 @@ const learningPath = await prisma.learning_paths.findUnique({
         freezeCompletedTaskIds: completedTaskIds,
       }
     });
+
+    void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-replanned');
 
     return {
       enabled: true,
@@ -3245,6 +3252,7 @@ const learningPath = await prisma.learning_paths.findUnique({
         milestoneId: subtask.milestoneId,
         scope: 'teaching',
       });
+      void dashboardGuidanceSnapshotService.refresh(data.userId, 'task-completed');
 
       return {
         task: updatedSubtask,
@@ -3304,7 +3312,7 @@ const learningPath = await prisma.learning_paths.findUnique({
       // 获取学习状态指标
       const currentState = await stateTrackingService.getCurrentState(userId);
       const suggestion = currentState ? stateTrackingService.generateSuggestion(currentState) : null;
-      const displayState = currentState ? learningStateService.toDisplayMetrics(currentState as any) : null;
+      const displayState = currentState || null;
 
       return {
         user: {

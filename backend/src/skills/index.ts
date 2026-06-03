@@ -155,7 +155,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn
 };
 
-import { setRequestContext } from '../gateway/api-gateway/context';
+import { getRequestContext, runWithContext } from '../gateway/api-gateway/context';
 import { logger } from '../utils/logger';
 
 function summarizeSkillPayload(value: any, depth = 0): any {
@@ -192,42 +192,46 @@ export async function executeSkill(definition: SkillDefinition, input: any): Pro
   }
 
   const startedAt = Date.now();
-  logger.info('[skill-executor] 开始执行', {
+  const parentContext = getRequestContext();
+
+  return runWithContext({
+    ...parentContext,
     skillId,
-    inputSummary: summarizeSkillPayload(input),
-  });
-  
-  // 设置 skillId 到 context，让 OpenAIClient 知道这是 skill 调用（默认用 chat 模型）
-  setRequestContext({ skillId });
+  }, async () => {
+    logger.info('[skill-executor] 开始执行', {
+      skillId,
+      inputSummary: summarizeSkillPayload(input),
+    });
 
-  try {
-    const result = await handler(input);
-    
-    if (result && result.success === false) {
-      const errorMsg = result.error?.message || `Skill ${skillId} execution failed`;
-      throw new Error(errorMsg);
+    try {
+      const result = await handler(input);
+
+      if (result && result.success === false) {
+        const errorMsg = result.error?.message || `Skill ${skillId} execution failed`;
+        throw new Error(errorMsg);
+      }
+
+      const durationMs = Date.now() - startedAt;
+      await recordDirectSkillStats(skillId, true, durationMs);
+
+      const output = result?.output || result;
+      logger.info('[skill-executor] 执行完成', {
+        skillId,
+        durationMs,
+        outputSummary: summarizeSkillPayload(output),
+      });
+
+      return output;
+    } catch (error: any) {
+      await recordDirectSkillStats(skillId, false, Date.now() - startedAt);
+      logger.error('[skill-executor] 执行失败', {
+        skillId,
+        durationMs: Date.now() - startedAt,
+        error: error?.message || String(error),
+      });
+      throw error;
     }
-
-    const durationMs = Date.now() - startedAt;
-    await recordDirectSkillStats(skillId, true, durationMs);
-
-    const output = result?.output || result;
-    logger.info('[skill-executor] 执行完成', {
-      skillId,
-      durationMs,
-      outputSummary: summarizeSkillPayload(output),
-    });
-
-    return output;
-  } catch (error: any) {
-    await recordDirectSkillStats(skillId, false, Date.now() - startedAt);
-    logger.error('[skill-executor] 执行失败', {
-      skillId,
-      durationMs: Date.now() - startedAt,
-      error: error?.message || String(error),
-    });
-    throw error;
-  }
+  });
 }
 
 async function recordDirectSkillStats(skillId: string, success: boolean, durationMs: number): Promise<void> {

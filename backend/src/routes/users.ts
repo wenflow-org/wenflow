@@ -53,10 +53,26 @@ router.get('/me', async (req, res, next) => {
 router.get('/me/learner-center', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const pathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
+    const requestedPathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
     const scope = req.query.scope === 'path' || req.query.scope === 'teaching' ? req.query.scope : 'global';
 
-    const snapshot = await learnerSnapshotRefreshService.getLatest({
+    let pathId = requestedPathId;
+
+    // 用户侧全局快照默认补一条活跃路径，避免账户页等入口误判为“暂无进行中路径”。
+    if (!pathId && scope === 'global') {
+      const activePath = await prisma.learning_paths.findFirst({
+        where: {
+          userId,
+          status: 'active'
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true }
+      });
+
+      pathId = activePath?.id;
+    }
+
+    const snapshot = await learnerSnapshotRefreshService.refresh({
       userId,
       pathId,
       scope,

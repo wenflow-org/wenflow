@@ -145,6 +145,7 @@ npm run env:setup
 ```
 
 说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
+启动后端时，系统会自动把核心 agent / skill prompts 从当前代码同步到数据库 ACTIVE 版本；这样别人从 GitHub 拉下项目后，默认运行版本会和仓库代码保持一致。
 
 ### 本机开发
 
@@ -153,8 +154,8 @@ npm run env:setup
 ./start-dev.ps1
 ```
 
-说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建或补全 `backend/.env`。
-如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。
+说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建或补全 `backend/.env`，并在启动前自动执行一次 core prompts 同步。
+如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
 
 ### 局域网开发模式
 
@@ -200,6 +201,25 @@ npm run env:edit
 ```
 
 说明：`env:setup` 不再单独询问域名；Nginx 模式下域名由 `-Domain`（优先）或 `backend/.env` 中的 `FRONTEND_URL` 推断。
+
+### Prompt 初始化与维护
+
+```bash
+# 手动将核心 prompts 从当前代码同步到数据库 ACTIVE 版本
+cd backend
+npm run prompts:sync-core
+
+# 升级后补齐新增的 prompt 节点，不覆盖已有 ACTIVE 配置
+npm run prompts:backfill-core
+```
+
+说明：`prompts:sync-core` 会以当前仓库代码为准，同步核心 prompts 到数据库 ACTIVE 版本；若代码与数据库 ACTIVE 不一致，会自动创建新版本并切换到 ACTIVE。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动执行一次 core prompts 同步。
+
+### 本地 SQLite 路径约定
+
+- 本地 SQLite 开发环境请使用：`DATABASE_URL=file:./dev.db`
+- 不要写成：`DATABASE_URL=file:./prisma/dev.db`
+- 错误写法可能让 Prisma 在 `backend/prisma/prisma/dev.db` 创建误库，导致现有用户数据和 prompt 配置看起来“消失”
 
 ### 前端 API 环境变量
 

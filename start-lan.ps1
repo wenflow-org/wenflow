@@ -276,6 +276,49 @@ function Assert-RequiredEnvConfiguration {
     }
 }
 
+function Assert-SafeSqliteDatabaseUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EnvPath
+    )
+
+    $databaseUrl = Get-EnvValue -Path $EnvPath -Key 'DATABASE_URL'
+    if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
+        return
+    }
+
+    $trimmed = $databaseUrl.Trim()
+    if ($trimmed -notmatch '^file:') {
+        return
+    }
+
+    if ($trimmed -match '^file:\./prisma/') {
+        Write-Host "DATABASE_URL=$trimmed is not a safe local SQLite path for WenFlow." -ForegroundColor Red
+        Write-Host 'Use DATABASE_URL=file:./dev.db for the local development database.' -ForegroundColor Yellow
+        Write-Host 'Values under file:./prisma/... can resolve to a nested prisma/prisma/*.db during startup and split your data.' -ForegroundColor Yellow
+        exit 1
+    }
+}
+
+function Ensure-CoreAgentPromptsBootstrap {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BackendPath
+    )
+
+    Write-Host "Ensuring core agent prompts (bootstrap-only)..." -ForegroundColor Yellow
+    Push-Location $BackendPath
+    try {
+        npm run prompts:bootstrap
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "core agent prompt bootstrap failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 Write-Host "Starting WenFlow (LAN Mode)..." -ForegroundColor Cyan
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -332,6 +375,7 @@ if ($needsEnvSetup) {
 }
 
 Assert-RequiredEnvConfiguration -EnvPath $backendEnvPath
+Assert-SafeSqliteDatabaseUrl -EnvPath $backendEnvPath
 
 $localIP = Get-LocalIPAddress -PreferredIP $LanIP
 if ([string]::IsNullOrWhiteSpace($localIP)) {
@@ -369,6 +413,7 @@ Ensure-NpmDependencies -ProjectPath $frontendPath -ProjectName 'Frontend'
 
 if (-not $SkipPrisma) {
     Ensure-PrismaReady -BackendPath $backendPath
+    Ensure-CoreAgentPromptsBootstrap -BackendPath $backendPath
 } else {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }

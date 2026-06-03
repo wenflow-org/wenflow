@@ -15,7 +15,7 @@
         <div class="auth-brand__content">
           <span class="auth-brand__eyebrow">WenFlow</span>
           <h1>不是先找课，而是先找到真正的问题。</h1>
-          <p>登录后回到你的目标、路径和学习进展，从当前最小的一步继续。</p>
+          <p>登录后回到你的目标、路径和学习进展，从上次停下的地方继续。</p>
 
           <div class="auth-brand__points">
             <article v-for="item in loginPoints" :key="item.title" class="auth-point">
@@ -35,12 +35,12 @@
 
           <div class="auth-card__header">
             <h2>欢迎回来</h2>
-            <p>登录后，继续你的目标、路径和学习进展。</p>
+            <p>登录后，从上次停下的地方继续。</p>
           </div>
 
           <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="auth-form" @keyup.enter="handleLogin">
-            <el-form-item label="用户名或邮箱" prop="name">
-              <el-input v-model="loginForm.name" type="text" placeholder="请输入用户名或邮箱" prefix-icon="User" clearable />
+            <el-form-item label="用户名" prop="name">
+              <el-input v-model="loginForm.name" type="text" placeholder="请输入用户名" prefix-icon="User" clearable />
             </el-form-item>
 
             <el-form-item label="密码" prop="password">
@@ -124,7 +124,7 @@ const handleGoRegister = async () => {
   try {
     const status = await authAPI.getRegistrationStatus();
     if (!status.registrationEnabled) {
-      toast.warning('平台注册已关闭，暂不支持新用户注册');
+      toast.warning('当前暂未开放注册，请联系管理员');
       return;
     }
 

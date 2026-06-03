@@ -15,7 +15,7 @@
         <div class="auth-brand__content">
           <span class="auth-brand__eyebrow">新学习者入口</span>
           <h1>从一个模糊目标，生成一条能开始的路径。</h1>
-          <p>先不用准备完整计划。说出你最近想解决的问题，WenFlow 会陪你把目标缩小到可以行动。</p>
+          <p>先不用准备完整计划。说出你最近想解决的问题，WenFlow 会陪你把目标收敛到可以行动的一步。</p>
 
           <div class="auth-brand__points">
             <article v-for="item in registerPoints" :key="item.title" class="auth-point">
@@ -35,7 +35,7 @@
 
           <div class="auth-card__header">
             <h2>创建账号</h2>
-            <p>注册后进入学习台，从一个真实问题开始。</p>
+            <p>注册后进入学习台，从一个真实问题开始推进。</p>
           </div>
 
           <el-form ref="formRef" :model="registerForm" :rules="rules" label-position="top" size="large" class="auth-form" @keyup.enter="handleRegister">
@@ -44,17 +44,17 @@
             </el-form-item>
 
             <el-form-item label="密码" prop="password">
-              <el-input v-model="registerForm.password" type="password" placeholder="至少 8 位，需包含字母和数字" prefix-icon="Lock" show-password />
+              <el-input v-model="registerForm.password" type="password" placeholder="至少 8 位，且需包含字母和数字" prefix-icon="Lock" show-password />
             </el-form-item>
 
-            <p class="auth-hint">密码至少 8 位，且必须同时包含字母和数字。</p>
+            <p class="auth-hint">密码至少 8 位，且需同时包含字母和数字。</p>
 
             <el-form-item label="确认密码" prop="confirmPassword">
               <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" prefix-icon="Lock" show-password />
             </el-form-item>
 
             <el-button type="primary" :loading="loading" class="auth-submit" @click="handleRegister">
-              {{ loading ? '创建中...' : '创建账号并开始' }}
+              {{ loading ? '创建中...' : '注册并开始' }}
             </el-button>
 
             <div class="auth-switch">
@@ -108,7 +108,7 @@ const validatePassword = (rule: any, value: string, callback: any) => {
     return;
   }
   if (value.length < 8) {
-    callback(new Error('密码长度不能少于 8 位'));
+    callback(new Error('密码至少 8 位'));
     return;
   }
   if (!/[a-zA-Z]/.test(value)) {
@@ -125,7 +125,7 @@ const validatePassword = (rule: any, value: string, callback: any) => {
 const rules: FormRules = {
   name: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 2, max: 20, message: '用户名长度在 2 到 20 个字符', trigger: 'blur' }
+    { min: 2, max: 20, message: '用户名长度需为 2 到 20 个字符', trigger: 'blur' }
   ],
   password: [{ required: true, validator: validatePassword, trigger: 'blur' }],
   confirmPassword: [{ required: true, validator: validatePass2, trigger: 'blur' }]

@@ -54,6 +54,7 @@ const DEFAULT_LEARNING_STATE: LearningState = {
   ktl: 0,
   lf: 0,
   lss: 0,
+  lsb: 0,
   masteryByTopic: {},
   recentProgress: 'stable',
   streak: 0
@@ -276,6 +277,7 @@ export class ProfileAggregator {
         ktl: latestMetrics.ktl,
         lf: latestMetrics.lf,
         lss: latestMetrics.lss,
+        lsb: latestMetrics.lsb,
         masteryByTopic: {},
         recentProgress: this.inferProgress(trends),
         streak: 0

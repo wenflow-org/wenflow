@@ -32,6 +32,7 @@ export interface LearningState {
   ktl: number;
   lf: number;
   lss: number;
+  lsb: number;
   masteryByTopic: Record<string, number>;
   recentProgress: 'improving' | 'stable' | 'declining';
   streak: number;

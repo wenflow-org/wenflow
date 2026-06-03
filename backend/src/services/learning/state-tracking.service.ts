@@ -10,6 +10,7 @@ export interface LearningStateMetrics {
   ktl: number; // Knowledge Training Load (0-100, EWMA)
   lf: number;  // Learning Fatigue (0-100, short-term EWMA)
   lsb: number; // Learning State Balance = KTL - LF (-100 to +100)
+  updatedAt?: string;
 }
 
 export interface LSSInputs {
@@ -68,6 +69,7 @@ class LearningStateService {
         ktl: displayMetrics.ktl,
         lf: displayMetrics.lf,
         lsb: displayMetrics.lsb,
+        updatedAt: metrics.timestamp.toISOString(),
       };
     } catch (error) {
       logger.error('获取上一个学习指标失败:', error);

@@ -26,7 +26,33 @@
       </div>
     </div>
 
-    <div class="table-container admin-list-card">
+    <section v-if="showEmptyState" class="empty-state-card admin-list-card">
+      <div class="empty-state-card__copy">
+        <span class="empty-state-card__eyebrow">学习者快照</span>
+        <h3>{{ emptyStateTitle }}</h3>
+        <p>{{ emptyStateDescription }}</p>
+      </div>
+      <div class="empty-state-card__actions">
+        <el-button type="primary" class="learner-btn" @click="loadData">
+          重新加载
+        </el-button>
+        <el-button class="learner-btn learner-btn--ghost" @click="resetFilters">
+          清空筛选
+        </el-button>
+      </div>
+      <div class="empty-state-card__tips">
+        <article class="empty-tip">
+          <strong>为什么会为空</strong>
+          <span>还没有生成学习者快照，或者当前筛选条件把结果收窄到了 0 条。</span>
+        </article>
+        <article class="empty-tip">
+          <strong>建议下一步</strong>
+          <span>先去教学会话或虚拟学习者页跑一次真实流程，再回来查看模型快照。</span>
+        </article>
+      </div>
+    </section>
+
+    <div v-else class="table-container admin-list-card">
       <el-table :data="items" stripe v-loading="loading">
         <el-table-column label="用户" min-width="180">
           <template #default="{ row }">
@@ -84,7 +110,7 @@
       </el-table>
     </div>
 
-    <div class="pagination-container admin-list-pagination">
+    <div v-if="pagination.total > 0" class="pagination-container admin-list-pagination">
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.limit"
@@ -99,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Reading, Refresh } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
@@ -120,6 +146,22 @@ const pagination = reactive({
   page: 1,
   limit: 20,
   total: 0,
+});
+
+const showEmptyState = computed(() => !loading.value && items.value.length === 0);
+
+const hasFiltersApplied = computed(() => {
+  return Boolean(filters.userId || filters.pathId || filters.riskOnly || filters.staleOnly);
+});
+
+const emptyStateTitle = computed(() => {
+  return hasFiltersApplied.value ? '当前筛选下没有匹配的学习者快照' : '还没有可展示的学习者模型';
+});
+
+const emptyStateDescription = computed(() => {
+  return hasFiltersApplied.value
+    ? '可以先放宽筛选条件，或者回到列表重新查看最新快照。'
+    : '学习者模型会在产生真实学习轨迹后逐步累积，适合在这里做诊断和复盘。';
 });
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -260,6 +302,86 @@ onMounted(loadData);
   border: 1px solid transparent;
 }
 
+.empty-state-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.94));
+  box-shadow: 0 18px 36px rgba(31, 87, 204, 0.08);
+}
+
+.empty-state-card__copy {
+  display: grid;
+  gap: 8px;
+  max-width: 680px;
+}
+
+.empty-state-card__copy h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.empty-state-card__copy p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.empty-state-card__eyebrow {
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--color-primary-dark, #1f57cc);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+}
+
+.empty-state-card__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.empty-state-card__tips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.empty-tip {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.empty-tip strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.empty-tip span {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
 .learner-btn--ghost {
   color: #335aa4;
   border-color: rgba(52, 120, 246, 0.26);
@@ -366,5 +488,15 @@ onMounted(loadData);
 
 :deep(.el-table .el-table__row:hover > td.el-table__cell) {
   background: rgba(52, 120, 246, 0.03);
+}
+
+@media (max-width: 768px) {
+  .empty-state-card {
+    padding: 22px 18px;
+  }
+
+  .empty-state-card__tips {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -1,10 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { adaptiveGuidanceCopy } from '../skills/adaptive-guidance-copy';
-import { learnerSnapshotService } from '../services/learner/LearnerSnapshotService';
-import { learnerStateSummaryService } from '../services/learner/LearnerStateSummaryService';
-import learningService from '../services/learning/learning.service';
-import stateTrackingService from '../services/learning/state-tracking.service';
+import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 
@@ -19,10 +15,7 @@ router.get('/copy', async (req: any, res) => {
       return res.status(401).json({ success: false, error: '未登录' });
     }
 
-    const view = req.query.view === 'path-detail' || req.query.view === 'path-list' || req.query.view === 'learning-state'
-      ? req.query.view
-      : 'dashboard';
-    const pathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
+    const view = typeof req.query.view === 'string' ? req.query.view : 'dashboard';
     const sourceEntry = typeof req.headers['x-source-entry'] === 'string' ? req.headers['x-source-entry'] : '';
     const debugOperatorId = req.user?.projection?.issuedByAdminId || userId;
     const debugOperator = sourceEntry === 'test' && debugOperatorId
@@ -33,52 +26,21 @@ router.get('/copy', async (req: any, res) => {
       : null;
     const canIncludeDebug = sourceEntry === 'test' && (req.user?.isAdmin === true || debugOperator?.isAdmin === true);
 
-    const learnerSnapshot = await learnerSnapshotService.getSnapshot({
-      userId,
-      learningPathId: pathId,
-      mode: view === 'path-detail' ? 'path' : 'global',
-    });
+    // adaptive-guidance-copy 现在只作为 dashboard snapshot 对外提供。
+    if (view !== 'dashboard') {
+      return res.json({ success: true, data: null });
+    }
 
-    const learningState = await learningService.getLearningStats(userId).catch(() => null);
-    const path = pathId ? await learningService.getLearningPath(pathId).catch(() => null) : null;
-    const latestTeachingSession = await prisma.teaching_sessions.findFirst({
-      where: { userId, ...(pathId ? { learningPathId: pathId } : {}) },
-      orderBy: { updatedAt: 'desc' },
-      select: {
-        wrapup: true,
-        advisory: true,
-      },
-    });
-
-    const sessionWrapup = latestTeachingSession?.wrapup ? JSON.parse(latestTeachingSession.wrapup) : null;
-    const advisory = latestTeachingSession?.advisory ? JSON.parse(latestTeachingSession.advisory) : null;
-
-    const warnings = await stateTrackingService.checkWarnings(userId).catch(() => []);
-    const warningCount = warnings.length;
-
-    const summary = learnerStateSummaryService.build({
-      learnerSnapshot,
-      learningState,
-      path,
-      warningCount,
-    });
-
-    const result = await adaptiveGuidanceCopy({
-      view,
-      learnerSnapshot,
-      learningState,
-      path,
-      sessionWrapup,
-      advisory,
-    });
-
+    const snapshot = await dashboardGuidanceSnapshotService.get(userId);
     return res.json({
       success: true,
-      data: {
-        copy: result.output,
-        summary,
-        ...(canIncludeDebug && result.debug ? { debug: result.debug } : {}),
-      }
+      data: snapshot
+        ? {
+            copy: snapshot.copy,
+            summary: snapshot.summary,
+            ...(canIncludeDebug && snapshot.debug ? { debug: snapshot.debug } : {}),
+          }
+        : null,
     });
   } catch (error: any) {
     logger.error('[adaptive-guidance] copy failed', { error: error?.message || String(error) });

@@ -880,6 +880,11 @@ const openSessionInspector = (sessionId: string) => {
   router.push(`/admin/virtual-session/${sessionId}`)
 }
 
+const setActiveSession = (session: any) => {
+  if (!session?.id) return
+  openSessionInspector(session.id)
+}
+
 const openLatestSessionInspector = () => {
   if (!latestProjectionSession.value?.id) {
     ElMessage.info('这个账号还没有运行记录')
@@ -967,7 +972,7 @@ const openTestDebugEntry = (entry: 'goal' | 'path' | 'learn') => {
   window.open(target, '_blank')
 }
 
-const openDebugGoalFor = (session?: any | null) => {
+const openDebugGoal = (session?: any | null) => {
   if (!session?.bindings?.goalConversationId) return
   router.push(`/admin/test/goal-full/${session.bindings.goalConversationId}?virtualSessionId=${session.id}&viewMode=debug`)
 }

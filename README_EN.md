@@ -144,6 +144,7 @@ npm run env:setup
 ```
 
 Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
+When the backend starts, it automatically syncs core agent / skill prompts from the current code into the database ACTIVE versions. This keeps a fresh GitHub checkout aligned with the repository's code-defined defaults.
 
 ### Local Development
 
@@ -152,8 +153,9 @@ Note: For first-time use, it is recommended to finish environment setup before c
 ./start-dev.ps1
 ```
 
-Note: The script automatically checks and installs dependencies, initializes Prisma (`prisma generate` + `prisma db push`), and guides creation or completion of `backend/.env` if needed.  
-To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`
+Note: The script automatically checks and installs dependencies, initializes Prisma (`prisma generate` + `prisma db push`), guides creation or completion of `backend/.env` if needed, and runs one core prompt sync before startup.  
+To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`  
+Important: this flag also skips the startup prompt sync, so it should only be used when both the database schema and prompt records are already ready.
 
 ### LAN Development Mode
 
@@ -199,6 +201,25 @@ npm run env:edit
 ```
 
 Note: `env:setup` no longer asks for a domain separately. In Nginx mode, the domain is inferred from `-Domain` first, then from `FRONTEND_URL` in `backend/.env`.
+
+### Prompt Bootstrap and Maintenance
+
+```bash
+# Manually sync core prompts from the current code into ACTIVE database versions
+cd backend
+npm run prompts:sync-core
+
+# Backfill newly introduced prompt nodes without overriding existing ACTIVE prompts
+npm run prompts:backfill-core
+```
+
+Note: `prompts:sync-core` treats the current repository code as the source of truth for core prompts and syncs database ACTIVE versions to match. If code and DB differ, it creates a new version and activates it automatically. `prompts:backfill-core` only fills missing nodes and does not overwrite existing ACTIVE prompts. If you run `npm run dev` directly inside `backend/`, the server also performs the same core prompt sync during startup.
+
+### Local SQLite Path Rule
+
+- For local SQLite development, use: `DATABASE_URL=file:./dev.db`
+- Do not use: `DATABASE_URL=file:./prisma/dev.db`
+- The wrong path can make Prisma create a nested `backend/prisma/prisma/dev.db`, which makes existing user data and prompt records appear to disappear
 
 ### Frontend API Environment Variables
 

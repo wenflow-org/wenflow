@@ -110,13 +110,6 @@
           <router-link :to="hasLearningPath ? continueLearningTarget : goalConversationPath" class="btn btn--primary btn--full">
             {{ hasLearningPath ? '继续上次学习' : '创建第一个目标' }}
           </router-link>
-
-          <div v-if="learnerStateChips.length" class="focus-card__state-strip">
-            <span v-for="item in learnerStateChips" :key="item.label" class="focus-card__state-chip" :class="`focus-card__state-chip--${item.tone}`">
-              <strong>{{ item.label }}</strong>
-              <em>{{ item.value }}</em>
-            </span>
-          </div>
         </aside>
       </section>
 
@@ -466,51 +459,19 @@ const nextStepHint = computed(() => {
   return primaryActionTask.value ? '' : '进入学习路径查看安排';
 });
 
-const learnerStateChips = computed(() => {
-  const summary = adaptiveSummary.value;
-  const state = stats.value?.state;
-  const items: Array<{ label: string; value: string; tone: 'neutral' | 'good' | 'warn' }> = [];
-
-  if (summary?.global?.pacingLevel) {
-    const tone = summary.global.pacingLevel === 'slow' ? 'warn' : 'good';
-    items.push({
-      label: '当前节奏',
-      value: summary.global.pacingLevel === 'slow' ? '建议放慢' : summary.global.pacingLevel === 'fast' ? '可以加快' : '稳定推进',
-      tone
-    });
-  } else if (typeof state?.lsb === 'number') {
-    items.push({
-      label: '学习状态',
-      value: state.lsb >= 0 ? '状态平衡' : '需要恢复',
-      tone: state.lsb >= 0 ? 'good' : 'warn'
-    });
-  }
-
-  if (summary?.global?.hasWarnings) {
-    items.push({
-      label: '当前提醒',
-      value: '有需关注项',
-      tone: 'warn'
-    });
-  }
-
-  if (summary?.global?.primaryAction) {
-    items.push({
-      label: '下一步',
-      value: summary.global.primaryAction === 'create-goal'
-        ? '先创建目标'
-        : summary.global.primaryAction === 'learning-state'
-          ? '先看状态'
-          : '继续当前任务',
-      tone: 'neutral'
-    });
-  }
-
-  return items.slice(0, 3);
+const learnerCenterDisplayMetrics = computed(() => {
+  const metrics = learnerCenter.value?.dynamicState?.metrics;
+  if (!metrics) return null;
+  return {
+    lss: Number((Number(metrics.lss || 0) * 10).toFixed(2)),
+    ktl: Number((Number(metrics.ktl || 0) * 10).toFixed(2)),
+    lf: Number((Number(metrics.lf || 0) * 10).toFixed(2)),
+    lsb: Number((Number(metrics.lsb || 0) * 10).toFixed(2)),
+  };
 });
 
 const stateWorkbenchMetricCards = computed(() => {
-  const metrics = learnerCenter.value?.dynamicState?.metrics || currentState.value;
+  const metrics = learnerCenterDisplayMetrics.value || currentState.value;
   if (!metrics) return [];
   return [
     { label: 'LSS 学习压力', value: Number(metrics.lss || 0).toFixed(2), note: '当前即时压力' },
@@ -549,7 +510,7 @@ const stateWorkbenchSignalItems = computed(() => {
 });
 
 const stateWorkbenchQuickChips = computed(() => {
-  const metrics = learnerCenter.value?.dynamicState?.metrics || currentState.value;
+  const metrics = learnerCenterDisplayMetrics.value || currentState.value;
   const control = learnerCenter.value?.learningControlState;
   const signal = learnerCenter.value?.replanSignal;
   return [
@@ -1380,46 +1341,6 @@ a.dashboard-list__item:hover .dashboard-list__action {
   margin-top: -4px;
 }
 
-.focus-card__state-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.focus-card__state-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px solid rgba(23, 32, 51, 0.08);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.focus-card__state-chip strong {
-  font-size: 12px;
-  margin: 0;
-}
-
-.focus-card__state-chip em {
-  font-style: normal;
-  color: var(--dash-muted);
-  font-weight: 700;
-}
-
-.focus-card__state-chip--good {
-  border-color: rgba(49, 177, 111, 0.18);
-  background: rgba(49, 177, 111, 0.08);
-}
-
-.focus-card__state-chip--warn {
-  border-color: rgba(244, 170, 70, 0.24);
-  background: rgba(244, 170, 70, 0.12);
-}
-
 .focus-card__stats,
 .achievement-summary {
   display: grid;
@@ -2015,6 +1936,10 @@ a.dashboard-list__item:hover .dashboard-list__action {
     padding-top: 18px;
   }
 
+  .dashboard-hero {
+    gap: 18px;
+  }
+
   .dashboard-hero,
   .today-card,
   .focus-card,
@@ -2027,11 +1952,38 @@ a.dashboard-list__item:hover .dashboard-list__action {
   }
 
   .dashboard-hero h1 {
-    font-size: clamp(2.25rem, 12vw, 3.2rem);
+    max-width: 10ch;
+    font-size: clamp(2rem, 11.5vw, 3rem);
+    line-height: 0.98;
   }
 
   .dashboard-hero__copy > p {
     font-size: 0.95rem;
+  }
+
+  .dashboard-list-section {
+    gap: 10px;
+  }
+
+  .dashboard-list-section__head {
+    margin-bottom: 6px;
+  }
+
+  .dashboard-list__item {
+    gap: 10px;
+    padding: 13px;
+    border-radius: 16px;
+  }
+
+  .dashboard-list__item div strong {
+    display: block;
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  .dashboard-list__item div p {
+    font-size: 0.92rem;
+    line-height: 1.55;
   }
 
   .dashboard-list__item,
@@ -2089,6 +2041,44 @@ a.dashboard-list__item:hover .dashboard-list__action {
 
   .dashboard-debug-panel__actions .btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-main {
+    width: min(100% - 16px, 1240px);
+    gap: 14px;
+    padding-top: 14px;
+    padding-bottom: calc(14px + var(--safe-area-bottom));
+  }
+
+  .dashboard-hero,
+  .today-card,
+  .focus-card,
+  .overview-card,
+  .dashboard-panel,
+  .dashboard-calendar-panel,
+  .dashboard-calendar-status {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .dashboard-hero h1 {
+    font-size: clamp(1.85rem, 11vw, 2.65rem);
+  }
+
+  .focus-card__stats article {
+    padding: 13px;
+    border-radius: 16px;
+  }
+
+  .focus-card__stats strong {
+    font-size: 20px;
+  }
+
+  .dashboard-list__action {
+    padding: 5px 9px;
+    font-size: 11px;
   }
 }
 </style>

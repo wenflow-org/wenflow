@@ -125,7 +125,6 @@ import {
   Operation,
   Connection,
   Grid,
-  WarningFilled,
   Clock,
   Setting,
   ArrowDown,
@@ -198,6 +197,7 @@ const monitorNav: NavItem[] = [
   { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
   { to: '/admin/prompt-call-logs', label: 'Prompt 调用日志', icon: MagicStick },
   { to: '/admin/orchestrators', label: '编排运行监控', icon: Connection },
+  { to: '/admin/manifest-diagnostics', label: 'Manifest 诊断', icon: Document },
 ];
 
 const devDebugNav: NavItem[] = [

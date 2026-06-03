@@ -216,15 +216,6 @@
                     </el-dropdown>
                   </div>
                   <p>{{ getPathSummary(path) }}</p>
-                  <div v-if="getPathInsightChips(path).length > 0" class="path-overview-card__chips">
-                    <span v-for="item in getPathInsightChips(path)" :key="item" class="path-overview-card__chip">{{ item }}</span>
-                  </div>
-                  <div v-if="getPathDesignBrief(path).length > 0" class="path-overview-card__brief">
-                    <article v-for="item in getPathDesignBrief(path)" :key="item.label" class="path-overview-card__brief-item">
-                      <span>{{ item.label }}</span>
-                      <strong>{{ item.value }}</strong>
-                    </article>
-                  </div>
                   <div class="path-overview-card__next-task">
                     <span>当前任务</span>
                     <strong>{{ getPathNextTaskLabel(path) }}</strong>
@@ -396,7 +387,6 @@ const pathToRegenerate = ref<any>(null);
 const retryingPathId = ref<string | null>(null);
 const showGeneratingAlert = ref(false);
 const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
-const adaptiveGuidance = ref<any | null>(null);
 
 // 前端提示超时阈值：4 分钟
 const GENERATION_TIMEOUT_SECONDS = 240;
@@ -433,50 +423,7 @@ const timeoutPaths = computed(() =>
 const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
 
 const getPathSummary = (path: any) => {
-  if (adaptiveGuidance.value?.pathHint && primaryPath.value?.id === path.id) {
-    return adaptiveGuidance.value.pathHint;
-  }
   return path.summary || path.description || '这里会显示这条学习路径的简要说明。';
-};
-
-const getPathInsightChips = (path: any) => {
-  const chips: string[] = [];
-  const domain = typeof path?.cognitiveDesign?.cognitiveDomain === 'string'
-    ? path.cognitiveDesign.cognitiveDomain.trim()
-    : '';
-  const planningFocus = Array.isArray(path?.sceneSummary?.planningFocus)
-    ? path.sceneSummary.planningFocus.filter(Boolean)
-    : [];
-
-  if (domain) {
-    chips.push(`认知域：${domain}`);
-  }
-
-  planningFocus.slice(0, 2).forEach((item: string) => {
-    chips.push(`重点：${item}`);
-  });
-
-  return chips.slice(0, 3);
-};
-
-const getPathDesignBrief = (path: any) => {
-  const brief: Array<{ label: string; value: string }> = [];
-  const firstDeliverable = typeof path?.sceneSummary?.firstDeliverable === 'string'
-    ? path.sceneSummary.firstDeliverable.trim()
-    : '';
-  const targetState = typeof path?.sceneSummary?.targetState === 'string'
-    ? path.sceneSummary.targetState.trim()
-    : '';
-
-  if (firstDeliverable) {
-    brief.push({ label: '首个交付物', value: firstDeliverable });
-  }
-
-  if (targetState) {
-    brief.push({ label: '目标状态', value: targetState });
-  }
-
-  return brief.slice(0, 2);
 };
 
 const getPathStages = (path: any) => path?.milestones || path?.weeks || [];
@@ -592,8 +539,8 @@ const primaryPath = computed(() => {
   return activePaths.find((path: any) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
 });
 
-const pathsHeroTitle = computed(() => adaptiveGuidance.value?.headline || '查看所有路径进度。');
-const pathsHeroSubtitle = computed(() => adaptiveGuidance.value?.subtitle || '在这里查看你创建过的学习路径、当前阶段和学习进度。');
+const pathsHeroTitle = '查看所有路径进度。';
+const pathsHeroSubtitle = '在这里查看你创建过的学习路径、当前阶段和学习进度。';
 
 const pathFilterChips = computed(() => {
   const list = sortedPaths.value;
@@ -696,11 +643,6 @@ const loadPaths = async () => {
   try {
     const response = await request.get('/learning/paths');
     paths.value = response.data.data;
-    try {
-      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('path-list');
-    } catch (error) {
-      console.error('获取路径列表动态引导文案失败:', error);
-    }
   } catch (error: any) {
     console.error('加载学习路径失败:', error);
     toast.error(error.response?.data?.error?.message || '加载学习路径失败');
@@ -2506,6 +2448,11 @@ onUnmounted(() => {
     padding-bottom: calc(1rem + var(--safe-area-bottom));
   }
 
+  .paths-hero {
+    gap: 14px;
+    padding: 16px;
+  }
+
   .header-right {
     justify-content: flex-end;
   }
@@ -2556,11 +2503,60 @@ onUnmounted(() => {
   .paths-filter-chip {
     width: 100%;
     justify-content: space-between;
+    min-height: 46px;
+    padding: 12px 14px;
   }
 
   .paths-scene-banner__meta,
   .path-overview-card__brief {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .paths-main {
+    padding: 0.75rem 0.5rem calc(0.9rem + var(--safe-area-bottom));
+  }
+
+  .paths-hero,
+  .paths-scene-banner,
+  .path-overview-card,
+  .paths-empty-state {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .paths-hero h1,
+  .paths-empty-state h2 {
+    font-size: 22px;
+    line-height: 1.12;
+  }
+
+  .paths-hero p,
+  .path-overview-card p,
+  .paths-empty-state p {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .path-overview-card {
+    gap: 12px;
+  }
+
+  .path-overview-card strong,
+  .path-overview-card__head strong {
+    font-size: 19px;
+    line-height: 1.25;
+  }
+
+  .path-overview-card__next-task,
+  .path-overview-card__brief-item {
+    padding: 11px 12px;
+    border-radius: 14px;
+  }
+
+  .path-overview-card__actions-row .btn {
+    min-height: 44px;
   }
 }
 </style>

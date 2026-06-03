@@ -16,6 +16,8 @@ import { createAgentCollaborationService } from './services/agent-collaboration.
 import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
 import { learnerOrchestrator } from './orchestrators/learner.orchestrator';
+import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
+import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
 const RETIRED_SKILLS = [
@@ -404,6 +406,15 @@ async function startServer() {
     await prisma.$connect();
     logger.info('✅ Database connected successfully');
 
+    const promptBootstrap = await ensureCoreAgentPrompts(prisma, 'bootstrap');
+    logger.info('核心 Prompt 启动检查完成', {
+      mode: promptBootstrap.mode,
+      performed: promptBootstrap.performed,
+      reason: promptBootstrap.reason,
+      created: promptBootstrap.created,
+      missingBefore: promptBootstrap.missingBefore,
+    });
+
     // 初始化管理员账户
     await initializeAdmin();
 
@@ -426,8 +437,16 @@ async function startServer() {
         });
       }, ENRICHMENT_RETRY_POLL_INTERVAL_MS);
 
+      void dashboardGuidanceSnapshotService.backfillMissingForActiveUsers(200).then((result) => {
+        logger.info('首页引导快照回填完成', result);
+      }).catch((error) => {
+        logger.warn('首页引导快照回填失败', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+
      app.listen(PORT, () => {
-      logger.info(`🚀 Server is running on port ${PORT}`);
+       logger.info(`🚀 Server is running on port ${PORT}`);
       logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
       logger.info(`🤖 EduClaw Gateway: Agent-Driven Architecture`);
     });

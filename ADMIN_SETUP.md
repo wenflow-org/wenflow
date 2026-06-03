@@ -23,10 +23,18 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 # 推荐：在项目根目录一键启动
 ./start-dev.ps1
 
-# 或仅启动后端
+# 或使用 backend-only 便捷脚本
 cd backend
+./start-backend.ps1
+
+# 或仅启动后端
 npm run dev
 ```
+
+说明：
+- 如果数据库是空的，后端首次启动时会自动 bootstrap 核心 agent / skill prompts。
+- 如果数据库里已经存在 prompt 配置，则不会覆盖已有版本。
+- 若项目升级后新增了 prompt 节点，可在 `backend/` 下手动执行 `npm run prompts:backfill-core` 补齐缺项。
 
 ### 3) 查看启动日志
 

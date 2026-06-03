@@ -340,7 +340,10 @@ export async function buildTeachingScenarioContext(
     throw new Error('无权访问此任务');
   }
 
-  const learningState = await learningStateService.getCurrentState(userId);
+  const runtimeLearningState = previousSession?.status === 'active'
+    ? learningStateService.coerceMetrics(previousSession.teachingState)
+    : null;
+  const learningState = runtimeLearningState || await learningStateService.getCurrentState(userId);
   const learnerResult = await learnerModelAgent.getSnapshot({
     userId,
     learningPathId: path.id,
@@ -350,10 +353,8 @@ export async function buildTeachingScenarioContext(
   });
   const learnerSnapshot = learnerResult.snapshot;
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
-  const primaryConcepts = dedupeConcepts([
-    resolvedConcept.name,
-    ...parseLearningObjectives((task as any).learningObjectives),
-  ]);
+  const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
+  const primaryConcepts = persistedLearningObjectives;
   const prerequisiteConcepts = (learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps || [])
     .map((item) => item.label)
     .filter((label) => primaryConcepts.some((concept) => label.includes(concept) || concept.includes(label)))
@@ -367,7 +368,7 @@ export async function buildTeachingScenarioContext(
     knowledgeType: (task as any).knowledgeType || null,
     cognitiveLevel: (task as any).cognitiveLevel || null,
     displayLabel: (task as any).displayLabel || null,
-    learningObjectives: parseLearningObjectives((task as any).learningObjectives),
+    learningObjectives: persistedLearningObjectives,
     coreConcept: resolvedConcept.name,
     linkedConceptId: resolvedConcept.id,
     linkedConceptName: resolvedConcept.name,

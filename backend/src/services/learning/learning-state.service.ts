@@ -51,6 +51,24 @@ export interface SessionScoreInput {
   sessionLf?: number;
   durationMinutes: number;
   confidence?: number;
+  pathId?: string | null;
+  taskId?: string | null;
+  sessionId?: string | null;
+}
+
+interface LearningStateMetricPersistOptions {
+  version?: string;
+  committed?: boolean;
+  source?: string;
+  pathId?: string | null;
+  taskId?: string | null;
+  sessionId?: string | null;
+  primaryMetric?: 'lss' | 'lsb';
+}
+
+interface LearningStateCommittedSnapshot {
+  metrics: LearningStateMetrics;
+  calculatedAt: Date;
 }
 
 // 认知层级
@@ -91,6 +109,8 @@ export interface InterventionDecision {
 }
 
 export class LearningStateService {
+  private readonly committedMetricVersion = 'state-v2';
+
   private getNaturalDayDiff(from: Date, to: Date): number {
     const start = new Date(from);
     const end = new Date(to);
@@ -114,6 +134,216 @@ export class LearningStateService {
       return Math.max(-10, Math.min(10, numeric / 10));
     }
     return Math.max(-10, Math.min(10, numeric));
+  }
+
+  private parseMetricMetadata(raw: string | null | undefined): Record<string, any> | null {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildCommittedMetricWhere(userId: string, since?: Date) {
+    return {
+      userId,
+      metricType: 'learning_state',
+      AND: [
+        { metadata: { contains: `"version":"${this.committedMetricVersion}"` } },
+        { metadata: { contains: '"committed":true' } },
+      ],
+      ...(since ? { calculatedAt: { gte: since } } : {}),
+    };
+  }
+
+  private extractSnapshotTimestamp(value: unknown, fallback: Date): Date {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+
+    return fallback;
+  }
+
+  coerceMetrics(input: any, fallbackTimestamp: Date = new Date()): LearningStateMetrics | null {
+    if (!input || typeof input !== 'object') return null;
+
+    const rawLss = typeof input.lss === 'number' ? input.lss : null;
+    const rawKtl = typeof input.ktl === 'number' ? input.ktl : null;
+    const rawLf = typeof input.lf === 'number' ? input.lf : null;
+    const rawLsb = typeof input.lsb === 'number' ? input.lsb : null;
+
+    if (rawLss === null || rawKtl === null || rawLf === null || rawLsb === null) {
+      return null;
+    }
+
+    return {
+      lss: this.normalizeTenScale(rawLss),
+      ktl: this.normalizeTenScale(rawKtl),
+      lf: this.normalizeTenScale(rawLf),
+      lsb: this.normalizeBalanceScale(rawLsb),
+      timestamp: this.extractSnapshotTimestamp(input.timestamp, fallbackTimestamp),
+    };
+  }
+
+  private projectState(
+    previousMetrics: LearningStateMetrics | null,
+    input: {
+      lss: number;
+      ktlInput?: number;
+      lfInput?: number;
+    },
+    timestamp: Date = new Date()
+  ): LearningStateMetrics {
+    const effectiveKtlInput = this.normalizeTenScale(input.ktlInput ?? input.lss);
+    const effectiveLfInput = this.normalizeTenScale(input.lfInput ?? input.lss);
+
+    const previousKTL = previousMetrics?.ktl ?? effectiveKtlInput;
+    const previousLF = previousMetrics?.lf ?? effectiveLfInput;
+
+    const currentKTL = this.calculateKTL(previousKTL, effectiveKtlInput);
+    const currentLF = this.calculateLF(previousLF, effectiveLfInput);
+    const currentLSB = this.calculateLSB(currentKTL, currentLF);
+
+    return {
+      lss: this.normalizeTenScale(input.lss),
+      ktl: currentKTL,
+      lf: currentLF,
+      lsb: currentLSB,
+      timestamp,
+    };
+  }
+
+  private metricRecordToSnapshot(record: {
+    lss: number | null;
+    ktl: number | null;
+    lf: number | null;
+    lsb: number | null;
+    calculatedAt: Date;
+  }): LearningStateCommittedSnapshot | null {
+    const metrics = this.coerceMetrics({
+      lss: record.lss,
+      ktl: record.ktl,
+      lf: record.lf,
+      lsb: record.lsb,
+      timestamp: record.calculatedAt,
+    }, record.calculatedAt);
+
+    if (!metrics) return null;
+    return {
+      metrics,
+      calculatedAt: record.calculatedAt,
+    };
+  }
+
+  private wrapupSessionToSnapshot(session: {
+    wrapup: string | null;
+    startTime: Date;
+    endTime: Date | null;
+  }): LearningStateCommittedSnapshot | null {
+    if (!session.wrapup) return null;
+
+    try {
+      const wrapup = JSON.parse(session.wrapup);
+      const rawState = wrapup?.stateUpdate;
+      const fallbackTimestamp = session.endTime || session.startTime;
+      const metrics = this.coerceMetrics(rawState, fallbackTimestamp);
+      if (!metrics) return null;
+
+      return {
+        metrics,
+        calculatedAt: metrics.timestamp,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async listCommittedSnapshots(userId: string, since?: Date): Promise<LearningStateCommittedSnapshot[]> {
+    const committedRows = await prisma.learning_metrics.findMany({
+      where: this.buildCommittedMetricWhere(userId, since),
+      orderBy: { calculatedAt: 'asc' },
+      select: {
+        lss: true,
+        ktl: true,
+        lf: true,
+        lsb: true,
+        calculatedAt: true,
+      },
+    });
+
+    const committedSnapshots = committedRows
+      .map((row) => this.metricRecordToSnapshot(row))
+      .filter((row): row is LearningStateCommittedSnapshot => Boolean(row));
+
+    if (committedSnapshots.length > 0) {
+      return committedSnapshots;
+    }
+
+    const sessionWhere: Record<string, any> = {
+      userId,
+      status: 'completed',
+      wrapup: { not: null },
+    };
+
+    if (since) {
+      sessionWhere.OR = [
+        { endTime: { gte: since } },
+        { startTime: { gte: since } },
+      ];
+    }
+
+    const sessions = await prisma.teaching_sessions.findMany({
+      where: sessionWhere,
+      orderBy: { endTime: 'asc' },
+      select: {
+        wrapup: true,
+        startTime: true,
+        endTime: true,
+      },
+    });
+
+    return sessions
+      .map((session) => this.wrapupSessionToSnapshot(session))
+      .filter((row): row is LearningStateCommittedSnapshot => Boolean(row));
+  }
+
+  async getLatestCommittedStateAt(userId: string): Promise<Date | null> {
+    const latestCommittedRow = await prisma.learning_metrics.findFirst({
+      where: this.buildCommittedMetricWhere(userId),
+      orderBy: { calculatedAt: 'desc' },
+      select: { calculatedAt: true },
+    });
+
+    if (latestCommittedRow?.calculatedAt) {
+      return latestCommittedRow.calculatedAt;
+    }
+
+    const latestCompletedSession = await prisma.teaching_sessions.findFirst({
+      where: {
+        userId,
+        status: 'completed',
+        wrapup: { not: null },
+      },
+      orderBy: { endTime: 'desc' },
+      select: {
+        wrapup: true,
+        startTime: true,
+        endTime: true,
+      },
+    });
+
+    return latestCompletedSession
+      ? this.wrapupSessionToSnapshot(latestCompletedSession)?.calculatedAt || null
+      : null;
   }
 
   toDisplayMetrics(metrics: LearningStateMetrics): LearningStateMetrics {
@@ -241,20 +471,12 @@ export class LearningStateService {
    * 获取用户历史指标
    */
   async getPreviousMetrics(userId: string): Promise<LearningStateMetrics | null> {
-    const latestRecord = await prisma.learning_metrics.findFirst({
-      where: { userId },
-      orderBy: { calculatedAt: 'desc' },
-    });
+    const snapshots = await this.listCommittedSnapshots(userId);
+    const latestSnapshot = snapshots[snapshots.length - 1] || null;
 
-    if (!latestRecord) return null;
+    if (!latestSnapshot) return null;
 
-    return this.restoreMetrics({
-      lss: latestRecord.lss,
-      ktl: latestRecord.ktl,
-      lf: latestRecord.lf,
-      lsb: latestRecord.lsb,
-      timestamp: latestRecord.calculatedAt,
-    });
+    return this.restoreMetrics(latestSnapshot.metrics);
   }
 
   /**
@@ -269,31 +491,19 @@ export class LearningStateService {
 
     // 2. 获取历史指标
     const previousMetrics = await this.getPreviousMetrics(userId);
-
-    // 3. 计算 KTL 和 LF
-    const previousKTL = previousMetrics?.ktl ?? currentLSS;
-    const previousLF = previousMetrics?.lf ?? currentLSS;
-
-    const currentKTL = this.calculateKTL(previousKTL, currentLSS);
-    const currentLF = this.calculateLF(previousLF, currentLSS);
-
-    // 4. 计算 LSB
-    const currentLSB = this.calculateLSB(currentKTL, currentLF);
-
-    const metrics: LearningStateMetrics = {
-      lss: currentLSS,
-      ktl: currentKTL,
-      lf: currentLF,
-      lsb: currentLSB,
-      timestamp: new Date(),
-    };
+    const metrics = this.projectState(previousMetrics, { lss: currentLSS });
 
     // 5. 保存到数据库
     await this.saveMetrics(userId, metrics, inputs);
 
-    logger.info(`[LearningState] 用户 ${userId}: LSS=${currentLSS.toFixed(2)}, KTL=${currentKTL.toFixed(2)}, LF=${currentLF.toFixed(2)}, LSB=${currentLSB.toFixed(2)}`);
+    logger.info(`[LearningState] 用户 ${userId}: LSS=${metrics.lss.toFixed(2)}, KTL=${metrics.ktl.toFixed(2)}, LF=${metrics.lf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`);
 
     return metrics;
+  }
+
+  calculateRuntimeState(previousMetrics: LearningStateMetrics | null, inputs: LSSInputs): LearningStateMetrics {
+    const currentLSS = this.calculateLSS(inputs);
+    return this.projectState(previousMetrics, { lss: currentLSS });
   }
 
   /**
@@ -317,20 +527,11 @@ export class LearningStateService {
     const confidenceAdjustedLf = normalizedSessionLf * (0.6 + confidence * 0.4);
 
     const previousMetrics = await this.getPreviousMetrics(userId);
-    const previousKTL = previousMetrics?.ktl ?? confidenceAdjustedKtl;
-    const previousLF = previousMetrics?.lf ?? confidenceAdjustedLf;
-
-    const currentKTL = this.calculateKTL(previousKTL, confidenceAdjustedKtl);
-    const currentLF = this.calculateLF(previousLF, confidenceAdjustedLf);
-    const currentLSB = this.calculateLSB(currentKTL, currentLF);
-
-    const metrics: LearningStateMetrics = {
+    const metrics = this.projectState(previousMetrics, {
       lss: confidenceAdjustedLss,
-      ktl: currentKTL,
-      lf: currentLF,
-      lsb: currentLSB,
-      timestamp: new Date(),
-    };
+      ktlInput: confidenceAdjustedKtl,
+      lfInput: confidenceAdjustedLf,
+    });
 
     await this.saveMetrics(userId, metrics, {
       difficulty: Math.max(1, Math.min(10, confidenceAdjustedLss)),
@@ -340,10 +541,18 @@ export class LearningStateService {
       expectedTime: 15,
       completionRate: 1,
       taskType: 'practice',
+    }, {
+      version: this.committedMetricVersion,
+      committed: true,
+      source: 'session-wrapup',
+      pathId: input.pathId,
+      taskId: input.taskId,
+      sessionId: input.sessionId,
+      primaryMetric: 'lsb',
     });
 
     logger.info(
-      `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, sessionKtl=${normalizedSessionKtl.toFixed(2)}, sessionLf=${normalizedSessionLf.toFixed(2)}, confidence=${confidence.toFixed(2)}, adjustedLss=${confidenceAdjustedLss.toFixed(2)}, adjustedKtl=${confidenceAdjustedKtl.toFixed(2)}, adjustedLf=${confidenceAdjustedLf.toFixed(2)}, LSB=${currentLSB.toFixed(2)}`
+      `[LearningState] 会话评分更新: user=${userId}, sessionLss=${normalizedLss.toFixed(2)}, sessionKtl=${normalizedSessionKtl.toFixed(2)}, sessionLf=${normalizedSessionLf.toFixed(2)}, confidence=${confidence.toFixed(2)}, adjustedLss=${confidenceAdjustedLss.toFixed(2)}, adjustedKtl=${confidenceAdjustedKtl.toFixed(2)}, adjustedLf=${confidenceAdjustedLf.toFixed(2)}, LSB=${metrics.lsb.toFixed(2)}`
     );
 
     return metrics;
@@ -355,7 +564,8 @@ export class LearningStateService {
   private async saveMetrics(
     userId: string,
     metrics: LearningStateMetrics,
-    inputs: LSSInputs
+    inputs: LSSInputs,
+    options: LearningStateMetricPersistOptions = {}
   ): Promise<void> {
     // 获取现有的 lssHistory
     const existingRecord = await prisma.learning_metrics.findFirst({
@@ -383,12 +593,26 @@ export class LearningStateService {
       lssHistory = lssHistory.slice(-30);
     }
 
-await prisma.learning_metrics.create({
+    const metadata = (options.version || options.committed || options.source || options.pathId || options.taskId || options.sessionId)
+      ? JSON.stringify({
+          version: options.version || undefined,
+          committed: options.committed === true,
+          source: options.source || undefined,
+          scale: 'internal-10',
+          pathId: options.pathId || undefined,
+          taskId: options.taskId || undefined,
+          sessionId: options.sessionId || undefined,
+        })
+      : null;
+
+    await prisma.learning_metrics.create({
       data: {
         id: `lm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         userId,
+        pathId: options.pathId || null,
+        taskId: options.taskId || null,
         metricType: 'learning_state',
-        value: metrics.lss,
+        value: options.primaryMetric === 'lsb' ? metrics.lsb : metrics.lss,
         lss: metrics.lss,
         ktl: metrics.ktl,
         lf: metrics.lf,
@@ -398,6 +622,7 @@ await prisma.learning_metrics.create({
         lfCurrent: metrics.lf,
         lsbCurrent: metrics.lsb,
         lssHistory: JSON.stringify(lssHistory),
+        metadata,
         calculatedAt: metrics.timestamp,
       },
     });
@@ -417,20 +642,11 @@ await prisma.learning_metrics.create({
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    const records = await prisma.learning_metrics.findMany({
-      where: {
-        userId,
-        calculatedAt: { gte: since },
-      },
-      orderBy: { calculatedAt: 'asc' },
-    });
+    const snapshots = await this.listCommittedSnapshots(userId, since);
 
-    return records.map(r => ({
-      lss: this.normalizeTenScale(r.lss),
-      ktl: this.normalizeTenScale(r.ktl),
-      lf: this.normalizeTenScale(r.lf),
-      lsb: this.normalizeBalanceScale(r.lsb),
-      timestamp: r.calculatedAt,
+    return snapshots.map((snapshot) => ({
+      ...snapshot.metrics,
+      timestamp: snapshot.calculatedAt,
     }));
   }
 

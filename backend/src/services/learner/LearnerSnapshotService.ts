@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { learnerModelAgent } from '../../agents/learner-model-agent';
 import { personalizationEngine } from '../../agents/learner-model-agent/personalization';
+import learningStateService from '../learning/learning-state.service';
 import type {
   LearnerDynamicState,
   LearnerLearningControlState,
@@ -161,7 +162,7 @@ function deriveReplanSignal(input: {
 
 export class LearnerSnapshotService {
   async getSnapshot(input: LearnerSnapshotScopeInput): Promise<LearnerSnapshot> {
-    const [{ profile, confidence }, knowledgeMemory, latestConversation, latestMetrics, latestSession, latestCompletedTask] = await Promise.all([
+    const [{ profile, confidence }, knowledgeMemory, latestGoalConversation, latestMetricAt, latestSession, latestCompletedTask] = await Promise.all([
       learnerModelAgent.getProfile(input.userId),
       learnerKnowledgeMemoryService.build({
         userId: input.userId,
@@ -174,11 +175,7 @@ export class LearnerSnapshotService {
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true },
       }),
-      prisma.learning_metrics.findFirst({
-        where: { userId: input.userId },
-        orderBy: { calculatedAt: 'desc' },
-        select: { calculatedAt: true },
-      }),
+      learningStateService.getLatestCommittedStateAt(input.userId),
       prisma.teaching_sessions.findFirst({
         where: { userId: input.userId },
         orderBy: { updatedAt: 'desc' },
@@ -203,7 +200,7 @@ export class LearnerSnapshotService {
         lss: metrics.lss,
         ktl: metrics.ktl,
         lf: metrics.lf,
-        lsb: metrics.ktl - metrics.lf,
+        lsb: metrics.lsb,
       },
       recentTrend: metrics.recentProgress,
       fatigueRisk: deriveFatigueRisk(metrics.lf),
@@ -259,8 +256,8 @@ export class LearnerSnapshotService {
         generatedAt: new Date().toISOString(),
         confidence,
         basedOn: {
-          latestGoalConversationAt: latestConversation?.createdAt?.toISOString(),
-          latestMetricAt: latestMetrics?.calculatedAt?.toISOString(),
+          latestGoalConversationAt: latestGoalConversation?.createdAt?.toISOString(),
+          latestMetricAt: latestMetricAt?.toISOString?.(),
           latestTeachingSessionAt: latestSession?.updatedAt?.toISOString(),
           latestTaskCompletionAt: latestCompletedTask?.completedAt?.toISOString(),
           latestPathUpdateAt: currentPath ? await this.resolvePathUpdatedAt(currentPath.learningPathId) : undefined,

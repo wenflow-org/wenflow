@@ -372,7 +372,6 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import request from '../utils/request';
 import { metricsAPI } from '../api/metrics';
-import { learningAPI } from '../api/learning';
 import { userAPI, type LearnerCenterSnapshot } from '../api/user';
 import { adminDevtoolsApi, type AdvanceTimePreviewResponse } from '../api/adminApi';
 import { getReplanActionText, getReplanPriorityText } from '../utils/replanSignal';
@@ -443,9 +442,6 @@ const warnings = ref<Array<{
   message: string;
   suggestion: string;
 }>>([]);
-const adaptiveGuidance = ref<any | null>(null);
-const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
-const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
 const learnerCenter = ref<LearnerCenterSnapshot | null>(null);
 const stateDebugDrawerVisible = ref(false);
 const simulatedAdvanceDays = ref(7);
@@ -455,45 +451,38 @@ let chartInstance: Chart | null = null;
 const trendCache = new Map<number, TrendData[]>();
 const advanceDayOptions = [1, 3, 7, 14, 30];
 
-const statePageTitle = computed(() => adaptiveCopy.value?.headline || '看见最近的学习状态，再决定下一步怎么学。');
-const statePageSubtitle = computed(() => adaptiveCopy.value?.subtitle || '这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。');
+const statePageTitle = computed(() => '看见最近的学习状态，再决定下一步怎么学。');
+const statePageSubtitle = computed(() => '这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。');
 
 const stateWarningSummary = computed(() => {
-  if (adaptiveCopy.value?.warningCopy && adaptiveCopy.value.warningCopy !== '当前没有明显风险。') {
-    return adaptiveCopy.value.warningCopy;
-  }
   if (adaptiveSummary.value?.global?.hasWarnings) return '当前状态存在需关注项，建议先看预警再决定是否继续推进。';
   return '';
 });
 
+const adaptiveSummary = computed(() => null);
+
 const stateGuidanceActions = computed(() => {
-  const resolveTarget = (value?: string) => {
-    switch (value) {
-      case 'continue-learning':
-        return dashboardPath.value;
-      case 'learning-state':
-        return learningStatePath.value;
-      case 'achievements':
-        return achievementsPath.value;
-      case 'create-goal':
-        return goalConversationPath.value;
-      case 'path-detail':
-        return learningPathsPath.value;
-      default:
-        return learningPathsPath.value;
-    }
-  };
-
-  if (adaptiveCopy.value?.todayActions?.length) {
-    return adaptiveCopy.value.todayActions.slice(0, 3).map((item: any) => ({
-      title: item.title,
-      desc: item.desc,
-      action: item.action,
-      to: resolveTarget(item.to)
-    }));
-  }
-
-  return [];
+  const pathId = learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId;
+  return [
+    {
+      title: '查看当前路径',
+      desc: '回到当前任务，确认状态影响的是哪一步。',
+      action: '查看路径',
+      to: pathId ? `/learning-path/${pathId}` : learningPathsPath.value,
+    },
+    {
+      title: '继续学习',
+      desc: '如果状态稳定，就继续完成当前最小任务。',
+      action: '继续学习',
+      to: dashboardPath.value,
+    },
+    {
+      title: '创建新目标',
+      desc: '如果当前路径不再适合，可以重新开始一个目标。',
+      action: '创建目标',
+      to: goalConversationPath.value,
+    },
+  ];
 });
 
 const learnerReplanSignal = computed(() => learnerCenter.value?.replanSignal || null);
@@ -517,8 +506,19 @@ const blockedFoundationsText = computed(() => {
   return values.length > 0 ? values.slice(0, 6).join('、') : '暂无高风险前置。';
 });
 
+const learnerCenterDisplayMetrics = computed(() => {
+  const metrics = learnerCenter.value?.dynamicState?.metrics;
+  if (!metrics) return null;
+  return {
+    lss: Number((Number(metrics.lss || 0) * 10).toFixed(2)),
+    ktl: Number((Number(metrics.ktl || 0) * 10).toFixed(2)),
+    lf: Number((Number(metrics.lf || 0) * 10).toFixed(2)),
+    lsb: Number((Number(metrics.lsb || 0) * 10).toFixed(2)),
+  };
+});
+
 const stateDebugQuickChips = computed(() => {
-  const metrics = learnerCenter.value?.dynamicState?.metrics || state.value;
+  const metrics = learnerCenterDisplayMetrics.value || state.value;
   const control = learnerCenter.value?.learningControlState;
   const signal = learnerCenter.value?.replanSignal;
   return [
@@ -533,8 +533,8 @@ const stateDebugQuickChipText = computed(() => {
   return stateDebugQuickChips.value.map((item) => `${item.label} ${item.value}`).join(' · ') || '打开状态调试';
 });
 
-const stateDebugAdaptiveCopyJson = computed(() => JSON.stringify(adaptiveCopy.value || null, null, 2));
-const stateDebugAdaptiveSummaryJson = computed(() => JSON.stringify(adaptiveSummary.value || null, null, 2));
+const stateDebugAdaptiveCopyJson = computed(() => JSON.stringify(null, null, 2));
+const stateDebugAdaptiveSummaryJson = computed(() => JSON.stringify(null, null, 2));
 const stateDebugLearnerCenterJson = computed(() => JSON.stringify(learnerCenter.value || null, null, 2));
 const stateDebugAdvancePreviewJson = computed(() => JSON.stringify(advancePreviewResult.value || null, null, 2));
 
@@ -630,7 +630,7 @@ const stateDefinitionCards = computed(() => {
     { title: 'LSS 学习压力', desc: '最近一次课程的即时压力，内部按 0-10 评估，对外换算为 0-100。' },
     { title: 'KTL 知识掌握', desc: '长期知识积累的量化指标，使用 42 天加权平均计算，并换算为 0-100 展示。' },
     { title: 'LF 学习疲劳', desc: '近期疲劳程度，使用 7 天加权平均计算，并换算为 0-100 展示。' },
-    { title: 'LSB 状态平衡值', desc: '核心指标，计算公式为 LSB = KTL - LF，内部范围约 -10 到 10，对外换算展示。' }
+    { title: 'LSB 状态平衡值', desc: '核心指标，计算公式为 LSB = KTL - LF，内部范围约 -10 到 10，对外按 -100 到 100 展示。' }
   ];
 });
 
@@ -639,6 +639,7 @@ interface StateMetrics {
   ktl: number;
   lf: number;
   lsb: number;
+  updatedAt?: string;
   suggestion?: {
     level: 'critical' | 'warning' | 'normal' | 'optimal';
     message: string;
@@ -768,7 +769,8 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
       },
       scales: {
         y: {
-          beginAtZero: true,
+          beginAtZero: false,
+          suggestedMin: -100,
           suggestedMax: 100,
           grid: {
             color: 'rgba(0, 0, 0, 0.05)',
@@ -878,7 +880,6 @@ const refreshStatePage = async (options?: { forceTrends?: boolean }) => {
   await Promise.all([
     loadCurrentState(),
     loadTrends(trendDays.value),
-    loadAdaptiveGuidance(),
     loadLearnerCenter()
   ]);
   loading.value = false;
@@ -891,14 +892,6 @@ const loadWarnings = async () => {
     warnings.value = response.data.data.warnings || [];
   } catch (error: any) {
     console.error('加载预警信息失败:', error);
-  }
-};
-
-const loadAdaptiveGuidance = async () => {
-  try {
-    adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('learning-state');
-  } catch (error) {
-    console.error('加载学习状态引导文案失败:', error);
   }
 };
 
@@ -944,10 +937,10 @@ const getLSBValueClass = (lsb: number) => {
 };
 
 const getLSBText = (lsb: number) => {
-  if (lsb < 0) return '疲劳';
-  if (lsb < 20) return '偏低';
-  if (lsb >= 40) return '高效';
-  return '正常';
+  if (lsb < 0) return '恢复优先';
+  if (lsb < 20) return '谨慎推进';
+  if (lsb >= 40) return '推进窗口';
+  return '相对平衡';
 };
 
 const getLSSValueClass = (lss: number) => {

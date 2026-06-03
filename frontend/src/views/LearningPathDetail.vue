@@ -124,7 +124,7 @@
                   </div>
                   <p class="replan-advisory-banner__action-copy">{{ pathReplanMeta.action }}</p>
                   <div class="replan-advisory-banner__chips" v-if="pathReplanSignal.reasonCodes?.length">
-                    <span v-for="code in pathReplanMeta.reasonCodes" :key="code" class="path-detail-chip path-detail-chip--warn">{{ code }}</span>
+                    <span v-for="(code, index) in pathReplanMeta.reasonCodes" :key="`replan-reason-${index}-${code}`" class="path-detail-chip path-detail-chip--warn">{{ code }}</span>
                   </div>
                 </div>
                 <div class="replan-advisory-banner__actions">
@@ -330,7 +330,7 @@
                 </div>
                 <div class="path-detail-side-card__time">预计总投入：{{ currentStageEffortText }}</div>
                 <ul class="path-detail-note-list">
-                  <li v-for="item in pathDetailNotes" :key="item">{{ item }}</li>
+                  <li v-for="(item, index) in pathDetailNotes" :key="`note-${index}`">{{ item }}</li>
                 </ul>
               </article>
 
@@ -340,7 +340,7 @@
                   <h2>当前最值得先完成的任务</h2>
                 </div>
                 <div class="path-detail-plan-list">
-                  <article v-for="item in pathDetailPlan" :key="item.title" class="path-detail-plan-item">
+                  <article v-for="(item, index) in pathDetailPlan" :key="`plan-${index}-${item.title}`" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
                     <p>{{ sanitizeDisplayText(item.desc) }}</p>
                   </article>
@@ -356,7 +356,7 @@
                   <h2>当前建议学习节奏</h2>
                 </div>
                 <div class="path-detail-plan-list">
-                  <article v-for="item in paceSuggestionCards" :key="item.title" class="path-detail-plan-item">
+                  <article v-for="(item, index) in paceSuggestionCards" :key="`pace-${index}-${item.title}`" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
                     <p>{{ sanitizeDisplayText(item.desc) }}</p>
                   </article>
@@ -369,13 +369,13 @@
                   <h2>这条路径先解决什么</h2>
                 </div>
                 <div class="path-detail-plan-list">
-                  <article v-for="item in pathSceneCards" :key="item.title" class="path-detail-plan-item">
+                  <article v-for="(item, index) in pathSceneCards" :key="`scene-${index}-${item.title}`" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
                     <p>{{ sanitizeDisplayText(item.desc) }}</p>
                   </article>
                 </div>
                 <div v-if="pathSceneMetaChips.length > 0" class="path-detail-chip-row path-detail-chip-row--wrap">
-                  <span v-for="item in pathSceneMetaChips" :key="item" class="path-detail-chip">{{ item }}</span>
+                  <span v-for="(item, index) in pathSceneMetaChips" :key="`scene-chip-${index}-${item}`" class="path-detail-chip">{{ item }}</span>
                 </div>
               </article>
 
@@ -389,7 +389,7 @@
                   <strong>{{ path.cognitiveDesign.cognitiveDomain }}</strong>
                 </div>
                 <div v-if="cognitiveConceptCards.length > 0" class="path-detail-plan-list">
-                  <article v-for="item in cognitiveConceptCards" :key="item.title" class="path-detail-plan-item">
+                  <article v-for="(item, index) in cognitiveConceptCards" :key="`concept-${index}-${item.title}`" class="path-detail-plan-item">
                     <strong>{{ item.title }}</strong>
                     <p>{{ item.desc }}</p>
                   </article>
@@ -468,7 +468,7 @@
         <div v-if="previewMeta.reasonCodes.length" class="replan-preview-dialog__section">
           <span class="section-kicker">触发原因</span>
           <div class="path-detail-chip-row path-detail-chip-row--wrap">
-            <span v-for="code in previewMeta.reasonCodes" :key="code" class="path-detail-chip path-detail-chip--warn">{{ code }}</span>
+            <span v-for="(code, index) in previewMeta.reasonCodes" :key="`preview-reason-${index}-${code}`" class="path-detail-chip path-detail-chip--warn">{{ code }}</span>
           </div>
         </div>
       </div>
@@ -574,7 +574,6 @@ const evaluationDialogVisible = ref(false);
 const evaluationLoading = ref(false);
 const selectedTaskEvaluation = ref<TaskEvaluationDetail | null>(null);
 const retryingEnrichment = ref(false);
-const adaptiveGuidance = ref<any | null>(null);
 const learnerCenter = ref<any | null>(null);
 const replanLoading = ref(false);
 const replanConfirmLoading = ref(false);
@@ -751,8 +750,6 @@ const paceRangeText = computed(() => {
   return `单次 ${min}-${max} 分钟`;
 });
 
-const adaptiveSummary = computed(() => adaptiveGuidance.value?.summary || null);
-const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
 const pathReplanSignal = computed(() => learnerCenter.value?.replanSignal || null);
 const pathReplanMeta = computed(() => ({
   priority: getReplanPriorityText(pathReplanSignal.value?.priority),
@@ -801,11 +798,6 @@ const replanResultSummary = computed(() => {
 });
 
 const pathDetailNotes = computed(() => {
-  if (adaptiveCopy.value?.subtitle || adaptiveCopy.value?.warningCopy) {
-    return [adaptiveCopy.value.subtitle, adaptiveCopy.value.warningCopy]
-      .filter((item: string) => typeof item === 'string' && item.trim())
-      .slice(0, 3);
-  }
   const notes: string[] = [];
   const stage = activeStage.value;
   const stageSummary = stage?.description || stage?.goal;
@@ -886,12 +878,6 @@ const getTaskConceptLabel = (task: any) => {
 };
 
 const pathDetailPlan = computed(() => {
-  if (adaptiveCopy.value?.todayActions?.length) {
-    return adaptiveCopy.value.todayActions.slice(0, 3).map((item: any, index: number) => ({
-      title: item.title || `任务 ${index + 1}`,
-      desc: item.desc || item.action || '',
-    }));
-  }
   const items = nextActionTasks.value.map((task: any, index: number) => ({
     title: `任务 ${index + 1}`,
     desc: `${task.title}${task.estimatedMinutes ? ` · 预计 ${task.estimatedMinutes} 分钟` : ''}`
@@ -905,23 +891,6 @@ const pathDetailPlan = computed(() => {
 });
 
 const paceSuggestionCards = computed(() => {
-  if (adaptiveCopy.value?.paceHint || adaptiveCopy.value?.nextStep || adaptiveSummary.value?.path?.recommendedAction) {
-    const summaryAction = adaptiveSummary.value?.path?.recommendedAction;
-    return [
-      {
-        title: adaptiveCopy.value?.paceHint
-          || (summaryAction === 'slow-down' ? '当前建议放慢节奏，优先消化当前内容。' : paceRangeText.value),
-        desc: '根据当前学习状态动态调整。'
-      },
-      {
-        title: adaptiveCopy.value?.nextStep
-          || (summaryAction === 'review-prerequisites'
-            ? '先补前置概念，再继续当前阶段。'
-            : `当前阶段先聚焦「${activeStage.value?.title || '这一阶段'}」`),
-        desc: '优先处理当前最关键的推进点。'
-      }
-    ];
-  }
   const stage = activeStage.value;
   return [
     {
@@ -1011,12 +980,6 @@ const loadPathData = async () => {
       startEnrichmentPolling();
     } else {
       stopEnrichmentPolling();
-    }
-
-    try {
-      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('path-detail', effectivePathId.value as string);
-    } catch (error) {
-      console.error('获取路径动态引导文案失败:', error);
     }
 
     await loadLearnerCenter();
