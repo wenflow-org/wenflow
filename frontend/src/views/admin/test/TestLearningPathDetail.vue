@@ -52,7 +52,137 @@
           </div>
         </section>
 
-        <section v-if="processDetail" class="test-path-detail-card test-path-detail-card--process test-path-detail-process-section">
+        <section class="test-path-detail-grid test-path-detail-grid--content">
+          <section class="test-path-detail-main">
+            <section v-if="showEnrichmentBanner" class="test-path-detail-banner" :class="`test-path-detail-banner--${enrichmentStatus || 'unknown'}`">
+              <div>
+                <strong>{{ enrichmentBannerTitle }}</strong>
+                <p>{{ enrichmentBannerMessage }}</p>
+              </div>
+            </section>
+
+            <section class="test-path-detail-card">
+              <div class="test-path-detail-section-head">
+                <div>
+                  <span class="test-path-detail-eyebrow">显性任务路径</span>
+                  <h2>最终渲染的任务链</h2>
+                </div>
+              </div>
+
+              <div class="test-path-stage-list">
+                <article
+                  v-for="stage in pathStages"
+                  :key="stage.id"
+                  class="test-path-stage"
+                >
+                  <button type="button" class="test-path-stage__head" @click="toggleWeek(stage)">
+                    <div>
+                      <span class="test-path-stage__index">阶段 {{ stage.stageNumber || stage.weekNumber }}</span>
+                      <strong>{{ stage.title }}</strong>
+                      <p>{{ stage.description || stage.goal }}</p>
+                      <div v-if="stage.coreConceptName || stage.coreConceptId" class="test-path-task__profile-copy">
+                        <span class="test-path-task__profile-line">阶段核心概念：{{ stage.coreConceptName || '--' }}</span>
+                        <span class="test-path-task__profile-line">概念 ID：{{ stage.coreConceptId || '--' }}</span>
+                      </div>
+                    </div>
+                    <span class="test-path-stage__meta">{{ getWeekCompletedCount(stage) }}/{{ normalizeTaskList(stage).length }}</span>
+                  </button>
+
+                  <div v-if="activeWeeks.includes(stage.stageNumber || stage.weekNumber)" class="test-path-stage__body">
+                    <div class="test-path-task-list">
+                      <article
+                        v-for="task in normalizeTaskList(stage)"
+                        :key="task.id"
+                        class="test-path-task"
+                        :class="{ 'test-path-task--locked': !canStartLearning && task.status !== 'completed' }"
+                      >
+                        <div class="test-path-task__head">
+                          <div>
+                            <strong>{{ task.title }}</strong>
+                            <p>{{ task.description }}</p>
+                            <div v-if="task.displayLabel || task.coreConcept || task.linkedConceptId || normalizedTaskObjectives(task).length" class="test-path-task__profile-copy">
+                              <span v-if="task.displayLabel" class="test-path-task__profile-line">任务标签：{{ task.displayLabel }}</span>
+                              <span v-if="task.coreConcept" class="test-path-task__profile-line">任务命中概念：{{ task.coreConcept }}</span>
+                              <span v-if="task.linkedConceptId" class="test-path-task__profile-line">关联概念 ID：{{ task.linkedConceptId }}</span>
+                              <span v-if="normalizedTaskObjectives(task).length">学习目标：{{ normalizedTaskObjectives(task).join(' / ') }}</span>
+                            </div>
+                          </div>
+                          <div class="test-path-detail-chip-row">
+                            <span class="test-path-detail-chip">{{ getStatusText(task.status) }}</span>
+                            <span class="test-path-detail-chip">{{ getTaskTypeText(task.taskType) }}</span>
+                            <span class="test-path-detail-chip">{{ task.estimatedMinutes || 0 }} 分钟</span>
+                            <span v-if="task.knowledgeType" class="test-path-detail-chip test-path-detail-chip--accent">{{ task.knowledgeType }}</span>
+                            <span v-if="task.cognitiveLevel" class="test-path-detail-chip test-path-detail-chip--accent">{{ task.cognitiveLevel }}</span>
+                          </div>
+                        </div>
+
+                        <div class="test-path-task__actions">
+                          <button v-if="task.status !== 'completed'" class="test-path-detail-btn test-path-detail-btn--primary" :disabled="!canStartLearning" @click="startTask(task)">
+                            {{ canStartLearning ? (task.status === 'in_progress' ? '继续' : '开始') : '等待生成' }}
+                          </button>
+                          <button v-else-if="task.hasTeachingWrapup" class="test-path-detail-btn test-path-detail-btn--ghost" @click="viewTaskEvaluation(task)">查看当堂评估</button>
+                        </div>
+                      </article>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+          </section>
+
+          <aside class="test-path-detail-sidebar">
+            <section class="test-path-detail-card">
+              <span class="test-path-detail-eyebrow">生成状态</span>
+              <div class="test-path-detail-kv-list">
+                <div class="test-path-detail-kv"><span>core</span><strong>{{ generationStatus?.core || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>当前步骤</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>阶段任务状态</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>来源对话 ID</span><strong>{{ generationStatus?.sourceConversationId || '--' }}</strong></div>
+                <div class="test-path-detail-kv"><span>可开始学习</span><strong>{{ canStartLearning ? '是' : '否' }}</strong></div>
+              </div>
+            </section>
+
+            <section class="test-path-detail-card">
+              <span class="test-path-detail-eyebrow">当前建议</span>
+              <div class="test-path-detail-plan-list">
+                <article v-for="item in pathDetailPlan" :key="item.title" class="test-path-detail-plan-item">
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.desc }}</p>
+                </article>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </template>
+    </main>
+
+    <button v-if="processDetail" type="button" class="test-path-debug-float-btn" @click="pathDebugDrawerVisible = true">
+      <strong>Path / Raw</strong>
+      <span>{{ pathDebugQuickChipText }}</span>
+    </button>
+
+    <el-drawer
+      v-if="processDetail"
+      v-model="pathDebugDrawerVisible"
+      title="路径调试数据"
+      size="min(92vw, 1080px)"
+      destroy-on-close
+      class="test-path-debug-drawer"
+    >
+      <div class="test-path-debug-drawer__body">
+        <div class="test-path-debug-panel__actions">
+          <button class="test-path-detail-btn test-path-detail-btn--ghost" :disabled="loading" @click="refreshPathDebugPanel">刷新调试数据</button>
+        </div>
+
+        <div class="test-path-debug-toolbar">
+          <span v-for="item in pathDebugQuickChips" :key="item.label" class="test-path-debug-quick-chip">
+            <strong>{{ item.label }}</strong>
+            <em>{{ item.value }}</em>
+          </span>
+        </div>
+
+        <section class="test-path-detail-card test-path-detail-card--process test-path-detail-process-section">
           <div class="test-path-detail-section-head">
             <div>
               <span class="test-path-detail-eyebrow">路径调试</span>
@@ -285,111 +415,8 @@
             </section>
           </div>
         </section>
-
-        <section class="test-path-detail-grid test-path-detail-grid--content">
-          <section class="test-path-detail-main">
-            <section v-if="showEnrichmentBanner" class="test-path-detail-banner" :class="`test-path-detail-banner--${enrichmentStatus || 'unknown'}`">
-              <div>
-                <strong>{{ enrichmentBannerTitle }}</strong>
-                <p>{{ enrichmentBannerMessage }}</p>
-              </div>
-            </section>
-
-            <section class="test-path-detail-card">
-              <div class="test-path-detail-section-head">
-                <div>
-                  <span class="test-path-detail-eyebrow">显性任务路径</span>
-                  <h2>最终渲染的任务链</h2>
-                </div>
-              </div>
-
-              <div class="test-path-stage-list">
-                <article
-                  v-for="stage in pathStages"
-                  :key="stage.id"
-                  class="test-path-stage"
-                >
-                  <button type="button" class="test-path-stage__head" @click="toggleWeek(stage)">
-                    <div>
-                      <span class="test-path-stage__index">阶段 {{ stage.stageNumber || stage.weekNumber }}</span>
-                      <strong>{{ stage.title }}</strong>
-                      <p>{{ stage.description || stage.goal }}</p>
-                      <div v-if="stage.coreConceptName || stage.coreConceptId" class="test-path-task__profile-copy">
-                        <span class="test-path-task__profile-line">阶段核心概念：{{ stage.coreConceptName || '--' }}</span>
-                        <span class="test-path-task__profile-line">概念 ID：{{ stage.coreConceptId || '--' }}</span>
-                      </div>
-                    </div>
-                    <span class="test-path-stage__meta">{{ getWeekCompletedCount(stage) }}/{{ normalizeTaskList(stage).length }}</span>
-                  </button>
-
-                  <div v-if="activeWeeks.includes(stage.stageNumber || stage.weekNumber)" class="test-path-stage__body">
-                    <div class="test-path-task-list">
-                      <article
-                        v-for="task in normalizeTaskList(stage)"
-                        :key="task.id"
-                        class="test-path-task"
-                        :class="{ 'test-path-task--locked': !canStartLearning && task.status !== 'completed' }"
-                      >
-                        <div class="test-path-task__head">
-                          <div>
-                            <strong>{{ task.title }}</strong>
-                            <p>{{ task.description }}</p>
-                            <div v-if="task.displayLabel || task.coreConcept || task.linkedConceptId || normalizedTaskObjectives(task).length" class="test-path-task__profile-copy">
-                              <span v-if="task.displayLabel" class="test-path-task__profile-line">任务标签：{{ task.displayLabel }}</span>
-                              <span v-if="task.coreConcept" class="test-path-task__profile-line">任务命中概念：{{ task.coreConcept }}</span>
-                              <span v-if="task.linkedConceptId" class="test-path-task__profile-line">关联概念 ID：{{ task.linkedConceptId }}</span>
-                              <span v-if="normalizedTaskObjectives(task).length">学习目标：{{ normalizedTaskObjectives(task).join(' / ') }}</span>
-                            </div>
-                          </div>
-                          <div class="test-path-detail-chip-row">
-                            <span class="test-path-detail-chip">{{ getStatusText(task.status) }}</span>
-                            <span class="test-path-detail-chip">{{ getTaskTypeText(task.taskType) }}</span>
-                            <span class="test-path-detail-chip">{{ task.estimatedMinutes || 0 }} 分钟</span>
-                            <span v-if="task.knowledgeType" class="test-path-detail-chip test-path-detail-chip--accent">{{ task.knowledgeType }}</span>
-                            <span v-if="task.cognitiveLevel" class="test-path-detail-chip test-path-detail-chip--accent">{{ task.cognitiveLevel }}</span>
-                          </div>
-                        </div>
-
-                        <div class="test-path-task__actions">
-                          <button v-if="task.status !== 'completed'" class="test-path-detail-btn test-path-detail-btn--primary" :disabled="!canStartLearning" @click="startTask(task)">
-                            {{ canStartLearning ? (task.status === 'in_progress' ? '继续' : '开始') : '等待生成' }}
-                          </button>
-                          <button v-else-if="task.hasTeachingWrapup" class="test-path-detail-btn test-path-detail-btn--ghost" @click="viewTaskEvaluation(task)">查看当堂评估</button>
-                        </div>
-                      </article>
-                    </div>
-                  </div>
-                </article>
-              </div>
-            </section>
-
-          </section>
-
-          <aside class="test-path-detail-sidebar">
-            <section class="test-path-detail-card">
-              <span class="test-path-detail-eyebrow">生成状态</span>
-              <div class="test-path-detail-kv-list">
-                <div class="test-path-detail-kv"><span>core</span><strong>{{ generationStatus?.core || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>当前步骤</span><strong>{{ generationStatus?.coreStep || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>阶段任务状态</span><strong>{{ enrichmentStatus || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>来源对话 ID</span><strong>{{ generationStatus?.sourceConversationId || '--' }}</strong></div>
-                <div class="test-path-detail-kv"><span>可开始学习</span><strong>{{ canStartLearning ? '是' : '否' }}</strong></div>
-              </div>
-            </section>
-
-            <section class="test-path-detail-card">
-              <span class="test-path-detail-eyebrow">当前建议</span>
-              <div class="test-path-detail-plan-list">
-                <article v-for="item in pathDetailPlan" :key="item.title" class="test-path-detail-plan-item">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.desc }}</p>
-                </article>
-              </div>
-            </section>
-          </aside>
-        </section>
-      </template>
-    </main>
+      </div>
+    </el-drawer>
 
     <el-dialog v-model="evaluationDialogVisible" title="当堂评估" width="760px">
       <div v-loading="evaluationLoading" class="test-path-detail-evaluation-dialog">
@@ -433,6 +460,7 @@ const evaluationDialogVisible = ref(false);
 const evaluationLoading = ref(false);
 const selectedTaskEvaluation = ref<TaskEvaluationDetail | null>(null);
 const retryingEnrichment = ref(false);
+const pathDebugDrawerVisible = ref(false);
 let enrichmentPollingTimer: number | null = null;
 let enrichmentPollingInFlight = false;
 
@@ -602,6 +630,23 @@ const virtualDebugSummary = computed(() => {
   ].filter(Boolean).join(' · ');
 });
 
+const pathDebugQuickChips = computed(() => {
+  if (!processDetail.value) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: 'Goal', value: processDetail.value.source || '--' },
+    { label: 'Core', value: generationStatus.value?.coreStep || generationStatus.value?.core || '--' },
+    { label: '概念', value: `${cognitiveConcepts.value.length}` },
+    { label: '任务画像', value: `${taskProfiles.value.length}` },
+    { label: '覆盖率', value: taskProfileCoverageLabel.value },
+  ];
+});
+
+const pathDebugQuickChipText = computed(() => {
+  const parts = pathDebugQuickChips.value.slice(0, 3).map((item) => `${item.label} ${item.value}`);
+  return parts.length > 0 ? parts.join(' · ') : '查看路径原始数据';
+});
+
 const formatTaskAnnotationConfidence = (value: any) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
   return `${Math.round(value * 100)}%`;
@@ -680,6 +725,10 @@ const loadPathData = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const refreshPathDebugPanel = async () => {
+  await loadPathData();
 };
 const toggleWeek = (week: any) => {
   const weekNumber = week.stageNumber || week.weekNumber;
@@ -985,6 +1034,78 @@ onUnmounted(() => {
 
 .test-path-detail-process-section {
   margin-bottom: 20px;
+}
+
+.test-path-debug-float-btn {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 1100;
+  display: grid;
+  gap: 4px;
+  min-width: 156px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
+  color: #fff;
+  text-align: left;
+}
+
+.test-path-debug-float-btn strong {
+  font-size: 14px;
+}
+
+.test-path-debug-float-btn span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.test-path-debug-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+}
+
+.test-path-debug-drawer :deep(.el-drawer__body) {
+  padding-top: 0;
+}
+
+.test-path-debug-drawer__body {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.test-path-debug-panel__actions,
+.test-path-debug-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.test-path-debug-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.test-path-debug-quick-chip strong {
+  font-size: 12px;
+  color: #172033;
+}
+
+.test-path-debug-quick-chip em {
+  font-style: normal;
+  font-size: 12px;
+  color: #66758d;
+  font-weight: 700;
 }
 
 .test-path-detail-kv {
@@ -1815,6 +1936,13 @@ onUnmounted(() => {
   .test-path-detail-header__inner,
   .test-path-detail-shell {
     width: calc(100% - 24px);
+  }
+
+  .test-path-debug-float-btn {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    min-width: 0;
   }
 
   .test-path-detail-nav {

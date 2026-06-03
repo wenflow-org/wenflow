@@ -437,11 +437,17 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         component: () => import('@/views/Dashboard.vue'),
         meta: { title: '测试学习台', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
       },
-{
+      {
+        path: 'test/skill-prompt-preview',
+        name: 'AdminSkillPromptPreview',
+        component: () => import('@/views/admin/SkillPromptPreview.vue'),
+        meta: { title: 'Skill Prompt 预览', requiresAdminAuth: true, adminGroup: 'devDebug' }
+      },
+      {
         path: 'test/prompt-stability',
         name: 'AdminPromptStability',
-        component: () => import('@/views/admin/PromptStability.vue'),
-        meta: { title: 'Prompt 稳定性', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        redirect: '/admin/test/skill-prompt-preview',
+        meta: { title: 'Skill Prompt 预览', requiresAdminAuth: true, adminGroup: 'devDebug' }
       },
       {
         path: 'test/goal-full/:conversationId?',

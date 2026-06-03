@@ -261,70 +261,6 @@
                     </div>
                   </details>
 
-                  <details v-if="path.generationStatus?.sourceConversationId" class="path-overview-card__goal-input">
-                    <summary class="path-overview-card__goal-toggle">
-                      <span>目标输入</span>
-                      <el-icon><ArrowDown /></el-icon>
-                    </summary>
-                    <div class="path-overview-card__goal-content">
-                <div class="goal-row">
-                  <span class="goal-label">来源对话</span>
-                  <span class="goal-value goal-value--id">{{ path.generationStatus.sourceConversationId }}</span>
-                </div>
-                      <button 
-                        v-if="!goalDataCache[path.generationStatus.sourceConversationId]" 
-                        class="goal-load-btn" 
-                        @click="loadGoalData(path.generationStatus.sourceConversationId)"
-                        :disabled="loadingGoalId === path.generationStatus.sourceConversationId"
-                      >
-                        <el-icon v-if="loadingGoalId === path.generationStatus.sourceConversationId"><Loading /></el-icon>
-                        <span>{{ loadingGoalId === path.generationStatus.sourceConversationId ? '加载中...' : '加载数据' }}</span>
-                      </button>
-                      <template v-else>
-                        <div v-if="goalDataCache[path.generationStatus.sourceConversationId]?.understanding?.real_problem" class="goal-row goal-row--block">
-                          <span class="goal-label">真实问题</span>
-                          <p class="goal-text">{{ goalDataCache[path.generationStatus.sourceConversationId].understanding.real_problem }}</p>
-                        </div>
-                        <div v-if="goalDataCache[path.generationStatus.sourceConversationId]?.understanding?.pain_points" class="goal-row goal-row--block">
-                          <span class="goal-label">核心痛点</span>
-                          <p class="goal-text">{{ goalDataCache[path.generationStatus.sourceConversationId].understanding.pain_points }}</p>
-                        </div>
-                        <div v-if="goalDataCache[path.generationStatus.sourceConversationId]?.understanding?.motivation" class="goal-row goal-row--block">
-                          <span class="goal-label">学习动机</span>
-                          <p class="goal-text">{{ goalDataCache[path.generationStatus.sourceConversationId].understanding.motivation }}</p>
-                        </div>
-                        <div v-if="goalDataCache[path.generationStatus.sourceConversationId]?.confirmedProposal" class="goal-row goal-row--block">
-                          <span class="goal-label">确认方案</span>
-                          <div class="goal-proposal">
-                            <p v-if="goalDataCache[path.generationStatus.sourceConversationId].confirmedProposal.problemText">
-                              <strong>方向：</strong>{{ goalDataCache[path.generationStatus.sourceConversationId].confirmedProposal.problemText }}
-                            </p>
-                            <p v-if="goalDataCache[path.generationStatus.sourceConversationId].confirmedProposal.deliverableText">
-                              <strong>首个交付：</strong>{{ goalDataCache[path.generationStatus.sourceConversationId].confirmedProposal.deliverableText }}
-                            </p>
-                            <p v-if="goalDataCache[path.generationStatus.sourceConversationId].confirmedProposal.keyStages?.length">
-                              <strong>阶段：</strong>{{ goalDataCache[path.generationStatus.sourceConversationId].confirmedProposal.keyStages.join(' → ') }}
-                            </p>
-                          </div>
-                        </div>
-                        <div v-if="goalDataCache[path.generationStatus.sourceConversationId]?.understanding?.background" class="goal-row">
-                          <span class="goal-label">资源画像</span>
-                          <span class="goal-value">
-                            <span v-if="goalDataCache[path.generationStatus.sourceConversationId].understanding.background.expected_time">
-                              周期：{{ goalDataCache[path.generationStatus.sourceConversationId].understanding.background.expected_time }}
-                            </span>
-                            <span v-if="goalDataCache[path.generationStatus.sourceConversationId].understanding.background.available_time">
-                              · 时间：{{ goalDataCache[path.generationStatus.sourceConversationId].understanding.background.available_time }}
-                            </span>
-                            <span v-if="goalDataCache[path.generationStatus.sourceConversationId].understanding.background.urgency">
-                              · 紧迫度：{{ goalDataCache[path.generationStatus.sourceConversationId].understanding.background.urgency }}
-                            </span>
-                          </span>
-                        </div>
-                      </template>
-                    </div>
-                  </details>
-
                   <div class="path-overview-card__actions-row">
                     <button type="button" class="btn btn-primary" @click="continuePath(path)">继续</button>
                     <button type="button" class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
@@ -343,6 +279,85 @@
         </section>
       </div>
     </main>
+
+    <button v-if="sortedPaths.length > 0" type="button" class="paths-debug-float-btn" @click="pathsDebugDrawerVisible = true">
+      <strong>Goal / Raw</strong>
+      <span>{{ pathsDebugQuickChipText }}</span>
+    </button>
+
+    <el-drawer
+      v-if="sortedPaths.length > 0"
+      v-model="pathsDebugDrawerVisible"
+      title="Path Goal / Raw"
+      size="min(92vw, 860px)"
+      destroy-on-close
+      class="paths-debug-drawer"
+    >
+      <div class="paths-debug-drawer__body">
+        <div class="paths-debug-panel__actions">
+          <button type="button" class="btn btn-ghost" :disabled="loading" @click="loadPaths">刷新路径</button>
+          <button
+            v-if="currentDebugConversationId && !currentDebugGoalRaw"
+            type="button"
+            class="btn btn-primary"
+            :disabled="loadingGoalId === currentDebugConversationId"
+            @click="loadGoalData(currentDebugConversationId)"
+          >
+            {{ loadingGoalId === currentDebugConversationId ? '加载 Goal 原始数据中...' : '加载 Goal 原始数据' }}
+          </button>
+        </div>
+
+        <div class="paths-debug-toolbar">
+          <span v-for="item in pathsDebugQuickChips" :key="item.label" class="paths-debug-quick-chip">
+            <strong>{{ item.label }}</strong>
+            <em>{{ item.value }}</em>
+          </span>
+        </div>
+
+        <div class="paths-debug-path-switch">
+          <button
+            v-for="path in debuggablePaths"
+            :key="path.id"
+            type="button"
+            class="paths-debug-path-chip"
+            :class="{ 'paths-debug-path-chip--active': currentDebugPath?.id === path.id }"
+            @click="selectDebugPath(path.id)"
+          >
+            <strong>{{ getPathTitle(path) }}</strong>
+            <span>{{ getPathStateLabel(path) }}</span>
+          </button>
+        </div>
+
+        <section class="paths-debug-section" v-if="currentDebugPath">
+          <div class="paths-debug-section__head">
+            <div>
+              <span class="pill">当前路径</span>
+              <h3>{{ getPathTitle(currentDebugPath) }}</h3>
+            </div>
+            <span class="paths-debug-state-pill">{{ getPathStateLabel(currentDebugPath) }}</span>
+          </div>
+
+          <p class="paths-debug-section__summary">{{ getPathSummary(currentDebugPath) }}</p>
+
+          <div class="paths-debug-kv-grid">
+            <div v-for="item in currentDebugPathMetaItems" :key="item.label" class="paths-debug-kv-item">
+              <span>{{ item.label }}</span>
+              <p>{{ item.value }}</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="paths-debug-json-grid">
+          <details v-for="card in currentDebugJsonCards" :key="card.key" class="paths-debug-json-card">
+            <summary>
+              <span>{{ card.title }}</span>
+              <em>{{ card.badge }}</em>
+            </summary>
+            <pre>{{ card.content }}</pre>
+          </details>
+        </div>
+      </div>
+    </el-drawer>
 
     <el-dialog
       v-model="showDeleteDialog"
@@ -412,8 +427,7 @@ import {
   Delete,
   More,
   Refresh,
-  ArrowDown,
-  Loading
+  ArrowDown
 } from '@element-plus/icons-vue';
 import request from '@/utils/request';
 import { learningAPI } from '@/api/learning';
@@ -438,6 +452,8 @@ const selectedPathIds = ref<string[]>([]);
 const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
 const goalDataCache = ref<Record<string, any>>({});
 const loadingGoalId = ref<string | null>(null);
+const pathsDebugDrawerVisible = ref(false);
+const debugPathId = ref('');
 let generatingAlertTimer: number | null = null;
 
 const formatCreatedAt = (value: string | null | undefined) => {
@@ -781,6 +797,110 @@ const goalSceneSteps = computed(() => {
   ];
 });
 
+const debuggablePaths = computed(() => sortedPaths.value.filter((path: any) => Boolean(
+  path?.generationStatus?.sourceConversationId
+  || path?.sceneSummary
+  || path?.generationStatus
+)));
+
+const currentDebugPath = computed(() => {
+  return debuggablePaths.value.find((path: any) => path.id === debugPathId.value)
+    || goalScenePath.value
+    || primaryPath.value
+    || debuggablePaths.value[0]
+    || null;
+});
+
+const currentDebugConversationId = computed(() => {
+  const raw = currentDebugPath.value?.generationStatus?.sourceConversationId;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+});
+
+const currentDebugGoalRaw = computed(() => {
+  return currentDebugConversationId.value
+    ? goalDataCache.value[currentDebugConversationId.value]?.raw || null
+    : null;
+});
+
+const currentDebugPathMetaItems = computed(() => {
+  const path = currentDebugPath.value;
+  if (!path) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: 'pathId', value: path.id || '--' },
+    { label: 'sourceConversationId', value: currentDebugConversationId.value || '--' },
+    { label: 'state', value: getPathStateLabel(path) },
+    { label: 'coreStep', value: path?.generationStatus?.coreStep || '--' },
+    { label: 'estimatedHours', value: `${getPathEstimatedHours(path)} 小时` },
+    { label: 'progress', value: `${getPathProgress(path)}%` },
+  ];
+});
+
+const formatDebugJson = (value: any, emptyText = '当前没有可展示的数据。') => {
+  if (value === null || value === undefined || value === '') return emptyText;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const currentDebugJsonCards = computed(() => {
+  const path = currentDebugPath.value;
+  if (!path) return [] as Array<{ key: string; title: string; badge: string; content: string }>;
+
+  return [
+    {
+      key: 'sceneSummary',
+      title: 'sceneSummary',
+      badge: 'path summary',
+      content: formatDebugJson(path.sceneSummary, '当前没有 sceneSummary。')
+    },
+    {
+      key: 'generationStatus',
+      title: 'generationStatus',
+      badge: 'path status',
+      content: formatDebugJson(path.generationStatus, '当前没有 generationStatus。')
+    },
+    {
+      key: 'goalConversationRaw',
+      title: 'goalConversationRaw',
+      badge: 'goal raw',
+      content: currentDebugConversationId.value
+        ? formatDebugJson(currentDebugGoalRaw.value, '当前还没有加载这条路径的 Goal 原始数据。')
+        : '当前路径没有 sourceConversationId。'
+    },
+    {
+      key: 'pathSnapshot',
+      title: 'pathSnapshot',
+      badge: 'path raw',
+      content: formatDebugJson(path, '当前没有路径快照。')
+    },
+  ];
+});
+
+const pathsDebugQuickChips = computed(() => {
+  const path = currentDebugPath.value;
+  if (!path) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: '路径', value: getPathTitle(path) },
+    { label: '状态', value: getPathStateLabel(path) },
+    currentDebugConversationId.value ? { label: 'Goal', value: currentDebugConversationId.value.slice(0, 8) } : null,
+    path?.generationStatus?.stageDesign ? { label: 'Stage', value: String(path.generationStatus.stageDesign) } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+});
+
+const pathsDebugQuickChipText = computed(() => {
+  const parts = pathsDebugQuickChips.value.slice(0, 3).map((item) => `${item.label} ${item.value}`);
+  return parts.length > 0 ? parts.join(' · ') : '查看 Goal 与原始数据';
+});
+
+const selectDebugPath = (pathId: string) => {
+  debugPathId.value = pathId;
+};
+
 const POLLING_INTERVAL_MS = 5000;
 const POLLING_BACKOFF_INTERVAL_MS = 30000;
 
@@ -1013,6 +1133,7 @@ const loadGoalData = async (conversationId: string) => {
     const response = await request.get(`/goal-conversation/${conversationId}`);
     const data = response.data.data;
     goalDataCache.value[conversationId] = {
+      raw: data,
       understanding: data.understanding || data.collected?.understanding || {},
       confirmedProposal: data.confirmedProposal || data.collected?.confirmedProposal || null,
       collected: data.collected || {}
@@ -1024,6 +1145,23 @@ const loadGoalData = async (conversationId: string) => {
     loadingGoalId.value = null;
   }
 };
+
+watch(debuggablePaths, (list) => {
+  if (list.length === 0) {
+    debugPathId.value = '';
+    return;
+  }
+
+  const exists = list.some((path: any) => path.id === debugPathId.value);
+  if (!exists) {
+    debugPathId.value = goalScenePath.value?.id || primaryPath.value?.id || list[0].id;
+  }
+}, { immediate: true });
+
+watch([pathsDebugDrawerVisible, currentDebugConversationId], ([visible, conversationId]) => {
+  if (!visible || !conversationId || goalDataCache.value[conversationId]) return;
+  void loadGoalData(conversationId);
+});
 
 onMounted(() => {
   if (route.query.from === 'goal' && route.query.auto === '1') {
@@ -1920,6 +2058,207 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
+.paths-debug-float-btn {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 1100;
+  display: grid;
+  gap: 4px;
+  min-width: 156px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #3478f6, #1f57cc);
+  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
+  color: #fff;
+  text-align: left;
+}
+
+.paths-debug-float-btn strong {
+  font-size: 14px;
+}
+
+.paths-debug-float-btn span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.paths-debug-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+}
+
+.paths-debug-drawer :deep(.el-drawer__body) {
+  padding-top: 0;
+}
+
+.paths-debug-drawer__body,
+.paths-debug-json-grid,
+.paths-debug-kv-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.paths-debug-drawer__body {
+  padding-bottom: 24px;
+}
+
+.paths-debug-panel__actions,
+.paths-debug-toolbar,
+.paths-debug-path-switch,
+.paths-debug-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.paths-debug-quick-chip,
+.paths-debug-state-pill {
+  display: inline-flex;
+  align-items: center;
+}
+
+.paths-debug-quick-chip {
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.paths-debug-quick-chip strong {
+  font-size: 12px;
+  color: #172033;
+}
+
+.paths-debug-quick-chip em {
+  font-style: normal;
+  font-size: 12px;
+  color: #66758d;
+  font-weight: 700;
+}
+
+.paths-debug-path-chip {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  background: rgba(255, 255, 255, 0.82);
+  text-align: left;
+  cursor: pointer;
+}
+
+.paths-debug-path-chip strong {
+  font-size: 13px;
+  color: #172033;
+}
+
+.paths-debug-path-chip span {
+  font-size: 11px;
+  color: #66758d;
+}
+
+.paths-debug-path-chip--active {
+  border-color: rgba(52, 120, 246, 0.24);
+  background: rgba(52, 120, 246, 0.08);
+}
+
+.paths-debug-section {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(205, 216, 238, 0.9);
+}
+
+.paths-debug-section__head {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.paths-debug-section__head h3 {
+  margin: 0.6rem 0 0;
+  color: #172033;
+  font-size: 1.15rem;
+}
+
+.paths-debug-section__summary {
+  margin: 0;
+  color: #66758d;
+  line-height: 1.6;
+}
+
+.paths-debug-state-pill {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.paths-debug-kv-grid,
+.paths-debug-json-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.paths-debug-kv-item,
+.paths-debug-json-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.82);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+}
+
+.paths-debug-kv-item span {
+  display: block;
+  font-size: 12px;
+  color: #66758d;
+  margin-bottom: 6px;
+}
+
+.paths-debug-kv-item p {
+  margin: 0;
+  color: #172033;
+  line-height: 1.6;
+}
+
+.paths-debug-json-card summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.paths-debug-json-card summary em {
+  font-style: normal;
+  font-size: 12px;
+  color: #66758d;
+}
+
+.paths-debug-json-card pre {
+  margin: 12px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .path-overview-card__actions-row {
   display: flex;
   gap: 0.75rem;
@@ -2024,6 +2363,11 @@ onUnmounted(() => {
   .header-nav {
     flex-wrap: wrap;
   }
+
+  .paths-debug-kv-grid,
+  .paths-debug-json-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2042,6 +2386,13 @@ onUnmounted(() => {
 
   .header-nav {
     display: none;
+  }
+
+  .paths-debug-float-btn {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    min-width: 0;
   }
 }
 </style>

@@ -216,6 +216,16 @@ export interface LearnerStateSummary {
 export interface AdaptiveGuidancePayload {
   copy: AdaptiveGuidanceCopy;
   summary: LearnerStateSummary;
+  debug?: {
+    skillId: string;
+    model: string | null;
+    systemPromptVersion: number | null;
+    userPayload: string;
+    rawModelOutput: string;
+    normalizedOutput: AdaptiveGuidanceCopy | null;
+    durationMs: number;
+    cached: boolean;
+  } | null;
 }
 
 export interface PathReplanResponse {

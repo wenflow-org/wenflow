@@ -23,6 +23,15 @@ router.get('/copy', async (req: any, res) => {
       ? req.query.view
       : 'dashboard';
     const pathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
+    const sourceEntry = typeof req.headers['x-source-entry'] === 'string' ? req.headers['x-source-entry'] : '';
+    const debugOperatorId = req.user?.projection?.issuedByAdminId || userId;
+    const debugOperator = sourceEntry === 'test' && debugOperatorId
+      ? await prisma.users.findUnique({
+          where: { id: debugOperatorId },
+          select: { isAdmin: true }
+        }).catch(() => null)
+      : null;
+    const canIncludeDebug = sourceEntry === 'test' && (req.user?.isAdmin === true || debugOperator?.isAdmin === true);
 
     const learnerSnapshot = await learnerSnapshotService.getSnapshot({
       userId,
@@ -63,7 +72,14 @@ router.get('/copy', async (req: any, res) => {
       advisory,
     });
 
-    return res.json({ success: true, data: { copy: result.output, summary } });
+    return res.json({
+      success: true,
+      data: {
+        copy: result.output,
+        summary,
+        ...(canIncludeDebug && result.debug ? { debug: result.debug } : {}),
+      }
+    });
   } catch (error: any) {
     logger.error('[adaptive-guidance] copy failed', { error: error?.message || String(error) });
     return res.status(500).json({ success: false, error: error?.message || '生成引导文案失败' });

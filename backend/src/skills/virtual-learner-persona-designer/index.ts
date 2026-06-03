@@ -23,6 +23,8 @@ export const VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT = `你是一位“虚拟学
 9. 如果提供 recentPersonaHints，要尽量避开最近重复的人物组合与表达模板。
 10. 如果提供 existingPersonaSeed，优先保留该人物的长期底色，做增强而不是重造。
 11. 保持字段精简，不要堆砌同义字段；如果两个字段表达接近，以更具体、更可观察的那个为准。
+12. 所有必填字段都必须给出具体、非空、可观察的内容；不要留空，不要写“待补充/未明确/通用模板”。
+13. 如果你发现自己想写“最近在真实任务中遇到了一个需要尽快补上的问题”“先按自己的理解试一次”这类安全兜底句，说明这次生成还不够具体，必须重写。
 
 可选输入：
 - preferredLevels: 倾向的学习起点标签（仅作弱参考）
@@ -121,8 +123,8 @@ function normalizeConceptArray(value: any): string[] {
   return normalizeStringArray(value).slice(0, 4);
 }
 
-function normalizeEnum<T extends string>(value: any, allowed: T[], fallback: T): T {
-  return allowed.includes(value) ? value : fallback;
+function isAllowedEnum<T extends string>(value: any, allowed: T[]): value is T {
+  return allowed.includes(value);
 }
 
 const DEFAULT_CANDIDATE_PERSONAS = [
@@ -149,52 +151,91 @@ const DEFAULT_RECENT_PERSONA_HINTS = [
   '优先拉开职业背景、时间条件和求助风格的分布',
 ];
 
-function buildTraitFallbackSeed(personaSeed: any) {
-  const occupation = normalizeString(personaSeed?.occupation) || '在职学习者';
-  const background = normalizeString(personaSeed?.background) || '最近长期处在一种想补能力、但又总被现实琐事打断的状态。';
+function validatePersonaOutput(parsed: any): { valid: boolean; failureReason?: string } {
+  const personaSeed = parsed?.personaSeed && typeof parsed.personaSeed === 'object' ? parsed.personaSeed : parsed;
+  if (!personaSeed || typeof personaSeed !== 'object') {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: personaSeed is required' };
+  }
 
-  return {
-    corePersonality: `${occupation}，习惯先从眼前场景判断有没有用，不会轻易接受脱离现实的建议。`,
-    emotionalBaseline: `${background}让他在碰到新方法或陌生要求时更容易出现紧张、迟疑或自我怀疑。`,
-    helpSeekingPattern: '通常会先按自己的理解试一次，确认还是卡住后才会问，而且更想听贴近自己场景的例子。',
-    adversarialPattern: '如果建议听起来太理想化、太花时间，第一反应往往是先保留、先问“现实里真能这样做吗”。',
-    selfAwarenessPattern: '能感觉到自己不顺，但未必能立刻把根因说清，也不一定会第一时间承认自己没懂。',
-    planningFollowThrough: '更容易被现实截止时间推动，而不是稳定地提前拆解和复盘；一旦掉队，通常先拖一拖再补。',
-    overloadReaction: '一旦信息过多或步骤太密，会先抓最表面的可执行点，后面再慢慢补理解。',
-    memoryRepairPattern: '忘了或没完全懂时，容易先用模糊说法带过，暴露后才承认自己其实没抓稳。',
-    behavioralProfileSummary: `${occupation}会带着真实限制来求助，既想推进问题，又会被现实压力和过去的卡点拖住。`
-  };
+  const requiredStringFields = [
+    'nameHint',
+    'occupation',
+    'education',
+    'background',
+    'corePersonality',
+    'emotionalBaseline',
+    'helpSeekingPattern',
+    'adversarialPattern',
+    'selfAwarenessPattern',
+    'planningFollowThrough',
+    'overloadReaction',
+    'memoryRepairPattern',
+    'behavioralProfileSummary',
+  ];
+
+  const missingFields = requiredStringFields.filter((field) => !normalizeString(personaSeed[field]));
+  if (missingFields.length > 0) {
+    return { valid: false, failureReason: `PERSONA_OUTPUT_INVALID: missing required fields: ${missingFields.join(', ')}` };
+  }
+
+  if (!Number.isFinite(Number(personaSeed.age))) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: age must be a number' };
+  }
+
+  if (normalizeConceptArray(personaSeed.knownConcepts).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: knownConcepts must contain at least one item' };
+  }
+
+  if (normalizeConceptArray(personaSeed.struggleConcepts).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: struggleConcepts must contain at least one item' };
+  }
+
+  if (!isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening'])) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: learningStyle is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant'])) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: availableTime is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.techComfort, ['low', 'medium', 'high'])) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: techComfort is invalid' };
+  }
+
+  return { valid: true };
 }
 
 function normalizePersonaOutput(raw: any) {
   const personaSeed = raw?.personaSeed && typeof raw.personaSeed === 'object' ? raw.personaSeed : raw || {};
-  const traitFallbacks = buildTraitFallbackSeed(personaSeed);
+  const selfAwarenessPattern = normalizeString(personaSeed.selfAwarenessPattern);
+  const planningFollowThrough = normalizeString(personaSeed.planningFollowThrough);
+  const overloadReaction = normalizeString(personaSeed.overloadReaction);
 
   return {
     personaSeed: {
-      nameHint: normalizeString(personaSeed.nameHint) || '真实学习者',
-      age: Number.isFinite(Number(personaSeed.age)) ? Math.max(18, Math.min(60, Number(personaSeed.age))) : 26,
-      occupation: normalizeString(personaSeed.occupation) || '在职学习者',
-      education: normalizeString(personaSeed.education) || '本科',
-      background: normalizeString(personaSeed.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。',
+      nameHint: normalizeString(personaSeed.nameHint),
+      age: Math.max(18, Math.min(60, Number(personaSeed.age))),
+      occupation: normalizeString(personaSeed.occupation),
+      education: normalizeString(personaSeed.education),
+      background: normalizeString(personaSeed.background),
       knownConcepts: normalizeConceptArray(personaSeed.knownConcepts),
       struggleConcepts: normalizeConceptArray(personaSeed.struggleConcepts),
-      learningStyle: normalizeEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening'], 'reading'),
-      availableTime: normalizeEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant'], 'minimal'),
-      techComfort: normalizeEnum(personaSeed.techComfort, ['low', 'medium', 'high'], 'medium'),
-      corePersonality: normalizeString(personaSeed.corePersonality) || traitFallbacks.corePersonality,
-      emotionalBaseline: normalizeString(personaSeed.emotionalBaseline) || traitFallbacks.emotionalBaseline,
-      helpSeekingPattern: normalizeString(personaSeed.helpSeekingPattern) || traitFallbacks.helpSeekingPattern,
-      adversarialPattern: normalizeString(personaSeed.adversarialPattern) || traitFallbacks.adversarialPattern,
-      selfAwarenessPattern: normalizeString(personaSeed.selfAwarenessPattern) || normalizeString(personaSeed.metacognitiveProfile) || traitFallbacks.selfAwarenessPattern,
-      planningFollowThrough: normalizeString(personaSeed.planningFollowThrough) || normalizeString(personaSeed.selfRegulationStyle) || traitFallbacks.planningFollowThrough,
-      overloadReaction: normalizeString(personaSeed.overloadReaction) || normalizeString(personaSeed.cognitiveLoadTolerance) || traitFallbacks.overloadReaction,
-      memoryRepairPattern: normalizeString(personaSeed.memoryRepairPattern) || traitFallbacks.memoryRepairPattern,
-      behavioralProfileSummary: normalizeString(personaSeed.behavioralProfileSummary) || traitFallbacks.behavioralProfileSummary,
+      learningStyle: personaSeed.learningStyle,
+      availableTime: personaSeed.availableTime,
+      techComfort: personaSeed.techComfort,
+      corePersonality: normalizeString(personaSeed.corePersonality),
+      emotionalBaseline: normalizeString(personaSeed.emotionalBaseline),
+      helpSeekingPattern: normalizeString(personaSeed.helpSeekingPattern),
+      adversarialPattern: normalizeString(personaSeed.adversarialPattern),
+      selfAwarenessPattern,
+      planningFollowThrough,
+      overloadReaction,
+      memoryRepairPattern: normalizeString(personaSeed.memoryRepairPattern),
+      behavioralProfileSummary: normalizeString(personaSeed.behavioralProfileSummary),
       // Backfill legacy field names so existing profile pages and session logic can keep working.
-      metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile) || normalizeString(personaSeed.selfAwarenessPattern) || traitFallbacks.selfAwarenessPattern,
-      selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle) || normalizeString(personaSeed.planningFollowThrough) || traitFallbacks.planningFollowThrough,
-      cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance) || normalizeString(personaSeed.overloadReaction) || traitFallbacks.overloadReaction,
+      metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile) || selfAwarenessPattern,
+      selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle) || planningFollowThrough,
+      cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance) || overloadReaction,
     }
   };
 }
@@ -216,7 +257,12 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
         recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
         existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
       }),
+      validateParsedOutput: (parsed) => validatePersonaOutput(parsed),
       normalizeOutput: (parsed) => normalizePersonaOutput(parsed),
+      retryStrategy: {
+        maxAttempts: 2,
+        onValidationFail: ({ failureReason }) => `请只输出一个合法 JSON 对象，必须包含完整 personaSeed，所有必填字段都要具体、非空、可观察，禁止使用模板套话或占位词。上次失败原因：${failureReason}`
+      }
     }, input || {});
 
     if (!result.success || !result.output) {

@@ -17,6 +17,7 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
 - 原始学习目标 goal
 - currentLevel
 - timePerDay
+- normalizedInput（如果上游已经做过结构化归一化，这里会作为高优先级种子输入）
 - structuredData
 - confirmedProposal
 - metadata
@@ -30,17 +31,19 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
 4.2 如果 problemSpace.realProblem 缺失，就保持缺失，不要用 learnerProfile.surfaceGoal 自动补齐，更不要把用户原话伪装成诊断结论。
 4.3 problemSpace.realProblem 优先描述用户当前卡住的具体矛盾或阻塞，不要复述成任务计划，也不要只是把 surfaceGoal 换一种说法重写。
 4.4 problemSpace.realProblem 不允许写成“第1步/先做A再做B/梳理-提炼-整合”这类步骤句。
+4.5 如果上游已经明确给出 backgroundExperience、painPoints、learningSignal、constraintsAndBoundaries、scenario、currentPainPoint，请直接保留为结构化字段，不要丢失，也不要改写成更抽象的泛化说法。
 5. 不要在 normalizedInput 中输出 source、mode 这类编排控制字段。
 6. confirmedProposal.keyStages 只保留高层阶段提示，不要原样回声任务步骤句。
 6.1 如果上游 keyStages 更像执行步骤、检查清单、动作链、梳理/提炼/整合式操作语句，不要把它们继续放在 keyStages，留空数组即可。
 6.2 keyStages 是给 path 提供阶段方向提示，不是给隐藏概念层提供命名素材。
-6.3 你还需要根据 timeHorizon、timePerSession、confirmedProposal.keyStages 的信息，为下游 path-agent 与 stage-designer 推算一份 planningHints。planningHints 是节奏建议，不是新增事实。
+6.3 你还需要根据 timeHorizon、timeBudget、timeBudgetCadence、timePerSession、confirmedProposal.keyStages 的信息，为下游 path-agent 与 stage-designer 推算一份 planningHints。planningHints 是节奏建议，不是新增事实。
 6.4 planningHints 的推算目标是：让不同时间窗口下的阶段数、概念数、每阶段任务数更匹配，而不是所有路径都写死成同一个节奏。
 6.5 planningHints.paceSignal 只能是 compact|standard|extended：
 - compact：通常对应 半天 / 1天 / 2天 这类短时窗口
 - standard：通常对应 3-7天 / 1-2周 这类中等窗口
 - extended：通常对应 1个月+ / 未明确 / 更长周期
 6.6 planningHints.milestoneRange、conceptRange、subtasksPerStageRange、subtaskMinutesRange 都是建议范围，不是用户显式提供的事实；请根据输入给出合理范围。
+6.7 timeBudget / timeBudgetCadence 表示用户平时能投入多少学习预算；timeHorizon / deadlineText 表示整体时间窗口或完成窗口。不要把投入预算误写成 timeHorizon，也不要把 timeHorizon 误写成 timeBudget。
 7. 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解释。
 
 请输出：
@@ -55,8 +58,10 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
       },
       "motivation": null,
       "urgency": null,
+      "backgroundExperience": null,
       "painPoints": [],
-      "learningSignal": null
+      "learningSignal": null,
+      "constraintsAndBoundaries": []
     },
     "problemSpace": {
       "realProblem": "",
@@ -64,6 +69,8 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
       "currentPainPoint": null
     },
     "resources": {
+      "timeBudget": null,
+      "timeBudgetCadence": null,
       "timePerWeek": null,
       "timePerSession": null,
       "timeHorizon": null,
@@ -101,6 +108,7 @@ export const pathSceneFramingDefinition: SkillDefinition = {
       goal: { type: 'string', required: true },
       currentLevel: { type: 'string' },
       timePerDay: { type: 'string' },
+      normalizedInput: { type: 'object' },
       structuredData: { type: 'object' },
       confirmedProposal: { type: 'object' },
       metadata: { type: 'object' },
@@ -124,6 +132,7 @@ export interface PathSceneFramingInput {
   goal: string;
   currentLevel?: string;
   timePerDay?: string;
+  normalizedInput?: any;
   structuredData?: any;
   confirmedProposal?: any;
   metadata?: any;
@@ -148,6 +157,8 @@ function isOperationalStageLike(value: string | null): boolean {
 
 type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 
+type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
+
 function clampRange(value: any, fallback: [number, number], minFloor = 1): [number, number] {
   if (!Array.isArray(value) || value.length !== 2) return fallback;
   const first = Number(value[0]);
@@ -158,6 +169,26 @@ function clampRange(value: any, fallback: [number, number], minFloor = 1): [numb
   return [start, end];
 }
 
+function normalizeCadence(value: any): TimeBudgetCadence | null {
+  return value === 'per_day'
+    || value === 'per_week'
+    || value === 'per_session'
+    || value === 'flexible'
+    || value === 'unclear'
+    ? value
+    : null;
+}
+
+function parseBudgetMinutes(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return null;
+  if (/(小时|h|hour)/i.test(value)) return Math.round(amount * 60);
+  return Math.round(amount);
+}
+
 function inferPaceSignal(timeHorizon: string | null): PlanningPaceSignal {
   if (!timeHorizon) return 'extended';
   if (['半天', '1天', '2天'].includes(timeHorizon)) return 'compact';
@@ -165,7 +196,13 @@ function inferPaceSignal(timeHorizon: string | null): PlanningPaceSignal {
   return 'extended';
 }
 
-function derivePlanningHints(timeHorizon: string | null, timePerSession: string | null, keyStages: string[]) {
+function derivePlanningHints(
+  timeHorizon: string | null,
+  timePerSession: string | null,
+  timeBudget: string | null,
+  timeBudgetCadence: TimeBudgetCadence | null,
+  keyStages: string[]
+) {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
 
@@ -210,6 +247,20 @@ function derivePlanningHints(timeHorizon: string | null, timePerSession: string 
       ]
     : defaultMinutesRange;
 
+  const parsedBudgetMinutes = parseBudgetMinutes(timeBudget);
+  if (Number.isFinite(parsedBudgetMinutes)) {
+    const budgetMinutes = parsedBudgetMinutes as number;
+    const isTightBudget = (timeBudgetCadence === 'per_day' && budgetMinutes <= 20)
+      || (timeBudgetCadence === 'per_week' && budgetMinutes <= 90)
+      || (timeBudgetCadence === 'per_session' && budgetMinutes <= 30);
+
+    if (isTightBudget) {
+      milestoneRange = [Math.max(2, milestoneRange[0] - 1), Math.max(3, milestoneRange[1] - 1)];
+      conceptRange = [Math.max(2, conceptRange[0] - 1), Math.max(2, conceptRange[1] - 1)];
+      subtasksPerStageRange = [Math.max(2, subtasksPerStageRange[0] - 1), Math.max(3, subtasksPerStageRange[1] - 1)];
+    }
+  }
+
   return {
     paceSignal,
     milestoneRange,
@@ -220,12 +271,21 @@ function derivePlanningHints(timeHorizon: string | null, timePerSession: string 
   };
 }
 
-function normalizeSceneFramingOutput(output: any) {
+function normalizeSceneFramingOutput(output: any, payload?: PathSceneFramingInput) {
   if (!output || typeof output !== 'object') return output;
 
-  const normalizedInput = output.normalizedInput && typeof output.normalizedInput === 'object'
+  const seedNormalizedInput = payload?.normalizedInput && typeof payload.normalizedInput === 'object'
+    ? payload.normalizedInput
+    : payload?.metadata?.normalizedInput && typeof payload.metadata.normalizedInput === 'object'
+      ? payload.metadata.normalizedInput
+      : {};
+  const modelNormalizedInput = output.normalizedInput && typeof output.normalizedInput === 'object'
     ? output.normalizedInput
     : {};
+  const normalizedInput = {
+    ...seedNormalizedInput,
+    ...modelNormalizedInput,
+  };
   const learnerProfile = normalizedInput.learnerProfile && typeof normalizedInput.learnerProfile === 'object'
     ? normalizedInput.learnerProfile
     : {};
@@ -242,12 +302,14 @@ function normalizeSceneFramingOutput(output: any) {
   const resources = normalizedInput.resources && typeof normalizedInput.resources === 'object'
     ? normalizedInput.resources
     : {};
+  const timeBudget = normalizeString(resources.timeBudget) || normalizeString(resources.timePerWeek);
+  const timeBudgetCadence = normalizeCadence(resources.timeBudgetCadence);
   const timePerSession = normalizeString(resources.timePerSession);
   const timeHorizon = normalizeString(resources.timeHorizon);
   const rawPlanningHints = normalizedInput.planningHints && typeof normalizedInput.planningHints === 'object'
     ? normalizedInput.planningHints
     : null;
-  const derivedPlanningHints = derivePlanningHints(timeHorizon, timePerSession, keyStages);
+  const derivedPlanningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages);
 
   return {
     normalizedInput: {
@@ -255,10 +317,12 @@ function normalizeSceneFramingOutput(output: any) {
       learnerProfile: {
         ...learnerProfile,
         surfaceGoal,
+        backgroundExperience: normalizeString(learnerProfile.backgroundExperience),
         painPoints: normalizeStringArray(learnerProfile.painPoints),
         motivation: normalizeString(learnerProfile.motivation),
         urgency: normalizeString(learnerProfile.urgency),
         learningSignal: normalizeString(learnerProfile.learningSignal),
+        constraintsAndBoundaries: normalizeStringArray(learnerProfile.constraintsAndBoundaries),
         currentBaseline: {
           level: normalizeString(learnerProfile.currentBaseline?.level),
           evidence: normalizeString(learnerProfile.currentBaseline?.evidence),
@@ -271,7 +335,9 @@ function normalizeSceneFramingOutput(output: any) {
         currentPainPoint: normalizeString(problemSpace.currentPainPoint),
       },
       resources: {
-        timePerWeek: normalizeString(resources.timePerWeek),
+        timeBudget,
+        timeBudgetCadence,
+        timePerWeek: normalizeString(resources.timePerWeek) || timeBudget,
         timePerSession,
         timeHorizon,
         deadlineText: normalizeString(resources.deadlineText),
@@ -319,11 +385,12 @@ export async function pathSceneFraming(
         goal: payload.goal,
         currentLevel: payload.currentLevel,
         timePerDay: payload.timePerDay,
+        normalizedInput: payload.normalizedInput || null,
         structuredData: payload.structuredData,
         confirmedProposal: payload.confirmedProposal,
         metadata: payload.metadata || {},
       }),
-      normalizeOutput: (parsed) => normalizeSceneFramingOutput(parsed),
+      normalizeOutput: (parsed, payload) => normalizeSceneFramingOutput(parsed, payload),
     }, input);
 
     if (!result.success || !result.output) {

@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import { runGoalConversationAgent } from '../../agents/goal-conversation-agent';
 import pathOrchestrator, { GoalPathRequest } from '../../orchestrators/path.orchestrator';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 
 interface GoalNormalizedStateV1 {
   version: '1.0';
@@ -742,7 +743,6 @@ async continueConversation(
   ): GoalPathRequest {
     const data = JSON.parse(conversation.collectedData);
     const goalExt = this.getGoalExt(aiResponse.internal);
-    const core = this.getCore(aiResponse.internal);
     const understanding = goalExt.understanding || data.understanding || {};
     const confirmedProposal = goalExt.confirmedProposal ?? data.confirmedProposal ?? null;
     const conversationHistory = Array.isArray(data.messages)
@@ -761,39 +761,11 @@ async continueConversation(
       source: 'goal',
       mode: 'generate',
       rawGoal: conversation.description,
-      visibleSummary: {
-        surfaceGoal: understanding.surface_goal || null,
-        realProblem: understanding.real_problem || null,
-        motivation: understanding.motivation || null,
-        currentBaseline: understanding.current_baseline
-          ? {
-              level: understanding.current_baseline.level || null,
-              evidence: understanding.current_baseline.evidence || null,
-            }
-          : null,
-        resources: understanding.available_resources
-          ? {
-              timePerWeek: understanding.available_resources.time_budget || null,
-              timePerSession: data.collected?.timePerDay || null,
-              timeHorizon: understanding.available_resources.time_horizon || understanding.deadline_text || null,
-              deadlineText: understanding.deadline_text || null,
-            }
-          : null,
-        successCriteria: understanding.success_criteria
-          ? {
-              observableResult: understanding.success_criteria.observable_result || null,
-              acceptanceCheck: understanding.success_criteria.acceptance_check || null,
-            }
-          : null,
-        confirmedProposal: confirmedProposal
-          ? {
-              learningDirection: confirmedProposal.learning_direction || null,
-              firstDeliverable: confirmedProposal.first_deliverable || null,
-              keyStages: Array.isArray(confirmedProposal.key_stages) ? confirmedProposal.key_stages : [],
-              outOfScope: Array.isArray(confirmedProposal.out_of_scope) ? confirmedProposal.out_of_scope : [],
-            }
-          : null,
-      },
+      visibleSummary: buildGoalPathVisibleSummary({
+        understanding,
+        confirmedProposal,
+        collected: data.collected || {},
+      }),
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
     };

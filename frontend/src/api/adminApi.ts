@@ -244,6 +244,7 @@ export interface AdminRegistryAgent {
   role?: string;
   kind?: 'agent' | 'skill' | 'orchestrator' | 'alias';
   aliases?: string[];
+  runtimeEnabled?: boolean;
   lifecycleStatus: 'draft' | 'staging' | 'published';
   status: 'healthy' | 'warning' | 'error' | 'idle';
   callCount: number;
@@ -629,96 +630,14 @@ export const adminAgentPromptsApi = {
   },
 };
 
-export interface PromptStabilityEvalResult {
-  caseId: string;
-  caseName: string;
-  runIndex: number;
-  durationMs: number;
-  input: {
-    userInput: string;
-    conversationContextCount: number;
-    previousState: Record<string, any>;
-  };
-  output: {
-    userVisible: string;
-    stage: string;
-    confidence: number;
-    nextQuestions: string[];
-    quickReplies: Array<{ text?: string; icon?: string } | string>;
-  };
-  debug: {
-    promptVersion: number;
-    attemptCount: number;
-    actualRetryCount: number;
-    formatFailureCount: number;
-    parseMode: string;
-    failureType: string;
-    violations: string[];
-    structuredOutputValid: boolean;
-    attempts: Array<{
-      attemptIndex: number;
-      parseMode: string;
-      structuredOutputValid: boolean;
-      failureType?: string;
-      violations?: string[];
-      rawContent: string;
-    }>;
-  };
-  checks: {
-    singleQuestionRule: boolean;
-    stageValid: boolean;
-    nextQuestionsSingle: boolean;
-    noWrappedUserVisibleJson: boolean;
-  };
-}
-
-export interface PromptStabilityEvalResponse {
-  data: {
-    config: {
-      agentId: string;
-      promptSource: string;
-      promptVersion: number;
-      model: string | null;
-      repeatCount: number;
-      caseCount: number;
-      totalRuns: number;
-    };
-    summary: {
-      structuredSuccessRate: number;
-      proposingRate: number;
-      checkerPassRate: number;
-      avgAttemptCount: number;
-      failureCount: number;
-      parseModeDistribution: Record<string, number>;
-      failureTypeDistribution: Record<string, number>;
-    };
-    results: PromptStabilityEvalResult[];
-  };
-}
-
-export const adminPromptStabilityApi = {
-  run: async (data: {
-    agentId: string;
-    promptVersionId?: string;
-    promptVersion?: number;
-    customPrompt?: string;
-    model?: string;
-    repeatCount?: number;
-    cases: Array<{
-      id?: string;
-      name?: string;
-      messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-      previousState?: Record<string, any> | null;
-    }>;
-  }) => {
-    return adminAxios.post<PromptStabilityEvalResponse>('/admin/prompt-stability/run', data);
-  }
-};
-
 /**
  * Skill 模型配置 API
  */
 export const adminSkillsApi = {
+  getSkills: async () => {
+    return adminAxios.get('/admin/skills');
+  },
+
   getSkillModelConfigs: async () => {
     return adminAxios.get('/admin/skill-model-configs');
   },
@@ -967,9 +886,6 @@ export const adminApi = {
   
   // Agent Prompts
   ...adminAgentPromptsApi,
-
-  // Prompt Stability
-  ...adminPromptStabilityApi,
   
   // Skill Model Configs
   ...adminSkillsApi,

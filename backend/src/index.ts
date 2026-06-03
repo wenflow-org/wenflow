@@ -18,6 +18,19 @@ import learningService from './services/learning/learning.service';
 import { learnerOrchestrator } from './orchestrators/learner.orchestrator';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
+const RETIRED_SKILLS = [
+  'pdf-parser',
+  'time-estimator',
+  'quiz-generation',
+  'exercise-generator',
+  'content-generation',
+  'error-pattern',
+  'code-explainer',
+  'answer-generation',
+  'batch-anderson-labeler',
+  'goal-type-identifier',
+  'task-profile-builder'
+] as const;
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
@@ -343,6 +356,22 @@ async function initializeGateway() {
   return gateway;
 }
 
+async function purgeRetiredSkills() {
+  const retiredSkillNames = [...RETIRED_SKILLS];
+  const retiredAgentIds = retiredSkillNames.map((name) => `skill:${name}`);
+
+  await Promise.all([
+    prisma.skill_registrations.deleteMany({ where: { name: { in: retiredSkillNames } } }),
+    prisma.skill_model_configs.deleteMany({ where: { skillId: { in: retiredSkillNames } } }),
+    prisma.user_skill_configs.deleteMany({ where: { skillName: { in: retiredSkillNames } } }),
+    prisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } })
+  ]);
+
+  logger.info('已清理退役 Skill 配置残留', {
+    retiredSkillCount: retiredSkillNames.length
+  });
+}
+
 /**
  * 初始化 Agent 协作服务
  */
@@ -378,8 +407,9 @@ async function startServer() {
     // 初始化管理员账户
     await initializeAdmin();
 
-// 初始化 EduClaw Gateway
-    await initializeGateway();
+     // 初始化 EduClaw Gateway
+    await purgeRetiredSkills();
+     await initializeGateway();
     
      // 初始化 Agent 协作服务
      await initializeAgentCollaboration();

@@ -4,6 +4,7 @@ import {
   getPathOrchestratorInputConfig,
   type PathOrchestratorInputConfig
 } from '../services/orchestratorConfig.service';
+import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 
 const ORCHESTRATOR_ID = 'path-orchestrator';
 
@@ -24,33 +25,9 @@ interface GoalFinalPayload {
   sourceConversationId?: string;
   existingPathId?: string;
   rawGoal: string;
-   visibleSummary?: {
-     surfaceGoal?: string | null;
-     realProblem?: string | null;
-     motivation?: string | null;
-     currentBaseline?: {
-       level?: string | null;
-       evidence?: string | null;
-     } | null;
-     resources?: {
-       timePerWeek?: string | null;
-       timePerSession?: string | null;
-       timeHorizon?: string | null;
-       deadlineText?: string | null;
-     } | null;
-     successCriteria?: {
-       observableResult?: string | null;
-       acceptanceCheck?: string | null;
-     } | null;
-     confirmedProposal?: {
-       learningDirection?: string | null;
-       firstDeliverable?: string | null;
-       keyStages?: string[];
-       outOfScope?: string[];
-     } | null;
-   } | null;
-   conversationHistory?: Array<{ role: string; content: string }>;
-   finalUserVisible?: string | null;
+  visibleSummary?: GoalPathVisibleSummary | null;
+  conversationHistory?: Array<{ role: string; content: string }>;
+  finalUserVisible?: string | null;
 }
 
 interface NormalizedPathInputV1 {
@@ -63,8 +40,10 @@ interface NormalizedPathInputV1 {
     };
     motivation: string | null;
     urgency: string | null;
+    backgroundExperience: string | null;
     painPoints: string[];
     learningSignal: string | null;
+    constraintsAndBoundaries: string[];
   };
   problemSpace: {
     realProblem: string | null;
@@ -72,6 +51,8 @@ interface NormalizedPathInputV1 {
     currentPainPoint: string | null;
   };
   resources: {
+    timeBudget: string | null;
+    timeBudgetCadence: GoalPathTimeBudgetCadence | null;
     timePerWeek: string | null;
     timePerSession: string | null;
     timeHorizon: string | null;
@@ -144,6 +125,16 @@ class PathOrchestrator {
       .filter((item): item is string => !!item);
   }
 
+  private normalizeCadence(value: any): GoalPathTimeBudgetCadence | null {
+    return value === 'per_day'
+      || value === 'per_week'
+      || value === 'per_session'
+      || value === 'flexible'
+      || value === 'unclear'
+      ? value
+      : null;
+  }
+
   private buildNormalizedGoalInput(input: GoalPathRequest, config: PathOrchestratorInputConfig): PathGenerationInput {
     const goalFinalPayload: GoalFinalPayload = {
       sourceConversationId: input.sourceConversationId,
@@ -157,39 +148,74 @@ class PathOrchestrator {
     const source = {
       rawGoal: goalFinalPayload.rawGoal,
       visibleSummary: goalFinalPayload.visibleSummary || null,
+      understanding: {
+        real_problem: goalFinalPayload.visibleSummary?.realProblem || null,
+        surface_goal: goalFinalPayload.visibleSummary?.surfaceGoal || null,
+        motivation: goalFinalPayload.visibleSummary?.motivation || null,
+        urgency: goalFinalPayload.visibleSummary?.urgency || null,
+        background_experience: goalFinalPayload.visibleSummary?.backgroundExperience || null,
+        learning_signal: goalFinalPayload.visibleSummary?.learningSignal || null,
+        pain_points: goalFinalPayload.visibleSummary?.painPoints || [],
+        constraints_and_boundaries: goalFinalPayload.visibleSummary?.constraintsAndBoundaries || [],
+        scenario: goalFinalPayload.visibleSummary?.scenario || null,
+        current_pain_point: goalFinalPayload.visibleSummary?.currentPainPoint || null,
+        background: {
+          current_level: goalFinalPayload.visibleSummary?.currentBaseline?.level || null,
+          available_time: goalFinalPayload.visibleSummary?.resources?.timeBudget || null,
+        },
+        current_baseline: goalFinalPayload.visibleSummary?.currentBaseline || null,
+        available_resources: {
+          time_budget: goalFinalPayload.visibleSummary?.resources?.timeBudget || null,
+          time_horizon: goalFinalPayload.visibleSummary?.resources?.timeHorizon || null,
+          time_per_session: goalFinalPayload.visibleSummary?.resources?.timePerSession || null,
+        },
+        deadline_text: goalFinalPayload.visibleSummary?.resources?.deadlineText || null,
+        success_criteria: {
+          observable_result: goalFinalPayload.visibleSummary?.successCriteria?.observableResult || null,
+          acceptance_check: goalFinalPayload.visibleSummary?.successCriteria?.acceptanceCheck || null,
+        },
+      },
+      collected: {
+        level: goalFinalPayload.visibleSummary?.currentBaseline?.level || null,
+        timePerDay: goalFinalPayload.visibleSummary?.resources?.timeBudget || null,
+      },
       conversationHistory: goalFinalPayload.conversationHistory || [],
     };
 
-    const visibleSummary = goalFinalPayload.visibleSummary || {};
+    const visibleSummary = goalFinalPayload.visibleSummary;
     const normalizedInputV1: NormalizedPathInputV1 = {
       version: '1.0',
       learnerProfile: {
-        surfaceGoal: this.normalizeString(visibleSummary.surfaceGoal) || this.normalizeString(goalFinalPayload.rawGoal),
+        surfaceGoal: this.normalizeString(visibleSummary?.surfaceGoal) || this.normalizeString(goalFinalPayload.rawGoal),
         currentBaseline: {
-          level: this.normalizeString(visibleSummary.currentBaseline?.level),
-          evidence: this.normalizeString(visibleSummary.currentBaseline?.evidence),
+          level: this.normalizeString(visibleSummary?.currentBaseline?.level),
+          evidence: this.normalizeString(visibleSummary?.currentBaseline?.evidence),
         },
-        motivation: this.normalizeString(visibleSummary.motivation),
-        urgency: null,
-        painPoints: [],
-        learningSignal: null,
+        motivation: this.normalizeString(visibleSummary?.motivation),
+        urgency: this.normalizeString(visibleSummary?.urgency),
+        backgroundExperience: this.normalizeString(visibleSummary?.backgroundExperience),
+        painPoints: this.normalizeStringArray(visibleSummary?.painPoints),
+        learningSignal: this.normalizeString(visibleSummary?.learningSignal),
+        constraintsAndBoundaries: this.normalizeStringArray(visibleSummary?.constraintsAndBoundaries),
       },
       problemSpace: {
-        realProblem: this.normalizeString(visibleSummary.realProblem),
-        scenario: null,
-        currentPainPoint: null,
+        realProblem: this.normalizeString(visibleSummary?.realProblem),
+        scenario: this.normalizeString(visibleSummary?.scenario),
+        currentPainPoint: this.normalizeString(visibleSummary?.currentPainPoint),
       },
       resources: {
-        timePerWeek: this.normalizeString(visibleSummary.resources?.timePerWeek),
-        timePerSession: this.normalizeString(visibleSummary.resources?.timePerSession),
-        timeHorizon: this.normalizeString(visibleSummary.resources?.timeHorizon),
-        deadlineText: this.normalizeString(visibleSummary.resources?.deadlineText),
+        timeBudget: this.normalizeString(visibleSummary?.resources?.timeBudget) || this.normalizeString(visibleSummary?.resources?.timePerWeek),
+        timeBudgetCadence: this.normalizeCadence(visibleSummary?.resources?.timeBudgetCadence),
+        timePerWeek: this.normalizeString(visibleSummary?.resources?.timePerWeek),
+        timePerSession: this.normalizeString(visibleSummary?.resources?.timePerSession),
+        timeHorizon: this.normalizeString(visibleSummary?.resources?.timeHorizon),
+        deadlineText: this.normalizeString(visibleSummary?.resources?.deadlineText),
       },
       successCriteria: {
-        observableResult: this.normalizeString(visibleSummary.successCriteria?.observableResult),
-        acceptanceCheck: this.normalizeString(visibleSummary.successCriteria?.acceptanceCheck),
+        observableResult: this.normalizeString(visibleSummary?.successCriteria?.observableResult),
+        acceptanceCheck: this.normalizeString(visibleSummary?.successCriteria?.acceptanceCheck),
       },
-      confirmedProposal: visibleSummary.confirmedProposal ? {
+      confirmedProposal: visibleSummary?.confirmedProposal ? {
         learningDirection: this.normalizeString(visibleSummary.confirmedProposal.learningDirection),
         firstDeliverable: this.normalizeString(visibleSummary.confirmedProposal.firstDeliverable),
         keyStages: this.normalizeStringArray(visibleSummary.confirmedProposal.keyStages),
@@ -206,6 +232,7 @@ class PathOrchestrator {
       || normalizedInputV1.learnerProfile.currentBaseline.level
       || 'beginner';
     const availableTime = this.pickFirstDefined(source, config.normalizedInput.timePerDaySources)
+      || normalizedInputV1.resources.timeBudget
       || normalizedInputV1.resources.timePerWeek
       || '1 小时';
     const deadlineRaw = this.pickFirstDefined(source, config.normalizedInput.deadlineTextSources);

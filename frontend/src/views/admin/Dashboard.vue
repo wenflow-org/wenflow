@@ -204,7 +204,7 @@ const devDebugNav: NavItem[] = [
   { to: '/admin/ui-lab', label: 'UI Lab', icon: PictureRounded },
   { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets },
   { to: '/admin/virtual-learners', label: '虚拟用户模拟', icon: User },
-  { to: '/admin/test/prompt-stability', label: 'Prompt 稳定性', icon: MagicStick },
+  { to: '/admin/test/skill-prompt-preview', label: 'Skill Prompt 预览', icon: MagicStick },
 ];
 
 const handleLogout = () => {

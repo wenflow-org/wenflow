@@ -19,6 +19,7 @@ import {
   type SimulationOrchestratorConfig
 } from '../services/orchestratorConfig.service';
 import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition } from '../skills';
+import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import type { 
   SimulationContext,
   SimulationStepResult,
@@ -1038,39 +1039,11 @@ class SimulationOrchestrator {
         sourceConversationId: session.goalConversationId,
         source: 'goal',
         rawGoal: session.virtual_learner_profiles.learningGoal,
-        visibleSummary: {
-          surfaceGoal: collectedData.understanding?.surface_goal || null,
-          realProblem: collectedData.understanding?.real_problem || null,
-          motivation: collectedData.understanding?.motivation || null,
-          currentBaseline: collectedData.understanding?.current_baseline
-            ? {
-                level: collectedData.understanding.current_baseline.level || null,
-                evidence: collectedData.understanding.current_baseline.evidence || null,
-              }
-            : null,
-          resources: collectedData.understanding?.available_resources
-            ? {
-                timePerWeek: collectedData.understanding.available_resources.time_budget || null,
-                timePerSession: collectedData.collected?.timePerDay || null,
-                timeHorizon: collectedData.understanding.available_resources.time_horizon || collectedData.understanding.deadline_text || null,
-                deadlineText: collectedData.understanding.deadline_text || null,
-              }
-            : null,
-          successCriteria: collectedData.understanding?.success_criteria
-            ? {
-                observableResult: collectedData.understanding.success_criteria.observable_result || null,
-                acceptanceCheck: collectedData.understanding.success_criteria.acceptance_check || null,
-              }
-            : null,
-          confirmedProposal: collectedData.confirmedProposal
-            ? {
-                learningDirection: collectedData.confirmedProposal.learning_direction || null,
-                firstDeliverable: collectedData.confirmedProposal.first_deliverable || null,
-                keyStages: Array.isArray(collectedData.confirmedProposal.key_stages) ? collectedData.confirmedProposal.key_stages : [],
-                outOfScope: Array.isArray(collectedData.confirmedProposal.out_of_scope) ? collectedData.confirmedProposal.out_of_scope : [],
-              }
-            : null,
-        },
+        visibleSummary: buildGoalPathVisibleSummary({
+          understanding: collectedData.understanding || {},
+          confirmedProposal: collectedData.confirmedProposal || null,
+          collected: collectedData.collected || {},
+        }),
         conversationHistory: collectedData.messages || []
       };
       

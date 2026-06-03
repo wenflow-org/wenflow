@@ -500,16 +500,6 @@ const SKILL_CN_NAMES: Record<string, string> = {
   'virtual-learner-persona-designer': '虚拟学习者身份设计器',
   'virtual-learner-scenario-designer': '虚拟学习者故事设计器',
   'peer-reinforcement': '同伴强化',
-  'goal-type-identifier': '目标类型识别器',
-  'batch-anderson-labeler': '批量安德森标注器',
-  'time-estimator': '时间估算器',
-  'quiz-generation': '测验生成器',
-  'pdf-parser': 'PDF 解析器',
-  'exercise-generator': '练习生成器',
-  'error-pattern': '错误模式分析器',
-  'content-generation': '内容生成器',
-  'code-explainer': '代码解释器',
-  'answer-generation': '答案生成器',
 };
 
 const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`;

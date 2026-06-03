@@ -72,6 +72,21 @@ export interface AdaptiveGuidanceCopyOutput {
   warningCopy: string;
 }
 
+export interface AdaptiveGuidanceCopyDebug {
+  skillId: 'adaptive-guidance-copy';
+  model: string | null;
+  systemPromptVersion: number | null;
+  userPayload: string;
+  rawModelOutput: string;
+  normalizedOutput: AdaptiveGuidanceCopyOutput | null;
+  durationMs: number;
+  cached: boolean;
+}
+
+type AdaptiveGuidanceCopyResult = SkillExecutionResult<AdaptiveGuidanceCopyOutput> & {
+  debug?: AdaptiveGuidanceCopyDebug;
+};
+
 export const ADAPTIVE_GUIDANCE_COPY_PROMPT = `你是一个学习产品的动态引导文案生成器。
 
 目标：
@@ -162,8 +177,13 @@ function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOu
 
 export async function adaptiveGuidanceCopy(
   input: AdaptiveGuidanceCopyInput
-): Promise<SkillExecutionResult<AdaptiveGuidanceCopyOutput>> {
+): Promise<AdaptiveGuidanceCopyResult> {
   const startTime = Date.now();
+  const userPayload = buildPrompt(input);
+  let model: string | null = null;
+  let systemPromptVersion: number | null = null;
+  let rawModelOutput = '';
+  let normalizedOutput: AdaptiveGuidanceCopyOutput | null = null;
 
   try {
     const gateway = getAPIGateway();
@@ -173,9 +193,12 @@ export async function adaptiveGuidanceCopy(
       throw new Error('SKILL_PROMPT_MISSING: adaptive-guidance-copy');
     }
 
+    systemPromptVersion = promptConfig.version;
+    model = promptConfig.model || null;
+
     const messages: ChatMessage[] = [
       { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: buildPrompt(input) }
+      { role: 'user', content: userPayload }
     ];
 
     const response = await gateway.execute({ messages }, caller, {
@@ -183,13 +206,16 @@ export async function adaptiveGuidanceCopy(
       maxTokens: promptConfig.maxTokens,
       model: promptConfig.model,
     });
-    const content = response.choices[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    model = response.model || model;
+
+    rawModelOutput = response.choices[0]?.message?.content || '';
+    const jsonMatch = rawModelOutput.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    const fallback = buildFallback(input);
 
     const output: AdaptiveGuidanceCopyOutput = {
-      headline: safeText(parsed.headline) || buildFallback(input).headline,
-      subtitle: safeText(parsed.subtitle) || buildFallback(input).subtitle,
+      headline: safeText(parsed.headline) || fallback.headline,
+      subtitle: safeText(parsed.subtitle) || fallback.subtitle,
       todayActions: Array.isArray(parsed.todayActions)
         ? parsed.todayActions.slice(0, 3).map((item: any) => ({
             title: safeText(item?.title) || '继续学习',
@@ -197,25 +223,52 @@ export async function adaptiveGuidanceCopy(
             action: safeText(item?.action) || '继续',
             to: safeText(item?.to) || undefined,
           }))
-        : buildFallback(input).todayActions,
-      pathHint: safeText(parsed.pathHint) || buildFallback(input).pathHint,
-      nextStep: safeText(parsed.nextStep) || buildFallback(input).nextStep,
-      paceHint: safeText(parsed.paceHint) || buildFallback(input).paceHint,
-      emptyStateCopy: safeText(parsed.emptyStateCopy) || buildFallback(input).emptyStateCopy,
-      warningCopy: safeText(parsed.warningCopy) || buildFallback(input).warningCopy,
+        : fallback.todayActions,
+      pathHint: safeText(parsed.pathHint) || fallback.pathHint,
+      nextStep: safeText(parsed.nextStep) || fallback.nextStep,
+      paceHint: safeText(parsed.paceHint) || fallback.paceHint,
+      emptyStateCopy: safeText(parsed.emptyStateCopy) || fallback.emptyStateCopy,
+      warningCopy: safeText(parsed.warningCopy) || fallback.warningCopy,
     };
+
+    normalizedOutput = output;
+    const duration = Date.now() - startTime;
 
     return {
       success: true,
       output,
-      duration: Date.now() - startTime,
+      duration,
+      debug: {
+        skillId: 'adaptive-guidance-copy',
+        model,
+        systemPromptVersion,
+        userPayload,
+        rawModelOutput,
+        normalizedOutput,
+        durationMs: duration,
+        cached: false,
+      }
     };
   } catch (error: any) {
+    const fallback = buildFallback(input);
+    normalizedOutput = fallback;
+    const duration = Date.now() - startTime;
+
     return {
       success: true,
-      output: buildFallback(input),
-      duration: Date.now() - startTime,
+      output: fallback,
+      duration,
       cached: true,
+      debug: {
+        skillId: 'adaptive-guidance-copy',
+        model,
+        systemPromptVersion,
+        userPayload,
+        rawModelOutput,
+        normalizedOutput,
+        durationMs: duration,
+        cached: true,
+      }
     };
   }
 }

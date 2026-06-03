@@ -64,17 +64,6 @@
       </section>
 
       <div class="learning-layout-shell">
-        <button
-          v-if="isTestMode && (pathHandoffSections.length || pathInputSections.length)"
-          type="button"
-          class="learning-layout-shell__debug-trigger"
-          @click="openPathInputDialog"
-        >
-          <span class="learning-layout-shell__debug-eyebrow">Path -> Learn</span>
-          <strong>查看编排输入</strong>
-          <small>Path 交付数据 / 编排器处理结果</small>
-        </button>
-
       <section class="learning-layout" :class="{ 'learning-layout--no-sidebar': knowledgePoints.length === 0 }">
         <aside v-if="knowledgePoints.length > 0" class="learning-sidebar">
           <div class="learning-sidebar__progress">
@@ -295,11 +284,23 @@
         <el-icon><ChatDotRound /></el-icon>
       </el-button>
 
-      <el-dialog
+      <button
+        v-if="showLearningDebugFloat"
+        type="button"
+        class="learning-debug-float-btn"
+        :class="{ 'learning-debug-float-btn--stacked': showPeerFloatButton }"
+        @click="openPathInputDialog"
+      >
+        <strong>Learn / Raw</strong>
+        <span>{{ learningDebugQuickChipText }}</span>
+      </button>
+
+      <el-drawer
         v-model="showPathInputDialog"
-        title="Path 到本节课的数据传递"
-        width="900px"
-        class="learning-debug-dialog"
+        title="Learn 调试数据"
+        size="min(92vw, 900px)"
+        destroy-on-close
+        class="learning-debug-drawer"
       >
         <div class="learning-debug-dialog__summary">{{ latestTeachingInputSummary }}</div>
         <div v-if="pathHandoffSections.length" class="learning-debug-dialog__group">
@@ -321,7 +322,31 @@
           </section>
         </div>
         </div>
-      </el-dialog>
+
+        <div v-if="latestTeachingPromptDebugSections.length" class="learning-debug-dialog__group">
+          <div class="learning-debug-dialog__group-title">最近一轮 Teaching Turn Prompt Debug</div>
+          <div class="learning-debug-dialog__grid">
+            <section v-for="section in latestTeachingPromptDebugSections" :key="section.key" class="learning-debug-card">
+              <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
+              <pre>{{ section.content }}</pre>
+            </section>
+          </div>
+        </div>
+
+        <div v-if="latestPeerPromptDebugSections.length" class="learning-debug-dialog__group">
+          <div class="learning-debug-dialog__group-title">最近一轮 Peer Skill 调试</div>
+          <div class="learning-debug-dialog__grid">
+            <section v-for="section in latestPeerPromptDebugSections" :key="section.key" class="learning-debug-card">
+              <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
+              <pre>{{ section.content }}</pre>
+            </section>
+          </div>
+        </div>
+
+        <div v-if="!pathHandoffSections.length && !pathInputSections.length && !latestTeachingPromptDebugSections.length && !latestPeerPromptDebugSections.length" class="learning-debug-dialog__empty">
+          当前没有可展示的调试数据。
+        </div>
+      </el-drawer>
 
       <el-dialog
         v-model="showTurnDebugDialog"
@@ -662,6 +687,27 @@ const latestTeachingInputSummary = computed(() => {
     .join(' · ') || '展示 teaching-turn 最近一次 userPayload';
 });
 
+const showPeerFloatButton = computed(() => peerChatMessages.value.length > 0 && !peerChatWindowVisible.value);
+const showLearningDebugFloat = computed(() => {
+  return isTestMode.value && (
+    pathHandoffSections.value.length > 0
+    || pathInputSections.value.length > 0
+    || latestTeachingInputDebug.value !== null
+    || latestPeerPromptDebug.value !== null
+  );
+});
+
+const learningDebugQuickChipText = computed(() => {
+  const chips = [
+    pathHandoffSections.value.length > 0 ? `Path ${pathHandoffSections.value.length}` : '',
+    pathInputSections.value.length > 0 ? `Input ${pathInputSections.value.length}` : '',
+    latestTeachingInputDebug.value?.systemPromptVersion ? `Prompt v${latestTeachingInputDebug.value.systemPromptVersion}` : '',
+    latestPeerPromptDebug.value ? 'Peer skill' : ''
+  ].filter(Boolean);
+
+  return chips.length > 0 ? chips.slice(0, 3).join(' · ') : '查看 Learn 原始数据';
+});
+
 const virtualDebugSummary = computed(() => {
   if (!virtualContext.value) return '';
   const profile = virtualContext.value.profile || {};
@@ -769,6 +815,36 @@ const pathHandoffSections = computed(() => {
       content: JSON.stringify(section.value, null, 2),
     }));
 });
+
+const buildPromptDebugSections = (promptDebug: any) => {
+  if (!promptDebug || typeof promptDebug !== 'object') return [] as Array<{ key: string; label: string; content: string }>;
+
+  return [
+    { key: 'userPayload', label: 'userPayload', value: promptDebug.userPayload || null },
+    { key: 'normalizedOutput', label: 'normalizedOutput', value: promptDebug.normalizedOutput || null },
+    { key: 'rawModelOutput', label: 'rawModelOutput', value: promptDebug.rawModelOutput || null },
+    { key: 'attempts', label: 'attempts', value: promptDebug.attempts || null },
+  ]
+    .filter((section) => section.value !== null && section.value !== undefined && section.value !== '')
+    .map((section) => ({
+      key: section.key,
+      label: section.label,
+      content: typeof section.value === 'string' ? section.value : JSON.stringify(section.value, null, 2),
+    }));
+};
+
+const latestPeerPromptDebug = computed(() => {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const msg = messages.value[index] as any;
+    if (msg?.peerDebug?.promptDebug) {
+      return msg.peerDebug.promptDebug;
+    }
+  }
+  return null;
+});
+
+const latestTeachingPromptDebugSections = computed(() => buildPromptDebugSections(latestTeachingInputDebug.value));
+const latestPeerPromptDebugSections = computed(() => buildPromptDebugSections(latestPeerPromptDebug.value));
 
 const buildRouteQuery = (extra: Record<string, string> = {}) => {
   const query: Record<string, string> = {};
@@ -2155,46 +2231,44 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.learning-layout-shell__debug-trigger {
-  position: absolute;
-  left: -88px;
-  top: 22px;
-  width: 74px;
+.learning-debug-float-btn {
+  position: fixed;
+  right: max(16px, calc(16px + var(--safe-area-right)));
+  bottom: calc(28px + var(--safe-area-bottom));
+  z-index: 9998;
   display: grid;
-  gap: 6px;
-  padding: 12px 10px;
+  gap: 4px;
+  min-width: 156px;
+  padding: 12px 14px;
+  border: 0;
   border-radius: 18px;
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.98));
-  box-shadow: 0 12px 28px rgba(52, 120, 246, 0.08);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
+  color: #fff;
   text-align: left;
-  cursor: pointer;
-  z-index: 2;
-  transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
-.learning-layout-shell__debug-trigger:hover {
-  transform: translateY(-1px);
-  border-color: rgba(52, 120, 246, 0.28);
+.learning-debug-float-btn--stacked {
+  bottom: calc(168px + var(--safe-area-bottom));
 }
 
-.learning-layout-shell__debug-eyebrow {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent-deep);
-  line-height: 1.4;
+.learning-debug-float-btn strong {
+  font-size: 14px;
 }
 
-.learning-layout-shell__debug-trigger strong {
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--ink);
-}
-
-.learning-layout-shell__debug-trigger small {
+.learning-debug-float-btn span {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.learning-debug-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+}
+
+.learning-debug-drawer :deep(.el-drawer__body) {
+  padding-top: 0;
 }
 
 .learning-layout--no-sidebar {
@@ -2860,12 +2934,6 @@ onUnmounted(() => {
     max-width: 100%;
   }
 
-  .learning-layout-shell__debug-trigger {
-    position: static;
-    width: 100%;
-    margin: 0 0 12px 0;
-  }
-
   .learning-layout,
   .learning-header-card {
     width: 100%;
@@ -2982,6 +3050,15 @@ onUnmounted(() => {
     bottom: calc(84px + var(--safe-area-bottom));
     right: max(12px, calc(12px + var(--safe-area-right)));
   }
+
+  .learning-debug-float-btn {
+    right: max(12px, calc(12px + var(--safe-area-right)));
+    bottom: calc(16px + var(--safe-area-bottom));
+  }
+
+  .learning-debug-float-btn--stacked {
+    bottom: calc(140px + var(--safe-area-bottom));
+  }
 }
 
 @media (max-width: 520px) {
@@ -3025,6 +3102,16 @@ onUnmounted(() => {
 
   .peer-chat-float-btn {
     bottom: calc(76px + var(--safe-area-bottom));
+  }
+
+  .learning-debug-float-btn {
+    left: 16px;
+    right: 16px;
+    min-width: 0;
+  }
+
+  .learning-debug-float-btn--stacked {
+    bottom: calc(132px + var(--safe-area-bottom));
   }
 }
 </style>

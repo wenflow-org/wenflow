@@ -265,30 +265,12 @@ ${JSON.stringify(skillContext, null, 2)}
 
 function generateConservativeValue(annotation: any, skillName: string): any {
   const typeMap: Record<string, any> = {
-    'time-estimator': {
-      estimatedMinutes: 60,
-      confidence: 0.5,
-      factors: ['使用默认保守值'],
-      reason: '无法准确估算时间，使用保守的60分钟默认值'
-    },
     'text-structure-analyzer': {
       outline: [],
       keywords: [],
       summary: '无法分析结构',
       estimatedReadTime: 30,
       reason: '置信度过低，返回空结构'
-    },
-    'content-generation': {
-      content: '',
-      keyPoints: [],
-      difficulty: 'medium',
-      reason: '置信度过低，跳过生成'
-    },
-    'quiz-generation': {
-      questions: [],
-      totalScore: 0,
-      estimatedTime: 15,
-      reason: '置信度过低，不生成测验'
     }
   };
 

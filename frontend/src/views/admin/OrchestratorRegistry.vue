@@ -73,10 +73,10 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="成员 Agent" min-width="180">
+        <el-table-column label="直属成员" min-width="180">
           <template #default="{ row }">
             <div class="members-cell">
-              <span class="members-count">{{ getMemberCount(row.agentId) }} 个成员</span>
+              <span class="members-count">{{ getDirectMemberCount(row.agentId) }} 个直属成员</span>
               <el-button type="primary" link size="small" @click="openMemberDrawer(row)">
                 查看详情
               </el-button>
@@ -87,7 +87,7 @@
           <template #default="{ row }">
             <div class="metrics-cell">
               <div class="metrics-cell__row">
-                <span>{{ getMemberCount(row.agentId) }} 个成员</span>
+                <span>{{ getDirectMemberCount(row.agentId) }} 个直属成员</span>
                 <span>{{ row.version ? `v${row.version}` : '未标注版本' }}</span>
               </div>
               <div class="metrics-cell__row metrics-cell__row--sub">
@@ -498,6 +498,7 @@ import {
   adminAxios,
   type AdminRegistryAgent,
   type AgentDesignDetail,
+  type OrchestratorRelationItem,
   type PathOrchestratorInputConfig,
   type OrchestratorDataContractSection,
   type PathOrchestratorNormalizedInputPreview
@@ -512,6 +513,7 @@ const summary = ref<{
   totalMemberAgents: number;
 } | null>(null);
 const agents = ref<AdminRegistryAgent[]>([]);
+const orchestratorRelations = ref<OrchestratorRelationItem[]>([]);
 const keyword = ref('');
 const health = ref('');
 
@@ -579,24 +581,29 @@ const filteredOrchestrators = computed(() => {
     });
 });
 
-const getMemberCount = (orchestratorId: string) => {
-  const countMap: Record<string, number> = {
-    'ai-teaching': 3,
-    'ai-teaching-agent': 4,
-    'requirement-orchestrator': 2,
-    'path-orchestrator': 3,
-    'goal-conversation-orchestrator': 2,
-    'simulation-orchestrator': 7
-  };
-  return countMap[orchestratorId] || 0;
+const orchestratorRelationMap = computed(() => {
+  return new Map(orchestratorRelations.value.map((item) => [item.orchestratorId, item]));
+});
+
+const isCountableMember = (member: OrchestratorRelationItem['members'][number]) => {
+  return member.role !== 'orchestrator'
+}
+
+const getDirectMemberCount = (orchestratorId: string) => {
+  const members = orchestratorRelationMap.value.get(orchestratorId)?.members || []
+  return members.filter(isCountableMember).length
 };
 
 const loadRegistry = async () => {
   loading.value = true;
   try {
-    const response: any = await adminAgentsApi.getRegistry();
+    const [response, relationResponse]: any = await Promise.all([
+      adminAgentsApi.getRegistry(),
+      adminAgentsApi.getOrchestratorRelations()
+    ]);
     const allAgents = response.data.data.agents || [];
     agents.value = allAgents;
+    orchestratorRelations.value = relationResponse.data?.data?.orchestrators || [];
     availableAgents.value = allAgents.filter((a: AdminRegistryAgent) => !isOrchestrator(a));
 
     const orchestrators = allAgents.filter(isOrchestrator);

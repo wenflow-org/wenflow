@@ -41,6 +41,8 @@ export const VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT = `你是一位"虚拟学�
 17. 如果提供 existingPersonaSeed，默认是在"同一个人"上补故事，不允许偷偷换人；只能换情境、事件和表层求助表达。
 18. 如果提供 existingPersonaSeed，不要重写此人的核心身份与长期行为底色；输出里的 personaSeed 只允许补空缺、做轻量对齐，不能把 occupation、corePersonality、helpSeekingPattern、adversarialPattern 等核心字段改成另一套人。
 19. 如果提供 existingStoryPool，新故事必须明显避开同类 triggerEvent、visibleOpening、pressurePoints 和 behaviorHooks。
+20. 所有必填字段都必须给出具体、非空、可观察的内容；不要留空，不要写“待补充/未明确/通用模板”。
+21. 不要依赖系统为你补齐 persona 或 story 字段；如果你发现自己想写安全兜底句，说明这次生成还不够具体，必须重写。
 
 可选输入：
 - preferredDomains: 倾向的学习主题
@@ -185,10 +187,8 @@ export const virtualLearnerScenarioDesignerDefinition: SkillDefinition = {
   outputSchema: {
     type: 'object',
     properties: {
-      goalSeed: { type: 'object' },
       personaSeed: { type: 'object' },
-      situationSeed: { type: 'object' },
-      stories: { type: 'array' },
+      story: { type: 'object' },
       consistencyNotes: { type: 'array' },
     },
   },
@@ -225,88 +225,57 @@ function normalizeStringArray(value: any, fallback: string[] = []): string[] {
   return next.length ? Array.from(new Set(next)) : fallback;
 }
 
-function normalizeEnum<T extends string>(value: any, allowed: T[], fallback: T): T {
-  return allowed.includes(value) ? value : fallback;
+function isAllowedEnum<T extends string>(value: any, allowed: T[]): value is T {
+  return allowed.includes(value);
 }
 
 function normalizeDisclosurePlan(raw: any) {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      opening: '先抱怨具体困难，被追问后才展开',
-      revelationTriggers: ['被追问具体细节时', '被质疑判断时'],
-      resistancePoints: ['抽象理论建议', '要求立刻做规划'],
-      idealProbe: '问"你上次是怎么处理的"'
-    };
-  }
+  const data = raw && typeof raw === 'object' ? raw : {};
   return {
-    opening: normalizeString(raw.opening) || '先抱怨具体困难，被追问后才展开',
-    revelationTriggers: normalizeStringArray(raw.revelationTriggers, ['被追问具体细节时', '被质疑判断时']),
-    resistancePoints: normalizeStringArray(raw.resistancePoints, ['抽象理论建议', '要求立刻做规划']),
-    idealProbe: normalizeString(raw.idealProbe) || '问"你上次是怎么处理的"'
+    opening: normalizeString(data.opening),
+    revelationTriggers: normalizeStringArray(data.revelationTriggers),
+    resistancePoints: normalizeStringArray(data.resistancePoints),
+    idealProbe: normalizeString(data.idealProbe)
   };
 }
 
 function normalizeProblemKnowledge(raw: any) {
   const data = raw && typeof raw === 'object' ? raw : {}
   return {
-    domainFamiliarity: normalizeEnum(data.domainFamiliarity, ['low', 'medium', 'high'], 'low'),
+    domainFamiliarity: isAllowedEnum(data.domainFamiliarity, ['low', 'medium', 'high']) ? data.domainFamiliarity : null,
     knownConcepts: normalizeStringArray(data.knownConcepts),
     struggleConcepts: normalizeStringArray(data.struggleConcepts),
-    selfAssessment: normalizeString(data.selfAssessment) || '对这类问题有一些零散经验，但还没有形成稳定做法。',
+    selfAssessment: normalizeString(data.selfAssessment),
     hiddenGaps: normalizeStringArray(data.hiddenGaps)
   }
 }
 
-function normalizeStory(raw: any, fallbackGoalSeed: any, index: number) {
-  const goalSeed = raw?.goalSeed && typeof raw.goalSeed === 'object' ? raw.goalSeed : fallbackGoalSeed || {};
+function normalizeStory(raw: any) {
+  const goalSeed = raw?.goalSeed && typeof raw.goalSeed === 'object' ? raw.goalSeed : {};
 
   return {
-    id: normalizeString(raw?.id) || `story-${index + 1}`,
-    title: normalizeString(raw?.title) || `故事 ${index + 1}`,
-    sourceType: normalizeEnum(raw?.sourceType, ['work', 'life', 'study', 'self_management'], 'work'),
-    storyOutline: normalizeString(raw?.storyOutline) || '最近在一个具体场景里遇到了卡点，但自己还没有完全想清楚问题到底出在哪。',
-    triggerEvent: normalizeString(raw?.triggerEvent) || '最近一次出错或卡住的具体事件',
-    visibleOpening: normalizeString(raw?.visibleOpening) || '我最近碰到个具体情况，有点卡住，不太确定该怎么处理。',
-    hiddenDetails: normalizeStringArray(raw?.hiddenDetails, ['还有一些没有主动说出的限制条件']),
-    misdiagnosis: normalizeString(raw?.misdiagnosis) || '先把问题归因为自己不够会，但未必抓到了真正原因',
-    pressurePoints: normalizeStringArray(raw?.pressurePoints, ['近期压力会放大原本就存在的焦虑或迟疑']),
-    behaviorHooks: normalizeStringArray(raw?.behaviorHooks, ['遇到关键卡点时会暴露稳定的求助或防御方式']),
+    id: normalizeString(raw?.id) || undefined,
+    title: normalizeString(raw?.title),
+    sourceType: isAllowedEnum(raw?.sourceType, ['work', 'life', 'study', 'self_management']) ? raw.sourceType : null,
+    storyOutline: normalizeString(raw?.storyOutline),
+    triggerEvent: normalizeString(raw?.triggerEvent),
+    visibleOpening: normalizeString(raw?.visibleOpening),
+    hiddenDetails: normalizeStringArray(raw?.hiddenDetails),
+    misdiagnosis: normalizeString(raw?.misdiagnosis),
+    pressurePoints: normalizeStringArray(raw?.pressurePoints),
+    behaviorHooks: normalizeStringArray(raw?.behaviorHooks),
     problemKnowledge: normalizeProblemKnowledge(raw?.problemKnowledge),
     goalSeed: {
-      domain: normalizeString(goalSeed.domain) || '通用技能',
-      goalType: normalizeEnum(goalSeed.goalType, ['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration'], 'problem_driven'),
-      surfaceGoal: normalizeString(goalSeed.surfaceGoal) || '想先把眼前这个问题解决掉',
-      realProblem: normalizeString(goalSeed.realProblem) || '当前还没有把真实问题描述清楚',
-      motivation: normalizeString(goalSeed.motivation) || '希望尽快把当前问题处理掉',
-      urgencyHint: normalizeString(goalSeed.urgencyHint) || '近期需要用到',
-      constraints: normalizeStringArray(goalSeed.constraints, ['时间有限']),
-      expectedOutcome: normalizeString(goalSeed.expectedOutcome) || '达到能立即使用的程度'
+      domain: normalizeString(goalSeed.domain),
+      goalType: isAllowedEnum(goalSeed.goalType, ['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration']) ? goalSeed.goalType : null,
+      surfaceGoal: normalizeString(goalSeed.surfaceGoal),
+      realProblem: normalizeString(goalSeed.realProblem),
+      motivation: normalizeString(goalSeed.motivation),
+      urgencyHint: normalizeString(goalSeed.urgencyHint),
+      constraints: normalizeStringArray(goalSeed.constraints),
+      expectedOutcome: normalizeString(goalSeed.expectedOutcome)
     },
     disclosurePlan: normalizeDisclosurePlan(raw?.disclosurePlan)
-  };
-}
-
-function buildTraitFallbackSeed(personaSeed: any, goalSeed: any) {
-  const occupation = normalizeString(personaSeed?.occupation) || '在职学习者';
-  const background = normalizeString(personaSeed?.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。';
-  const domain = normalizeString(goalSeed?.domain) || '通用技能';
-  const motivation = normalizeString(goalSeed?.motivation) || '希望尽快把当前问题处理掉';
-  const surfaceGoal = normalizeString(goalSeed?.surfaceGoal) || '想解决一个具体学习问题';
-
-  return {
-    corePersonality: `${occupation}，习惯先从眼前场景判断有没有用，不会轻易接受脱离现实的建议。`,
-    communicationStyle: `${occupation}更容易先说最近一次卡住的片段，而不是主动做完整汇报。`,
-    motivationOrientation: `${motivation}，比系统性掌握更在意"现在能不能先把${surfaceGoal}这件事推进"。`,
-    emotionalBaseline: `${background} 让他在涉及「${domain}」时更容易出现紧张、迟疑或自我怀疑。`,
-    resiliencePattern: `第一次受挫时通常先自己消化，连续卡住后才会明显怀疑方法是否适合自己。`,
-    metacognitiveProfile: `能感觉到自己在「${domain}」上不顺，但未必能立刻把根因说清。`,
-    cognitiveLoadTolerance: `一旦信息过多或步骤太密，会先抓最表面的可执行点，后面再慢慢补理解。`,
-    selfRegulationStyle: `更容易被现实截止时间推动，而不是稳定地提前拆解和复盘。`,
-    digitalLiteracy: `日常工具能用，但一到陌生流程、多步骤配置或抽象方法切换就会变慢。`,
-    helpSeekingPattern: `通常会先按自己的理解试一次，确认还是卡住后才会问，而且更想听贴近自己场景的例子。`,
-    adversarialPattern: `如果建议听起来太理想化、太花时间，第一反应往往是先保留、先问"现实里真能这样做吗"。`,
-    memoryRepairPattern: `忘了或没完全懂时，容易先用模糊说法带过，暴露后才承认自己其实没抓稳。`,
-    behavioralProfileSummary: `${occupation}会带着真实限制来求助，既想推进${surfaceGoal}，又会被现实压力和过去的卡点拖住。`
   };
 }
 
@@ -357,128 +326,196 @@ function normalizeScenarioOutput(raw: any) {
   const storyRaw = raw?.story && typeof raw?.story === 'object' ? raw.story : null;
   const personaSeed = raw?.personaSeed && typeof raw.personaSeed === 'object' ? raw.personaSeed : {};
 
-  const normalizedStory = normalizeStory(storyRaw || {}, {}, 0);
-
-  const primaryGoalSeed = normalizedStory?.goalSeed || {};
-  const traitFallbacks = buildTraitFallbackSeed(personaSeed, primaryGoalSeed);
+  const normalizedStory = normalizeStory(storyRaw || {});
 
   return {
     personaSeed: {
-      nameHint: normalizeString(personaSeed.nameHint) || '真实学习者',
-      age: Number.isFinite(Number(personaSeed.age)) ? Math.max(18, Math.min(60, Number(personaSeed.age))) : 26,
-      occupation: normalizeString(personaSeed.occupation) || '在职学习者',
-      education: normalizeString(personaSeed.education) || '本科',
-      background: normalizeString(personaSeed.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。',
+      nameHint: normalizeString(personaSeed.nameHint),
+      age: Number.isFinite(Number(personaSeed.age)) ? Math.max(18, Math.min(60, Number(personaSeed.age))) : null,
+      occupation: normalizeString(personaSeed.occupation),
+      education: normalizeString(personaSeed.education),
+      background: normalizeString(personaSeed.background),
       knownConcepts: normalizeStringArray(personaSeed.knownConcepts),
       struggleConcepts: normalizeStringArray(personaSeed.struggleConcepts),
-      learningStyle: normalizeEnum(personaSeed.learningStyle, ['visual', 'auditory', 'reading', 'kinesthetic'], 'reading'),
-      motivationType: normalizeEnum(personaSeed.motivationType, ['career', 'interest', 'necessity', 'social'], 'necessity'),
-      availableTime: normalizeEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant'], 'minimal'),
-      techComfort: normalizeEnum(personaSeed.techComfort, ['low', 'medium', 'high'], 'medium'),
+      learningStyle: isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening']) ? personaSeed.learningStyle : null,
+      motivationType: isAllowedEnum(personaSeed.motivationType, ['career', 'interest', 'necessity', 'social']) ? personaSeed.motivationType : null,
+      availableTime: isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant']) ? personaSeed.availableTime : null,
+      techComfort: isAllowedEnum(personaSeed.techComfort, ['low', 'medium', 'high']) ? personaSeed.techComfort : null,
       priorAttempts: normalizeString(personaSeed.priorAttempts) || undefined,
-      corePersonality: normalizeString(personaSeed.corePersonality) || traitFallbacks.corePersonality,
-      personalityDrivers: normalizeStringArray(personaSeed.personalityDrivers, ['希望先把眼前问题解决', '遇到不确定时会先保留判断']),
-      communicationStyle: normalizeString(personaSeed.communicationStyle) || traitFallbacks.communicationStyle,
-      motivationOrientation: normalizeString(personaSeed.motivationOrientation) || traitFallbacks.motivationOrientation,
-      emotionalBaseline: normalizeString(personaSeed.emotionalBaseline) || traitFallbacks.emotionalBaseline,
-      emotionalTriggers: normalizeStringArray(personaSeed.emotionalTriggers, ['被要求立刻表现得很会', '担心再次犯和以前类似的错']),
-      resiliencePattern: normalizeString(personaSeed.resiliencePattern) || traitFallbacks.resiliencePattern,
-      metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile) || traitFallbacks.metacognitiveProfile,
-      cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance) || traitFallbacks.cognitiveLoadTolerance,
-      selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle) || traitFallbacks.selfRegulationStyle,
-      digitalLiteracy: normalizeString(personaSeed.digitalLiteracy) || traitFallbacks.digitalLiteracy,
-      helpSeekingPattern: normalizeString(personaSeed.helpSeekingPattern) || traitFallbacks.helpSeekingPattern,
-      adversarialPattern: normalizeString(personaSeed.adversarialPattern) || traitFallbacks.adversarialPattern,
-      memoryRepairPattern: normalizeString(personaSeed.memoryRepairPattern) || traitFallbacks.memoryRepairPattern,
-      behaviorBoundaries: normalizeStringArray(personaSeed.behaviorBoundaries, ['通常不会主动做完整汇报式表达', '没完全想清楚前不会轻易装得特别笃定']),
-      learningPreferences: normalizeStringArray(personaSeed.learningPreferences, ['先给一个贴近场景的例子', '先从最小可执行的一步开始']),
-      failurePatterns: normalizeStringArray(personaSeed.failurePatterns, ['开始时很想解决问题，但容易在执行几轮后松掉', '以前试过一些方法，但没有坚持到形成稳定习惯']),
-      behavioralProfileSummary: normalizeString(personaSeed.behavioralProfileSummary) || traitFallbacks.behavioralProfileSummary,
+      corePersonality: normalizeString(personaSeed.corePersonality),
+      personalityDrivers: normalizeStringArray(personaSeed.personalityDrivers),
+      communicationStyle: normalizeString(personaSeed.communicationStyle),
+      motivationOrientation: normalizeString(personaSeed.motivationOrientation),
+      emotionalBaseline: normalizeString(personaSeed.emotionalBaseline),
+      emotionalTriggers: normalizeStringArray(personaSeed.emotionalTriggers),
+      resiliencePattern: normalizeString(personaSeed.resiliencePattern),
+      metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile),
+      cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance),
+      selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle),
+      digitalLiteracy: normalizeString(personaSeed.digitalLiteracy),
+      helpSeekingPattern: normalizeString(personaSeed.helpSeekingPattern),
+      adversarialPattern: normalizeString(personaSeed.adversarialPattern),
+      memoryRepairPattern: normalizeString(personaSeed.memoryRepairPattern),
+      behaviorBoundaries: normalizeStringArray(personaSeed.behaviorBoundaries),
+      learningPreferences: normalizeStringArray(personaSeed.learningPreferences),
+      failurePatterns: normalizeStringArray(personaSeed.failurePatterns),
+      behavioralProfileSummary: normalizeString(personaSeed.behavioralProfileSummary),
       personalityTraits: {
-        verbosity: normalizeEnum(personaSeed.personalityTraits?.verbosity, ['terse', 'normal', 'verbose'], 'normal'),
-        enthusiasm: normalizeEnum(personaSeed.personalityTraits?.enthusiasm, ['low', 'normal', 'high'], 'normal'),
-        confusionStyle: normalizeEnum(personaSeed.personalityTraits?.confusionStyle, ['direct', 'hinting'], 'direct'),
-        patience: normalizeEnum(personaSeed.personalityTraits?.patience, ['low', 'normal', 'high'], 'normal'),
-        questionStyle: normalizeEnum(personaSeed.personalityTraits?.questionStyle, ['none', 'clarifying', 'challenging'], 'clarifying'),
-        emotionalRange: normalizeEnum(personaSeed.personalityTraits?.emotionalRange, ['flat', 'moderate', 'expressive'], 'moderate'),
+        verbosity: isAllowedEnum(personaSeed.personalityTraits?.verbosity, ['terse', 'normal', 'verbose']) ? personaSeed.personalityTraits.verbosity : null,
+        enthusiasm: isAllowedEnum(personaSeed.personalityTraits?.enthusiasm, ['low', 'normal', 'high']) ? personaSeed.personalityTraits.enthusiasm : null,
+        confusionStyle: isAllowedEnum(personaSeed.personalityTraits?.confusionStyle, ['direct', 'hinting']) ? personaSeed.personalityTraits.confusionStyle : null,
+        patience: isAllowedEnum(personaSeed.personalityTraits?.patience, ['low', 'normal', 'high']) ? personaSeed.personalityTraits.patience : null,
+        questionStyle: isAllowedEnum(personaSeed.personalityTraits?.questionStyle, ['none', 'clarifying', 'challenging']) ? personaSeed.personalityTraits.questionStyle : null,
+        emotionalRange: isAllowedEnum(personaSeed.personalityTraits?.emotionalRange, ['flat', 'moderate', 'expressive']) ? personaSeed.personalityTraits.emotionalRange : null,
       },
     },
     story: normalizedStory,
-    consistencyNotes: normalizeStringArray(raw?.consistencyNotes, [
-      'story 的 pressurePoints 与 persona 的 emotionalTriggers 保持一致。',
-      'story 的 behaviorHooks 与 persona 的求助/防御方式保持一致。'
-    ]),
+    consistencyNotes: normalizeStringArray(raw?.consistencyNotes),
   };
 }
 
-function preferExistingString(existingValue: any, nextValue: any) {
-  return normalizeString(existingValue) || normalizeString(nextValue) || undefined;
-}
+function validateScenarioOutput(parsed: any): { valid: boolean; failureReason?: string } {
+  const personaSeed = parsed?.personaSeed;
+  const story = parsed?.story;
 
-function preferExistingStringArray(existingValue: any, nextValue: any, fallback: string[] = []) {
-  const existing = normalizeStringArray(existingValue);
-  if (existing.length) return existing;
-  const next = normalizeStringArray(nextValue);
-  return next.length ? next : fallback;
-}
+  if (!personaSeed || typeof personaSeed !== 'object') {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed is required' };
+  }
 
-function preferExistingEnum<T extends string>(existingValue: any, nextValue: any, allowed: T[], fallback: T) {
-  if (allowed.includes(existingValue)) return existingValue as T;
-  if (allowed.includes(nextValue)) return nextValue as T;
-  return fallback;
-}
+  if (!story || typeof story !== 'object') {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story is required' };
+  }
 
-function mergeScenarioPersonaWithExisting(output: any, existingPersonaSeed: any) {
-  if (!existingPersonaSeed || typeof existingPersonaSeed !== 'object') return output;
+  const requiredPersonaStrings = [
+    'nameHint',
+    'occupation',
+    'education',
+    'background',
+    'corePersonality',
+    'emotionalBaseline',
+    'helpSeekingPattern',
+    'adversarialPattern',
+    'metacognitiveProfile',
+    'cognitiveLoadTolerance',
+    'memoryRepairPattern',
+    'behavioralProfileSummary',
+  ];
+  const missingPersonaStrings = requiredPersonaStrings.filter((field) => !normalizeString(personaSeed[field]));
+  if (missingPersonaStrings.length > 0) {
+    return { valid: false, failureReason: `SCENARIO_OUTPUT_INVALID: missing personaSeed fields: ${missingPersonaStrings.join(', ')}` };
+  }
 
-  const currentPersona = output?.personaSeed && typeof output.personaSeed === 'object' ? output.personaSeed : {};
+  if (!Number.isFinite(Number(personaSeed.age))) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.age must be a number' };
+  }
 
-  return {
-    ...output,
-    personaSeed: {
-      ...currentPersona,
-      nameHint: preferExistingString(existingPersonaSeed.nameHint, currentPersona.nameHint) || '真实学习者',
-      age: Number.isFinite(Number(existingPersonaSeed.age))
-        ? Math.max(18, Math.min(60, Number(existingPersonaSeed.age)))
-        : currentPersona.age,
-      occupation: preferExistingString(existingPersonaSeed.occupation, currentPersona.occupation) || '在职学习者',
-      education: preferExistingString(existingPersonaSeed.education, currentPersona.education) || '本科',
-      background: preferExistingString(existingPersonaSeed.background, currentPersona.background) || '最近在真实任务中遇到了一个需要尽快补上的问题。',
-      knownConcepts: preferExistingStringArray(existingPersonaSeed.knownConcepts, currentPersona.knownConcepts),
-      struggleConcepts: preferExistingStringArray(existingPersonaSeed.struggleConcepts, currentPersona.struggleConcepts),
-      learningStyle: preferExistingEnum(existingPersonaSeed.learningStyle, currentPersona.learningStyle, ['visual', 'auditory', 'reading', 'kinesthetic'], 'reading'),
-      motivationType: preferExistingEnum(existingPersonaSeed.motivationType, currentPersona.motivationType, ['career', 'interest', 'necessity', 'social'], 'necessity'),
-      availableTime: preferExistingEnum(existingPersonaSeed.availableTime, currentPersona.availableTime, ['minimal', 'moderate', 'abundant'], 'minimal'),
-      techComfort: preferExistingEnum(existingPersonaSeed.techComfort, currentPersona.techComfort, ['low', 'medium', 'high'], 'medium'),
-      priorAttempts: preferExistingString(existingPersonaSeed.priorAttempts, currentPersona.priorAttempts),
-      corePersonality: preferExistingString(existingPersonaSeed.corePersonality, currentPersona.corePersonality),
-      personalityDrivers: preferExistingStringArray(existingPersonaSeed.personalityDrivers, currentPersona.personalityDrivers),
-      communicationStyle: preferExistingString(existingPersonaSeed.communicationStyle, currentPersona.communicationStyle),
-      motivationOrientation: preferExistingString(existingPersonaSeed.motivationOrientation, currentPersona.motivationOrientation),
-      emotionalBaseline: preferExistingString(existingPersonaSeed.emotionalBaseline, currentPersona.emotionalBaseline),
-      emotionalTriggers: preferExistingStringArray(existingPersonaSeed.emotionalTriggers, currentPersona.emotionalTriggers),
-      resiliencePattern: preferExistingString(existingPersonaSeed.resiliencePattern, currentPersona.resiliencePattern),
-      metacognitiveProfile: preferExistingString(existingPersonaSeed.metacognitiveProfile, currentPersona.metacognitiveProfile),
-      cognitiveLoadTolerance: preferExistingString(existingPersonaSeed.cognitiveLoadTolerance, currentPersona.cognitiveLoadTolerance),
-      selfRegulationStyle: preferExistingString(existingPersonaSeed.selfRegulationStyle, currentPersona.selfRegulationStyle),
-      digitalLiteracy: preferExistingString(existingPersonaSeed.digitalLiteracy, currentPersona.digitalLiteracy),
-      helpSeekingPattern: preferExistingString(existingPersonaSeed.helpSeekingPattern, currentPersona.helpSeekingPattern),
-      adversarialPattern: preferExistingString(existingPersonaSeed.adversarialPattern, currentPersona.adversarialPattern),
-      memoryRepairPattern: preferExistingString(existingPersonaSeed.memoryRepairPattern, currentPersona.memoryRepairPattern),
-      behaviorBoundaries: preferExistingStringArray(existingPersonaSeed.behaviorBoundaries, currentPersona.behaviorBoundaries),
-      learningPreferences: preferExistingStringArray(existingPersonaSeed.learningPreferences, currentPersona.learningPreferences),
-      failurePatterns: preferExistingStringArray(existingPersonaSeed.failurePatterns, currentPersona.failurePatterns),
-      behavioralProfileSummary: preferExistingString(existingPersonaSeed.behavioralProfileSummary, currentPersona.behavioralProfileSummary),
-      personalityTraits: {
-        verbosity: preferExistingEnum(existingPersonaSeed.personalityTraits?.verbosity, currentPersona.personalityTraits?.verbosity, ['terse', 'normal', 'verbose'], 'normal'),
-        enthusiasm: preferExistingEnum(existingPersonaSeed.personalityTraits?.enthusiasm, currentPersona.personalityTraits?.enthusiasm, ['low', 'normal', 'high'], 'normal'),
-        confusionStyle: preferExistingEnum(existingPersonaSeed.personalityTraits?.confusionStyle, currentPersona.personalityTraits?.confusionStyle, ['direct', 'hinting'], 'direct'),
-        patience: preferExistingEnum(existingPersonaSeed.personalityTraits?.patience, currentPersona.personalityTraits?.patience, ['low', 'normal', 'high'], 'normal'),
-        questionStyle: preferExistingEnum(existingPersonaSeed.personalityTraits?.questionStyle, currentPersona.personalityTraits?.questionStyle, ['none', 'clarifying', 'challenging'], 'clarifying'),
-        emotionalRange: preferExistingEnum(existingPersonaSeed.personalityTraits?.emotionalRange, currentPersona.personalityTraits?.emotionalRange, ['flat', 'moderate', 'expressive'], 'moderate'),
-      },
-    }
-  };
+  if (normalizeStringArray(personaSeed.knownConcepts).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.knownConcepts must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.struggleConcepts).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.struggleConcepts must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.emotionalTriggers).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.emotionalTriggers must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.failurePatterns).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.failurePatterns must contain at least one item' };
+  }
+
+  if (!isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.learningStyle is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.motivationType, ['career', 'interest', 'necessity', 'social'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.motivationType is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.availableTime is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.techComfort, ['low', 'medium', 'high'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.techComfort is invalid' };
+  }
+
+  if (!personaSeed.personalityTraits || typeof personaSeed.personalityTraits !== 'object') {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits is required' };
+  }
+
+  if (!isAllowedEnum(personaSeed.personalityTraits.verbosity, ['terse', 'normal', 'verbose'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits.verbosity is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.personalityTraits.enthusiasm, ['low', 'normal', 'high'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits.enthusiasm is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.personalityTraits.confusionStyle, ['direct', 'hinting'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits.confusionStyle is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.personalityTraits.patience, ['low', 'normal', 'high'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits.patience is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.personalityTraits.questionStyle, ['none', 'clarifying', 'challenging'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits.questionStyle is invalid' };
+  }
+
+  if (!isAllowedEnum(personaSeed.personalityTraits.emotionalRange, ['flat', 'moderate', 'expressive'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.personalityTraits.emotionalRange is invalid' };
+  }
+
+  const requiredStoryStrings = ['title', 'storyOutline', 'triggerEvent', 'visibleOpening'];
+  const missingStoryStrings = requiredStoryStrings.filter((field) => !normalizeString(story[field]));
+  if (missingStoryStrings.length > 0) {
+    return { valid: false, failureReason: `SCENARIO_OUTPUT_INVALID: missing story fields: ${missingStoryStrings.join(', ')}` };
+  }
+
+  if (normalizeStringArray(story.pressurePoints).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.pressurePoints must contain at least one item' };
+  }
+
+  if (normalizeStringArray(story.behaviorHooks).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.behaviorHooks must contain at least one item' };
+  }
+
+  const problemKnowledge = story.problemKnowledge;
+  if (!problemKnowledge || typeof problemKnowledge !== 'object') {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.problemKnowledge is required' };
+  }
+
+  if (!isAllowedEnum(problemKnowledge.domainFamiliarity, ['low', 'medium', 'high'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.problemKnowledge.domainFamiliarity is invalid' };
+  }
+
+  if (normalizeStringArray(problemKnowledge.struggleConcepts).length === 0) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.problemKnowledge.struggleConcepts must contain at least one item' };
+  }
+
+  if (!normalizeString(problemKnowledge.selfAssessment)) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.problemKnowledge.selfAssessment is required' };
+  }
+
+  const goalSeed = story.goalSeed;
+  if (!goalSeed || typeof goalSeed !== 'object') {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.goalSeed is required' };
+  }
+
+  const requiredGoalSeedStrings = ['domain', 'surfaceGoal', 'realProblem', 'motivation'];
+  const missingGoalSeedStrings = requiredGoalSeedStrings.filter((field) => !normalizeString(goalSeed[field]));
+  if (missingGoalSeedStrings.length > 0) {
+    return { valid: false, failureReason: `SCENARIO_OUTPUT_INVALID: missing story.goalSeed fields: ${missingGoalSeedStrings.join(', ')}` };
+  }
+
+  if (!isAllowedEnum(goalSeed.goalType, ['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration'])) {
+    return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: story.goalSeed.goalType is invalid' };
+  }
+
+  return { valid: true };
 }
 
 function summarizeScenarioInput(input: any) {
@@ -530,26 +567,29 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
         existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
         existingStoryPool: Array.isArray(payload?.existingStoryPool) ? payload.existingStoryPool.slice(0, 6) : undefined,
       }),
+      validateParsedOutput: (parsed) => validateScenarioOutput(parsed),
       normalizeOutput: (parsed) => normalizeScenarioOutput(parsed),
+      retryStrategy: {
+        maxAttempts: 2,
+        onValidationFail: ({ failureReason }) => `请只输出一个合法 JSON 对象，必须同时包含完整 personaSeed 与 story。所有必填字段都要具体、非空、可观察，禁止使用模板兜底句或占位词。上次失败原因：${failureReason}`
+      }
     }, input || {});
 
     if (!result.success || !result.output) {
       throw new Error(result.error?.message || 'VIRTUAL_LEARNER_SCENARIO_DESIGN_FAILED');
     }
 
-    const mergedOutput = mergeScenarioPersonaWithExisting(result.output, input?.existingPersonaSeed);
-
     logger.info('[virtual-learner-scenario-designer] 生成完成', {
       systemPromptVersion: result.debug.systemPromptVersion,
       durationMs: result.debug.durationMs,
       inputSummary: summarizeScenarioInput(input),
-      outputSummary: summarizeScenarioOutput(mergedOutput),
+      outputSummary: summarizeScenarioOutput(result.output),
     });
 
     return {
       success: true,
       output: {
-        ...mergedOutput,
+        ...result.output,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

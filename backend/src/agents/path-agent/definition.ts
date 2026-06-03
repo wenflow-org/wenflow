@@ -31,9 +31,15 @@ export const pathAgentRuntimeDefinition: RuntimeDefinitionRecord = {
   variableBindings: {
     consumes: [
       'normalizedInput.problemSpace.realProblem',
+      'normalizedInput.problemSpace.scenario',
+      'normalizedInput.problemSpace.currentPainPoint',
+      'normalizedInput.learnerProfile.backgroundExperience',
+      'normalizedInput.learnerProfile.constraintsAndBoundaries',
       'normalizedInput.successCriteria.observableResult',
       'normalizedInput.confirmedProposal.firstDeliverable',
       'normalizedInput.confirmedProposal.keyStages',
+      'normalizedInput.resources.timeBudget',
+      'normalizedInput.resources.timeBudgetCadence',
       'normalizedInput.planningHints.paceSignal',
       'normalizedInput.planningHints.milestoneRange',
       'normalizedInput.planningHints.conceptRange',

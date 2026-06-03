@@ -37,12 +37,6 @@ const TASK_TYPE_MAPPING: Record<string, { type: string; estimatedMinutes: number
 };
 
 const DEFAULT_CONSERVATIVE_VALUES: Record<string, any> = {
-  'time-estimator': {
-    estimatedMinutes: 60,
-    confidence: 0.5,
-    factors: ['fallback: 使用保守默认值'],
-    breakdown: { reading: 30, practice: 20, review: 10 }
-  },
   'text-structure-analyzer': {
     outline: [],
     chapters: [],
@@ -50,27 +44,10 @@ const DEFAULT_CONSERVATIVE_VALUES: Record<string, any> = {
     summary: '无法提取结构，使用降级方案',
     estimatedReadTime: 30
   },
-  'content-generation': {
-    content: '',
-    sections: [],
-    keyPoints: [],
-    estimatedTime: 30,
-    difficulty: 'medium'
-  },
-  'quiz-generation': {
-    questions: [],
-    totalScore: 0,
-    estimatedTime: 15
-  },
   'smart-search': {
     results: [],
     totalFound: 0,
     queryExpansion: []
-  },
-  'pdf-parser': {
-    text: '',
-    pages: 0,
-    structure: { headings: [], paragraphs: [] }
   }
 };
 

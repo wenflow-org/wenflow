@@ -30,11 +30,11 @@ const SIMULATION_ORCHESTRATOR_CONFIG_KEY = 'simulation-orchestrator';
 export const DEFAULT_PATH_ORCHESTRATOR_INPUT_CONFIG: PathOrchestratorInputConfig = {
   version: '1.0.0',
   normalizedInput: {
-    descriptionSources: ['understanding.real_problem', 'rawGoal'],
+    descriptionSources: ['visibleSummary.realProblem', 'understanding.real_problem', 'rawGoal'],
     subjectSources: ['structuredData.subject', 'collected.subject'],
-    skillLevelSources: ['understanding.background.current_level', 'collected.level'],
-    timePerDaySources: ['understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
-    deadlineTextSources: ['understanding.available_resources.time_horizon', 'understanding.deadline_text'],
+    skillLevelSources: ['visibleSummary.currentBaseline.level', 'understanding.background.current_level', 'collected.level'],
+    timePerDaySources: ['visibleSummary.resources.timeBudget', 'understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
+    deadlineTextSources: ['visibleSummary.resources.deadlineText', 'visibleSummary.resources.timeHorizon', 'understanding.available_resources.time_horizon', 'understanding.deadline_text'],
     includeStructuredData: true,
     includeConfirmedProposal: true,
     includeConfidenceScores: true,

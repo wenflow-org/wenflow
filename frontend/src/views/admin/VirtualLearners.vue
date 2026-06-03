@@ -5,6 +5,11 @@
         <span class="page-header__eyebrow">Admin</span>
         <h1>虚拟学习者</h1>
         <p>集中管理画像、故事池与 Goal / Path / Learn 运行样本。</p>
+        <div class="page-header__meta">
+          <span>{{ profiles.length }} 个样本</span>
+          <span>{{ recentSessions.length }} 个最近诊断</span>
+          <span>{{ storyReadyCount }} 个可直接开局</span>
+        </div>
       </div>
 
       <div class="page-header__actions">
@@ -26,9 +31,19 @@
         class="summary-card"
         :class="item.tone"
       >
-        <span class="summary-card__label">{{ item.label }}</span>
-        <strong class="summary-card__value">{{ item.value }}</strong>
-        <span class="summary-card__helper">{{ item.helper }}</span>
+        <div class="summary-card__top">
+          <span class="summary-card__icon">
+            <el-icon><component :is="item.icon" /></el-icon>
+          </span>
+          <span class="summary-card__label">{{ item.label }}</span>
+        </div>
+        <div class="summary-card__body">
+          <strong class="summary-card__value">{{ item.value }}</strong>
+          <span class="summary-card__helper">{{ item.helper }}</span>
+        </div>
+        <div class="summary-card__bar" aria-hidden="true">
+          <i :style="{ width: `${item.progress}%` }"></i>
+        </div>
       </article>
     </section>
 
@@ -46,7 +61,20 @@
           </template>
         </el-input>
       </div>
-      <div class="toolbar-card__group toolbar-card__group--hint">先缩小范围，再进入详情或开局。</div>
+      <div class="toolbar-card__filters">
+        <button
+          v-for="item in profileFilterOptions"
+          :key="item.value"
+          type="button"
+          class="filter-chip"
+          :class="{ active: activeFilter === item.value }"
+          :aria-pressed="activeFilter === item.value"
+          @click="setFilter(item.value)"
+        >
+          <span>{{ item.label }}</span>
+          <strong>{{ item.count }}</strong>
+        </button>
+      </div>
     </div>
 
     <main class="page-shell">
@@ -55,13 +83,13 @@
           <div class="lab-panel__head">
             <div class="lab-panel__head-left">
               <el-checkbox
-                v-if="!loading && filteredProfiles.length > 0"
+                v-if="!loading && pagedProfiles.length > 0"
                 :model-value="isAllSelected"
                 @change="toggleSelectAll"
               />
               <div>
                 <div class="lab-panel__title">虚拟学习者列表</div>
-                <div class="lab-panel__meta lab-panel__meta--stack">按样本查看画像、故事准备度和最近运行状态。</div>
+                <div class="lab-panel__meta lab-panel__meta--stack">按故事准备度、实验状态和最近阶段管理样本。</div>
               </div>
             </div>
             <div class="lab-panel__head-right">
@@ -80,48 +108,62 @@
               v-for="row in pagedProfiles"
               :key="row.id"
               class="profile-card"
-              :class="{ 'profile-card--selected': selectedIds.has(row.id) }"
+              :class="[
+                { 'profile-card--selected': selectedIds.has(row.id) },
+                getProfileRowClass(row)
+              ]"
             >
+              <div class="profile-card__select">
+                <el-checkbox
+                  :model-value="selectedIds.has(row.id)"
+                  @change="toggleSelect(row.id)"
+                  @click.stop
+                />
+              </div>
+
               <div class="profile-card__primary">
                 <div class="profile-card__head">
-                  <el-checkbox
-                    :model-value="selectedIds.has(row.id)"
-                    @change="toggleSelect(row.id)"
-                    @click.stop
-                  />
                   <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
                   <div class="profile-card__identity">
                     <strong>{{ row.userName }}</strong>
                     <span>{{ row.profile?.occupation || '未填写职业' }}</span>
                   </div>
+                  <div class="profile-card__badges">
+                    <span class="status-pill" :class="getStoryStatus(row).className">{{ getStoryStatus(row).label }}</span>
+                    <span class="status-pill" :class="getProfileStageStatus(row).className">{{ getProfileStageStatus(row).label }}</span>
+                  </div>
                 </div>
 
                 <div class="profile-meta-row">
                   <span v-if="row.profile?.age">{{ row.profile.age }}岁</span>
-                  <span>{{ getStoryPool(row).length }} 个故事</span>
                   <span>{{ row.simulationMode === 'ai' ? 'AI画像' : '手动画像' }}</span>
+                  <span>{{ getProfileStatusLabel(row) }}</span>
                 </div>
 
                 <p class="profile-card__summary">{{ row.profile?.background || row.profile?.corePersonality || '进入详情查看人物画像与故事目录。' }}</p>
               </div>
 
-              <div class="profile-card__stats">
+              <div class="profile-card__signals">
                 <div class="mini-stat">
-                  <span>会话数</span>
+                  <span>故事池</span>
+                  <strong>{{ getStoryPool(row).length }}</strong>
+                </div>
+                <div class="mini-stat mini-stat--soft">
+                  <span>会话</span>
                   <strong>{{ row.sessionCount || 0 }}</strong>
                 </div>
                 <div class="mini-stat mini-stat--soft">
-                  <span>最近阶段</span>
-                  <strong>{{ row.sessions?.[0] ? getSessionStageLabel(row.sessions[0].currentStage) : '未开始' }}</strong>
+                  <span>阶段</span>
+                  <strong>{{ getProfileStageLabel(row) }}</strong>
                 </div>
               </div>
 
               <div class="profile-card__footer">
                 <el-button type="primary" @click="goToProfile(row)">详情</el-button>
-                <el-button @click="openStartSessionDialog(row)">开局</el-button>
+                <el-button @click="openStartSessionDialog(row)">{{ getProfileActionLabel(row) }}</el-button>
                 <el-dropdown trigger="click">
-                  <el-button>
-                    更多
+                  <el-button class="profile-card__more" aria-label="更多操作">
+                    <el-icon><MoreFilled /></el-icon>
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
@@ -135,17 +177,19 @@
             </article>
           </div>
 
-          <div class="pagination-row" v-if="pagination.total > pagination.limit">
+          <div class="pagination-row" v-if="filteredProfiles.length > pagination.limit">
             <el-pagination
               v-model:current-page="pagination.page"
               :page-size="pagination.limit"
-              :total="pagination.total"
+              :total="filteredProfiles.length"
               layout="total, prev, pager, next"
               @current-change="handlePageChange"
             />
           </div>
         </section>
+      </section>
 
+      <aside class="lab-side">
         <section class="lab-panel lab-panel--sessions">
           <div class="lab-panel__head">
             <div>
@@ -161,11 +205,16 @@
                 <div class="session-row__main">
                   <div class="session-row__identity">
                     <strong>{{ item.profileName }}</strong>
-                    <span>{{ getSessionStatusLabel(item.status) }} / {{ getSessionStageLabel(item.currentStage) }}</span>
+                    <span class="session-status" :class="getSessionStatusClass(item.status)">{{ getSessionStatusLabel(item.status) }}</span>
                   </div>
                   <p>{{ item.goal || '暂无学习目标' }}</p>
                 </div>
                 <el-button type="primary" link @click="goToSession(item.id)">进入诊断</el-button>
+              </div>
+              <div class="session-funnel" aria-label="运行阶段">
+                <span :class="{ active: item.goalReady }">Goal</span>
+                <span :class="{ active: item.pathReady }">Path</span>
+                <span :class="{ active: item.learnStarted, done: item.learnCompleted }">Learn</span>
               </div>
               <div class="session-row__meta">
                 <span v-if="item.roundCount !== null">{{ item.roundCount }} 轮</span>
@@ -174,7 +223,7 @@
             </article>
           </div>
         </section>
-      </section>
+      </aside>
     </main>
 
     <el-dialog
@@ -355,11 +404,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MagicStick, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import {
+  Collection,
+  DataAnalysis,
+  Finished,
+  MagicStick,
+  MoreFilled,
+  Plus,
+  Refresh,
+  Search,
+  TrendCharts
+} from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
+
+type ProfileFilter = 'all' | 'ready' | 'needsStory' | 'running' | 'completed'
 
 const router = useRouter()
 const loading = ref(false)
@@ -367,6 +428,7 @@ const submitting = ref(false)
 const generatingScenario = ref(false)
 const profiles = ref<any[]>([])
 const searchKeyword = ref('')
+const activeFilter = ref<ProfileFilter>('all')
 const selectedIds = ref<Set<string>>(new Set())
 const isAllSelected = computed(() => {
   return pagedProfiles.value.length > 0 && pagedProfiles.value.every(p => selectedIds.value.has(p.id))
@@ -415,14 +477,44 @@ const formRules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
+const profileMatchesFilter = (profile: any, filter: ProfileFilter) => {
+  const storyCount = getStoryPool(profile).length
+  const sessions = profile.sessions || []
+  switch (filter) {
+    case 'ready':
+      return storyCount > 0
+    case 'needsStory':
+      return storyCount === 0
+    case 'running':
+      return sessions.some((session: any) => session.status === 'running')
+    case 'completed':
+      return sessions.some((session: any) => session.status === 'completed')
+    default:
+      return true
+  }
+}
+
 const filteredProfiles = computed(() => {
   return profiles.value.filter((p: any) => {
     const searchTarget = `${p.userName || ''} ${p.learningGoal || ''}`.toLowerCase()
     if (searchKeyword.value && !searchTarget.includes(searchKeyword.value.toLowerCase())) {
       return false
     }
-    return true
+    return profileMatchesFilter(p, activeFilter.value)
   })
+})
+
+const storyReadyCount = computed(() => profiles.value.filter((item: any) => getStoryPool(item).length > 0).length)
+
+const profileFilterOptions = computed(() => {
+  const getCount = (filter: ProfileFilter) => profiles.value.filter((profile: any) => profileMatchesFilter(profile, filter)).length
+  return [
+    { label: '全部', value: 'all' as ProfileFilter, count: getCount('all') },
+    { label: '可开局', value: 'ready' as ProfileFilter, count: getCount('ready') },
+    { label: '待补故事', value: 'needsStory' as ProfileFilter, count: getCount('needsStory') },
+    { label: '运行中', value: 'running' as ProfileFilter, count: getCount('running') },
+    { label: '已完成', value: 'completed' as ProfileFilter, count: getCount('completed') }
+  ]
 })
 
 const pagedProfiles = computed(() => {
@@ -454,7 +546,6 @@ const summaryCards = computed(() => {
   const totalProfiles = profiles.value.length
   const totalSessions = profiles.value.reduce((sum: number, item: any) => sum + (item.sessionCount || 0), 0)
   const autoProfiles = profiles.value.filter((item: any) => item.simulationMode === 'ai').length
-  const activeProfiles = profiles.value.filter((item: any) => (item.sessionCount || 0) > 0).length
   const withStories = profiles.value.filter((item: any) => getStoryPool(item).length > 0).length
 
   const allSessions = profiles.value.flatMap((item: any) => item.sessions || [])
@@ -469,56 +560,43 @@ const summaryCards = computed(() => {
   const goalReadyRate = `${Math.round((goalReadySessions / totalSessionBase) * 100)}%`
   const pathReadyRate = `${Math.round((pathReadySessions / totalSessionBase) * 100)}%`
   const learnCompletionRate = `${Math.round((learnCompletedSessions / totalSessionBase) * 100)}%`
+  const storyProgress = totalProfiles > 0 ? Math.round((withStories / totalProfiles) * 100) : 0
+  const runningProgress = totalSessions > 0 ? Math.round((runningSessions / totalSessions) * 100) : 0
+  const pathProgress = Math.round((pathReadySessions / totalSessionBase) * 100)
+  const learnProgress = Math.round((learnCompletedSessions / totalSessionBase) * 100)
 
   return [
     {
       label: '样本与故事',
       value: `${totalProfiles}`,
       helper: `${withStories} 个有故事，${totalProfiles - withStories} 个待补故事`,
-      tone: 'tone-blue'
+      tone: 'tone-blue',
+      icon: Collection,
+      progress: storyProgress
     },
     {
       label: '实验进度',
       value: String(totalSessions),
       helper: `${runningSessions} 运行中 / ${completedSessions} 完成 / ${failedSessions} 失败`,
-      tone: 'tone-dark'
+      tone: 'tone-dark',
+      icon: DataAnalysis,
+      progress: runningProgress
     },
     {
       label: 'Goal / Path',
       value: `${goalReadyRate} / ${pathReadyRate}`,
       helper: `${goalReadySessions}/${allSessions.length || 0} 进入 Path，${pathReadySessions}/${allSessions.length || 0} 生成路径`,
-      tone: 'tone-green'
+      tone: 'tone-green',
+      icon: TrendCharts,
+      progress: pathProgress
     },
     {
       label: 'Learn 完成率',
       value: learnCompletionRate,
       helper: `${learnCompletedSessions}/${allSessions.length || 0} 完整跑通，${autoProfiles} 个 AI 画像样本`,
-      tone: 'tone-amber'
-    }
-  ]
-})
-
-const profileBuckets = computed(() => {
-  const total = profiles.value.length
-  const withStories = profiles.value.filter((item: any) => getStoryPool(item).length > 0).length
-  const inProgress = profiles.value.filter((item: any) => (item.sessions || []).some((session: any) => session.status === 'running')).length
-  const completed = profiles.value.filter((item: any) => (item.sessions || []).some((session: any) => session.status === 'completed')).length
-
-  return [
-    {
-      label: '有故事可跑',
-      value: String(withStories),
-      helper: `${total - withStories} 个仍需补故事`
-    },
-    {
-      label: '实验进行中',
-      value: String(inProgress),
-      helper: '当前仍有运行中的样本'
-    },
-    {
-      label: '已有完成样本',
-      value: String(completed),
-      helper: '至少完成过一次 Learn'
+      tone: 'tone-amber',
+      icon: Finished,
+      progress: learnProgress
     }
   ]
 })
@@ -545,6 +623,12 @@ const formatRelativeTime = (time: string | Date | null) => {
 
 const debouncedSearch = () => {
   pagination.value.page = 1
+}
+
+const setFilter = (value: ProfileFilter) => {
+  activeFilter.value = value
+  pagination.value.page = 1
+  selectedIds.value = new Set()
 }
 
 const loadProfiles = async () => {
@@ -679,6 +763,64 @@ const getStoryPool = (profile: any) => {
   if (!profile) return []
   const profileData = profile.profile || {}
   return Array.isArray(profileData.storyPool) ? profileData.storyPool.filter((story: any) => story && typeof story === 'object') : []
+}
+
+const getLatestSession = (profile: any) => {
+  const sessions = profile?.sessions || []
+  return sessions[0] || null
+}
+
+const getStoryStatus = (profile: any) => {
+  const storyCount = getStoryPool(profile).length
+  if (storyCount === 0) {
+    return { label: '待补故事', className: 'status-pill--warning' }
+  }
+  if (storyCount >= 2) {
+    return { label: `${storyCount} 个故事`, className: 'status-pill--success' }
+  }
+  return { label: '1 个故事', className: 'status-pill--ready' }
+}
+
+const getProfileStageStatus = (profile: any) => {
+  const latest = getLatestSession(profile)
+  if (!latest) return { label: '未开始', className: 'status-pill--idle' }
+  if (latest.status === 'failed') return { label: '失败', className: 'status-pill--danger' }
+  if (latest.status === 'completed') return { label: '已完成', className: 'status-pill--success' }
+  if (latest.status === 'running') return { label: getSessionStageLabel(latest.currentStage), className: 'status-pill--running' }
+  return { label: getSessionStageLabel(latest.currentStage), className: 'status-pill--idle' }
+}
+
+const getProfileStageLabel = (profile: any) => getProfileStageStatus(profile).label
+
+const getProfileStatusLabel = (profile: any) => {
+  const latest = getLatestSession(profile)
+  if (!latest) return '尚未开局'
+  return `${getSessionStatusLabel(latest.status)} · ${formatRelativeTime(latest.updatedAt || latest.createdAt)}`
+}
+
+const getProfileRowClass = (profile: any) => {
+  const latest = getLatestSession(profile)
+  if (getStoryPool(profile).length === 0) return 'profile-card--needs-story'
+  if (latest?.status === 'running') return 'profile-card--running'
+  if (latest?.status === 'completed') return 'profile-card--completed'
+  return ''
+}
+
+const getProfileActionLabel = (profile: any) => {
+  return getStoryPool(profile).length > 0 ? '开局' : '补故事'
+}
+
+const getSessionStatusClass = (status: string) => {
+  switch (status) {
+    case 'running':
+      return 'session-status--running'
+    case 'completed':
+      return 'session-status--completed'
+    case 'failed':
+      return 'session-status--failed'
+    default:
+      return 'session-status--created'
+  }
 }
 
 const handleSubmit = async () => {
@@ -896,17 +1038,28 @@ const startSession = async (profile: any, story?: any) => {
 onMounted(() => {
   loadProfiles()
 })
+
+watch(filteredProfiles, () => {
+  const maxPage = Math.max(Math.ceil(filteredProfiles.value.length / pagination.value.limit), 1)
+  if (pagination.value.page > maxPage) {
+    pagination.value.page = maxPage
+  }
+})
 </script>
 
 <style scoped>
 .learner-lab-page {
   min-height: 100vh;
-  padding: 16px;
-  background: #f3f5f9;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(234, 239, 247, 0.88), rgba(247, 249, 252, 0.96) 340px),
+    #f4f7fb;
+  color: #1f2937;
 }
 
 .page-header,
 .summary-grid,
+.toolbar-card,
 .page-shell {
   max-width: 1440px;
   margin: 0 auto;
@@ -915,155 +1068,255 @@ onMounted(() => {
 .page-header {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
   align-items: flex-start;
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid #e5eaf2;
-  margin-bottom: 12px;
+  padding: 18px 20px;
+  border: 1px solid #dfe7f1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 34px rgba(31, 41, 55, 0.06);
+}
+
+.page-header__copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
 }
 
 .page-header__eyebrow {
   display: inline-flex;
   width: fit-content;
-  padding: 4px 10px;
+  padding: 4px 9px;
+  border: 1px solid #d7e3f5;
   border-radius: 999px;
-  background: #eaf0fb;
-  color: #2355d8;
+  background: #eef5ff;
+  color: #1f5dbb;
   font-size: 12px;
   font-weight: 700;
 }
 
-.page-header__copy {
-  display: grid;
-  gap: 6px;
-}
-
 .page-header h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1.2;
+  letter-spacing: 0;
 }
 
 .page-header p {
   margin: 0;
+  color: #596579;
   font-size: 13px;
   line-height: 1.55;
-  color: #66758b;
+}
+
+.page-header__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-header__meta span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f4f7fb;
+  color: #667085;
+  font-size: 12px;
 }
 
 .page-header__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   flex-wrap: wrap;
 }
 
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
+  gap: 10px;
+  margin-top: 12px;
   margin-bottom: 12px;
-  padding: 10px 0;
-  border-top: 1px solid #e5eaf2;
-  border-bottom: 1px solid #e5eaf2;
 }
 
 .summary-card {
-  min-height: 0;
-  padding: 2px 18px;
-  border-radius: 0;
-  background: transparent;
-  border: 0;
-  border-left: 1px solid #e5eaf2;
+  --card-accent: #2f6fed;
+  display: grid;
+  gap: 14px;
+  min-height: 134px;
+  padding: 16px;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.045);
 }
 
-.summary-card:first-child {
-  border-left: 0;
+.summary-card__top,
+.summary-card__body,
+.profile-card__head,
+.profile-card__footer,
+.profile-meta-row,
+.profile-card__signals,
+.session-row__meta {
+  display: flex;
+  align-items: center;
+}
+
+.summary-card__top {
+  gap: 9px;
+}
+
+.summary-card__icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card-accent) 12%, white);
+  color: var(--card-accent);
 }
 
 .summary-card__label {
-  display: block;
+  color: #697386;
   font-size: 12px;
-  color: #7b8598;
-  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.summary-card__body {
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .summary-card__value {
-  display: block;
-  font-size: 22px;
-  line-height: 1.1;
+  color: #1f2937;
+  font-size: 26px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .summary-card__helper {
-  display: block;
-  margin-top: 8px;
+  color: #667085;
   font-size: 12px;
   line-height: 1.45;
-  color: #5f6b7d;
 }
 
-.tone-blue {
-  background: transparent;
+.summary-card__bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf2f7;
+}
+
+.summary-card__bar i {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+  background: var(--card-accent);
 }
 
 .tone-dark {
-  background: transparent;
+  --card-accent: #475467;
 }
 
 .tone-green {
-  background: transparent;
+  --card-accent: #15957b;
 }
 
 .tone-amber {
-  background: transparent;
+  --card-accent: #d9822b;
 }
 
 .toolbar-card {
-  max-width: 1440px;
-  margin: 0 auto 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: 0;
+  margin-bottom: 12px;
 }
 
 .toolbar-card__group {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.toolbar-card__group--hint {
-  font-size: 12px;
-  color: #8b94a6;
+  min-width: min(360px, 100%);
 }
 
 .toolbar-card__search {
-  width: min(360px, 100%);
+  width: min(390px, 100%);
+}
+
+.toolbar-card__filters {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #dfe7f1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #5f6b7d;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter-chip strong {
+  color: #1f2937;
+  font-size: 12px;
+}
+
+.filter-chip.active {
+  border-color: #2f6fed;
+  background: #eef5ff;
+  color: #1f5dbb;
 }
 
 .page-shell {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
+  align-items: start;
+}
+
+.lab-main,
+.lab-side,
+.session-list,
+.story-draft-panel,
+.start-session-panel,
+.start-session-story-list,
+.story-pool-preview {
+  display: grid;
   gap: 12px;
 }
 
-.lab-main {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.lab-side {
+  position: sticky;
+  top: 16px;
 }
 
 .lab-panel {
-  background: #fff;
-  border: 1px solid #e5eaf2;
-  border-radius: 12px;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.035);
+}
+
+.lab-panel--profiles {
+  padding: 0;
+  overflow: hidden;
+}
+
+.lab-panel--sessions {
   padding: 16px;
 }
 
@@ -1072,26 +1325,12 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #edf2f7;
 }
 
-.lab-panel__title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.lab-panel__meta {
-  font-size: 12px;
-  color: #8b94a6;
-  white-space: nowrap;
-}
-
-.lab-panel__meta--stack {
-  display: block;
-  margin-top: 4px;
-  white-space: normal;
-  line-height: 1.5;
+.lab-panel--sessions .lab-panel__head {
+  padding: 0 0 12px;
 }
 
 .lab-panel__head-left,
@@ -1101,228 +1340,76 @@ onMounted(() => {
   gap: 10px;
 }
 
-.story-draft-panel {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.story-draft-panel__head {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid #e6ebf2;
-  border-radius: 14px;
-  background: #fafcff;
-}
-
-.story-draft-panel__head strong {
-  font-size: 13px;
+.lab-panel__title {
   color: #1f2937;
+  font-size: 14px;
+  font-weight: 750;
 }
 
-.story-draft-panel__head span {
+.lab-panel__meta {
+  color: #8a94a6;
   font-size: 12px;
-  color: #6b7280;
+  white-space: nowrap;
 }
 
-.story-draft-grid {
-  display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.story-card {
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #e8edf5;
-  background: #ffffff;
-}
-
-.story-card.primary {
-  border-color: #c9dafd;
-  background: #f7faff;
-}
-
-.story-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.story-card__head strong {
-  font-size: 13px;
-  color: #1f2937;
-}
-
-.story-card p {
-  margin: 0 0 10px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #475569;
-}
-
-.story-card__line {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 8px;
-}
-
-.story-card__line:last-child {
-  margin-bottom: 0;
-}
-
-.story-card__line span {
-  font-size: 11px;
-  color: #8b94a6;
-}
-
-.story-card__line strong {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #334155;
-  font-weight: 500;
-}
-
-.story-pool-preview {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.story-pool-card {
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #e6ebf2;
-  background: #fafcff;
-}
-
-.story-pool-card__head,
-.start-session-panel__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.story-pool-card p,
-.start-session-story p,
-.start-session-panel__head span {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #5f6b7d;
-}
-
-.story-pool-card__meta {
-  margin-top: 8px;
-  font-size: 11px;
-  color: #8b94a6;
-}
-
-.story-pool-card__actions {
-  margin-top: 8px;
-}
-
-.start-session-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.start-session-story-list {
-  display: grid;
-  gap: 10px;
-}
-
-.start-session-story {
-  display: flex;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #e6ebf2;
-  background: #fff;
-  cursor: pointer;
-}
-
-.start-session-story.active {
-  border-color: #c8dafd;
-  background: #f7faff;
-}
-
-.start-session-story input {
-  margin-top: 3px;
-}
-
-.start-session-story strong {
+.lab-panel__meta--stack {
   display: block;
-  margin-bottom: 4px;
-  font-size: 13px;
-  color: #1f2937;
+  margin-top: 4px;
+  line-height: 1.5;
+  white-space: normal;
 }
 
 .select-count {
+  color: #6b7280;
   font-size: 12px;
-  color: #8b94a6;
-}
-
-.profile-card--selected {
-  border-color: #c8dafd;
-  background: #f8faff;
-}
-
-.filter-stack,
-.session-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.hint-compact {
-  font-size: 13px;
-  color: #5f6b7d;
 }
 
 .profile-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0;
-  border-top: 1px solid #edf1f6;
 }
 
 .profile-card {
-  border: 0;
-  border-bottom: 1px solid #edf1f6;
-  border-radius: 0;
-  padding: 14px 2px;
-  background: transparent;
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(180px, 0.85fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(210px, 0.55fr) auto;
   gap: 14px;
   align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #edf2f7;
+  background: #fff;
 }
 
-.profile-card__head,
-.profile-card__primary,
-.profile-card__footer,
-.profile-meta-row,
-.profile-stats,
-.session-row__meta,
-.task-row {
+.profile-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: transparent;
+}
+
+.profile-card--running::before {
+  background: #2f6fed;
+}
+
+.profile-card--needs-story::before {
+  background: #d9822b;
+}
+
+.profile-card--completed::before {
+  background: #15957b;
+}
+
+.profile-card--selected {
+  background: #f7fbff;
+}
+
+.profile-card:last-child {
+  border-bottom: 0;
+}
+
+.profile-card__select {
   display: flex;
-  align-items: center;
-}
-
-.profile-card__head {
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 8px;
+  justify-content: center;
 }
 
 .profile-card__primary {
@@ -1331,117 +1418,191 @@ onMounted(() => {
   min-width: 0;
 }
 
+.profile-card__head {
+  gap: 10px;
+  min-width: 0;
+}
+
 .avatar-badge {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #315fd7, #5b8cff);
-  color: white;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2f6fed, #4da3ff);
+  color: #fff;
   font-size: 15px;
-  font-weight: 700;
-  flex-shrink: 0;
+  font-weight: 750;
 }
 
 .profile-card__identity {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .profile-card__identity strong {
+  overflow: hidden;
+  color: #1f2937;
   font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-card__identity span {
-  font-size: 12px;
+  overflow: hidden;
   color: #7a8597;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-card__badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.status-pill,
+.session-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.status-pill--ready,
+.status-pill--running,
+.session-status--running {
+  background: #eef5ff;
+  color: #1f5dbb;
+}
+
+.status-pill--success,
+.session-status--completed {
+  background: #eaf8f4;
+  color: #087767;
+}
+
+.status-pill--warning,
+.session-status--created {
+  background: #fff5e6;
+  color: #a75d13;
+}
+
+.status-pill--danger,
+.session-status--failed {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.status-pill--idle {
+  background: #f2f4f7;
+  color: #667085;
 }
 
 .profile-meta-row {
   gap: 6px;
   flex-wrap: wrap;
-  font-size: 11px;
   color: #6b7280;
+  font-size: 11px;
 }
 
 .profile-meta-row span {
   padding: 2px 7px;
+  border: 1px solid #e6ebf2;
   border-radius: 999px;
-  background: #f4f6fa;
-}
-
-.profile-card__stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.mini-stat {
-  min-width: 0;
-  padding: 2px 0 2px 12px;
-  border-radius: 0;
-  background: transparent;
-  border: 0;
-  border-left: 1px solid #edf1f6;
-}
-
-.mini-stat--soft {
-  background: transparent;
-}
-
-.mini-stat span {
-  display: block;
-  font-size: 11px;
-  color: #8b94a6;
-  margin-bottom: 4px;
-}
-
-.mini-stat strong {
-  font-size: 12px;
-  color: #334155;
-}
-
-.profile-card__footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  background: #f8fafc;
 }
 
 .profile-card__summary {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 0;
   color: #5f6b7d;
   font-size: 12px;
   line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.profile-card__signals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mini-stat {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.mini-stat span {
+  display: block;
+  margin-bottom: 4px;
+  color: #8a94a6;
+  font-size: 11px;
+}
+
+.mini-stat strong {
+  display: block;
   overflow: hidden;
+  color: #344054;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-card__footer {
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
 }
 
 .profile-card__footer .el-button {
   flex-shrink: 0;
   font-size: 12px;
-  padding: 6px 12px;
+  padding: 7px 12px;
+}
+
+.profile-card__more {
+  width: 32px;
+  padding: 7px 0;
 }
 
 .pagination-row {
-  margin-top: 16px;
   display: flex;
   justify-content: center;
+  padding: 16px;
+  border-top: 1px solid #edf2f7;
+}
+
+.session-list--compact {
+  gap: 0;
 }
 
 .session-row {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 10px 0;
-  border-bottom: 1px solid #edf1f6;
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.session-row:last-child {
+  border-bottom: 0;
 }
 
 .session-row__top {
@@ -1452,94 +1613,107 @@ onMounted(() => {
 }
 
 .session-row__main {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  gap: 5px;
   min-width: 0;
-  flex: 1;
 }
 
 .session-row__identity {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-}
-
-.session-row__identity span {
-  font-size: 11px;
-  color: #8b94a6;
-  white-space: nowrap;
-}
-
-.session-row:last-child {
-  border-bottom: none;
+  gap: 8px;
 }
 
 .session-row strong {
   display: block;
-  margin-bottom: 2px;
-  white-space: nowrap;
   overflow: hidden;
+  color: #1f2937;
+  font-size: 13px;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-row p {
-  margin: 0;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.session-funnel {
-  display: none;
-}
-
-.session-row__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 11px;
-  color: #8b94a6;
-}
-
-.session-row__active {
-  color: #6b7280;
-  font-style: italic;
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .session-row__top .el-button {
   flex-shrink: 0;
 }
 
-.session-list--compact {
-  gap: 0;
+.session-funnel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.session-funnel span {
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #f2f4f7;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.session-funnel span.active {
+  background: #eef5ff;
+  color: #1f5dbb;
+}
+
+.session-funnel span.done {
+  background: #eaf8f4;
+  color: #087767;
+}
+
+.session-row__meta {
+  gap: 6px;
+  flex-wrap: wrap;
+  color: #8a94a6;
+  font-size: 11px;
+}
+
+.session-row__active {
+  color: #667085;
 }
 
 .empty-state {
-  padding: 26px;
-  border-radius: 16px;
-  text-align: center;
+  margin: 16px;
+  padding: 28px;
+  border: 1px dashed #d8e1ec;
+  border-radius: 8px;
   background: #fbfcfe;
-  border: 1px dashed #dce4ee;
-  color: #8b94a6;
+  color: #8a94a6;
+  text-align: center;
 }
 
 .empty-state.small {
-  padding: 20px;
+  margin: 0;
+  padding: 22px;
+}
+
+.drawer-summary,
+.story-pool-card,
+.start-session-story,
+.story-card,
+.story-draft-panel__head {
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #fbfcfe;
 }
 
 .drawer-summary {
   margin-bottom: 16px;
   padding: 14px;
-  border-radius: 14px;
-  background: #f8fafc;
-  border: 1px solid #e7ecf3;
 }
 
 .drawer-summary strong {
@@ -1547,6 +1721,83 @@ onMounted(() => {
   margin-bottom: 6px;
 }
 
+.story-draft-panel__head,
+.story-pool-card,
+.story-card,
+.start-session-story {
+  padding: 12px 14px;
+}
+
+.story-card.primary,
+.start-session-story.active {
+  border-color: #bcd3ff;
+  background: #f7fbff;
+}
+
+.story-card__head,
+.story-pool-card__head,
+.start-session-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.story-card p,
+.story-pool-card p,
+.start-session-story p,
+.start-session-panel__head span {
+  margin: 0;
+  color: #5f6b7d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.story-card__line {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.story-card__line:last-child {
+  margin-bottom: 0;
+}
+
+.story-card__line span,
+.story-pool-card__meta {
+  color: #8a94a6;
+  font-size: 11px;
+}
+
+.story-card__line strong {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.story-pool-card__meta,
+.story-pool-card__actions {
+  margin-top: 8px;
+}
+
+.start-session-story {
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.start-session-story input {
+  margin-top: 3px;
+}
+
+.start-session-story strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #1f2937;
+  font-size: 13px;
+}
 
 .personality-settings {
   display: flex;
@@ -1561,36 +1812,44 @@ onMounted(() => {
 }
 
 .personality-item .label {
-  font-size: 13px;
   color: #6b7280;
+  font-size: 13px;
 }
 
 .ai-generate-section {
-  margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: 16px;
 }
 
 .ai-generate-hint {
+  color: #98a2b3;
   font-size: 12px;
-  color: #9ca3af;
 }
 
-@media (max-width: 1440px) {
-  .summary-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1280px) {
+@media (max-width: 1320px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .profile-card {
+  .page-shell {
     grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
+  }
+
+  .lab-side {
+    position: static;
+  }
+}
+
+@media (max-width: 1080px) {
+  .profile-card {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .profile-card__signals,
+  .profile-card__footer {
+    grid-column: 2;
   }
 
   .profile-card__footer {
@@ -1602,32 +1861,61 @@ onMounted(() => {
     align-items: stretch;
   }
 
+  .toolbar-card__group,
   .toolbar-card__search {
     width: 100%;
   }
+
+  .toolbar-card__filters {
+    justify-content: flex-start;
+  }
 }
 
-@media (max-width: 980px) {
-  .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 760px) {
+  .learner-lab-page {
+    padding: 14px;
   }
 
   .page-header {
     flex-direction: column;
+    padding: 16px;
   }
 
   .page-header__actions {
     width: 100%;
   }
-}
 
-@media (max-width: 640px) {
-  .learner-lab-page {
-    padding: 14px;
+  .page-header__actions .el-button {
+    flex: 1;
   }
 
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .profile-card {
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .profile-card__head {
+    align-items: flex-start;
+  }
+
+  .profile-card__badges {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+
+  .profile-card__signals {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-chip {
+    flex: 1;
+    justify-content: center;
   }
 }
 </style>

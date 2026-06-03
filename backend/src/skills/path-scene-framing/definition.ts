@@ -11,6 +11,7 @@ export const pathSceneFramingRuntimeDefinition: RuntimeDefinitionRecord = {
       goal: { type: 'string' },
       currentLevel: { type: 'string' },
       timePerDay: { type: 'string' },
+      normalizedInput: { type: 'object' },
       structuredData: { type: 'object' },
       confirmedProposal: { type: 'object' },
       metadata: { type: 'object' },
@@ -26,12 +27,16 @@ export const pathSceneFramingRuntimeDefinition: RuntimeDefinitionRecord = {
   variableBindings: {
     consumes: [
       'goal',
+      'normalizedInput',
       'structuredData',
       'confirmedProposal',
       'metadata',
     ],
     produces: [
       'normalizedInput.problemSpace.realProblem',
+      'normalizedInput.problemSpace.scenario',
+      'normalizedInput.resources.timeBudget',
+      'normalizedInput.resources.timeBudgetCadence',
       'normalizedInput.confirmedProposal.keyStages',
       'normalizedInput.planningHints.paceSignal',
       'normalizedInput.planningHints.milestoneRange',

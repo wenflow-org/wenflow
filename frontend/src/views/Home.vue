@@ -23,14 +23,22 @@
           </template>
         </div>
 
-        <button type="button" class="mobile-menu-btn" :aria-label="mobileNavOpen ? '关闭菜单' : '打开菜单'" @click="toggleMobileNav">
+        <button
+          type="button"
+          class="mobile-menu-btn"
+          :class="{ 'mobile-menu-btn--open': mobileNavOpen }"
+          :aria-label="mobileNavOpen ? '关闭菜单' : '打开菜单'"
+          :aria-expanded="mobileNavOpen ? 'true' : 'false'"
+          aria-controls="home-mobile-nav"
+          @click="toggleMobileNav"
+        >
           <span></span>
           <span></span>
           <span></span>
         </button>
       </div>
 
-      <div class="mobile-nav" :class="{ 'mobile-nav--open': mobileNavOpen }">
+      <div id="home-mobile-nav" class="mobile-nav" :class="{ 'mobile-nav--open': mobileNavOpen }">
         <a href="#start" class="mobile-nav__item" @click="closeMobileNav">首页</a>
         <router-link to="/vision" class="mobile-nav__item" @click="closeMobileNav">愿景</router-link>
         <a href="https://github.com/wenflow-org/wenflow" class="mobile-nav__item" target="_blank" rel="noreferrer" @click="closeMobileNav">GitHub</a>
@@ -40,6 +48,11 @@
         </div>
       </div>
     </header>
+
+    <div class="home-mobile-action-bar" aria-label="移动端快捷操作">
+      <router-link :to="primaryCtaPath" class="home-mobile-action-bar__primary">{{ primaryCtaLabel }}</router-link>
+      <router-link :to="secondaryCtaPath" class="home-mobile-action-bar__secondary">{{ secondaryCtaLabel }}</router-link>
+    </div>
 
     <main id="start" class="home-main">
       <div class="home-bg-layer">

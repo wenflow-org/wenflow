@@ -25,7 +25,6 @@ type MessageRole = 'user' | 'assistant' | 'system';
 type ChatMessage = { role: MessageRole; content: string };
 import { EventBus, getEventBus } from '../../gateway/event-bus';
 import { textStructureAnalyzer } from '../../skills/text-structure-analyzer';
-import { timeEstimator } from '../../skills/time-estimator';
 import { logger } from '../../utils/logger';
 
 const PATH_AGENT_MAX_TOKENS = 32000;
@@ -62,11 +61,20 @@ function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
   const confirmedProposal = normalizedInput.confirmedProposal && typeof normalizedInput.confirmedProposal === 'object'
     ? normalizedInput.confirmedProposal
     : null;
+  const planningHints = normalizedInput.planningHints && typeof normalizedInput.planningHints === 'object'
+    ? normalizedInput.planningHints
+    : null;
   return {
     normalizedInput: {
       version: normalizePromptString(normalizedInput.version) || '1.0',
       learnerProfile: {
         surfaceGoal: normalizePromptString(learnerProfile.surfaceGoal),
+        motivation: normalizePromptString(learnerProfile.motivation),
+        urgency: normalizePromptString(learnerProfile.urgency),
+        backgroundExperience: normalizePromptString(learnerProfile.backgroundExperience),
+        painPoints: normalizePromptStringArray(learnerProfile.painPoints),
+        learningSignal: normalizePromptString(learnerProfile.learningSignal),
+        constraintsAndBoundaries: normalizePromptStringArray(learnerProfile.constraintsAndBoundaries),
         currentBaseline: {
           level: normalizePromptString(learnerProfile.currentBaseline?.level),
           evidence: normalizePromptString(learnerProfile.currentBaseline?.evidence),
@@ -78,6 +86,8 @@ function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
         currentPainPoint: normalizePromptString(problemSpace.currentPainPoint),
       },
       resources: {
+        timeBudget: normalizePromptString(resources.timeBudget),
+        timeBudgetCadence: normalizePromptString(resources.timeBudgetCadence),
         timePerWeek: normalizePromptString(resources.timePerWeek),
         timePerSession: normalizePromptString(resources.timePerSession),
         timeHorizon: normalizePromptString(resources.timeHorizon),
@@ -92,6 +102,16 @@ function buildPathSceneFramingPromptInput(pathSceneFraming: any) {
         firstDeliverable: normalizePromptString(confirmedProposal.firstDeliverable),
         keyStages: normalizePromptStringArray(confirmedProposal.keyStages),
         outOfScope: normalizePromptStringArray(confirmedProposal.outOfScope),
+      } : null,
+      planningHints: planningHints ? {
+        paceSignal: planningHints.paceSignal === 'compact' || planningHints.paceSignal === 'standard' || planningHints.paceSignal === 'extended'
+          ? planningHints.paceSignal
+          : null,
+        milestoneRange: Array.isArray(planningHints.milestoneRange) ? planningHints.milestoneRange : null,
+        conceptRange: Array.isArray(planningHints.conceptRange) ? planningHints.conceptRange : null,
+        subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,
+        subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
+        maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
       } : null,
     },
   };
@@ -119,6 +139,7 @@ export const DEFAULT_PATH_GENERATION_PROMPT = `你是一位认知建构师，负
 2. normalizedInput.confirmedProposal 是用户已确认方向，必须优先遵守，尤其是 learningDirection、firstDeliverable、keyStages、outOfScope。
 3. normalizedInput.successCriteria 如果存在 observableResult 或 acceptanceCheck，必须用于约束里程碑目标与任务完成标准。
 4. normalizedInput.planningHints 如果存在，是上游对路径节奏的建议范围，优先用于决定概念数、milestone 数、周期上限；若缺失，再使用默认范围。
+5. normalizedInput.problemSpace.scenario、normalizedInput.problemSpace.currentPainPoint、normalizedInput.learnerProfile.backgroundExperience、normalizedInput.learnerProfile.constraintsAndBoundaries 如果存在，都是 Goal 阶段已经显式暴露的主上下文，必须优先用于锚定路径场景、命名和范围边界。
 
 执行环境约束：
 1. 当前平台执行环境仅支持文本输入与文本输出。
@@ -205,7 +226,7 @@ successCriteria 约束：
 
 时间约束：
 1. 如果输入提供 totalWeeks，不要超过 totalWeeks；如果 normalizedInput.planningHints.maxWeeks 存在，也不要超过它；若两者都缺失，默认不超过 52 周。
-2. 如果输入提供 timePerWeek、timePerDay 或 totalWeeks，整体阶段任务量要与预算匹配，不要明显超配。
+2. 如果输入提供 normalizedInput.resources.timeBudget、timeBudgetCadence、timePerWeek、timePerDay 或 totalWeeks，整体阶段任务量要与预算匹配，不要明显超配。
 3. 预算不足时，优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段。
 4. 当原始目标天然容易让人想到视频教程、图片示意、界面演示时，也必须把路径收束为纯文本可完成的学习安排，不要把多模态资源写成默认前提。
 
@@ -487,6 +508,10 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   focus: string[];
   context: string;
   confidence: number;
+  structuredData?: any;
+  confirmedProposal?: any;
+  conversationHistory?: any[];
+  scenario?: string;
   replan?: any;
   pathSceneFraming?: any;
 }> {
@@ -498,6 +523,20 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   const conversationHistory = input.conversationHistory as any[] || [];
   const replan = input.metadata?.replan as any;
   const pathSceneFraming = input.metadata?.pathSceneFraming as any;
+  const framingNormalizedInput = pathSceneFraming?.normalizedInput && typeof pathSceneFraming.normalizedInput === 'object'
+    ? pathSceneFraming.normalizedInput
+    : null;
+  const framingPainPoints = Array.isArray(framingNormalizedInput?.learnerProfile?.painPoints)
+    ? framingNormalizedInput.learnerProfile.painPoints.filter(Boolean)
+    : [];
+  const framingContext = typeof framingNormalizedInput?.problemSpace?.scenario === 'string' && framingNormalizedInput.problemSpace.scenario.trim()
+    ? framingNormalizedInput.problemSpace.scenario.trim()
+    : (typeof framingNormalizedInput?.problemSpace?.currentPainPoint === 'string' && framingNormalizedInput.problemSpace.currentPainPoint.trim()
+      ? framingNormalizedInput.problemSpace.currentPainPoint.trim()
+      : '');
+  const framingLevel = typeof framingNormalizedInput?.learnerProfile?.currentBaseline?.level === 'string' && framingNormalizedInput.learnerProfile.currentBaseline.level.trim()
+    ? framingNormalizedInput.learnerProfile.currentBaseline.level.trim()
+    : null;
   
   if (structuredData) {
     logger.info('使用结构化数据', {
@@ -517,9 +556,9 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     
     return {
       subject: input.goal,
-      level: structuredData.learner?.skill_level || input.currentLevel || 'beginner',
-      focus: structuredData.end_user?.pain_points || [],
-      context: structuredData.end_user?.identity || '',
+      level: framingLevel || structuredData.learner?.skill_level || input.currentLevel || 'beginner',
+      focus: framingPainPoints.length > 0 ? framingPainPoints : (structuredData.end_user?.pain_points || []),
+      context: framingContext || structuredData.end_user?.identity || '',
       confidence: input.confidenceScores?.understanding || 0.8,
       // @ts-ignore
       scenario,
@@ -581,7 +620,15 @@ ${input.timePerDay ? `每天可用时间：${input.timePerDay}` : ''}` }
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        ...parsed,
+        level: framingLevel || parsed.level,
+        focus: framingPainPoints.length > 0 ? framingPainPoints : (Array.isArray(parsed.focus) ? parsed.focus : []),
+        context: framingContext || parsed.context || '',
+        replan,
+        pathSceneFraming,
+      };
     }
   } catch (error: any) {
     throw new Error(`PATH_AGENT_GOAL_ANALYSIS_INVALID: ${error?.message || 'JSON parse failed'}`);

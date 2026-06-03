@@ -88,70 +88,6 @@
             </div>
           </section>
 
-          <section v-if="isTestMode" class="planning-card-group planning-debug-block">
-            <div class="planning-debug-block__head">
-              <span class="planning-block-label">调试面板</span>
-              <strong>{{ testDebugSummary }}</strong>
-            </div>
-            <div v-if="virtualDebugSummary" class="planning-debug-block__hint">
-              {{ virtualDebugSummary }}
-            </div>
-
-            <div class="planning-debug-metrics">
-              <article v-for="item in testDebugCards" :key="item.label" class="planning-debug-metric">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-              </article>
-            </div>
-
-            <div v-if="testRequestTraces.length > 0" class="planning-debug-traces">
-              <details v-for="trace in testRequestTraces" :key="trace.id" class="planning-debug-trace">
-                <summary class="planning-debug-trace__summary">
-                  <div>
-                    <strong>{{ trace.title }}</strong>
-                    <span>{{ trace.subtitle }}</span>
-                    <span>{{ trace.statusLabel }}</span>
-                  </div>
-                  <div class="planning-debug-trace__meta">
-                    <em>{{ trace.badge }}</em>
-                    <span>{{ trace.badgeNote }}</span>
-                  </div>
-                </summary>
-
-                <div class="planning-debug-trace__body">
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">本轮用户输入</span>
-                    <pre>{{ trace.input }}</pre>
-                  </section>
-
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">请求状态快照</span>
-                    <pre>{{ trace.stateSnapshot }}</pre>
-                  </section>
-
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">发送给模型的完整 messages</span>
-                    <pre>{{ trace.requestMessages }}</pre>
-                  </section>
-
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">本轮尝试详情</span>
-                    <pre>{{ trace.attempts }}</pre>
-                  </section>
-
-                  <section v-if="trace.rawUserVisible" class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">最后一次原始文本输出</span>
-                    <pre>{{ trace.rawUserVisible }}</pre>
-                  </section>
-                </div>
-              </details>
-            </div>
-
-            <div v-else class="planning-status-empty">
-              发起测试对话后，这里会显示每轮请求实际发送给模型的全部内容。
-            </div>
-          </section>
-
         </aside>
 
         <section class="planning-chat-card glass-card">
@@ -418,6 +354,98 @@
         </section>
 
       </section>
+
+      <button v-if="isTestMode" type="button" class="goal-debug-float-btn" @click="goalDebugDrawerVisible = true">
+        <strong>Goal / Raw</strong>
+        <span>{{ goalDebugQuickChipText }}</span>
+      </button>
+
+      <el-drawer
+        v-if="isTestMode"
+        v-model="goalDebugDrawerVisible"
+        title="Goal 调试数据"
+        size="min(92vw, 860px)"
+        destroy-on-close
+        class="goal-debug-drawer"
+      >
+        <div class="goal-debug-drawer__body">
+          <div class="goal-debug-panel__actions">
+            <button type="button" class="planning-secondary-btn" :disabled="loading" @click="refreshGoalDebugPanel">刷新调试数据</button>
+          </div>
+
+          <div v-if="virtualDebugSummary" class="goal-debug-inline-hint">
+            {{ virtualDebugSummary }}
+          </div>
+
+          <div class="goal-debug-toolbar">
+            <span v-for="item in goalDebugQuickChips" :key="item.label" class="goal-debug-quick-chip">
+              <strong>{{ item.label }}</strong>
+              <em>{{ item.value }}</em>
+            </span>
+          </div>
+
+          <section class="planning-card-group planning-debug-block goal-debug-block--drawer">
+            <div class="planning-debug-block__head">
+              <span class="planning-block-label">调试面板</span>
+              <strong>{{ testDebugSummary || '0 次请求' }}</strong>
+            </div>
+
+            <div class="planning-debug-metrics">
+              <article v-for="item in testDebugCards" :key="item.label" class="planning-debug-metric">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </article>
+            </div>
+
+            <div v-if="testRequestTraces.length > 0" class="planning-debug-traces">
+              <details v-for="trace in testRequestTraces" :key="trace.id" class="planning-debug-trace">
+                <summary class="planning-debug-trace__summary">
+                  <div>
+                    <strong>{{ trace.title }}</strong>
+                    <span>{{ trace.subtitle }}</span>
+                    <span>{{ trace.statusLabel }}</span>
+                  </div>
+                  <div class="planning-debug-trace__meta">
+                    <em>{{ trace.badge }}</em>
+                    <span>{{ trace.badgeNote }}</span>
+                  </div>
+                </summary>
+
+                <div class="planning-debug-trace__body">
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">本轮用户输入</span>
+                    <pre>{{ trace.input }}</pre>
+                  </section>
+
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">请求状态快照</span>
+                    <pre>{{ trace.stateSnapshot }}</pre>
+                  </section>
+
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">发送给模型的完整 messages</span>
+                    <pre>{{ trace.requestMessages }}</pre>
+                  </section>
+
+                  <section class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">本轮尝试详情</span>
+                    <pre>{{ trace.attempts }}</pre>
+                  </section>
+
+                  <section v-if="trace.rawUserVisible" class="planning-debug-trace__section">
+                    <span class="planning-debug-trace__label">最后一次原始文本输出</span>
+                    <pre>{{ trace.rawUserVisible }}</pre>
+                  </section>
+                </div>
+              </details>
+            </div>
+
+            <div v-else class="planning-status-empty">
+              发起测试对话后，这里会显示每轮请求实际发送给模型的全部内容。
+            </div>
+          </section>
+        </div>
+      </el-drawer>
 
       <!-- 重新规划对话框 -->
       <el-dialog
@@ -964,6 +992,7 @@ const activeQuickReplies = computed(() => {
 
 const hasConversationStarted = computed(() => Boolean(conversationId.value || userMessages.value.length > 0 || loading.value));
 const showPlanningSidePanels = computed(() => hasConversationStarted.value);
+const goalDebugDrawerVisible = ref(false);
 const shouldShowUploadPanel = computed(() => showUploadPanel.value);
 const shouldShowUploadSummary = computed(() => !showUploadPanel.value && hasUploadedFiles.value);
 const uploadSummaryHint = computed(() => {
@@ -1265,6 +1294,20 @@ const testDebugSummary = computed(() => {
   if (!isTestMode.value) return '';
   const traceCount = Array.isArray(testDebug.value.requestLog) ? testDebug.value.requestLog.length : 0;
   return `${traceCount} 次请求`;
+});
+
+const goalDebugQuickChips = computed(() => {
+  if (!isTestMode.value) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: '请求', value: testDebugSummary.value || '0 次请求' },
+    ...testDebugCards.value.slice(0, 3)
+  ];
+});
+
+const goalDebugQuickChipText = computed(() => {
+  const parts = goalDebugQuickChips.value.slice(0, 3).map((item) => `${item.label} ${item.value}`);
+  return parts.length > 0 ? parts.join(' · ') : '查看 Goal 原始请求';
 });
 
 const virtualDebugSummary = computed(() => {
@@ -1868,6 +1911,10 @@ const resetLocalConversationState = () => {
     writeStoredConversationId('');
     syncConversationRoute('');
   }
+};
+
+const refreshGoalDebugPanel = async () => {
+  await restoreConversation(conversationId.value || undefined);
 };
 
 const formatMessage = (text: string) => md.render(text);
@@ -4742,6 +4789,91 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.goal-debug-float-btn {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 1100;
+  display: grid;
+  gap: 4px;
+  min-width: 156px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--planning-blue), var(--planning-blue-deep));
+  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
+  color: #fff;
+  text-align: left;
+}
+
+.goal-debug-float-btn strong {
+  font-size: 14px;
+}
+
+.goal-debug-float-btn span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.goal-debug-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+}
+
+.goal-debug-drawer :deep(.el-drawer__body) {
+  padding-top: 0;
+}
+
+.goal-debug-drawer__body {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.goal-debug-panel__actions,
+.goal-debug-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.goal-debug-inline-hint {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(52, 120, 246, 0.08);
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  color: var(--planning-muted);
+  line-height: 1.6;
+}
+
+.goal-debug-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.goal-debug-quick-chip strong {
+  font-size: 12px;
+  color: var(--planning-ink);
+}
+
+.goal-debug-quick-chip em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--planning-muted);
+  font-weight: 700;
+}
+
+.goal-debug-block--drawer {
+  margin-top: 0;
+}
+
 .planning-debug-block__head {
   display: flex;
   align-items: baseline;
@@ -6182,6 +6314,13 @@ font-weight: 800;
 }
 
 @media (max-width: 520px) {
+  .goal-debug-float-btn {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    min-width: 0;
+  }
+
   .planning-topbar-card h1 {
     font-size: 1.8rem;
   }

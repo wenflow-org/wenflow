@@ -60,6 +60,7 @@ interface GeneratePathData {
     confirmedProposal?: any;
     confidenceScores?: any;
     conversationHistory?: Array<{ role: string; content: string }>;
+    normalizedInput?: any;
     goalFinalPayload?: GoalToPathHandoffSnapshot;
     pathSceneFraming?: any;
     pathSceneFramingInput?: any;
@@ -142,8 +143,10 @@ interface PathSceneFramingNormalizedInput {
     };
     motivation?: string | null;
     urgency?: string | null;
+    backgroundExperience?: string | null;
     painPoints?: string[];
     learningSignal?: string | null;
+    constraintsAndBoundaries?: string[];
   };
   problemSpace?: {
     realProblem?: string | null;
@@ -151,6 +154,8 @@ interface PathSceneFramingNormalizedInput {
     currentPainPoint?: string | null;
   };
   resources?: {
+    timeBudget?: string | null;
+    timeBudgetCadence?: string | null;
     timePerWeek?: string | null;
     timePerSession?: string | null;
     timeHorizon?: string | null;
@@ -165,6 +170,14 @@ interface PathSceneFramingNormalizedInput {
     firstDeliverable?: string | null;
     keyStages?: string[];
     outOfScope?: string[];
+  } | null;
+  planningHints?: {
+    paceSignal?: 'compact' | 'standard' | 'extended' | null;
+    milestoneRange?: [number, number] | number[];
+    conceptRange?: [number, number] | number[];
+    subtasksPerStageRange?: [number, number] | number[];
+    subtaskMinutesRange?: [number, number] | number[];
+    maxWeeks?: number | null;
   } | null;
 }
 
@@ -261,6 +274,7 @@ interface PathNormalizedInputSnapshot {
   timePerDay: string | null;
   confirmedProposal: any;
   conversationHistory: Array<{ role: string; content: string }>;
+  normalizedInput: PathSceneFramingNormalizedInput | null;
 }
 
 interface PathStageTraceItem {
@@ -407,6 +421,53 @@ function getSceneFramingNormalizedInput(sceneFraming: PathSceneFraming | null | 
     return null;
   }
   return sceneFraming.normalizedInput;
+}
+
+function isStructuredNormalizedInput(value: any): value is PathSceneFramingNormalizedInput {
+  if (!value || typeof value !== 'object') return false;
+  return !!(
+    value.learnerProfile
+    || value.problemSpace
+    || value.resources
+    || value.successCriteria
+    || value.planningHints
+  );
+}
+
+function resolvePersistedNormalizedInput(parsedTemplate: Record<string, any> | null | undefined): PathSceneFramingNormalizedInput | null {
+  const candidate = parsedTemplate?.normalizedInput;
+  if (candidate && typeof candidate === 'object') {
+    if (candidate.normalizedInput && isStructuredNormalizedInput(candidate.normalizedInput)) {
+      return candidate.normalizedInput;
+    }
+    if (isStructuredNormalizedInput(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function resolveNormalizedInputSnapshot(parsedTemplate: Record<string, any> | null | undefined): PathNormalizedInputSnapshot | null {
+  const snapshot = parsedTemplate?.normalizedInputSnapshot;
+  if (snapshot && typeof snapshot === 'object') {
+    return snapshot as PathNormalizedInputSnapshot;
+  }
+
+  const candidate = parsedTemplate?.normalizedInput;
+  if (
+    candidate
+    && typeof candidate === 'object'
+    && (
+      typeof candidate.description === 'string'
+      || typeof candidate.sourceConversationId === 'string'
+      || typeof candidate.timePerDay === 'string'
+    )
+  ) {
+    return candidate as PathNormalizedInputSnapshot;
+  }
+
+  return null;
 }
 
 function getSceneFramingFirstDeliverable(sceneFraming: PathSceneFraming | null | undefined): string | null {
@@ -623,7 +684,7 @@ function buildSceneSummaryFromFraming(
     planningFocus: focusSource,
     excludedScope: outOfScope.length > 0 ? outOfScope : legacyExcludedScope,
     riskFlags: normalizeStringArray(sceneFraming.riskFlags),
-    timeBudget: normalizedInput?.resources?.timePerWeek || sceneFraming.resourceProfile?.timeBudget || null,
+    timeBudget: normalizedInput?.resources?.timeBudget || normalizedInput?.resources?.timePerWeek || sceneFraming.resourceProfile?.timeBudget || null,
     timeHorizon: normalizedInput?.resources?.timeHorizon || sceneFraming.resourceProfile?.timeHorizon || null,
     milestoneCount: typeof milestoneCount === 'number' ? milestoneCount : undefined,
     taskCount: typeof taskCount === 'number' ? taskCount : undefined,
@@ -801,6 +862,10 @@ function buildNormalizedPathInputSnapshot(data: GeneratePathData): PathNormalize
         }))
         .filter((message: { role: string; content: string }) => message.content)
     : [];
+  const sceneFramingNormalizedInput = getSceneFramingNormalizedInput(data.userProfile?.pathSceneFraming);
+  const orchestratorNormalizedInput = data.userProfile?.normalizedInput && typeof data.userProfile.normalizedInput === 'object'
+    ? data.userProfile.normalizedInput as PathSceneFramingNormalizedInput
+    : null;
 
   return {
     source: data.source || (data.sourceConversationId ? 'goal' : 'api'),
@@ -814,6 +879,7 @@ function buildNormalizedPathInputSnapshot(data: GeneratePathData): PathNormalize
     timePerDay: data.userProfile?.timePerDay || null,
     confirmedProposal: data.userProfile?.confirmedProposal || null,
     conversationHistory,
+    normalizedInput: sceneFramingNormalizedInput || orchestratorNormalizedInput || null,
   };
 }
 
@@ -884,13 +950,11 @@ class LearningService {
     const stageDesigns = parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object'
       ? parsedTemplate.stageDesigns
       : null;
-    const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
-      ? parsedTemplate.normalizedInput
-      : null;
+    const normalizedInput = resolveNormalizedInputSnapshot(parsedTemplate);
     const goalFinalPayload = parsedTemplate?.goalFinalPayload && typeof parsedTemplate.goalFinalPayload === 'object'
       ? parsedTemplate.goalFinalPayload
       : null;
-    const sceneFramingNormalizedInput = getSceneFramingNormalizedInput(sceneFraming);
+    const sceneFramingNormalizedInput = getSceneFramingNormalizedInput(sceneFraming) || resolvePersistedNormalizedInput(parsedTemplate);
     const cognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
     const milestoneConceptBindings = parsePathMilestoneConceptBindings(path.aiPromptTemplate || null);
     const milestoneConceptBindingMap = new Map<number, { coreConcept: string | null; title?: string | null }>();
@@ -993,6 +1057,7 @@ class LearningService {
         conversationHistory: Array.isArray(normalizedInput?.conversationHistory)
           ? normalizedInput.conversationHistory
           : [],
+        normalizedInput: normalizedInput?.normalizedInput || sceneFramingNormalizedInput || null,
       },
       framing: sceneFraming ? {
         normalizedInput: sceneFramingNormalizedInput || null,
@@ -1035,6 +1100,7 @@ class LearningService {
         raw: {
           goalFinalPayload,
           normalizedInput,
+          normalizedInputStructured: sceneFramingNormalizedInput || null,
           sceneFramingInput,
           sceneFramingRaw,
           pathAgentInput,
@@ -1851,7 +1917,9 @@ class LearningService {
       goal: data.description,
       currentLevel: currentLevel || 'beginner',
       timePerDay: data.userProfile?.timePerDay,
+      structuredData: data.userProfile?.structuredData,
       confirmedProposal: data.userProfile?.confirmedProposal,
+      confidenceScores: data.userProfile?.confidenceScores,
       conversationHistory: data.userProfile?.conversationHistory,
       metadata: {
         availableTime: data.userProfile?.timePerDay,
@@ -1860,7 +1928,10 @@ class LearningService {
         totalWeeks: data.userProfile?.totalWeeks,
         userId: data.userId,
         replan: data.userProfile?.replan,
-        pathSceneFraming: data.userProfile?.pathSceneFraming
+        pathSceneFraming: data.userProfile?.pathSceneFraming,
+        goalFinalPayload: data.userProfile?.goalFinalPayload || null,
+        normalizedInput: data.userProfile?.normalizedInput || null,
+        conversationHistory: Array.isArray(data.userProfile?.conversationHistory) ? data.userProfile.conversationHistory : [],
       }
     };
   }
@@ -1876,6 +1947,7 @@ class LearningService {
           goal: agentInput.goal,
           currentLevel: agentInput.currentLevel,
           timePerDay: agentInput.timePerDay,
+          structuredData: agentInput.structuredData,
           confirmedProposal: agentInput.confirmedProposal,
           metadata: agentInput.metadata || {},
         };
@@ -1891,6 +1963,7 @@ class LearningService {
           pathSceneFraming: sceneFraming,
           pathSceneFramingRaw: sceneFramingRaw,
           pathSceneFramingInput,
+          normalizedInput: getSceneFramingNormalizedInput(sceneFraming) || data.userProfile?.normalizedInput || null,
         };
         agentInput.metadata = {
           ...(agentInput.metadata || {}),
@@ -1977,6 +2050,7 @@ class LearningService {
         mode: data.mode || 'generate',
         goalFinalPayload: buildGoalToPathHandoffSnapshot(data),
         normalizedInput: buildNormalizedPathInputSnapshot(data),
+        normalizedInputSnapshot: buildNormalizedPathInputSnapshot(data),
         sceneFramingInput: analysis.sceneFramingInput || data.userProfile?.pathSceneFramingInput || null,
         sceneFramingRaw: analysis.sceneFramingRaw || data.userProfile?.pathSceneFramingRaw || null,
         pathAgentInput: analysis.pathAgentInput || null,
@@ -2147,9 +2221,9 @@ class LearningService {
       const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
         ? parsedTemplate.sceneFraming
         : null;
-      const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
-        ? parsedTemplate.normalizedInput
-        : null;
+      const normalizedInput = getSceneFramingNormalizedInput(sceneFraming)
+        || resolvePersistedNormalizedInput(parsedTemplate)
+        || null;
       const stageDesignerBaseInput = {
         cognitiveCore: pathCognitiveDesign,
         normalizedInput,
@@ -2860,9 +2934,9 @@ const learningPath = await prisma.learning_paths.findUnique({
   private async redesignMilestoneTasks(path: any, milestone: any, data: PathReplanRequest, learnerReplanProjection: any) {
     const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
     const pathCognitiveDesign = parsePathCognitiveDesign(path.aiPromptTemplate || null);
-    const normalizedInput = parsedTemplate?.normalizedInput && typeof parsedTemplate.normalizedInput === 'object'
-      ? parsedTemplate.normalizedInput
-      : null;
+    const normalizedInput = getSceneFramingNormalizedInput(parsedTemplate?.sceneFraming)
+      || resolvePersistedNormalizedInput(parsedTemplate)
+      || null;
     const sceneFraming = parsedTemplate?.sceneFraming && typeof parsedTemplate.sceneFraming === 'object'
       ? parsedTemplate.sceneFraming
       : null;

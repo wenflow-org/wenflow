@@ -24,7 +24,6 @@ export const basicGenerator: AgentPlugin = {
     'content-creation',
     'exercise-generation',
     'code-example',
-    'error-pattern',
     'difficulty-adaptation'
   ],
 

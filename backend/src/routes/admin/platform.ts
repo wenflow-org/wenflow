@@ -724,7 +724,7 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
         ? Number(((successStats.success / totalCalls) * 100).toFixed(1))
         : Number((((registration?.successRate ?? 1)) * 100).toFixed(1));
 
-      const lifecycleStatus = catalog[agentId]?.status || (isOfficialAgent(agentId) ? 'published' : 'draft');
+      const lifecycleStatus = catalog[agentId]?.status || (manifest ? 'published' : 'draft');
 
       return {
         agentId,
@@ -738,7 +738,8 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
         version: registration?.version || '1.0.0',
         endpoint: registration?.endpoint,
         lifecycleStatus,
-        isOfficial: isOfficialAgent(agentId),
+        isOfficial: !!manifest,
+        runtimeEnabled: manifest?.runtimeEnabled ?? true,
         callCount: totalCalls,
         successRate,
         avgDuration: callStats?.avgDuration || 0,
@@ -1079,11 +1080,11 @@ router.get('/orchestrators/:orchestratorId/config', async (req: Request, res: Re
         config,
         defaults: DEFAULT_PATH_ORCHESTRATOR_INPUT_CONFIG,
         availableSourcePaths: {
-          descriptionSources: ['understanding.real_problem', 'rawGoal'],
+          descriptionSources: ['visibleSummary.realProblem', 'understanding.real_problem', 'rawGoal'],
           subjectSources: ['structuredData.subject', 'collected.subject'],
-          skillLevelSources: ['understanding.background.current_level', 'collected.level'],
-          timePerDaySources: ['understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
-          deadlineTextSources: ['understanding.available_resources.time_horizon', 'understanding.deadline_text'],
+          skillLevelSources: ['visibleSummary.currentBaseline.level', 'understanding.background.current_level', 'collected.level'],
+          timePerDaySources: ['visibleSummary.resources.timeBudget', 'understanding.background.available_time', 'collected.timePerDay', 'understanding.available_resources.time_budget'],
+          deadlineTextSources: ['visibleSummary.resources.deadlineText', 'visibleSummary.resources.timeHorizon', 'understanding.available_resources.time_horizon', 'understanding.deadline_text'],
           flags: ['includeStructuredData', 'includeConfirmedProposal', 'includeConfidenceScores', 'includeConversationHistory']
         }
       }
@@ -1134,14 +1135,15 @@ router.get('/orchestrators/:orchestratorId/data-contract', async (req: Request, 
           fields: [
             { key: 'sourceConversationId', description: 'Goal 会话关联 ID。' },
             { key: 'rawGoal', description: '用户原始目标表述。' },
-            { key: 'stage', description: 'Goal 最终确认时的阶段。' },
-            { key: 'confidence', description: 'Goal 阶段对当前收敛结果的置信度。' },
             { key: 'finalUserVisible', description: 'Goal 最后一次面向用户的确认文本。' },
-            { key: 'understanding', description: 'Goal 阶段结构化理解结果。' },
-            { key: 'collected', description: 'Goal 聚合后的补充收集信息。' },
-            { key: 'structuredData', description: 'Goal 附带的更强结构化数据。' },
-            { key: 'confirmedProposal', description: '用户已确认的方向、交付物和阶段。' },
-            { key: 'confidenceScores', description: '关键维度的置信分数。' },
+            { key: 'visibleSummary', description: '只包含 Goal 对话中已显式暴露、可进入平台主链路的结构化摘要。' },
+            { key: 'visibleSummary.backgroundExperience', description: '与当前目标直接相关的显式背景经验。' },
+            { key: 'visibleSummary.painPoints', description: 'Goal 中显式暴露的痛点列表。' },
+            { key: 'visibleSummary.constraintsAndBoundaries', description: '显式表达的约束、禁区与边界。' },
+            { key: 'visibleSummary.scenario', description: '显式可见的失败/卡住场景摘要。' },
+            { key: 'visibleSummary.resources.timeBudget', description: '平时可投入的学习预算文本。' },
+            { key: 'visibleSummary.resources.timeBudgetCadence', description: '学习预算的节奏归一化。' },
+            { key: 'visibleSummary.resources.timeHorizon', description: '整体时间窗口，不等于投入预算。' },
             { key: 'conversationHistory', description: '全部可见消息，上下文辅助证据。' }
           ]
         },
@@ -1155,18 +1157,23 @@ router.get('/orchestrators/:orchestratorId/data-contract', async (req: Request, 
             { key: 'sourceConversationId', description: '保留 Goal 会话关联。' },
             { key: 'existingPathId', description: '重试或覆盖时沿用的路径 ID。' },
             { key: 'skillLevel', description: '当前水平信号。' },
-            { key: 'timePerDay', description: '时间投入信号。' },
+            { key: 'timePerDay', description: '兼容旧链路保留的可投入时间信号。' },
             { key: 'structuredData', description: '按开关决定是否透传。' },
             { key: 'confirmedProposal', description: '按开关决定是否透传。' },
             { key: 'confidenceScores', description: '按开关决定是否透传。' },
-            { key: 'conversationHistory', description: '全部可见消息，上下文运行证据。' }
+            { key: 'conversationHistory', description: '全部可见消息，上下文运行证据。' },
+            { key: 'normalizedInput', description: '归一化后的结构化主输入，供下游直接消费。' }
           ]
         },
         framingContract: {
           name: 'pathSceneFraming',
           description: 'Path 清洗层输出的标准结构，供下游直接以 normalizedInput 作为主输入消费。',
           fields: [
-            { key: 'normalizedInput', description: '清洗后的主输入结构，不含编排控制字段。' }
+            { key: 'normalizedInput', description: '清洗后的主输入结构，不含编排控制字段。' },
+            { key: 'normalizedInput.resources.timeBudget', description: '平时可投入的学习预算。' },
+            { key: 'normalizedInput.resources.timeBudgetCadence', description: '学习预算的节奏归一化。' },
+            { key: 'normalizedInput.problemSpace.scenario', description: 'Goal 中已显式暴露的具体应用/失败场景。' },
+            { key: 'normalizedInput.planningHints', description: '基于时间窗口与预算推算的路径节奏建议。' }
           ]
         },
         outputContract: {
