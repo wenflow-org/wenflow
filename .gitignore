@@ -191,6 +191,7 @@ create-admin.js
 test-conversation.js
 test_*.mjs
 test-*.ts
+!backend/src/routes/test-*.ts
 test_dialogue.py
 
 nul
