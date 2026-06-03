@@ -724,6 +724,10 @@ if ($backendReady) {
     Write-Host "Backend is ready." -ForegroundColor Green
 } else {
     Write-Host "Backend did not become ready in time. Check the backend window for errors." -ForegroundColor Yellow
+    if ($UseNginx) {
+        Write-Host "Stopping Nginx startup because the backend is unavailable. Otherwise the domain would serve the frontend but return 502 for /api requests." -ForegroundColor Red
+        exit 1
+    }
 }
 
 if ($UseNginx) {
