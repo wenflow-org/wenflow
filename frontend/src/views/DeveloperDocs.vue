@@ -305,7 +305,7 @@ LOG_LEVEL=debug</code></pre>
               <span class="code-title">frontend/.env</span>
               <button class="copy-btn" @click="copyCode('frontend-env')">复制</button>
             </div>
-            <pre><code>VITE_API_BASE_URL=http://localhost:3001/api</code></pre>
+            <pre><code>VITE_API_BASE_URL=/api</code></pre>
           </div>
 
           <h3>AI 服务配置</h3>

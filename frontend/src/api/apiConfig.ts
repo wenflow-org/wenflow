@@ -1,7 +1,7 @@
 // API 配置服务
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 export interface APIConfig {
   baseURL: string;
@@ -17,7 +17,7 @@ export const apiConfigAPI = {
    * 获取当前配置
    */
   getConfig: async () => {
-    const response = await axios.get<APIConfig>(`${API_BASE}/api/prompts/config`);
+    const response = await axios.get<APIConfig>(`${API_BASE}/admin/api-config`);
     return response.data;
   },
 
@@ -25,7 +25,7 @@ export const apiConfigAPI = {
    * 更新配置
    */
   updateConfig: async (config: Partial<APIConfig>) => {
-    const response = await axios.put<APIConfig>(`${API_BASE}/api/prompts/config`, config);
+    const response = await axios.put<APIConfig>(`${API_BASE}/admin/api-config`, config);
     return response.data;
   },
 
@@ -33,7 +33,7 @@ export const apiConfigAPI = {
    * 测试连接
    */
   testConnection: async () => {
-    const response = await axios.post<{ success: boolean; message: string }>(`${API_BASE}/api/prompts/config/test`);
+    const response = await axios.post<{ success: boolean; message: string }>(`${API_BASE}/admin/api-config/test`);
     return response.data;
   },
 };

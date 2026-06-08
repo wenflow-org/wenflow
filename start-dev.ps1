@@ -14,6 +14,194 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$script:EnvFileMaxBytes = 1MB
+$script:EnvFileMaxLines = 500
+$script:EnvFileMaxLineLength = 4096
+$script:EnvFileRecoveryReadLimitBytes = 8MB
+
+function Get-Utf8NoBomEncoding {
+    return New-Object System.Text.UTF8Encoding($false)
+}
+
+function Get-EnvLineRegex {
+    return '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$'
+}
+
+function Get-DefaultEnvEntries {
+    $defaults = [ordered]@{
+        NODE_ENV = 'development'
+        PORT = '3001'
+        CORS_ORIGIN = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
+        TRUST_PROXY = ''
+        DATABASE_URL = 'file:./dev.db'
+        JWT_SECRET = ''
+        ADMIN_LOCALHOST_ONLY = 'true'
+        LOGIN_MAX_ATTEMPTS = '5'
+        LOGIN_LOCK_DURATION = '900000'
+        JWT_EXPIRES_IN = '7d'
+        AI_API_URL = 'https://api.deepseek.com'
+        AI_API_KEY = ''
+        AI_MODEL = 'deepseek-v4-flash'
+        AI_MODEL_REASONING = 'deepseek-v4-pro'
+        FRONTEND_URL = 'http://localhost:5173'
+        INIT_ADMIN_NAME = 'admin'
+        INIT_ADMIN_PASSWORD = ''
+    }
+
+    return $defaults
+}
+
+function Write-EnvLinesUtf8 {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Lines
+    )
+
+    $parentPath = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($parentPath) -and -not (Test-Path -LiteralPath $parentPath)) {
+        New-Item -ItemType Directory -Path $parentPath | Out-Null
+    }
+
+    [System.IO.File]::WriteAllLines($Path, $Lines, (Get-Utf8NoBomEncoding))
+}
+
+function Read-EnvFileLines {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @()
+    }
+
+    return [System.IO.File]::ReadAllLines($Path, (Get-Utf8NoBomEncoding))
+}
+
+function Get-EnvEntriesFromFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $entries = [ordered]@{}
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $entries
+    }
+
+    $lineRegex = Get-EnvLineRegex
+    foreach ($line in [System.IO.File]::ReadLines($Path, (Get-Utf8NoBomEncoding))) {
+        if ($line -match $lineRegex) {
+            $key = $matches[1]
+            if (-not $entries.Contains($key)) {
+                $entries[$key] = $matches[2].Trim()
+            }
+        }
+    }
+
+    return $entries
+}
+
+function Get-MinimalEnvLines {
+    param(
+        [System.Collections.IDictionary]$RecoveredEntries = $null
+    )
+
+    $entries = Get-DefaultEnvEntries
+    if ($RecoveredEntries) {
+        foreach ($key in $RecoveredEntries.Keys) {
+            $entries[$key] = [string]$RecoveredEntries[$key]
+        }
+    }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($key in $entries.Keys) {
+        $lines.Add("$key=$($entries[$key])")
+    }
+
+    return $lines.ToArray()
+}
+
+function Get-EnvFileRecoveryReason {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return ''
+    }
+
+    $fileInfo = Get-Item -LiteralPath $Path
+    if ($fileInfo.Length -gt $script:EnvFileMaxBytes) {
+        return "file size $($fileInfo.Length) bytes exceeds $($script:EnvFileMaxBytes) bytes"
+    }
+
+    $lineCount = 0
+    foreach ($line in [System.IO.File]::ReadLines($Path, (Get-Utf8NoBomEncoding))) {
+        $lineCount++
+        if ($lineCount -gt $script:EnvFileMaxLines) {
+            return "line count exceeds $($script:EnvFileMaxLines)"
+        }
+
+        if ($line.Length -gt $script:EnvFileMaxLineLength) {
+            return "a line exceeds $($script:EnvFileMaxLineLength) characters"
+        }
+
+        if ($line.IndexOf([char]0) -ge 0) {
+            return 'file contains NUL characters'
+        }
+    }
+
+    return ''
+}
+
+function Initialize-EnvFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [System.Collections.IDictionary]$RecoveredEntries = $null
+    )
+
+    Write-EnvLinesUtf8 -Path $Path -Lines (Get-MinimalEnvLines -RecoveredEntries $RecoveredEntries)
+}
+
+function Ensure-EnvFileHealthy {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Initialize-EnvFile -Path $Path
+        Write-Host "Created minimal backend/.env at $Path" -ForegroundColor Green
+        return
+    }
+
+    $recoveryReason = Get-EnvFileRecoveryReason -Path $Path
+    if ([string]::IsNullOrWhiteSpace($recoveryReason)) {
+        return
+    }
+
+    $fileInfo = Get-Item -LiteralPath $Path
+    $recoveredEntries = $null
+    if ($fileInfo.Length -le $script:EnvFileRecoveryReadLimitBytes) {
+        $recoveredEntries = Get-EnvEntriesFromFile -Path $Path
+    }
+
+    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $backupPath = "$Path.corrupt.$timestamp.bak"
+    Move-Item -LiteralPath $Path -Destination $backupPath
+    Initialize-EnvFile -Path $Path -RecoveredEntries $recoveredEntries
+
+    Write-Host "Recovered abnormal backend/.env ($recoveryReason). Backup: $backupPath" -ForegroundColor Yellow
+    if ($null -eq $recoveredEntries) {
+        Write-Host 'The backup was not parsed because the file was too large. Review the backup if you need to restore custom values.' -ForegroundColor Yellow
+    }
+}
+
 function Test-ServiceReady {
     param(
         [Parameter(Mandatory = $true)]
@@ -259,13 +447,15 @@ function Get-EnvValue {
         return ''
     }
 
+    Ensure-EnvFileHealthy -Path $Path
     $escapedKey = [Regex]::Escape($Key)
-    $line = Get-Content -Path $Path | Where-Object { $_ -match "^\s*$escapedKey\s*=" } | Select-Object -First 1
-    if (-not $line) {
-        return ''
+    foreach ($line in (Read-EnvFileLines -Path $Path)) {
+        if ($line -match "^\s*$escapedKey\s*=") {
+            return (($line -replace "^\s*$escapedKey\s*=", '').Trim())
+        }
     }
 
-    return (($line -replace "^\s*$escapedKey\s*=", '').Trim())
+    return ''
 }
 
 function Set-EnvValue {
@@ -278,32 +468,38 @@ function Set-EnvValue {
         [string]$Value
     )
 
-    $content = @()
-    if (Test-Path $Path) {
-        $content = @(Get-Content -Path $Path)
+    Ensure-EnvFileHealthy -Path $Path
+
+    $content = New-Object System.Collections.Generic.List[string]
+    foreach ($line in (Read-EnvFileLines -Path $Path)) {
+        $content.Add($line)
     }
 
     $escapedKey = [Regex]::Escape($Key)
     $newLine = "$Key=$Value"
     $updated = $false
+    $resultLines = New-Object System.Collections.Generic.List[string]
 
-    for ($i = 0; $i -lt $content.Count; $i++) {
-        if ($content[$i] -match "^\s*$escapedKey\s*=") {
-            $content[$i] = $newLine
-            $updated = $true
-            break
+    foreach ($line in $content) {
+        if ($line -match "^\s*$escapedKey\s*=") {
+            if (-not $updated) {
+                $resultLines.Add($newLine)
+                $updated = $true
+            }
+            continue
         }
+
+        $resultLines.Add($line)
     }
 
     if (-not $updated) {
-        if ($content.Count -gt 0 -and $content[-1] -ne '') {
-            $content += ''
+        if ($resultLines.Count -gt 0 -and $resultLines[$resultLines.Count - 1] -ne '') {
+            $resultLines.Add('')
         }
-        $content += $newLine
+        $resultLines.Add($newLine)
     }
 
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllLines($Path, $content, $utf8NoBom)
+    Write-EnvLinesUtf8 -Path $Path -Lines $resultLines.ToArray()
 }
 
 function Get-LocalIPAddress {
@@ -432,8 +628,8 @@ function Ensure-BackendEnvForNginx {
         $frontendUrl = 'http://localhost'
         $corsOrigin = $defaultLocalCorsOrigin
     } else {
-        $frontendUrl = "http://$ServerName"
-        $corsOrigin = "http://$ServerName,$defaultLocalCorsOrigin"
+        $frontendUrl = "https://$ServerName"
+        $corsOrigin = "https://$ServerName,http://$ServerName,$defaultLocalCorsOrigin"
     }
 
     Set-EnvValue -Path $EnvPath -Key 'FRONTEND_URL' -Value $frontendUrl
@@ -620,6 +816,8 @@ if (-not (Test-Path $frontendPath)) {
     Write-Host "Frontend directory not found: $frontendPath" -ForegroundColor Red
     exit 1
 }
+
+Ensure-EnvFileHealthy -Path $backendEnvPath
 
 if ($EditEnv) {
     if (-not (Test-Path $setupScriptPath)) {
