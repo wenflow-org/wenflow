@@ -373,6 +373,17 @@ export function lintPromptSchema(
     }
   }
 
+  // 3b) 输入说明必须含 JSON schema（编译器输入字段真相源 — P-PROMPT-COMPILE.0）
+  // 协议: 含 input 段的非 code-only prompt 必须在 ## 输入说明 段提供一个 ```json``` 示例,
+  // 让编译器能从中抽出 inputFields[], 用于后续编译时合成输入字段路由.
+  if (presentSections.has('input') && schema.inputFields.length === 0) {
+    issues.push({
+      level: 'error',
+      code: 'MISSING_INPUT_SCHEMA',
+      message: '「## 输入说明」缺少 ```json``` 示例（编译器输入字段真相源），无法抽出输入字段表',
+    });
+  }
+
   // 4) 非规范标题（裸标题 / 模糊命中）→ 警告，建议改用标准 H2
   for (const b of schema.blocks) {
     if (b.section === 'extras') {

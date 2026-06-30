@@ -240,3 +240,50 @@ describe('prompt-schema v2: JSON schema 即字段真相源（outputFields）', (
     expect(schema.outputFields).toEqual([]);
   });
 });
+
+// ============================================================
+// P-COMPILE.0: 输入字段表 inputFields 抽取 (编译器输入真相源)
+// ============================================================
+describe('P-COMPILE.0: 输入字段抽取 (inputFields)', () => {
+  it('从 ## 输入说明 的 ```json``` 示例抽出输入字段表', () => {
+    const text = [
+      '## 输入说明',
+      '',
+      'payload 含三类信息：',
+      '',
+      '```json',
+      '{',
+      '  "userInput": "用户最新一轮输入",',
+      '  "state": "当前已累积主记忆对象",',
+      '  "conversationContext": "对话摘要上下文"',
+      '}',
+      '```',
+    ].join('\n');
+    const schema = parsePromptSchema(text);
+    expect(schema.inputFields.length).toBeGreaterThanOrEqual(3);
+    const paths = schema.inputFields.map((f) => f.path);
+    expect(paths).toContain('userInput');
+    expect(paths).toContain('state');
+    expect(paths).toContain('conversationContext');
+  });
+
+  it('22 个真实 prompt 中, 含 ## 输入说明 段的文件必须能抽出 ≥1 个输入字段', () => {
+    const files = loadPromptBodies();
+    expect(files.length).toBeGreaterThan(0);
+    for (const { name, body } of files) {
+      const schema = parsePromptSchema(body);
+      const hasInputSection = schema.blocks.some((b) => b.section === 'input');
+      if (hasInputSection) {
+        expect(schema.inputFields.length).toBeGreaterThanOrEqual(1);
+        if (schema.inputFields.length < 1) {
+          throw new Error(`${name} 含 ## 输入说明 但抽不出 inputFields`);
+        }
+      }
+    }
+  });
+
+  it('无 ## 输入说明 段时 inputFields 为空 (code-only 豁免)', () => {
+    const schema = parsePromptSchema('## 身份定义\n\n你是一个纯逻辑 stub.');
+    expect(schema.inputFields).toEqual([]);
+  });
+});
