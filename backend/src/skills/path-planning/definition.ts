@@ -1,0 +1,62 @@
+import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
+
+export const pathAgentRuntimeDefinition: RuntimeDefinitionRecord = {
+  id: 'skill:path-planning',
+  displayName: '学习路径规划',
+  description: '根据标准化输入生成认知图景与 milestone 骨架。',
+  category: 'skill',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      goal: { type: 'string' },
+      currentLevel: { type: 'string' },
+      timePerDay: { type: 'string' },
+      structuredData: { type: 'object' },
+      confirmedProposal: { type: 'object' },
+      confidenceScores: { type: 'object' },
+      conversationHistory: { type: 'array' },
+      metadata: { type: 'object' },
+    },
+    required: ['goal'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      summary: { type: 'string' },
+      cognitiveCore: { type: 'object' },
+      milestones: { type: 'array' },
+    },
+  },
+  variableBindings: {
+    consumes: [
+      'normalizedInput.problemSpace.realProblem',
+      'normalizedInput.problemSpace.scenario',
+      'normalizedInput.problemSpace.currentPainPoint',
+      'normalizedInput.learnerProfile.backgroundExperience',
+      'normalizedInput.learnerProfile.constraintsAndBoundaries',
+      'normalizedInput.successCriteria.observableResult',
+      'normalizedInput.confirmedProposal.firstDeliverable',
+      'normalizedInput.confirmedProposal.keyStages',
+      'normalizedInput.resources.timeBudget',
+      'normalizedInput.resources.timeBudgetCadence',
+      'normalizedInput.planningHints.paceSignal',
+      'normalizedInput.planningHints.milestoneRange',
+      'normalizedInput.planningHints.conceptRange',
+      'normalizedInput.planningHints.maxWeeks',
+    ],
+    produces: [
+      'cognitiveCore.cognitiveDomain',
+      'cognitiveCore.coreConcepts',
+      'milestones[].stageNumber',
+      'milestones[].title',
+      'milestones[].coreConcept',
+      'milestones[].goal',
+    ],
+  },
+  capabilities: ['goal-analysis', 'path-generation', 'milestone-planning'],
+  defaultMaxTokens: 32000,
+  defaultTemperature: 0.2,
+  source: 'code',
+  managedByCode: true,
+};
