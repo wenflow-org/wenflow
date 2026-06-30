@@ -1,4 +1,4 @@
-const fs = require('fs')
+﻿const fs = require('fs')
 const path = require('path')
 const { PrismaClient } = require('@prisma/client')
 
@@ -17,7 +17,7 @@ async function main() {
 
   const updateResult = await prisma.agent_prompts.updateMany({
     where: {
-      agentId: 'goal-conversation-agent',
+      agentId: 'skill:goal-conversation',
       version: 9
     },
     data: {
@@ -28,7 +28,7 @@ async function main() {
 
   const record = await prisma.agent_prompts.findFirst({
     where: {
-      agentId: 'goal-conversation-agent',
+      agentId: 'skill:goal-conversation',
       version: 9
     },
     select: {

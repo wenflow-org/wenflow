@@ -31,8 +31,7 @@
         </div>
         <div class="message-content">
           <div class="loading-bubble">
-            <el-icon class="loading-icon"><Loading /></el-icon>
-            <span>AI 思考中...</span>
+            <TypingIndicator variant="minimal" label="AI 思考中" />
           </div>
         </div>
       </div>
@@ -56,6 +55,7 @@
 import { ref, defineProps, defineEmits, watch, nextTick } from 'vue';
 import { Loading } from '@element-plus/icons-vue';
 import QuestionCard from './QuestionCard.vue';
+import TypingIndicator from './TypingIndicator.vue';
 
 interface Message {
   role: 'user' | 'assistant';

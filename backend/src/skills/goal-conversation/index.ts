@@ -2,7 +2,7 @@
 import aiService from '../../services/ai/ai.service';
 import { logger } from '../../utils/logger';
 import {
-  composePromptFromOrchestratorRouting,
+  composePromptFromAgentRouting,
   isPromptSupplementEnabled,
 } from '../../services/prompt-composer';
 import {
@@ -464,8 +464,8 @@ function getCachedHardRequiredFields(): string[] | null {
 
 async function refreshHardRequiredCache(): Promise<void> {
   try {
-    const { getOrchestratorRoutings } = await import('../../services/field-dispatcher');
-    const rows = await getOrchestratorRoutings('goal-conversation');
+    const { getAgentRoutings } = await import('../../services/field-dispatcher');
+    const rows = await getAgentRoutings('goal-conversation');
     const ids = rows
       .filter((r) => r.promptRole === 'hard-required')
       .map((r) => r.fieldId);
@@ -627,11 +627,13 @@ async function callAIWithRetry(
   let lastContent = '';
   let lastParseMode: StructuredParseResult['parseMode'] = 'none';
   const attempts: RetryAttemptInfo[] = [];
+  let currentMaxTokens = options.maxTokens ?? 8000;
+  const tokenCeiling = 16000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await aiService.chat(messages, {
       temperature: options.temperature,
-      maxTokens: options.maxTokens,
+      maxTokens: currentMaxTokens,
       model: options.model,
       agentId: 'skill:goal-conversation',
       userId,
@@ -666,14 +668,33 @@ async function callAIWithRetry(
       };
     }
 
+    // 检测长度截断: finish_reason='length' 或 JSON 末尾被截断
+    const wasTruncatedByLength = (response as any).finishReason === 'length'
+      || /[",:][^"]*$/.test(response.content.trim().slice(-50));
+
     logger.warn('GoalConversationAgent 输出不完整，准备重试', {
       attempt: attempt + 1,
       maxRetries,
       parseMode: validation.parseMode,
       failureType: validation.failureType,
       violations: validation.violations,
+      finishReason: (response as any).finishReason,
+      wasTruncatedByLength,
+      currentMaxTokens,
       contentPreview: response.content.substring(0, 200)
     });
+
+    // 长度截断 → 下一次重试时把 maxTokens 翻倍 (最多到 tokenCeiling)
+    if (wasTruncatedByLength && attempt < maxRetries) {
+      const nextMaxTokens = Math.min(tokenCeiling, currentMaxTokens * 2);
+      if (nextMaxTokens > currentMaxTokens) {
+        logger.info('[GoalConversation] 检测到长度截断，重试时扩大 maxTokens', {
+          from: currentMaxTokens,
+          to: nextMaxTokens
+        });
+        currentMaxTokens = nextMaxTokens;
+      }
+    }
 
     if (attempt < maxRetries) {
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -705,7 +726,6 @@ export async function goalConversationAgentHandler(
   context: AgentContext,
   options: GoalConversationAgentOptions = {}
 ): Promise<AgentOutput> {
-  const startTime = Date.now();
   const userId = context.userId;
 
   try {
@@ -717,7 +737,7 @@ export async function goalConversationAgentHandler(
     // V3 §6 P1.5: 字段路由 supplement
     if (isPromptSupplementEnabled()) {
       const { finalPrompt, supplementApplied, fieldsCovered } =
-        await composePromptFromOrchestratorRouting('goal-conversation', systemPrompt);
+        await composePromptFromAgentRouting('goal-conversation', systemPrompt);
       if (supplementApplied) {
         systemPrompt = finalPrompt;
         logger.debug('[skill:goal-conversation] field routing supplement applied', {
@@ -754,37 +774,12 @@ export async function goalConversationAgentHandler(
       options.maxFormatRetries ?? 2
     );
 
-    const duration = Date.now() - startTime;
-
     if (!retryInfo.structuredOutputValid && options.allowInvalidStructuredOutput) {
       const observedResult = parseGoalConversationResponse(retryInfo.content, previousUnderstanding, {
         latestUserInput: input.goal,
         previousStage: input.metadata?.previousStage,
         previousConfidence: previousUnderstanding?.confidence || 0.2,
         confirmProposal: input.metadata?.confirmProposal === true
-      });
-
-      await agentConfigService.recordAgentCall({
-        agentId: 'skill:goal-conversation',
-        userId: userId || 'anonymous',
-        promptVersion: config?.version || 0,
-        duration,
-        tokensUsed: 0,
-        success: false,
-        error: 'Structured output validation bypassed in observation mode',
-        input: { messages: chatMessages.length, lastMessage: input.goal.substring(0, 200) },
-        output: {
-          responseLength: observedResult.userVisible.length,
-          stage: observedResult.internal.core.stage,
-          quickReplies: observedResult.internal.ext.goalConversation.quickReplies?.length || 0,
-          attemptCount: retryInfo.attemptCount,
-          actualRetryCount: retryInfo.actualRetryCount,
-          formatFailureCount: retryInfo.formatFailureCount,
-          parseMode: retryInfo.parseMode,
-          failureType: retryInfo.failureType,
-          violations: retryInfo.violations,
-          observationMode: true
-        }
       });
 
       return {
@@ -820,25 +815,6 @@ export async function goalConversationAgentHandler(
     }
 
     if (!retryInfo.structuredOutputValid) {
-      await agentConfigService.recordAgentCall({
-        agentId: 'skill:goal-conversation',
-        userId: userId || 'anonymous',
-        promptVersion: config?.version || 0,
-        duration,
-        tokensUsed: 0,
-        success: false,
-        error: 'Structured output validation failed after retries',
-        input: { messages: chatMessages.length, lastMessage: input.goal.substring(0, 200) },
-        output: {
-          attemptCount: retryInfo.attemptCount,
-          actualRetryCount: retryInfo.actualRetryCount,
-          formatFailureCount: retryInfo.formatFailureCount,
-          parseMode: retryInfo.parseMode,
-          failureType: retryInfo.failureType,
-          violations: retryInfo.violations
-        }
-      });
-
       return {
         success: false,
         error: 'STRUCTURED_OUTPUT_INVALID',
@@ -889,29 +865,6 @@ export async function goalConversationAgentHandler(
       confirmProposal: input.metadata?.confirmProposal === true
     });
 
-    await agentConfigService.recordAgentCall({
-      agentId: 'skill:goal-conversation',
-      userId: userId || 'anonymous',
-      promptVersion: config?.version || 0,
-      duration,
-      tokensUsed: 0,
-      success: true,
-      input: { messages: chatMessages.length, lastMessage: input.goal.substring(0, 200) },
-      output: {
-        responseLength: result.userVisible.length,
-        stage: result.internal.core.stage,
-        quickReplies: result.internal.ext.goalConversation.quickReplies?.length || 0,
-        attemptCount: retryInfo.attemptCount,
-        actualRetryCount: retryInfo.actualRetryCount,
-        formatFailureCount: retryInfo.formatFailureCount,
-        parseMode: retryInfo.parseMode,
-        failureType: retryInfo.failureType,
-        violations: retryInfo.violations
-      }
-    });
-
-    await agentConfigService.updateStats('skill:goal-conversation', config?.version || 0, duration, true);
-
     return {
       success: true,
       userVisible: result.userVisible,
@@ -942,20 +895,6 @@ export async function goalConversationAgentHandler(
       }
     };
   } catch (error: any) {
-    const duration = Date.now() - startTime;
-
-    await agentConfigService.recordAgentCall({
-      agentId: 'skill:goal-conversation',
-      userId: userId || 'anonymous',
-      promptVersion: 0,
-      duration,
-      tokensUsed: 0,
-      success: false,
-      error: error.message || 'Unknown error'
-    });
-
-    await agentConfigService.updateStats('skill:goal-conversation', 0, duration, false);
-
     return {
       success: false,
       error: error.message || 'Unknown error',

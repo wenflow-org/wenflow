@@ -32,6 +32,17 @@ import {
   suggestRulePrefix,
   type PromptSchema,
 } from '../../services/prompt-schema';
+import { compilePrompt } from '../../services/prompt-compiler';
+import { promptCache } from '../../services/cache/prompt-cache.service';
+import {
+  listTopLevelAgents,
+  listSkillsOfAgent,
+} from '../../services/agent-manifest.service';
+import {
+  extractFieldsFromSource,
+  updateFieldsInSource,
+  type EditableField,
+} from '../../services/prompt-source-fields';
 
 const router = Router();
 
@@ -1430,6 +1441,525 @@ router.post('/sync', async (_req: Request, res: Response) => {
       success: false,
       error: error.message || '同步失败',
     });
+  }
+});
+
+/**
+ * 编译预览 — P-PROMPT-COMPILE
+ * GET /admin/prompt-ops/:agentId/compile-info
+ *
+ * 返回:
+ *   - source: PromptSource 文本 (来自 DB ACTIVE 版本)
+ *   - compiled: 实时编译产物 (调 compilePrompt)
+ *   - sourceHash / contextHash
+ *   - status: fresh | failed
+ *   - rewritten / fieldsApplied
+ *   - storedCompiledAt / storedSourceHash 等 (DB 存的产物元信息, 后续 C3 会用到)
+ *
+ * 注: 当前阶段 (C2) 是"实时 dry-run 编译", 不落库. C3 会改为优先用 DB 已存产物.
+ */
+router.get('/:agentId/compile-info', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.agentId;
+    // 兼容 'goal-conversation' / 'skill:goal-conversation' 两种入参
+    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
+
+    // 找 DB ACTIVE prompt
+    let activePrompt: any = null;
+    for (const id of ids) {
+      activePrompt = await systemPrisma.agent_prompts.findFirst({
+        where: { agentId: id, status: 'ACTIVE' },
+        orderBy: { version: 'desc' },
+      });
+      if (activePrompt) break;
+    }
+
+    if (!activePrompt) {
+      return res.status(404).json({
+        success: false,
+        error: `未找到 agentId=${rawId} 的 ACTIVE prompt`,
+      });
+    }
+
+    const source: string = activePrompt.systemPrompt || '';
+
+    // routing 表用的 key 是无 skill: 前缀的版本 (从 seed 脚本和 goal-conversation/index.ts 推断)
+    const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
+    const compileResult = await compilePrompt(source, routingKey);
+
+    res.json({
+      success: true,
+      data: {
+        agentId: rawId,
+        routingKey,
+        promptVersion: activePrompt.version,
+        promptName: activePrompt.name,
+        source,
+        compiled: compileResult.compiled,
+        status: compileResult.status,
+        error: compileResult.error || null,
+        warnings: compileResult.warnings,
+        rewritten: compileResult.rewritten,
+        fieldsApplied: compileResult.fieldsApplied,
+        sourceHash: compileResult.sourceHash,
+        compileContextHash: compileResult.compileContextHash,
+        // DB 落库的产物 (C3 后会非空)
+        storedCompiledAt: activePrompt.compiledAt,
+        storedSourceHash: activePrompt.sourceHash,
+        storedContextHash: activePrompt.compileContextHash,
+        storedStatus: activePrompt.compileStatus,
+      },
+    });
+  } catch (error: any) {
+    logger.error('compile-info 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '编译预览失败',
+    });
+  }
+});
+
+/**
+ * 手动重编译 — P-PROMPT-COMPILE
+ * POST /admin/prompt-ops/:agentId/recompile
+ *
+ * 行为:
+ *   - 拉 DB ACTIVE 源 → 调 compilePrompt → 落库 compiledSystemPrompt 等字段
+ *   - 同步失效 prompt cache (热更换关键: 下次 LLM 调用立即拿新产物)
+ *   - 不重新版本号 (产物只是源的派生, 不算新版本)
+ */
+router.post('/:agentId/recompile', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.agentId;
+    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
+
+    let activePrompt: any = null;
+    for (const id of ids) {
+      activePrompt = await systemPrisma.agent_prompts.findFirst({
+        where: { agentId: id, status: 'ACTIVE' },
+        orderBy: { version: 'desc' },
+      });
+      if (activePrompt) break;
+    }
+
+    if (!activePrompt) {
+      return res.status(404).json({
+        success: false,
+        error: `未找到 agentId=${rawId} 的 ACTIVE prompt`,
+      });
+    }
+
+    const source: string = activePrompt.systemPrompt || '';
+    const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
+    const compileResult = await compilePrompt(source, routingKey);
+
+    await systemPrisma.agent_prompts.update({
+      where: { id: activePrompt.id },
+      data: {
+        compiledSystemPrompt: compileResult.compiled,
+        compiledAt: new Date(),
+        sourceHash: compileResult.sourceHash,
+        compileContextHash: compileResult.compileContextHash,
+        compileStatus: compileResult.status,
+        compileError: compileResult.error || null,
+      },
+    });
+
+    // 热更换关键: 失效缓存, 下次 LLM 调用立即拿新产物
+    try {
+      promptCache.clearAgentCache(activePrompt.agentId);
+      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
+    } catch (cacheErr: any) {
+      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        agentId: rawId,
+        status: compileResult.status,
+        rewritten: compileResult.rewritten,
+        fieldsApplied: compileResult.fieldsApplied,
+        sourceHash: compileResult.sourceHash,
+        compileContextHash: compileResult.compileContextHash,
+        warnings: compileResult.warnings,
+        error: compileResult.error || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error('recompile 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '重编译失败',
+    });
+  }
+});
+
+/**
+ * 保存源 + 自动编译 + 失效缓存 (一键完成"编辑→编译") — P-PROMPT-COMPILE
+ * PUT /admin/prompt-ops/:agentId/source
+ *
+ * body: { systemPrompt: string, autoCompile?: boolean (默认 true) }
+ *
+ * 行为:
+ *   1. 把 systemPrompt 写入 ACTIVE 版本的 systemPrompt 字段 (原地更新, 不新建版本)
+ *   2. autoCompile=true 时立即调 compilePrompt → 落库
+ *   3. 失效 prompt cache → 下次 LLM 调用立即用新源/新产物
+ *
+ * 设计取舍:
+ *   - 原地更新 systemPrompt 是热更换语义 — 用户改 prompt 立即生效, 不引入新版本号
+ *   - 如需保留历史版本应该走 agent-prompts.ts 的 publish 流程 (创建新 DRAFT 版本)
+ *   - 本端点是 "运营快速调整" 路径, 跟 sync(.md 文件) 不冲突
+ */
+router.put('/:agentId/source', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.agentId;
+    const { systemPrompt, autoCompile = true } = req.body || {};
+
+    if (typeof systemPrompt !== 'string' || systemPrompt.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'systemPrompt 不能为空' });
+    }
+
+    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
+
+    let activePrompt: any = null;
+    for (const id of ids) {
+      activePrompt = await systemPrisma.agent_prompts.findFirst({
+        where: { agentId: id, status: 'ACTIVE' },
+        orderBy: { version: 'desc' },
+      });
+      if (activePrompt) break;
+    }
+
+    if (!activePrompt) {
+      return res.status(404).json({
+        success: false,
+        error: `未找到 agentId=${rawId} 的 ACTIVE prompt`,
+      });
+    }
+
+    // 1) 保存源
+    await systemPrisma.agent_prompts.update({
+      where: { id: activePrompt.id },
+      data: {
+        systemPrompt,
+        updatedAt: new Date(),
+        // 标记产物 stale (autoCompile=false 时让下次 LLM 调用前 lazy 重编译)
+        compileStatus: autoCompile ? activePrompt.compileStatus : 'stale',
+      },
+    });
+
+    let compileResult: any = null;
+
+    // 2) 自动编译
+    if (autoCompile) {
+      const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
+      compileResult = await compilePrompt(systemPrompt, routingKey);
+
+      await systemPrisma.agent_prompts.update({
+        where: { id: activePrompt.id },
+        data: {
+          compiledSystemPrompt: compileResult.compiled,
+          compiledAt: new Date(),
+          sourceHash: compileResult.sourceHash,
+          compileContextHash: compileResult.compileContextHash,
+          compileStatus: compileResult.status,
+          compileError: compileResult.error || null,
+        },
+      });
+    }
+
+    // 3) 失效缓存 (热更换关键)
+    try {
+      promptCache.clearAgentCache(activePrompt.agentId);
+      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
+    } catch (cacheErr: any) {
+      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        agentId: rawId,
+        savedSource: true,
+        compiled: autoCompile,
+        compileStatus: compileResult?.status || (autoCompile ? null : 'stale'),
+        rewritten: compileResult?.rewritten || false,
+        fieldsApplied: compileResult?.fieldsApplied || 0,
+        sourceHash: compileResult?.sourceHash || null,
+        compileContextHash: compileResult?.compileContextHash || null,
+        warnings: compileResult?.warnings || [],
+        error: compileResult?.error || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error('保存源失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '保存失败',
+    });
+  }
+});
+
+/**
+ * skill-catalog — 用于前端可视化字段选择器 (SkillFieldPicker)
+ * GET /admin/prompt-ops/skill-catalog
+ *
+ * 返回三级树:
+ *   [
+ *     {
+ *       agentId: 'goal-agent',
+ *       agentName: '目标 Agent',
+ *       skills: [
+ *         {
+ *           skillId: 'skill:goal-conversation',
+ *           skillName: 'goal-conversation',
+ *           inputFields: [{ path, valueType, note }, ...],   // 从 ## 输入说明 json 抽
+ *           outputFields: [{ path, valueType, note }, ...],  // 从 ## 输出规格 json 抽
+ *         }
+ *       ]
+ *     }
+ *   ]
+ *
+ * 数据源:
+ *   - agent → skill 嵌套: agent-manifest.service
+ *   - 字段表: 从每个 skill 的 DB ACTIVE prompt 调 parsePromptSchema 抽
+ *
+ * 注: 跨 stage 字段引用 (例如 path-agent 引用 goal-agent 的 surface_goal) 走 outputFields,
+ * 当前 stage 内部引用 (例如 path-planning 引用上游 normalizedInput) 走 inputFields.
+ */
+router.get('/skill-catalog', async (_req: Request, res: Response) => {
+  try {
+    const topAgents = listTopLevelAgents();
+
+    // 拉所有 ACTIVE prompts 一次性 (避免 N+1)
+    const allActivePrompts = await systemPrisma.agent_prompts.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        agentId: true,
+        systemPrompt: true,
+        compiledSystemPrompt: true,
+        compileStatus: true,
+        name: true,
+        version: true,
+      },
+    });
+    const promptMap = new Map<string, typeof allActivePrompts[0]>();
+    for (const p of allActivePrompts) {
+      promptMap.set(p.agentId, p);
+      // 也允许去掉/加上 skill: 前缀的查询
+      if (p.agentId.startsWith('skill:')) {
+        promptMap.set(p.agentId.slice(6), p);
+      } else {
+        promptMap.set(`skill:${p.agentId}`, p);
+      }
+    }
+
+    const tree = topAgents.map((agent) => {
+      const skills = listSkillsOfAgent(agent.id);
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        description: agent.description,
+        monitoringGroup: agent.monitoringGroup,
+        skills: skills.map((skill) => {
+          const prompt = promptMap.get(skill.id);
+          let inputFields: any[] = [];
+          let outputFields: any[] = [];
+          let hasPrompt = false;
+          let promptVersion: number | null = null;
+          if (prompt && prompt.systemPrompt) {
+            hasPrompt = true;
+            promptVersion = prompt.version;
+            try {
+              const schema = parsePromptSchema(prompt.systemPrompt);
+              inputFields = (schema.inputFields || []).map((f) => ({
+                path: f.path,
+                valueType: f.valueType,
+                enumValues: f.enumValues || null,
+                note: f.note || '',
+              }));
+              outputFields = (schema.outputFields || []).map((f) => ({
+                path: f.path,
+                valueType: f.valueType,
+                enumValues: f.enumValues || null,
+                note: f.note || '',
+              }));
+            } catch (err: any) {
+              logger.warn(`parse prompt schema failed for ${skill.id}: ${err?.message}`);
+            }
+          }
+          return {
+            skillId: skill.id,
+            skillName: skill.name,
+            description: skill.description,
+            hasPrompt,
+            promptVersion,
+            inputFields,
+            outputFields,
+            inputFieldCount: inputFields.length,
+            outputFieldCount: outputFields.length,
+          };
+        }),
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        agents: tree,
+        totalAgents: tree.length,
+        totalSkills: tree.reduce((s, a) => s + a.skills.length, 0),
+        totalFields: tree.reduce(
+          (s, a) => s + a.skills.reduce((ss, k) => ss + k.inputFieldCount + k.outputFieldCount, 0),
+          0
+        ),
+      },
+    });
+  } catch (error: any) {
+    logger.error('skill-catalog 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '加载 skill 目录失败',
+    });
+  }
+});
+
+/**
+ * GET /admin/prompt-ops/:agentId/fields
+ *
+ * 从 prompt 源里抽出 input + output 可编辑字段表 (供 GUI 渲染).
+ * source-of-truth 仍是 prompt source 里的 ```json``` 块, 这只是一个 GUI 友好视图.
+ */
+router.get('/:agentId/fields', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.agentId;
+    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
+
+    let activePrompt: any = null;
+    for (const id of ids) {
+      activePrompt = await systemPrisma.agent_prompts.findFirst({
+        where: { agentId: id, status: 'ACTIVE' },
+        orderBy: { version: 'desc' },
+      });
+      if (activePrompt) break;
+    }
+    if (!activePrompt) {
+      return res.status(404).json({ success: false, error: `未找到 agentId=${rawId} 的 ACTIVE prompt` });
+    }
+
+    const source: string = activePrompt.systemPrompt || '';
+    const inputFields = extractFieldsFromSource(source, 'input');
+    const outputFields = extractFieldsFromSource(source, 'output');
+
+    res.json({
+      success: true,
+      data: {
+        agentId: rawId,
+        inputFields,
+        outputFields,
+        inputFieldCount: inputFields.length,
+        outputFieldCount: outputFields.length,
+      },
+    });
+  } catch (error: any) {
+    logger.error('fields GET 失败:', error);
+    res.status(500).json({ success: false, error: error.message || '加载字段失败' });
+  }
+});
+
+/**
+ * PUT /admin/prompt-ops/:agentId/fields
+ * body: { inputFields?: EditableField[], outputFields?: EditableField[], autoCompile?: boolean }
+ *
+ * 把字段表序列化回 prompt 源里的 ```json``` 块, 等价于 GUI 字段编辑 → 改源 → 自动编译 → 热更换.
+ * 仅替换 ```json``` 块, 段内 prose / OUT-XX / IN-XX 全部保留.
+ */
+router.put('/:agentId/fields', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.params.agentId;
+    const { inputFields, outputFields, autoCompile = true } = req.body || {};
+
+    if (!inputFields && !outputFields) {
+      return res.status(400).json({ success: false, error: '至少提供 inputFields 或 outputFields' });
+    }
+
+    const ids = rawId.startsWith('skill:') ? [rawId, rawId.slice(6)] : [rawId, `skill:${rawId}`];
+
+    let activePrompt: any = null;
+    for (const id of ids) {
+      activePrompt = await systemPrisma.agent_prompts.findFirst({
+        where: { agentId: id, status: 'ACTIVE' },
+        orderBy: { version: 'desc' },
+      });
+      if (activePrompt) break;
+    }
+    if (!activePrompt) {
+      return res.status(404).json({ success: false, error: `未找到 agentId=${rawId} 的 ACTIVE prompt` });
+    }
+
+    const currentSource: string = activePrompt.systemPrompt || '';
+    const { source: newSource, warnings } = updateFieldsInSource(
+      currentSource,
+      inputFields as EditableField[] | undefined,
+      outputFields as EditableField[] | undefined
+    );
+
+    if (newSource === currentSource) {
+      return res.json({
+        success: true,
+        data: { changed: false, warnings, note: '字段表未变化, 源未更新' },
+      });
+    }
+
+    // 写回源
+    await systemPrisma.agent_prompts.update({
+      where: { id: activePrompt.id },
+      data: {
+        systemPrompt: newSource,
+        updatedAt: new Date(),
+        compileStatus: autoCompile ? activePrompt.compileStatus : 'stale',
+      },
+    });
+
+    let compileResult: any = null;
+    if (autoCompile) {
+      const routingKey = rawId.startsWith('skill:') ? rawId.slice(6) : rawId;
+      compileResult = await compilePrompt(newSource, routingKey);
+      await systemPrisma.agent_prompts.update({
+        where: { id: activePrompt.id },
+        data: {
+          compiledSystemPrompt: compileResult.compiled,
+          compiledAt: new Date(),
+          sourceHash: compileResult.sourceHash,
+          compileContextHash: compileResult.compileContextHash,
+          compileStatus: compileResult.status,
+          compileError: compileResult.error || null,
+        },
+      });
+    }
+
+    try {
+      promptCache.clearAgentCache(activePrompt.agentId);
+      if (activePrompt.agentId !== rawId) promptCache.clearAgentCache(rawId);
+    } catch (cacheErr: any) {
+      logger.warn('清缓存失败 (非致命):', cacheErr?.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        changed: true,
+        autoCompile,
+        compileStatus: compileResult?.status || (autoCompile ? null : 'stale'),
+        fieldsApplied: compileResult?.fieldsApplied || 0,
+        warnings: [...warnings, ...(compileResult?.warnings || [])],
+        error: compileResult?.error || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error('fields PUT 失败:', error);
+    res.status(500).json({ success: false, error: error.message || '保存字段失败' });
   }
 });
 

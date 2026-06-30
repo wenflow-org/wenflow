@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Agents 入口文件
  *
  * 统一导出所有 Agent
@@ -32,14 +32,14 @@ export { agentPluginConfig } from '../config/agent-plugin-config';
 export { registerAllPlugins, getAllPlugins } from './plugins';
 
 // Path Agent
-export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from './path-agent';
+export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from '../skills/path-planning';
 
 // Goal Conversation Agent
 export {
   goalConversationAgentDefinition,
   goalConversationAgentHandler,
   runGoalConversationAgent
-} from './goal-conversation-agent';
+} from '../skills/goal-conversation';
 
 // User Profile Agent
 export {
@@ -52,20 +52,20 @@ export {
 export {
   teachingTurnAgentDefinition,
   teachingTurnAgentHandler,
-} from './teaching-turn-agent';
+} from '../skills/teaching-turn';
 
 export {
   sessionWrapupAgentDefinition,
   sessionWrapupAgent,
   sessionWrapupAgentHandler,
-} from './session-wrapup-agent';
+} from '../skills/session-wrapup';
 
 // Simulation Orchestrator Agent
 export {
   simulationOrchestratorAgentDefinition,
   simulationOrchestratorAgentHandler,
   simulationOrchestrator
-} from './simulation-orchestrator-agent';
+} from './simulation-agent';
 
 // Path Adjustment
 export {
@@ -74,12 +74,12 @@ export {
   AdjustmentType,
   AdjustmentTarget,
   AdjustmentReason
-} from './path-agent/adjustment';
+} from '../skills/path-planning/adjustment';
 
 export {
   allAdjustmentStrategies,
   getApplicableStrategies
-} from './path-agent/strategies';
+} from '../skills/path-planning/strategies';
 
 // 插件
 export { genericPlanner } from './path-planner/plugins/generic-planner';
@@ -97,17 +97,17 @@ export {
   type TaskMetadata,
   type StrategySelection,
   type StrategyConfig
-} from './content-strategy-selector';
+} from '../skills/content-strategy-selector';
 
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
-import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from './path-agent';
+import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
-import { goalConversationAgentDefinition, goalConversationAgentHandler } from './goal-conversation-agent';
-import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from './teaching-turn-agent';
-import { peerAgentHandler } from './peer-agent';
-import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from './session-wrapup-agent';
-import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-orchestrator-agent';
+import { goalConversationAgentDefinition, goalConversationAgentHandler } from '../skills/goal-conversation';
+import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from '../skills/teaching-turn';
+import { peerAgentDefinition, peerAgentHandler } from '../skills/peer-reinforcement';
+import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from '../skills/session-wrapup';
+import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-agent';
 import { getAgentManifest } from '../services/agent-manifest.service';
 import { logger } from '../utils/logger';
 
@@ -116,22 +116,29 @@ export const allAgentDefinitions: AgentDefinition[] = [
   learnerModelAgentDefinition,
   goalConversationAgentDefinition,
   teachingTurnAgentDefinition,
+  peerAgentDefinition,
   sessionWrapupAgentDefinition,
   simulationOrchestratorAgentDefinition
 ];
 
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
-  'path-agent': pathAgentHandlerFn,
-  'learner-model-agent': learnerModelAgentHandlerFn,
-  'goal-conversation-agent': goalConversationAgentHandler,
-  'teaching-turn-agent': teachingTurnAgentHandler,
+  'skill:path-planning': pathAgentHandlerFn,
+  'skill:learner-model': learnerModelAgentHandlerFn,
+  'skill:goal-conversation': goalConversationAgentHandler,
+  'skill:teaching-turn': teachingTurnAgentHandler,
   'skill:peer-reinforcement': peerAgentHandler,
-  'session-wrapup-agent': sessionWrapupAgentHandler,
-  'simulation-orchestrator': simulationOrchestratorAgentHandler
+  'skill:session-wrapup': sessionWrapupAgentHandler,
+  'simulation-agent': simulationOrchestratorAgentHandler
 };
 
 /**
  * 注册所有官方 Agent 到 Gateway
+ *
+ * 真理源：agent-manifest.service.ts。`allAgentDefinitions` 必须与 manifest 中
+ * runtimeEnabled 的条目对齐——manifest 缺失或 runtimeEnabled=false 的不注册。
+ * 注意：核心 LLM 能力单元（goal/path/teaching/peer/wrapup）在 manifest 里 kind='skill'，
+ * 业务主链通过 skills/executeSkill 调用并计入 skill_registrations 统计；
+ * 此处的 gateway.registerAgent 仅用于 gateway 侧 agent-registry 的可发现性。
  */
 export async function registerOfficialAgents(gateway: {
   registerAgent: (definition: AgentDefinition, handler: any) => Promise<string>
@@ -156,3 +163,4 @@ export async function registerOfficialAgents(gateway: {
     }
   }
 }
+

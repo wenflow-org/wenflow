@@ -38,7 +38,7 @@ router.put('/:agentId', async (req, res) => {
 router.delete('/:agentId', async (req, res) => {
   try {
     const userId = req.user!.userId;
-    await userAgentModelConfigService.disable(userId, req.params.agentId);
+    await userAgentModelConfigService.delete(userId, req.params.agentId);
     res.json({ success: true, message: '已恢复使用系统默认配置' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

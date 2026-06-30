@@ -30,7 +30,8 @@ function Get-DefaultEnvEntries {
         PORT = '3001'
         CORS_ORIGIN = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
         TRUST_PROXY = ''
-        DATABASE_URL = 'file:./dev.db'
+        DATABASE_URL = 'file:./prisma/dev.db'
+        SYSTEM_DATABASE_URL = 'file:./prisma/system.db'
         JWT_SECRET = ''
         ADMIN_LOCALHOST_ONLY = 'true'
         LOGIN_MAX_ATTEMPTS = '5'
@@ -364,9 +365,21 @@ function Ensure-PrismaReady {
             exit $LASTEXITCODE
         }
 
+        npx prisma generate --schema=prisma/system.prisma
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "prisma generate (system) failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
         npx prisma db push
         if ($LASTEXITCODE -ne 0) {
             Write-Host "prisma db push failed" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
+        npx prisma db push --schema=prisma/system.prisma
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "prisma db push (system) failed" -ForegroundColor Red
             exit $LASTEXITCODE
         }
     } finally {
@@ -488,26 +501,26 @@ function Assert-SafeSqliteDatabaseUrl {
         return
     }
 
-    if ($trimmed -match '^file:\./prisma/') {
+    if ($trimmed -match '^file:\./prisma/prisma/') {
         Write-Host "DATABASE_URL=$trimmed is not a safe local SQLite path for WenFlow." -ForegroundColor Red
-        Write-Host 'Use DATABASE_URL=file:./dev.db for the local development database.' -ForegroundColor Yellow
-        Write-Host 'Values under file:./prisma/... can resolve to a nested prisma/prisma/*.db during startup and split your data.' -ForegroundColor Yellow
+        Write-Host 'Use DATABASE_URL=file:./prisma/dev.db for the local development database.' -ForegroundColor Yellow
+        Write-Host 'Values under file:./prisma/prisma/... can resolve to a nested prisma/prisma/*.db and split your data.' -ForegroundColor Yellow
         exit 1
     }
 }
 
-function Ensure-CoreAgentPromptsBootstrap {
+function Ensure-CoreAgentPromptsSync {
     param(
         [Parameter(Mandatory = $true)]
         [string]$BackendPath
     )
 
-    Write-Host "Ensuring core agent prompts (bootstrap-only)..." -ForegroundColor Yellow
+    Write-Host "Syncing core agent prompts from code..." -ForegroundColor Yellow
     Push-Location $BackendPath
     try {
-        npm run prompts:bootstrap
+        npm run prompts:sync
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "core agent prompt bootstrap failed" -ForegroundColor Red
+            Write-Host "core agent prompt sync failed" -ForegroundColor Red
             exit $LASTEXITCODE
         }
     } finally {
@@ -611,7 +624,7 @@ Ensure-NpmDependencies -ProjectPath $frontendPath -ProjectName 'Frontend'
 
 if (-not $SkipPrisma) {
     Ensure-PrismaReady -BackendPath $backendPath
-    Ensure-CoreAgentPromptsBootstrap -BackendPath $backendPath
+    Ensure-CoreAgentPromptsSync -BackendPath $backendPath
 } else {
     Write-Host "Skipping Prisma setup due to -SkipPrisma" -ForegroundColor DarkYellow
 }

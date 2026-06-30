@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
-import prisma from '../config/database';
+import systemPrisma from '../config/system-database';
 import {
-  CORE_AGENT_PROMPT_SEEDS,
+  loadCoreAgentPromptSeeds,
   ensureCoreAgentPrompts,
   findMissingCorePromptSeeds,
   type CoreAgentPromptEnsureMode,
@@ -22,12 +22,12 @@ function parseMode(argv: string[]): CoreAgentPromptEnsureMode {
 
 async function main() {
   const mode = parseMode(process.argv.slice(2));
-  const missingBefore = await findMissingCorePromptSeeds(prisma);
-  const result = await ensureCoreAgentPrompts(prisma, mode);
+  const missingBefore = await findMissingCorePromptSeeds(systemPrisma);
+  const result = await ensureCoreAgentPrompts(systemPrisma, mode);
 
   console.log(JSON.stringify({
     mode,
-    totalSeeds: CORE_AGENT_PROMPT_SEEDS.length,
+    totalSeeds: loadCoreAgentPromptSeeds().length,
     missingBefore: missingBefore.map((seed) => seed.agentId),
     result,
   }, null, 2));
@@ -39,5 +39,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await systemPrisma.$disconnect();
   });

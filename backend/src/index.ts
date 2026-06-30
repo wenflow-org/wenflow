@@ -1,9 +1,10 @@
-import express from 'express';
+﻿import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import prisma from './config/database';
+import systemPrisma from './config/system-database';
 import { initializeAdmin } from './services/auth/init-admin.service';
 import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
 
@@ -11,12 +12,17 @@ import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
 import { createGateway } from './gateway';
 import { registerOfficialAgents, registerAllPlugins } from './agents';
 import { allSkillDefinitions, skillHandlers } from './skills';
+import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
 
 import { createAgentCollaborationService } from './services/agent-collaboration.service';
 import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
-import { learnerOrchestrator } from './orchestrators/learner.orchestrator';
+import { learnerCoordinator } from './coordinators/learner.coordinator';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
+import { ensureGoalFieldRoutings } from './scripts/seed-goal-field-routings';
+import { ensurePathFieldRoutings } from './scripts/seed-path-field-routings';
+import { ensureExecutionFieldRoutings } from './scripts/seed-execution-field-routings';
+import { ensureLearnerFieldRoutings } from './scripts/seed-learner-field-routings';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
@@ -160,6 +166,10 @@ import adminAgentModelConfigsRoutes from './routes/admin/agent-model-configs';
 import adminAgentPromptsRoutes from './routes/admin/agent-prompts';
 import adminPromptStabilityRoutes from './routes/admin/prompt-stability';
 import adminRuntimeDefinitionsRoutes from './routes/admin/runtime-definitions';
+import adminFieldRoutingsRoutes from './routes/admin/field-routings';
+import promptLabRoutes from './routes/prompt-lab';
+import adminPromptOpsRoutes from './routes/admin/prompt-ops';
+import adminSkillAuthorRoutes from './routes/admin/skill-author';
 import adminSkillModelConfigsRoutes from './routes/admin/skill-model-configs';
 import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
@@ -167,12 +177,14 @@ import adminUsersRoutes from './routes/admin/users';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
 import adminDevtoolsRoutes from './routes/admin/devtools';
+import adminTestRoutes from './routes/admin/test';
+import adminDebugRoutes from './routes/admin/debug';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import abTestingRoutes from './routes/ab-testing';
+import configRoutes from './routes/config';
 
 // 用户自定义路由
-import userCodeRepoRoutes from './routes/user-code-repo';
 import userAgentsRoutes from './routes/user-agents';
 import userSkillsRoutes from './routes/user-skills';
 import userApiConfigRoutes from './routes/user-api-config';
@@ -203,7 +215,6 @@ app.get('/api', (req, res) => {
       skills: '/api/skills',
       feedback: '/api/feedback',
       userCustom: {
-        codeRepo: '/api/user/code-repo',
         agents: '/api/user/agents',
         skills: '/api/user/skills',
         apiConfig: '/api/user/api-config',
@@ -212,9 +223,9 @@ app.get('/api', (req, res) => {
       }
     },
 agents: {
-      'path-agent': '学习路径规划',
-      'ai-teaching-agent': 'AI授课编排',
-      'learner-model-agent': '学习者画像与状态中心'
+      'skill:path-planning': '学习路径规划',
+      'teaching-agent': 'AI授课编排',
+      'skill:learner-model': '学习者画像与状态中心'
     },
     skills: [
       'text-structure-analyzer',
@@ -249,18 +260,27 @@ app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('tes
 // 其他路由（保持原有认证）
 // 注意：具体路由必须在通用路由之前注册！
 app.use('/api/auth', authRoutes);
-app.use('/api/admin-auth', adminAuthRoutes);
+// 公共配置路由（不需要认证，用于获取模型列表等）
+app.use('/api/config', configRoutes);
+// 管理员登录路由（应用本地访问限制中间件）
+app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
 app.use('/api/admin/api-config', authMiddleware, acpContextMiddleware('admin'), adminApiConfigRoutes);
 app.use('/api/admin/skills', authMiddleware, acpContextMiddleware('admin'), adminSkillsRoutes);
 app.use('/api/admin/agent-model-configs', authMiddleware, acpContextMiddleware('admin'), adminAgentModelConfigsRoutes);
 app.use('/api/admin/agent-prompts', authMiddleware, acpContextMiddleware('admin'), adminAgentPromptsRoutes);
 app.use('/api/admin/prompt-stability', authMiddleware, acpContextMiddleware('admin'), adminPromptStabilityRoutes);
 app.use('/api/admin/runtime-definitions', authMiddleware, acpContextMiddleware('admin'), adminRuntimeDefinitionsRoutes);
+app.use('/api/admin/field-routings', authMiddleware, acpContextMiddleware('admin'), adminFieldRoutingsRoutes);
+app.use('/api/admin/prompt-ops', authMiddleware, acpContextMiddleware('admin'), adminPromptOpsRoutes);
+app.use('/api/admin/skill-author', authMiddleware, acpContextMiddleware('admin'), adminSkillAuthorRoutes);
 app.use('/api/admin/skill-model-configs', authMiddleware, acpContextMiddleware('admin'), adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', authMiddleware, acpContextMiddleware('admin'), adminUsersRoutes);
 app.use('/api/admin/learner-models', authMiddleware, acpContextMiddleware('admin'), adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', authMiddleware, acpContextMiddleware('admin'), adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', authMiddleware, acpContextMiddleware('admin'), adminVirtualLearnersRoutes);
+app.use('/api/admin/prompt-lab', authMiddleware, acpContextMiddleware('admin'), promptLabRoutes);
+app.use('/api/admin/test', authMiddleware, acpContextMiddleware('admin'), adminTestRoutes);
+app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminDebugRoutes);
 app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminDevtoolsRoutes);
 app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminPlatformRoutes);
 app.use('/api/users', authMiddleware, acpContextMiddleware('user'), userRoutes);
@@ -274,7 +294,6 @@ app.use('/api/ab-testing', authMiddleware, acpContextMiddleware('user'), abTesti
 
 
 // 用户自定义路由
-app.use('/api/user/code-repo', authMiddleware, acpContextMiddleware('user'), userCodeRepoRoutes);
 app.use('/api/user/agents', authMiddleware, acpContextMiddleware('user'), userAgentsRoutes);
 app.use('/api/user/skills', authMiddleware, acpContextMiddleware('user'), userSkillsRoutes);
 app.use('/api/user/api-config', authMiddleware, acpContextMiddleware('user'), userApiConfigRoutes);
@@ -284,23 +303,39 @@ app.use('/api/user/developer', authMiddleware, acpContextMiddleware('user'), use
 
 // 错误处理中间件
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Error:', {
+  // 记录错误日志（包含完整堆栈）
+  logger.error('Request error:', {
     message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    status: err.status
+    stack: err.stack,
+    status: err.status,
+    path: req.path,
+    method: req.method
   });
   
   const isProduction = process.env.NODE_ENV === 'production';
   
-  res.status(err.status || 500).json({
-    success: false,
-    error: {
-      message: isProduction ? '服务器错误，请稍后重试' : (err.message || 'Internal Server Error'),
-      code: err.code || 'INTERNAL_ERROR',
-      status: err.status || 500,
-      ...(isProduction ? {} : { stack: err.stack })
-    }
-  });
+  // 生产环境隐藏敏感信息
+  if (isProduction) {
+    res.status(err.status || 500).json({
+      success: false,
+      error: {
+        message: '服务器错误，请稍后重试',
+        code: err.code || 'INTERNAL_ERROR',
+        status: err.status || 500
+      }
+    });
+  } else {
+    // 开发环境返回详细错误
+    res.status(err.status || 500).json({
+      success: false,
+      error: {
+        message: err.message || 'Internal Server Error',
+        code: err.code || 'INTERNAL_ERROR',
+        status: err.status || 500,
+        stack: err.stack
+      }
+    });
+  }
 });
 
 // 404处理
@@ -333,6 +368,18 @@ async function initializeGateway() {
   });
   
   // 注册所有官方 Agent
+  // 启动校验：manifest 必须合法（kind=agent 无 prompt，kind=skill 有 prompt 与 modelConfig）
+  const manifestCheck = validateManifest();
+  if (!manifestCheck.ok) {
+    logger.error('[startup] Agent manifest 校验失败，终止启动:');
+    for (const err of manifestCheck.errors) {
+      logger.error('  - ' + err);
+    }
+    process.exit(1);
+  }
+  const topAgents = listTopLevelAgents();
+  logger.info(`[startup] Agent manifest OK · ${topAgents.length} 个顶层 Agent: ${topAgents.map(a => a.id).join(', ')}`);
+
   await registerOfficialAgents({
     registerAgent: async (definition, handler) => {
       return gateway.registerAgent(definition, handler);
@@ -363,10 +410,10 @@ async function purgeRetiredSkills() {
   const retiredAgentIds = retiredSkillNames.map((name) => `skill:${name}`);
 
   await Promise.all([
-    prisma.skill_registrations.deleteMany({ where: { name: { in: retiredSkillNames } } }),
-    prisma.skill_model_configs.deleteMany({ where: { skillId: { in: retiredSkillNames } } }),
+    systemPrisma.skill_registrations.deleteMany({ where: { name: { in: retiredSkillNames } } }),
+    systemPrisma.skill_model_configs.deleteMany({ where: { skillId: { in: retiredSkillNames } } }),
     prisma.user_skill_configs.deleteMany({ where: { skillName: { in: retiredSkillNames } } }),
-    prisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } })
+    systemPrisma.agent_prompts.deleteMany({ where: { agentId: { in: retiredAgentIds } } })
   ]);
 
   logger.info('已清理退役 Skill 配置残留', {
@@ -391,7 +438,7 @@ async function initializeAgentCollaboration() {
   
   service.start();
   
-  learnerOrchestrator.setupEventListeners(eventBus);
+  learnerCoordinator.setupEventListeners(eventBus);
   
   logger.info('✅ Agent Collaboration Service started');
   
@@ -406,14 +453,33 @@ async function startServer() {
     await prisma.$connect();
     logger.info('✅ Database connected successfully');
 
-    const promptBootstrap = await ensureCoreAgentPrompts(prisma, 'bootstrap');
-    logger.info('核心 Prompt 启动检查完成', {
+    const promptBootstrap = await ensureCoreAgentPrompts(systemPrisma, 'sync');
+    logger.info('核心 Prompt 文件同步完成（File-as-Truth）', {
       mode: promptBootstrap.mode,
       performed: promptBootstrap.performed,
       reason: promptBootstrap.reason,
       created: promptBootstrap.created,
+      updated: promptBootstrap.updated || [],
+      skipped: promptBootstrap.skipped,
       missingBefore: promptBootstrap.missingBefore,
     });
+
+    try {
+      const [goalRouting, pathRouting, executionRouting, learnerRouting] = await Promise.all([
+        ensureGoalFieldRoutings(systemPrisma),
+        ensurePathFieldRoutings(systemPrisma),
+        ensureExecutionFieldRoutings(systemPrisma),
+        ensureLearnerFieldRoutings(systemPrisma),
+      ]);
+      logger.info('阶段字段路由 seed 完成（V3 §3）', {
+        goal: goalRouting,
+        path: pathRouting,
+        execution: executionRouting,
+        learner: learnerRouting,
+      });
+    } catch (err) {
+      logger.warn('阶段字段路由 seed 失败（不影响主流程）', { error: (err as Error).message });
+    }
 
     // 初始化管理员账户
     await initializeAdmin();

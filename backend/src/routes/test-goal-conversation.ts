@@ -1,8 +1,8 @@
 import express, { Request, Response } from 'express';
 import prisma from '../config/database';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { runGoalConversationAgent, type GoalConversationAgentResult } from '../agents/goal-conversation-agent';
-import pathOrchestrator from '../orchestrators/path.orchestrator';
+import { runGoalConversationAgent, type GoalConversationAgentResult } from '../skills/goal-conversation';
+import pathOrchestrator from '../coordinators/path.coordinator';
 import goalConversationService from '../services/learning/goal-conversation.service';
 import { logger } from '../utils/logger';
 

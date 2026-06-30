@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 缓存预热脚本
  * 
  * 在系统启动时预加载常用数据到缓存中
@@ -31,7 +31,7 @@ const WARMUP_CONFIG = {
   preloadAchievements: true,
   
   // 预加载的 Agent 配置
-  agentIds: ['ai-teaching-agent', 'path-agent', 'goal-agent']
+  agentIds: ['teaching-agent', 'skill:path-planning', 'goal-agent']
 };
 
 /**

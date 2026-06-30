@@ -3,7 +3,7 @@
 
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import stateTrackingService from '../learning/state-tracking.service';
+import learningStateService from './learning-state.service';
 
 interface ReportData {
   user: {
@@ -259,13 +259,8 @@ class ReportService {
     startDate: Date,
     endDate: Date
   ) {
-    const metrics = await prisma.learning_metrics.findMany({
-      where: {
-        userId,
-        calculatedAt: { gte: startDate, lte: endDate }
-      },
-      orderBy: { calculatedAt: 'asc' }
-    });
+    const metrics = (await learningStateService.getTrendsSince(userId, startDate))
+      .filter((metric) => metric.timestamp.getTime() <= endDate.getTime());
 
     if (metrics.length === 0) {
       return {
@@ -335,29 +330,28 @@ class ReportService {
     startDate: Date,
     endDate: Date
   ) {
-    const metrics = await prisma.learning_metrics.findMany({
-      where: {
-        userId,
-        calculatedAt: { gte: startDate, lte: endDate }
-      },
-      orderBy: { calculatedAt: 'asc' }
-    });
+    const metrics = (await learningStateService.getTrendsSince(userId, startDate))
+      .filter((metric) => metric.timestamp.getTime() <= endDate.getTime());
 
     // 按日期聚合
     const dailyMap = new Map<string, any>();
 
     for (const metric of metrics) {
-      const dateKey = metric.calculatedAt.toISOString().split('T')[0];
+      const dateKey = metric.timestamp.toISOString().split('T')[0];
+      const existing = dailyMap.get(dateKey) || {
+        date: metric.timestamp,
+        sessions: 0,
+        timeMinutes: 0,
+        lss: 0,
+        ktl: 0,
+      };
 
-      if (!dailyMap.has(dateKey)) {
-        dailyMap.set(dateKey, {
-          date: metric.calculatedAt,
-          sessions: 0,
-          timeMinutes: 0,
-          lss: metric.lss || 0,
-          ktl: metric.ktl || 0
-        });
-      }
+      dailyMap.set(dateKey, {
+        ...existing,
+        date: metric.timestamp,
+        lss: metric.lss || 0,
+        ktl: metric.ktl || 0,
+      });
     }
 
     // 统计每日会话数和时间

@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import prisma from '../../config/database';
+import systemPrisma from '../../config/system-database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { getPlatformSettings, updatePlatformSettings } from '../../services/platform-settings.service';
 import { getAgentCatalog, isOfficialAgent } from '../../services/agent-catalog.service';
@@ -7,17 +8,17 @@ import {
   getAgentManifest,
   getCanonicalAgentId,
   getMonitoringGroupMappings,
-  getOrchestratorRelations,
-  isManifestOrchestrator,
+  getAgentRelations,
+  isManifestAgent,
   listAgentManifest
 } from '../../services/agent-manifest.service';
 import { getGateway } from '../../gateway';
 import {
-  DEFAULT_PATH_ORCHESTRATOR_INPUT_CONFIG,
-  getPathOrchestratorInputConfig,
-  savePathOrchestratorInputConfig
-} from '../../services/orchestratorConfig.service';
-import pathOrchestrator from '../../orchestrators/path.orchestrator';
+  DEFAULT_PATH_AGENT_INPUT_CONFIG,
+  getPathAgentInputConfig,
+  savePathAgentInputConfig
+} from '../../services/agentConfig.service';
+import pathCoordinator from '../../coordinators/path.coordinator';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -42,14 +43,16 @@ const AGENT_ID_TO_NAME = Object.entries(AGENT_NAME_TO_IDS).reduce((acc, [name, i
   return acc;
 }, {} as Record<string, string>);
 
-const ORCHESTRATOR_RELATIONS = getOrchestratorRelations();
+const AGENT_RELATIONS = getAgentRelations();
 
 const inferRuntimeRole = (agentId: string, type?: string | null) => {
   const typeText = String(type || '').toLowerCase();
-  if (typeText.includes('orchestrator')) return 'orchestrator';
-  if (isManifestOrchestrator(agentId)) return 'orchestrator';
-  if (agentId.endsWith('-orchestrator')) return 'orchestrator';
-  return 'agent';
+  if (agentId.startsWith('skill:')) return 'skill';
+  if (isManifestAgent(agentId)) return 'agent';
+  if (typeText.includes('skill')) return 'skill';
+  if (typeText.includes('agent')) return 'agent';
+  if (agentId.endsWith('-agent')) return 'agent';
+  return 'skill';
 };
 
 const ensureAdmin = async (userId?: string) => {
@@ -189,7 +192,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
     ]);
 
     const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples, arenaOutputSamples] = await Promise.all([
-      prisma.agent_registrations.findMany({
+      systemPrisma.agent_registrations.findMany({
         orderBy: { id: 'asc' },
         select: {
           id: true,
@@ -198,7 +201,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           updatedAt: true
         }
       }),
-      prisma.agent_model_configs.findMany({
+      systemPrisma.agent_model_configs.findMany({
         orderBy: { agentId: 'asc' },
         select: {
           agentId: true,
@@ -519,7 +522,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       }),
 
       prisma.agent_call_logs.findMany({
-        where: { agentId: 'session-wrapup-agent' },
+        where: { agentId: 'skill:session-wrapup' },
         orderBy: { calledAt: 'desc' },
         take: 200,
         select: { output: true }
@@ -675,7 +678,7 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
 
     const [catalog, registrations, callGroups, successGroups] = await Promise.all([
       getAgentCatalog(),
-      prisma.agent_registrations.findMany({
+      systemPrisma.agent_registrations.findMany({
         orderBy: { updatedAt: 'desc' }
       }),
       prisma.agent_call_logs.groupBy({
@@ -728,13 +731,13 @@ router.get('/agents/registry', async (req: Request, res: Response) => {
 
       return {
         agentId,
-        name: registration?.name || manifest?.name || agentId,
-        type: registration?.type || manifest?.category || 'custom',
+        name: manifest?.name || registration?.name || agentId,
+        type: manifest?.category || registration?.type || 'custom',
         role: inferRuntimeRole(agentId, registration?.type),
         kind: manifest?.kind || 'agent',
         aliases: manifest?.aliases || [],
-        category: registration?.category || manifest?.category,
-        description: registration?.description || manifest?.description,
+        category: manifest?.category || registration?.category,
+        description: manifest?.description || registration?.description,
         version: registration?.version || '1.0.0',
         endpoint: registration?.endpoint,
         lifecycleStatus,
@@ -854,23 +857,23 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
           monitoringGroup: manifest?.monitoringGroup || null,
           ioContractVersion: manifest?.ioContractVersion || 'legacy',
           aliases: manifest?.aliases || [],
-          orchestratorFlow: canonicalAgentId === 'simulation-orchestrator'
+          orchestratorFlow: canonicalAgentId === 'simulation-agent'
             ? {
                 description: '虚拟学习者生命周期总编排：故事触发 -> Goal learner turn -> Goal agent -> Path 生成 -> Path 接受评估 -> Learn learner turn -> Teaching orchestrator -> runtime projection。',
                 steps: [
-                  { agentId: 'virtual-learner-goal-dialogue-simulator', action: 'goal learner turn', condition: 'goal rounds' },
-                  { agentId: 'goal-conversation-agent', action: 'goal agent turn', condition: 'goal rounds' },
-                  { agentId: 'path-orchestrator', action: 'generate path', condition: 'when goal converges' },
-                  { agentId: 'virtual-learner-path-evaluator', action: 'accept/modify/reject path', condition: 'when path is available' },
-                  { agentId: 'virtual-learner-learn-turn-simulator', action: 'learn learner turn', condition: 'learning turns' },
-                  { agentId: 'ai-teaching-agent', action: 'teaching orchestration', condition: 'learning turns' },
+                  { agentId: 'skill:virtual-learner-goal-dialogue-simulator', action: 'goal learner turn', condition: 'goal rounds' },
+                  { agentId: 'skill:goal-conversation', action: 'goal agent turn', condition: 'goal rounds' },
+                  { agentId: 'path-agent', action: 'generate path', condition: 'when goal converges' },
+                  { agentId: 'skill:virtual-learner-path-evaluator', action: 'accept/modify/reject path', condition: 'when path is available' },
+                  { agentId: 'skill:virtual-learner-learn-turn-simulator', action: 'learn learner turn', condition: 'learning turns' },
+                  { agentId: 'teaching-agent', action: 'teaching orchestration', condition: 'learning turns' },
                 ]
               }
-            : canonicalAgentId === 'learner-orchestrator'
+            : canonicalAgentId === 'learner-agent'
               ? {
                   description: '学习者状态主编排：接收 Goal/lesson 相关事件，串联 learner profile 更新、知识背景沉淀与 snapshot refresh。',
                   steps: [
-                    { agentId: 'learner-model-agent', action: 'apply learner profile update', condition: 'when learning or goal understanding changes' },
+                    { agentId: 'skill:learner-model', action: 'apply learner profile update', condition: 'when learning or goal understanding changes' },
                     { agentId: 'skill:goal-profile-inference', action: 'enrich goal narrative/profile', condition: 'when goal understanding changes' },
                     { agentId: 'skill:learning-pattern-distiller', action: 'distill learning patterns', condition: 'when learning traces are aggregated' },
                     { agentId: 'skill:session-knowledge-distiller', action: 'distill lesson knowledge background', condition: 'when lesson ends' },
@@ -879,20 +882,28 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                 }
             : undefined,
           promptManagement: {
-            mode: canonicalAgentId === 'ai-teaching-agent'
-              ? 'orchestrator-no-direct-prompt'
-              : canonicalAgentId === 'learner-orchestrator'
-              ? 'orchestrator-no-direct-prompt'
-              : canonicalAgentId === 'tutor-agent'
-                ? 'legacy-service'
-                : 'agent-prompt',
-            note: canonicalAgentId === 'ai-teaching-agent'
-              ? '该编排器本身不直接持有单一 System Prompt，教学主输出由 teaching-turn-agent、skill:peer-reinforcement、session-wrapup-agent 等运行节点提供。'
-              : canonicalAgentId === 'learner-orchestrator'
-                ? '该编排器本身不直接持有单一 System Prompt，学习者画像增强与知识沉淀由 learner-model-agent 与内部 skill 链共同提供。'
-              : canonicalAgentId === 'tutor-agent'
-                ? '该名称当前更像旧服务概念，不是已注册的独立 runtime agent。若需要 Prompt 管理，应先确认真实运行 ID。'
-                : null
+            mode: canonicalAgentId === 'teaching-agent'
+              ? 'agent-no-direct-prompt'
+              : canonicalAgentId === 'learner-agent'
+              ? 'agent-no-direct-prompt'
+              : canonicalAgentId === 'goal-agent'
+                ? 'agent-no-direct-prompt'
+                : canonicalAgentId === 'path-agent'
+                  ? 'agent-no-direct-prompt'
+                  : canonicalAgentId === 'simulation-agent'
+                    ? 'agent-no-direct-prompt'
+                    : 'agent-prompt',
+            note: canonicalAgentId === 'teaching-agent'
+              ? '该 Agent 是编排器，不直接持有 System Prompt，教学主输出由 skill:teaching-turn / skill:peer-reinforcement / skill:session-wrapup 等下辖 Skill 提供。'
+              : canonicalAgentId === 'learner-agent'
+                ? '该 Agent 是编排器，不直接持有 System Prompt，学习者画像增强与知识沉淀由 skill:learner-model 与下辖 Skill 链共同提供。'
+                : canonicalAgentId === 'goal-agent'
+                  ? '该 Agent 是编排器，不直接持有 System Prompt，目标对话由 skill:goal-conversation 等下辖 Skill 提供。'
+                  : canonicalAgentId === 'path-agent'
+                    ? '该 Agent 是编排器，不直接持有 System Prompt，路径规划由 skill:path-planning 等下辖 Skill 提供。'
+                    : canonicalAgentId === 'simulation-agent'
+                      ? '该 Agent 是编排器，不直接持有 System Prompt，虚拟学习者实验链路由 skill:virtual-learner-* 系列下辖 Skill 提供。'
+                      : null
           }
         },
         definition: {
@@ -938,9 +949,9 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
 
 /**
  * 获取编排器与成员 Agent 关系
- * GET /api/admin/orchestrators/relations
+ * GET /api/admin/agents/relations
  */
-router.get('/orchestrators/relations', async (req: Request, res: Response) => {
+router.get('/agents/relations', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
@@ -951,7 +962,7 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
     }
 
     const allMemberIds = Array.from(new Set(Object.values(AGENT_NAME_TO_IDS).flat().map(getCanonicalAgentId)));
-    const registrations = await prisma.agent_registrations.findMany({
+    const registrations = await systemPrisma.agent_registrations.findMany({
       where: { id: { in: allMemberIds } },
       select: { id: true, name: true, type: true }
     });
@@ -960,8 +971,8 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
 
     const manifestMap = new Map(listAgentManifest().map(item => [item.id, item]));
 
-    const orchestrators = ORCHESTRATOR_RELATIONS.map((relation) => {
-      const orchestratorId = relation.orchestratorId;
+    const orchestrators = AGENT_RELATIONS.map((relation) => {
+      const agentId = relation.agentId;
       const group = relation.group;
       const memberAgentIds = relation.members || [];
       const members = memberAgentIds.map((agentId) => {
@@ -970,13 +981,13 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
         const manifestEntry = manifestMap.get(canonicalId);
         return {
           agentId: canonicalId,
-          name: registration?.name || manifestEntry?.name || canonicalId,
+          name: manifestEntry?.name || registration?.name || canonicalId,
           role: inferRuntimeRole(agentId, registration?.type)
         };
       });
 
       return {
-        orchestratorId,
+        agentId,
         group,
         members
       };
@@ -985,6 +996,8 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
+        // 'agents' 是新字段（5 Agent 拓扑后），'orchestrators' 保留向后兼容
+        agents: orchestrators,
         orchestrators
       }
     });
@@ -1000,7 +1013,17 @@ router.get('/orchestrators/relations', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/orchestrator-members/:orchestratorId', async (req: Request, res: Response) => {
+/**
+ * Agent 拓扑可视化 API
+ * GET /api/admin/agents/topology
+ *
+ * 返回 5 顶层 Agent + 下辖 Skill 的节点图数据：
+ *   - nodes: 5 Agent + N Skill（带统计）
+ *   - edges: Agent -> Skill 隶属关系
+ *
+ * 时间窗口：?range=24h | 7d | 30d (默认 7d)
+ */
+router.get('/agents/topology', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
@@ -1010,8 +1033,127 @@ router.get('/orchestrator-members/:orchestratorId', async (req: Request, res: Re
       });
     }
 
-    const { orchestratorId } = req.params;
-    const relation = ORCHESTRATOR_RELATIONS.find((item) => item.orchestratorId === orchestratorId);
+    const range = String(req.query.range || '7d');
+    const sinceMs = range === '24h' ? 24 * 3600 * 1000
+      : range === '30d' ? 30 * 24 * 3600 * 1000
+      : 7 * 24 * 3600 * 1000;
+    const since = new Date(Date.now() - sinceMs);
+
+    const { listTopLevelAgents, listAgentManifest, getCanonicalAgentId } = await import('../../services/agent-manifest.service');
+    const topAgents = listTopLevelAgents();
+    const allManifest = listAgentManifest();
+    const manifestMap = new Map(allManifest.map(m => [m.id, m]));
+
+    // 拉取窗口内的调用统计
+    const callGroups = await prisma.agent_call_logs.groupBy({
+      by: ['agentId'],
+      where: { calledAt: { gte: since } },
+      _count: { _all: true },
+      _avg: { durationMs: true }
+    });
+    const successGroups = await prisma.agent_call_logs.groupBy({
+      by: ['agentId', 'success'],
+      where: { calledAt: { gte: since } },
+      _count: { _all: true }
+    });
+
+    const callMap = new Map<string, { total: number; avgDuration: number }>();
+    for (const g of callGroups) {
+      callMap.set(g.agentId, { total: g._count._all, avgDuration: Math.round(g._avg.durationMs || 0) });
+    }
+    const successMap = new Map<string, { success: number; failed: number }>();
+    for (const g of successGroups) {
+      const cur = successMap.get(g.agentId) || { success: 0, failed: 0 };
+      if (g.success) cur.success += g._count._all; else cur.failed += g._count._all;
+      successMap.set(g.agentId, cur);
+    }
+
+    const getStats = (id: string) => {
+      const c = callMap.get(id);
+      const s = successMap.get(id) || { success: 0, failed: 0 };
+      const total = c?.total ?? 0;
+      const successRate = total > 0 ? Number(((s.success / total) * 100).toFixed(1)) : null;
+      return { totalCalls: total, successRate, avgDuration: c?.avgDuration ?? 0, failed: s.failed };
+    };
+
+    const nodes: any[] = [];
+    const edges: any[] = [];
+
+    for (const agent of topAgents) {
+      const agentStats = getStats(agent.id);
+
+      nodes.push({
+        id: agent.id,
+        type: 'agent',
+        label: agent.name,
+        description: agent.description,
+        monitoringGroup: agent.monitoringGroup,
+        memberCount: (agent.agentMembers || []).length,
+        stats: agentStats
+      });
+
+      for (const memberId of agent.agentMembers || []) {
+        const canonical = getCanonicalAgentId(memberId);
+        const skill = manifestMap.get(canonical);
+        if (!skill) continue;
+
+        const skillStats = getStats(canonical);
+        nodes.push({
+          id: skill.id,
+          type: 'skill',
+          label: skill.name,
+          description: skill.description,
+          category: skill.category,
+          parentAgentId: agent.id,
+          ioContractVersion: skill.ioContractVersion,
+          noPromptFile: !!skill.noPromptFile,
+          modelConfig: skill.defaultModelConfig || null,
+          stats: skillStats
+        });
+
+        edges.push({
+          id: `${agent.id}__${skill.id}`,
+          source: agent.id,
+          target: skill.id,
+          type: 'membership'
+        });
+      }
+    }
+
+    const summary = {
+      agentCount: topAgents.length,
+      skillCount: nodes.filter(n => n.type === 'skill').length,
+      totalCalls: nodes.reduce((s, n) => s + (n.stats?.totalCalls || 0), 0),
+      unhealthyCount: nodes.filter(n => n.stats?.totalCalls > 0 && (n.stats.successRate ?? 100) < 90).length,
+      idleCount: nodes.filter(n => n.type === 'skill' && (!n.stats?.totalCalls || n.stats.totalCalls === 0)).length,
+      range
+    };
+
+    res.json({
+      success: true,
+      data: { nodes, edges, summary }
+    });
+  } catch (error: any) {
+    logger.error('[admin-topology] 加载拓扑失败', { error });
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || '加载拓扑失败' }
+    });
+  }
+});
+
+router.get('/agent-members/:agentId', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '需要管理员权限' }
+      });
+    }
+
+    const { agentId } = req.params;
+    const relation = AGENT_RELATIONS.find((item) => item.agentId === agentId);
 
     if (!relation) {
       return res.status(404).json({
@@ -1022,7 +1164,7 @@ router.get('/orchestrator-members/:orchestratorId', async (req: Request, res: Re
 
     const manifestMap = new Map(listAgentManifest().map(item => [item.id, item]));
     const memberIds = Array.from(new Set((relation.members || []).map(getCanonicalAgentId)));
-    const registrations = await prisma.agent_registrations.findMany({
+    const registrations = await systemPrisma.agent_registrations.findMany({
       where: { id: { in: memberIds } },
       select: { id: true, name: true, type: true }
     });
@@ -1044,7 +1186,7 @@ router.get('/orchestrator-members/:orchestratorId', async (req: Request, res: Re
     res.json({
       success: true,
       data: {
-        orchestratorId,
+        agentId,
         members
       }
     });
@@ -1059,26 +1201,26 @@ router.get('/orchestrator-members/:orchestratorId', async (req: Request, res: Re
   }
 });
 
-router.get('/orchestrators/:orchestratorId/config', async (req: Request, res: Response) => {
+router.get('/agents/:agentId/config', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    const { orchestratorId } = req.params;
-    if (orchestratorId !== 'path-orchestrator') {
+    const { agentId } = req.params;
+    if (agentId !== 'path-agent') {
       return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器配置' } });
     }
 
-    const config = await getPathOrchestratorInputConfig();
+    const config = await getPathAgentInputConfig();
 
     res.json({
       success: true,
       data: {
-        orchestratorId,
+        agentId,
         config,
-        defaults: DEFAULT_PATH_ORCHESTRATOR_INPUT_CONFIG,
+        defaults: DEFAULT_PATH_AGENT_INPUT_CONFIG,
         availableSourcePaths: {
           descriptionSources: ['visibleSummary.realProblem', 'understanding.real_problem', 'rawGoal'],
           subjectSources: ['structuredData.subject', 'collected.subject'],
@@ -1094,41 +1236,41 @@ router.get('/orchestrators/:orchestratorId/config', async (req: Request, res: Re
   }
 });
 
-router.put('/orchestrators/:orchestratorId/config', async (req: Request, res: Response) => {
+router.put('/agents/:agentId/config', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    const { orchestratorId } = req.params;
-    if (orchestratorId !== 'path-orchestrator') {
+    const { agentId } = req.params;
+    if (agentId !== 'path-agent') {
       return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器配置' } });
     }
 
-    const config = await savePathOrchestratorInputConfig(req.body || {});
-    res.json({ success: true, data: { orchestratorId, config } });
+    const config = await savePathAgentInputConfig(req.body || {});
+    res.json({ success: true, data: { agentId, config } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '保存编排器配置失败', status: 500 } });
   }
 });
 
-router.get('/orchestrators/:orchestratorId/data-contract', async (req: Request, res: Response) => {
+router.get('/agents/:agentId/data-contract', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    const { orchestratorId } = req.params;
-    if (orchestratorId !== 'path-orchestrator') {
+    const { agentId } = req.params;
+    if (agentId !== 'path-agent') {
       return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器数据契约' } });
     }
 
     res.json({
       success: true,
       data: {
-        orchestratorId,
+        agentId,
         entryPayload: {
           name: 'goalFinalPayload',
           description: 'Goal 阶段最终产出并正式交给 Path 的入口对象。',
@@ -1197,15 +1339,15 @@ router.get('/orchestrators/:orchestratorId/data-contract', async (req: Request, 
   }
 });
 
-router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request, res: Response) => {
+router.post('/agents/:agentId/config-preview', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    const { orchestratorId } = req.params;
-    if (orchestratorId !== 'path-orchestrator') {
+    const { agentId } = req.params;
+    if (agentId !== 'path-agent') {
       return res.status(404).json({ success: false, error: { message: '当前仅支持路径编排器预览' } });
     }
 
@@ -1214,7 +1356,7 @@ router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request
       return res.status(400).json({ success: false, error: { message: '缺少 sampleGoalFinalPayload' } });
     }
 
-    const normalized = await pathOrchestrator.previewNormalizedGoalInput({
+    const normalized = await pathCoordinator.previewNormalizedGoalInput({
       userId: req.user?.userId || 'admin-preview',
       source: 'goal',
       mode: 'generate',
@@ -1229,7 +1371,7 @@ router.post('/orchestrators/:orchestratorId/config-preview', async (req: Request
     res.json({
       success: true,
       data: {
-        orchestratorId,
+        agentId,
         normalizedInput: {
           description: normalized.description,
           subject: normalized.subject || null,

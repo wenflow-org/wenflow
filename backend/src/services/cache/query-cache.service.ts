@@ -6,6 +6,8 @@
  */
 
 import prisma from '../../config/database';
+import systemPrisma from '../../config/system-database';
+import learningStateService from '../learning/learning-state.service';
 import { responseCache } from './response-cache.service';
 import { logger } from '../../utils/logger';
 
@@ -61,11 +63,19 @@ export class QueryCacheService {
     return this.cachedQuery(
       `student-state:${userId}`,
       async () => {
-        const state = await prisma.learning_metrics.findFirst({
-          where: { userId },
-          orderBy: { recordedAt: 'desc' }
-        });
-        return state;
+        const state = await learningStateService.getCurrentState(userId);
+        if (!state) {
+          return null;
+        }
+
+        const displayState = learningStateService.toDisplayMetrics(state);
+        return {
+          lss: displayState.lss,
+          ktl: displayState.ktl,
+          lf: displayState.lf,
+          lsb: displayState.lsb,
+          updatedAt: state.timestamp.toISOString(),
+        };
       },
       this.DEFAULT_TTL.SHORT  // 1 分钟 - 学生状态变化较快
     );
@@ -221,7 +231,7 @@ export class QueryCacheService {
           where.isActive = true;
         }
         
-        const prompt = await prisma.agent_prompts.findFirst({
+        const prompt = await systemPrisma.agent_prompts.findFirst({
           where
         });
         return prompt;

@@ -1,4 +1,4 @@
-const { PrismaClient } = require('@prisma/client')
+﻿const { PrismaClient } = require('@prisma/client')
 const { v4: uuidv4 } = require('uuid')
 
 const prisma = new PrismaClient()
@@ -44,7 +44,7 @@ const prompt = `你是一位专业的课程设计师，负责创建里程碑式�
 }`
 
 async function main() {
-  const agentId = 'path-agent'
+  const agentId = 'skill:path-planning'
   const model = process.env.AI_MODEL || null
 
   const latest = await prisma.agent_prompts.findFirst({

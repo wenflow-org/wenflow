@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import prisma from '../config/database';
-import { DEFAULT_PATH_GENERATION_PROMPT } from '../agents/path-agent';
 
 dotenv.config();
 
@@ -31,7 +30,7 @@ async function publishPathAgentPrompt() {
       version,
       name: `v${version}-path-agent-skeleton-only-no-subtasks`,
       description: '两层 Path 主链：path-agent 只输出 cognitiveCore 与 milestone 骨架，阶段 subtasks 由 stage-designer 单独生成。',
-      systemPrompt: DEFAULT_PATH_GENERATION_PROMPT,
+      systemPrompt: '',
       temperature: 0.2,
       maxTokens: 32000,
       model,

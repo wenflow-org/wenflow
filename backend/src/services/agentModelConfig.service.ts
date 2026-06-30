@@ -1,4 +1,4 @@
-import prisma from '../config/database';
+import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { getDefaultAgentModelConfigs } from './agent-manifest.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,7 +20,7 @@ export interface AgentModelConfig {
 class AgentModelConfigService {
   async getAll(): Promise<AgentModelConfig[]> {
     try {
-      const persistedConfigs = await prisma.agent_model_configs.findMany();
+      const persistedConfigs = await systemPrisma.agent_model_configs.findMany();
       const persistedMap = new Map(persistedConfigs.map((config) => [config.agentId, config]));
       const mergedConfigs = getDefaultAgentModelConfigs().map((defaultConfig) => {
         const persisted = persistedMap.get(defaultConfig.agentId);
@@ -63,7 +63,7 @@ class AgentModelConfigService {
 
   async get(agentId: string): Promise<AgentModelConfig | null> {
     try {
-      return await prisma.agent_model_configs.findUnique({ where: { agentId } });
+      return await systemPrisma.agent_model_configs.findUnique({ where: { agentId } });
     } catch (error) {
       logger.error(`Failed to get agent config: ${agentId}`, error);
       throw error;
@@ -72,7 +72,7 @@ class AgentModelConfigService {
 
   async upsert(agentId: string, config: Partial<AgentModelConfig>): Promise<AgentModelConfig> {
     try {
-      const result = await prisma.agent_model_configs.upsert({
+      const result = await systemPrisma.agent_model_configs.upsert({
         where: { agentId },
         update: { ...config, updatedAt: new Date() },
         create: { id: uuidv4(), agentId, ...config, updatedAt: new Date() }
@@ -87,7 +87,7 @@ class AgentModelConfigService {
 
   async delete(agentId: string): Promise<void> {
     try {
-      await prisma.agent_model_configs.delete({ where: { agentId } });
+      await systemPrisma.agent_model_configs.delete({ where: { agentId } });
       getAPIGateway().invalidateCache(undefined, agentId);
     } catch (error) {
       logger.error(`Failed to delete agent config: ${agentId}`, error);

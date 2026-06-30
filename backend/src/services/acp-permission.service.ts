@@ -1,8 +1,8 @@
-export class AcpPermissionService {
+﻿export class AcpPermissionService {
   // 权限矩阵：哪个入口可以调用哪些 Agent
 private permissionMatrix: Record<string, string[]> = {
-    'lab': ['goal-conversation-agent', 'requirement-orchestrator', 'path-agent', 'path-orchestrator'],
-    'platform': ['goal-conversation-agent', 'requirement-orchestrator', 'path-agent', 'path-orchestrator', 'ai-teaching-agent', 'skill:peer-reinforcement'],
+    'lab': ['skill:goal-conversation', 'goal-agent', 'skill:path-planning', 'path-agent'],
+    'platform': ['skill:goal-conversation', 'goal-agent', 'skill:path-planning', 'path-agent', 'teaching-agent', 'skill:peer-reinforcement'],
     'arena': ['persona-agent', 'user-agent', 'dialog-agent', 'extract-agent', 'generate-agent', 'evaluate-agent'],
     'test': ['*'], // 测试环境可以调用所有
   };

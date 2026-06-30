@@ -2,7 +2,7 @@
   <footer class="app-mini-footer">
     <div class="app-mini-footer__inner">
       <div class="app-mini-footer__brand">
-        <span class="app-mini-footer__logo" aria-hidden="true">问</span>
+        <img src="/favicon.png" alt="问流" class="app-mini-footer__logo" />
         <span class="app-mini-footer__name">问流 WenFlow</span>
         <span class="app-mini-footer__tag">让 AI 真正陪你学</span>
       </div>
@@ -57,16 +57,10 @@ const version = '0.9';
 }
 
 .app-mini-footer__logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #3478f6 0%, #2563eb 100%);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .app-mini-footer__name {

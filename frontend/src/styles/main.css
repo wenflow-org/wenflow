@@ -9,6 +9,9 @@
 /* 核心设计系统 */
 @import './design-system.css';
 
+/* Admin 统一 surface 系统 */
+@import './admin-surface.css';
+
 /* Admin 列表壳子 */
 @import './admin-list.css';
 

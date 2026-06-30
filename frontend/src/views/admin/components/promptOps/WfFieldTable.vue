@@ -33,7 +33,7 @@
       </el-table-column>
       <el-table-column label="治理" width="110">
         <template #default="{ row }">
-          <span v-if="row.systemLocked" class="wf-gov wf-gov--sys">🔒 系统字段</span>
+          <span v-if="row.systemLocked" class="wf-gov wf-gov--sys">系统字段</span>
           <span v-else-if="row.governed" class="wf-gov wf-gov--soft">可编辑软字段</span>
           <span v-else class="wf-table__dim">未治理</span>
         </template>

@@ -41,8 +41,7 @@
           </div>
           <div class="message-body">
             <div class="message-bubble thinking">
-              <el-icon class="loading-icon"><Loading /></el-icon>
-              <span>思考中...</span>
+              <TypingIndicator variant="minimal" label="思考中" />
             </div>
           </div>
         </div>
@@ -82,6 +81,7 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import { ChatDotRound, Close, User, Loading } from '@element-plus/icons-vue';
 import MarkdownRenderer from './MarkdownRenderer.vue';
+import TypingIndicator from './TypingIndicator.vue';
 
 interface PeerMessage {
   role: 'user' | 'peer';

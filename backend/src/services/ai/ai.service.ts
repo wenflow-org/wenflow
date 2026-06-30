@@ -1,4 +1,4 @@
-// AI 服务 - 多模型支持
+﻿// AI 服务 - 多模型支持
 import { logger } from '../../utils/logger';
 import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
 import { StudentStateAssessment } from './state-assessment.service';
@@ -271,7 +271,7 @@ interface ChatMessage {
 }
 
 function isPathPlanningRequest(agentId?: string, action?: string): boolean {
-  if (agentId === 'path-agent') return true;
+  if (agentId === 'skill:path-planning') return true;
   if (!action) return false;
 
   return [
@@ -362,13 +362,16 @@ class AIService {
 
       let reply = '';
       let reasoning = '';
+      let finishReason: string | null = null;
       
       // 尝试标准 OpenAI 格式
       if (response.choices && Array.isArray(response.choices) && response.choices.length > 0) {
-        const message = response.choices[0]?.message;
+        const choice = response.choices[0];
+        const message = choice?.message;
         reply = message?.content || '';
         // DeepSeek 模型可能有 reasoning 或 reasoning_content 字段（思维链）
         reasoning = (message as any)?.reasoning || (message as any)?.reasoning_content || '';
+        finishReason = (choice as any)?.finish_reason || null;
       }
       // 尝试直接返回文本的情况
       else if (typeof response === 'string') {
@@ -376,9 +379,11 @@ class AIService {
       }
       // 尝试从 data 字段获取（兼容某些代理格式）
       else if ((response as any).data && (response as any).data.choices) {
-        const message = (response as any).data.choices[0]?.message;
+        const choice = (response as any).data.choices[0];
+        const message = choice?.message;
         reply = message?.content || '';
         reasoning = (message as any)?.reasoning || (message as any)?.reasoning_content || '';
+        finishReason = (choice as any)?.finish_reason || null;
       }
       
       const pathPlanningRequest = isPathPlanningRequest(options?.agentId, options?.action);
@@ -417,6 +422,7 @@ class AIService {
 
       result = {
         content: reply,
+        finishReason,
         usage: {
           promptTokens: usage?.prompt_tokens,
           completionTokens: usage?.completion_tokens,
@@ -642,7 +648,7 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ], { 
-        agentId: 'path-agent',
+        agentId: 'skill:path-planning',
         userId: userId,
         action: 'analyzeLearningGoal'
       });
@@ -785,7 +791,7 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
       const response = await this.chat([
         { role: 'system', content: systemPrompt }
       ], {
-        agentId: 'ai-teaching-agent',
+        agentId: 'teaching-agent',
         userId: params.userId,
         action: 'zpdTutoring'
       });

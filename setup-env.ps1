@@ -26,7 +26,8 @@ function Get-DefaultEnvEntries {
         PORT = '3001'
         CORS_ORIGIN = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
         TRUST_PROXY = ''
-        DATABASE_URL = 'file:./dev.db'
+        DATABASE_URL = 'file:./prisma/dev.db'
+        SYSTEM_DATABASE_URL = 'file:./prisma/system.db'
         JWT_SECRET = ''
         ADMIN_LOCALHOST_ONLY = 'true'
         LOGIN_MAX_ATTEMPTS = '5'
@@ -38,7 +39,8 @@ function Get-DefaultEnvEntries {
         AI_MODEL_REASONING = 'deepseek-v4-pro'
         FRONTEND_URL = 'http://localhost:5173'
         INIT_ADMIN_NAME = 'admin'
-        INIT_ADMIN_PASSWORD = ''
+        INIT_ADMIN_EMAIL = 'admin@wenflow.local'
+        INIT_ADMIN_PASSWORD = 'admin123'
     }
 
     return $defaults

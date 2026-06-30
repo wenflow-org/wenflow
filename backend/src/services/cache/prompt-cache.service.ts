@@ -5,7 +5,7 @@
  * 减少数据库查询，提高 Prompt 加载速度
  */
 
-import prisma from '../../config/database';
+import systemPrisma from '../../config/system-database';
 import { responseCache } from './response-cache.service';
 import { logger } from '../../utils/logger';
 
@@ -57,17 +57,23 @@ export class PromptCacheService {
     }
     
     // 存入缓存
+    // P-PROMPT-COMPILE 热更换关键: 编译产物优先, 降级到源
+    const useCompiled =
+      prompt.compileStatus === 'fresh' &&
+      typeof prompt.compiledSystemPrompt === 'string' &&
+      prompt.compiledSystemPrompt.length > 0;
+
     const cacheData: PromptConfigCache = {
-      systemPrompt: prompt.systemPrompt,
+      systemPrompt: useCompiled ? prompt.compiledSystemPrompt : prompt.systemPrompt,
       temperature: prompt.temperature ?? 0.7,
       maxTokens: prompt.maxTokens ?? 2000,
       model: prompt.model || undefined,
       version: prompt.version,
       timestamp: Date.now()
     };
-    
+
     responseCache.set(cacheKey, cacheData, this.DEFAULT_TTL);
-    
+
     return cacheData;
   }
   
@@ -84,10 +90,10 @@ export class PromptCacheService {
       if (version) {
         where.version = version;
       } else {
-        where.isActive = true;
+        where.status = 'ACTIVE';
       }
       
-      const prompt = await prisma.agent_prompts.findFirst({
+      const prompt = await systemPrisma.agent_prompts.findFirst({
         where
       });
       

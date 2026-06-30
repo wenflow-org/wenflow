@@ -113,7 +113,7 @@ flowchart TD
 | **Backend** | Node.js + Express + TypeScript + Prisma |
 | **Database** | SQLite |
 | **AI Integration** | OpenAI-compatible model gateway (default: DeepSeek) |
-| **Agent Orchestration** | EduClaw Gateway + Orchestrators + Event Bus |
+| **Agent Coordination** | EduClaw Gateway + Agent Coordinators + Event Bus |
 | **Deployment** | PowerShell scripts + optional Nginx |
 
 ---

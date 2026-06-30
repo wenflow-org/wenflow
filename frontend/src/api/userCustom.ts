@@ -36,45 +36,6 @@ export const exportAgentLogs = async (params?: {
   return response.data;
 };
 
-// ==================== 代码仓库 ====================
-
-export const getCodeRepositories = async (params?: {
-  type?: 'AGENT' | 'SKILL' | 'MCP_TOOL';
-  status?: 'active' | 'archived';
-  limit?: number;
-}) => {
-  const response = await request.get(`${API_BASE}/code-repo`, { params });
-  return response.data;
-};
-
-export const getCodeRepository = async (id: string) => {
-  const response = await request.get(`${API_BASE}/code-repo/${id}`);
-  return response.data;
-};
-
-export const saveCodeRepository = async (data: {
-  name: string;
-  type: 'AGENT' | 'SKILL' | 'MCP_TOOL';
-  code: string;
-  description?: string;
-  inputSchema?: any;
-  outputSchema?: any;
-  metadata?: any;
-}) => {
-  const response = await request.post(`${API_BASE}/code-repo`, data);
-  return response.data;
-};
-
-export const deleteCodeRepository = async (id: string) => {
-  const response = await request.delete(`${API_BASE}/code-repo/${id}`);
-  return response.data;
-};
-
-export const testCodeRepository = async (id: string, input: any) => {
-  const response = await request.post(`${API_BASE}/code-repo/${id}/test`, { input });
-  return response.data;
-};
-
 // ==================== Agent 自定义 ====================
 
 export const getUserAgents = async (params?: {
@@ -94,12 +55,10 @@ export const saveUserAgent = async (data: {
   agentName: string;
   sourceType?: 'PLATFORM' | 'CUSTOM';
   enabled?: boolean;
-  codeRepositoryId?: string;
   model?: string;
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
-  customCode?: string;
 }) => {
   const response = await request.post(`${API_BASE}/agents`, data);
   return response.data;
@@ -110,8 +69,6 @@ export const updateUserAgent = async (name: string, data: {
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
-  customCode?: string;
-  codeRepositoryId?: string;
 }) => {
   const response = await request.put(`${API_BASE}/agents/${name}`, data);
   return response.data;
@@ -159,9 +116,7 @@ export const getUserSkill = async (name: string) => {
 export const saveUserSkill = async (data: {
   skillName: string;
   sourceType?: 'PLATFORM' | 'CUSTOM';
-  codeRepositoryId?: string;
   parameters?: any;
-  customCode?: string;
   endpoint?: string;
 }) => {
   const response = await request.post(`${API_BASE}/skills`, data);
@@ -170,9 +125,7 @@ export const saveUserSkill = async (data: {
 
 export const updateUserSkill = async (name: string, data: {
   parameters?: any;
-  customCode?: string;
   endpoint?: string;
-  codeRepositoryId?: string;
 }) => {
   const response = await request.put(`${API_BASE}/skills/${name}`, data);
   return response.data;

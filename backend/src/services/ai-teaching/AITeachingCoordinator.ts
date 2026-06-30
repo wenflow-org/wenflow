@@ -1434,40 +1434,46 @@ export class AITeachingOrchestrator {
     const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
 
     const wrapupOutput = await executeSkill(sessionWrapupAgentDefinition, {
-      messages: session.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-        timestamp: new Date(message.timestamp),
-        analysis: message.analysis,
-      })),
-      knowledgePoints: session.knowledgeState,
-      sessionInfo: {
-        subject: session.subject,
-        topic: session.topic,
-        durationMinutes,
-        userMessageCount: session.messages.filter((message) => message.role === 'user').length,
-        assistantMessageCount: session.messages.filter((message) => message.role === 'assistant').length,
-        taskType: session.taskType,
-        taskTitle: context.taskTitle,
-        taskDescription: context.taskDescription,
-        pathTitle: context.pathContext.pathTitle || null,
-        pathSummary: context.pathContext.pathSummary || null,
+      input: {
+        messages: session.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          timestamp: new Date(message.timestamp),
+          analysis: message.analysis,
+        })),
+        knowledgePoints: session.knowledgeState,
+        sessionInfo: {
+          subject: session.subject,
+          topic: session.topic,
+          durationMinutes,
+          userMessageCount: session.messages.filter((message) => message.role === 'user').length,
+          assistantMessageCount: session.messages.filter((message) => message.role === 'assistant').length,
+          taskType: session.taskType,
+          taskTitle: context.taskTitle,
+          taskDescription: context.taskDescription,
+          pathTitle: context.pathContext.pathTitle || null,
+          pathSummary: context.pathContext.pathSummary || null,
+        },
+        learningState: context.learningState ? {
+          ...context.learningState,
+          ...deriveTeachingRuntimeSignals(context),
+        } : undefined,
+        knowledgeContext: {
+          initialPoints: initialKnowledgeState,
+          delta: knowledgeDelta,
+        },
+        sessionEvidence,
+        sessionStructure: {
+          pathBackground: sessionArtifacts.pathBackgroundContext || null,
+          finalClassroomContext,
+          classroomEventHistory,
+          stageHistory,
+          endReason: sessionArtifacts.endReason || 'manual-end',
+        },
       },
-      learningState: context.learningState ? {
-        ...context.learningState,
-        ...deriveTeachingRuntimeSignals(context),
-      } : undefined,
-      knowledgeContext: {
-        initialPoints: initialKnowledgeState,
-        delta: knowledgeDelta,
-      },
-      sessionEvidence,
-      sessionStructure: {
-        pathBackground: sessionArtifacts.pathBackgroundContext || null,
-        finalClassroomContext,
-        classroomEventHistory,
-        stageHistory,
-        endReason: sessionArtifacts.endReason || 'manual-end',
+      context: {
+        userId: session.userId,
+        sessionId,
       },
     });
 

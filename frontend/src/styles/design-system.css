@@ -686,6 +686,8 @@ pre code {
 .el-button--primary {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)) !important;
   border-color: transparent !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
   box-shadow: 0 14px 28px rgba(52, 120, 246, 0.24);
 }
 
@@ -698,6 +700,8 @@ pre code {
 .el-button--success {
   background: linear-gradient(135deg, var(--color-success), #248a53) !important;
   border-color: transparent !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
   box-shadow: 0 14px 28px rgba(49, 177, 111, 0.24);
 }
 
@@ -710,6 +714,8 @@ pre code {
 .el-button--danger {
   background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark)) !important;
   border-color: transparent !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
   box-shadow: 0 14px 28px rgba(239, 117, 120, 0.24);
 }
 
@@ -722,6 +728,8 @@ pre code {
 .el-button--warning {
   background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark)) !important;
   border-color: transparent !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
   box-shadow: 0 14px 28px rgba(239, 117, 120, 0.24);
 }
 
@@ -730,11 +738,19 @@ pre code {
   border-color: var(--lab-color-border);
   background: color-mix(in srgb, var(--lab-color-surface-alt) 80%, white);
   color: var(--lab-color-text);
+  border-radius: 999px !important;
+  font-weight: 600 !important;
 }
 
 .el-button--default:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning):hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
+}
+
+/* el-button 文本（link）型保留方角，不强制圆角 */
+.el-button.is-link,
+.el-button.is-text {
+  border-radius: 6px !important;
 }
 
 /* 链接按钮样式统一 */
@@ -938,4 +954,141 @@ pre code {
 
 .admin-list-card .el-table td.el-table__cell {
   border-bottom-color: rgba(52, 120, 246, 0.04);
+}
+
+/* ==========================================
+   全局按钮系统（用户端）
+   .btn 是统一容器，配合修饰符使用
+   - .btn--primary 主操作（实色蓝渐变）
+   - .btn--ghost   次操作（半透明白底）
+   - .btn--text    文本按钮（无边框）
+   - .btn--danger  危险操作
+   - .btn--lg / .btn--sm 尺寸
+   - .btn--full    全宽
+   ========================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 200ms ease, background 200ms ease, border-color 200ms ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn--lg { min-height: 50px; padding: 0 24px; font-size: 15px; }
+.btn--sm { min-height: 32px; padding: 0 12px; font-size: 13px; gap: 4px; }
+.btn--full { width: 100%; }
+
+.btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  border-color: transparent;
+  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.22);
+}
+.btn--primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.28);
+}
+.btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.22);
+}
+
+.btn--ghost {
+  color: var(--text-primary, #172033);
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(23, 32, 51, 0.1);
+  backdrop-filter: blur(10px);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(52, 120, 246, 0.25);
+  color: var(--color-primary-dark);
+}
+
+.btn--text {
+  min-height: auto;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-primary-dark);
+  font-weight: 600;
+}
+.btn--text:hover:not(:disabled) {
+  background: rgba(52, 120, 246, 0.08);
+}
+
+.btn--danger {
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark));
+  box-shadow: 0 12px 24px rgba(239, 117, 120, 0.22);
+}
+.btn--danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(239, 117, 120, 0.3);
+}
+
+[data-theme='dark'] .btn--ghost {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+[data-theme='dark'] .btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--color-primary-light);
+}
+
+
+
+/* ==========================================
+   ��Ӧʽ��dashboard ��� header �� 1024 ������ nav �������
+   ��Dashboard / LearningPaths / LearningState / Achievements / LearningPathDetail / GoalConversation ���� .header-nav��
+   ========================================== */
+@media (max-width: 1024px) {
+  .header-nav {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    margin: 0 -8px;
+    padding: 0 8px;
+    flex-wrap: nowrap !important;
+    max-width: 100%;
+  }
+  .header-nav::-webkit-scrollbar { height: 0; }
+  .header-nav > * {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+  .user-chip {
+    min-width: auto;
+  }
 }

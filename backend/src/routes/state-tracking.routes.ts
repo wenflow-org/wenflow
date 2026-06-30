@@ -59,11 +59,13 @@ router.get('/current', async (req: any, res) => {
 /**
  * 获取学习趋势数据
  * GET /state/trends?days=7
+ * GET /state/trends?range=all
  */
 router.get('/trends', async (req: any, res) => {
   try {
     const userId = req.user?.userId;
-    const days = parseInt(req.query.days as string) || 7;
+    const days = parseInt(req.query.days as string, 10) || 30;
+    const rangeMode = req.query.range === 'all' ? 'all' : 'recent';
 
     if (!userId) {
       return res.status(401).json({
@@ -72,13 +74,19 @@ router.get('/trends', async (req: any, res) => {
       });
     }
 
-    const trends = await stateTrackingService.getStateTrends(userId, days);
+    const trendWindow = await stateTrackingService.getStateTrendWindow(userId, {
+      days,
+      mode: rangeMode,
+    });
 
     res.json({
       success: true,
       data: {
-        trends,
-        days
+        trends: trendWindow.trends,
+        range: trendWindow.range,
+        days: trendWindow.range.requestedDays === 'all'
+          ? trendWindow.range.actualDays
+          : trendWindow.range.requestedDays
       }
     });
   } catch (error: any) {

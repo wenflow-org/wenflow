@@ -18,7 +18,14 @@
 
         <div class="agent-model-settings__table mobile-table-scroll">
           <el-table :data="configs" v-loading="loading">
-            <el-table-column prop="agentId" label="Agent" width="200" />
+            <el-table-column label="Agent" width="240">
+              <template #default="{ row }">
+                <div class="agent-cell">
+                  <strong>{{ row.displayName || row.agentId }}</strong>
+                  <span>{{ row.agentId }}</span>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column prop="model" label="我的模型" width="150">
               <template #default="{ row }">
                 {{ row.model || '使用系统默认' }}
@@ -80,10 +87,17 @@ import CapabilityShell from '@/components/user/CapabilityShell.vue';
 
 interface UserAgentConfig {
   agentId: string;
+  displayName?: string;
   model?: string;
   temperature?: number;
   maxTokens?: number;
   enabled: boolean;
+  hasOverride?: boolean;
+}
+
+interface AgentDefinition {
+  id: string;
+  name: string;
 }
 
 const configs = ref<UserAgentConfig[]>([]);
@@ -95,6 +109,41 @@ const editForm = ref<UserAgentConfig>({
   enabled: false
 });
 
+const buildConfigRows = (agents: AgentDefinition[], overrides: UserAgentConfig[]) => {
+  const overrideMap = new Map(overrides.map((item) => [item.agentId, item]));
+  const rows = agents.map((agent) => {
+    const override = overrideMap.get(agent.id);
+    return {
+      agentId: agent.id,
+      displayName: agent.name || agent.id,
+      model: override?.model,
+      temperature: override?.temperature,
+      maxTokens: override?.maxTokens,
+      enabled: override?.enabled ?? false,
+      hasOverride: !!override
+    };
+  });
+
+  overrides.forEach((override) => {
+    if (!rows.some((row) => row.agentId === override.agentId)) {
+      rows.push({
+        ...override,
+        displayName: override.agentId,
+        hasOverride: true
+      });
+    }
+  });
+
+  return rows;
+};
+
+const toConfigPayload = (config: UserAgentConfig) => ({
+  enabled: config.enabled,
+  model: config.model,
+  temperature: config.temperature,
+  maxTokens: config.maxTokens
+});
+
 const syncViewport = () => {
   isMobileDialog.value = window.innerWidth <= 768;
 };
@@ -102,8 +151,15 @@ const syncViewport = () => {
 const fetchConfigs = async () => {
   loading.value = true;
   try {
-    const res = await api.get('/user/agent-model-settings');
-    configs.value = res.data?.data || [];
+    const [configRes, agentsRes] = await Promise.all([
+      api.get('/user/agent-model-configs'),
+      api.get('/agents/list')
+    ]);
+
+    const overrides = Array.isArray(configRes.data) ? configRes.data : [];
+    const agents = Array.isArray(agentsRes.data) ? agentsRes.data : [];
+
+    configs.value = buildConfigRows(agents, overrides);
   } catch (error) {
     toast.error('获取配置失败');
   }
@@ -111,12 +167,17 @@ const fetchConfigs = async () => {
 };
 
 const toggleOverride = async (row: UserAgentConfig) => {
+  const previousEnabled = !row.enabled;
   try {
-    await api.put(`/user/agent-model-settings/${row.agentId}/toggle`, { enabled: row.enabled });
+    await api.put(`/user/agent-model-configs/${encodeURIComponent(row.agentId)}`, {
+      ...toConfigPayload(row)
+    });
     toast.success(row.enabled ? '已启用覆盖' : '已禁用覆盖');
+    await fetchConfigs();
   } catch (error) {
+    row.enabled = previousEnabled;
     toast.error('操作失败');
-    fetchConfigs();
+    await fetchConfigs();
   }
 };
 
@@ -127,10 +188,10 @@ const editOverride = (row: UserAgentConfig) => {
 
 const saveOverride = async () => {
   try {
-    await api.put(`/user/agent-model-settings/${editForm.value.agentId}`, editForm.value);
+    await api.put(`/user/agent-model-configs/${encodeURIComponent(editForm.value.agentId)}`, toConfigPayload(editForm.value));
     toast.success('配置已保存');
     editDialogVisible.value = false;
-    fetchConfigs();
+    await fetchConfigs();
   } catch (error) {
     toast.error('保存失败');
   }
@@ -138,9 +199,11 @@ const saveOverride = async () => {
 
 const resetOverride = async (row: UserAgentConfig) => {
   try {
-    await api.delete(`/user/agent-model-settings/${row.agentId}`);
+    if (row.hasOverride) {
+      await api.delete(`/user/agent-model-configs/${encodeURIComponent(row.agentId)}`);
+    }
     toast.success('已重置为系统默认');
-    fetchConfigs();
+    await fetchConfigs();
   } catch (error) {
     toast.error('重置失败');
   }
@@ -217,6 +280,23 @@ onUnmounted(() => {
 
 .agent-model-settings__table :deep(.el-table) {
   min-width: 860px;
+}
+
+.agent-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-cell strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.agent-cell span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
 }
 
 .table-actions {

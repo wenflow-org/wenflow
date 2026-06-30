@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import prisma from '../config/database';
+import systemPrisma from '../config/system-database';
 import { getGateway } from '../gateway';
 import { skillHandlers, allSkillDefinitions } from '../skills';
 import { authMiddleware } from '../middleware/auth.middleware';
@@ -200,7 +201,7 @@ router.get('/:skillName/stats', async (req: Request, res: Response) => {
   try {
     const { skillName } = req.params;
     
-    const record = await prisma.skill_registrations.findUnique({
+    const record = await systemPrisma.skill_registrations.findUnique({
       where: { name: skillName }
     });
     

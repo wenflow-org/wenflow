@@ -119,6 +119,8 @@ function pickPrimaryPath(paths: DashboardGuidancePath[]) {
 }
 
 class DashboardGuidanceSnapshotService {
+  private refreshQueues = new Map<string, Promise<DashboardGuidanceSnapshotPayload | null>>();
+
   async get(userId: string): Promise<DashboardGuidanceSnapshotPayload | null> {
     const user = await prisma.users.findUnique({
       where: { id: userId },
@@ -160,6 +162,26 @@ class DashboardGuidanceSnapshotService {
   }
 
   async refresh(userId: string, trigger: DashboardGuidanceTrigger): Promise<DashboardGuidanceSnapshotPayload | null> {
+    const queued = this.refreshQueues.get(userId) || Promise.resolve(null);
+    const next = queued
+      .catch(() => null)
+      .then(() => this.performRefresh(userId, trigger));
+
+    this.refreshQueues.set(userId, next);
+
+    next.finally(() => {
+      if (this.refreshQueues.get(userId) === next) {
+        this.refreshQueues.delete(userId);
+      }
+    });
+
+    return next;
+  }
+
+  private async performRefresh(
+    userId: string,
+    trigger: DashboardGuidanceTrigger
+  ): Promise<DashboardGuidanceSnapshotPayload | null> {
     try {
       const [user, paths, subtasks, sessions] = await Promise.all([
         prisma.users.findUnique({

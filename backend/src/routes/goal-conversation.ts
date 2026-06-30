@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
-import requirementOrchestrator from '../orchestrators/requirement.orchestrator';
+import requirementOrchestrator from '../coordinators/requirement.coordinator';
 
 const router = express.Router();
 

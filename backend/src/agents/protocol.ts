@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Agent 协议定义 - EduClaw Gateway
  * 
  * Agent 是智能体，负责业务逻辑和决策
@@ -6,7 +6,7 @@
  */
 
 // Agent 类型
-export type AgentType = 'path' | 'content' | 'tutor' | 'progress' | 'profile' | 'custom' | 'teaching' | 'evaluation' | 'orchestrator';
+export type AgentType = 'path' | 'content' | 'tutor' | 'progress' | 'profile' | 'custom' | 'teaching' | 'evaluation';
 
 // Agent 分类
 export type AgentCategory = 'standard' | 'custom' | 'simulation';
@@ -76,7 +76,7 @@ export interface AgentOutput {
     details?: any;
   };
   
-  // 学习路径输出（path-agent）
+  // 学习路径输出（skill:path-planning）
   path?: {
     id?: string;
     name: string;

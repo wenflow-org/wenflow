@@ -2,14 +2,14 @@
   <div class="skill-manager-page">
     <header class="page-hero">
       <div class="hero-left">
-        <span class="hero-pill">运营 · Skill 工作台</span>
+        <span class="hero-pill">运营 · Skill 运行节点</span>
         <h1>Skill 管理中心</h1>
         <p class="hero-sub">
           管理所有主链 Skill（Goal / Path / Learn 内部能力）和外挂 Skill（检索、图片分析等）。
           <br />
           <span style="color: #8b5cf6; font-weight: 600;">
-            💡 如需编辑 Skill 的 Prompt 内容，请前往
-            <a href="/admin/agent-registry" style="color: #8b5cf6; text-decoration: underline; cursor: pointer;">Prompt 运营中心</a>
+            如需编辑 Skill 的 Prompt 内容，请前往
+            <a href="/admin/skills" style="color: #8b5cf6; text-decoration: underline; cursor: pointer;">Skill 运行节点</a>
           </span>
         </p>
       </div>
@@ -340,7 +340,7 @@ onMounted(() => {
 
 function goToPromptEdit() {
   if (!selectedSkill.value) return
-  router.push(`/admin/agent-registry?agentId=${selectedSkill.value.name}`)
+  router.push(`/admin/skills?agentId=${selectedSkill.value.name}`)
 }
 
 async function loadEffectivePrompt() {
@@ -403,7 +403,7 @@ async function loadEffectivePrompt() {
   padding: 14px 16px;
   border-radius: 14px;
   border: 1px solid rgba(205, 216, 238, 0.9);
-  background: white;
+  background: var(--admin-bg-surface);
   display: grid;
   gap: 4px;
 }
@@ -443,7 +443,7 @@ async function loadEffectivePrompt() {
   padding: 16px;
   border-radius: 14px;
   border: 1px solid rgba(205, 216, 238, 0.7);
-  background: white;
+  background: var(--admin-bg-surface);
   cursor: pointer;
   display: grid;
   gap: 10px;

@@ -3,6 +3,14 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import {
+  type VirtualLearnerPersona,
+  type VirtualLearnerStory,
+  type FrictionBudget,
+  getFrictionGuidance,
+  normalizeFrictionBudget,
+  PERSONA_FIELD_ANCHORS_HINT,
+} from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE = 0.8;
@@ -15,20 +23,24 @@ export interface GoalLearnerVisibleMessage {
 }
 
 export interface GoalLearnerSimulationInput {
-  learner: Record<string, any>;
-  story?: Record<string, any> | null;
+  learner: VirtualLearnerPersona | Record<string, any>;
+  story?: VirtualLearnerStory | Record<string, any> | null;
   visibleContext: {
     history: GoalLearnerVisibleMessage[];
     lastGoalAgentMessage?: string;
   };
   currentPhase: GoalLearnerPhase;
   previousLearnerState?: Record<string, any> | null;
+  /** 控制学习者对抗度. 默认 'normal' */
+  frictionBudget?: FrictionBudget;
   task?: Record<string, any>;
 }
 
 export interface GoalLearnerSimulationOutput {
   reply: string;
   emotion: 'neutral' | 'slightly_frustrated' | 'happy' | 'confident' | 'confused' | string;
+  /** 当 LLM 失败/校验失败时返回兜底数据, 评估时应排除这些 turn */
+  degraded?: boolean;
   learnerState: {
     phaseFocus: GoalLearnerPhase;
     feltUnderstood: number;
@@ -250,6 +262,9 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
       })).filter((message) => message.content)
     : [];
 
+  const frictionBudget = normalizeFrictionBudget(input.frictionBudget);
+  const frictionGuidance = getFrictionGuidance(frictionBudget);
+
   return {
     learner: input.learner || {},
     story: input.story || null,
@@ -259,13 +274,21 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
     },
     currentPhase: normalizePhase(input.currentPhase),
     previousLearnerState: input.previousLearnerState || null,
+    friction: {
+      budget: frictionBudget,
+      triggerProbability: frictionGuidance.triggerProbability,
+      guidance: frictionGuidance.promptHint
+    },
+    personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
     task: {
       mode: 'simulate-goal-learner-turn',
       requirements: [
         'use the full visibleContext as the learner-visible conversation',
         'ignore all system/developer/tool/reminder content',
         'reply only as the learner',
-        'in proposal_evaluation, evaluate proposal fit and task relevance instead of goal confidence'
+        'in proposal_evaluation, evaluate proposal fit and task relevance instead of goal confidence',
+        'apply friction.guidance to decide whether this turn shows adversarial/failure/emotional patterns',
+        'let personaAnchorHint fields implicitly steer reply style, do not name them'
       ],
       ...(input.task || {})
     }
@@ -299,7 +322,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
     if (!result.success || !result.output) {
       return {
         success: true,
-        output: buildFallback(input || {} as GoalLearnerSimulationInput),
+        output: { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true },
         duration: Date.now() - startTime,
         cached: true,
       };
@@ -321,7 +344,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
   } catch (error: any) {
     return {
       success: true,
-      output: buildFallback(input || {} as GoalLearnerSimulationInput),
+      output: { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true },
       duration: Date.now() - startTime,
       cached: true,
     };

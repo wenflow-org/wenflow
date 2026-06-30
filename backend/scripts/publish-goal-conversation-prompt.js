@@ -1,4 +1,4 @@
-const { PrismaClient } = require('@prisma/client')
+﻿const { PrismaClient } = require('@prisma/client')
 const { v4: uuidv4 } = require('uuid')
 
 const prisma = new PrismaClient()
@@ -175,7 +175,7 @@ proposing 阶段输出要求：
 `
 
 async function main() {
-  const agentId = 'goal-conversation-agent'
+  const agentId = 'skill:goal-conversation'
   const model = process.env.AI_MODEL || null
 
   const latest = await prisma.agent_prompts.findFirst({

@@ -23,6 +23,7 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
@@ -94,34 +95,115 @@
         </section>
 
         <div v-loading="loading" class="state-content">
-          <!-- 空状态 -->
-          <div v-if="!state" class="empty-state glass-card">
-            <div class="empty-icon">📈</div>
-            <h3 class="empty-title">暂无学习数据</h3>
-            <p class="empty-desc">先完成一个任务，开始追踪你的学习状态吧！</p>
-            <router-link :to="learningPathsPath" class="btn btn-primary">
-              <el-icon><FolderOpened /></el-icon>
-              查看学习路径
-            </router-link>
+          <!-- 空状态：预览骨架 + 解释将来会看到什么 -->
+          <div v-if="!state" class="empty-state-preview">
+            <div class="empty-state-preview__head">
+              <span class="section-kicker">预览</span>
+              <h2>完成第一次学习后，这里会显示你的学习状态</h2>
+              <p>WenFlow 会从你的学习节奏、掌握情况和疲劳变化中提炼可视化指标，帮你判断要继续推进还是先放慢一点。</p>
+            </div>
+
+            <div class="empty-state-preview__grid">
+              <article class="preview-card preview-card--metric">
+                <span class="preview-card__label">学习节奏</span>
+                <strong class="preview-card__value">--</strong>
+                <span class="preview-card__hint">看见每周的真实投入分布</span>
+                <div class="preview-card__sparkline">
+                  <span v-for="i in 7" :key="i" class="preview-card__bar" :style="{ height: 30 + ((i * 13) % 50) + '%' }"></span>
+                </div>
+              </article>
+
+              <article class="preview-card preview-card--metric">
+                <span class="preview-card__label">掌握度</span>
+                <strong class="preview-card__value">--</strong>
+                <span class="preview-card__hint">每个知识点的稳定程度</span>
+                <div class="preview-card__bars">
+                  <span class="preview-card__hbar" style="width: 64%"></span>
+                  <span class="preview-card__hbar" style="width: 42%"></span>
+                  <span class="preview-card__hbar" style="width: 78%"></span>
+                </div>
+              </article>
+
+              <article class="preview-card preview-card--metric">
+                <span class="preview-card__label">疲劳变化</span>
+                <strong class="preview-card__value">--</strong>
+                <span class="preview-card__hint">连续学习时的负荷曲线</span>
+                <svg class="preview-card__line" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M0,30 Q15,20 30,22 T60,18 T90,24 T120,16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </article>
+
+              <article class="preview-card preview-card--insight">
+                <span class="preview-card__label">智能建议</span>
+                <strong class="preview-card__value">--</strong>
+                <span class="preview-card__hint">系统会根据节奏给出个性化建议，比如"今天先做一个最小任务"或"该休息一下"。</span>
+              </article>
+            </div>
+
+            <div class="empty-state-preview__cta">
+              <router-link :to="learningPathsPath" class="btn btn--primary">
+                <el-icon><FolderOpened /></el-icon>
+                <span>开始第一次学习</span>
+              </router-link>
+              <router-link :to="goalConversationPath" class="btn btn--ghost">
+                <span>先规划学习目标</span>
+              </router-link>
+            </div>
           </div>
 
           <div v-else class="state-content-inner">
             <section class="state-layout">
               <article class="glass-card state-trend-panel">
-                <div class="state-panel__head">
-                  <div>
+                <div class="state-panel__head state-panel__head--trend">
+                  <div class="state-trend-panel__intro">
                     <span class="section-kicker">趋势图</span>
-                    <h2>最近状态变化</h2>
+                    <h2>学习状态轨迹</h2>
+                    <p>{{ trendRangeDescription }}</p>
                   </div>
                   <div class="trend-controls trend-controls--pill">
-                    <button class="trend-btn" :class="{ active: trendDays === 7 }" @click="trendDays = 7">7天</button>
-                    <button class="trend-btn" :class="{ active: trendDays === 30 }" @click="trendDays = 30">30天</button>
+                    <button
+                      v-for="option in trendRangeOptions"
+                      :key="option.key"
+                      class="trend-btn"
+                      :class="{ active: trendDays === option.key }"
+                      @click="trendDays = option.key"
+                    >
+                      {{ option.label }}
+                    </button>
                   </div>
                 </div>
 
-                <div v-if="trends.length > 0" class="trends-card state-trends-card">
-                  <div class="chart-container chart-container--state">
-                    <canvas ref="trendChart"></canvas>
+                <div class="state-trend-summary">
+                  <article
+                    v-for="item in trendSummaryCards"
+                    :key="item.label"
+                    class="state-trend-summary-card"
+                    :class="`state-trend-summary-card--${item.tone}`"
+                  >
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                    <p>{{ item.note }}</p>
+                  </article>
+                </div>
+
+                <div v-if="trends.length > 0" class="state-trend-chart-shell">
+                  <div class="state-trend-chart-head">
+                    <div class="state-trend-chart-head__block">
+                      <span>覆盖范围</span>
+                      <strong>{{ trendCoverageLabel }}</strong>
+                      <p>{{ trendCoverageNote }}</p>
+                    </div>
+                    <div class="state-trend-chart-head__block state-trend-chart-head__block--compact">
+                      <span>记录起点</span>
+                      <strong>{{ trendRegisteredAtLabel }}</strong>
+                      <p>趋势序列会从注册当天开始建立，不展示注册前的空白历史。</p>
+                    </div>
+                  </div>
+
+                  <div class="trends-card state-trends-card">
+                    <div class="chart-container chart-container--state">
+                      <canvas ref="trendChart"></canvas>
+                    </div>
                   </div>
                 </div>
                 <div v-else class="trends-card chart-empty">
@@ -212,156 +294,9 @@
           </div>
         </div>
       </div>
+      <AppMiniFooter />
     </main>
 
-    <button v-if="isTestMode" type="button" class="state-debug-float-btn" @click="stateDebugDrawerVisible = true">
-      <strong>状态调试</strong>
-      <span>{{ stateDebugQuickChipText }}</span>
-    </button>
-
-    <el-drawer
-      v-if="isTestMode"
-      v-model="stateDebugDrawerVisible"
-      title="学习状态详细调试"
-      size="min(52vw, 820px)"
-      destroy-on-close
-      class="state-debug-drawer"
-    >
-      <div class="state-debug-drawer__body">
-        <div class="state-debug-panel__actions state-debug-panel__actions--top">
-          <button class="btn btn-ghost" :disabled="loading" @click="refreshStatePage({ forceTrends: true })">刷新调试数据</button>
-        </div>
-
-        <div class="state-debug-toolbar">
-          <span v-for="item in stateDebugQuickChips" :key="item.label" class="state-debug-quick-chip">
-            <strong>{{ item.label }}</strong>
-            <em>{{ item.value }}</em>
-          </span>
-        </div>
-
-        <details class="state-debug-collapse" open>
-          <summary>
-            <div class="state-debug-collapse__head">
-              <div>
-                <span class="section-kicker">自然天模拟</span>
-                <strong>观察衰减是否影响 learner 策略</strong>
-              </div>
-              <span class="state-debug-collapse__badge">{{ simulatedAdvanceDays }} 天</span>
-            </div>
-          </summary>
-
-          <div class="state-debug-day-chips">
-            <button
-              v-for="days in advanceDayOptions"
-              :key="days"
-              type="button"
-              class="trend-btn"
-              :class="{ active: simulatedAdvanceDays === days }"
-              @click="simulatedAdvanceDays = days"
-            >
-              {{ days }}天
-            </button>
-          </div>
-
-          <div class="state-debug-panel__actions">
-            <button class="btn btn-primary" :disabled="advancePreviewLoading" @click="runAdvancePreview">
-              {{ advancePreviewLoading ? '模拟中...' : `模拟推进 ${simulatedAdvanceDays} 天` }}
-            </button>
-            <button class="btn btn-ghost" :disabled="!advancePreviewResult" @click="clearAdvancePreview">清空预览</button>
-          </div>
-
-          <div v-if="advancePreviewResult" class="state-debug-preview">
-            <div class="state-debug-preview__meta">
-              <span>推进天数：{{ advancePreviewResult.dayDiff }} 天</span>
-              <span>模拟时间：{{ formatPreviewDateTime(advancePreviewResult.simulatedAsOf) }}</span>
-              <span v-if="advancePreviewResult.latestMetricAt">最新真实指标：{{ formatPreviewDateTime(advancePreviewResult.latestMetricAt) }}</span>
-            </div>
-
-            <div v-if="!advancePreviewResult.hasMetricRecord || !advancePreviewResult.after" class="state-debug-empty">
-              当前没有学习指标记录，暂无法模拟自然天衰减。
-            </div>
-
-            <template v-else>
-              <div class="state-debug-compare-grid">
-                <article v-for="card in advanceMetricCompareCards" :key="card.label" class="state-debug-compare-card">
-                  <span>{{ card.label }}</span>
-                  <strong>{{ card.after }}</strong>
-                  <p>推进前 {{ card.before }} · {{ card.delta }}</p>
-                </article>
-              </div>
-
-              <div class="state-debug-sections">
-                <article class="state-debug-section">
-                  <strong>学习控制状态变化</strong>
-                  <div class="state-debug-kv-grid">
-                    <div v-for="item in advanceControlStateDiffs" :key="item.label" class="state-debug-kv-item">
-                      <span>{{ item.label }}</span>
-                      <p>{{ item.before }} -> {{ item.after }}</p>
-                    </div>
-                  </div>
-                </article>
-
-                <article class="state-debug-section">
-                  <strong>路径调整信号变化</strong>
-                  <div class="state-debug-kv-grid">
-                    <div v-for="item in advanceSignalDiffItems" :key="item.label" class="state-debug-kv-item">
-                      <span>{{ item.label }}</span>
-                      <p>{{ item.before }} -> {{ item.after }}</p>
-                    </div>
-                  </div>
-                </article>
-              </div>
-            </template>
-          </div>
-        </details>
-
-        <details class="state-debug-collapse">
-          <summary>
-            <div class="state-debug-collapse__head">
-              <div>
-                <span class="section-kicker">JSON 输出</span>
-                <strong>AI / 规则 / learner snapshot / 模拟预览</strong>
-              </div>
-              <span class="state-debug-collapse__badge">{{ advancePreviewResult ? '4 组' : '3 组' }}</span>
-            </div>
-          </summary>
-
-          <div class="state-debug-json-grid">
-            <details class="state-debug-json-card">
-              <summary>
-                <span>AI Guidance JSON</span>
-                <em>skill: adaptive-guidance-copy</em>
-              </summary>
-              <pre>{{ stateDebugAdaptiveCopyJson }}</pre>
-            </details>
-
-            <details class="state-debug-json-card">
-              <summary>
-                <span>Rule Summary JSON</span>
-                <em>service: learnerStateSummary</em>
-              </summary>
-              <pre>{{ stateDebugAdaptiveSummaryJson }}</pre>
-            </details>
-
-            <details class="state-debug-json-card">
-              <summary>
-                <span>Learner Snapshot JSON</span>
-                <em>route: learner-center</em>
-              </summary>
-              <pre>{{ stateDebugLearnerCenterJson }}</pre>
-            </details>
-
-            <details class="state-debug-json-card" v-if="advancePreviewResult">
-              <summary>
-                <span>Advance Preview JSON</span>
-                <em>admin devtools</em>
-              </summary>
-              <pre>{{ stateDebugAdvancePreviewJson }}</pre>
-            </details>
-          </div>
-        </details>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
@@ -379,6 +314,8 @@ import { Chart } from 'chart.js/auto';
 import { useUserStore } from '../stores/user';
 import { isProjectionMode } from '../utils/projection';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import AppMiniFooter from '../components/AppMiniFooter.vue';
 import {
   User,
   Switch,
@@ -429,11 +366,31 @@ const headerNavItems = computed(() => [
   { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
   { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
 ]);
+
+type TrendRangeKey = 0 | 7 | 30;
+
+interface TrendRangeMeta {
+  mode: 'recent' | 'all';
+  requestedDays: number | 'all';
+  actualDays: number;
+  registeredAt: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface TrendSummaryCard {
+  label: string;
+  value: string;
+  note: string;
+  tone: 'primary' | 'neutral' | 'success' | 'warning';
+}
+
 const scrolled = ref(false);
 const loading = ref(true);
 const state = ref<StateMetrics | null>(null);
 const trends = ref<TrendData[]>([]);
-const trendDays = ref(7);
+const trendDays = ref<TrendRangeKey>(0);
+const trendRangeMeta = ref<TrendRangeMeta | null>(null);
 const trendChart = ref<HTMLCanvasElement | null>(null);
 const warnings = ref<Array<{
   type: string;
@@ -448,8 +405,13 @@ const simulatedAdvanceDays = ref(7);
 const advancePreviewLoading = ref(false);
 const advancePreviewResult = ref<AdvanceTimePreviewResponse | null>(null);
 let chartInstance: Chart | null = null;
-const trendCache = new Map<number, TrendData[]>();
+const trendCache = new Map<TrendRangeKey, { trends: TrendData[]; range: TrendRangeMeta }>();
 const advanceDayOptions = [1, 3, 7, 14, 30];
+const trendRangeOptions: Array<{ key: TrendRangeKey; label: string }> = [
+  { key: 0, label: '注册至今' },
+  { key: 7, label: '7天' },
+  { key: 30, label: '30天' },
+];
 
 const statePageTitle = computed(() => '看见最近的学习状态，再决定下一步怎么学。');
 const statePageSubtitle = computed(() => '这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。');
@@ -533,8 +495,12 @@ const stateDebugQuickChipText = computed(() => {
   return stateDebugQuickChips.value.map((item) => `${item.label} ${item.value}`).join(' · ') || '打开状态调试';
 });
 
-const stateDebugAdaptiveCopyJson = computed(() => JSON.stringify(null, null, 2));
-const stateDebugAdaptiveSummaryJson = computed(() => JSON.stringify(null, null, 2));
+const stateDebugAdaptiveCopyJson = computed(() => JSON.stringify({
+  note: '学习状态页当前不走 /adaptive-guidance/copy。首屏内容来自 /state/current、/state/trends、/state/warnings 和 /users/me/learner-center。'
+}, null, 2));
+const stateDebugAdaptiveSummaryJson = computed(() => JSON.stringify({
+  note: '学习状态页当前没有独立的 snapshot/rule summary 载荷；页面直接组合状态指标、趋势、预警与 learner center 数据。'
+}, null, 2));
 const stateDebugLearnerCenterJson = computed(() => JSON.stringify(learnerCenter.value || null, null, 2));
 const stateDebugAdvancePreviewJson = computed(() => JSON.stringify(advancePreviewResult.value || null, null, 2));
 
@@ -654,12 +620,111 @@ interface StateMetrics {
 }
 
 interface TrendData {
-  date: Date;
+  date: string | Date;
   lss: number | null;
   ktl: number | null;
   lf: number | null;
   lsb: number | null;
 }
+
+interface TrendResponsePayload {
+  trends: TrendData[];
+  range: TrendRangeMeta;
+  days: number;
+}
+
+const hasTrendValue = (item: TrendData) => {
+  return [item.lss, item.ktl, item.lf, item.lsb].some((value) => typeof value === 'number');
+};
+
+const formatTrendDate = (value?: string | Date, withYear = false) => {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString('zh-CN', withYear
+    ? { year: 'numeric', month: 'numeric', day: 'numeric' }
+    : { month: 'numeric', day: 'numeric' });
+};
+
+const getTrendMaxTicks = (count: number) => {
+  if (count > 180) return 6;
+  if (count > 120) return 8;
+  if (count > 60) return 10;
+  return 14;
+};
+
+const buildTrendLabels = (data: TrendData[]) => {
+  return data.map((item) => formatTrendDate(item.date));
+};
+
+const trendLatestPoint = computed(() => {
+  const points = [...trends.value].reverse();
+  return points.find((item) => hasTrendValue(item)) || null;
+});
+
+const trendActiveDays = computed(() => trends.value.filter((item) => hasTrendValue(item)).length);
+
+const trendCoverageLabel = computed(() => {
+  if (!trendRangeMeta.value) return '暂无范围';
+  return `${formatTrendDate(trendRangeMeta.value.startDate, true)} - ${formatTrendDate(trendRangeMeta.value.endDate, true)}`;
+});
+
+const trendRangeDescription = computed(() => {
+  if (trendDays.value === 0) {
+    return '从注册当天开始回看，每个自然日都会留下一条真实或自然衰减后的状态轨迹。';
+  }
+
+  return `聚焦最近 ${trendDays.value} 天的状态波动；如果账号注册更晚，会自动从注册当天开始显示。`;
+});
+
+const trendCoverageNote = computed(() => {
+  if (!trendRangeMeta.value) return '系统会按自然日整理你的状态记录。';
+  if (trendRangeMeta.value.mode === 'all') {
+    return `已覆盖注册以来 ${trendRangeMeta.value.actualDays} 个自然日。`;
+  }
+
+  return `当前窗口共 ${trendRangeMeta.value.actualDays} 个自然日，注册前不会补出空白历史。`;
+});
+
+const trendRegisteredAtLabel = computed(() => {
+  return trendRangeMeta.value ? formatTrendDate(trendRangeMeta.value.registeredAt, true) : '--';
+});
+
+const trendSummaryCards = computed<TrendSummaryCard[]>(() => {
+  const latestPoint = trendLatestPoint.value;
+  const currentLsb = state.value?.lsb ?? latestPoint?.lsb ?? null;
+
+  return [
+    {
+      label: '观察区间',
+      value: trendDays.value === 0 ? '注册至今' : `最近 ${trendDays.value} 天`,
+      note: trendCoverageLabel.value,
+      tone: 'primary',
+    },
+    {
+      label: '有效记录',
+      value: `${trendActiveDays.value} 天`,
+      note: trendRangeMeta.value ? `共 ${trendRangeMeta.value.actualDays} 个自然日` : '等待趋势数据',
+      tone: 'neutral',
+    },
+    {
+      label: '当前节奏',
+      value: typeof currentLsb === 'number' ? getLSBText(currentLsb) : '--',
+      note: typeof currentLsb === 'number' ? `LSB ${currentLsb.toFixed(2)}` : '暂无状态判断',
+      tone: typeof currentLsb === 'number' && currentLsb >= 40
+        ? 'success'
+        : typeof currentLsb === 'number' && currentLsb < 20
+          ? 'warning'
+          : 'primary',
+    },
+    {
+      label: '最新记录',
+      value: latestPoint ? formatTrendDate(latestPoint.date, true) : '--',
+      note: state.value?.updatedAt ? `更新时间 ${formatPreviewDateTime(state.value.updatedAt)}` : '按自然日持续更新',
+      tone: 'neutral',
+    },
+  ];
+});
 
 const handleScroll = () => {
   scrolled.value = window.scrollY > 50;
@@ -686,18 +751,11 @@ const loadCurrentState = async () => {
     state.value = await metricsAPI.getCurrentState();
   } catch (error: any) {
     toast.error(error.response?.data?.error?.message || '加载学习状态失败');
-  } finally {
-    loading.value = false;
   }
 };
 
 const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
-  const labels = data.map(item => {
-    return new Date(item.date).toLocaleDateString('zh-CN', {
-      month: 'short',
-      day: 'numeric'
-    });
-  });
+  const labels = buildTrendLabels(data);
 
   const createGradient = (color: string) => {
     const gradient = ctx.createLinearGradient(0, 300, 0, 0);
@@ -714,34 +772,36 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
         {
           label: 'LSS (压力)',
           data: data.map(item => item.lss),
-          borderColor: '#ef4444',
+          borderColor: 'rgba(239, 68, 68, 0.88)',
           backgroundColor: createGradient('rgba(239, 68, 68, 1)'),
-          fill: true,
+          fill: false,
           tension: 0.35,
           borderWidth: 2,
-          pointRadius: 3,
+          borderDash: [6, 6],
+          pointRadius: 0,
           pointHoverRadius: 5,
         },
         {
           label: 'KTL (知识)',
           data: data.map(item => item.ktl),
-          borderColor: '#4f46e5',
+          borderColor: 'rgba(79, 70, 229, 0.96)',
           backgroundColor: createGradient('rgba(79, 70, 229, 1)'),
-          fill: true,
+          fill: false,
           tension: 0.35,
-          borderWidth: 2,
-          pointRadius: 3,
+          borderWidth: 2.5,
+          pointRadius: 0,
           pointHoverRadius: 5,
         },
         {
           label: 'LF (疲劳)',
           data: data.map(item => item.lf),
-          borderColor: '#f59e0b',
+          borderColor: 'rgba(245, 158, 11, 0.9)',
           backgroundColor: createGradient('rgba(245, 158, 11, 1)'),
-          fill: true,
+          fill: false,
           tension: 0.35,
           borderWidth: 2,
-          pointRadius: 3,
+          borderDash: [4, 4],
+          pointRadius: 0,
           pointHoverRadius: 5,
         },
         {
@@ -788,6 +848,9 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
           ticks: {
             color: '#6b7280',
             font: { size: 11 },
+            autoSkip: true,
+            maxRotation: 0,
+            maxTicksLimit: getTrendMaxTicks(data.length),
           },
         },
       },
@@ -808,6 +871,15 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
           padding: 12,
           cornerRadius: 8,
           displayColors: true,
+          callbacks: {
+            label: (context) => {
+              const raw = context.raw;
+              if (raw === null || raw === undefined) {
+                return `${context.dataset.label}: 暂无记录`;
+              }
+              return `${context.dataset.label}: ${Number(raw).toFixed(2)}`;
+            },
+          },
         },
       },
     },
@@ -816,26 +888,26 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
 
 const updateTrendChart = (data: TrendData[]) => {
   if (!chartInstance) return;
-  const labels = data.map(item => {
-    return new Date(item.date).toLocaleDateString('zh-CN', {
-      month: 'short',
-      day: 'numeric'
-    });
-  });
+  const labels = buildTrendLabels(data);
 
   chartInstance.data.labels = labels;
   chartInstance.data.datasets[0].data = data.map(item => item.lss);
   chartInstance.data.datasets[1].data = data.map(item => item.ktl);
   chartInstance.data.datasets[2].data = data.map(item => item.lf);
   chartInstance.data.datasets[3].data = data.map(item => item.lsb);
+  const scales = chartInstance.options.scales as any;
+  if (scales?.x?.ticks) {
+    scales.x.ticks.maxTicksLimit = getTrendMaxTicks(data.length);
+  }
   chartInstance.update('none');
 };
 
 // 加载趋势数据
-const loadTrends = async (days: number) => {
+const loadTrends = async (days: TrendRangeKey) => {
   const cached = trendCache.get(days);
   if (cached) {
-    trends.value = cached;
+    trends.value = cached.trends;
+    trendRangeMeta.value = cached.range;
     await nextTick();
     if (trendChart.value && trends.value.length > 0) {
       if (chartInstance) {
@@ -844,14 +916,25 @@ const loadTrends = async (days: number) => {
         const ctx = trendChart.value.getContext('2d');
         if (ctx) createTrendChart(ctx, trends.value);
       }
+    } else if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
     }
     return;
   }
 
   try {
-    const response = await request.get(`/state/trends?days=${days}`);
-    trends.value = response.data.data.trends;
-    trendCache.set(days, trends.value);
+    const query = days === 0 ? 'range=all' : `days=${days}`;
+    const response = await request.get(`/state/trends?${query}`);
+    const payload = response.data.data as TrendResponsePayload;
+    trends.value = payload.trends || [];
+    trendRangeMeta.value = payload.range || null;
+    if (trendRangeMeta.value) {
+      trendCache.set(days, {
+        trends: trends.value,
+        range: trendRangeMeta.value,
+      });
+    }
     await nextTick();
 
     // 更新图表（仅首次创建，后续只更新数据）
@@ -874,7 +957,7 @@ const loadTrends = async (days: number) => {
 const refreshStatePage = async (options?: { forceTrends?: boolean }) => {
   loading.value = true;
   if (options?.forceTrends) {
-    trendCache.delete(trendDays.value);
+    trendCache.clear();
   }
 
   await Promise.all([
@@ -1650,6 +1733,7 @@ onUnmounted(() => {
 .state-main-followups {
   display: grid;
   gap: 18px;
+  grid-column: 1 / 2;
 }
 
 .state-trend-panel,
@@ -1660,8 +1744,120 @@ onUnmounted(() => {
 }
 
 .state-trend-panel {
+  grid-column: 1 / -1;
   padding: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(52, 120, 246, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 251, 255, 0.9));
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  border-radius: 24px;
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.06);
+}
+
+.state-panel__head--trend {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.state-trend-panel__intro {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.state-trend-panel__intro p {
+  margin: 0;
+  color: #5b6880;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.state-trend-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.state-trend-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.state-trend-summary-card span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6d7a90;
+}
+
+.state-trend-summary-card strong {
+  font-size: 24px;
+  line-height: 1.1;
+  color: #172033;
+}
+
+.state-trend-summary-card p {
+  margin: 0;
+  color: #5b6880;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.state-trend-summary-card--primary {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.1), rgba(255, 255, 255, 0.88));
+}
+
+.state-trend-summary-card--success {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(255, 255, 255, 0.88));
+}
+
+.state-trend-summary-card--warning {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0.88));
+}
+
+.state-trend-chart-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.state-trend-chart-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+  gap: 12px;
+}
+
+.state-trend-chart-head__block {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+}
+
+.state-trend-chart-head__block--compact {
+  background: rgba(52, 120, 246, 0.07);
+}
+
+.state-trend-chart-head__block span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6d7a90;
+}
+
+.state-trend-chart-head__block strong {
+  font-size: 16px;
+  color: #172033;
+}
+
+.state-trend-chart-head__block p {
+  margin: 0;
+  color: #5b6880;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .state-debug-panel {
@@ -1954,6 +2150,7 @@ onUnmounted(() => {
 }
 
 .state-side-panels {
+  grid-column: 2 / 3;
   position: sticky;
   top: 104px;
 }
@@ -2025,43 +2222,9 @@ onUnmounted(() => {
 
 .trend-controls--pill {
   gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
-
-.trend-btn {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: rgba(255, 255, 255, 0.82);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  color: #172033;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.03);
-}
-
-.trend-btn.active {
-  background: rgba(52, 120, 246, 0.1);
-  border-color: rgba(52, 120, 246, 0.18);
-  color: #1f57cc;
-}
-
-.state-trends-card {
-  padding: 14px;
-  border-radius: 20px;
-  background: rgba(243, 246, 251, 0.72);
-  border: 1px solid rgba(52, 120, 246, 0.08);
-}
-
-  .chart-container--state {
-    min-height: 360px;
-    padding: 10px 8px 2px;
-  }
-
-  .state-debug-compare-grid,
-  .state-debug-kv-grid {
-    grid-template-columns: 1fr;
-  }
 
 /* ========== 按钮样式 ========== */
 .btn {
@@ -2115,6 +2278,169 @@ onUnmounted(() => {
   font-size: 1rem;
   color: var(--text-secondary);
   margin: 0 0 1rem 0;
+}
+
+/* ========== 预览空状态：展示将来会看到什么 ========== */
+.empty-state-preview {
+  display: grid;
+  gap: 28px;
+  padding: 32px;
+  border-radius: 28px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 250, 255, 0.78));
+  box-shadow: 0 22px 44px rgba(31, 87, 204, 0.06);
+  backdrop-filter: blur(14px);
+}
+
+[data-theme="dark"] .empty-state-preview {
+  background: linear-gradient(180deg, rgba(28, 36, 52, 0.9), rgba(20, 28, 42, 0.78));
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.empty-state-preview__head {
+  display: grid;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.empty-state-preview__head .section-kicker {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--color-primary-dark, #1f57cc);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  width: fit-content;
+}
+
+.empty-state-preview__head h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.empty-state-preview__head p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.empty-state-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.preview-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  background: rgba(255, 255, 255, 0.6);
+  position: relative;
+  overflow: hidden;
+  /* 视觉上让用户感受到这是占位 */
+  opacity: 0.92;
+}
+
+[data-theme="dark"] .preview-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.preview-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 60%, rgba(52, 120, 246, 0.04));
+  pointer-events: none;
+}
+
+.preview-card__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.preview-card__value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  opacity: 0.55;
+}
+
+.preview-card__hint {
+  font-size: 12px;
+  color: var(--text-muted, #66758d);
+  line-height: 1.5;
+}
+
+.preview-card__sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 40px;
+  margin-top: 4px;
+}
+
+.preview-card__bar {
+  flex: 1;
+  background: linear-gradient(180deg, var(--color-primary-light, #5a94f8), var(--color-primary, #3478f6));
+  border-radius: 4px 4px 2px 2px;
+  opacity: 0.6;
+}
+
+.preview-card__bars {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.preview-card__hbar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--color-primary-light, #5a94f8), var(--color-primary, #3478f6));
+  opacity: 0.6;
+}
+
+.preview-card__line {
+  width: 100%;
+  height: 40px;
+  color: var(--color-primary, #3478f6);
+  opacity: 0.55;
+  margin-top: 4px;
+}
+
+.preview-card--insight {
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(141, 107, 255, 0.04));
+  border-color: rgba(52, 120, 246, 0.12);
+}
+
+.empty-state-preview__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .empty-state-preview {
+    padding: 22px;
+  }
+
+  .empty-state-preview__head h2 {
+    font-size: 20px;
+  }
 }
 
 /* ========== Section 通用样式 ========== */
@@ -2452,77 +2778,66 @@ section {
 }
 
 /* ========== 趋势图表 ========== */
-.trends-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-  gap: 1.25rem;
-  align-items: stretch;
-  --panel-height: 520px;
-}
-
-.trends-main,
-.info-side {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.info-side {
-  position: sticky;
-  top: 88px;
-}
-
-.info-side .section-header {
-  margin-bottom: 0.75rem;
-}
-
-.info-panel {
-  padding: 0.75rem;
-  height: var(--panel-height);
-  overflow-y: auto;
-}
-
 .trend-controls {
   display: flex;
   gap: 0.5rem;
 }
 
 .trend-btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  border-radius: var(--radius-lg);
-  font-weight: 500;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: rgba(255, 255, 255, 0.86);
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  white-space: nowrap;
 }
 
 .trend-btn:hover {
-  border-color: var(--color-primary);
-  background: var(--bg-muted);
-  color: var(--text-primary);
+  transform: translateY(-1px);
+  border-color: rgba(52, 120, 246, 0.24);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
 }
 
 .trend-btn.active {
-  background: var(--gradient-primary);
-  border-color: transparent;
-  color: white;
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.16), rgba(31, 87, 204, 0.12));
+  border-color: rgba(52, 120, 246, 0.22);
+  color: #1f57cc;
 }
 
 .trends-card {
   padding: 1.5rem;
-  height: var(--panel-height);
 }
 
-.chart-container {
+.state-trends-card {
+  padding: 16px 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.chart-container--state {
   position: relative;
-  height: calc(var(--panel-height) - 3rem);
+  min-height: 380px;
+  height: 380px;
   width: 100%;
+  padding: 6px 4px 0;
 }
 
 .chart-empty {
-  padding: 3rem;
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  padding: 2.5rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px dashed rgba(52, 120, 246, 0.18);
 }
 
 /* ========== 指标说明 ========== */
@@ -2750,6 +3065,30 @@ section {
     grid-template-columns: 1fr;
   }
 
+  .state-trend-panel,
+  .state-main-followups,
+  .state-side-panels {
+    grid-column: auto;
+  }
+
+  .state-panel__head--trend {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .trend-controls--pill {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .state-trend-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .state-trend-chart-head {
+    grid-template-columns: 1fr;
+  }
+
   .state-main-followups {
     order: 2;
   }
@@ -2789,20 +3128,6 @@ section {
     grid-template-columns: 1fr;
   }
 
-  .trends-layout {
-    grid-template-columns: 1fr;
-    --panel-height: auto;
-  }
-
-  .info-side {
-    position: static;
-  }
-
-  .trends-card,
-  .info-panel {
-    height: auto;
-  }
-
   .suggestion-categories {
     grid-template-columns: 1fr;
   }
@@ -2815,7 +3140,8 @@ section {
     grid-template-columns: 1fr;
   }
 
-  .chart-container {
+  .chart-container--state {
+    min-height: 300px;
     height: 300px;
   }
 
@@ -2838,6 +3164,7 @@ section {
   }
 
   .app-page-head,
+  .state-trend-panel,
   .state-overview-card,
   .state-metrics-card,
   .state-side-card,
@@ -2851,8 +3178,13 @@ section {
   }
 
   .state-metrics-grid,
-  .app-page-head__summary {
+  .app-page-head__summary,
+  .state-trend-summary {
     grid-template-columns: 1fr;
+  }
+
+  .state-trend-chart-head__block {
+    padding: 14px 16px;
   }
 
   .app-page-head__actions {
@@ -2877,7 +3209,8 @@ section {
     flex: 1 1 100%;
   }
 
-  .chart-container {
+  .chart-container--state {
+    min-height: 260px;
     height: 260px;
   }
 }

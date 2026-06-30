@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+﻿import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
   const prompts = await prisma.agent_prompts.findMany({
-    where: { agentId: 'goal-conversation-agent' },
+    where: { agentId: 'skill:goal-conversation' },
     orderBy: { version: 'desc' },
     select: {
       id: true,
@@ -26,7 +26,7 @@ async function main() {
   });
 
   const activePrompt = await prisma.agent_prompts.findFirst({
-    where: { agentId: 'goal-conversation-agent', status: 'ACTIVE' },
+    where: { agentId: 'skill:goal-conversation', status: 'ACTIVE' },
   });
 
   if (activePrompt) {

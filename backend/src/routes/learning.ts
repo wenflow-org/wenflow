@@ -7,7 +7,7 @@ import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
 import { logger } from '../utils/logger';
-import pathOrchestrator from '../orchestrators/path.orchestrator';
+import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 
 const router = express.Router();

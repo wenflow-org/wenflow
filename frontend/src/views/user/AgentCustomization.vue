@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <CapabilityShell title="托管 Agent 选择" description="平台提供一组已发布的托管 Agent 来承担需求收集、路径规划、授课、辅导等职责。这里用于选择启用范围与参数，不支持用户侧导入或编写自定义 Agent。">
     <div class="agent-config-page">
 
@@ -107,7 +107,7 @@
               </div>
               <div class="candidate-card__meta-item">
                 <span>当前模型</span>
-                <strong>{{ agent.model || 'deepseek-chat' }}</strong>
+                <strong>{{ agent.model || 'deepseek-v4-flash' }}</strong>
               </div>
               <div class="candidate-card__meta-item">
                 <span>替换说明</span>
@@ -179,7 +179,7 @@
           </el-table-column>
           <el-table-column prop="model" label="模型" width="150">
             <template #default="{ row }">
-              {{ row.model || 'deepseek-chat' }}
+              {{ row.model || 'deepseek-v4-flash' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
@@ -210,7 +210,7 @@
           <el-input value="平台托管" disabled />
         </el-form-item>
         <el-form-item label="AI 模型">
-          <el-input v-model="formData.model" placeholder="deepseek-chat" />
+          <el-input v-model="formData.model" placeholder="deepseek-v4-flash" />
         </el-form-item>
         <el-form-item label="Temperature">
           <el-input-number v-model="formData.temperature" :min="0" :max="2" :step="0.1" />
@@ -273,8 +273,8 @@ import {
 import dayjs from 'dayjs';
 
 const AGENT_ROLE_MAP: Record<string, string[]> = {
-  'goal-conversation-agent': ['需求收集', '对话澄清'],
-  'path-agent': ['路径规划'],
+  'skill:goal-conversation': ['需求收集', '对话澄清'],
+  'skill:path-planning': ['路径规划'],
   'ai-teaching-agent': ['授课'],
   'learner-model-agent': ['学习者模型']
 };
@@ -290,8 +290,8 @@ const agentLogs = ref<any[]>([]);
 
 const roleCards = computed(() => {
   const definitions = [
-    { key: 'goal', label: '需求收集', description: '澄清用户目标与上下文', match: ['goal-conversation-agent'] },
-    { key: 'path', label: '路径规划', description: '生成学习路径与任务拆分', match: ['path-agent'] },
+    { key: 'goal', label: '需求收集', description: '澄清用户目标与上下文', match: ['skill:goal-conversation'] },
+    { key: 'path', label: '路径规划', description: '生成学习路径与任务拆分', match: ['skill:path-planning'] },
     { key: 'teaching', label: '授课', description: '生成讲解内容与课堂引导', match: ['ai-teaching-agent'] },
     { key: 'profile', label: '学习者模型', description: '聚合学习者画像、状态、进度信号与知识记忆', match: ['learner-model-agent'] }
   ];
@@ -401,7 +401,7 @@ const toggleAgent = async (agent: any) => {
 const configPlatformAgent = (agent: any) => {
   currentAgent.value = agent;
   formData.agentName = agent.agentName;
-  formData.model = agent.model || 'deepseek-chat';
+  formData.model = agent.model || 'deepseek-v4-flash';
   formData.temperature = agent.temperature || 0.7;
   formData.maxTokens = agent.maxTokens || 4096;
   formData.systemPrompt = agent.systemPrompt || '';

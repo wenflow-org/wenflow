@@ -5,7 +5,7 @@ import { parsePromptSchema, lintPromptSchema, Archetype } from '../services/prom
 const PROMPTS_DIR = path.resolve(__dirname, '../../../prompts')
 
 function readFrontmatter(raw: string): { archetype: Archetype | null; body: string } {
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n?/)
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
   if (!m) return { archetype: null, body: raw }
   const fm = m[1]
   const am = fm.match(/^archetype:\s*(.+)$/m)

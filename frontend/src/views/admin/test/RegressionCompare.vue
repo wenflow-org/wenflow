@@ -186,7 +186,7 @@ onMounted(async () => {
   padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid rgba(205, 216, 238, 0.9);
-  background: #fff;
+  background: var(--admin-bg-surface);
   font: inherit;
   font-size: 13px;
   cursor: pointer;

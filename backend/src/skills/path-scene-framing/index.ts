@@ -1,10 +1,11 @@
-import {
+﻿import {
   SkillDefinition,
   SkillExecutionResult,
 } from '../protocol';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
+import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig, operationalStagePatterns } from '../../config/pedagogy.config';
 
 export const PATH_SCENE_FRAMING_MAX_TOKENS = 32000;
 export const PATH_SCENE_FRAMING_TEMPERATURE = 0.2;
@@ -36,7 +37,7 @@ export const PATH_SCENE_FRAMING_PROMPT = `你是一个学习路径输入清洗�
 6. confirmedProposal.keyStages 只保留高层阶段提示，不要原样回声任务步骤句。
 6.1 如果上游 keyStages 更像执行步骤、检查清单、动作链、梳理/提炼/整合式操作语句，不要把它们继续放在 keyStages，留空数组即可。
 6.2 keyStages 是给 path 提供阶段方向提示，不是给隐藏概念层提供命名素材。
-6.3 你还需要根据 timeHorizon、timeBudget、timeBudgetCadence、timePerSession、confirmedProposal.keyStages 的信息，为下游 path-agent 与 stage-designer 推算一份 planningHints。planningHints 是节奏建议，不是新增事实。
+6.3 你还需要根据 timeHorizon、timeBudget、timeBudgetCadence、timePerSession、confirmedProposal.keyStages 的信息，为下游 skill:path-planning 与 stage-designer 推算一份 planningHints。planningHints 是节奏建议，不是新增事实。
 6.4 planningHints 的推算目标是：让不同时间窗口下的阶段数、概念数、每阶段任务数更匹配，而不是所有路径都写死成同一个节奏。
 6.5 planningHints.paceSignal 只能是 compact|standard|extended：
 - compact：通常对应 半天 / 1天 / 2天 这类短时窗口
@@ -151,8 +152,10 @@ function normalizeStringArray(value: any): string[] {
 
 function isOperationalStageLike(value: string | null): boolean {
   if (!value) return false;
-  return /^(梳理|提炼|整合|记录|分析|学习|设计|绘制|撰写|汇总|复盘|验证|拆解|总结|产出|模拟|试用)/.test(value)
-    || /(3-5个|检查点|清单|试用验证|模拟场景|先.+再.+)/.test(value);
+  const prefixPattern = `^(${operationalStagePatterns.verbPrefixes.join('|')})`;
+  const matchPattern = `(${operationalStagePatterns.patternMatches.join('|')}|先.+再.+)`;
+  return new RegExp(prefixPattern).test(value)
+    || new RegExp(matchPattern).test(value);
 }
 
 type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
@@ -191,9 +194,7 @@ function parseBudgetMinutes(value: string | null): number | null {
 
 function inferPaceSignal(timeHorizon: string | null): PlanningPaceSignal {
   if (!timeHorizon) return 'extended';
-  if (['半天', '1天', '2天'].includes(timeHorizon)) return 'compact';
-  if (['3-7天', '1-2周'].includes(timeHorizon)) return 'standard';
-  return 'extended';
+  return (timeHorizonPaceMapping[timeHorizon] as PlanningPaceSignal) || 'extended';
 }
 
 function derivePlanningHints(
@@ -205,32 +206,13 @@ function derivePlanningHints(
 ) {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
+  const paceConfig = paceSignalRangeConfig[paceSignal];
 
-  let milestoneRange: [number, number];
-  let conceptRange: [number, number];
-  let subtasksPerStageRange: [number, number];
-  let defaultMinutesRange: [number, number];
-  let maxWeeks: number;
-
-  if (paceSignal === 'compact') {
-    milestoneRange = [2, 3];
-    conceptRange = [2, 3];
-    subtasksPerStageRange = [2, 4];
-    defaultMinutesRange = [15, 45];
-    maxWeeks = 2;
-  } else if (paceSignal === 'standard') {
-    milestoneRange = [3, 5];
-    conceptRange = [2, 4];
-    subtasksPerStageRange = [3, 5];
-    defaultMinutesRange = [30, 90];
-    maxWeeks = 8;
-  } else {
-    milestoneRange = [4, 8];
-    conceptRange = [3, 5];
-    subtasksPerStageRange = [4, 6];
-    defaultMinutesRange = [30, 120];
-    maxWeeks = 24;
-  }
+  let milestoneRange: [number, number] = [...paceConfig.milestoneRange];
+  let conceptRange: [number, number] = [...paceConfig.conceptRange];
+  let subtasksPerStageRange: [number, number] = [...paceConfig.subtasksPerStageRange];
+  const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
+  const maxWeeks: number = paceConfig.maxWeeks;
 
   if (keyStageCount > 0) {
     milestoneRange = [keyStageCount, keyStageCount + 2];
@@ -250,14 +232,14 @@ function derivePlanningHints(
   const parsedBudgetMinutes = parseBudgetMinutes(timeBudget);
   if (Number.isFinite(parsedBudgetMinutes)) {
     const budgetMinutes = parsedBudgetMinutes as number;
-    const isTightBudget = (timeBudgetCadence === 'per_day' && budgetMinutes <= 20)
-      || (timeBudgetCadence === 'per_week' && budgetMinutes <= 90)
-      || (timeBudgetCadence === 'per_session' && budgetMinutes <= 30);
+    const threshold = tightBudgetConfig.thresholds[timeBudgetCadence || ''] || 0;
+    const isTightBudget = threshold > 0 && budgetMinutes <= threshold;
 
     if (isTightBudget) {
-      milestoneRange = [Math.max(2, milestoneRange[0] - 1), Math.max(3, milestoneRange[1] - 1)];
-      conceptRange = [Math.max(2, conceptRange[0] - 1), Math.max(2, conceptRange[1] - 1)];
-      subtasksPerStageRange = [Math.max(2, subtasksPerStageRange[0] - 1), Math.max(3, subtasksPerStageRange[1] - 1)];
+      const floors = tightBudgetConfig.rangeReductionFloors;
+      milestoneRange = [Math.max(floors.milestoneRange[0], milestoneRange[0] - 1), Math.max(floors.milestoneRange[1], milestoneRange[1] - 1)];
+      conceptRange = [Math.max(floors.conceptRange[0], conceptRange[0] - 1), Math.max(floors.conceptRange[1], conceptRange[1] - 1)];
+      subtasksPerStageRange = [Math.max(floors.subtasksPerStageRange[0], subtasksPerStageRange[0] - 1), Math.max(floors.subtasksPerStageRange[1], subtasksPerStageRange[1] - 1)];
     }
   }
 

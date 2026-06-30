@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
+import systemPrisma from '../../config/system-database';
 
 const router = Router();
 
@@ -13,7 +14,7 @@ function parseJson(value: string | null | undefined) {
 }
 
 router.get('/agents', async (_req: Request, res: Response) => {
-  const rows = await prisma.agent_definitions.findMany({
+  const rows = await systemPrisma.agent_definitions.findMany({
     orderBy: [
       { category: 'asc' },
       { displayName: 'asc' },
@@ -21,7 +22,7 @@ router.get('/agents', async (_req: Request, res: Response) => {
   });
 
   const agentIds = rows.map((row) => row.id);
-  const activePrompts = await prisma.agent_prompts.findMany({
+  const activePrompts = await systemPrisma.agent_prompts.findMany({
     where: {
       agentId: { in: agentIds },
       status: 'ACTIVE',
@@ -64,7 +65,7 @@ router.get('/agents', async (_req: Request, res: Response) => {
 });
 
 router.get('/agents/:id', async (req: Request, res: Response) => {
-  const row = await prisma.agent_definitions.findUnique({
+  const row = await systemPrisma.agent_definitions.findUnique({
     where: { id: req.params.id },
   });
 
@@ -72,7 +73,7 @@ router.get('/agents/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ success: false, error: { message: 'Definition 不存在' } });
   }
 
-  const activePrompt = await prisma.agent_prompts.findFirst({
+  const activePrompt = await systemPrisma.agent_prompts.findFirst({
     where: {
       agentId: row.id,
       status: 'ACTIVE',
@@ -134,7 +135,7 @@ router.get('/agents/:id', async (req: Request, res: Response) => {
 });
 
 router.get('/orchestrators', async (_req: Request, res: Response) => {
-  const rows = await prisma.orchestrator_definitions.findMany({
+  const rows = await systemPrisma.orchestrator_definitions.findMany({
     orderBy: { displayName: 'asc' },
   });
 
@@ -155,7 +156,7 @@ router.get('/orchestrators', async (_req: Request, res: Response) => {
 });
 
 router.get('/orchestrators/:id', async (req: Request, res: Response) => {
-  const row = await prisma.orchestrator_definitions.findUnique({
+  const row = await systemPrisma.orchestrator_definitions.findUnique({
     where: { id: req.params.id },
   });
 

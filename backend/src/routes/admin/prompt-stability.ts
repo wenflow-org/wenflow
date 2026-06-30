@@ -1,11 +1,11 @@
-import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+﻿import { Router, Request, Response } from 'express';
+import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
-import { runGoalConversationAgent } from '../../agents/goal-conversation-agent';
+import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
+import { executeSkill } from '../../skills';
 import { getCanonicalAgentId } from '../../services/agent-manifest.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 type ChatRole = 'user' | 'assistant';
 
@@ -101,7 +101,7 @@ async function resolvePrompt(agentId: string, payload: EvalRunRequest) {
   }
 
   if (payload.promptVersionId) {
-    const prompt = await prisma.agent_prompts.findUnique({ where: { id: payload.promptVersionId } });
+    const prompt = await systemPrisma.agent_prompts.findUnique({ where: { id: payload.promptVersionId } });
     if (!prompt) {
       throw new Error('指定的 Prompt 版本不存在');
     }
@@ -114,7 +114,7 @@ async function resolvePrompt(agentId: string, payload: EvalRunRequest) {
   }
 
   if (typeof payload.promptVersion === 'number' && Number.isFinite(payload.promptVersion)) {
-    const prompt = await prisma.agent_prompts.findFirst({
+    const prompt = await systemPrisma.agent_prompts.findFirst({
       where: {
         agentId,
         version: payload.promptVersion
@@ -131,7 +131,7 @@ async function resolvePrompt(agentId: string, payload: EvalRunRequest) {
     };
   }
 
-  const prompt = await prisma.agent_prompts.findFirst({
+  const prompt = await systemPrisma.agent_prompts.findFirst({
     where: {
       agentId,
       status: 'ACTIVE'
@@ -157,10 +157,10 @@ router.post('/run', async (req: Request, res: Response) => {
     const requestedAgentId = String(payload.agentId || '').trim();
     const canonicalAgentId = getCanonicalAgentId(requestedAgentId);
 
-    if (canonicalAgentId !== 'goal-conversation-agent') {
+    if (canonicalAgentId !== 'skill:goal-conversation') {
       return res.status(400).json({
         success: false,
-        error: { message: '当前轻量评测器仅支持 goal-conversation-agent' }
+        error: { message: '当前轻量评测器仅支持 skill:goal-conversation' }
       });
     }
 
@@ -189,7 +189,7 @@ router.post('/run', async (req: Request, res: Response) => {
           const previousState = item.previousState || {};
 
           const startedAt = Date.now();
-          const result = await runGoalConversationAgent({
+          const result = await executeSkill(goalConversationAgentDefinition, {
             input: userInput,
             userId: 'admin-prompt-stability',
             conversationHistory: history,

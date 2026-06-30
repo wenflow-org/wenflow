@@ -3,6 +3,14 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import {
+  type VirtualLearnerPersona,
+  type VirtualLearnerStory,
+  type FrictionBudget,
+  getFrictionGuidance,
+  normalizeFrictionBudget,
+  PERSONA_FIELD_ANCHORS_HINT,
+} from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
@@ -15,8 +23,8 @@ export interface LearnLearnerVisibleMessage {
 }
 
 export interface LearnLearnerSimulationInput {
-  learner: Record<string, any>;
-  story?: Record<string, any> | null;
+  learner: VirtualLearnerPersona | Record<string, any>;
+  story?: VirtualLearnerStory | Record<string, any> | null;
   visibleContext: {
     history: LearnLearnerVisibleMessage[];
     lastTeacherMessage?: string;
@@ -32,11 +40,15 @@ export interface LearnLearnerSimulationInput {
     status?: string;
     progress?: number;
   }>;
+  /** 控制学习者对抗度. 默认 'normal' */
+  frictionBudget?: FrictionBudget;
 }
 
 export interface LearnLearnerSimulationOutput {
   reply: string;
   emotion: 'neutral' | 'slightly_frustrated' | 'happy' | 'confident' | 'confused' | string;
+  /** 当 LLM 失败/校验失败时返回兜底数据, 评估时应排除这些 turn */
+  degraded?: boolean;
   learnerState: {
     phaseFocus: LearnLearnerPhase;
     taskUnderstanding: number;
@@ -286,6 +298,9 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       })).filter((message) => message.content).slice(-6)
     : [];
 
+  const frictionBudget = normalizeFrictionBudget(input.frictionBudget);
+  const frictionGuidance = getFrictionGuidance(frictionBudget);
+
   return {
     learner: input.learner || {},
     story: input.story || null,
@@ -296,7 +311,20 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     currentPhase: normalizePhase(input.currentPhase),
     previousLearnerState: input.previousLearnerState || null,
     currentTask: input.currentTask || null,
-    knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : []
+    knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
+    friction: {
+      budget: frictionBudget,
+      triggerProbability: frictionGuidance.triggerProbability,
+      guidance: frictionGuidance.promptHint
+    },
+    personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
+    task: {
+      requirements: [
+        'reply only as the learner, in 1-2 short sentences',
+        'apply friction.guidance to calibrate adversarial/failure/emotional patterns this turn',
+        'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)'
+      ]
+    }
   };
 }
 
@@ -349,6 +377,14 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         temperature: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
       },
       buildUserPayload,
+      validateParsedOutput: (parsed: any) => {
+        const replyOk = typeof parsed?.reply === 'string' && parsed.reply.trim().length > 0
+        const stateOk = parsed?.learnerState && typeof parsed.learnerState === 'object'
+        return {
+          valid: replyOk && stateOk,
+          failureReason: !replyOk ? 'missing reply' : 'missing learnerState'
+        }
+      },
       normalizeOutput,
       retryStrategy: {
         maxAttempts: 2,
@@ -362,6 +398,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         success: true,
         output: {
           ...fallback,
+          degraded: true,
           _debug: {
             rawModelOutput: result.debug.rawModelOutput,
             extractedJson: result.debug.extractedJson,

@@ -2,7 +2,7 @@
   <div class="completion-card">
     <div class="completion-header">
       <el-icon :size="24" color="#2e7d32"><CircleCheckFilled /></el-icon>
-      <h3 class="completion-title">课程完成</h3>
+      <h3 class="completion-title">当前任务完成</h3>
     </div>
 
     <div class="completion-body">
@@ -266,7 +266,23 @@ const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' :
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: #37474f; }
-.completion-actions { display: flex; justify-content: flex-end; }
+.completion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 @media (max-width: 900px) { .metrics-grid--three { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .completion-summary, .metrics-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .completion-summary,
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .completion-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .completion-actions :deep(.el-button),
+  .advisory-options :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+}
 </style>

@@ -17,8 +17,7 @@
     >
       <template #title>工程视图</template>
       <div style="font-size: 12.5px; line-height: 1.7">
-        这里是给工程师看的"运行节点元信息"。
-        改 prompt 不需要打开它。如果你是 prompt 编辑/运营，可以跳过。
+        运行节点元信息，改 prompt 无需访问。
       </div>
     </el-alert>
 
@@ -104,24 +103,15 @@
     <section v-if="agent.kind === 'skill'" class="eng-section">
       <h4>Skill 相关管理</h4>
       <p class="eng-section__desc">
-        如需查看此 Skill 的引用关系、调用统计，请前往 Skill 管理中心。
-        旧的「Skill 节点工作台」抽屉提供更详细的运行时配置（模型、调用样本、契约）。
+        模型运行时参数已并入「模型运行时」一级 tab。如需引用关系或横向对比，请前往 Skill 模型配置中心。
       </p>
       <div style="display: flex; gap: 8px;">
         <el-button
           size="small"
           type="primary"
-          @click="goToSkillManager"
+          @click="goToSkillModelConfigList"
         >
-          查看引用关系和统计 →
-        </el-button>
-        <el-button
-          size="small"
-          type="default"
-          plain
-          @click="$emit('open-skill-workbench', skillIdShort)"
-        >
-          打开 SkillNodeWorkbench
+          打开 Skill 模型配置列表 →
         </el-button>
       </div>
     </section>
@@ -145,8 +135,8 @@ const skillIdShort = computed(() =>
   String(props.agent?.agentId || '').replace(/^skill:/, '')
 );
 
-function goToSkillManager() {
-  router.push(`/admin/agent-registry/${encodeURIComponent(props.agent?.agentId || '')}`);
+function goToSkillModelConfigList() {
+  router.push({ path: '/admin/skill-model-configs', query: { skillId: skillIdShort.value } });
 }
 
 function formatTime(value: string): string {
@@ -158,6 +148,7 @@ function formatTime(value: string): string {
 <style scoped>
 .eng-pane {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -169,7 +160,7 @@ function formatTime(value: string): string {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 14px 16px;
-  background: white;
+  background: var(--admin-bg-surface);
 }
 
 .eng-section h4 {

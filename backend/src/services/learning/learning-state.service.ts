@@ -66,6 +66,19 @@ interface LearningStateMetricPersistOptions {
   primaryMetric?: 'lss' | 'lsb';
 }
 
+export interface DisplayMetricCommitInput {
+  lss: number;
+  ktl: number;
+  lf: number;
+  lsb: number;
+  timestamp?: Date;
+  source?: string;
+  pathId?: string | null;
+  taskId?: string | null;
+  sessionId?: string | null;
+  primaryMetric?: 'lss' | 'lsb';
+}
+
 interface LearningStateCommittedSnapshot {
   metrics: LearningStateMetrics;
   calculatedAt: Date;
@@ -467,6 +480,19 @@ export class LearningStateService {
     return Math.max(-10, Math.min(10, lsb)); // 限制在 -10 到 +10
   }
 
+  async getLatestCommittedMetricBefore(userId: string, before: Date): Promise<LearningStateMetrics | null> {
+    const snapshots = await this.listCommittedSnapshots(userId);
+
+    for (let index = snapshots.length - 1; index >= 0; index -= 1) {
+      const snapshot = snapshots[index];
+      if (snapshot.calculatedAt.getTime() < before.getTime()) {
+        return snapshot.metrics;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * 获取用户历史指标
    */
@@ -558,6 +584,39 @@ export class LearningStateService {
     return metrics;
   }
 
+  async commitDisplayMetrics(
+    userId: string,
+    input: DisplayMetricCommitInput
+  ): Promise<LearningStateMetrics> {
+    const metrics: LearningStateMetrics = {
+      lss: this.normalizeTenScale(input.lss),
+      ktl: this.normalizeTenScale(input.ktl),
+      lf: this.normalizeTenScale(input.lf),
+      lsb: this.normalizeBalanceScale(input.lsb),
+      timestamp: input.timestamp || new Date(),
+    };
+
+    await this.saveMetrics(userId, metrics, {
+      difficulty: Math.max(1, Math.min(10, metrics.lss)),
+      cognitiveLoad: Math.max(1, Math.min(10, metrics.lss)),
+      efficiency: 1,
+      timeSpent: 0,
+      expectedTime: 0,
+      completionRate: 1,
+      taskType: 'practice',
+    }, {
+      version: this.committedMetricVersion,
+      committed: true,
+      source: input.source || 'display-metric-commit',
+      pathId: input.pathId,
+      taskId: input.taskId,
+      sessionId: input.sessionId,
+      primaryMetric: input.primaryMetric || 'lsb',
+    });
+
+    return metrics;
+  }
+
   /**
    * 保存指标到数据库
    */
@@ -638,16 +697,20 @@ export class LearningStateService {
   /**
    * 获取状态趋势（最近 N 天）
    */
-  async getTrends(userId: string, days: number = 7): Promise<LearningStateMetrics[]> {
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-
+  async getTrendsSince(userId: string, since: Date): Promise<LearningStateMetrics[]> {
     const snapshots = await this.listCommittedSnapshots(userId, since);
 
     return snapshots.map((snapshot) => ({
       ...snapshot.metrics,
       timestamp: snapshot.calculatedAt,
     }));
+  }
+
+  async getTrends(userId: string, days: number = 7): Promise<LearningStateMetrics[]> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    return this.getTrendsSince(userId, since);
   }
 
   /**

@@ -13,6 +13,26 @@ export interface LearningStateMetrics {
   updatedAt?: string;
 }
 
+export interface LearningStateTrendPoint {
+  date: Date;
+  lss: number | null;
+  ktl: number | null;
+  lf: number | null;
+  lsb: number | null;
+}
+
+export interface LearningStateTrendWindow {
+  trends: LearningStateTrendPoint[];
+  range: {
+    mode: 'recent' | 'all';
+    requestedDays: number | 'all';
+    actualDays: number;
+    registeredAt: string;
+    startDate: string;
+    endDate: string;
+  };
+}
+
 export interface LSSInputs {
   difficulty: number;  // 任务难度 (1-10)
   cognitiveLoad: number; // 认知负荷 (1-10)
@@ -130,10 +150,18 @@ class LearningStateService {
         ktl: currentKTL,
         lf: currentLF,
         lsb: currentLSB,
+        updatedAt: new Date().toISOString(),
       };
 
-      // 5. 保存到数据库
-      await this.saveMetrics(userId, metrics);
+      await learningStateService.commitDisplayMetrics(userId, {
+        lss: metrics.lss,
+        ktl: metrics.ktl,
+        lf: metrics.lf,
+        lsb: metrics.lsb,
+        timestamp: new Date(metrics.updatedAt),
+        source: 'state-calculate',
+        primaryMetric: 'lsb',
+      });
 
       logger.info('学习状态指标计算完成:', {
         userId,
@@ -146,34 +174,6 @@ class LearningStateService {
       return metrics;
     } catch (error) {
       logger.error('计算学习状态指标失败:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 保存学习指标到数据库
-   */
-  private async saveMetrics(
-    userId: string,
-    metrics: LearningStateMetrics
-  ): Promise<void> {
-    try {
-await prisma.learning_metrics.create({
-        data: {
-          id: `lm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          userId,
-          metricType: 'session',
-          value: metrics.lss,
-          lss: metrics.lss,
-          ktl: metrics.ktl,
-          lf: metrics.lf,
-          lsb: metrics.lsb,
-          recordedAt: new Date(),
-          calculatedAt: new Date(),
-        },
-      });
-    } catch (error) {
-      logger.error('保存学习指标失败:', error);
       throw error;
     }
   }
@@ -198,6 +198,7 @@ await prisma.learning_metrics.create({
         ktl: displayMetrics.ktl,
         lf: displayMetrics.lf,
         lsb: displayMetrics.lsb,
+        updatedAt: metrics.timestamp.toISOString(),
       };
     } catch (error) {
       logger.error('获取当前学习状态失败:', error);
@@ -212,23 +213,43 @@ await prisma.learning_metrics.create({
   async getStateTrends(
     userId: string,
     days: number = 30
-  ): Promise<
-    Array<{
-      date: Date;
-      lss: number | null;
-      ktl: number | null;
-      lf: number | null;
-      lsb: number | null;
-    }>
-  > {
-    try {
-      const safeDays = Math.max(1, Math.min(365, days));
-      const metrics = await learningStateService.getTrends(userId, safeDays);
-      const currentState = await learningStateService.getCurrentState(userId);
+  ): Promise<LearningStateTrendPoint[]> {
+    const result = await this.getStateTrendWindow(userId, { days, mode: 'recent' });
+    return result.trends;
+  }
 
-      const startDate = new Date();
-      startDate.setHours(0, 0, 0, 0);
-      startDate.setDate(startDate.getDate() - (safeDays - 1));
+  async getStateTrendWindow(
+    userId: string,
+    options?: {
+      days?: number;
+      mode?: 'recent' | 'all';
+    }
+  ): Promise<LearningStateTrendWindow> {
+    try {
+      const requestedDays = Math.max(1, Math.min(365, options?.days ?? 30));
+      const mode = options?.mode === 'all' ? 'all' : 'recent';
+      const user = await prisma.users.findUnique({
+        where: { id: userId },
+        select: { createdAt: true },
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const registeredAt = user?.createdAt ? new Date(user.createdAt) : new Date(today);
+      registeredAt.setHours(0, 0, 0, 0);
+
+      const requestedStartDate = new Date(today);
+      requestedStartDate.setDate(today.getDate() - (requestedDays - 1));
+
+      const startDate = mode === 'all'
+        ? new Date(registeredAt)
+        : new Date(Math.max(requestedStartDate.getTime(), registeredAt.getTime()));
+
+      const actualDays = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1);
+      const metrics = await learningStateService.getTrendsSince(userId, startDate);
+      const currentState = await learningStateService.getCurrentState(userId);
+      const latestMetricBeforeWindow = await learningStateService.getLatestCommittedMetricBefore(userId, startDate);
 
       const toDateKey = (date: Date): string => {
         const y = date.getFullYear();
@@ -245,11 +266,11 @@ await prisma.learning_metrics.create({
         metricsByDay.set(key, list);
       }
 
-      const trends: Array<{ date: Date; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> = [];
-      let lastKnownMetric = metrics.length > 0 ? metrics[0] : null;
+      const trends: LearningStateTrendPoint[] = [];
+      let lastKnownMetric = latestMetricBeforeWindow;
       const todayKey = toDateKey(new Date());
 
-      for (let i = 0; i < safeDays; i += 1) {
+      for (let i = 0; i < actualDays; i += 1) {
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + i);
         currentDate.setHours(12, 0, 0, 0);
@@ -295,7 +316,17 @@ await prisma.learning_metrics.create({
         });
       }
 
-      return trends;
+      return {
+        trends,
+        range: {
+          mode,
+          requestedDays: mode === 'all' ? 'all' : requestedDays,
+          actualDays,
+          registeredAt: registeredAt.toISOString(),
+          startDate: new Date(startDate).toISOString(),
+          endDate: new Date(today).toISOString(),
+        },
+      };
     } catch (error) {
       logger.error('获取学习趋势失败:', error);
       throw error;

@@ -1,12 +1,12 @@
-import dotenv from 'dotenv';
-import prisma from '../config/database';
+﻿import dotenv from 'dotenv';
+import systemPrisma from '../../config/system-database';
 
 dotenv.config();
 
 async function inspectActivePrompts() {
-  const prompts = await prisma.agent_prompts.findMany({
+  const prompts = await systemPrisma.agent_prompts.findMany({
     where: {
-      agentId: { in: ['goal-conversation-agent', 'skill:path-scene-framing', 'path-agent', 'skill:stage-designer'] },
+      agentId: { in: ['skill:goal-conversation', 'skill:path-scene-framing', 'skill:path-planning', 'skill:stage-designer'] },
       status: 'ACTIVE',
     },
     select: {
@@ -30,7 +30,7 @@ async function inspectActivePrompts() {
     hasQualityFlags: item.systemPrompt.includes('qualityFlags'),
     hasSupportingEvidence: item.systemPrompt.includes('supportingEvidence'),
     hasStrictSurfaceGoalRule: item.systemPrompt.includes('surface_goal 是用户的原始诉求锚点'),
-    hasStrictRealProblemRule: item.systemPrompt.includes('real_problem 必须是对 surface_goal 的诊断结论'),
+    hasStrictRealProblemRule: item.systemPrompt.includes('real_problem 必须是对 surface_goal 的诊断结果'),
     hasSubtasks: item.systemPrompt.includes('subtasks'),
     hasTaskChain: item.systemPrompt.includes('taskChain'),
     hasStageDesigner: item.systemPrompt.includes('stage-designer'),
@@ -47,5 +47,5 @@ inspectActivePrompts()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await systemPrisma.$disconnect();
   });

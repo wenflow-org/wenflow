@@ -143,11 +143,6 @@
             <el-option label="自定义 Skill" value="CUSTOM" />
           </el-select>
         </el-form-item>
-        <el-form-item label="代码仓库">
-          <el-select v-model="formData.codeRepositoryId" clearable filterable placeholder="选择一个 Skill 仓库">
-            <el-option v-for="repo in codeRepositories" :key="repo.id" :label="repo.name" :value="repo.id" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="远端 Endpoint">
           <el-input v-model="formData.endpoint" placeholder="https://example.com/skill" />
         </el-form-item>
@@ -157,15 +152,6 @@
             type="textarea"
             :rows="6"
             placeholder='{"timeout": 3000}'
-            style="font-family: 'Courier New', monospace;"
-          />
-        </el-form-item>
-        <el-form-item label="内联代码">
-          <el-input
-            v-model="formData.customCode"
-            type="textarea"
-            :rows="10"
-            placeholder="export async function execute(input) { return { output: input } }"
             style="font-family: 'Courier New', monospace;"
           />
         </el-form-item>
@@ -215,7 +201,6 @@ import { toast } from '../../utils/toast';
 import dayjs from 'dayjs';
 import {
   deleteUserSkill,
-  getCodeRepositories,
   getUserSkill,
   getUserSkills,
   saveUserSkill,
@@ -231,7 +216,6 @@ const dialogVisible = ref(false);
 const testVisible = ref(false);
 const isEdit = ref(false);
 const skills = ref<any[]>([]);
-const codeRepositories = ref<any[]>([]);
 const currentSkill = ref<any>(null);
 const filterEnabled = ref<boolean | undefined>(undefined);
 const testInput = ref('');
@@ -240,10 +224,8 @@ const testResult = ref('');
 const formData = reactive({
   skillName: '',
   sourceType: 'CUSTOM' as 'PLATFORM' | 'CUSTOM',
-  codeRepositoryId: '',
   endpoint: '',
-  parameters: '',
-  customCode: ''
+  parameters: ''
 });
 
 const enabledCount = computed(() => skills.value.filter((item) => item.enabled).length);
@@ -255,7 +237,7 @@ const featuredSkills = computed(() => {
 });
 
 onMounted(async () => {
-  await Promise.all([loadSkills(), loadRepositories()]);
+  await loadSkills();
 });
 
 async function loadSkills() {
@@ -274,15 +256,6 @@ async function loadSkills() {
   }
 }
 
-async function loadRepositories() {
-  try {
-    const res = await getCodeRepositories({ type: 'SKILL' });
-    codeRepositories.value = res.data || [];
-  } catch {
-    codeRepositories.value = [];
-  }
-}
-
 function showCreateDialog() {
   isEdit.value = false;
   dialogVisible.value = true;
@@ -297,10 +270,8 @@ async function editSkill(skill: any) {
     currentSkill.value = detail;
     formData.skillName = detail.skillName;
     formData.sourceType = detail.sourceType || 'CUSTOM';
-    formData.codeRepositoryId = detail.codeRepositoryId || '';
     formData.endpoint = detail.endpoint || '';
     formData.parameters = detail.parameters ? JSON.stringify(detail.parameters, null, 2) : '';
-    formData.customCode = detail.customCode || '';
     dialogVisible.value = true;
   } catch {
     toast.error('加载 Skill 详情失败');
@@ -316,9 +287,7 @@ async function submitForm() {
   const payload = {
     skillName: formData.skillName,
     sourceType: formData.sourceType,
-    codeRepositoryId: formData.codeRepositoryId || undefined,
     endpoint: formData.endpoint || undefined,
-    customCode: formData.customCode || undefined,
     parameters: formData.parameters ? JSON.parse(formData.parameters) : undefined
   };
 
@@ -394,10 +363,8 @@ async function removeSkill(skill: any) {
 function resetForm() {
   formData.skillName = '';
   formData.sourceType = 'CUSTOM';
-  formData.codeRepositoryId = '';
   formData.endpoint = '';
   formData.parameters = '';
-  formData.customCode = '';
   currentSkill.value = null;
 }
 

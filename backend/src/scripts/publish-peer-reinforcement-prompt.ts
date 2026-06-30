@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import prisma from '../config/database';
-import { DEFAULT_PEER_AGENT_PROMPT } from '../agents/peer-agent';
 
 dotenv.config();
 
@@ -31,7 +30,7 @@ async function publishPeerReinforcementPrompt() {
       version,
       name: `v${version}-peer-reinforcement-json-output`,
       description: '伴学讨论 Prompt：固定 JSON 输出，策略细节由 user payload 提供。',
-      systemPrompt: DEFAULT_PEER_AGENT_PROMPT,
+      systemPrompt: '',
       temperature: 0.7,
       maxTokens: 4000,
       model,

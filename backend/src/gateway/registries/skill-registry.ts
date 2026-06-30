@@ -4,7 +4,7 @@
  * 发现和管理可用 Skill
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../generated/system-client';
 import {
   SkillDefinition,
   SkillCategory,

@@ -6,6 +6,7 @@ export interface TeachingSession {
   topic: string;
   startTime: string;
   welcomeMessage: string;
+  knowledgePoints?: KnowledgePointStatus[];
   mode?: 'new' | 'resumed';
   opening?: {
     message: string;
@@ -68,6 +69,8 @@ export interface MessageResult {
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
   isCompletion: boolean;
+  shouldConfirmEnd?: boolean;
+  endReason?: 'completion-candidate' | 'learner-requested-end' | null;
   peerTriggered: boolean;
   autoEnded?: boolean;
   wrapup?: WrapupArtifact | null;

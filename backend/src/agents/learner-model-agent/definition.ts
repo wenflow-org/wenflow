@@ -1,7 +1,7 @@
 import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
 
 export const learnerModelRuntimeDefinition: RuntimeDefinitionRecord = {
-  id: 'learner-model-agent',
+  id: 'skill:learner-model',
   displayName: '学习者画像与状态中心',
   description: '聚合学习者画像、动态学习状态、知识背景、replan 触发信号与教学控制态，向 goal/path/learn 提供统一 learner snapshot。',
   category: 'agent',

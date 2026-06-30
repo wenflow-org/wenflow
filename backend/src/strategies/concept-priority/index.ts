@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Concept Priority Strategy
  *
  * 动态调整知识分布策略
  * 根据目标类型和建议分布，调整概念性任务比例
  */
 
-import { AdjustmentStrategy, PathAdjustment, AdjustmentReason } from '../../agents/path-agent/adjustment';
+import { AdjustmentStrategy, PathAdjustment, AdjustmentReason } from '../../skills/path-planning/adjustment';
 import { LearningSignal, AgentContext, MilestoneOutput, SubtaskOutput } from '../../agents/protocol';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';

@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "./mcp-schema.json",
   "version": "1.0.0",
   "description": "AI学习平台 MCP 配置",
@@ -25,8 +25,8 @@
       "type": "openai-compatible",
       "endpoint": "${AI_API_URL:-http://localhost:3000/v1}",
       "apiKey": "${AI_API_KEY}",
-      "models": ["deepseek-chat", "deepseek-reasoner"],
-      "defaultModel": "deepseek-chat",
+      "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-r1"],
+      "defaultModel": "deepseek-v4-flash",
       "priority": 2,
       "enabled": true,
       "config": {
@@ -84,21 +84,21 @@
     }
   ],
   "agents": {
-    "path-agent": {
+    "skill:path-planning": {
       "mcpServer": "newapi",
-      "model": "deepseek-chat",
+      "model": "deepseek-v4-flash",
       "maxTokens": 4000,
       "temperature": 0.5
     },
     "ai-teaching-agent": {
       "mcpServer": "newapi",
-      "model": "deepseek-chat",
+      "model": "deepseek-v4-flash",
       "maxTokens": 2000,
       "temperature": 0.7
     },
     "planner-agent": {
       "mcpServer": "newapi",
-      "model": "deepseek-reasoner",
+      "model": "deepseek-v4-pro",
       "maxTokens": 6000,
       "temperature": 0.3
     }

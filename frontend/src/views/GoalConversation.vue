@@ -22,6 +22,7 @@
         <div class="header-right planning-header__actions">
           <span v-if="!isTestMode && virtualDebugSummary" class="session-badge stage-info">{{ virtualDebugSummary }}</span>
           <router-link :to="newConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
@@ -226,9 +227,13 @@
                     :key="index"
                     class="planning-reply-chip"
                     :class="{ 'planning-reply-chip--selected': isQuickReplySelected(reply.text) }"
+                    :title="isQuickReplySelected(reply.text) ? '再次点击取消选择' : '点击选中此选项'"
+                    role="button"
+                    :aria-pressed="isQuickReplySelected(reply.text)"
                     @click="toggleQuickReplySelection(reply.text, msg.id)"
                   >
-                    {{ reply.text }}
+                    <span class="planning-reply-chip__text">{{ reply.text }}</span>
+                    <span v-if="isQuickReplySelected(reply.text)" class="planning-reply-chip__remove" aria-hidden="true">✕</span>
                   </span>
                 </div>
 
@@ -244,11 +249,7 @@
                 <div class="planning-msg__meta">
                   <span class="planning-msg__role">问流</span>
                 </div>
-                <div class="typing-indicator glass-card">
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                </div>
+                <TypingIndicator variant="card" />
               </div>
             </div>
 
@@ -316,7 +317,7 @@
                 </div>
               </transition>
 
-              <div v-if="!showProposalActionPanel" class="planning-composer__box planning-composer__box--final">
+              <div v-if="!showProposalActionPanel" ref="composerRef" class="planning-composer__box planning-composer__box--final">
                 <div class="planning-composer__field">
                   <div v-if="selectedQuickReplies.length > 0" class="planning-composer__selected-tags">
                     <button
@@ -340,6 +341,13 @@
                     rows="1"
                     @input="autoResize"
                   ></textarea>
+                  <span
+                    v-if="userInput.length >= 80"
+                    class="planning-composer__counter"
+                    :class="{ 'planning-composer__counter--warn': userInput.length > 800 }"
+                  >
+                    {{ userInput.length }}{{ userInput.length > 800 ? ' / 建议 800 字内' : '' }}
+                  </span>
                 </div>
                 <div class="planning-composer__row">
                   <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
@@ -355,97 +363,6 @@
 
       </section>
 
-      <button v-if="isTestMode" type="button" class="goal-debug-float-btn" @click="goalDebugDrawerVisible = true">
-        <strong>Goal / Raw</strong>
-        <span>{{ goalDebugQuickChipText }}</span>
-      </button>
-
-      <el-drawer
-        v-if="isTestMode"
-        v-model="goalDebugDrawerVisible"
-        title="Goal 调试数据"
-        size="min(92vw, 860px)"
-        destroy-on-close
-        class="goal-debug-drawer"
-      >
-        <div class="goal-debug-drawer__body">
-          <div class="goal-debug-panel__actions">
-            <button type="button" class="planning-secondary-btn" :disabled="loading" @click="refreshGoalDebugPanel">刷新调试数据</button>
-          </div>
-
-          <div v-if="virtualDebugSummary" class="goal-debug-inline-hint">
-            {{ virtualDebugSummary }}
-          </div>
-
-          <div class="goal-debug-toolbar">
-            <span v-for="item in goalDebugQuickChips" :key="item.label" class="goal-debug-quick-chip">
-              <strong>{{ item.label }}</strong>
-              <em>{{ item.value }}</em>
-            </span>
-          </div>
-
-          <section class="planning-card-group planning-debug-block goal-debug-block--drawer">
-            <div class="planning-debug-block__head">
-              <span class="planning-block-label">调试面板</span>
-              <strong>{{ testDebugSummary || '0 次请求' }}</strong>
-            </div>
-
-            <div class="planning-debug-metrics">
-              <article v-for="item in testDebugCards" :key="item.label" class="planning-debug-metric">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-              </article>
-            </div>
-
-            <div v-if="testRequestTraces.length > 0" class="planning-debug-traces">
-              <details v-for="trace in testRequestTraces" :key="trace.id" class="planning-debug-trace">
-                <summary class="planning-debug-trace__summary">
-                  <div>
-                    <strong>{{ trace.title }}</strong>
-                    <span>{{ trace.subtitle }}</span>
-                    <span>{{ trace.statusLabel }}</span>
-                  </div>
-                  <div class="planning-debug-trace__meta">
-                    <em>{{ trace.badge }}</em>
-                    <span>{{ trace.badgeNote }}</span>
-                  </div>
-                </summary>
-
-                <div class="planning-debug-trace__body">
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">本轮用户输入</span>
-                    <pre>{{ trace.input }}</pre>
-                  </section>
-
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">请求状态快照</span>
-                    <pre>{{ trace.stateSnapshot }}</pre>
-                  </section>
-
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">发送给模型的完整 messages</span>
-                    <pre>{{ trace.requestMessages }}</pre>
-                  </section>
-
-                  <section class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">本轮尝试详情</span>
-                    <pre>{{ trace.attempts }}</pre>
-                  </section>
-
-                  <section v-if="trace.rawUserVisible" class="planning-debug-trace__section">
-                    <span class="planning-debug-trace__label">最后一次原始文本输出</span>
-                    <pre>{{ trace.rawUserVisible }}</pre>
-                  </section>
-                </div>
-              </details>
-            </div>
-
-            <div v-else class="planning-status-empty">
-              发起测试对话后，这里会显示每轮请求实际发送给模型的全部内容。
-            </div>
-          </section>
-        </div>
-      </el-drawer>
 
       <!-- 重新规划对话框 -->
       <el-dialog
@@ -509,6 +426,8 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import { ArrowRight, Loading, Promotion, RefreshRight, User, Switch, Delete } from '@element-plus/icons-vue';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
+import TypingIndicator from '../components/TypingIndicator.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import { useUserStore } from '../stores/user';
 import MarkdownIt from 'markdown-it';
 import type { GoalConversationEnvelope } from '@/api/goalConversation';
@@ -594,6 +513,7 @@ const handleLogout = async () => {
 };
 
 const chatContent = ref<HTMLElement | null>(null);
+const composerRef = ref<HTMLElement | null>(null);
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const userInput = ref('');
@@ -830,7 +750,7 @@ const composeQuickReplyPayload = () => {
   if (selectedQuickReplies.value.length === 0) return '';
   const base = selectedQuickReplies.value.join('、');
   const trimmed = userInput.value.trim();
-  if (trimmed) {
+  if (trimmed && trimmed !== base && !selectedQuickReplies.value.includes(trimmed)) {
     return `${base}\n${trimmed}`;
   }
   return base;
@@ -1834,6 +1754,81 @@ const loadVirtualFormalGoalConversation = async (sessionId: string) => {
   return data as GoalConversationEnvelope;
 };
 
+const loadVirtualDebugGoalConversation = async (sessionId: string) => {
+  const response = await adminApi.getVirtualSessionGoalConversation(sessionId);
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || '加载虚拟调试 Goal 失败');
+  }
+
+  const data = response.data.data;
+  const debugMeta = data?.meta?.debug || {};
+
+  virtualContext.value = {
+    ...(virtualContext.value || {}),
+    goalConversation: data,
+    bindings: virtualContext.value?.bindings || { goalConversationId: data.id }
+  };
+
+  return {
+    userVisible: data?.messages?.[data.messages.length - 1]?.content || '',
+    internal: {
+      core: {
+        conversationId: data.id || '',
+        stage: data.stage || 'understanding',
+        confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+        isCompleted: ['ready', 'completed'].includes(String(data.stage || '')),
+        learningPath: data.learningPath || null
+      },
+      ext: {
+        goalConversation: {
+          understanding: data.understanding || {},
+          nextQuestions: data.nextQuestions || [],
+          quickReplies: [],
+          structuredData: data.structuredData || null,
+          confirmedProposal: data.confirmedProposal || null,
+          confidenceScores: data.confidenceScores || null,
+          collected: data.collected || {}
+        }
+      }
+    },
+    renderHints: {
+      quickReplies: []
+    },
+    schemaVersion: 'agent-output-v1',
+    meta: {
+      source: data?.meta?.source || 'goal-conversation',
+      timestamp: data?.meta?.timestamp || new Date().toISOString(),
+      debug: {
+        contextMode: 'full',
+        contextStrategy: debugMeta.contextStrategy || 'virtual-session-goal-restore',
+        historyCount: Array.isArray(data?.messages) ? data.messages.length : 0,
+        conversationContextCount: debugMeta.conversationContextCount ?? (Array.isArray(data?.messages) ? data.messages.length : 0),
+        visibleMessageCount: debugMeta.visibleMessageCount ?? (Array.isArray(data?.messages) ? data.messages.length : 0),
+        stateFieldCount: debugMeta.stateFieldCount ?? 0,
+        promptVersion: debugMeta.promptVersion ?? 0,
+        requestMessages: debugMeta.requestMessages || [],
+        requestLog: debugMeta.requestLog || [],
+        attemptCount: debugMeta.attemptCount ?? 0,
+        actualRetryCount: debugMeta.actualRetryCount ?? 0,
+        formatFailureCount: debugMeta.formatFailureCount ?? 0,
+        structuredOutputValid: debugMeta.structuredOutputValid !== false,
+        stateApplied: debugMeta.stateApplied !== false,
+        maxFormatRetries: debugMeta.maxFormatRetries ?? 0,
+        usage: debugMeta.usage || null,
+        parseMode: debugMeta.parseMode || null,
+        observationMode: debugMeta.observationMode === true
+      },
+      messages: Array.isArray(data?.messages)
+        ? data.messages.map((message: any) => ({
+            role: message.role === 'assistant' ? 'ai' : 'user',
+            content: String(message.content || ''),
+            time: String(message.timestamp || message.time || data?.createdAt || new Date().toISOString())
+          }))
+        : []
+    }
+  } as GoalConversationEnvelope;
+};
+
 const syncConversationHistory = (messages: any[] = []) => {
   const mappedMessages = messages
     .map((message, index) => mapStoredMessage(message, index))
@@ -1863,7 +1858,9 @@ const restoreConversation = async (targetConversationId?: string) => {
   loading.value = true;
   try {
     const response = isTestMode.value
-      ? await getTestGoalConversation(storedId)
+      ? (virtualSessionId.value
+          ? await loadVirtualDebugGoalConversation(virtualSessionId.value)
+          : await getTestGoalConversation(storedId))
       : (isVirtualFormalView.value && virtualSessionId.value
         ? await loadVirtualFormalGoalConversation(virtualSessionId.value)
         : await getGoalConversation(storedId));
@@ -1878,6 +1875,8 @@ const restoreConversation = async (targetConversationId?: string) => {
     }
   } finally {
     loading.value = false;
+    await nextTick();
+    keepComposerVisible();
   }
 };
 
@@ -2072,11 +2071,20 @@ const inputNewLine = () => {
   nextTick(() => autoResize());
 };
 
+const keepComposerVisible = () => {
+  if (window.innerWidth > 768 || !composerRef.value) return;
+  const rect = composerRef.value.getBoundingClientRect();
+  if (rect.bottom > window.innerHeight - 16 || rect.top < 0) {
+    composerRef.value.scrollIntoView({ block: 'end' });
+  }
+};
+
 const scrollToBottom = async () => {
   await nextTick();
   if (chatContent.value) {
     chatContent.value.scrollTop = chatContent.value.scrollHeight;
   }
+  requestAnimationFrame(() => keepComposerVisible());
 };
 
 const isStructuredOutputInvalidError = (error: any) => {
@@ -3185,6 +3193,7 @@ onUnmounted(() => {
 .planning-reply-chip {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 600;
   color: var(--planning-blue-deep);
@@ -3193,19 +3202,55 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(52, 120, 246, 0.12);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  user-select: none;
 }
 
 .planning-reply-chip:hover {
   background: rgba(52, 120, 246, 0.08);
   border-color: rgba(52, 120, 246, 0.2);
+  transform: translateY(-1px);
+}
+
+.planning-reply-chip:active {
+  transform: translateY(0);
 }
 
 .planning-reply-chip--selected {
   background: rgba(52, 120, 246, 0.14);
-  border-color: rgba(52, 120, 246, 0.24);
+  border-color: rgba(52, 120, 246, 0.32);
   color: var(--planning-blue-deep);
   font-weight: 700;
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.08);
+}
+
+.planning-reply-chip--selected:hover {
+  background: rgba(52, 120, 246, 0.18);
+  border-color: rgba(52, 120, 246, 0.4);
+}
+
+.planning-reply-chip__text {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.planning-reply-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--planning-blue-deep);
+  background: rgba(52, 120, 246, 0.18);
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.planning-reply-chip--selected:hover .planning-reply-chip__remove {
+  background: rgba(52, 120, 246, 0.28);
 }
 
 .planning-msg__retry {
@@ -3666,6 +3711,23 @@ onUnmounted(() => {
   border: 1px solid rgba(23, 32, 51, 0.08);
 }
 
+.planning-composer__counter {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.42);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.2s ease;
+}
+
+.planning-composer__counter--warn {
+  color: #b45309;
+  font-weight: 600;
+}
+
 .planning-composer__row {
   display: contents;
 }
@@ -3676,6 +3738,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  position: relative;
 }
 
 .planning-composer__selected-tags {
@@ -6038,8 +6101,7 @@ font-weight: 800;
     flex-direction: column;
   }
 
-  .planning-header__actions .session-badge,
-  .planning-nav {
+  .planning-header__actions .session-badge {
     display: none;
   }
 

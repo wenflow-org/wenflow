@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
-import prisma from '../config/database';
-import { DEFAULT_SYSTEM_PROMPT } from '../agents/goal-conversation-agent';
+import systemPrisma from '../config/system-database';
 
 dotenv.config();
 
@@ -11,7 +10,7 @@ async function publishGoalConversationPrompt() {
   }
 
   const agentId = 'goal-conversation-agent';
-  const latest = await prisma.agent_prompts.findFirst({
+  const latest = await systemPrisma.agent_prompts.findFirst({
     where: { agentId },
     orderBy: { version: 'desc' },
     select: { version: true },
@@ -19,12 +18,12 @@ async function publishGoalConversationPrompt() {
 
   const version = (latest?.version || 0) + 1;
 
-  await prisma.agent_prompts.updateMany({
+  await systemPrisma.agent_prompts.updateMany({
     where: { agentId, status: 'ACTIVE' },
     data: { status: 'ARCHIVED', updatedAt: new Date() },
   });
 
-  const created = await prisma.agent_prompts.create({
+  const created = await systemPrisma.agent_prompts.create({
     data: {
       id: `ap_goal_conversation_${Date.now()}`,
       agentId,
@@ -61,5 +60,5 @@ publishGoalConversationPrompt()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await systemPrisma.$disconnect();
   });

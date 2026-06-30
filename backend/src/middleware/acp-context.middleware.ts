@@ -40,6 +40,7 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
     };
     
     requestContextStorage.run(context, () => {
+      res.setHeader('X-Trace-Id', context.traceId);
       next();
     });
   };

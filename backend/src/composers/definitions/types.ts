@@ -7,7 +7,7 @@ export interface RuntimeDefinitionRecord {
   id: string;
   displayName: string;
   description?: string;
-  category: 'agent' | 'skill' | 'orchestrator';
+  category: 'agent' | 'skill';
   inputSchema?: Record<string, any>;
   outputSchema?: Record<string, any>;
   variableBindings?: VariableBindings;

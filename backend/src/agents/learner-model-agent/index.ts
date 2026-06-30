@@ -23,7 +23,7 @@ import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotSe
 import { logger } from '../../utils/logger';
 
 export const learnerModelAgentDefinition: AgentDefinition = {
-  id: 'learner-model-agent',
+  id: 'skill:learner-model',
   name: '学习者画像与状态中心',
   version: '1.0.0',
   type: 'custom',
@@ -138,7 +138,7 @@ class LearnerModelAgent {
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
-          agentId: 'learner-model-agent',
+          agentId: 'skill:learner-model',
           agentName: '学习者画像与状态中心',
           agentType: 'custom',
           confidence: result.confidence || 0.8,
@@ -158,7 +158,7 @@ class LearnerModelAgent {
         userVisible: '学习者模型生成失败',
         schemaVersion: 'agent-output-v1',
         metadata: {
-          agentId: 'learner-model-agent',
+          agentId: 'skill:learner-model',
           agentName: '学习者画像与状态中心',
           agentType: 'custom',
           confidence: 0,

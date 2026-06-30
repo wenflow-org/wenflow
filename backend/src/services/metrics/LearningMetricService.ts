@@ -11,6 +11,7 @@
  */
 
 import prisma from '../../config/database';
+import learningStateService from '../learning/learning-state.service';
 
 export interface LearningStateMetrics {
   lss: number;           // 学习压力评分 (0-100)
@@ -260,10 +261,7 @@ export async function updateLearningMetrics(
       );
 
     // 2. 获取当前指标
-    const currentMetrics = await prisma.learning_metrics.findFirst({
-      where: { userId: input.userId },
-      orderBy: { calculatedAt: 'desc' },
-    });
+    const currentMetrics = await getLearningMetrics(input.userId);
 
     // 3. 计算KTL
     const previousKTL = currentMetrics?.ktl || 0;
@@ -275,20 +273,15 @@ export async function updateLearningMetrics(
     // 5. 计算LSB
     const lsbCurrent = calculateLSB(ktlCurrent, lfCurrent);
 
-    // 6. 创建指标记录（每次学习会话创建新记录）
-    const metricId = `lm_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const metrics = await prisma.learning_metrics.create({
-      data: {
-        id: metricId,
-        userId: input.userId,
-        metricType: 'session',
-        value: lssScore,
-        lss: lssScore,
-        ktl: ktlCurrent,
-        lf: lfCurrent,
-        lsb: lsbCurrent,
-        calculatedAt: new Date(),
-      }
+    await learningStateService.commitDisplayMetrics(input.userId, {
+      lss: lssScore,
+      ktl: ktlCurrent,
+      lf: lfCurrent,
+      lsb: lsbCurrent,
+      timestamp: new Date(),
+      source: 'task-completion',
+      taskId: input.taskId || null,
+      primaryMetric: 'lsb',
     });
 
     console.log(`✅ Updated learning metrics for user ${input.userId}:`, {
@@ -315,20 +308,19 @@ export async function updateLearningMetrics(
  */
 export async function getLearningMetrics(userId: string): Promise<LearningStateMetrics | null> {
   try {
-    const metrics = await prisma.learning_metrics.findFirst({
-      where: { userId },
-      orderBy: { calculatedAt: 'desc' },
-    });
+    const metrics = await learningStateService.getCurrentState(userId);
 
     if (!metrics) {
       return null;
     }
 
+    const displayMetrics = learningStateService.toDisplayMetrics(metrics);
+
     return {
-      lss: metrics.lss || 0,
-      ktl: metrics.ktl || 0,
-      lf: metrics.lf || 0,
-      lsb: metrics.lsb || 0,
+      lss: displayMetrics.lss,
+      ktl: displayMetrics.ktl,
+      lf: displayMetrics.lf,
+      lsb: displayMetrics.lsb,
     };
   } catch (error) {
     console.error('Error getting learning metrics:', error);
@@ -341,18 +333,19 @@ export async function getLearningMetrics(userId: string): Promise<LearningStateM
  */
 export async function getLearningHistory(userId: string) {
   try {
-    const metrics = await prisma.learning_metrics.findFirst({
-      where: { userId },
-      orderBy: { calculatedAt: 'desc' },
-    });
+    const since = new Date();
+    since.setDate(since.getDate() - 99);
 
-    if (!metrics) {
+    const metrics = await learningStateService.getTrendsSince(userId, since);
+    if (metrics.length === 0) {
       return { lssHistory: [], sessionHistory: [] };
     }
 
-    // 简化版本：返回空历史数据（因为数据库中没有这些字段）
     return {
-      lssHistory: [],
+      lssHistory: metrics.map((metric) => ({
+        date: metric.timestamp.toISOString(),
+        score: Math.round(learningStateService.toDisplayMetrics(metric).lss),
+      })),
       sessionHistory: [],
     };
   } catch (error) {

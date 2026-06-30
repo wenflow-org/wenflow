@@ -126,7 +126,10 @@ class AuthService {
   // 验证 Token
   async verifyToken(token: string) {
     try {
-      const decoded = jwt.verify(token, this.JWT_SECRET) as JWTPayload;
+      // 显式指定允许的算法，防止算法混淆攻击
+      const decoded = jwt.verify(token, this.JWT_SECRET, {
+        algorithms: ['HS256']
+      }) as JWTPayload;
 
       // 查找用户
       const user = await prisma.users.findUnique({
@@ -151,7 +154,8 @@ class AuthService {
   // 生成 JWT
   private generateToken(payload: JWTPayload): string {
     const options: SignOptions = {
-      expiresIn: this.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn']
+      expiresIn: this.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
+      algorithm: 'HS256' // 显式指定算法，防止算法混淆攻击
     };
     return jwt.sign(payload, this.JWT_SECRET, options);
   }

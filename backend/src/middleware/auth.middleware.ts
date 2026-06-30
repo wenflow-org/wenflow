@@ -86,8 +86,10 @@ export const authMiddleware = async (
 
     const token = authHeader.substring(7); // 去掉 "Bearer " 前缀
 
-    // 验证token
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    // 验证token（显式指定允许的算法）
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ['HS256']
+    }) as JwtPayload;
 
     // 将用户信息附加到request
     req.user = {
@@ -133,7 +135,9 @@ export const optionalAuthMiddleware = async (
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        algorithms: ['HS256']
+      }) as JwtPayload;
       req.user = {
         userId: decoded.userId,
         email: decoded.email

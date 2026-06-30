@@ -114,7 +114,7 @@ flowchart TD
 | **后端** | Node.js + Express + TypeScript + Prisma |
 | **数据库（当前）** | SQLite |
 | **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek） |
-| **Agent 编排** | EduClaw Gateway + Orchestrators + Event Bus |
+| **Agent 协调** | EduClaw Gateway + Agent 协调层 + Event Bus |
 | **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署） |
 
 ---

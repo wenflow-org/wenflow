@@ -2,8 +2,8 @@
 // 核心理念：穿透表象，找到真问题，渐进式收集信息
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import { runGoalConversationAgent } from '../../agents/goal-conversation-agent';
-import pathOrchestrator, { GoalPathRequest } from '../../orchestrators/path.orchestrator';
+import { runGoalConversationAgent } from '../../skills/goal-conversation';
+import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 

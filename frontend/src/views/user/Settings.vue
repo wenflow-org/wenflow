@@ -51,7 +51,7 @@
           <el-form-item label="对话模型">
             <el-input
               v-model="apiConfig.chatModel"
-              placeholder="deepseek-chat"
+              placeholder="deepseek-v4-flash"
               :disabled="!apiConfig.enabled"
             />
             <div class="field-hint">
@@ -62,7 +62,7 @@
           <el-form-item label="推理模型">
             <el-input
               v-model="apiConfig.reasoningModel"
-              placeholder="deepseek-think"
+              placeholder="deepseek-v4-pro"
               :disabled="!apiConfig.enabled"
             />
             <div class="field-hint">
@@ -120,8 +120,8 @@ const apiConfig = reactive({
   enabled: false,
   endpoint: '',
   apiKey: '',
-  chatModel: 'deepseek-chat',
-  reasoningModel: 'deepseek-think',
+  chatModel: 'deepseek-v4-flash',
+  reasoningModel: 'deepseek-v4-pro',
 });
 
 onMounted(async () => {
@@ -139,8 +139,8 @@ const loadApiConfig = async () => {
     if (data.apiKey) {
       apiConfig.apiKey = data.apiKey;
     }
-    apiConfig.chatModel = data.chatModel || 'deepseek-chat';
-    apiConfig.reasoningModel = data.reasoningModel || 'deepseek-think';
+    apiConfig.chatModel = data.chatModel || 'deepseek-v4-flash';
+    apiConfig.reasoningModel = data.reasoningModel || 'deepseek-v4-pro';
   } catch {
     toast.error('加载 API 配置失败');
   } finally {

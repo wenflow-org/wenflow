@@ -23,6 +23,7 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
@@ -84,6 +85,9 @@
                   </div>
                   <h1 class="path-title">{{ sanitizeDisplayText(path.name) }}</h1>
                   <p class="path-description">{{ sanitizeDisplayText(path.summary || path.description) }}</p>
+                  <button class="btn btn-primary btn--full path-detail-hero__mobile-cta" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
+                    {{ primaryActionLabel }}
+                  </button>
                   <div class="path-detail-overview-grid">
                     <article v-for="item in pathOverviewMetrics" :key="item.label" class="path-detail-overview-card">
                       <span>{{ item.label }}</span>
@@ -100,6 +104,15 @@
                   </div>
                   <button class="btn btn-primary btn--full" :disabled="!primaryActionTask || !canStartLearning" @click="startPrimaryActionTask">
                     {{ primaryActionLabel }}
+                  </button>
+                  <button
+                    v-if="isTestMode && sourceGoalConversationId"
+                    class="btn btn-ghost btn--full"
+                    :disabled="replaying"
+                    @click="replayPath"
+                    style="margin-top: 8px;"
+                  >
+                    {{ replaying ? '正从对话重新生成...' : '从 Goal 对话重新生成' }}
                   </button>
                 </div>
               </div>
@@ -406,28 +419,9 @@
           </button>
         </div>
       </div>
+      <AppMiniFooter />
     </main>
 
-    <el-dialog
-      v-model="evaluationDialogVisible"
-      title="当堂评估"
-      width="640px"
-      :close-on-click-modal="false"
-    >
-      <div v-loading="evaluationLoading" class="evaluation-dialog-content">
-        <CompletionCard
-          v-if="selectedTaskEvaluation"
-          :topic="selectedTaskEvaluation.topic"
-          :mastered-count="selectedTaskEvaluation.knowledgePoints.filter(kp => kp.status === 'mastered').length"
-          :total-count="selectedTaskEvaluation.knowledgePoints.length"
-          :duration="formatSessionDuration(selectedTaskEvaluation.duration)"
-          :message-count="selectedTaskEvaluation.messageCount"
-          :wrapup="selectedTaskEvaluation.wrapup"
-          :advisory="selectedTaskEvaluation.advisory"
-          @action="closeEvaluationDialog"
-        />
-      </div>
-    </el-dialog>
 
     <el-dialog
       v-model="replanPreviewDialogVisible"
@@ -501,11 +495,11 @@ import {
   DataAnalysis,
 } from '@element-plus/icons-vue';
 import { useUserStore } from '../stores/user';
-import CompletionCard from '../components/CompletionCard.vue';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import AppMiniFooter from '../components/AppMiniFooter.vue';
 import api from '../utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
-import type { TaskEvaluationDetail } from '@/api/aiTeaching';
 import { learningAPI } from '@/api/learning';
 import { userAPI } from '@/api/user';
 import { adminApi } from '@/api/adminApi';
@@ -556,6 +550,12 @@ const achievementsPath = computed(() => {
   }
   return '/achievements';
 });
+const learnBasePath = computed(() => {
+  if (isTestMode.value) {
+    return isAdminRoute.value ? '/admin/test/learn' : '/learn';
+  }
+  return '/learn';
+});
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerNavItems = computed(() => [
@@ -570,9 +570,6 @@ const loading = ref(true);
 const path = ref<any>(null);
 const virtualContext = ref<any>(null);
 const activeWeeks = ref<number[]>([1]);
-const evaluationDialogVisible = ref(false);
-const evaluationLoading = ref(false);
-const selectedTaskEvaluation = ref<TaskEvaluationDetail | null>(null);
 const retryingEnrichment = ref(false);
 const learnerCenter = ref<any | null>(null);
 const replanLoading = ref(false);
@@ -983,6 +980,9 @@ const loadPathData = async () => {
     }
 
     await loadLearnerCenter();
+    if (isTestMode.value) {
+      await loadGoalConversationRaw();
+    }
   } catch (error: any) {
     toast.error(error.response?.data?.error?.message || '加载路径详情失败');
   } finally {
@@ -1138,38 +1138,20 @@ const stopEnrichmentPolling = () => {
   }
 };
 
-const formatSessionDuration = (minutes: number) => {
-  const safeMinutes = Math.max(0, Math.round(minutes || 0));
-  const hours = Math.floor(safeMinutes / 60);
-  const mins = safeMinutes % 60;
-  if (hours > 0) {
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:00`;
-  }
-  return `${mins.toString().padStart(2, '0')}:00`;
-};
-
-const closeEvaluationDialog = () => {
-  evaluationDialogVisible.value = false;
-};
-
 const viewTaskEvaluation = async (task: any) => {
-  evaluationLoading.value = true;
-  evaluationDialogVisible.value = true;
-  selectedTaskEvaluation.value = null;
-
   try {
     const result = await aiTeachingAPI.getLatestTaskEvaluation(task.id);
     if (!result) {
       toast.warning('暂无当堂评估记录');
-      evaluationDialogVisible.value = false;
       return;
     }
-    selectedTaskEvaluation.value = result;
+    const pathQuery = effectivePathId.value ? { pathId: effectivePathId.value } : {};
+    router.push({
+      path: `${learnBasePath.value}/${task.id}/evaluation/${result.sessionId}`,
+      query: buildRouteQuery(pathQuery),
+    });
   } catch (error: any) {
     toast.error(error.response?.data?.error || error.message || '获取当堂评估失败');
-    evaluationDialogVisible.value = false;
-  } finally {
-    evaluationLoading.value = false;
   }
 };
 
@@ -1312,6 +1294,167 @@ onUnmounted(() => {
   stopEnrichmentPolling();
   window.removeEventListener('scroll', handleScroll);
 });
+
+// ============================================================
+// 测试模式：Path / Raw 调试抽屉
+// ============================================================
+const pathDebugDrawerVisible = ref(false);
+const replaying = ref(false);
+const goalConversationRaw = ref<any | null>(null);
+
+const processDetail = computed(() => path.value?.processDetail || null);
+const cognitiveConcepts = computed(() => processDetail.value?.cognitiveDesign?.coreConcepts || []);
+const milestoneConcepts = computed(() => processDetail.value?.milestoneConcepts || []);
+const taskProfiles = computed(() => processDetail.value?.taskProfiles || []);
+const milestoneConceptBoundCount = computed(() => milestoneConcepts.value.filter((item: any) => item.coreConceptId).length);
+const profiledTaskCount = computed(() => pathStages.value.reduce(
+  (sum: number, stage: any) => sum + normalizeTaskList(stage).filter((task: any) => task.knowledgeType || task.cognitiveLevel || task.displayLabel).length,
+  0,
+));
+const taskProfileCoverageLabel = computed(() => totalTasks.value === 0 ? '0%' : `${Math.round((profiledTaskCount.value / totalTasks.value) * 100)}%`);
+
+const stageConceptTree = computed(() => {
+  const milestoneMap = new Map<string, any>();
+  milestoneConcepts.value.forEach((item: any) => {
+    if (item?.milestoneId) {
+      milestoneMap.set(item.milestoneId, item);
+    }
+  });
+
+  return pathStages.value.map((stage: any, index: number) => {
+    const milestoneConcept = milestoneMap.get(stage.id) || {};
+    return {
+      milestoneId: stage.id,
+      stageNumber: stage.stageNumber || stage.weekNumber || index + 1,
+      title: stage.title || null,
+      description: stage.description || null,
+      goal: stage.goal || null,
+      coreConceptId: stage.coreConceptId || milestoneConcept.coreConceptId || null,
+      coreConceptName: stage.coreConceptName || milestoneConcept.coreConceptName || null,
+      coreConceptDescription: stage.coreConceptDescription || milestoneConcept.coreConceptDescription || null,
+      conceptSource: stage.coreConceptSource || milestoneConcept.conceptSource || null,
+      tasks: normalizeTaskList(stage),
+    };
+  });
+});
+
+const goalConversationSummary = computed(() => {
+  if (!goalConversationRaw.value) return null;
+  return {
+    id: goalConversationRaw.value.id || null,
+    stage: goalConversationRaw.value.stage || null,
+    status: goalConversationRaw.value.status || null,
+    description: goalConversationRaw.value.description || null,
+    understanding: goalConversationRaw.value.understanding || goalConversationRaw.value.collected?.understanding || null,
+    confirmedProposal: goalConversationRaw.value.confirmedProposal || goalConversationRaw.value.collected?.confirmedProposal || null,
+    collected: goalConversationRaw.value.collected || null,
+  };
+});
+
+const goalConversationRawHint = computed(() => {
+  const conversationId = processDetail.value?.sourceConversationId || generationStatus.value?.sourceConversationId;
+  if (!conversationId) {
+    return '当前这次路径运行没有带回 Goal 对话关联，所以这里暂时无法还原 Goal 阶段原始数据。';
+  }
+  return '当前未加载到 Goal 对话原始数据。';
+});
+
+const stageDesignEntries = computed(() => {
+  const stageDesigns = processDetail.value?.raw?.stageDesigns;
+  if (!stageDesigns || typeof stageDesigns !== 'object') return [];
+
+  return Object.keys(stageDesigns)
+    .sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }))
+    .map((stageKey) => ({
+      stageKey,
+      inputPayload: stageDesigns[stageKey]?.inputPayload || null,
+      rawModelOutput: stageDesigns[stageKey]?.rawModelOutput || null,
+    }));
+});
+
+const virtualDebugSummary = computed(() => {
+  if (!virtualContext.value) return '';
+  const profile = virtualContext.value.profile || {};
+  const story = virtualContext.value.storyContext || {};
+  return [
+    profile.userName ? `画像：${profile.userName}` : '',
+    story.title ? `故事：${story.title}` : '',
+    viewMode.value ? `模式：${viewMode.value}` : ''
+  ].filter(Boolean).join(' · ');
+});
+
+const pathDebugQuickChips = computed(() => {
+  if (!processDetail.value) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: 'Goal', value: processDetail.value.source || '--' },
+    { label: 'Core', value: generationStatus.value?.coreStep || generationStatus.value?.core || '--' },
+    { label: '概念', value: `${cognitiveConcepts.value.length}` },
+    { label: '任务画像', value: `${taskProfiles.value.length}` },
+    { label: '覆盖率', value: taskProfileCoverageLabel.value },
+  ];
+});
+
+const pathDebugQuickChipText = computed(() => {
+  const parts = pathDebugQuickChips.value.slice(0, 3).map((item) => `${item.label} ${item.value}`);
+  return parts.length > 0 ? parts.join(' · ') : '查看路径原始数据';
+});
+
+const getProcessSourceSummary = (provenance: any) => {
+  if (!provenance) return '无来源说明';
+  return provenance.source === 'missing' ? '缺少新结构数据' : '正式落库';
+};
+
+const formatTaskAnnotationConfidence = (value: any) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  return `${Math.round(value * 100)}%`;
+};
+
+const loadGoalConversationRaw = async () => {
+  const conversationId = processDetail.value?.sourceConversationId || generationStatus.value?.sourceConversationId || virtualContext.value?.bindings?.goalConversationId;
+  if (!conversationId) {
+    goalConversationRaw.value = null;
+    return;
+  }
+
+  try {
+    const response = await api.get(`/goal-conversation/${conversationId}`);
+    goalConversationRaw.value = response.data;
+  } catch (error: any) {
+    goalConversationRaw.value = null;
+    console.error('加载 Goal 阶段原始数据失败:', error);
+  }
+};
+
+const refreshPathDebugPanel = async () => {
+  await loadPathData();
+};
+
+const sourceGoalConversationId = computed(() => {
+  return processDetail.value?.sourceConversationId
+    || generationStatus.value?.sourceConversationId
+    || virtualContext.value?.bindings?.goalConversationId
+    || null;
+});
+
+const replayPath = async () => {
+  const conversationId = sourceGoalConversationId.value;
+  if (!conversationId) return;
+  replaying.value = true;
+  try {
+    const result = await adminApi.replayPath(conversationId);
+    if (result?.success && result?.data?.pathId) {
+      toast.success('路径已从 Goal 对话重新生成');
+      router.push(`/admin/test/learning-path/${result.data.pathId}`);
+    } else {
+      toast.error(result?.error?.message || '重新生成失败');
+    }
+  } catch (err: any) {
+    toast.error(err?.response?.data?.error?.message || err?.message || '重新生成失败');
+  } finally {
+    replaying.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -1820,6 +1963,10 @@ onUnmounted(() => {
   font-size: 24px;
   line-height: 1.05;
   color: var(--text-primary);
+}
+
+.path-detail-hero__mobile-cta {
+  display: none;
 }
 
 /* 环形进度 */
@@ -2488,10 +2635,6 @@ onUnmounted(() => {
   background: rgba(24, 144, 255, 0.14);
 }
 
-.evaluation-dialog-content {
-  min-height: 120px;
-}
-
 /* ========== 空状态 ========== */
 .empty-state {
   padding: 4rem 2rem;
@@ -2800,6 +2943,10 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .path-detail-hero__mobile-cta {
+    display: inline-flex;
+  }
+
   .header-right {
     justify-content: flex-end;
   }
@@ -2837,6 +2984,10 @@ onUnmounted(() => {
     width: 100%;
   }
 
+  .path-detail-hero__progress > .btn--full {
+    display: none;
+  }
+
   .week-title-wrapper,
   .task-card,
   .task-header,
@@ -2865,4 +3016,5 @@ onUnmounted(() => {
     flex-direction: column;
   }
 }
+
 </style>

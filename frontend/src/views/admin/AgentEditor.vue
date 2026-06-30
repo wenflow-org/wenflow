@@ -1,8 +1,8 @@
 <!--
   AgentEditor (Prompt 二级编辑页)
   ============================================================
-  路由：/admin/agent-registry/:agentId
-  父路由列表页：/admin/agent-registry
+  路由：/admin/skills/:agentId
+  父路由列表页：/admin/skills
   设计：
     - 顶部 header（返回 + skill 名 + 健康 + 全局按钮）占满宽度但极薄
     - 主体：chip 切换 4 个 Pane；当前 Pane 占满剩余空间
@@ -38,7 +38,7 @@
             </span>
             <span v-if="currentAgent.db && currentAgent.db.version" class="ed-meta-chip">
               <span class="k">DB ACTIVE</span>
-              <span class="v">v{{ currentAgent.db.version }}</span>
+              <el-tag size="small" type="info">v{{ currentAgent.db.version }}</el-tag>
             </span>
             <span v-if="workbenchMeta?.stats?.totalCalls" class="ed-meta-chip ed-meta-chip--info">
               <span class="k">调用</span>
@@ -70,6 +70,16 @@
         <el-button :icon="Refresh" :loading="loading" size="small" @click="loadAll">刷新</el-button>
         <el-button size="small" @click="openProtocolDrawer">协议视图</el-button>
         <el-button size="small" type="primary" plain @click="openRulesOverview">规则总览</el-button>
+        <el-button 
+          size="small" 
+          type="warning" 
+          plain
+          @click="openPromptLab"
+          title="使用实验台编辑（Beta）"
+        >
+          <el-icon><MagicStick /></el-icon>
+          实验台
+        </el-button>
       </div>
     </header>
 
@@ -81,46 +91,55 @@
         :class="['ed-pill', { 'ed-pill--active': activeTab === t.key }]"
         @click="activeTab = t.key"
       >
-        <span class="ed-pill__icon">{{ t.icon }}</span>
+        <span class="ed-pill__icon"><el-icon><component :is="t.icon" /></el-icon></span>
         <span class="ed-pill__label">{{ t.label }}</span>
       </button>
     </nav>
 
     <!-- ============ Pane Body ============ -->
     <main class="ed-body" v-if="currentAgent">
-      <PromptEditPane
+      <!-- File ↔ DB 漂移警告 -->
+      <el-alert
+        v-if="currentAgent.drift === 'file-vs-db-mismatch'"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="drift-warning"
+      >
+        <template #title>
+          <strong>检测到 File ↔ DB 不一致</strong>
+        </template>
+        <div class="drift-warning__content">
+          <p>该 Skill 的 Prompt 在两处存在差异：</p>
+          <ul>
+            <li><strong>文件源</strong>：<code>{{ currentAgent.file?.path || 'prompts/skill.*.md' }}</code></li>
+            <li><strong>数据库</strong>：当前 ACTIVE 版本（v{{ currentAgent.db?.version || '?' }}）</li>
+          </ul>
+          <p class="drift-warning__advice">
+            <strong>建议：</strong>
+            <span v-if="activeTab === 'edit'">在此页面编辑会修改数据库版本。如需同步文件源，请使用「实验台」或手动编辑 <code>prompts/</code> 文件。</span>
+            <span v-else>切换到「编辑工作台」查看详情并选择编辑入口。</span>
+          </p>
+        </div>
+      </el-alert>
+
+      <PromptWorkbench
         v-show="activeTab === 'edit'"
-        :agent="currentAgent"
-        :prompt-versions="promptVersions"
-        :active-prompt="activePrompt"
-        :active-prompt-loading="activePromptLoading"
-        @reload="loadPromptDetailForAgent(currentAgent.agentId)"
-        @publish="publishPrompt"
-        @save-draft="saveDraft"
-        @delete="deletePromptVersion"
-      />
-      <PromptAIDraftPane
-        v-show="activeTab === 'ai'"
-        :agent="currentAgent"
-        @draft-ready="onAIDraftReady"
+        :agent-id="currentAgent.agentId"
       />
       <PromptPreviewPane
         v-show="activeTab === 'preview'"
         :agent="currentAgent"
       />
-      <PromptEvalPane
-        v-show="activeTab === 'eval'"
-        :agent="currentAgent"
-        :eval-cases="evalCases"
-        :eval-runs="evalRuns"
-        :active-prompt="activePrompt"
-        @reload-cases="loadEvalCasesForAgent(currentAgent.agentId)"
-        @reload-runs="loadEvalRunsForAgent(currentAgent.agentId)"
+      <SkillRuntimeConfigPane
+        v-if="currentAgent.kind === 'skill'"
+        v-show="activeTab === 'runtime'"
+        :agent-id="currentAgent.agentId"
+        @changed="onSkillRuntimeChanged"
       />
       <PromptEngineeringPane
         v-show="activeTab === 'engineering'"
         :agent="currentAgent"
-        @open-skill-workbench="openSkillWorkbench"
       />
     </main>
 
@@ -133,10 +152,7 @@
     >
       <div v-if="protocolView" class="protocol-drawer">
         <p class="protocol-drawer__intro">
-          Goal → Path、Path → Learn 之间目前的契约形态。
-          Prompt 运营场景下这些是只读上下文（你改的是 prompt，不是协议）。
-          协议本身的演进路线见
-          <code>doc/AGENT_IO_DESIGN_V3.md</code>。
+          Goal → Path、Path → Learn 之间的契约形态。只读上下文。
         </p>
         <article
           v-for="proto in protocolView.protocols"
@@ -195,7 +211,7 @@
     <!-- ============ 规则总览抽屉 ============ -->
     <el-drawer
       v-model="rulesDrawerVisible"
-      title="🧱 Skill 规则总览（R-XX-NN）"
+      title="Skill 规则总览"
       direction="rtl"
       size="720px"
     >
@@ -226,7 +242,7 @@
           show-icon
           class="rules-conflict"
         >
-          <template #title>检测到 prefix 冲突</template>
+          <template #title>prefix 冲突</template>
           <ul style="margin: 4px 0; padding-left: 20px; font-size: 12px">
             <li
               v-for="c in rulesOverview.conflictPrefixes"
@@ -234,7 +250,7 @@
             >
               <code>{{ c.prefix }}</code> 同时被
               <code v-for="(id, i) in c.agentIds" :key="id">{{ id }}{{ i < c.agentIds.length - 1 ? ', ' : '' }}</code>
-              使用 — 建议改 prefix 避免歧义
+              使用 — 请改 prefix 避免歧义
             </li>
           </ul>
         </el-alert>
@@ -267,30 +283,23 @@
       <div v-else-if="rulesOverviewLoading" class="rules-loading">加载中…</div>
     </el-drawer>
 
-    <!-- 旧 SkillNodeWorkbench -->
-    <SkillNodeWorkbench
-      v-model:visible="skillWorkbenchVisible"
-      :skill-id="currentSkillNodeId"
-      @close="skillWorkbenchVisible = false"
-    />
+    <!-- SkillNodeWorkbench 已并入「模型运行时」一级 tab；旧抽屉移除 -->
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Refresh } from '@element-plus/icons-vue';
+import { ArrowLeft, Refresh, Edit, VideoPlay, DataAnalysis, Setting, SetUp, MagicStick } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
 import {
   adminPromptOpsApi,
   adminAgentPromptsApi,
   adminSkillWorkbenchApi
 } from '@/api/adminApi';
-import SkillNodeWorkbench from './components/SkillNodeWorkbench.vue';
-import PromptEditPane from './components/promptOps/PromptEditPane.vue';
-import PromptAIDraftPane from './components/promptOps/PromptAIDraftPane.vue';
+import SkillRuntimeConfigPane from './components/promptOps/SkillRuntimeConfigPane.vue';
+import PromptWorkbench from './components/promptOps/PromptWorkbench.vue';
 import PromptPreviewPane from './components/promptOps/PromptPreviewPane.vue';
-import PromptEvalPane from './components/promptOps/PromptEvalPane.vue';
 import PromptEngineeringPane from './components/promptOps/PromptEngineeringPane.vue';
 import { toast } from '../../utils/toast';
 
@@ -313,22 +322,23 @@ const router = useRouter();
 
 const loading = ref(false);
 const currentAgent = ref<AgentOverviewItem | null>(null);
-const activeTab = ref<'edit' | 'ai' | 'preview' | 'eval' | 'engineering'>('edit');
+const activeTab = ref<'edit' | 'preview' | 'runtime' | 'engineering'>('edit');
 
-const tabs = [
-  { key: 'edit', label: '编辑 Prompt', icon: '📝' },
-  { key: 'ai', label: 'AI 起草', icon: '🤖' },
-  { key: 'preview', label: '试运行', icon: '▶️' },
-  { key: 'eval', label: '评估', icon: '🧪' },
-  { key: 'engineering', label: '工程视图', icon: '⚙️' }
-] as const;
+const tabs = computed(() => {
+  const base: { key: 'edit' | 'preview' | 'runtime' | 'engineering'; label: string; icon: any }[] = [
+    { key: 'edit', label: '编辑工作台', icon: Edit },
+    { key: 'preview', label: '试运行', icon: VideoPlay }
+  ];
+  if (currentAgent.value?.kind === 'skill') {
+    base.push({ key: 'runtime', label: '模型运行时', icon: Setting });
+  }
+  base.push({ key: 'engineering', label: '工程视图', icon: SetUp });
+  return base;
+});
 
 const promptVersions = ref<any[]>([]);
 const activePrompt = ref<any>(null);
 const activePromptLoading = ref(false);
-
-const evalCases = ref<any[]>([]);
-const evalRuns = ref<any[]>([]);
 
 // Skill 工作台综合元数据（隶属 Agent / 模型配置 / 调用统计 / 字段契约）
 const workbenchMeta = ref<{
@@ -346,8 +356,7 @@ const rulesDrawerVisible = ref(false);
 const rulesOverviewLoading = ref(false);
 const rulesOverview = ref<any>(null);
 
-const skillWorkbenchVisible = ref(false);
-const currentSkillNodeId = ref('');
+// 注：旧的 SkillNodeWorkbench 抽屉已被「模型运行时」一级 tab 取代
 
 const agentIdParam = computed(() => {
   const v = route.params.agentId;
@@ -362,6 +371,10 @@ function healthLabel(h: 'good' | 'warn' | 'risk'): string {
 
 function goBackList() {
   void router.push({ name: 'AdminAgentRegistry' });
+}
+
+function openPromptLab() {
+  void router.push({ name: 'AdminPromptLab' });
 }
 
 async function loadAll() {
@@ -379,8 +392,6 @@ async function loadAll() {
     currentAgent.value = found;
     await Promise.all([
       loadPromptDetailForAgent(found.agentId),
-      loadEvalCasesForAgent(found.agentId),
-      loadEvalRunsForAgent(found.agentId),
       loadWorkbenchMeta(found.agentId)
     ]);
   } catch (err: any) {
@@ -409,24 +420,6 @@ async function loadPromptDetailForAgent(agentId: string) {
     toast.error(err?.response?.data?.error?.message || 'Prompt 加载失败');
   } finally {
     activePromptLoading.value = false;
-  }
-}
-
-async function loadEvalCasesForAgent(agentId: string) {
-  try {
-    const r = await adminPromptOpsApi.listEvalCases(agentId);
-    evalCases.value = r.data?.data || [];
-  } catch {
-    evalCases.value = [];
-  }
-}
-
-async function loadEvalRunsForAgent(agentId: string) {
-  try {
-    const r = await adminPromptOpsApi.listEvalRuns(agentId, 10);
-    evalRuns.value = r.data?.data || [];
-  } catch {
-    evalRuns.value = [];
   }
 }
 
@@ -482,7 +475,7 @@ function jumpToAgent(agentId: string) {
 
 async function publishPrompt(id: string) {
   try {
-    await ElMessageBox.confirm('确认发布该版本？这会归档当前 ACTIVE 版本。', '发布确认', {
+    await ElMessageBox.confirm('确认发布？这会归档当前 ACTIVE 版本。', '发布确认', {
       type: 'warning'
     });
     await adminAgentPromptsApi.publishPrompt(id);
@@ -546,20 +539,9 @@ async function deletePromptVersion(id: string) {
   }
 }
 
-function onAIDraftReady(systemPrompt: string) {
-  activeTab.value = 'edit';
-  if (currentAgent.value && systemPrompt) {
-    sessionStorage.setItem(
-      `promptOps:ai-draft:${currentAgent.value.agentId}`,
-      systemPrompt
-    );
-    toast.success('AI 起草已就绪，请前往编辑面板查看 / 保存');
-  }
-}
-
-function openSkillWorkbench(skillId: string) {
-  currentSkillNodeId.value = skillId;
-  skillWorkbenchVisible.value = true;
+function onSkillRuntimeChanged() {
+  // skill_model_configs 变化后刷新 workbench 元信息，使顶部 chip 同步
+  void loadAll();
 }
 
 watch(agentIdParam, (next, prev) => {
@@ -589,7 +571,7 @@ onMounted(async () => {
   grid-template-columns: 1fr auto;
   gap: 16px;
   padding: 14px 18px;
-  background: white;
+  background: var(--admin-bg-surface);
   border-radius: 14px;
   border: 1px solid rgba(205, 216, 238, 0.9);
 }
@@ -606,7 +588,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   border: 1px solid #e2e8f0;
-  background: white;
+  background: var(--admin-bg-surface);
   border-radius: 8px;
   padding: 6px 12px;
   cursor: pointer;
@@ -776,7 +758,7 @@ onMounted(async () => {
   display: flex;
   gap: 6px;
   padding: 6px;
-  background: white;
+  background: var(--admin-bg-surface);
   border-radius: 12px;
   border: 1px solid rgba(205, 216, 238, 0.9);
   width: fit-content;
@@ -820,12 +802,52 @@ onMounted(async () => {
 
 /* ============ Body ============ */
 .ed-body {
-  background: white;
+  background: var(--admin-bg-surface);
   border-radius: 16px;
   border: 1px solid rgba(205, 216, 238, 0.9);
   padding: 22px 24px;
   overflow: auto;
   min-height: 480px;
+}
+
+/* ============ Drift Warning ============ */
+.drift-warning {
+  margin-bottom: 20px;
+}
+
+.drift-warning__content {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.drift-warning__content p {
+  margin: 8px 0;
+}
+
+.drift-warning__content ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.drift-warning__content li {
+  margin: 4px 0;
+}
+
+.drift-warning__content code {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.drift-warning__advice {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 8px;
+  border-left: 3px solid #f59e0b;
 }
 
 /* ============ Drawer styles (复用列表页) ============ */
@@ -857,7 +879,7 @@ onMounted(async () => {
   border-radius: 12px;
   padding: 14px 16px;
   margin-bottom: 12px;
-  background: white;
+  background: var(--admin-bg-surface);
 }
 
 .protocol-block__head {
@@ -985,7 +1007,7 @@ onMounted(async () => {
 .protocol-notes {
   margin: 16px 0 0;
   padding: 12px 14px 12px 32px;
-  background: #fff7ed;
+  background: var(--admin-color-warning-bg);
   border-radius: 10px;
   font-size: 12px;
   color: #9a3412;
@@ -1049,7 +1071,7 @@ onMounted(async () => {
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 10px;
-  background: white;
+  background: var(--admin-bg-surface);
 }
 
 .rules-group__head {
@@ -1123,7 +1145,7 @@ onMounted(async () => {
 
 .rules-row__jump {
   border: 1px solid #e2e8f0;
-  background: white;
+  background: var(--admin-bg-surface);
   border-radius: 4px;
   padding: 0 8px;
   font-size: 12px;

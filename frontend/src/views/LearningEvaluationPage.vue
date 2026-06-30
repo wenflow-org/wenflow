@@ -3,8 +3,8 @@
     <div class="evaluation-shell" ref="reportRef">
       <header class="evaluation-head">
         <div>
-          <p class="evaluation-kicker">课程评估</p>
-          <h1>本节学习反馈</h1>
+          <p class="evaluation-kicker">任务评估</p>
+          <h1>当前任务学习反馈</h1>
         </div>
         <div class="evaluation-head__actions">
           <el-button :loading="exportingImage" @click="exportImage">导出图片</el-button>
@@ -15,7 +15,7 @@
 
       <section v-if="loading" class="evaluation-loading">
         <el-icon class="spin"><Loading /></el-icon>
-        <p>正在生成课程评估，请稍候...</p>
+          <p>正在生成当前任务评估，请稍候...</p>
       </section>
 
       <section v-else-if="error" class="evaluation-error">
@@ -26,18 +26,52 @@
         </div>
       </section>
 
-      <CompletionCard
-        v-else-if="sessionDetail"
-        :topic="sessionDetail.topic"
-        :mastered-count="knowledgePoints.filter(kp => kp.status === 'mastered').length"
-        :total-count="knowledgePoints.length"
-        :duration="formatTime(durationSeconds)"
-        :message-count="sessionDetail.messages?.length || 0"
-        :wrapup="wrapup"
-        :advisory="sessionDetail.advisory || null"
-        @action="handleAction"
-        @advisory-action="handleAdvisoryAction"
-      />
+      <template v-else-if="sessionDetail">
+        <CompletionCard
+          :topic="sessionDetail.topic"
+          :mastered-count="knowledgePoints.filter(kp => kp.status === 'mastered').length"
+          :total-count="knowledgePoints.length"
+          :duration="formatTime(durationSeconds)"
+          :message-count="mainDialogueMessages.length"
+          :wrapup="wrapup"
+          :advisory="sessionDetail.advisory || null"
+          @action="handleAction"
+          @advisory-action="handleAdvisoryAction"
+        />
+
+        <section class="evaluation-transcript-card">
+          <div class="evaluation-transcript-card__head">
+            <div>
+              <p class="evaluation-transcript-card__kicker">已完成课堂回看</p>
+              <h2>当堂对话</h2>
+            </div>
+            <span class="evaluation-transcript-card__meta">{{ mainDialogueMessages.length }} 条主对话</span>
+          </div>
+
+          <p class="evaluation-transcript-card__hint">这里只展示本次已完成课堂的主对话内容，不包含进行中课堂的恢复状态。</p>
+
+          <div v-if="mainDialogueMessages.length" class="evaluation-transcript-list">
+            <article
+              v-for="(message, index) in mainDialogueMessages"
+              :key="`${message.timestamp || 'message'}-${index}`"
+              class="evaluation-transcript-item"
+              :class="`evaluation-transcript-item--${message.role}`"
+            >
+              <div class="evaluation-transcript-item__meta">
+                <strong>{{ getMessageRoleLabel(message.role) }}</strong>
+                <span v-if="message.timestamp">{{ formatMessageTime(message.timestamp) }}</span>
+              </div>
+              <div class="evaluation-transcript-item__body">
+                <MarkdownRenderer :content="message.content" />
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="evaluation-transcript-empty">
+            暂无可回看的课堂对话。
+          </div>
+        </section>
+      </template>
     </div>
   </div>
 </template>
@@ -49,6 +83,7 @@ import { Loading } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
 import html2canvas from 'html2canvas-pro';
 import CompletionCard from '@/components/CompletionCard.vue';
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
@@ -127,10 +162,24 @@ const wrapup = computed<WrapupArtifact>(() => {
 });
 
 const knowledgePoints = computed(() => sessionDetail.value?.knowledgePoints || []);
+const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
 const durationSeconds = computed(() => {
   const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration ?? 0;
   return typeof minutes === 'number' ? Math.max(0, Math.round(minutes * 60)) : 0;
 });
+
+const getMessageRoleLabel = (role: string) => (role === 'assistant' ? 'AI 导师' : '你');
+
+const formatMessageTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
 const stopPolling = () => {
   if (pollTimer.value) {
@@ -562,6 +611,117 @@ onUnmounted(stopPolling);
   padding: 0 18px;
 }
 
+.evaluation-transcript-card {
+  padding: 24px 28px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  display: grid;
+  gap: 18px;
+}
+
+.evaluation-transcript-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.evaluation-transcript-card__kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep, #1f57cc);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.evaluation-transcript-card__head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.evaluation-transcript-card__meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f3f6fb;
+  color: #57657a;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.evaluation-transcript-card__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #7a8599;
+}
+
+.evaluation-transcript-list {
+  display: grid;
+  gap: 14px;
+}
+
+.evaluation-transcript-item {
+  max-width: min(100%, 860px);
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 32, 51, 0.06);
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-transcript-item--assistant {
+  justify-self: start;
+  background: #f8fafc;
+}
+
+.evaluation-transcript-item--user {
+  justify-self: end;
+  background: color-mix(in srgb, var(--accent, #3478f6) 8%, white);
+  border-color: rgba(52, 120, 246, 0.12);
+}
+
+.evaluation-transcript-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.evaluation-transcript-item__meta strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.evaluation-transcript-item__meta span {
+  font-size: 12px;
+  color: #7a8599;
+}
+
+.evaluation-transcript-item__body {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #3d4a5c;
+}
+
+.evaluation-transcript-empty {
+  padding: 20px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #7a8599;
+  font-size: 14px;
+  text-align: center;
+}
+
 /* ---- responsive ---- */
 @media (max-width: 1100px) {
   .evaluation-shell {
@@ -579,8 +739,25 @@ onUnmounted(stopPolling);
     align-items: flex-start;
   }
 
+  .evaluation-transcript-card {
+    padding: 22px 20px;
+  }
+
+  .evaluation-transcript-card__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .evaluation-head__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
     width: 100%;
+  }
+
+  .evaluation-head__actions :deep(.el-button) {
+    flex: 1 1 calc(50% - 10px);
+    margin-left: 0;
   }
 
   .evaluation-shell :deep(.completion-summary) {
@@ -593,6 +770,21 @@ onUnmounted(stopPolling);
 }
 
 @media (max-width: 640px) {
+  .evaluation-head__actions :deep(.el-button) {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .evaluation-transcript-item {
+    max-width: 100%;
+    padding: 14px 14px;
+  }
+
+  .evaluation-transcript-item__meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .evaluation-shell :deep(.completion-summary) {
     grid-template-columns: 1fr;
   }

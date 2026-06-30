@@ -1,5 +1,6 @@
 /* ==========================================
    Admin List Shell
+   统一使用 admin-surface.css 中的 token
    ========================================== */
 
 .admin-list-toolbar {
@@ -9,13 +10,13 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 1rem;
-  padding: 16px 18px;
-  border-radius: 18px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 247, 252, 0.88));
+  padding: var(--admin-padding-card);
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--admin-shadow-xs);
   position: relative;
   z-index: 1;
 }
@@ -28,17 +29,35 @@
   min-width: 0;
 }
 
+/* sticky 修饰：用于长列表页，让筛选条吸顶 */
+.admin-list-toolbar--sticky {
+  position: sticky !important;
+  top: 0;
+  z-index: 5;
+}
+
+/* 当 toolbar 处于 sticky 状态被向上贴住时，加一层阴影提示 */
+@supports (animation-timeline: scroll()) {
+  .admin-list-toolbar--sticky {
+    animation: admin-toolbar-stuck linear both;
+    animation-timeline: scroll(nearest);
+    animation-range: 0 60px;
+  }
+  @keyframes admin-toolbar-stuck {
+    from { box-shadow: var(--admin-shadow-xs); }
+    to { box-shadow: var(--admin-shadow-sticky); }
+  }
+}
+
 .admin-list-card {
   overflow-x: auto;
   width: 100%;
   max-width: 100%;
   padding: 0.25rem;
-  border-radius: 20px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(244, 247, 252, 0.82));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface);
+  box-shadow: var(--admin-shadow-xs);
   position: relative;
   z-index: 1;
   -webkit-overflow-scrolling: touch;
@@ -46,7 +65,7 @@
 
 .admin-list-card .el-table {
   width: 100%;
-  border-radius: 16px;
+  border-radius: 10px;
   overflow: hidden;
   --el-table-bg-color: transparent;
   --el-bg-color: transparent;
@@ -58,12 +77,14 @@
 }
 
 .admin-list-card .el-table th.el-table__cell {
-  background: rgba(52, 120, 246, 0.04);
+  background: var(--admin-bg-surface-alt);
   font-weight: 700;
+  font-size: 12px;
+  color: var(--admin-text-muted);
 }
 
 .admin-list-card .el-table .el-table__row:hover > td.el-table__cell {
-  background: rgba(52, 120, 246, 0.03);
+  background: var(--admin-bg-hover);
 }
 
 .admin-list-card .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
@@ -71,7 +92,7 @@
 }
 
 .admin-list-card .el-table td.el-table__cell {
-  border-bottom-color: rgba(52, 120, 246, 0.05);
+  border-bottom-color: rgba(225, 232, 242, 0.5);
 }
 
 .admin-list-pagination {
@@ -89,12 +110,12 @@
 }
 
 .admin-page-title__icon {
-  color: var(--color-primary);
+  color: var(--admin-text-brand, var(--color-primary));
 }
 
 @media (max-width: 768px) {
   .admin-list-toolbar {
-    padding: 14px;
+    padding: 10px 12px;
   }
 
   .admin-list-toolbar__group {

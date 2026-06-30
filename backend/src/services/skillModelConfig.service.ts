@@ -1,4 +1,4 @@
-import prisma from '../config/database';
+import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { getGateway } from '../gateway';
 import { getAPIGateway } from '../gateway/api-gateway';
@@ -53,7 +53,7 @@ class SkillModelConfigService {
       return defaultConfig;
     }
 
-    const persisted = await prisma.skill_model_configs.upsert({
+    const persisted = await systemPrisma.skill_model_configs.upsert({
       where: { skillId },
       update: { updatedAt: new Date() },
       create: {
@@ -85,7 +85,7 @@ class SkillModelConfigService {
 
   async getAll(): Promise<SkillModelConfig[]> {
     try {
-      const persistedConfigs = await prisma.skill_model_configs.findMany();
+      const persistedConfigs = await systemPrisma.skill_model_configs.findMany();
       const persistedMap = new Map(persistedConfigs.map((config) => [config.skillId, config]));
       const gateway = getGateway();
       const skills = gateway.matchSkills({});
@@ -131,7 +131,7 @@ class SkillModelConfigService {
 
   async get(skillId: string): Promise<SkillModelConfig | null> {
     try {
-      const config = await prisma.skill_model_configs.findUnique({ where: { skillId } });
+      const config = await systemPrisma.skill_model_configs.findUnique({ where: { skillId } });
       if (!config) {
         const gateway = getGateway();
         const skill = gateway.getSkill(skillId);
@@ -151,7 +151,7 @@ class SkillModelConfigService {
 
   async upsert(skillId: string, config: Partial<SkillModelConfig>): Promise<SkillModelConfig> {
     try {
-      const result = await prisma.skill_model_configs.upsert({
+      const result = await systemPrisma.skill_model_configs.upsert({
         where: { skillId },
         update: { ...config, updatedAt: new Date() },
         create: { id: uuidv4(), skillId, ...config, updatedAt: new Date() },
@@ -166,7 +166,7 @@ class SkillModelConfigService {
 
   async delete(skillId: string): Promise<void> {
     try {
-      await prisma.skill_model_configs.delete({ where: { skillId } });
+      await systemPrisma.skill_model_configs.delete({ where: { skillId } });
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
     } catch (error) {
       logger.error(`Failed to delete skill config: ${skillId}`, error);

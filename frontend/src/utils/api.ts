@@ -58,6 +58,44 @@ api.interceptors.response.use(
     const requestKey = generateRequestKey(response.config);
     pendingRequests.delete(requestKey);
 
+    // 调试浮层：捕获 traceId 和 debug 载荷
+    try {
+      const traceId = response.headers?.['x-trace-id'];
+      const url = response.config?.url || '';
+      const data = response.data;
+
+      if (traceId && typeof traceId === 'string') {
+        import('@/stores/debug').then(({ useDebugStore }) => {
+          useDebugStore().setTraceId(traceId);
+        });
+      }
+
+      // B 类镜像：goal-conversation meta.debug
+      if (url.includes('/goal-conversation') && data?.meta?.debug) {
+        import('@/stores/debug').then(({ useDebugStore }) => {
+          useDebugStore().captureGoalDebug(data.meta.debug, url);
+        });
+      }
+
+      // B 类镜像：ai-teaching promptDebug
+      if (url.includes('/ai-teaching/sessions/') && url.includes('/messages') && data?.promptDebug) {
+        const sessionIdMatch = url.match(/\/ai-teaching\/sessions\/([^/]+)/);
+        const sessionId = sessionIdMatch?.[1] || '';
+        import('@/stores/debug').then(({ useDebugStore }) => {
+          useDebugStore().captureTeachingDebug(sessionId, data, url, traceId);
+        });
+      }
+
+      // B 类镜像：adaptive-guidance debug
+      if (url.includes('/adaptive-guidance') && data?.debug) {
+        import('@/stores/debug').then(({ useDebugStore }) => {
+          useDebugStore().captureAdaptiveGuidanceDebug(data.debug, url);
+        });
+      }
+    } catch {
+      // 镜像失败不影响主流程
+    }
+
     return response.data;
   },
   (error) => {

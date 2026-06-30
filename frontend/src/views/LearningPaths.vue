@@ -22,6 +22,7 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
@@ -250,6 +251,7 @@
           </div>
         </section>
       </div>
+      <AppMiniFooter />
     </main>
 
     <!-- 删除确认对话框 -->
@@ -310,11 +312,13 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 测试模式：Path Goal / Raw 调试抽屉 -->
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
@@ -329,6 +333,8 @@ import request from '../utils/request';
 import { useUserStore } from '../stores/user';
 import { learningAPI } from '../api/learning';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import AppMiniFooter from '../components/AppMiniFooter.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -698,6 +704,162 @@ const goalSceneCandidates = computed(() => {
 });
 
 const goalScenePath = computed(() => goalSceneCandidates.value[0] || null);
+
+// ============================================================
+// 测试模式：Path Goal / Raw 调试抽屉
+// ============================================================
+const goalDataCache = ref<Record<string, any>>({});
+const loadingGoalId = ref<string | null>(null);
+const pathsDebugDrawerVisible = ref(false);
+const debugPathId = ref('');
+
+const getPathStateLabel = (path: any) => {
+  const state = getPathDisplayState(path);
+  if (state === 'generating') return '生成中';
+  if (state === 'attention') return '待处理';
+  return '进行中';
+};
+
+const debuggablePaths = computed(() => sortedPaths.value.filter((path: any) => Boolean(
+  path?.generationStatus?.sourceConversationId
+  || path?.sceneSummary
+  || path?.generationStatus
+)));
+
+const currentDebugPath = computed(() => {
+  return debuggablePaths.value.find((path: any) => path.id === debugPathId.value)
+    || goalScenePath.value
+    || primaryPath.value
+    || debuggablePaths.value[0]
+    || null;
+});
+
+const currentDebugConversationId = computed(() => {
+  const raw = currentDebugPath.value?.generationStatus?.sourceConversationId;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+});
+
+const currentDebugGoalRaw = computed(() => {
+  return currentDebugConversationId.value
+    ? goalDataCache.value[currentDebugConversationId.value]?.raw || null
+    : null;
+});
+
+const currentDebugPathMetaItems = computed(() => {
+  const path = currentDebugPath.value;
+  if (!path) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: 'pathId', value: path.id || '--' },
+    { label: 'sourceConversationId', value: currentDebugConversationId.value || '--' },
+    { label: 'state', value: getPathStateLabel(path) },
+    { label: 'coreStep', value: path?.generationStatus?.coreStep || '--' },
+    { label: 'estimatedHours', value: `${getPathEstimatedHours(path)} 小时` },
+    { label: 'progress', value: `${getPathProgress(path)}%` },
+  ];
+});
+
+const formatDebugJson = (value: any, emptyText = '当前没有可展示的数据。') => {
+  if (value === null || value === undefined || value === '') return emptyText;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const currentDebugJsonCards = computed(() => {
+  const path = currentDebugPath.value;
+  if (!path) return [] as Array<{ key: string; title: string; badge: string; content: string }>;
+
+  return [
+    {
+      key: 'sceneSummary',
+      title: 'sceneSummary',
+      badge: 'path summary',
+      content: formatDebugJson(path.sceneSummary, '当前没有 sceneSummary。')
+    },
+    {
+      key: 'generationStatus',
+      title: 'generationStatus',
+      badge: 'path status',
+      content: formatDebugJson(path.generationStatus, '当前没有 generationStatus。')
+    },
+    {
+      key: 'goalConversationRaw',
+      title: 'goalConversationRaw',
+      badge: 'goal raw',
+      content: currentDebugConversationId.value
+        ? formatDebugJson(currentDebugGoalRaw.value, '当前还没有加载这条路径的 Goal 原始数据。')
+        : '当前路径没有 sourceConversationId。'
+    },
+    {
+      key: 'pathSnapshot',
+      title: 'pathSnapshot',
+      badge: 'path raw',
+      content: formatDebugJson(path, '当前没有路径快照。')
+    },
+  ];
+});
+
+const pathsDebugQuickChips = computed(() => {
+  const path = currentDebugPath.value;
+  if (!path) return [] as Array<{ label: string; value: string }>;
+
+  return [
+    { label: '路径', value: getPathTitle(path) },
+    { label: '状态', value: getPathStateLabel(path) },
+    currentDebugConversationId.value ? { label: 'Goal', value: currentDebugConversationId.value.slice(0, 8) } : null,
+    path?.generationStatus?.stageDesign ? { label: 'Stage', value: String(path.generationStatus.stageDesign) } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+});
+
+const pathsDebugQuickChipText = computed(() => {
+  const parts = pathsDebugQuickChips.value.slice(0, 3).map((item) => `${item.label} ${item.value}`);
+  return parts.length > 0 ? parts.join(' · ') : '查看 Goal 与原始数据';
+});
+
+const selectDebugPath = (pathId: string) => {
+  debugPathId.value = pathId;
+};
+
+const loadGoalData = async (conversationId: string) => {
+  if (goalDataCache.value[conversationId]) return;
+  loadingGoalId.value = conversationId;
+  try {
+    const response = await request.get(`/goal-conversation/${conversationId}`);
+    const data = response.data.data;
+    goalDataCache.value[conversationId] = {
+      raw: data,
+      understanding: data.understanding || data.collected?.understanding || {},
+      confirmedProposal: data.confirmedProposal || data.collected?.confirmedProposal || null,
+      collected: data.collected || {}
+    };
+  } catch (error: any) {
+    console.error('加载目标对话数据失败:', error);
+    toast.error(error.response?.data?.error?.message || '加载目标数据失败');
+  } finally {
+    loadingGoalId.value = null;
+  }
+};
+
+watch(debuggablePaths, (list) => {
+  if (list.length === 0) {
+    debugPathId.value = '';
+    return;
+  }
+
+  const exists = list.some((path: any) => path.id === debugPathId.value);
+  if (!exists) {
+    debugPathId.value = goalScenePath.value?.id || primaryPath.value?.id || list[0].id;
+  }
+}, { immediate: true });
+
+watch([pathsDebugDrawerVisible, currentDebugConversationId], ([visible, conversationId]) => {
+  if (!visible || !conversationId || goalDataCache.value[conversationId]) return;
+  void loadGoalData(conversationId);
+});
 
 const goalSceneState = computed<'processing' | 'ready' | 'attention'>(() => {
   const path = goalScenePath.value;
@@ -2559,4 +2721,5 @@ onUnmounted(() => {
     min-height: 44px;
   }
 }
+
 </style>

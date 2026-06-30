@@ -2,6 +2,7 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
+import { supportsThinkingMode } from '../../config/models.config';
 
 class APIExecutionError extends Error {
   readonly retryable: boolean;
@@ -207,7 +208,10 @@ export class APIExecutor {
   }
 
   private applyThinkingMode(route: ResolvedRoute, requestBody: ChatRequest): void {
-    if (!this.isDeepSeekV4Model(String(requestBody.model || route.model || ''))) {
+    const modelId = String(requestBody.model || route.model || '');
+    
+    // 使用统一的模型配置检查是否支持 thinking mode
+    if (!supportsThinkingMode(modelId)) {
       return;
     }
 
@@ -222,9 +226,12 @@ export class APIExecutor {
     }
   }
 
+  /**
+   * @deprecated 使用 supportsThinkingMode() 替代
+   * 保留此方法用于向后兼容
+   */
   private isDeepSeekV4Model(model: string): boolean {
-    const normalized = model.trim().toLowerCase();
-    return normalized === 'deepseek-v4-flash' || normalized === 'deepseek-v4-pro';
+    return supportsThinkingMode(model);
   }
 
   private delay(ms: number): Promise<void> {

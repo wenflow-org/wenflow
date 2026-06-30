@@ -1,19 +1,19 @@
-<template>
-  <CapabilityShell title="执行日志" description="回看平台实际执行了什么，定位错误、复盘调用链，并确认这次调用走的是平台默认模型还是你自己的 AI 大模型 API。">
+﻿<template>
+  <CapabilityShell title="我的学习活动" description="按时间线回看 AI 真正为你做了什么——每次回答、规划、纠错和模型调用。如需排查问题，可打开「显示底层调用」查看完整调用链。">
     <template #actions>
       <div class="actions">
-        <el-button class="toolbar-btn toolbar-btn--neutral" @click="exportLogs('json')">
+        <button type="button" class="btn btn--ghost btn--sm" @click="exportLogs('json')">
           <el-icon><Download /></el-icon>
           导出 JSON
-        </el-button>
-        <el-button class="toolbar-btn toolbar-btn--neutral" @click="exportLogs('csv')">
+        </button>
+        <button type="button" class="btn btn--ghost btn--sm" @click="exportLogs('csv')">
           <el-icon><Download /></el-icon>
           导出 CSV
-        </el-button>
-        <el-button class="toolbar-btn toolbar-btn--primary" @click="copyDiagnosticsSummary">
+        </button>
+        <button type="button" class="btn btn--primary btn--sm" @click="copyDiagnosticsSummary">
           <el-icon><DocumentCopy /></el-icon>
           复制诊断摘要
-        </el-button>
+        </button>
       </div>
     </template>
     <div class="agent-logs-page">
@@ -23,20 +23,20 @@
       <el-form :inline="true" :model="filters">
         <el-form-item label="Agent">
           <el-select v-model="filters.agentId" placeholder="全部" clearable>
-            <el-option label="Path Agent" value="path-agent" />
+            <el-option label="Path Agent" value="skill:path-planning" />
             <el-option label="AI Teaching Agent" value="ai-teaching-agent" />
             <el-option label="Learner State Hub" value="learner-model-agent" />
           </el-select>
         </el-form-item>
-        <el-form-item label="能力类型">
+        <el-form-item label="活动类型">
           <el-select v-model="filters.capabilityType" placeholder="全部" clearable>
-            <el-option label="需求收集" value="goal" />
+            <el-option label="目标对话" value="goal" />
             <el-option label="路径规划" value="path" />
-            <el-option label="授课内容" value="teaching" />
+            <el-option label="教学讲解" value="teaching" />
             <el-option label="辅导答疑" value="tutoring" />
             <el-option label="进度追踪" value="tracking" />
-            <el-option label="学习者模型" value="profile" />
-            <el-option label="系统调用" value="system" />
+            <el-option label="学习画像更新" value="profile" />
+            <el-option label="系统底层调用" value="system" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -528,8 +528,8 @@ const formatAgentId = (logOrAgentId: any) => {
   
   // 友好显示映射
   const agentNames: Record<string, string> = {
-    'path-agent': '学习路径规划',
-    'goal-conversation-agent': '目标对话',
+    'skill:path-planning': '学习路径规划',
+    'skill:goal-conversation': '目标对话',
     'ai-teaching-agent': 'AI 授课',
     'ai-tutor': 'AI 辅导',
     'learner-model-agent': '学习者模型',
@@ -570,8 +570,8 @@ const getLogSourceType = (log: any) => {
 
 const getCapabilityType = (agentId: string) => {
   const mapping: Record<string, string> = {
-    'goal-conversation-agent': 'goal',
-    'path-agent': 'path',
+    'skill:goal-conversation': 'goal',
+    'skill:path-planning': 'path',
     'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
     'learner-model-agent': 'profile',
@@ -700,34 +700,6 @@ const copyText = async (text: string, successMessage: string) => {
     gap: 8px;
     flex-wrap: wrap;
     justify-content: flex-end;
-  }
-
-  .toolbar-btn {
-    border-radius: 10px;
-    font-weight: 600;
-  }
-
-  .toolbar-btn--neutral {
-    background: #f7fafc;
-    border-color: #d8e6f0;
-    color: #255b79;
-  }
-
-  .toolbar-btn--neutral:hover {
-    background: #eef5fb;
-    border-color: #b8d6ea;
-    color: #17445f;
-  }
-
-  .toolbar-btn--primary {
-    color: #fff;
-    border: none;
-    background: linear-gradient(135deg, #1f7aa8 0%, #0f766e 100%);
-  }
-
-  .toolbar-btn--primary:hover {
-    filter: brightness(1.03);
-    box-shadow: 0 6px 14px rgba(20, 96, 132, 0.3);
   }
 
   .filters {
@@ -1199,7 +1171,6 @@ const copyText = async (text: string, successMessage: string) => {
   border-color: rgba(138, 173, 197, 0.3);
 }
 
-[data-theme="dark"] .agent-logs-page .toolbar-btn--neutral,
 [data-theme="dark"] .agent-logs-page .dialog-btn--close {
   background: rgba(18, 30, 41, 0.8);
   border-color: rgba(138, 173, 197, 0.3);

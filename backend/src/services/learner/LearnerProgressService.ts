@@ -96,7 +96,7 @@ class LearnerProgressService {
 
       await eventBus.emit({
         type: eventType as any,
-        source: 'learner-model-agent',
+        source: 'skill:learner-model',
         userId,
         data: {
           intensity: signal.intensity,
@@ -293,7 +293,7 @@ class LearnerProgressService {
 
     try {
       const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: 'learner-model-agent' };
+      const caller: CallerInfo = { agentId: 'skill:learner-model' };
       const signalDescriptions = signals.map((s) => {
         const typeMap: Record<string, string> = {
           'fatigue-high': '疲劳度较高',

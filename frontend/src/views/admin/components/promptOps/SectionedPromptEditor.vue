@@ -2,7 +2,7 @@
   SectionedPromptEditor (V4 — v2 分块 + 分权保护)
   ============================================================
   - v2：遍历 schema.blocks 按 8 类块渲染，按耦合度分权：
-      prose 块可编辑 textarea；contract/flow 块只读（🔒 受代码保护）。
+      prose 块可编辑 textarea；contract/flow 块只读（受代码保护）。
       块内 wf-* 字段表只读（契约，运营只能看）。
   - archetype 徽章 + code-only 空态。
   - compose() 1:1 复刻后端 composePromptSchema 的 blocks 分支。
@@ -33,7 +33,7 @@
 
     <!-- code-only 空态：纯逻辑 skill，无可编辑话术 -->
     <div v-if="archetype === 'code-only'" class="code-only-empty">
-      <span class="code-only-empty__icon">⚙️</span>
+      <span class="code-only-empty__icon">代码</span>
       <p class="code-only-empty__text">
         这是纯逻辑 skill（code-only），没有可编辑的 LLM 话术。<br />
         其行为由 <code>skills/&lt;name&gt;/index.ts</code> 代码决定。
@@ -50,7 +50,7 @@
         <header class="block-card__head">
           <span class="block-card__tag">{{ blockTitle(blk) }}</span>
           <span v-if="blockLocked(blk)" class="block-card__lock">
-            🔒 {{ blockCoupling(blk) === 'flow' ? '受代码保护（状态机）' : '受代码保护（契约）' }}
+            {{ blockCoupling(blk) === 'flow' ? '受代码保护（状态机）' : '受代码保护（契约）' }}
           </span>
           <span v-else class="block-card__hint">可编辑话术</span>
         </header>
@@ -770,7 +770,7 @@ watch(
   margin: 0;
   padding: 6px 12px 6px 28px;
   list-style: disc;
-  background: #fff7ed;
+  background: var(--admin-color-warning-bg);
   border-radius: 6px;
   font-size: 11.5px;
   color: #9a3412;
@@ -801,7 +801,7 @@ watch(
 .code-only-empty__text code {
   font-family: 'JetBrains Mono', Consolas, monospace;
   font-size: 0.95em;
-  background: white;
+  background: var(--admin-bg-surface);
   border: 1px solid #e2e8f0;
   padding: 1px 5px;
   border-radius: 3px;
@@ -811,7 +811,7 @@ watch(
 .block-card {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  background: white;
+  background: var(--admin-bg-surface);
   padding: 12px 14px;
   width: 100%;
   min-width: 0;
@@ -938,7 +938,7 @@ watch(
 .rules-empty code {
   font-family: 'JetBrains Mono', Consolas, monospace;
   font-size: 0.95em;
-  background: white;
+  background: var(--admin-bg-surface);
   border: 1px solid #e2e8f0;
   padding: 1px 5px;
   border-radius: 3px;
@@ -984,7 +984,7 @@ watch(
 .rules-extras {
   margin-top: 10px;
   padding: 8px 12px;
-  background: #fff7ed;
+  background: var(--admin-color-warning-bg);
   border-radius: 6px;
   font-size: 11.5px;
 }
@@ -1004,7 +1004,7 @@ watch(
 .rules-extras__pre {
   margin: 6px 0 0;
   padding: 8px;
-  background: white;
+  background: var(--admin-bg-surface);
   border-radius: 4px;
   font-family: 'JetBrains Mono', Consolas, monospace;
   font-size: 11px;

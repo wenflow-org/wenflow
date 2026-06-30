@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
-import prisma from '../config/database';
+import systemPrisma from '../../config/system-database';
 
 dotenv.config();
 
 async function upsertStageDesignerSkillConfig() {
-  await prisma.skill_model_configs.upsert({
+  await systemPrisma.skill_model_configs.upsert({
     where: { skillId: 'stage-designer' },
     update: {
       temperature: 0.3,
@@ -39,5 +39,5 @@ upsertStageDesignerSkillConfig()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await systemPrisma.$disconnect();
   });

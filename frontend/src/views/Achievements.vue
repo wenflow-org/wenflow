@@ -23,6 +23,7 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
@@ -131,6 +132,7 @@
           </div>
         </div>
       </div>
+      <AppMiniFooter />
     </main>
   </div>
 </template>
@@ -144,6 +146,8 @@ import request from '../utils/request';
 import { useUserStore } from '../stores/user';
 import { isProjectionMode } from '../utils/projection';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import AppMiniFooter from '../components/AppMiniFooter.vue';
 import {
   User,
   Switch,

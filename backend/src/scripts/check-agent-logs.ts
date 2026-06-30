@@ -1,4 +1,4 @@
-import prisma from '../config/database';
+﻿import prisma from '../config/database';
 
 async function checkAgentLogs() {
   console.log('🔍 检查 agent 执行日志...\n');
@@ -36,12 +36,12 @@ async function checkAgentLogs() {
       console.log('');
     }
 
-    // 检查 goal-conversation-agent 的失败日志
-    console.log('\n🔍 检查 goal-conversation-agent 的失败日志...\n');
+    // 检查 skill:goal-conversation 的失败日志
+    console.log('\n🔍 检查 skill:goal-conversation 的失败日志...\n');
     
     const errorLogs = await prisma.agent_call_logs.findMany({
       where: {
-        agentId: 'goal-conversation-agent',
+        agentId: 'skill:goal-conversation',
         success: false
       },
       orderBy: {
@@ -75,7 +75,7 @@ async function checkAgentLogs() {
         console.log(`耗时：${log.durationMs}ms\n`);
       }
     } else {
-      console.log('✅ goal-conversation-agent 没有失败日志！');
+      console.log('✅ skill:goal-conversation 没有失败日志！');
     }
 
     // 检查所有 agent 的最近日志

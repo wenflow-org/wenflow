@@ -1,4 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
+﻿const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
@@ -39,9 +39,9 @@ async function main() {
   const targetAgents = [
     'requirement-orchestrator',
     'session-evaluation-agent',
-    'session-wrapup-agent',
+    'skill:session-wrapup',
     'summary-agent',
-    'teaching-turn-agent',
+    'skill:teaching-turn',
     'tutor-agent',
     'user-profile-agent'
   ];

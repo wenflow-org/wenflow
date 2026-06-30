@@ -128,20 +128,6 @@ model agent_instances {
   updatedAt     DateTime
 }
 
-model agent_lab_configs {
-  id           String   @id
-  agentName    String   @unique
-  model        String?
-  temperature  Float?
-  maxTokens    Int?
-  baseURL      String?
-  apiKey       String?
-  systemPrompt String?
-  extraConfig  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime
-}
-
 model agent_logs {
   id         String   @id
   agentName  String
@@ -155,82 +141,6 @@ model agent_logs {
 
   @@index([timestamp])
   @@index([agentName])
-}
-
-model agent_model_configs {
-  id              String   @id
-  agentId         String   @unique
-  tier            String   @default("chat")
-  model           String?
-  endpoint        String?
-  apiKey          String?
-  temperature     Float    @default(0.7)
-  maxTokens       Int      @default(2000)
-  priority        Int      @default(0)
-  enabled         Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime
-  reasoningEffort String?
-  thinkingMode    String?
-}
-
-model agent_prompts {
-  id           String    @id
-  agentId      String
-  version      Int
-  name         String
-  description  String?
-  systemPrompt String
-  temperature  Float?
-  maxTokens    Int?
-  model        String?
-  status       String    @default("draft")
-  createdBy    String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @default(now())
-  metadata     String?
-  useCount     Int       @default(0)
-  avgLatency   Float?
-  successRate  Float?
-  publishedAt  DateTime?
-
-  @@unique([agentId, version])
-  @@index([agentId])
-  @@index([status])
-}
-
-model agent_definitions {
-  id               String   @id
-  displayName      String
-  description      String?
-  category         String
-  inputSchema      String?
-  outputSchema     String?
-  variableBindings String?
-  capabilities     String?
-  defaultMaxTokens Int?
-  defaultTemperature Float?
-  schemaVersion    Int      @default(1)
-  source           String   @default("code")
-  managedByCode    Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([category])
-  @@index([managedByCode])
-}
-
-model orchestrator_definitions {
-  id            String   @id
-  displayName   String
-  description   String?
-  category      String   @default("orchestrator")
-  steps         String
-  variableGraph String?
-  source        String   @default("code")
-  managedByCode Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 }
 
 model prompt_call_logs {
@@ -259,26 +169,6 @@ model prompt_call_logs {
   @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])
-}
-
-model agent_registrations {
-  id           String   @id
-  name         String   @unique
-  type         String
-  category     String?
-  description  String?
-  version      String   @default("1.0.0")
-  config       String?
-  inputSchema  String?
-  outputSchema String?
-  capabilities String?
-  subscribes   String?
-  publishes    String?
-  callCount    Int      @default(0)
-  successRate  Float    @default(1.0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now())
-  endpoint     String?
 }
 
 model arena_agent_logs {
@@ -635,24 +525,24 @@ model learning_paths {
 }
 
 model milestones {
-  id             String         @id
-  learningPathId String
-  stageNumber    Int
-  title          String
-  description    String?
-  goal           String?
-  coreConceptId  String?
+  id              String         @id
+  learningPathId  String
+  stageNumber     Int
+  title           String
+  description     String?
+  goal            String?
+  estimatedHours  Float?
+  status          String         @default("locked")
+  unlockedAt      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  order           Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime
+  coreConceptId   String?
   coreConceptName String?
-  estimatedHours Float?
-  status         String         @default("locked")
-  unlockedAt     DateTime?
-  startedAt      DateTime?
-  completedAt    DateTime?
-  order          Int            @default(0)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime
-  learning_paths learning_paths @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
-  subtasks       subtasks[]
+  learning_paths  learning_paths @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  subtasks        subtasks[]
 
   @@unique([learningPathId, stageNumber])
   @@index([learningPathId])
@@ -674,27 +564,6 @@ model path_decompositions {
   users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model platform_api_configs {
-  id                     String    @id @default("platform")
-  apiUrl                 String?
-  apiKey                 String?
-  availableModels        String?
-  defaultModel           String?
-  defaultReasoningModel  String?
-  defaultEvaluationModel String?
-  connectionStatus       String    @default("unknown")
-  lastCheckedAt          DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @default(now())
-  defaultTemperature     Float     @default(0.7)
-  defaultMaxTokens       Int       @default(2000)
-  reasoningEndpoint      String?
-  lightEndpoint          String?
-  chatModels             String?
-  reasoningModels        String?
-  lightModels            String?
-}
-
 model platform_stats {
   id             String   @id
   date           DateTime @default(now())
@@ -705,38 +574,6 @@ model platform_stats {
   totalTasks     Int      @default(0)
   completedTasks Int      @default(0)
   metadata       String?
-}
-
-model skill_model_configs {
-  id               String   @id
-  skillId          String   @unique
-  tier             String   @default("chat")
-  model            String?
-  thinkingMode     String?
-  reasoningEffort  String?
-  endpoint         String?
-  apiKey           String?
-  temperature      Float    @default(0.7)
-  maxTokens        Int      @default(2000)
-  requestTimeoutMs Int?
-  enabled          Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime
-}
-
-model skill_registrations {
-  id           String   @id
-  name         String   @unique
-  version      String   @default("1.0.0")
-  category     String?
-  description  String?
-  inputSchema  String?
-  outputSchema String?
-  endpoint     String?
-  callCount    Int      @default(0)
-  successRate  Float    @default(1.0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now())
 }
 
 model student_baselines {
@@ -784,12 +621,12 @@ model subtasks {
   annotationConfidence Float?
   cognitiveLevel       String?
   coreConcept          String?
-  linkedConceptId      String?
-  linkedConceptName    String?
   displayLabel         String?
   knowledgeType        String?
   learningObjectives   String?
   transferable         Boolean?           @default(false)
+  linkedConceptId      String?
+  linkedConceptName    String?
   learningContents     learningContents[]
   users                users?             @relation(fields: [usersId], references: [id])
   milestones           milestones         @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
@@ -891,26 +728,6 @@ model user_api_configs {
   users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model user_code_repositories {
-  id           String   @id
-  userId       String
-  name         String
-  type         String
-  code         String
-  version      String   @default("1.0.0")
-  status       String   @default("active")
-  description  String?
-  inputSchema  String?
-  outputSchema String?
-  metadata     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime
-  users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, type])
-  @@index([status])
-}
-
 model user_mcp_configs {
   id              String   @id
   userId          String   @unique
@@ -943,92 +760,80 @@ model user_skill_configs {
 }
 
 model users {
-  id                       String                     @id
-  email                    String                     @unique
-  name                     String
-  password                 String
-  role                     String                     @default("user")
-  currentLevel             String                     @default("beginner")
-  xp                       Int                        @default(0)
-  isAdmin                  Boolean                    @default(false)
+  id                        String                     @id
+  email                     String                     @unique
+  name                      String
+  password                  String
+  role                      String                     @default("user")
+  currentLevel              String                     @default("beginner")
+  xp                        Int                        @default(0)
+  isAdmin                   Boolean                    @default(false)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime
+  lastLoginAt               DateTime?
   dashboardGuidanceSnapshot String?
-  createdAt                DateTime                   @default(now())
-  updatedAt                DateTime
-  lastLoginAt              DateTime?
-  achievements             achievements[]
-  content_feedback         content_feedback[]
-  dialogue_sessions        dialogue_sessions[]
-  goal_conversations       goal_conversations[]
-  learning_goals           learning_goals[]
-  learning_metrics         learning_metrics[]
-  learning_paths           learning_paths[]
-  path_decompositions      path_decompositions[]
-  student_baselines        student_baselines?
-  subtasks                 subtasks[]
-  teaching_sessions        teaching_sessions[]
-  user_agent_configs       user_agent_configs[]
-  user_agent_model_configs user_agent_model_configs[]
-  user_api_configs         user_api_configs?
-  user_code_repositories   user_code_repositories[]
-  user_mcp_configs         user_mcp_configs?
-  user_skill_configs       user_skill_configs[]
-  virtual_learner_profiles virtual_learner_profiles?
-  virtual_sessions         virtual_sessions[]
+  achievements              achievements[]
+  content_feedback          content_feedback[]
+  dialogue_sessions         dialogue_sessions[]
+  goal_conversations        goal_conversations[]
+  learning_goals            learning_goals[]
+  learning_metrics          learning_metrics[]
+  learning_paths            learning_paths[]
+  path_decompositions       path_decompositions[]
+  student_baselines         student_baselines?
+  subtasks                  subtasks[]
+  teaching_sessions         teaching_sessions[]
+  user_agent_configs        user_agent_configs[]
+  user_agent_model_configs  user_agent_model_configs[]
+  user_api_configs          user_api_configs?
+  user_mcp_configs          user_mcp_configs?
+  user_skill_configs        user_skill_configs[]
+  virtual_learner_profiles  virtual_learner_profiles?
+  virtual_sessions          virtual_sessions[]
 }
 
 model virtual_learner_profiles {
-  id                   String   @id @default(uuid())
-  userId               String   @unique
-  
-  profile              String            // JSON: { age, occupation, education, background }
-  learningGoal         String            // 学习目标描述
-  knowledgeLevel       String            // beginner/intermediate/advanced
-  knownConcepts        String?           // JSON: 已掌握概念列表
-  struggleConcepts     String?           // JSON: 困难概念列表
-  
-  simulationMode       String  @default("manual")  // ai/manual
-  simulationPrompt     String?           // 自定义扮演Prompt
-  simulationModel      String?           // 指定模型
-  simulationTemperature Float? @default(0.8)
-  personalityTraits    String?           // JSON: { verbosity, enthusiasm, confusionStyle }
-  
-  tags                 String?           // JSON: ["测试", "演示"]
-  notes                String?           // 管理员备注
-  
-  sessions             virtual_sessions[]
-  users                users @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  
+  id                    String             @id @default(uuid())
+  userId                String             @unique
+  profile               String
+  learningGoal          String
+  knowledgeLevel        String
+  knownConcepts         String?
+  struggleConcepts      String?
+  simulationMode        String             @default("manual")
+  simulationPrompt      String?
+  simulationModel       String?
+  simulationTemperature Float?             @default(0.8)
+  personalityTraits     String?
+  tags                  String?
+  notes                 String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  users                 users              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions              virtual_sessions[]
+
   @@index([userId])
 }
 
 model virtual_sessions {
-  id                   String   @id @default(uuid())
-  virtualProfileId     String
-  userId               String            // 虚拟用户账号ID
-  
-  status               String  @default("created")  // created/running/completed/failed
-  currentStage         String  @default("goal")     // goal/path/learning
-  
-  goalConversationId   String?
-  learningPathId       String?
-  currentTaskId        String?
-  
-  completedTasks       Int     @default(0)
-  totalTasks           Int     @default(0)
-  
-  stageResults         String?           // JSON: 各阶段结果
-  logs                 String?           // JSON: 事件日志
-  
+  id                       String                   @id @default(uuid())
+  virtualProfileId         String
+  userId                   String
+  status                   String                   @default("created")
+  currentStage             String                   @default("goal")
+  goalConversationId       String?
+  learningPathId           String?
+  currentTaskId            String?
+  completedTasks           Int                      @default(0)
+  totalTasks               Int                      @default(0)
+  stageResults             String?
+  logs                     String?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  completedAt              DateTime?
+  users                    users                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   virtual_learner_profiles virtual_learner_profiles @relation(fields: [virtualProfileId], references: [id], onDelete: Cascade)
-  users                   users @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  completedAt          DateTime?
-  
+
   @@index([virtualProfileId])
   @@index([userId])
   @@index([status])

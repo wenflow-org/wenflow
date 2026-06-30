@@ -10,7 +10,7 @@ import bcrypt from 'bcrypt';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
-import simulationOrchestrator from '../../orchestrators/simulation.orchestrator';
+import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { getGateway } from '../../gateway';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
@@ -1600,7 +1600,7 @@ router.post('/', async (req: any, res) => {
     const normalizedLearningGoal = typeof learningGoal === 'string' ? learningGoal.trim() : '';
     const normalizedKnowledgeLevel = typeof knowledgeLevel === 'string' && knowledgeLevel.trim()
       ? knowledgeLevel.trim()
-      : null;
+      : 'beginner';
     
     const email = `virtual_${uuidv4().substring(0, 8)}@test.local`;
     const hashedPassword = await bcrypt.hash(VIRTUAL_USER_PASSWORD, 10);
@@ -1926,79 +1926,77 @@ router.post('/:id/start-session', async (req: any, res) => {
   try {
     const { id } = req.params;
     const { storyId, storyIndex } = req.body || {};
-    
-    const profile = await prisma.virtual_learner_profiles.findUnique({
-      where: { id }
-    });
-    
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        error: '虚拟用户不存在'
-      });
+    const session = await createSessionForProfile(id, { storyId, storyIndex });
+    if (!session) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
-
-    await ensureProfileStoryPool(profile);
-
-    const story = pickStoryFromPool(profile, storyId, storyIndex);
-    const storyContext = story
-      ? {
-          storyId: story.id || null,
-          title: story.title || '故事',
-          sourceType: story.sourceType || null,
-          outline: story.storyOutline || story.outline || '',
-          triggerEvent: story.triggerEvent || '',
-          visibleOpening: story.visibleOpening || '',
-          hiddenDetails: Array.isArray(story.hiddenDetails) ? story.hiddenDetails : [],
-          misdiagnosis: story.misdiagnosis || '',
-          pressurePoints: Array.isArray(story.pressurePoints) ? story.pressurePoints : [],
-          behaviorHooks: Array.isArray(story.behaviorHooks) ? story.behaviorHooks : [],
-          problemKnowledge: story.problemKnowledge || null,
-          goalSeed: story.goalSeed || null,
-          disclosurePlan: story.disclosurePlan || null,
-        }
-      : null;
-
-    const stageResults = storyContext
-      ? JSON.stringify({
-          story: storyContext,
-          learnerContext: parseJson<any>(profile.profile, {}),
-        })
-      : '{}';
-
-    const session = await prisma.virtual_sessions.create({
-      data: {
-        id: uuidv4(),
-        virtualProfileId: id,
-        userId: profile.userId,
-        status: 'created',
-        currentStage: 'goal',
-        logs: '[]',
-        stageResults,
-      }
-    });
-    
-    logger.info('启动模拟会话成功', {
-      sessionId: session.id,
-      profileId: id,
-      userId: profile.userId
-    });
-    
-    res.json({
-      success: true,
-      data: {
-        ...session,
-        storyContext,
-      }
-    });
+    res.json({ success: true, data: session });
   } catch (error: any) {
     logger.error('启动模拟会话失败:', error);
     res.status(500).json({
       success: false,
       error: error.message || '启动模拟会话失败'
     });
-}
+  }
 });
+
+async function createSessionForProfile(
+  profileId: string,
+  options: { storyId?: string; storyIndex?: number } = {}
+): Promise<any | null> {
+  const profile = await prisma.virtual_learner_profiles.findUnique({
+    where: { id: profileId }
+  });
+  if (!profile) return null;
+
+  await ensureProfileStoryPool(profile);
+
+  const story = pickStoryFromPool(profile, options.storyId, options.storyIndex);
+  const storyContext = story
+    ? {
+        storyId: story.id || null,
+        title: story.title || '故事',
+        sourceType: story.sourceType || null,
+        outline: story.storyOutline || story.outline || '',
+        triggerEvent: story.triggerEvent || '',
+        visibleOpening: story.visibleOpening || '',
+        hiddenDetails: Array.isArray(story.hiddenDetails) ? story.hiddenDetails : [],
+        misdiagnosis: story.misdiagnosis || '',
+        pressurePoints: Array.isArray(story.pressurePoints) ? story.pressurePoints : [],
+        behaviorHooks: Array.isArray(story.behaviorHooks) ? story.behaviorHooks : [],
+        problemKnowledge: story.problemKnowledge || null,
+        goalSeed: story.goalSeed || null,
+        disclosurePlan: story.disclosurePlan || null,
+      }
+    : null;
+
+  const stageResults = storyContext
+    ? JSON.stringify({
+        story: storyContext,
+        learnerContext: parseJson<any>(profile.profile, {}),
+      })
+    : '{}';
+
+  const session = await prisma.virtual_sessions.create({
+    data: {
+      id: uuidv4(),
+      virtualProfileId: profileId,
+      userId: profile.userId,
+      status: 'created',
+      currentStage: 'goal',
+      logs: '[]',
+      stageResults,
+    }
+  });
+
+  logger.info('启动模拟会话成功', {
+    sessionId: session.id,
+    profileId,
+    userId: profile.userId
+  });
+
+  return { ...session, storyContext };
+}
 
 /**
  * 获取模拟会话详情
@@ -2314,7 +2312,7 @@ router.post('/sessions/:sessionId/step', async (req: any, res) => {
       });
     }
     
-    const result = await simulationOrchestrator.executeSingleStep({
+    const result = await simulationCoordinator.executeSingleStep({
       sessionId,
       userId: session.userId,
       mode: 'single-step'
@@ -2354,7 +2352,7 @@ router.post('/sessions/:sessionId/auto', async (req: any, res) => {
       });
     }
     
-    const results = await simulationOrchestrator.executeAutoLoop(
+    const results = await simulationCoordinator.executeAutoLoop(
       {
         sessionId,
         userId: session.userId,
@@ -2389,7 +2387,7 @@ router.post('/sessions/:sessionId/advance-path', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     
-    const result = await simulationOrchestrator.advanceToPathGeneration(sessionId);
+    const result = await simulationCoordinator.advanceToPathGeneration(sessionId);
     
     res.json({
       success: result.success,
@@ -2548,7 +2546,7 @@ router.post('/sessions/:sessionId/start-learning', async (req: any, res) => {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
     
-    const result = await simulationOrchestrator.startLearningPhase(sessionId, { taskId });
+    const result = await simulationCoordinator.startLearningPhase(sessionId, { taskId });
     
     res.json({
       success: result.success,
@@ -2572,7 +2570,7 @@ router.post('/sessions/:sessionId/learning-step', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     
-    const result = await simulationOrchestrator.executeLearningStep(sessionId);
+    const result = await simulationCoordinator.executeLearningStep(sessionId);
     
     res.json({
       success: result.success,
@@ -2597,7 +2595,7 @@ router.post('/sessions/:sessionId/auto-learning', async (req: any, res) => {
     const { sessionId } = req.params;
     const { maxMilestones = 10 } = req.body;
     
-    const result = await simulationOrchestrator.executeAutoLearning(sessionId, {
+    const result = await simulationCoordinator.executeAutoLearning(sessionId, {
       maxMilestones
     });
     
@@ -2615,10 +2613,121 @@ router.post('/sessions/:sessionId/auto-learning', async (req: any, res) => {
   }
 });
 
+/**
+ * 一键全自动: Goal -> Path -> Learn 全流程
+ * POST /api/admin/virtual-sessions/:sessionId/run-full
+ * body: { maxRounds?, maxMilestones?, continueOnTaskComplete?, autoAdvanceToPath?, autoAdvanceToLearning? }
+ */
+router.post('/sessions/:sessionId/run-full', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const {
+      maxRounds = 20,
+      maxMilestones = 10,
+      continueOnTaskComplete = true,
+      autoAdvanceToPath = true,
+      autoAdvanceToLearning = true
+    } = req.body || {};
+
+    const result = await simulationCoordinator.executeFullSession(sessionId, {
+      maxRounds,
+      maxMilestones,
+      continueOnTaskComplete,
+      autoAdvanceToPath,
+      autoAdvanceToLearning
+    });
+
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('一键全流程失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '一键全流程失败'
+    });
+  }
+});
+
+/**
+ * 手动触发 wrapup 学习总结
+ * POST /api/admin/virtual-sessions/:sessionId/wrapup
+ */
+router.post('/sessions/:sessionId/wrapup', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const result = await simulationCoordinator.generateWrapupForSession(sessionId);
+
+    res.json({
+      success: result.success,
+      data: result,
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('生成 wrapup 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '生成 wrapup 失败'
+    });
+  }
+});
+
+/**
+ * 更新 session 的模拟配置 (目前主要是 frictionBudget)
+ * PUT /api/admin/virtual-learners/sessions/:sessionId/simulation-config
+ * body: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test' }
+ */
+router.put('/sessions/:sessionId/simulation-config', async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { frictionBudget } = req.body || {};
+
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'session 不存在' });
+    }
+
+    const allowedBudgets = ['none', 'low', 'normal', 'high', 'stress_test'];
+    if (frictionBudget && !allowedBudgets.includes(frictionBudget)) {
+      return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
+    }
+
+    const stageResults = parseJson<any>(session.stageResults, {});
+    const nextStageResults = {
+      ...stageResults,
+      simulationConfig: {
+        ...(stageResults.simulationConfig || {}),
+        ...(frictionBudget ? { frictionBudget } : {})
+      }
+    };
+
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: {
+        stageResults: JSON.stringify(nextStageResults),
+        updatedAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      data: { simulationConfig: nextStageResults.simulationConfig }
+    });
+  } catch (error: any) {
+    logger.error('更新 simulation-config 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '更新 simulation-config 失败'
+    });
+  }
+});
+
 router.post('/sessions/:sessionId/restart-path', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await simulationOrchestrator.restartPathPhase(sessionId);
+    const result = await simulationCoordinator.restartPathPhase(sessionId);
 
     res.json({
       success: result.success,
@@ -2635,7 +2744,7 @@ router.post('/sessions/:sessionId/restart-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
-    const result = await simulationOrchestrator.restartLearningPhase(sessionId, { taskId });
+    const result = await simulationCoordinator.restartLearningPhase(sessionId, { taskId });
 
     res.json({
       success: result.success,
@@ -2651,7 +2760,7 @@ router.post('/sessions/:sessionId/restart-learning', async (req: any, res) => {
 router.post('/sessions/:sessionId/stop-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await simulationOrchestrator.emergencyStopLearning(sessionId, 'admin-emergency-stop');
+    const result = await simulationCoordinator.emergencyStopLearning(sessionId, 'admin-emergency-stop');
 
     res.json({
       success: result.success,
@@ -2755,6 +2864,129 @@ router.delete('/sessions/:sessionId', async (req: any, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '删除模拟会话失败'
+    });
+  }
+});
+
+/**
+ * 回归测试: 跑一个完整的 Goal→Path 流程, 可指定 prompt 版本 override
+ * POST /api/admin/virtual-learners/:profileId/regression-run
+ */
+router.post('/:profileId/regression-run', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+
+    const { profileId } = req.params;
+    const { storyId, storyIndex, maxGoalRounds = 20 } = req.body || {};
+
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id: profileId }
+    });
+    if (!profile) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    }
+
+    // 1. 创建新 session
+    const session = await createSessionForProfile(profileId, { storyId, storyIndex });
+    if (!session) {
+      return res.status(404).json({ success: false, error: '虚拟用户不存在或故事池为空' });
+    }
+    const sessionId = session.id;
+
+    // 2. 执行全自动 (Goal→Path→Learn 一条龙, 受 maxGoalRounds 限制)
+    const result = await simulationCoordinator.executeFullSession(sessionId, {
+      maxRounds: maxGoalRounds,
+      maxMilestones: 5,
+      continueOnTaskComplete: false, // 回归测试只跑首个 task
+      autoAdvanceToPath: true,
+      autoAdvanceToLearning: false  // 回归测试主要看 Goal+Path, 不跑完整 Learn
+    });
+
+    res.json({
+      success: result.success,
+      data: {
+        sessionId,
+        ...result,
+      },
+      error: result.error
+    });
+  } catch (error: any) {
+    logger.error('回归测试失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '回归测试失败'
+    });
+  }
+});
+
+/**
+ * 回归对比: 对比两个 session 的关键运行结果
+ * GET /api/admin/virtual-learners/regression/compare-sessions?sessionA=&sessionB=
+ */
+router.get('/regression/compare-sessions', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+
+    const sessionA = String(req.query.sessionA || '');
+    const sessionB = String(req.query.sessionB || '');
+    if (!sessionA || !sessionB) {
+      return res.status(400).json({ success: false, error: '需要提供 sessionA 与 sessionB' });
+    }
+
+    const [a, b] = await Promise.all([
+      prisma.virtual_sessions.findUnique({ where: { id: sessionA } }),
+      prisma.virtual_sessions.findUnique({ where: { id: sessionB } })
+    ]);
+
+    if (!a || !b) {
+      return res.status(404).json({
+        success: false,
+        error: '至少一个 session 不存在'
+      });
+    }
+
+    const summarize = (s: any) => {
+      const stageResults = parseStageResults(s);
+      return {
+        id: s.id,
+        status: s.status,
+        currentStage: s.currentStage,
+        goalConversationId: s.goalConversationId,
+        learningPathId: s.learningPathId,
+        currentTaskId: s.currentTaskId,
+        completedTasks: s.completedTasks,
+        totalTasks: s.totalTasks,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+        goalStage: stageResults?.goal?.finalStage || stageResults?.goal?.stage || null,
+        pathReady: !!stageResults?.path?.success,
+        learnerStateSnapshot: stageResults?.learning?.learnerState || stageResults?.goal?.learnerState || null,
+        wrapup: stageResults?.learning?.wrapup || null,
+        rounds: {
+          goal: Array.isArray(stageResults?.goal?.conversationHistory) ? stageResults.goal.conversationHistory.length : 0,
+          learning: Array.isArray(stageResults?.learning?.conversationHistory) ? stageResults.learning.conversationHistory.length : 0,
+        }
+      };
+    };
+
+    res.json({
+      success: true,
+      data: {
+        sessionA: summarize(a),
+        sessionB: summarize(b),
+      }
+    });
+  } catch (error: any) {
+    logger.error('对比 session 失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || '对比 session 失败'
     });
   }
 });

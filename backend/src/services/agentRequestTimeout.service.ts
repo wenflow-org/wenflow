@@ -1,4 +1,4 @@
-const DEFAULT_AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 600_000);
+﻿const DEFAULT_AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 600_000);
 const PATH_AGENT_REQUEST_TIMEOUT_MS = Number(process.env.PATH_AGENT_REQUEST_TIMEOUT_MS || 600_000);
 
 export type AgentRequestTimeoutInfo = {
@@ -11,7 +11,7 @@ export function getDefaultAIRequestTimeoutMs() {
 }
 
 export function getAgentRequestTimeoutInfo(agentId?: string): AgentRequestTimeoutInfo {
-  if (agentId === 'path-agent') {
+  if (agentId === 'skill:path-planning') {
     return {
       requestTimeoutMs: PATH_AGENT_REQUEST_TIMEOUT_MS,
       requestTimeoutSource: 'agent-override',

@@ -28,7 +28,12 @@ router.get('/copy', async (req: any, res) => {
 
     // adaptive-guidance-copy 现在只作为 dashboard snapshot 对外提供。
     if (view !== 'dashboard') {
-      return res.json({ success: true, data: null });
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'adaptive-guidance/copy 目前仅支持 dashboard 视图',
+        },
+      });
     }
 
     const snapshot = await dashboardGuidanceSnapshotService.get(userId);

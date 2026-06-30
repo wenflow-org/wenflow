@@ -22,6 +22,7 @@
 
         <div class="header-right">
           <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
@@ -54,7 +55,19 @@
     <main class="dashboard-main">
       <section class="dashboard-hero surface-card">
         <div class="dashboard-hero__copy">
-          <span class="pill">学习台</span>
+          <div class="dashboard-hero__eyebrow">
+            <span class="pill">学习台</span>
+            <span
+              v-if="isAdminTestDashboard"
+              class="dashboard-source-badge"
+              :class="`dashboard-source-badge--${dashboardDataModeTone}`"
+            >
+              {{ dashboardDataModeLabel }}
+            </span>
+          </div>
+          <div v-if="isAdminTestDashboard" class="dashboard-source-note">
+            {{ dashboardDataModeMeta }}
+          </div>
           <h1>{{ dashboardTitle }}</h1>
           <p>{{ dashboardSubtitle }}</p>
 
@@ -161,114 +174,53 @@
         </div>
       </section>
 
+      <section v-if="isTestMode" class="dashboard-debug-overview surface-card">
+        <div class="section-head dashboard-debug-overview__head">
+          <div>
+            <span class="section-kicker">调试总览</span>
+            <strong>{{ debugOverviewTitle }}</strong>
+          </div>
+          <div class="dashboard-debug-overview__actions">
+            <button class="btn btn--ghost" :disabled="loading || stateWorkbenchLoading" @click="refreshDashboardDebug">刷新总览</button>
+            <router-link :to="learningPathsPath" class="btn btn--ghost">查看测试路径</router-link>
+          </div>
+        </div>
+
+        <p class="dashboard-debug-overview__lead">{{ debugOverviewLead }}</p>
+
+        <div v-if="debugWorkbenchCards.length" class="dashboard-debug-overview__grid">
+          <article v-for="item in debugWorkbenchCards" :key="item.label" class="dashboard-debug-overview__card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <p>{{ item.meta }}</p>
+          </article>
+        </div>
+
+        <div class="dashboard-debug-overview__step-row">
+          <article
+            v-for="step in debugWorkbenchSteps"
+            :key="step.label"
+            class="dashboard-debug-step"
+            :class="[`dashboard-debug-step--${step.tone}`]"
+          >
+            <span>{{ step.label }}</span>
+            <strong>{{ step.value }}</strong>
+            <p>{{ step.desc }}</p>
+          </article>
+        </div>
+
+        <div class="dashboard-debug-overview__links">
+          <router-link :to="debugGoalTarget" class="dashboard-debug-link">测试目标规划</router-link>
+          <router-link :to="debugPathTarget" class="dashboard-debug-link">测试学习路径详情</router-link>
+          <router-link :to="learningStatePath" class="dashboard-debug-link">测试学习状态</router-link>
+          <router-link :to="debugPromptLogsTarget" class="dashboard-debug-link">Path Prompt 调用日志</router-link>
+          <router-link :to="debugExecutionLogsTarget" class="dashboard-debug-link">Path 执行日志</router-link>
+        </div>
+      </section>
+
+      <AppMiniFooter />
     </main>
 
-    <button v-if="isTestMode" type="button" class="dashboard-debug-float-btn" @click="dashboardDebugDrawerVisible = true">
-      <strong>Skill / Raw</strong>
-      <span>{{ dashboardDebugQuickChipText }}</span>
-    </button>
-
-    <el-drawer
-      v-if="isTestMode"
-      v-model="dashboardDebugDrawerVisible"
-      title="首页调试数据"
-      size="min(92vw, 860px)"
-      destroy-on-close
-      class="dashboard-debug-drawer"
-    >
-      <div class="dashboard-debug-drawer__body">
-        <div class="dashboard-debug-panel__actions dashboard-debug-panel__actions--top">
-          <button class="btn btn--ghost" :disabled="loading || stateWorkbenchLoading" @click="refreshDashboardDebug">刷新调试数据</button>
-          <router-link :to="learningStatePath" class="btn btn--primary">打开测试学习状态</router-link>
-        </div>
-
-        <div class="dashboard-debug-toolbar">
-          <span v-for="item in dashboardDebugQuickChips" :key="item.label" class="dashboard-debug-quick-chip">
-            <strong>{{ item.label }}</strong>
-            <em>{{ item.value }}</em>
-          </span>
-        </div>
-
-        <details class="dashboard-debug-collapse" open>
-          <summary>
-            <div class="dashboard-debug-collapse__head">
-              <div>
-                <span class="section-kicker">Skill</span>
-                <strong>adaptive-guidance-copy 当前输出</strong>
-              </div>
-              <span class="dashboard-debug-collapse__badge">{{ dashboardDebugSkillMetaItems.length }} + {{ dashboardDebugSkillJsonCards.length }} 组</span>
-            </div>
-          </summary>
-
-          <div class="dashboard-debug-skill-grid">
-            <article class="dashboard-debug-section dashboard-debug-section--accent">
-              <span class="section-kicker">当前页面使用结果</span>
-              <strong>{{ adaptiveCopy?.headline || '当前没有 headline。' }}</strong>
-              <p>{{ adaptiveCopy?.subtitle || '当前没有 subtitle。' }}</p>
-
-              <div v-if="dashboardDebugOutputItems.length" class="dashboard-debug-kv-grid">
-                <div v-for="item in dashboardDebugOutputItems" :key="item.label" class="dashboard-debug-kv-item">
-                  <span>{{ item.label }}</span>
-                  <p>{{ item.value }}</p>
-                </div>
-              </div>
-
-              <div v-if="adaptiveCopy?.todayActions?.length" class="dashboard-debug-action-list">
-                <div v-for="(item, index) in adaptiveCopy.todayActions" :key="`dashboard-debug-action-${index}`" class="dashboard-debug-action-item">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.desc }}</p>
-                  <span>{{ item.action }} · {{ item.to || '--' }}</span>
-                </div>
-              </div>
-            </article>
-
-            <article class="dashboard-debug-section">
-              <span class="section-kicker">技能元信息</span>
-              <div class="dashboard-debug-kv-grid">
-                <div v-for="item in dashboardDebugSkillMetaItems" :key="item.label" class="dashboard-debug-kv-item">
-                  <span>{{ item.label }}</span>
-                  <p>{{ item.value }}</p>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div class="dashboard-debug-json-grid">
-            <details v-for="card in dashboardDebugSkillJsonCards" :key="card.key" class="dashboard-debug-json-card">
-              <summary>
-                <span>{{ card.title }}</span>
-                <em>{{ card.badge }}</em>
-              </summary>
-              <pre>{{ card.content }}</pre>
-            </details>
-          </div>
-        </details>
-
-        <details class="dashboard-debug-collapse">
-          <summary>
-            <div class="dashboard-debug-collapse__head">
-              <div>
-                <span class="section-kicker">原始数据</span>
-                <strong>输入、rawModelOutput 和状态快照</strong>
-              </div>
-              <span class="dashboard-debug-collapse__badge">{{ dashboardDebugRawJsonCards.length }} 组</span>
-            </div>
-          </summary>
-
-          <div v-if="dashboardDebugRawHint" class="dashboard-debug-empty-state">{{ dashboardDebugRawHint }}</div>
-
-          <div class="dashboard-debug-json-grid dashboard-debug-json-grid--raw">
-            <details v-for="card in dashboardDebugRawJsonCards" :key="card.key" class="dashboard-debug-json-card">
-              <summary>
-                <span>{{ card.title }}</span>
-                <em>{{ card.badge }}</em>
-              </summary>
-              <pre>{{ card.content }}</pre>
-            </details>
-          </div>
-        </details>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
@@ -280,6 +232,8 @@ import { toast } from '../utils/toast';
 import { Switch, User } from '@element-plus/icons-vue';
 import LoadCalendar from '../components/LoadCalendar.vue';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
+import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import AppMiniFooter from '../components/AppMiniFooter.vue';
 import { learningAPI, type AdaptiveGuidancePayload, type LearningPath, type LearningStats, type Stage, type Task, type Week } from '../api/learning';
 import { metricsAPI, type CurrentState } from '../api/metrics';
 import { userAPI, type LearnerCenterSnapshot } from '../api/user';
@@ -292,6 +246,7 @@ const route = useRoute();
 const userStore = useUserStore();
 const isTestMode = computed(() => route.meta.isTestMode === true);
 const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
+const isAdminTestDashboard = computed(() => route.name === 'AdminTestDashboard');
 const dashboardPath = computed(() => {
   if (isTestMode.value) {
     return isAdminRoute.value ? '/admin/test/dashboard' : '/dashboard';
@@ -364,6 +319,8 @@ const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);
 const totalTaskCount = computed(() => completedTaskCount.value + inProgressTaskCount.value || 1);
 
+const getPathTitle = (path: DashboardPath | null | undefined) => path?.name || path?.title || '未命名路径';
+
 const getEnrichmentStatus = (path: DashboardPath | null | undefined) => path?.generationStatus?.stageDesign || null;
 
 const getPathDisplayState = (path: DashboardPath | null | undefined) => {
@@ -401,7 +358,16 @@ const primaryPath = computed(() => {
   return activePaths.find((path) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
 });
 
+const latestPath = computed(() => {
+  if (!paths.value.length) return null;
+  return [...paths.value].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null;
+});
+
+const debugFocusPath = computed(() => primaryPath.value || latestPath.value || null);
+
 const primaryActionTask = computed(() => getPrimaryActionTask(primaryPath.value));
+
+const debugActionTask = computed(() => getPrimaryActionTask(debugFocusPath.value));
 
 const continueLearningTarget = computed(() => {
   const nextTask = getPrimaryActionTask(primaryPath.value);
@@ -416,6 +382,44 @@ const continueLearningTarget = computed(() => {
   return learningPathsPath.value;
 });
 
+const debugGoalConversationId = computed(() => {
+  const sourceId = debugFocusPath.value?.generationStatus?.sourceConversationId;
+  return typeof sourceId === 'string' && sourceId.trim() ? sourceId.trim() : '';
+});
+
+const debugGoalTarget = computed(() => {
+  return debugGoalConversationId.value ? `${goalConversationPath.value}/${debugGoalConversationId.value}` : goalConversationPath.value;
+});
+
+const debugPathTarget = computed(() => {
+  return debugFocusPath.value?.id ? `${learningPathDetailBasePath.value}/${debugFocusPath.value.id}` : learningPathsPath.value;
+});
+
+const debugPromptLogsTarget = computed(() => {
+  const pathId = debugFocusPath.value?.id;
+  if (!pathId) return '/admin/prompt-call-logs';
+  return {
+    path: '/admin/prompt-call-logs',
+    query: {
+      pathId,
+      limit: '100'
+    }
+  };
+});
+
+const debugExecutionLogsTarget = computed(() => {
+  const pathId = debugFocusPath.value?.id;
+  if (!pathId) return '/admin/execution-logs';
+  return {
+    path: '/admin/execution-logs',
+    query: {
+      pathId,
+      sourceEntry: 'platform',
+      timeRange: 'all'
+    }
+  };
+});
+
 const dashboardTitle = computed(() => {
   if (adaptiveCopy.value?.headline) return adaptiveCopy.value.headline;
   if (!hasLearningPath.value) return `你好，${userStore.user?.name || '同学'}，先从一个具体目标开始。`;
@@ -426,6 +430,106 @@ const dashboardSubtitle = computed(() => {
   if (adaptiveCopy.value?.subtitle) return adaptiveCopy.value.subtitle;
   if (!hasLearningPath.value) return '描述一件你最近想解决的事，把它缩小到可以开始的一步。';
   return '从上次停下的位置继续，把学习接上。';
+});
+
+const debugPathStageLabel = computed(() => {
+  const path = debugFocusPath.value;
+  if (!path) return '还没有测试路径';
+
+  const state = getPathDisplayState(path);
+  const coreStep = path.generationStatus?.coreStep;
+  const stageDesign = path.generationStatus?.stageDesign;
+  const stageCount = getPathStages(path).length;
+
+  if (state === 'attention') return '需要处理';
+  if (path.canStartLearning && stageCount > 0) return '可开始 Learn';
+  if (coreStep === 'framing') return '主路径生成中';
+  if (coreStep === 'planning') return '主路径拆解中';
+  if (coreStep === 'persist') return '主路径落成中';
+  if (coreStep === 'completed' && (stageDesign === 'processing' || stageDesign === 'pending')) return '阶段任务补充中';
+  if (state === 'generating') return '生成中';
+  return '已就绪';
+});
+
+const debugPathStageDescription = computed(() => {
+  const path = debugFocusPath.value;
+  if (!path) return '先去创建一个测试目标，首页才会出现最近链路的可观察状态。';
+  if (path.canStartLearning && getPathStages(path).length > 0) return '里程碑和 task 已准备完成，可以直接进入 Learn。';
+  if (path.generationStatus?.coreStep === 'framing') return '正在从 Goal 结果收敛真实问题、约束与首个交付物。';
+  if (path.generationStatus?.coreStep === 'planning') return '正在把 Goal 结果拆成学习路径主结构。';
+  if (path.generationStatus?.coreStep === 'persist') return '正在写入路径主结构，准备切换到阶段任务生成。';
+  if (path.generationStatus?.coreStep === 'completed' && (path.generationStatus?.stageDesign === 'processing' || path.generationStatus?.stageDesign === 'pending')) {
+    return path.learningBlockedReason || '主路径已完成，系统正在补充每个阶段的具体 task。';
+  }
+  return path.learningBlockedReason || '当前没有额外调试说明。';
+});
+
+const debugOverviewTitle = computed(() => {
+  return debugFocusPath.value ? '最近一条测试链路' : '还没有测试链路';
+});
+
+const debugOverviewLead = computed(() => {
+  const path = debugFocusPath.value;
+  if (!path) {
+    return '这里会汇总最近一条测试 Goal -> Path -> Learn 的关键状态，方便先判断问题卡在哪一层。';
+  }
+
+  return debugPathStageDescription.value;
+});
+
+const debugWorkbenchCards = computed(() => {
+  const path = debugFocusPath.value;
+  return [
+    {
+      label: '最近路径',
+      value: path ? getPathTitle(path) : '暂无',
+      meta: path?.id || '先创建一个测试目标'
+    },
+    {
+      label: 'Goal 来源',
+      value: debugGoalConversationId.value ? `会话 ${debugGoalConversationId.value.slice(0, 16)}...` : '暂无',
+      meta: debugGoalConversationId.value ? '可直接跳回测试目标规划' : '当前路径没有回溯到测试 Goal 会话'
+    },
+    {
+      label: 'Path 状态',
+      value: debugPathStageLabel.value,
+      meta: debugPathStageDescription.value
+    },
+    {
+      label: 'Learn 入口',
+      value: debugActionTask.value?.title || '暂无可继续任务',
+      meta: debugActionTask.value ? '路径已给出当前最值得先推进的 task。' : '若仍在生成中，请先观察 Path 阶段。'
+    }
+  ];
+});
+
+const debugWorkbenchSteps = computed(() => {
+  const path = debugFocusPath.value;
+  const state = getPathDisplayState(path);
+  const goalTone = path ? 'done' : 'idle';
+  const pathTone = !path ? 'idle' : state === 'attention' ? 'attention' : state === 'generating' ? 'active' : 'done';
+  const learnTone = path?.canStartLearning && getPathStages(path).length > 0 ? 'done' : path ? 'idle' : 'idle';
+
+  return [
+    {
+      label: 'Goal',
+      value: debugGoalConversationId.value ? '已收口' : '待创建',
+      desc: debugGoalConversationId.value ? '已拿到可追踪的测试 Goal 会话。' : '先从测试目标规划页开始。',
+      tone: goalTone
+    },
+    {
+      label: 'Path',
+      value: debugPathStageLabel.value,
+      desc: debugPathStageDescription.value,
+      tone: pathTone
+    },
+    {
+      label: 'Learn',
+      value: path?.canStartLearning && getPathStages(path).length > 0 ? '可进入' : '未就绪',
+      desc: path?.canStartLearning && getPathStages(path).length > 0 ? '可以直接点击继续，进入当前 task。' : '等 Path 真正 ready 后再开始 Learn。',
+      tone: learnTone
+    }
+  ];
 });
 
 const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习路径' : '还没有学习路径'));
@@ -520,6 +624,33 @@ const stateWorkbenchQuickChips = computed(() => {
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 });
 
+const formatDashboardDebugDateTime = (value?: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', { hour12: false });
+};
+
+const dashboardDataModeTone = computed(() => (adaptiveGuidance.value ? 'hot' : 'cold'));
+
+const dashboardDataModeLabel = computed(() => {
+  if (!adaptiveGuidance.value) return '冷数据 fallback';
+  return adaptiveGuidanceDebug.value?.cached ? '热数据快照 · fallback 生成' : '热数据快照 · model 生成';
+});
+
+const dashboardDataModeMeta = computed(() => {
+  if (!adaptiveGuidance.value) {
+    return '当前 /api/adaptive-guidance/copy 返回 null，页面正在使用默认冷数据。';
+  }
+
+  const generatedAt = formatDashboardDebugDateTime(adaptiveGuidanceDebug.value?.generatedAt);
+  if (generatedAt) {
+    return `当前页面命中后台首页快照，生成时间：${generatedAt}`;
+  }
+
+  return '当前页面命中后台首页快照。';
+});
+
 const dashboardDebugQuickChips = computed(() => {
   return [
     { label: 'Skill', value: adaptiveGuidanceDebug.value?.skillId || 'adaptive-guidance-copy' },
@@ -553,7 +684,11 @@ const dashboardDebugSkillMetaItems = computed(() => [
   },
   {
     label: 'source',
-    value: adaptiveGuidanceDebug.value ? (adaptiveGuidanceDebug.value.cached ? 'fallback' : 'live') : '当前未返回'
+    value: adaptiveGuidanceDebug.value ? (adaptiveGuidanceDebug.value.cached ? 'snapshot-fallback' : 'snapshot-model') : '当前没有后台快照'
+  },
+  {
+    label: 'generatedAt',
+    value: adaptiveGuidanceDebug.value?.generatedAt || '当前没有后台快照'
   },
 ]);
 
@@ -578,9 +713,18 @@ const formatDebugJson = (value: any, emptyText: string = '当前没有可用数�
 
 const dashboardDebugAdaptiveCopyJson = computed(() => formatDebugJson(adaptiveCopy.value));
 const dashboardDebugSummaryJson = computed(() => formatDebugJson(adaptiveSummary.value));
-const dashboardDebugUserPayload = computed(() => formatDebugJson(adaptiveGuidanceDebug.value?.userPayload, '当前没有可用的 userPayload。'));
-const dashboardDebugRawModelOutput = computed(() => formatDebugJson(adaptiveGuidanceDebug.value?.rawModelOutput, '当前没有可用的 rawModelOutput。'));
-const dashboardDebugNormalizedOutputJson = computed(() => formatDebugJson(adaptiveGuidanceDebug.value?.normalizedOutput, '当前没有可用的 normalizedOutput。'));
+const dashboardDebugUserPayload = computed(() => formatDebugJson(
+  adaptiveGuidanceDebug.value?.userPayload,
+  adaptiveGuidance.value ? '首页快照模式未保存 userPayload。' : '当前没有后台首页快照。'
+));
+const dashboardDebugRawModelOutput = computed(() => formatDebugJson(
+  adaptiveGuidanceDebug.value?.rawModelOutput,
+  adaptiveGuidance.value ? '首页快照模式未保存 rawModelOutput。' : '当前没有后台首页快照。'
+));
+const dashboardDebugNormalizedOutputJson = computed(() => formatDebugJson(
+  adaptiveGuidanceDebug.value?.normalizedOutput,
+  adaptiveGuidance.value ? '首页快照模式未保存 normalizedOutput。' : '当前没有后台首页快照。'
+));
 const dashboardDebugLearnerCenterJson = computed(() => formatDebugJson(learnerCenter.value, '当前还没有 learner-center 快照。'));
 const dashboardDebugCurrentStateJson = computed(() => formatDebugJson(currentState.value, '当前还没有 metrics state 快照。'));
 
@@ -598,8 +742,13 @@ const dashboardDebugRawJsonCards = computed(() => [
 ]);
 
 const dashboardDebugRawHint = computed(() => {
-  if (adaptiveGuidanceDebug.value) return '';
-  return '当前这次首页请求还没有带回 adaptive-guidance-copy 的原始调试数据。可以点“刷新调试数据”重试。';
+  if (!adaptiveGuidance.value) {
+    return '当前没有后台首页快照，页面正在使用冷数据 fallback。完成一次学习行为后，后台会自动回填。';
+  }
+  if (adaptiveGuidanceDebug.value?.userPayload || adaptiveGuidanceDebug.value?.rawModelOutput || adaptiveGuidanceDebug.value?.normalizedOutput) {
+    return '';
+  }
+  return '当前首页使用的是后台快照。快照只保留摘要调试元信息，不保留 userPayload 和 rawModelOutput。';
 });
 
 const todayActionItems = computed(() => {
@@ -728,14 +877,13 @@ async function fetchDashboardData() {
     }
 
     try {
-      const activePaths = (pathsResult.status === 'fulfilled' ? (pathsResult.value as DashboardPath[]) || [] : [])
-        .filter((path) => getPathDisplayState(path) === 'active');
-      const primaryGuidancePath = activePaths.find((path) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
-      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance('dashboard', primaryGuidancePath?.id);
+      adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance();
     } catch (error) {
+      adaptiveGuidance.value = null;
       console.error('获取动态引导文案失败:', error);
     }
   } catch (error) {
+    adaptiveGuidance.value = null;
     console.error('获取学习台数据失败:', error);
   } finally {
     loading.value = false;
@@ -1025,6 +1173,13 @@ onUnmounted(() => {
   gap: 16px;
 }
 
+.dashboard-hero__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .pill,
 .section-kicker {
   width: fit-content;
@@ -1043,6 +1198,34 @@ onUnmounted(() => {
   border-radius: 999px;
   background: rgba(52, 120, 246, 0.09);
   line-height: 1;
+}
+
+.dashboard-source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.dashboard-source-badge--hot {
+  background: rgba(49, 177, 111, 0.12);
+  color: #178a56;
+}
+
+.dashboard-source-badge--cold {
+  background: rgba(230, 162, 60, 0.12);
+  color: #b57709;
+}
+
+.dashboard-source-note {
+  margin-top: -10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dash-muted);
 }
 
 .section-kicker {
@@ -1084,34 +1267,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.btn {
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: 14px;
-}
-
-.btn--lg {
-  min-height: 50px;
-  padding-inline: 24px;
-}
-
-.btn--primary {
-  color: #fff;
-  background: linear-gradient(135deg, var(--dash-blue), var(--dash-blue-deep));
-  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.2);
-}
-
-.btn--ghost {
-  color: var(--dash-ink);
-  background: rgba(255, 255, 255, 0.74);
-  border-color: rgba(23, 32, 51, 0.08);
-}
-
-.btn--full {
-  width: 100%;
-}
+/* .btn / .btn--primary / .btn--ghost / .btn--lg / .btn--full 已统一到全局 design-system.css */
 
 .today-card {
   margin-top: 8px;
@@ -1143,7 +1299,8 @@ onUnmounted(() => {
   background: rgba(243, 246, 251, 0.8);
   color: inherit;
   text-decoration: none;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  border: 1px solid transparent;
 }
 
 a.dashboard-list__item:hover,
@@ -1151,6 +1308,39 @@ button.dashboard-list__item:hover,
 .dashboard-list__item:hover {
   background: rgba(243, 246, 251, 1);
   box-shadow: 0 2px 8px rgba(23, 32, 51, 0.06);
+  transform: translateY(-1px);
+}
+
+/* 主操作：实色背景 + 强阴影，吸引眼球 */
+.dashboard-list__item--primary {
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.08), rgba(31, 87, 204, 0.04));
+  border-color: rgba(52, 120, 246, 0.15);
+}
+
+a.dashboard-list__item.dashboard-list__item--primary:hover {
+  background: linear-gradient(135deg, rgba(52, 120, 246, 0.12), rgba(31, 87, 204, 0.06));
+  border-color: rgba(52, 120, 246, 0.28);
+  box-shadow: 0 8px 24px rgba(52, 120, 246, 0.12);
+}
+
+/* 次操作：略带蓝意但更克制 */
+.dashboard-list__item--accent {
+  background: rgba(243, 246, 251, 0.6);
+  border-color: rgba(52, 120, 246, 0.06);
+}
+
+/* 弱化操作：纯灰背景 */
+.dashboard-list__item--muted {
+  background: rgba(243, 246, 251, 0.5);
+}
+
+.dashboard-list__item--muted strong {
+  color: var(--dash-ink);
+  opacity: 0.85;
+}
+
+.dashboard-list__item--muted p {
+  opacity: 0.7;
 }
 
 .dashboard-list__item div {
@@ -1195,12 +1385,31 @@ button.dashboard-list__item:hover,
   border-radius: 8px;
   background: rgba(52, 120, 246, 0.08);
   white-space: nowrap;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .dashboard-list__action--muted {
   color: var(--dash-ink);
   background: rgba(23, 32, 51, 0.06);
+}
+
+/* 主操作的 action 标签：实色填充按钮感 */
+.dashboard-list__item--primary .dashboard-list__action {
+  color: #fff;
+  background: linear-gradient(135deg, var(--dash-blue), var(--dash-blue-deep));
+  box-shadow: 0 6px 14px rgba(52, 120, 246, 0.22);
+  padding: 6px 14px;
+}
+
+a.dashboard-list__item.dashboard-list__item--primary:hover .dashboard-list__action {
+  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
+}
+
+/* 次/弱操作 action 保持半透明灰 */
+.dashboard-list__item--muted .dashboard-list__action {
+  color: var(--dash-ink);
+  background: rgba(23, 32, 51, 0.06);
+  opacity: 0.85;
 }
 
 a.dashboard-list__item:hover .dashboard-list__action {
@@ -1448,6 +1657,109 @@ a.dashboard-list__item:hover .dashboard-list__action {
   display: grid;
   gap: 24px;
   margin-bottom: 24px;
+}
+
+.dashboard-debug-overview {
+  display: grid;
+  gap: 18px;
+  padding: 24px 26px;
+  border-radius: 28px;
+}
+
+.dashboard-debug-overview__head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-debug-overview__actions,
+.dashboard-debug-overview__links,
+.dashboard-debug-overview__step-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dashboard-debug-overview__lead {
+  margin: 0;
+  color: var(--dash-muted);
+  line-height: 1.7;
+}
+
+.dashboard-debug-overview__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-debug-overview__card,
+.dashboard-debug-step {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.dashboard-debug-overview__card span,
+.dashboard-debug-step span {
+  font-size: 12px;
+  color: var(--dash-muted);
+}
+
+.dashboard-debug-overview__card strong,
+.dashboard-debug-step strong {
+  color: var(--dash-ink);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.dashboard-debug-overview__card p,
+.dashboard-debug-step p {
+  margin: 0;
+  color: var(--dash-muted);
+  line-height: 1.65;
+}
+
+.dashboard-debug-step {
+  flex: 1 1 220px;
+}
+
+.dashboard-debug-step--done {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.9));
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.dashboard-debug-step--active {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.9));
+  border-color: rgba(52, 120, 246, 0.16);
+}
+
+.dashboard-debug-step--attention {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0.92));
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.dashboard-debug-step--idle {
+  background: rgba(243, 246, 251, 0.9);
+}
+
+.dashboard-debug-link {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--dash-blue-deep);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.dashboard-debug-link:hover {
+  background: rgba(52, 120, 246, 0.08);
 }
 
 .dashboard-debug-float-btn {
@@ -1843,10 +2155,6 @@ a.dashboard-list__item:hover .dashboard-list__action {
 }
 
 @media (max-width: 1120px) {
-  .header-nav {
-    display: none;
-  }
-
   .dashboard-hero,
   .dashboard-bottom-grid {
     grid-template-columns: 1fr;
@@ -1871,7 +2179,7 @@ a.dashboard-list__item:hover .dashboard-list__action {
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .header-container,
   .dashboard-main {
     width: min(100% - 28px, 1240px);
@@ -1881,6 +2189,10 @@ a.dashboard-list__item:hover .dashboard-list__action {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+  }
+
+  .header-nav {
+    display: none;
   }
 
   .header-cta,
@@ -1905,13 +2217,15 @@ a.dashboard-list__item:hover .dashboard-list__action {
   }
 
   .overview-grid,
-  .achievement-summary {
+  .achievement-summary,
+  .dashboard-debug-overview__grid {
     grid-template-columns: 1fr;
   }
 
   .section-head,
   .panel-head,
-  .dashboard-hero__actions {
+  .dashboard-hero__actions,
+  .dashboard-debug-overview__head {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -1946,6 +2260,7 @@ a.dashboard-list__item:hover .dashboard-list__action {
   .overview-card,
   .dashboard-panel,
   .dashboard-calendar-panel,
+  .dashboard-debug-overview,
   .dashboard-calendar-status {
     padding: 16px;
     border-radius: 20px;
@@ -2023,7 +2338,8 @@ a.dashboard-list__item:hover .dashboard-list__action {
   .dashboard-debug-panel__actions,
   .dashboard-debug-collapse__head,
   .dashboard-calendar-status__head,
-  .focus-card__head {
+  .focus-card__head,
+  .dashboard-debug-overview__actions {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -2058,6 +2374,7 @@ a.dashboard-list__item:hover .dashboard-list__action {
   .overview-card,
   .dashboard-panel,
   .dashboard-calendar-panel,
+  .dashboard-debug-overview,
   .dashboard-calendar-status {
     padding: 14px;
     border-radius: 18px;

@@ -214,8 +214,7 @@
             <article v-if="aiLoading" class="learning-msg learning-msg--assistant">
               <span class="learning-msg__role">AI</span>
               <div class="learning-msg__body learning-msg__body--thinking">
-                <el-icon class="loading-icon"><Loading /></el-icon>
-                <span>思考中...</span>
+                <TypingIndicator variant="minimal" label="思考中" />
               </div>
             </article>
           </div>
@@ -234,22 +233,34 @@
             />
 
             <div v-if="showCompletionPrompt" class="learning-completion">
-              <span>已达到课程完成条件</span>
+              <div class="learning-completion__copy">
+                <strong>{{ completionPromptTitle }}</strong>
+                <p>{{ completionPromptDescription }}</p>
+              </div>
               <div class="learning-completion__actions">
                 <el-button size="small" @click="dismissCompletionPrompt">继续学习</el-button>
-                <el-button type="success" size="small" :loading="endingSession" @click="confirmCompletionEnd">结束并评估</el-button>
+                <el-button type="success" size="small" :loading="endingSession" @click="confirmCompletionEnd">结束当前任务并评估</el-button>
               </div>
             </div>
 
-            <div class="learning-composer">
-              <el-input
-                v-model="userInput"
-                type="textarea"
-                :autosize="{ minRows: 1, maxRows: 4 }"
-                placeholder="输入你的想法… (Ctrl+Enter 发送)"
-                @keydown.ctrl.enter="sendMessage"
-                :disabled="aiLoading"
-              />
+            <div ref="composerRef" class="learning-composer">
+              <div class="learning-composer__field">
+                <el-input
+                  v-model="userInput"
+                  type="textarea"
+                  :autosize="{ minRows: 1, maxRows: 4 }"
+                  placeholder="输入你的想法… (Ctrl+Enter 发送)"
+                  @keydown.ctrl.enter="sendMessage"
+                  :disabled="aiLoading"
+                />
+                <span
+                  v-if="userInput.length >= 80"
+                  class="learning-composer__counter"
+                  :class="{ 'learning-composer__counter--warn': userInput.length > 800 }"
+                >
+                  {{ userInput.length }}{{ userInput.length > 800 ? ' / 建议 800 字内' : '' }}
+                </span>
+              </div>
               <el-button
                 type="primary"
                 @click="sendMessage"
@@ -284,69 +295,6 @@
         <el-icon><ChatDotRound /></el-icon>
       </el-button>
 
-      <button
-        v-if="showLearningDebugFloat"
-        type="button"
-        class="learning-debug-float-btn"
-        :class="{ 'learning-debug-float-btn--stacked': showPeerFloatButton }"
-        @click="openPathInputDialog"
-      >
-        <strong>Learn / Raw</strong>
-        <span>{{ learningDebugQuickChipText }}</span>
-      </button>
-
-      <el-drawer
-        v-model="showPathInputDialog"
-        title="Learn 调试数据"
-        size="min(92vw, 900px)"
-        destroy-on-close
-        class="learning-debug-drawer"
-      >
-        <div class="learning-debug-dialog__summary">{{ latestTeachingInputSummary }}</div>
-        <div v-if="pathHandoffSections.length" class="learning-debug-dialog__group">
-          <div class="learning-debug-dialog__group-title">Path 交付数据</div>
-          <div class="learning-debug-dialog__grid">
-            <section v-for="section in pathHandoffSections" :key="section.key" class="learning-debug-card">
-              <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
-              <pre>{{ section.content }}</pre>
-            </section>
-          </div>
-        </div>
-
-        <div v-if="pathInputSections.length" class="learning-debug-dialog__group">
-          <div class="learning-debug-dialog__group-title">编排器处理后的教学输入</div>
-        <div class="learning-debug-dialog__grid">
-          <section v-for="section in pathInputSections" :key="section.key" class="learning-debug-card">
-            <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
-            <pre>{{ section.content }}</pre>
-          </section>
-        </div>
-        </div>
-
-        <div v-if="latestTeachingPromptDebugSections.length" class="learning-debug-dialog__group">
-          <div class="learning-debug-dialog__group-title">最近一轮 Teaching Turn Prompt Debug</div>
-          <div class="learning-debug-dialog__grid">
-            <section v-for="section in latestTeachingPromptDebugSections" :key="section.key" class="learning-debug-card">
-              <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
-              <pre>{{ section.content }}</pre>
-            </section>
-          </div>
-        </div>
-
-        <div v-if="latestPeerPromptDebugSections.length" class="learning-debug-dialog__group">
-          <div class="learning-debug-dialog__group-title">最近一轮 Peer Skill 调试</div>
-          <div class="learning-debug-dialog__grid">
-            <section v-for="section in latestPeerPromptDebugSections" :key="section.key" class="learning-debug-card">
-              <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
-              <pre>{{ section.content }}</pre>
-            </section>
-          </div>
-        </div>
-
-        <div v-if="!pathHandoffSections.length && !pathInputSections.length && !latestTeachingPromptDebugSections.length && !latestPeerPromptDebugSections.length" class="learning-debug-dialog__empty">
-          当前没有可展示的调试数据。
-        </div>
-      </el-drawer>
 
       <el-dialog
         v-model="showTurnDebugDialog"
@@ -410,6 +358,7 @@ import {
 } from '@element-plus/icons-vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import KnowledgePointCard from '@/components/KnowledgePointCard.vue';
+import TypingIndicator from '@/components/TypingIndicator.vue';
 import CompletionCard from '@/components/CompletionCard.vue';
 import PeerNotification from '@/components/PeerNotification.vue';
 import PeerChatWindow from '@/components/PeerChatWindow.vue';
@@ -509,16 +458,20 @@ interface LearningInputTraceCard {
   sections: TraceSectionView[];
 }
 
+type CompletionPromptReason = 'completion-candidate' | 'learner-requested-end' | null;
+
 const messages = ref<ChatMessage[]>([]);
 const userInput = ref('');
 const aiLoading = ref(false);
 const messageListRef = ref<HTMLElement | null>(null);
+const composerRef = ref<HTMLElement | null>(null);
 const checkpointRef = ref<InstanceType<typeof CheckpointCard> | null>(null);
 const activeCheckpoint = ref<Checkpoint | null>(null);
 const checkpointSubmitting = ref(false);
 
 const knowledgePoints = ref<KnowledgePointStatus[]>([]);
 const showCompletionPrompt = ref(false);
+const completionPromptReason = ref<CompletionPromptReason>(null);
 const completionDurationSeconds = ref(0);
 
 const peerNotificationVisible = ref(false);
@@ -592,10 +545,13 @@ const sessionInitMessage = computed(() => sessionInitMode.value === 'resumed'
   ? '正在恢复上次授课进度...'
   : '正在初始化授课会话...');
 
-const allKnowledgePointsMastered = computed(() => {
-  return knowledgePoints.value.length > 0
-    && knowledgePoints.value.every((kp) => kp.status === 'mastered');
-});
+const completionPromptTitle = computed(() => completionPromptReason.value === 'learner-requested-end'
+  ? '已收到结束当前任务课堂的请求'
+  : '当前任务已达到可收束状态');
+
+const completionPromptDescription = computed(() => completionPromptReason.value === 'learner-requested-end'
+  ? '确认后将结束当前 task 的当次课堂并进入评价页面；这不代表整个 Learn 阶段已经结束。'
+  : '本轮教学判断当前 task 已满足收束条件。你可以继续巩固，也可以确认结束当前 task 的当次课堂并进入评价页面。');
 
 const kpMasteredCount = computed(() => knowledgePoints.value.filter(kp => kp.status === 'mastered').length);
 const kpProgressPercent = computed(() => {
@@ -1195,6 +1151,7 @@ const resetSessionState = () => {
   knowledgePoints.value = [];
   activeCheckpoint.value = null;
   showCompletionPrompt.value = false;
+  completionPromptReason.value = null;
   completionDurationSeconds.value = 0;
   sessionWrapup.value = {
     status: 'summary-only',
@@ -1299,6 +1256,10 @@ const startSession = async () => {
       difficulty: 5
     };
 
+    if (session.knowledgePoints && session.knowledgePoints.length > 0) {
+      knowledgePoints.value = session.knowledgePoints;
+    }
+
     sessionActive.value = true;
     sessionInitializing.value = false;
 
@@ -1311,6 +1272,7 @@ const startSession = async () => {
       quickReplies: session.opening?.quickReplies || [],
       quickRepliesUsed: false,
     });
+    scrollToBottom();
 
     startTimer();
     toast.success('授课会话已开始，课程进度将在 48 小时内保留');
@@ -1328,6 +1290,9 @@ const startSession = async () => {
           topic: session.topic,
           difficulty: 5
         };
+        if (session.knowledgePoints && session.knowledgePoints.length > 0) {
+          knowledgePoints.value = session.knowledgePoints;
+        }
         sessionActive.value = true;
         sessionInitializing.value = false;
         messages.value.push({
@@ -1339,6 +1304,7 @@ const startSession = async () => {
           quickReplies: session.opening?.quickReplies || [],
           quickRepliesUsed: false,
         });
+        scrollToBottom();
         startTimer();
         toast.success('已跳过旧会话恢复，重新开始本节授课');
       } catch (retryError: any) {
@@ -1354,6 +1320,7 @@ const sendMessage = async () => {
   if (!text || aiLoading.value || !sessionInfo.value.sessionId) return;
 
   showCompletionPrompt.value = false;
+  completionPromptReason.value = null;
   
   lastActivityTime.value = Date.now();
   
@@ -1395,6 +1362,7 @@ const sendMessage = async () => {
       sessionPaused.value = false;
       activeCheckpoint.value = null;
       showCompletionPrompt.value = false;
+      completionPromptReason.value = null;
       stopTimer();
 
       const evaluationDurationMinutes = result.wrapup?.duration;
@@ -1424,15 +1392,20 @@ const sendMessage = async () => {
       });
     }
     
-    if (result.isCompletion && !endingSession.value) {
-      if (allKnowledgePointsMastered.value) {
-        showCompletionPrompt.value = true;
-        toast.success('🎉 已完成本节课程目标，可选择结束并生成评估');
+    if (result.shouldConfirmEnd && !endingSession.value) {
+      completionPromptReason.value = result.endReason || (result.isCompletion ? 'completion-candidate' : 'learner-requested-end');
+      showCompletionPrompt.value = true;
+      if (completionPromptReason.value === 'learner-requested-end') {
+        toast.info('已收到结束本节学习的请求，请确认是否结束并进入评估');
       } else {
-        toast.info('检测到完成信号，但还有知识点未完全掌握，可继续学习');
+        toast.success('已检测到当前任务达到收束条件，可确认结束并进入评估');
       }
     }
     
+    if (result.recovered) {
+      toast.info('检测到一段时间未活动，已自动恢复会话');
+    }
+
     if (result.peerTriggered) {
       if (result.peerMessage) {
         peerChatMessages.value.push({
@@ -1624,6 +1597,7 @@ const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complet
 
 const dismissCompletionPrompt = () => {
   showCompletionPrompt.value = false;
+  completionPromptReason.value = null;
 };
 
 const confirmCompletionEnd = async () => {
@@ -1667,6 +1641,7 @@ const endSession = async (options?: {
     
     const result = await aiTeachingAPI.endSession(sessionInfo.value.sessionId);
     showCompletionPrompt.value = false;
+    completionPromptReason.value = null;
     activeCheckpoint.value = null;
     
     sessionActive.value = false;
@@ -1708,6 +1683,9 @@ const endSession = async (options?: {
   } catch (error: any) {
     if (error !== 'cancel') {
       toast.error(error.message || '结束会话失败');
+      // 兜底: 即使后端结束失败,也复位提示和按钮状态,避免一直卡在"准备结束"
+      showCompletionPrompt.value = false;
+      completionPromptReason.value = null;
     }
   } finally {
     endingSession.value = false;
@@ -1788,6 +1766,15 @@ const scrollToBottom = () => {
   nextTick(() => {
     if (messageListRef.value) {
       messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
+    }
+
+    if (window.innerWidth <= 768 && composerRef.value) {
+      const rect = composerRef.value.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight - 16 || rect.top < 0) {
+        requestAnimationFrame(() => {
+          composerRef.value?.scrollIntoView({ block: 'end' });
+        });
+      }
     }
   });
 };
@@ -1956,6 +1943,7 @@ const resumeSession = async (sessionId: string) => {
     knowledgePoints.value = Array.isArray(detail.knowledgePoints) ? detail.knowledgePoints : [];
     activeCheckpoint.value = detail.pendingCheckpoint || null;
     showCompletionPrompt.value = false;
+    completionPromptReason.value = null;
     completionDurationSeconds.value = 0;
     sessionAdvisory.value = null;
     sessionPaused.value = false;
@@ -1963,6 +1951,7 @@ const resumeSession = async (sessionId: string) => {
     sessionActive.value = true;
     sessionInitializing.value = false;
     startTimer();
+    scrollToBottom();
     
     toast.success('已恢复你在 48 小时内未完成的课程进度');
   } catch (error: any) {
@@ -2522,6 +2511,7 @@ onUnmounted(() => {
 }
 
 .learning-msg__body {
+  min-width: 0;
   font-size: 13px;
   line-height: 1.65;
   color: var(--ink);
@@ -2832,15 +2822,27 @@ onUnmounted(() => {
   background: rgba(49, 177, 111, 0.06);
   border: 1px solid rgba(49, 177, 111, 0.15);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
-.learning-completion span {
+.learning-completion__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.learning-completion__copy strong {
   font-size: 14px;
   font-weight: 600;
   color: #1a7a42;
+}
+
+.learning-completion__copy p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #3d6f54;
 }
 
 .learning-completion__actions {
@@ -2866,6 +2868,31 @@ onUnmounted(() => {
   background: #fff;
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.learning-composer__field {
+  position: relative;
+  min-width: 0;
+}
+
+.learning-composer__counter {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.42);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 1px 6px;
+  border-radius: 999px;
+  transition: color 0.2s ease;
+}
+
+.learning-composer__counter--warn {
+  color: #b45309;
+  font-weight: 600;
 }
 
 .learning-composer:focus-within {
@@ -3085,10 +3112,6 @@ onUnmounted(() => {
 
   .learning-msg {
     padding: 14px;
-  }
-
-  .learning-msg__body {
-    min-width: 0;
   }
 
   .quick-replies {

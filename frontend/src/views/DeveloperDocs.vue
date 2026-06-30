@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="developer-docs">
     <!-- 导航栏 -->
     <header class="docs-navbar">
@@ -293,7 +293,7 @@ JWT_EXPIRES_IN=7d
 # AI 服务配置
 AI_API_URL=http://localhost:3000
 AI_API_KEY=sk-your-api-key
-AI_MODEL=deepseek-chat
+AI_MODEL=deepseek-v4-flash
 
 # 日志配置
 LOG_LEVEL=debug</code></pre>
@@ -313,7 +313,7 @@ LOG_LEVEL=debug</code></pre>
             <p><strong>生产环境模型：</strong> DeepSeek（通过 NewAPI 服务）</p>
             <ul>
               <li>地址：http://101.43.146.102:30001</li>
-              <li>模型：deepseek-chat / deepseek-think</li>
+              <li>模型：deepseek-v4-flash / deepseek-v4-pro</li>
               <li>兼容 OpenAI API 格式</li>
             </ul>
           </div>
@@ -491,7 +491,7 @@ export default MyAgent;</code></pre>
           <h3>6. 验证 Agent</h3>
           <p>访问管理平台查看 Agent 是否已注册：</p>
           <div class="code-block">
-            <pre><code>http://localhost:5173/admin/agent-registry</code></pre>
+            <pre><code>http://localhost:5173/admin/skills</code></pre>
           </div>
         </section>
 
@@ -571,7 +571,7 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
               <span class="agent-version">v2.0</span>
             </div>
             <div class="agent-type-card">
-              <h4>🗺️ path-agent</h4>
+              <h4>🗺️ skill:path-planning</h4>
               <p>路径生成 Agent</p>
               <span class="agent-version">v1.0</span>
             </div>
@@ -689,7 +689,7 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
             <pre><code>import { mcpGateway } from '../../core/mcp/McpGateway';
 
 const response = await mcpGateway.chatCompletion({
-  model: process.env.AI_MODEL || 'deepseek-chat',
+  model: process.env.AI_MODEL || 'deepseek-v4-flash',
   messages: [
     { role: 'system', content: '你是一个专业的 AI 辅导老师' },
     { role: 'user', content: '请解释什么是递归' }
@@ -715,12 +715,12 @@ console.log(response.content);</code></pre>
                 <tr>
                   <td>newapi</td>
                   <td>http://localhost:3000</td>
-                  <td>deepseek-chat</td>
+                  <td>deepseek-v4-flash</td>
                 </tr>
                 <tr>
                   <td>production</td>
                   <td>http://101.43.146.102:30001</td>
-                  <td>deepseek-chat / deepseek-think</td>
+                  <td>deepseek-v4-flash / deepseek-v4-pro</td>
                 </tr>
               </tbody>
             </table>
@@ -813,7 +813,7 @@ async function generateContent(prompt: string) {
     logger.info('开始生成内容...');
     
     const response = await mcpGateway.chatCompletion({
-  model: process.env.AI_MODEL || 'deepseek-chat',
+  model: process.env.AI_MODEL || 'deepseek-v4-flash',
       messages: [
         { role: 'system', content: '你是一个专业的内容生成器' },
         { role: 'user', content: prompt }
@@ -841,7 +841,7 @@ async function generateContent(prompt: string) {
           <h3>更多示例</h3>
           <p>参考现有标准化 Agent 获取灵感：</p>
           <ul class="simple-list">
-            <li><code>backend/src/agents/path-agent/</code> - 路径生成 Agent</li>
+            <li><code>backend/src/agents/path-planning/</code> - 路径生成 Agent</li>
             <li><code>backend/src/services/ai-teaching/</code> - AI 授课编排</li>
           </ul>
         </section>

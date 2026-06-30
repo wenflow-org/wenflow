@@ -27,15 +27,18 @@
           <el-option
             v-for="d in draftVersions"
             :key="d.id"
-            :label="`v${d.version} · ${d.name}`"
+            :label="d.name"
             :value="d.id"
-          />
+          >
+            <el-tag size="small" effect="plain" type="info">v{{ d.version }}</el-tag>
+            <span>{{ d.name }}</span>
+          </el-option>
         </el-select>
         <span v-if="draftMode === 'fork'" class="toolbar-hint">
-          下次 v{{ nextVersion }} · 在当前 ACTIVE 基础上修改
+           <el-tag size="small" effect="plain" type="info">v{{ nextVersion }}</el-tag> 在当前 ACTIVE 基础上修改
         </span>
         <span v-if="draftMode === 'empty'" class="toolbar-hint">
-          下次 v{{ nextVersion }} · 完全空白
+          <el-tag size="small" effect="plain" type="info">v{{ nextVersion }}</el-tag> 完全空白
         </span>
       </div>
       <div class="edit-toolbar__right">
@@ -111,7 +114,7 @@
           <article v-if="activePrompt" class="ref-card">
             <header class="ref-card__head">
               <span class="ref-card__tag ref-card__tag--db">DB ACTIVE</span>
-              <span class="ref-card__path">v{{ activePrompt.version }} · {{ activePrompt.name }}</span>
+              <span class="ref-card__path"><el-tag size="small" effect="plain" type="info">v{{ activePrompt.version }}</el-tag> {{ activePrompt.name }}</span>
               <span class="ref-card__meta">
                 T={{ activePrompt.temperature ?? '—' }} ·
                 Max={{ activePrompt.maxTokens ?? '—' }} ·
@@ -154,7 +157,7 @@
         <header class="edit-col__head">
           <h4>草稿 {{ form.id ? `· 编辑 v${form.version}` : '· 新建' }}</h4>
           <span v-if="aiDraftSourceFlag" class="edit-col__ai">
-            🤖 已注入 AI 起草内容
+            AI 起草内容已注入
           </span>
         </header>
 
@@ -162,16 +165,16 @@
         <div class="editor-toolbar">
           <el-radio-group v-model="editorMode" size="small">
             <el-radio-button value="sectioned">
-              🧱 分块
+              分块
               <span v-if="schemaLintBadge" :class="['mini-lint', schemaLintBadge.ok ? 'mini-lint--ok' : 'mini-lint--warn']">
                 {{ schemaLintBadge.text }}
               </span>
             </el-radio-button>
-            <el-radio-button value="edit">✏️ 文本</el-radio-button>
+            <el-radio-button value="edit">文本</el-radio-button>
             <el-radio-button value="diff" :disabled="!activePrompt">
-              🔀 Diff
+              Diff
             </el-radio-button>
-            <el-radio-button value="outline">📑 大纲</el-radio-button>
+            <el-radio-button value="outline">大纲</el-radio-button>
           </el-radio-group>
           <div class="editor-toolbar__right">
             <el-button
@@ -179,7 +182,7 @@
               link
               type="primary"
               @click="findDialogOpen = !findDialogOpen"
-            >🔍 查找/替换</el-button>
+            >查找/替换</el-button>
             <span class="editor-meta">
               {{ form.systemPrompt.length }} 字 ·
               {{ lineCount }} 行
@@ -324,27 +327,25 @@
             </div>
           </el-form-item>
 
-          <div class="draft-form__row draft-form__row--params">
-            <el-form-item label="Temperature">
-              <el-input-number
-                v-model="form.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                size="small"
-                :precision="2"
-              />
-            </el-form-item>
-            <el-form-item label="Max Tokens">
-              <el-input-number
-                v-model="form.maxTokens"
-                :min="100"
-                :max="32000"
-                :step="500"
-                size="small"
-              />
-            </el-form-item>
-          </div>
+          <!-- 
+            运行时参数已移至"模型运行时" Tab 统一配置
+            Temperature/MaxTokens/Model 不再在 Prompt 版本中设置
+            请在 AgentEditor 的"模型运行时" Tab 中配置 Skill 独立参数
+          -->
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 16px;"
+          >
+            <template #title>
+              运行时参数配置已迁移
+            </template>
+            <p style="margin: 0; font-size: 13px; line-height: 1.5;">
+              Temperature、MaxTokens、Model 等参数现在统一在 <strong>"模型运行时" Tab</strong> 中配置。<br>
+              Prompt 版本中的参数已废弃，不再影响实际运行。
+            </p>
+          </el-alert>
         </el-form>
 
         <div v-if="draftVersions.length > 0" class="draft-list">
@@ -375,6 +376,10 @@
       width="60%"
       append-to-body
     >
+      <div v-if="fullTextDialog.version" class="full-text-meta">
+        <el-tag size="small" type="info">DB ACTIVE</el-tag>
+        <el-tag size="small" effect="plain">{{ fullTextDialog.version }}</el-tag>
+      </div>
       <pre class="full-text">{{ fullTextDialog.content }}</pre>
     </el-dialog>
   </div>
@@ -421,6 +426,7 @@ const form = ref({
 const fullTextDialog = ref({
   visible: false,
   title: '',
+  version: '',
   content: '',
 });
 
@@ -956,7 +962,8 @@ async function loadFullText(source: 'file' | 'db') {
   if (source === 'db' && props.activePrompt) {
     fullTextDialog.value = {
       visible: true,
-      title: `DB ACTIVE · v${props.activePrompt.version} · ${props.activePrompt.name}`,
+      title: `${props.activePrompt.name}`,
+      version: `v${props.activePrompt.version}`,
       content: props.activePrompt.systemPrompt,
     };
   } else if (source === 'file' && props.agent.file) {
@@ -972,6 +979,7 @@ async function loadFullText(source: 'file' | 'db') {
     fullTextDialog.value = {
       visible: true,
       title: `FILE · ${props.agent.file.path}`,
+      version: '',
       content: fullText,
     };
   }
@@ -1218,7 +1226,7 @@ defineExpose({});
 .ref-card__body {
   margin: 0;
   padding: 8px 10px;
-  background: white;
+  background: var(--admin-bg-surface);
   border: 1px solid #f1f5f9;
   border-radius: 6px;
   font-family: 'JetBrains Mono', Consolas, monospace;
@@ -1291,7 +1299,7 @@ defineExpose({});
   flex-wrap: wrap;
   position: sticky;
   top: 0;
-  background: white;
+  background: var(--admin-bg-surface);
   z-index: 10;
   padding: 8px 0;
   border-bottom: 1px solid #f1f5f9;
@@ -1363,7 +1371,7 @@ defineExpose({});
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   overflow: hidden;
-  background: white;
+  background: var(--admin-bg-surface);
   height: 480px;
   width: 100%;
   min-width: 0;
@@ -1404,7 +1412,7 @@ defineExpose({});
   font-size: 12.5px;
   line-height: 22px;
   color: #1a2a44;
-  background: white;
+  background: var(--admin-bg-surface);
   white-space: pre;
   overflow: auto;
   tab-size: 2;
@@ -1419,7 +1427,7 @@ defineExpose({});
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   overflow: hidden;
-  background: white;
+  background: var(--admin-bg-surface);
   max-height: 480px;
   display: flex;
   flex-direction: column;
@@ -1485,7 +1493,7 @@ defineExpose({});
 }
 
 .diff-line--eq {
-  background: white;
+  background: var(--admin-bg-surface);
   opacity: 0.6;
 }
 
@@ -1521,7 +1529,7 @@ defineExpose({});
 .outline-wrap {
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  background: white;
+  background: var(--admin-bg-surface);
   padding: 12px;
   max-height: 480px;
   overflow-y: auto;
@@ -1660,6 +1668,12 @@ defineExpose({});
   color: #94a3b8;
   font-size: 11px;
   font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.full-text-meta {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .full-text {

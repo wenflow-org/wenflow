@@ -11,7 +11,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './',
-  testMatch: 'mcp-*.test.ts',
+  testMatch: ['mcp-*.test.ts', 'admin-visual-check.test.ts'],
+  /* Maximum time one test can run for */
+  timeout: 300000,
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

@@ -6,6 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
+import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
@@ -21,6 +22,9 @@ import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-l
 import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
 import { VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT } from '../../skills/virtual-learner-path-evaluator';
 import { VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT } from '../../skills/virtual-learner-learn-turn-simulator';
+import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
+import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
+import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-parser';
 
 const router = Router();
 
@@ -38,6 +42,9 @@ const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
   'virtual-learner-path-evaluator': VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
   'virtual-learner-learn-turn-simulator': VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
+  'goal-understanding-composer': GOAL_UNDERSTANDING_COMPOSER_PROMPT,
+  'acceptance-evidence-evaluator': ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT,
+  'structured-output-parser': STRUCTURED_OUTPUT_PARSER_PROMPT,
 };
 
 type SkillRuntimeStats = {
@@ -71,7 +78,7 @@ async function getSkillRuntimeStats(skillNames: string[]): Promise<Map<string, S
 
   const promptAgentIds = skillNames.map((name) => `skill:${name}`);
   const [registrations, promptGroups, promptSuccessGroups, agentLogs] = await Promise.all([
-    prisma.skill_registrations.findMany({
+    systemPrisma.skill_registrations.findMany({
       where: { name: { in: skillNames } },
       select: { name: true, callCount: true, successRate: true, updatedAt: true },
     }),
@@ -273,6 +280,84 @@ router.get('/categories', async (req: Request, res: Response) => {
   }
 });
 
+
+/**
+ * 获取 Skill-Agent 关联关系
+ * 
+ * 扫描所有 agent 和 orchestrator 源文件，找出每个 skill 被哪些 agent/orchestrator 引用。
+ * 使用静态分析：baseDir 下的 .ts 文件是否 import 或引用该 skill。
+ * 
+ * 注意：此函数路由必须在 /:name 通配路由之前注册，避免 Express 把 "agent-relations" 当作 skill name 匹配。
+ */
+router.get('/agent-relations', async (_req: Request, res: Response) => {
+  try {
+    const gateway = getGateway();
+    const skills = gateway.matchSkills({});
+    const allSkillNames = skills.map(s => s.definition.name);
+
+    const relations: Record<string, { agents: string[]; orchestrators: string[]; totalReferences: number }> = {};
+    for (const name of allSkillNames) {
+      relations[name] = { agents: [], orchestrators: [], totalReferences: 0 };
+    }
+
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const agentDir = path.resolve(__dirname, '../../agents');
+    const orchDir = path.resolve(__dirname, '../../orchestrators');
+
+    function scanDir(dir: string, kind: 'agents' | 'orchestrators') {
+      if (!fs.existsSync(dir)) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanDir(fullPath, kind);
+        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+          try {
+            const content = fs.readFileSync(fullPath, 'utf-8');
+            const dirName = entry.name === 'index.ts'
+              ? path.basename(path.dirname(fullPath))
+              : entry.name.replace('.ts', '');
+            for (const skillName of allSkillNames) {
+              if (
+                content.includes(`'${skillName}'`) ||
+                content.includes(`"${skillName}"`) ||
+                content.includes(`skill:${skillName}`) ||
+                content.includes(`skills/${skillName}`)
+              ) {
+                if (kind === 'agents') {
+                  relations[skillName].agents.push(dirName);
+                } else {
+                  relations[skillName].orchestrators.push(dirName);
+                }
+                relations[skillName].totalReferences++;
+              }
+            }
+          } catch {
+            // skip unreadable files
+          }
+        }
+      }
+    }
+
+    scanDir(agentDir, 'agents');
+    scanDir(orchDir, 'orchestrators');
+
+    for (const [skillName, rel] of Object.entries(relations)) {
+      rel.agents = [...new Set(rel.agents)];
+      rel.orchestrators = [...new Set(rel.orchestrators)];
+    }
+
+    res.json({ success: true, data: relations });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 /**
  * 获取 Skill 详情
  */
@@ -321,7 +406,7 @@ router.get('/:name/db-stats', async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
     
-    const record = await prisma.skill_registrations.findUnique({
+    const record = await systemPrisma.skill_registrations.findUnique({
       where: { name }
     });
     
@@ -403,6 +488,66 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
     const skill = gateway.getSkill(name);
 
     if (!skill) {
+      // 兜底：peer-reinforcement 等以 skill: 前缀注册到 agent 体系的节点
+      // 不在 SkillRegistry 中，但仍然有 active prompt 可读
+      const promptService = new AgentConfigService();
+      const agentId = `skill:${name}`;
+      const activePrompt = await promptService.getActivePrompt(agentId);
+      const fallbackPrompt = SKILL_FALLBACK_PROMPTS[name] || null;
+
+      if (activePrompt) {
+        const fallbackNormalized = normalizePromptText(fallbackPrompt);
+        const activeNormalized = normalizePromptText(activePrompt.systemPrompt);
+        const promptDrift = !!fallbackPrompt && activeNormalized !== fallbackNormalized;
+        return res.json({
+          success: true,
+          data: {
+            source: 'db-active',
+            editable: true,
+            agentId,
+            prompt: activePrompt,
+            fallbackPrompt,
+            promptDrift,
+            driftDetail: fallbackPrompt ? {
+              activeVersion: activePrompt.version,
+              fallbackAvailable: true,
+              activeMatchesCode: !promptDrift,
+            } : null,
+          },
+        });
+      }
+
+      if (fallbackPrompt) {
+        return res.json({
+          success: true,
+          data: {
+            source: 'code-fallback',
+            promptMode: 'code-fallback',
+            editable: true,
+            agentId,
+            prompt: {
+              id: null,
+              agentId,
+              version: null,
+              name: `${name} fallback prompt`,
+              description: '代码内置默认 Prompt',
+              systemPrompt: fallbackPrompt,
+              model: null,
+              temperature: null,
+              maxTokens: null,
+              status: 'FALLBACK',
+            },
+            fallbackPrompt,
+            promptDrift: false,
+            driftDetail: {
+              activeVersion: null,
+              fallbackAvailable: true,
+              activeMatchesCode: true,
+            },
+          },
+        });
+      }
+
       return res.status(404).json({
         success: false,
         error: 'Skill not found',
@@ -510,7 +655,7 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
  */
 router.get('/usage/trends', async (req: Request, res: Response) => {
   try {
-    const skills = await prisma.skill_registrations.findMany({
+    const skills = await systemPrisma.skill_registrations.findMany({
       select: {
         name: true,
         callCount: true,
@@ -564,5 +709,157 @@ function getCategoryLabel(category: string): string {
   };
   return labels[category] || category;
 }
+
+/**
+ * Skill 工作台综合元数据 API
+ * GET /api/admin/skills/:skillId/workbench-meta
+ *
+ * 一次性返回 Skill 工作台所需的全部信息：
+ *   - manifest 信息（name / description / category / aliases）
+ *   - 隶属 Agent（agentId / name）
+ *   - 模型配置（temperature / maxTokens / model）
+ *   - prompt 版本列表（agent_prompts 表）
+ *   - 字段契约（agent_contracts 表，按 stage）
+ *   - 调用统计（agent_call_logs 聚合）
+ *
+ * 同时接受老 id（如 'teaching-turn-agent'）通过 alias 解析。
+ */
+router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
+  try {
+    const rawSkillId = req.params.skillId;
+    const { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } = await import('../../services/agent-manifest.service');
+
+    const canonicalId = getCanonicalAgentId(rawSkillId);
+    const manifest = getAgentManifest(canonicalId);
+
+    if (!manifest) {
+      return res.status(404).json({
+        success: false,
+        error: { message: `Skill "${rawSkillId}" 不在 manifest 中` }
+      });
+    }
+
+    if (manifest.kind === 'agent') {
+      return res.status(400).json({
+        success: false,
+        error: { message: `"${canonicalId}" 是 Agent（编排器），不应使用 Skill 工作台。请前往 Agent 拓扑视图。` }
+      });
+    }
+
+    const parentAgent = getAgentOfSkill(canonicalId);
+
+    // 并发拉取
+    const [modelConfig, promptVersions, contract, callStats] = await Promise.all([
+      systemPrisma.agent_model_configs.findUnique({ where: { agentId: canonicalId } }),
+      systemPrisma.agent_prompts.findMany({
+        where: { agentId: canonicalId },
+        orderBy: { version: 'desc' },
+        select: {
+          id: true,
+          version: true,
+          name: true,
+          description: true,
+          status: true,
+          temperature: true,
+          maxTokens: true,
+          model: true,
+          createdAt: true,
+          updatedAt: true,
+          publishedAt: true
+        }
+      }),
+      systemPrisma.agent_contracts.findUnique({ where: { agentId: canonicalId } }),
+      prisma.agent_call_logs.groupBy({
+        by: ['success'],
+        where: { agentId: canonicalId },
+        _count: { _all: true },
+        _avg: { durationMs: true },
+        _max: { calledAt: true }
+      })
+    ]);
+
+    const totalCalls = callStats.reduce((s, g) => s + g._count._all, 0);
+    const successCalls = callStats.find(g => g.success)?._count._all || 0;
+    const successRate = totalCalls > 0 ? Number(((successCalls / totalCalls) * 100).toFixed(1)) : null;
+    const avgDuration = callStats.length > 0
+      ? Math.round(callStats.reduce((s, g) => s + (g._avg.durationMs || 0) * g._count._all, 0) / totalCalls || 0)
+      : 0;
+    const lastCalledAt = callStats.reduce<Date | null>((latest, g) => {
+      if (!g._max.calledAt) return latest;
+      if (!latest) return g._max.calledAt;
+      return g._max.calledAt > latest ? g._max.calledAt : latest;
+    }, null);
+
+    const activePrompt = promptVersions.find(p => p.status === 'ACTIVE' || p.status === 'published') || null;
+
+    res.json({
+      success: true,
+      data: {
+        skill: {
+          id: canonicalId,
+          name: manifest.name,
+          description: manifest.description,
+          category: manifest.category,
+          aliases: manifest.aliases || [],
+          ioContractVersion: manifest.ioContractVersion,
+          noPromptFile: !!manifest.noPromptFile
+        },
+        parentAgent: parentAgent ? {
+          id: parentAgent.id,
+          name: parentAgent.name,
+          monitoringGroup: parentAgent.monitoringGroup
+        } : null,
+        modelConfig: modelConfig ? {
+          temperature: modelConfig.temperature,
+          maxTokens: modelConfig.maxTokens,
+          model: modelConfig.model,
+          tier: modelConfig.tier
+        } : (manifest.defaultModelConfig ? {
+          temperature: manifest.defaultModelConfig.temperature,
+          maxTokens: manifest.defaultModelConfig.maxTokens,
+          model: null,
+          tier: 'chat',
+          fromManifestDefault: true
+        } : null),
+        contract: contract ? {
+          stage: contract.stage,
+          displayName: contract.displayName,
+          description: contract.description,
+          schemaVersion: contract.schemaVersion,
+          source: contract.source,
+          managedByCode: contract.managedByCode
+        } : null,
+        promptVersions: promptVersions.map(p => ({
+          id: p.id,
+          version: p.version,
+          name: p.name,
+          description: p.description,
+          status: p.status,
+          temperature: p.temperature,
+          maxTokens: p.maxTokens,
+          model: p.model,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+          publishedAt: p.publishedAt,
+          isActive: activePrompt?.id === p.id
+        })),
+        activePromptId: activePrompt?.id || null,
+        stats: {
+          totalCalls,
+          successCalls,
+          successRate,
+          avgDuration,
+          lastCalledAt
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('[skill-workbench-meta] failed:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: error?.message || 'workbench meta load failed' }
+    });
+  }
+});
 
 export default router;

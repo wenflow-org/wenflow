@@ -1,7 +1,8 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
 import { learnerModelAgent } from '../../agents/learner-model-agent';
-import type { TeachingSessionRecord } from './TeachingSessionRepository';
+import { teachingStrategyConfig } from '../../config/pedagogy.config';
+import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 
 export interface TeachingScenarioContext {
   userId: string;
@@ -12,12 +13,13 @@ export interface TeachingScenarioContext {
   topic: string;
   taskTitle: string;
   taskDescription: string;
-  taskType: 'reading' | 'practice' | 'project' | 'quiz';
+  taskType: 'reading' | 'practice' | 'project' | 'quiz' | 'acquire' | 'deconstruct' | 'model' | 'execute' | 'diagnose' | 'refine' | 'consolidate';
   taskKnowledgeScope: {
     primaryConcepts: string[];
     prerequisiteConcepts: string[];
     supportingConcepts: string[];
   };
+  taskKnowledgeSeeds: TeachingKnowledgePointState[];
   taskProfile: {
     knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
     cognitiveLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;
@@ -216,85 +218,36 @@ function parseLearningObjectives(raw: string | null | undefined): string[] {
   return [];
 }
 
+
+
+function buildTaskKnowledgeSeeds(_params: {
+  task: any;
+  resolvedConcept: { id: string | null; name: string | null; description: string | null };
+}): TeachingKnowledgePointState[] {
+  return [];
+}
+
 function buildTeachingStrategyGuidance(taskProfile: TeachingScenarioContext['taskProfile']) {
   const knowledgeType = taskProfile.knowledgeType;
   const cognitiveLevel = taskProfile.cognitiveLevel;
   const objectiveFocus = taskProfile.learningObjectives.slice(0, 4);
   const coreConcept = taskProfile.coreConcept;
 
-  const byKnowledgeType: Record<NonNullable<TeachingScenarioContext['taskProfile']['knowledgeType']>, {
-    explanationStyle: string;
-    interactionPattern: string;
-    preferredStrategies: string[];
-    responseConstraints: string[];
-  }> = {
-    factual: {
-      explanationStyle: 'Give concise, concrete explanations that emphasize precise definitions, key facts, and recognition cues.',
-      interactionPattern: 'Use quick recall checks, contrast similar terms, and verify exact understanding before moving on.',
-      preferredStrategies: ['explain', 'drill'],
-      responseConstraints: ['Avoid over-expanding into theory not needed for the current fact set.'],
-    },
-    conceptual: {
-      explanationStyle: 'Explain underlying ideas, relationships, and why the concept works, using analogies only when they sharpen understanding.',
-      interactionPattern: 'Prompt the learner to compare, classify, and explain connections in their own words.',
-      preferredStrategies: ['explain', 'scaffold', 'diagnose'],
-      responseConstraints: ['Do not reduce the lesson to memorized definitions without showing relationships.'],
-    },
-    procedural: {
-      explanationStyle: 'Teach as a sequence of steps with decision points, examples, and common failure cases.',
-      interactionPattern: 'Guide the learner through doing the task step by step, then fade support as they gain traction.',
-      preferredStrategies: ['demonstrate', 'scaffold', 'feedback'],
-      responseConstraints: ['Do not stay only at abstract explanation; anchor the reply in execution.'],
-    },
-    metacognitive: {
-      explanationStyle: 'Focus on planning, self-monitoring, reflection, and how to choose an approach.',
-      interactionPattern: 'Ask the learner to justify choices, inspect mistakes, and decide what to try next.',
-      preferredStrategies: ['reflect', 'diagnose', 'motivate'],
-      responseConstraints: ['Do not answer everything directly; preserve space for learner reflection and self-correction.'],
-    },
-  };
+  const knowledgeGuidance = knowledgeType && teachingStrategyConfig.byKnowledgeType[knowledgeType]
+    ? teachingStrategyConfig.byKnowledgeType[knowledgeType]
+    : {
+        explanationStyle: teachingStrategyConfig.defaults.explanationStyle,
+        interactionPattern: teachingStrategyConfig.defaults.interactionPattern,
+        preferredStrategies: teachingStrategyConfig.defaults.preferredStrategies,
+        responseConstraints: [] as string[],
+      };
 
-  const byCognitiveLevel: Record<NonNullable<TeachingScenarioContext['taskProfile']['cognitiveLevel']>, {
-    targetDepth: string;
-    responseConstraints: string[];
-  }> = {
-    remember: {
-      targetDepth: 'Target recognition and accurate recall only; do not force deeper transfer in the same turn.',
-      responseConstraints: ['Keep the goal at recall depth unless the learner clearly shows readiness for more.'],
-    },
-    understand: {
-      targetDepth: 'Target comprehension, paraphrasing, and basic explanation of meaning.',
-      responseConstraints: ['Prefer explanation and interpretation over complex production tasks.'],
-    },
-    apply: {
-      targetDepth: 'Target use of the concept or process on a concrete example or small task.',
-      responseConstraints: ['Include at least one concrete application or execution cue.'],
-    },
-    analyze: {
-      targetDepth: 'Target breakdown of structure, comparison of parts, and diagnosis of why something works or fails.',
-      responseConstraints: ['Ask the learner to inspect structure, assumptions, or error sources.'],
-    },
-    evaluate: {
-      targetDepth: 'Target judgment with criteria, tradeoff analysis, and reasoned justification.',
-      responseConstraints: ['Require explicit reasoning or criteria when comparing alternatives.'],
-    },
-    create: {
-      targetDepth: 'Target synthesis into a new artifact, plan, or original solution.',
-      responseConstraints: ['Push toward producing something new, not only explaining existing material.'],
-    },
-  };
-
-  const knowledgeGuidance = knowledgeType ? byKnowledgeType[knowledgeType] : {
-    explanationStyle: 'Explain clearly with concrete examples matched to the current task.',
-    interactionPattern: 'Use a guided back-and-forth that checks understanding before adding complexity.',
-    preferredStrategies: ['explain', 'scaffold'],
-    responseConstraints: [] as string[],
-  };
-
-  const levelGuidance = cognitiveLevel ? byCognitiveLevel[cognitiveLevel] : {
-    targetDepth: 'Target a practical next step without exceeding the learner’s demonstrated readiness.',
-    responseConstraints: [] as string[],
-  };
+  const levelGuidance = cognitiveLevel && teachingStrategyConfig.byCognitiveLevel[cognitiveLevel]
+    ? teachingStrategyConfig.byCognitiveLevel[cognitiveLevel]
+    : {
+        targetDepth: teachingStrategyConfig.defaults.targetDepth,
+        responseConstraints: [] as string[],
+      };
 
   return {
     knowledgeType,
@@ -354,7 +307,10 @@ export async function buildTeachingScenarioContext(
   const learnerSnapshot = learnerResult.snapshot;
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
-  const primaryConcepts = persistedLearningObjectives;
+  const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, resolvedConcept });
+  const primaryConcepts = persistedLearningObjectives.length > 0
+    ? persistedLearningObjectives
+    : taskKnowledgeSeeds.map((point) => point.name).slice(0, 2);
   const prerequisiteConcepts = (learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps || [])
     .map((item) => item.label)
     .filter((label) => primaryConcepts.some((concept) => label.includes(concept) || concept.includes(label)))
@@ -368,7 +324,7 @@ export async function buildTeachingScenarioContext(
     knowledgeType: (task as any).knowledgeType || null,
     cognitiveLevel: (task as any).cognitiveLevel || null,
     displayLabel: (task as any).displayLabel || null,
-    learningObjectives: persistedLearningObjectives,
+    learningObjectives: primaryConcepts,
     coreConcept: resolvedConcept.name,
     linkedConceptId: resolvedConcept.id,
     linkedConceptName: resolvedConcept.name,
@@ -406,6 +362,7 @@ export async function buildTeachingScenarioContext(
       prerequisiteConcepts,
       supportingConcepts,
     },
+    taskKnowledgeSeeds,
     taskProfile,
     currentTaskContext: {
       description: task.description || null,
@@ -414,7 +371,7 @@ export async function buildTeachingScenarioContext(
     teachingStrategyGuidance: buildTeachingStrategyGuidance(taskProfile),
     cognitiveFrame,
     canStartLearning,
-    learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习。',
+    learningBlockedReason: canStartLearning ? null : '学习内容还在准备中，请稍候再开始学习',
     pathProgress: {
       pathTitle: path.title || path.name || '当前学习路径',
       pathSummary: parsePathSummary(path.aiPromptTemplate),

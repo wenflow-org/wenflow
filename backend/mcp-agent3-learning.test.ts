@@ -66,7 +66,7 @@ test.describe('MCP Agent 3 - 学习页面和任务完成测试', () => {
       console.log('[2/12] 检查登录状态...');
       await page.waitForTimeout(2000);
       
-      const userMenu = await page.$('.user-menu, .avatar-placeholder, .el-dropdown-user').catch(() => null);
+      const userMenu = await page.$('.user-chip, .user-menu, .avatar-placeholder, .el-dropdown-user').catch(() => null);
       if (!userMenu) {
         console.log('未登录，执行登录流程...');
         const loginButton = await page.$('button:has-text("登录")').catch(() => null);
@@ -76,17 +76,18 @@ test.describe('MCP Agent 3 - 学习页面和任务完成测试', () => {
           await page.waitForTimeout(1000);
           
           // 尝试多种选择器
-          const emailInput = await page.$('#email, input[type="email"], input[placeholder*="邮箱"]').catch(() => null);
-          const passwordInput = await page.$('#password, input[type="password"], input[placeholder*="密码"]').catch(() => null);
+          const emailInput = await page.$('input[placeholder*="请输入用户名"]').catch(() => null);
+          const passwordInput = await page.$('input[placeholder*="请输入密码"]').catch(() => null);
           
           if (emailInput && passwordInput) {
-            await emailInput.fill('mcp_test_fix@test.com');
+            await emailInput.fill('mcp_test_fix');
             await passwordInput.fill('Test123456!');
             await page.waitForTimeout(500);
             
-            const submitButton = await page.$('button[type="submit"], button:has-text("登录")').catch(() => null);
+            const submitButton = await page.$('button:has-text("登录并继续"), button[type="submit"]').catch(() => null);
             if (submitButton) {
               await submitButton.click();
+              await page.waitForTimeout(5000);
               await page.waitForTimeout(5000);
               console.log('✅ 登录成功');
             }

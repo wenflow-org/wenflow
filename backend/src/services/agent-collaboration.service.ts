@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Agent 协作服务
  * 
  * 协调四大核心Agent的互相调用
@@ -13,7 +13,7 @@ import {
   SignalDetectionResult,
   PathAdjustmentRequest
 } from '../agents/protocol';
-import { pathAdjustmentEngine, PathAdjustment } from '../agents/path-agent/adjustment';
+import { pathAdjustmentEngine, PathAdjustment } from '../skills/path-planning/adjustment';
 import { learnerModelAgent } from '../agents/learner-model-agent';
 import prisma from '../config/database';
 import { learnerProgressService } from './learner/LearnerProgressService';

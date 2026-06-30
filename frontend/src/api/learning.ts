@@ -220,11 +220,12 @@ export interface AdaptiveGuidancePayload {
     skillId: string;
     model: string | null;
     systemPromptVersion: number | null;
-    userPayload: string;
-    rawModelOutput: string;
-    normalizedOutput: AdaptiveGuidanceCopy | null;
     durationMs: number;
     cached: boolean;
+    generatedAt?: string | null;
+    userPayload?: string;
+    rawModelOutput?: string;
+    normalizedOutput?: AdaptiveGuidanceCopy | null;
   } | null;
 }
 
@@ -321,9 +322,8 @@ export const learningAPI = {
     return (response as any)?.data ?? null;
   },
 
-  async getAdaptiveGuidance(view: 'dashboard' | 'path-list' | 'path-detail' | 'learning-state', pathId?: string): Promise<AdaptiveGuidancePayload | null> {
-    const query = pathId ? `?view=${encodeURIComponent(view)}&pathId=${encodeURIComponent(pathId)}` : `?view=${encodeURIComponent(view)}`;
-    const response = await api.get(`/adaptive-guidance/copy${query}`);
+  async getAdaptiveGuidance(): Promise<AdaptiveGuidancePayload | null> {
+    const response = await api.get('/adaptive-guidance/copy');
     return response.data || null;
   }
 };

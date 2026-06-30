@@ -19,6 +19,8 @@ import {
   type SimulationAgentConfig
 } from '../services/agentConfig.service';
 import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLearnerPathEvaluatorDefinition, virtualLearnerLearnTurnSimulatorDefinition } from '../skills';
+import { normalizeFrictionBudget, type FrictionBudget } from '../skills/virtual-learner-shared';
+import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import type { 
   SimulationContext,
@@ -40,6 +42,16 @@ export interface SimulationOrchestratorInput {
 export interface AutoLoopOptions {
   maxRounds?: number;
   onStep?: (result: SimulationStepResult) => void;
+  autoAdvanceToPath?: boolean;
+  autoAdvanceToLearning?: boolean;
+}
+
+export interface RunFullOptions {
+  maxRounds?: number;
+  maxMilestones?: number;
+  continueOnTaskComplete?: boolean;
+  autoAdvanceToPath?: boolean;
+  autoAdvanceToLearning?: boolean;
 }
 
 class SimulationOrchestrator {
@@ -329,6 +341,7 @@ class SimulationOrchestrator {
     currentPhase: 'opening' | 'understanding' | 'proposal_evaluation';
     previousLearnerState?: any;
     goalState?: any;
+    frictionBudget?: FrictionBudget;
   }) {
     const output = await executeSkill(virtualLearnerGoalDialogueSimulatorDefinition, {
       learner: {
@@ -342,6 +355,7 @@ class SimulationOrchestrator {
       visibleContext: this.buildGoalVisibleContext(params.conversationHistory, params.lastAssistantMessage),
       currentPhase: params.currentPhase,
       previousLearnerState: params.previousLearnerState || null,
+      frictionBudget: params.frictionBudget,
       task: {
         mode: 'simulate-goal-learner-turn',
         requirements: [
@@ -610,6 +624,15 @@ class SimulationOrchestrator {
     }
   }
 
+  /**
+   * 从 session.stageResults.simulationConfig 读取本次会话的 frictionBudget
+   * 默认 'normal' (真实人物常态)
+   */
+  private getSessionFrictionBudget(session: any): FrictionBudget {
+    const stageResults = this.parseStageResultsPayload(session?.stageResults)
+    return normalizeFrictionBudget(stageResults?.simulationConfig?.frictionBudget)
+  }
+
   private parseStoryContextFromStageResults(stageResults: any): any {
     return stageResults?.story || null;
   }
@@ -641,7 +664,8 @@ class SimulationOrchestrator {
           lastAssistantMessage: '',
           currentPhase: 'opening',
           previousLearnerState: undefined,
-          goalState: undefined
+          goalState: undefined,
+          frictionBudget: this.getSessionFrictionBudget(session)
         });
         const openingReply = openingResult.success && openingResult.output?.reply
           ? openingResult.output.reply
@@ -779,7 +803,8 @@ class SimulationOrchestrator {
         lastAssistantMessage,
         currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage),
         previousLearnerState: stageResults.goal?.learnerState,
-        goalState
+        goalState,
+        frictionBudget: this.getSessionFrictionBudget(session)
       });
       
       if (!virtualReplyResult.success || !virtualReplyResult.output?.reply) {
@@ -989,11 +1014,23 @@ class SimulationOrchestrator {
           round
         });
         
-        if (config.autoAdvanceToPath) {
+        const shouldAdvancePath = options.autoAdvanceToPath ?? config.autoAdvanceToPath;
+        if (shouldAdvancePath) {
           logger.info('[simulation-coordinator] 自动推进到Path阶段', {
             sessionId: input.sessionId
           });
           await this.advanceToPathGeneration(input.sessionId);
+
+          if (options.autoAdvanceToLearning) {
+            logger.info('[simulation-coordinator] 自动推进到Learning阶段', {
+              sessionId: input.sessionId
+            });
+            try {
+              await this.startLearningPhase(input.sessionId);
+            } catch (err: any) {
+              logger.warn('[simulation-coordinator] 自动启动 Learn 失败', { error: err.message });
+            }
+          }
         }
         break;
       }
@@ -1006,6 +1043,131 @@ class SimulationOrchestrator {
     
     return results;
   }
+
+  /**
+   * 一键运行整个会话: Goal -> Path -> Learn
+   * 适合"全自动"按钮，跑到 Goal 收敛 -> 自动生成 Path -> 自动启动 Learn -> 跑完所有 task
+   */
+  async executeFullSession(
+    sessionId: string,
+    options: RunFullOptions = {}
+  ): Promise<{
+    success: boolean;
+    goalRounds: number;
+    learningSteps: number;
+    pathGenerated: boolean;
+    isPathCompleted: boolean;
+    finalStage?: string;
+    error?: string;
+  }> {
+    const config = await getSimulationAgentConfig();
+    const maxRounds = options.maxRounds || config.maxRounds;
+    const maxMilestones = options.maxMilestones || 10;
+    const continueOnTaskComplete = options.continueOnTaskComplete ?? true;
+
+    logger.info('[simulation-coordinator] 一键全流程开始', {
+      sessionId,
+      maxRounds,
+      maxMilestones,
+      continueOnTaskComplete
+    });
+
+    const session = await this.getVirtualSession(sessionId);
+    const summary = {
+      success: false,
+      goalRounds: 0,
+      learningSteps: 0,
+      pathGenerated: false,
+      isPathCompleted: false,
+      finalStage: session.currentStage,
+      error: undefined as string | undefined
+    };
+
+    try {
+      // ========== Phase A: Goal ==========
+      if (session.currentStage === 'goal') {
+        const goalResults = await this.executeAutoLoop(
+          { sessionId, userId: session.userId, mode: 'auto-loop' },
+          {
+            maxRounds,
+            autoAdvanceToPath: true,
+            autoAdvanceToLearning: false
+          }
+        );
+        summary.goalRounds = goalResults.length;
+        const lastGoal = goalResults[goalResults.length - 1];
+        if (!lastGoal?.goalReady && !lastGoal?.success) {
+          summary.error = lastGoal?.error || 'Goal 阶段未完成';
+          return summary;
+        }
+      }
+
+      // refresh session state
+      const updatedAfterGoal = await this.getVirtualSession(sessionId);
+      summary.finalStage = updatedAfterGoal.currentStage;
+      summary.pathGenerated = !!updatedAfterGoal.learningPathId;
+
+      // ========== Phase B: Path -> Learn bridge ==========
+      if (updatedAfterGoal.learningPathId && updatedAfterGoal.currentStage !== 'learning') {
+        try {
+          await this.startLearningPhase(sessionId);
+        } catch (err: any) {
+          logger.warn('[simulation-coordinator] 启动 Learn 失败', { error: err.message });
+          summary.error = err.message || '启动 Learn 失败';
+          return summary;
+        }
+      }
+
+      // ========== Phase C: Learn loop with continueOnTaskComplete ==========
+      const refreshed = await this.getVirtualSession(sessionId);
+      if (refreshed.currentStage !== 'learning') {
+        summary.finalStage = refreshed.currentStage;
+        summary.success = true;
+        return summary;
+      }
+
+      let totalLearningSteps = 0;
+      let consecutiveTaskBoundaries = 0;
+      const maxTaskBoundaries = continueOnTaskComplete ? maxMilestones * 3 : 1;
+
+      while (consecutiveTaskBoundaries < maxTaskBoundaries) {
+        const learnResult = await this.executeAutoLearning(sessionId, { maxMilestones });
+        totalLearningSteps += learnResult.totalSteps || 0;
+
+        // refresh
+        const after = await this.getVirtualSession(sessionId);
+        summary.finalStage = after.currentStage;
+
+        if (after.status === 'completed') {
+          summary.isPathCompleted = true;
+          break;
+        }
+        if (after.status === 'failed') {
+          summary.error = '学习被中止';
+          break;
+        }
+        if (!continueOnTaskComplete) {
+          break;
+        }
+
+        // if last loop ran 0 steps, no further progress is possible
+        if (!learnResult.success || (learnResult.totalSteps || 0) === 0) {
+          break;
+        }
+
+        consecutiveTaskBoundaries += 1;
+      }
+
+      summary.learningSteps = totalLearningSteps;
+      summary.success = true;
+      return summary;
+    } catch (error: any) {
+      logger.error('[simulation-coordinator] 一键全流程失败', { sessionId, error });
+      summary.error = error.message || 'unknown';
+      return summary;
+    }
+  }
+
   
   async advanceToPathGeneration(sessionId: string): Promise<{
     success: boolean;
@@ -1146,7 +1308,8 @@ class SimulationOrchestrator {
         },
         goalState: null,
         previousReaction: stageResults.path_review || null,
-        learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults))
+        learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults)),
+        frictionBudget: this.getSessionFrictionBudget(session)
       });
 
       if (!reactionOutput?.reaction) {
@@ -1485,6 +1648,7 @@ class SimulationOrchestrator {
           milestoneTitle: currentMilestone.title,
         },
         knowledgeSnapshot: [],
+        frictionBudget: this.getSessionFrictionBudget(session),
       });
 
       const virtualReplyResult = {
@@ -1720,6 +1884,27 @@ class SimulationOrchestrator {
             }
           }
         });
+
+        // 触发 wrapup 总结生成
+        try {
+          await this.generateWrapupForSession(sessionId);
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'stage-transition',
+            details: {
+              output: { message: '已生成学习总结' }
+            }
+          });
+        } catch (err: any) {
+          logger.warn('[simulation-coordinator] 生成 wrapup 失败', { sessionId, error: err.message });
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'error',
+            details: {
+              error: err.message || 'wrapup generation failed'
+            }
+          });
+        }
       }
       
       for (const log of logs) {
@@ -2033,6 +2218,95 @@ class SimulationOrchestrator {
         success: false,
         error: error.message
       }
+    }
+  }
+
+  /**
+   * 学习完成后生成 wrapup 总结 (调用 skill:session-wrapup)
+   * 将结果写入 stageResults.learning.wrapup
+   */
+  async generateWrapupForSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      const learning = stageResults.learning || {};
+      const storyContext = stageResults.story || stageResults.storyContext || null;
+
+      // 已经生成过就不重复
+      if (learning.wrapup) {
+        return { success: true };
+      }
+
+      const conversation = Array.isArray(learning.conversationHistory) ? learning.conversationHistory : [];
+      const messages = conversation.map((m: any) => ({
+        role: m.role || (m.isLearner ? 'user' : 'assistant'),
+        content: m.content || m.text || '',
+        timestamp: m.timestamp || m.createdAt || undefined
+      }));
+
+      const userMessageCount = messages.filter(m => m.role === 'user').length;
+      const assistantMessageCount = messages.filter(m => m.role === 'assistant').length;
+
+      const createdAt = session.createdAt ? new Date(session.createdAt as any).getTime() : Date.now();
+      const completedAt = Date.now();
+      const durationMinutes = Math.max(1, Math.round((completedAt - createdAt) / 60000));
+
+      // 知识点: 从 learnerState 抽取
+      const learnerState = learning.learnerState || {};
+      const knowledgePoints: SessionWrapupInput['knowledgePoints'] = Array.isArray(learnerState.knowledgePoints)
+        ? learnerState.knowledgePoints.map((kp: any) => ({
+            name: kp.name || kp.label || '未命名知识点',
+            status: kp.status || 'in_progress',
+            progress: typeof kp.progress === 'number' ? kp.progress : 50
+          }))
+        : [];
+
+      const wrapupInput: SessionWrapupInput = {
+        messages,
+        knowledgePoints,
+        sessionInfo: {
+          subject: storyContext?.subject || '虚拟学习场景',
+          topic: storyContext?.title || storyContext?.storyTitle || '本次故事',
+          durationMinutes,
+          userMessageCount,
+          assistantMessageCount,
+          taskType: 'practice',
+          taskTitle: learning.currentTaskTitle || undefined,
+          taskDescription: learning.currentTaskDescription || undefined,
+          pathTitle: storyContext?.pathTitle || null,
+          pathSummary: storyContext?.pathSummary || null
+        },
+        learningState: typeof learnerState.lss === 'number'
+          ? {
+              lss: learnerState.lss || 5,
+              ktl: learnerState.ktl || 5,
+              lf: learnerState.lf || 5,
+              lsb: learnerState.lsb || 5,
+              recentTrend: learnerState.recentTrend,
+              recommendedPacing: learnerState.recommendedPacing
+            }
+          : undefined
+      };
+
+      const result = await sessionWrapupAgent.generate(wrapupInput);
+
+      // 写回 stageResults.learning.wrapup
+      await this.updateStageResults(sessionId, 'learning', {
+        ...learning,
+        wrapup: {
+          generatedAt: new Date().toISOString(),
+          summary: result.summary,
+          evaluation: result.evaluation,
+          summarySource: result.summarySource,
+          evaluationSource: result.evaluationSource
+        }
+      });
+
+      logger.info('[simulation-coordinator] wrapup 已生成', { sessionId });
+      return { success: true };
+    } catch (error: any) {
+      logger.error('[simulation-coordinator] generateWrapupForSession 失败', { sessionId, error });
+      return { success: false, error: error.message || 'unknown' };
     }
   }
 }

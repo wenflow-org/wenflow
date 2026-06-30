@@ -1,26 +1,26 @@
-import dotenv from 'dotenv';
-import prisma from '../config/database';
-import { pathAgentRuntimeDefinition } from '../agents/path-agent/definition';
-import { goalConversationRuntimeDefinition } from '../agents/goal-conversation-agent/definition';
-import { teachingTurnRuntimeDefinition } from '../agents/teaching-turn-agent/definition';
-import { peerRuntimeDefinition } from '../agents/peer-agent/definition';
-import { sessionWrapupRuntimeDefinition } from '../agents/session-wrapup-agent/definition';
+﻿import dotenv from 'dotenv';
+import systemPrisma from '../config/system-database';
+import { pathAgentRuntimeDefinition } from '../skills/path-planning/definition';
+import { goalConversationRuntimeDefinition } from '../skills/goal-conversation/definition';
+import { teachingTurnRuntimeDefinition } from '../skills/teaching-turn/definition';
+import { peerRuntimeDefinition } from '../skills/peer-reinforcement/definition';
+import { sessionWrapupRuntimeDefinition } from '../skills/session-wrapup/definition';
 import { learnerModelRuntimeDefinition } from '../agents/learner-model-agent/definition';
 import { pathSceneFramingRuntimeDefinition } from '../skills/path-scene-framing/definition';
 import { stageDesignerRuntimeDefinition } from '../skills/stage-designer/definition';
 import { virtualLearnerPersonaDesignerRuntimeDefinition } from '../skills/virtual-learner-persona-designer/definition';
 import { virtualLearnerScenarioDesignerRuntimeDefinition } from '../skills/virtual-learner-scenario-designer/definition';
-import { pathOrchestratorRuntimeDefinition } from '../orchestrators/definition';
-import { aiTeachingOrchestratorRuntimeDefinition } from '../orchestrators/ai-teaching.definition';
-import { learnerOrchestratorRuntimeDefinition } from '../orchestrators/learner.definition';
-import { simulationOrchestratorRuntimeDefinition } from '../orchestrators/simulation.definition';
+import { pathOrchestratorRuntimeDefinition } from '../coordinators/path.definition';
+import { AITeachingCoordinatorRuntimeDefinition } from '../coordinators/ai-teaching.definition';
+import { learnerOrchestratorRuntimeDefinition } from '../coordinators/learner.definition';
+import { simulationOrchestratorRuntimeDefinition } from '../coordinators/simulation.definition';
 
 dotenv.config();
 
 async function main() {
-  await prisma.agent_definitions.deleteMany({
+  await systemPrisma.agent_definitions.deleteMany({
     where: {
-      id: 'peer-agent',
+      id: 'skill:peer-reinforcement',
       managedByCode: true,
     }
   });
@@ -40,13 +40,13 @@ async function main() {
 
   const orchestratorDefinitions = [
     pathOrchestratorRuntimeDefinition,
-    aiTeachingOrchestratorRuntimeDefinition,
+    AITeachingCoordinatorRuntimeDefinition,
     learnerOrchestratorRuntimeDefinition,
     simulationOrchestratorRuntimeDefinition,
   ];
 
   for (const definition of definitions) {
-    await prisma.agent_definitions.upsert({
+    await systemPrisma.agent_definitions.upsert({
       where: { id: definition.id },
       update: {
         displayName: definition.displayName,
@@ -80,7 +80,7 @@ async function main() {
   }
 
   for (const orchestrator of orchestratorDefinitions) {
-    await prisma.orchestrator_definitions.upsert({
+    await systemPrisma.orchestrator_definitions.upsert({
       where: { id: orchestrator.id },
       update: {
         displayName: orchestrator.displayName,
@@ -114,5 +114,6 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await systemPrisma.$disconnect();
   });
+

@@ -1,4 +1,4 @@
-// 学习服务
+﻿// 学习服务
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import aiService from '../ai/ai.service';
@@ -7,6 +7,7 @@ import achievementService from '../achievements/achievement.service';
 import { updateLearningMetrics } from '../metrics/LearningMetricService';
 import learningStateService from './learning-state.service';
 import type { AgentInput } from '../../agents/protocol';
+import { getEventBus, type LearningEvent } from '../../gateway/event-bus';
 import { runWithContext } from '../../gateway/api-gateway/context';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
@@ -74,12 +75,15 @@ interface GeneratePathData {
       freezeCompletedTaskIds?: string[];
     };
   };
+  systemPromptOverrides?: {
+    pathAgent?: string;
+  };
 }
 
 interface PathReplanRequest {
   pathId: string;
   userId: string;
-  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
@@ -233,7 +237,7 @@ type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
   recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-  triggerSource?: 'learn' | 'ai-teaching' | 'learner-model-agent' | 'system' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'teaching-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
 }
 
 interface PathAdjustmentEvidence {
@@ -603,6 +607,7 @@ function parsePathAdjustmentPolicy(raw: string | null): PathAdjustmentPolicy | n
     const triggerSource = candidate.triggerSource === 'learn'
       || candidate.triggerSource === 'ai-teaching'
       || candidate.triggerSource === 'learner-model-agent'
+      || candidate.triggerSource === 'skill:learner-model'
       || candidate.triggerSource === 'system'
       ? candidate.triggerSource
       : null;
@@ -930,6 +935,24 @@ function normalizeStageTracePhase(value: any): PathGenerationPhase | null {
 }
 
 class LearningService {
+  private emitLearningEvent(event: LearningEvent, label: string) {
+    try {
+      void getEventBus().emit(event).catch((error) => {
+        logger.warn(`[learning-service] ${label} 事件发送失败`, {
+          eventType: event.type,
+          userId: event.userId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+    } catch (error) {
+      logger.warn(`[learning-service] ${label} 事件总线不可用`, {
+        eventType: event.type,
+        userId: event.userId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
   private buildPathProcessDetail(path: any) {
     const parsedTemplate = this.parsePathPromptTemplate(path.aiPromptTemplate || null);
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate || null);
@@ -1117,7 +1140,7 @@ class LearningService {
   private async getPathStageTraces(pathId: string, sourceConversationId?: string | null): Promise<PathStageTraceItem[]> {
     const logs = await prisma.agent_call_logs.findMany({
       where: {
-        agentId: 'path-orchestrator',
+        agentId: 'path-agent',
         sourceEntry: 'platform',
         OR: [
           { metadata: { contains: pathId } },
@@ -1565,7 +1588,7 @@ class LearningService {
       await prisma.agent_call_logs.create({
         data: {
           id: `acl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          agentId: 'path-orchestrator',
+          agentId: 'path-agent',
           userId: payload.userId,
           sourceEntry: 'platform',
           input: JSON.stringify({
@@ -1939,9 +1962,14 @@ class LearningService {
 
   private async analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     try {
-      const { pathAgentHandler } = await import('../../agents/path-agent');
+      const { pathAgentHandler } = await import('../../skills/path-planning');
       const agentInput = this.buildPathAgentInput(data);
-      const agentContext = { userId: data.userId };
+      const agentContext: any = {
+        userId: data.userId,
+        metadata: data.systemPromptOverrides?.pathAgent
+          ? { pathAgentSystemPromptOverride: data.systemPromptOverrides.pathAgent }
+          : undefined
+      };
 
       if (!data.userProfile?.pathSceneFraming) {
         const pathSceneFramingInput = {
@@ -1974,11 +2002,11 @@ class LearningService {
 
       const agentResult = await runWithContext({
         userId: data.userId,
-        agentId: 'path-agent',
+        agentId: 'skill:path-planning',
         action: 'generateLearningPath'
       }, () => pathAgentHandler(agentInput, agentContext));
 
-      const normalizedPathResult = normalizeAgentOutput('path-agent', agentResult);
+      const normalizedPathResult = normalizeAgentOutput('skill:path-planning', agentResult);
       const pathPayload =
         normalizedPathResult.internal?.ext?.path?.path
         || normalizedPathResult.internal?.path
@@ -2351,6 +2379,19 @@ class LearningService {
         triggerSource,
         updatedAt: new Date().toISOString()
       });
+      this.emitLearningEvent({
+        type: 'path:adjusted',
+        source: 'learning-service',
+        userId: data.userId,
+        data: {
+          pathId,
+          taskCount: designedTaskCount,
+          milestoneCount: learningPath.milestones.length,
+          reason: 'stage-design-succeeded',
+          sourceConversationId: data.sourceConversationId || null,
+          triggerSource,
+        }
+      }, 'path-stage-design')
       void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-created');
     } catch (andersonError: any) {
       logger.warn('阶段任务设计失败，路径保持骨架可用', {
@@ -2516,6 +2557,18 @@ class LearningService {
     const { fullPath, analysis } = await this.generateLearningPathCore(data);
 
     void this.enrichLearningPathWithAnderson(fullPath.id, data, analysis);
+    this.emitLearningEvent({
+      type: 'path:created',
+      source: 'learning-service',
+      userId: data.userId,
+      data: {
+        pathId: fullPath.id,
+        pathName: fullPath.title || fullPath.name || data.description,
+        totalMilestones: Array.isArray(fullPath.milestones) ? fullPath.milestones.length : 0,
+        sourceConversationId: data.sourceConversationId || null,
+        triggerSource: data.source || 'api',
+      }
+    }, 'path-created')
     void learnerSnapshotRefreshService.refresh({
       userId: data.userId,
       pathId: fullPath.id,
@@ -2746,7 +2799,16 @@ const learningPath = await prisma.learning_paths.findUnique({
         include: {
           milestones: {
             include: {
-              learning_paths: true
+              learning_paths: true,
+              subtasks: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  order: true,
+                },
+                orderBy: { order: 'asc' }
+              }
             }
           },
           learningContents: true
@@ -3135,6 +3197,19 @@ const learningPath = await prisma.learning_paths.findUnique({
       }
     });
 
+    this.emitLearningEvent({
+      type: 'path:adjusted',
+      source: 'learning-service',
+      userId: data.userId,
+      data: {
+        pathId: data.pathId,
+        stageNumber: targetMilestone.stageNumber,
+        redesignedTaskCount: redesignResult.redesignedTaskCount,
+        preservedCompletedTaskCount: redesignResult.preservedCompletedTaskCount,
+        reason: data.reason || replanSignal?.rationale || 'manual-replan',
+        triggerSource,
+      }
+    }, 'path-replanned')
     void dashboardGuidanceSnapshotService.refresh(data.userId, 'path-replanned');
 
     return {
@@ -3174,7 +3249,14 @@ const learningPath = await prisma.learning_paths.findUnique({
   async completeTask(data: CompleteTaskData) {
     try {
       const subtask = await prisma.subtasks.findUnique({
-        where: { id: data.taskId }
+        where: { id: data.taskId },
+        include: {
+          milestones: {
+            select: {
+              learningPathId: true,
+            }
+          }
+        }
       });
 
       if (!subtask) {
@@ -3192,8 +3274,9 @@ const learningPath = await prisma.learning_paths.findUnique({
       });
 
       // 更新学习指标 (LSS/KTL/LF/LSB)
+      let learningMetrics: Awaited<ReturnType<typeof updateLearningMetrics>> | null = null;
       try {
-        await updateLearningMetrics({
+        learningMetrics = await updateLearningMetrics({
           userId: data.userId,
           taskId: data.taskId,
           durationMinutes: data.actualMinutes || 30,
@@ -3204,6 +3287,23 @@ const learningPath = await prisma.learning_paths.findUnique({
         logger.info('学习指标已更新', { userId: data.userId });
       } catch (error) {
         logger.warn('更新学习指标失败（不影响任务完成）', error);
+      }
+
+      if (learningMetrics) {
+        this.emitLearningEvent({
+          type: 'learning:completed',
+          source: 'learning-service',
+          userId: data.userId,
+          data: {
+            taskId: data.taskId,
+            pathId: subtask.milestones?.learningPathId || null,
+            milestoneId: subtask.milestoneId,
+            lss: learningMetrics.lss,
+            ktl: learningMetrics.ktl,
+            lf: learningMetrics.lf,
+            lsb: learningMetrics.lsb,
+          }
+        }, 'task-completed')
       }
 
       // 更新用户 XP
@@ -3248,6 +3348,7 @@ const learningPath = await prisma.learning_paths.findUnique({
 
       void learnerSnapshotRefreshService.refresh({
         userId: data.userId,
+        pathId: subtask.milestones?.learningPathId || undefined,
         taskId: data.taskId,
         milestoneId: subtask.milestoneId,
         scope: 'teaching',

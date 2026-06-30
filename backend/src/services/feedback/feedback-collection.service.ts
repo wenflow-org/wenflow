@@ -120,7 +120,7 @@ async submitFeedback(params: SubmitFeedbackParams): Promise<void> {
     return await prisma.content_feedback.findMany({
       where: {
         rating: { lte: threshold },
-        agentId: 'ai-teaching-agent'
+        agentId: 'teaching-agent'
       },
       orderBy: { createdAt: 'desc' },
       take: limit,

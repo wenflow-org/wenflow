@@ -6,6 +6,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import systemPrisma from '../config/system-database';
 import { EventBus, createEventBus } from './event-bus';
 import { AgentRegistry } from './registries/agent-registry';
 import { SkillRegistry } from './registries/skill-registry';
@@ -77,8 +78,8 @@ export class EduClawGateway {
 
     // 初始化组件
     this.eventBus = createEventBus(prisma, this.config.eventBus);
-    this.agentRegistry = new AgentRegistry(prisma);
-    this.skillRegistry = new SkillRegistry(prisma);
+    this.agentRegistry = new AgentRegistry(systemPrisma as any);
+    this.skillRegistry = new SkillRegistry(systemPrisma as any);
     this.signalRegistry = new SignalRegistry();
     this.strategyRegistry = new StrategyRegistry();
 

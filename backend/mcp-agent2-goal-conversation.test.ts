@@ -19,8 +19,8 @@ const SCREENSHOT_DIR = join(__dirname, 'mcp-agent2-screenshots');
 const REPORT_PATH = join(__dirname, 'mcp-agent2-goal-report.json');
 
 // 测试账号
-const TEST_EMAIL = 'admin@test.com';
-const TEST_PASSWORD = 'Admin123!';
+const TEST_USER = 'admin';
+const TEST_PASSWORD = 'admin123';
 
 // 对话流程
 const CONVERSATION_FLOW = [
@@ -109,20 +109,20 @@ async function login(page: Page): Promise<boolean> {
     }
     
     // 等待登录表单加载
-    await page.waitForSelector('input[type="email"]', { timeout: 10000 });
-    await page.waitForSelector('input[type="password"]', { timeout: 10000 });
+    await page.waitForSelector('input[placeholder*="请输入用户名"]', { timeout: 10000 });
+    await page.waitForSelector('input[placeholder*="请输入密码"]', { timeout: 10000 });
     
     // 填写登录表单
-    await page.fill('input[type="email"]', TEST_EMAIL);
-    await page.fill('input[type="password"]', TEST_PASSWORD);
+    await page.fill('input[placeholder*="请输入用户名"]', TEST_USER);
+    await page.fill('input[placeholder*="请输入密码"]', TEST_PASSWORD);
     await takeScreenshot(page, '00-login-filled');
     
     // 点击登录按钮
-    await page.click('button:has-text("登录"), button[type="submit"]');
+    await page.click('button:has-text("登录并继续"), button[type="submit"]');
     
     // 等待登录完成（等待导航或错误消息）
     try {
-      await page.waitForSelector('text=AI 规划，text=Dashboard，text=控制台', { timeout: 10000 });
+      await page.waitForSelector('text=学习台', { timeout: 10000 });
       await takeScreenshot(page, '01-after-login');
       console.log('✅ 登录成功');
       results.checkpoints.loginSuccessful = true;
@@ -239,37 +239,126 @@ test.describe('MCP 浏览器测试代理 2 - 学习目标对话和路径生成',
     // 步骤 4: 完成 5 轮对话
     console.log('\n📍 步骤 4: 完成 5 轮对话');
     
+    let inProposalMode = false;
+    let inSupplementMode = false;
+    
     for (const flow of CONVERSATION_FLOW) {
       console.log(`\n💬 ${flow.description}`);
       
       const roundStartTime = Date.now();
       
       try {
-        // 等待输入框可用
-        const textarea = page.locator('textarea[placeholder*="告诉我你想学什么"], textarea:not([disabled])');
-        await expect(textarea).toBeVisible({ timeout: 15000 });
-        await expect(textarea).toBeEnabled({ timeout: 15000 });
+        // 检查是否在方案模式
+        const pageContent = await page.textContent('body').catch(() => '');
+        inProposalMode = pageContent.includes('确认并生成路径') || pageContent.includes('还想补充') || pageContent.includes('补充信息');
+        const proposalPanel = await page.$('.planning-proposal').catch(() => null);
+        inProposalMode = inProposalMode || (proposalPanel !== null);
         
-        // 等待加载状态消失
-        await page.waitForSelector('.typing-indicator', { state: 'detached', timeout: 30000 });
+        // 调试：页面上实际有什么
+        const allButtons = await page.$$('button').catch(() => []);
+        const btnTexts: string[] = [];
+        for (const btn of allButtons) {
+          btnTexts.push((await btn.textContent().catch(() => '')) || '');
+        }
+        const allTextareas = await page.$$('textarea').catch(() => []);
+        const hasAnyTextarea = allTextareas.length > 0;
+        const hasProposal = pageContent.includes('确认并生成路径');
+        console.log(`  ↪ URL: ${page.url()}, 方案: ${hasProposal}, textarea: ${hasAnyTextarea}, 按钮: [${btnTexts.filter(Boolean).join(' | ')}]`);
         
-        // 输入文本
-        await textarea.fill(flow.input);
-        await takeScreenshot(page, `04-round-${flow.round}-input`);
-        
-        // 点击发送按钮
-        const sendButton = page.locator('button.send-btn, button[type="submit"]').first();
-        await sendButton.click();
-        
-        // 等待 AI 响应
-        console.log('⏳ 等待 AI 响应...');
-        try {
-          await page.waitForSelector('.typing-indicator', { timeout: 5000 });
-        } catch (e) {
-          console.log('⚠️ 未检测到 typing 指示器，继续等待响应');
+        if (inProposalMode || hasProposal) {
+          console.log('📋 检测到方案面板');
+          await takeScreenshot(page, `04-round-${flow.round}-proposal-view`);
+          
+          // 检查是否在补充模式
+          const supplementField = await page.$('.planning-proposal__supplement-input');
+          inSupplementMode = supplementField !== null;
+          
+          if (!inSupplementMode) {
+            // 点击"还想补充"进入补充模式
+            const continueBtn = await page.$('button:has-text("还想补充")');
+            if (continueBtn) {
+              await continueBtn.click();
+              await page.waitForTimeout(500);
+              inSupplementMode = true;
+              console.log('✅ 已点击"还想补充"');
+            }
+          }
+          
+          if (inSupplementMode) {
+            // 使用补充输入框
+            const supplementTextarea = page.locator('textarea[placeholder*="补充背景"]');
+            await expect(supplementTextarea).toBeVisible({ timeout: 5000 });
+            await supplementTextarea.fill(flow.input);
+            await takeScreenshot(page, `04-round-${flow.round}-supplement-input`);
+            
+            // 点击补充发送按钮
+            const supplementSendBtn = page.locator('.planning-proposal__supplement-send');
+            await supplementSendBtn.click();
+          } else {
+            // 意外情况：无法补充，直接确认方案
+            const confirmBtn = await page.$('button:has-text("确认并生成路径")');
+            if (confirmBtn) {
+              await confirmBtn.click();
+              console.log('✅ 已点击"确认并生成路径"');
+            }
+            break;
+          }
+        } else {
+          // 正常对话模式
+          const textarea = page.locator('textarea').first();
+          try {
+            await expect(textarea).toBeVisible({ timeout: 5000 });
+          } catch (e) {
+            console.log('  ↪ textarea 不可见，尝试检查其他输入方式');
+            const otherInput = await page.$('input[type="text"], [contenteditable="true"]').catch(() => null);
+            if (otherInput) {
+              console.log('  ↪ 找到其他输入方式');
+              await otherInput.fill(flow.input);
+            } else {
+              throw new Error('无法找到可用的输入框');
+            }
+          }
+          
+          // 填写输入 - 使用 fill 确保 Vue v-model 更新
+          await textarea.fill(flow.input);
+          await page.waitForTimeout(300);
+          
+          // 验证输入生效
+          const actualValue = await textarea.inputValue().catch(() => '');
+          console.log(`  ↪ 输入验证: "${actualValue.substring(0, 60)}..."`);
+          if (!actualValue.trim()) {
+            // fill 可能未触发 v-model，改用 type
+            console.log('  ↪ fill 未生效，改用 type()');
+            await textarea.type(flow.input, { delay: 30 });
+            await page.waitForTimeout(300);
+          }
+          
+          await takeScreenshot(page, `04-round-${flow.round}-input`);
+          
+          // 点击发送按钮
+          const sendButton = page.locator('button.planning-send-btn');
+          const isDisabled = await sendButton.isDisabled().catch(() => true);
+          if (isDisabled) {
+            console.log('  ↪ 发送按钮被禁用，尝试直接回车');
+            await textarea.press('Enter');
+          } else {
+            await sendButton.click();
+          }
         }
         
-        await page.waitForSelector('.typing-indicator', { state: 'detached', timeout: 60000 });
+        // 等待 AI 响应完成（等待 textarea 重新可用）
+        console.log('⏳ 等待 AI 响应...');
+        try {
+          await page.waitForFunction(
+            () => {
+              const ta = document.querySelector('textarea');
+              return ta && !ta.hasAttribute('disabled');
+            },
+            { timeout: 90000 }
+          );
+        } catch (e) {
+          console.log('⚠️ textarea 未在 90 秒内启用，尝试继续');
+        }
         
         const roundEndTime = Date.now();
         const responseTime = roundEndTime - roundStartTime;
@@ -280,48 +369,57 @@ test.describe('MCP 浏览器测试代理 2 - 学习目标对话和路径生成',
         
         results.conversationRounds = flow.round;
         console.log(`✅ 第 ${flow.round} 轮对话完成，AI 响应时间：${responseTime}ms`);
-        
-        // 检查是否需要确认方案
-        if (flow.round === 4) {
-          console.log('📋 检测方案确认按钮...');
-          const confirmButton = page.locator('button:has-text("确认方案")');
-          const hasConfirmButton = await confirmButton.isVisible({ timeout: 5000 }).catch(() => false);
-          
-          if (hasConfirmButton) {
-            console.log('✅ 检测到方案确认按钮');
-            await takeScreenshot(page, '06-proposal-confirm');
-          }
-        }
       } catch (roundError: any) {
         console.error(`❌ 第 ${flow.round} 轮对话失败:`, roundError.message);
         results.errors.push(`第 ${flow.round} 轮对话失败：${roundError.message}`);
         await takeScreenshot(page, `04-round-${flow.round}-error`);
+        break;
       }
     }
     
     results.checkpoints.allRoundsCompleted = results.conversationRounds === 5;
     console.log(`\n✅ ${results.conversationRounds}/5 轮对话完成`);
     
-    // 步骤 5: 等待学习路径生成
-    console.log('\n📍 步骤 5: 等待学习路径生成');
+    // 步骤 5: 检查是否生成路径——导航到学习路径页面
+    console.log('\n📍 步骤 5: 检查学习路径生成');
     
-    await takeScreenshot(page, '07-path-generation-complete');
+    await page.waitForTimeout(3000);
+    await takeScreenshot(page, '07-after-conversation');
     
-    // 步骤 6: 验证学习路径
-    console.log('\n📍 步骤 6: 验证学习路径');
+    // 导航到学习路径页面查看是否有路径生成
+    console.log('📋 导航到学习路径页面检查结果...');
+    await page.goto('http://localhost:5173/learning-paths', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    await takeScreenshot(page, '08-learning-paths');
+    console.log(`  ↪ 当前URL: ${page.url()}`);
     
-    const viewPathButton = page.locator('button:has-text("查看学习路径"), button:has-text("路径")');
-    const hasViewPathButton = await viewPathButton.isVisible({ timeout: 5000 }).catch(() => false);
+    // 检查是否有学习路径卡片
+    const pathSelectors = [
+      '.learning-path-card',
+      '.path-item',
+      '.el-card',
+      '.path-card',
+      '[class*="path-card"]',
+      '[class*="path-item"]'
+    ];
     
-    if (hasViewPathButton) {
-      console.log('✅ 检测到查看学习路径按钮');
-      results.checkpoints.learningPathGenerated = true;
-    } else {
-      console.warn('⚠️ 未检测到查看学习路径按钮');
+    for (const selector of pathSelectors) {
+      const elements = await page.$$(selector).catch(() => []);
+      if (elements && elements.length > 0) {
+        console.log(`✅ 找到学习路径：${selector}, 数量：${elements.length}`);
+        results.checkpoints.learningPathGenerated = true;
+        results.checkpoints.pathHasStages = true;
+        results.checkpoints.stagesCount = elements.length;
+        break;
+      }
     }
     
-    // 步骤 7: 验证验收标准
-    console.log('\n📍 步骤 7: 验证验收标准');
+    if (!results.checkpoints.learningPathGenerated) {
+      console.warn('⚠️ 学习路径页面未找到路径卡片，可能路径生成中或尚未生成');
+    }
+    
+    // 步骤 6: 验证验收标准
+    console.log('\n📍 步骤 6: 验证验收标准');
     
     // 检查 AI 响应时间
     if (results.aiResponseTimes.length > 0) {

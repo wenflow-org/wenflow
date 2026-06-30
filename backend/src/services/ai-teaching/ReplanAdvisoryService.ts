@@ -1,5 +1,5 @@
-import type { LearnerReplanProjection } from '../../agents/learner-model-agent/types';
-import type { SessionWrapupArtifact } from '../../agents/session-wrapup-agent';
+﻿import type { LearnerReplanProjection } from '../../agents/learner-model-agent/types';
+import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 
 export interface ReplanAdvisory {
   shouldSuggest: boolean;

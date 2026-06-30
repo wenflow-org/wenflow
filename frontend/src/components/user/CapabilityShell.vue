@@ -5,28 +5,25 @@
       <div class="gradient-orb gradient-orb-2"></div>
     </div>
 
-    <header class="shell-header">
+    <header class="shell-header" :class="{ 'shell-header--scrolled': scrolled }">
       <div class="shell-header__inner">
-        <div class="shell-brand">
-          <span class="shell-brand__icon">🎓</span>
-          <div>
-            <div class="shell-brand__title">能力中心</div>
-            <div class="shell-brand__subtitle">账户</div>
-          </div>
-        </div>
+        <button type="button" class="shell-brand" @click="router.push('/dashboard')">
+          <img src="/logo.png" alt="问流 WenFlow" class="shell-brand__logo" />
+        </button>
 
-        <nav class="shell-nav">
-          <router-link to="/learning-paths" class="shell-nav__item shell-nav__item--back">
-            <el-icon><ArrowLeft /></el-icon>
-            返回学习
-          </router-link>
-          <router-link to="/user/account" class="shell-nav__item">账户</router-link>
+        <nav class="shell-nav" aria-label="应用导航">
+          <router-link to="/dashboard" class="shell-nav__item">学习台</router-link>
+          <router-link to="/goal-conversation" class="shell-nav__item">目标规划</router-link>
+          <router-link to="/learning-paths" class="shell-nav__item">学习路径</router-link>
+          <router-link to="/learning-state" class="shell-nav__item">学习状态</router-link>
+          <router-link to="/achievements" class="shell-nav__item">成就</router-link>
+          <router-link to="/user/account" class="shell-nav__item shell-nav__item--current">账户</router-link>
         </nav>
 
         <div class="shell-header__actions">
           <ThemeSwitcher />
           <MobileSiteMenu
-            title="能力中心"
+            title="账户"
             :user-name="userStore.user?.name || '用户'"
             :user-initial="userStore.user?.name?.charAt(0) || 'U'"
             :nav-items="shellNavItems"
@@ -34,15 +31,13 @@
             @logout="handleLogout"
           />
           <el-dropdown>
-            <div class="shell-user">
-              <img v-if="userStore.user?.avatarUrl" :src="userStore.user.avatarUrl" alt="avatar" />
-              <div v-else class="shell-user__placeholder">
-                {{ userStore.user?.name?.charAt(0) || 'U' }}
-              </div>
-            </div>
+            <button type="button" class="shell-user-chip">
+              <span class="shell-user-chip__avatar">{{ userStore.user?.name?.charAt(0) || 'U' }}</span>
+              <strong>{{ userStore.user?.name || '用户' }}</strong>
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item>{{ userStore.user?.name || '用户' }}</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/user/account')">账户中心</el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -55,7 +50,7 @@
       <div class="shell-container">
         <section class="shell-hero">
           <div>
-            <div class="shell-hero__eyebrow">Account</div>
+            <span class="shell-hero__eyebrow">账户</span>
             <h1 class="shell-hero__title">{{ title }}</h1>
             <p v-if="description" class="shell-hero__description">{{ description }}</p>
           </div>
@@ -73,8 +68,8 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessageBox } from 'element-plus';
-import { ArrowLeft } from '@element-plus/icons-vue';
 import { toast } from '../../utils/toast';
 import { useRouter } from 'vue-router';
 import ThemeSwitcher from '../ThemeSwitcher.vue';
@@ -85,10 +80,28 @@ defineProps<{ title: string; description?: string }>();
 
 const router = useRouter();
 const userStore = useUserStore();
+const scrolled = ref(false);
+
 const shellNavItems = [
-  { label: '返回学习', to: '/learning-paths', matchPrefixes: ['/learning-paths', '/learning-path/', '/dashboard', '/goal-conversation', '/learning-state', '/achievements'] },
-  { label: '账户', to: '/user/account', matchPrefixes: ['/user', '/user/account'] }
+  { label: '学习台', to: '/dashboard', matchPrefixes: ['/dashboard'] },
+  { label: '学习路径', to: '/learning-paths', matchPrefixes: ['/learning-paths', '/learning-path/'] },
+  { label: '学习状态', to: '/learning-state', matchPrefixes: ['/learning-state'] },
+  { label: '成就', to: '/achievements', matchPrefixes: ['/achievements'] },
+  { label: '账户', to: '/user/account', matchPrefixes: ['/user'] }
 ];
+
+function onScroll() {
+  scrolled.value = window.scrollY > 6;
+}
+
+onMounted(() => {
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+});
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll);
+});
 
 async function handleLogout() {
   try {
@@ -167,156 +180,155 @@ async function handleLogout() {
 .shell-header {
   position: sticky;
   top: 0;
-  z-index: 1000;
-  backdrop-filter: blur(20px);
-  background: color-mix(in srgb, var(--glass-bg-light) 92%, white);
-  border-bottom: 1px solid rgba(52, 120, 246, 0.08);
-  box-shadow: 0 10px 30px rgba(31, 87, 204, 0.06);
-  transition: all 0.3s ease;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+  backdrop-filter: blur(18px);
+  transition: box-shadow 0.2s ease;
+}
+
+.shell-header--scrolled {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
 }
 
 [data-theme="dark"] .shell-header {
-  background: color-mix(in srgb, var(--glass-bg-dark) 88%, #0f1820);
-  border-bottom-color: rgba(96, 165, 250, 0.12);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-}
-
-.shell-header__inner,
-.shell-container {
-  max-width: 1600px;
-  margin: 0 auto;
+  background: rgba(15, 23, 42, 0.82);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
 .shell-header__inner {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 20px;
+  width: min(1280px, calc(100% - 48px));
+  min-height: 72px;
+  margin: 0 auto;
+  display: flex;
   align-items: center;
-  padding: 14px 24px;
-  min-width: 0;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0;
+}
+
+.shell-container {
+  width: min(1280px, calc(100% - 48px));
+  margin: 0 auto;
 }
 
 .shell-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.shell-brand__icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
-  font-size: 1.4rem;
-  background: linear-gradient(135deg, rgba(67, 176, 216, 0.18), rgba(52, 120, 246, 0.18));
-  border: 1px solid rgba(52, 120, 246, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary, #172033);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  flex: 0 0 auto;
 }
 
-.shell-brand__title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.shell-brand__subtitle {
-  font-size: 12px;
-  color: var(--text-secondary);
+.shell-brand__logo {
+  height: 56px;
+  object-fit: contain;
+  display: block;
 }
 
 .shell-nav {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 32, 51, 0.06);
   min-width: 0;
 }
 
+[data-theme="dark"] .shell-nav {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .shell-nav__item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-radius: var(--radius-xl);
-  color: var(--text-secondary);
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--text-primary, #172033) 68%, white);
   text-decoration: none;
-  font-size: 0.95rem;
-  font-weight: 500;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.36);
-  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 800;
+  border: 0;
+  background: transparent;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .shell-nav__item:hover,
+.shell-nav__item--current,
 .shell-nav__item.router-link-active {
-  color: var(--color-primary-dark);
-  background: rgba(52, 120, 246, 0.1);
-  border-color: rgba(52, 120, 246, 0.12);
-  box-shadow: 0 8px 20px rgba(52, 120, 246, 0.1);
+  background: rgba(52, 120, 246, 0.09);
+  color: var(--color-primary-dark, #1f57cc);
 }
 
 [data-theme="dark"] .shell-nav__item {
-  background: rgba(15, 23, 42, 0.28);
+  color: rgba(255, 255, 255, 0.65);
 }
 
 [data-theme="dark"] .shell-nav__item:hover,
+[data-theme="dark"] .shell-nav__item--current,
 [data-theme="dark"] .shell-nav__item.router-link-active {
-  color: #9fc3ff;
   background: rgba(52, 120, 246, 0.18);
-  border-color: rgba(96, 165, 250, 0.16);
-}
-
-.shell-nav__item--back {
-  color: var(--color-primary);
-}
-
-.shell-nav__item--back:hover {
-  background: rgba(64, 158, 255, 0.1);
+  color: #9fc3ff;
 }
 
 .shell-header__actions {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
-.shell-user {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  cursor: pointer;
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.12);
-}
-
-.shell-user img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.shell-user__placeholder {
-  width: 100%;
-  height: 100%;
+.shell-user-chip {
   display: flex;
   align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-primary, #172033);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.shell-user-chip:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(52, 120, 246, 0.25);
+}
+
+.shell-user-chip__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-secondary), var(--color-primary));
-  color: white;
-  font-weight: 600;
-  font-size: 1rem;
+  background: rgba(52, 120, 246, 0.1);
+  color: var(--color-primary-dark, #1f57cc);
+  font-weight: 900;
+}
+
+[data-theme="dark"] .shell-user-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .shell-main {
   position: relative;
   z-index: 1;
-  padding: 2rem;
-  padding-bottom: calc(2rem + var(--safe-area-bottom));
+  padding: 28px 0 calc(80px + var(--safe-area-bottom));
 }
 
 .shell-hero {

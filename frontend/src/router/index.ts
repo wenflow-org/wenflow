@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { setTestMode } from '../utils/api';
+import { setDebugMode } from '../utils/debugMode';
 import { getProjectionToken } from '../utils/projection';
 
 const THEME_STORAGE_KEY = 'wenflow-theme';
@@ -17,12 +18,7 @@ function resolveUserTheme(): 'light' | 'dark' {
   return prefersDark ? 'dark' : 'light';
 }
 
-function syncThemeForRoute(path: string) {
-  if (path.startsWith('/admin')) {
-    applyDocumentTheme('light');
-    return;
-  }
-
+function syncThemeForRoute(_path: string) {
   applyDocumentTheme(resolveUserTheme());
 }
 
@@ -104,96 +100,6 @@ const routes: RouteRecordRaw[] = [
     name: 'LearningEvaluationPage',
     component: () => import('@/views/LearningEvaluationPage.vue'),
     meta: { title: '课程评估', requiresAuth: true }
-  },
-  {
-    path: '/ui-lab',
-    name: 'UILabHome',
-    redirect: '/admin/ui-lab',
-    meta: { title: 'UI Lab 首页', uiLabSceneId: 'home' }
-  },
-  {
-    path: '/ui-lab/vision',
-    name: 'UILabVision',
-    redirect: '/admin/ui-lab/vision',
-    meta: { title: 'UI Lab 愿景', uiLabSceneId: 'vision' }
-  },
-  {
-    path: '/ui-lab/login',
-    name: 'UILabLogin',
-    redirect: '/admin/ui-lab/login',
-    meta: { title: 'UI Lab 登录', uiLabSceneId: 'login' }
-  },
-  {
-    path: '/ui-lab/register',
-    name: 'UILabRegister',
-    redirect: '/admin/ui-lab/register',
-    meta: { title: 'UI Lab 注册', uiLabSceneId: 'register' }
-  },
-  {
-    path: '/ui-lab/dashboard',
-    name: 'UILabDashboard',
-    redirect: '/admin/ui-lab/dashboard',
-    meta: { title: 'UI Lab 学习台', uiLabSceneId: 'dashboard' }
-  },
-  {
-    path: '/ui-lab/planning',
-    name: 'UILabPlanning',
-    redirect: '/admin/ui-lab/planning',
-    meta: { title: 'UI Lab AI 规划', uiLabSceneId: 'requirement' }
-  },
-  {
-    path: '/ui-lab/planning-immersive',
-    redirect: '/admin/ui-lab/planning'
-  },
-  {
-    path: '/ui-lab/planning-formal',
-    redirect: '/admin/ui-lab/planning'
-  },
-  {
-    path: '/ui-lab/paths',
-    name: 'UILabPaths',
-    redirect: '/admin/ui-lab/paths',
-    meta: { title: 'UI Lab 学习路径', uiLabSceneId: 'paths' }
-  },
-  {
-    path: '/ui-lab/paths/:id',
-    name: 'UILabPathDetail',
-    redirect: (to) => `/admin/ui-lab/paths/${to.params.id}`,
-    meta: { title: 'UI Lab 路径详情', uiLabSceneId: 'path-detail' }
-  },
-  {
-    path: '/ui-lab/state',
-    name: 'UILabState',
-    redirect: '/admin/ui-lab/state',
-    meta: { title: 'UI Lab 学习状态', uiLabSceneId: 'state' }
-  },
-  {
-    path: '/ui-lab/achievements',
-    name: 'UILabAchievements',
-    redirect: '/admin/ui-lab/achievements',
-    meta: { title: 'UI Lab 成就', uiLabSceneId: 'achievements' }
-  },
-  {
-    path: '/ui-lab/learn/:taskId',
-    name: 'UILabLearning',
-    redirect: (to) => `/admin/ui-lab/learn/${to.params.taskId}`,
-    meta: { title: 'UI Lab 学习中', uiLabSceneId: 'learning' }
-  },
-  {
-    path: '/ui-lab/feedback',
-    name: 'UILabFeedback',
-    redirect: '/admin/ui-lab/feedback',
-    meta: { title: 'UI Lab 学习反馈', uiLabSceneId: 'evaluation' }
-  },
-  {
-    path: '/ui-lab/dashboard-legacy',
-    redirect: '/admin/ui-lab/dashboard'
-  },
-  {
-    path: '/ui-lab/question-cards',
-    name: 'QuestionCardUILab',
-    redirect: '/admin/ui-lab/question-cards',
-    meta: { title: 'UI Lab 问题卡片' }
   },
   {
     path: '/user',
@@ -297,31 +203,33 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'AdminDashboard',
         component: () => import('@/views/admin/Overview.vue'),
-        meta: { title: '数据概览', requiresAdminAuth: true, adminGroup: 'content' }
+        meta: { title: '数据概览', requiresAdminAuth: true, adminGroup: 'overview' }
       },
       {
         path: 'users',
         name: 'AdminUsers',
         component: () => import('@/views/admin/Users.vue'),
-        meta: { title: '用户管理', requiresAdminAuth: true, adminGroup: 'content' }
+        meta: { title: '用户管理', requiresAdminAuth: true, adminGroup: 'ops' }
+      },
+      {
+        path: 'learner-center',
+        name: 'AdminLearnerCenter',
+        component: () => import('@/views/admin/LearnerCenter.vue'),
+        meta: { title: '学习者中心', requiresAdminAuth: true, adminGroup: 'ops' }
       },
       {
         path: 'learner-models',
-        name: 'AdminLearnerModels',
-        component: () => import('@/views/admin/LearnerModels.vue'),
-        meta: { title: '学习者模型', requiresAdminAuth: true, adminGroup: 'content' }
+        redirect: '/admin/learner-center?tab=models'
       },
       {
         path: 'learner-models/:userId',
         name: 'AdminLearnerModelDetail',
         component: () => import('@/views/admin/LearnerModelDetail.vue'),
-        meta: { title: '学习者模型详情', requiresAdminAuth: true, adminGroup: 'content' }
+        meta: { title: '学习者模型详情', requiresAdminAuth: true, adminGroup: 'ops' }
       },
       {
         path: 'teaching-sessions',
-        name: 'AdminTeachingSessions',
-        component: () => import('@/views/admin/TeachingSessions.vue'),
-        meta: { title: '教学会话巡检', requiresAdminAuth: true, adminGroup: 'content' }
+        redirect: '/admin/learner-center?tab=sessions'
       },
       {
         path: 'api-config',
@@ -330,214 +238,144 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'API 管理', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
-        path: 'platform-capabilities',
-        name: 'AdminPlatformCapabilities',
-        component: () => import('@/views/admin/PlatformCapabilities.vue'),
-        meta: { title: '能力地图', requiresAdminAuth: true, adminGroup: 'system' }
-      },
-      {
-        path: 'agent-registry',
+        path: 'skills',
         name: 'AdminAgentRegistry',
         component: () => import('@/views/admin/AgentRegistry.vue'),
-        meta: { title: '运行节点管理', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: 'Skill 运行节点', requiresAdminAuth: true, adminGroup: 'ai' }
       },
       {
-        path: 'orchestrator-registry',
-        name: 'AdminOrchestratorRegistry',
-        component: () => import('@/views/admin/OrchestratorRegistry.vue'),
-        meta: { title: '编排配置中心', requiresAdminAuth: true, adminGroup: 'system' }
+        path: 'skills/:agentId',
+        name: 'AdminAgentEditor',
+        component: () => import('@/views/admin/AgentEditor.vue'),
+        meta: { title: 'Skill 编辑', requiresAdminAuth: true, adminGroup: 'ai' }
+      },
+      {
+        path: 'agents/topology',
+        name: 'AdminAgentTopology',
+        component: () => import('@/views/admin/AgentTopology.vue'),
+        meta: { title: 'Agent 拓扑', requiresAdminAuth: true, adminGroup: 'ai' }
       },
       {
         path: 'orchestrator-definitions',
+        alias: 'agent-definitions',
         name: 'AdminOrchestratorDefinitions',
         component: () => import('@/views/admin/OrchestratorDefinitions.vue'),
-        meta: { title: '编排定义', requiresAdminAuth: true, adminGroup: 'system' }
-      },
-      {
-        path: 'ui-lab',
-        name: 'AdminUILabHome',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 首页', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'home' }
-      },
-      {
-        path: 'ui-lab/vision',
-        name: 'AdminUILabVision',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 愿景', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'vision' }
-      },
-      {
-        path: 'ui-lab/login',
-        name: 'AdminUILabLogin',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 登录', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'login' }
-      },
-      {
-        path: 'ui-lab/register',
-        name: 'AdminUILabRegister',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 注册', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'register' }
-      },
-      {
-        path: 'ui-lab/dashboard',
-        name: 'AdminUILabDashboard',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 学习台', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'dashboard' }
-      },
-      {
-        path: 'ui-lab/planning',
-        name: 'AdminUILabPlanning',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab AI 规划', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'requirement' }
-      },
-      {
-        path: 'ui-lab/paths',
-        name: 'AdminUILabPaths',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 学习路径', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'paths' }
-      },
-      {
-        path: 'ui-lab/paths/:id',
-        name: 'AdminUILabPathDetail',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 路径详情', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'path-detail' }
-      },
-      {
-        path: 'ui-lab/state',
-        name: 'AdminUILabState',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 学习状态', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'state' }
-      },
-      {
-        path: 'ui-lab/achievements',
-        name: 'AdminUILabAchievements',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 成就', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'achievements' }
-      },
-      {
-        path: 'ui-lab/learn/:taskId',
-        name: 'AdminUILabLearning',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 学习中', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'learning' }
-      },
-      {
-        path: 'ui-lab/feedback',
-        name: 'AdminUILabFeedback',
-        component: () => import('@/views/DemoScenePage.vue'),
-        meta: { title: 'UI Lab 学习反馈', requiresAdminAuth: true, adminGroup: 'system', uiLabSceneId: 'evaluation' }
-      },
-      {
-        path: 'ui-lab/question-cards',
-        name: 'AdminQuestionCardUILab',
-        component: () => import('@/views/QuestionCardDemo.vue'),
-meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: '字段契约', requiresAdminAuth: true, adminGroup: 'ai' }
       },
       {
         path: 'test/dashboard',
         name: 'AdminTestDashboard',
         component: () => import('@/views/Dashboard.vue'),
-        meta: { title: '测试学习台', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        meta: { title: '测试学习台', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
       {
         path: 'test/skill-prompt-preview',
-        name: 'AdminSkillPromptPreview',
-        component: () => import('@/views/admin/SkillPromptPreview.vue'),
-        meta: { title: 'Skill Prompt 预览', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: '/admin/skills'
       },
       {
         path: 'test/prompt-stability',
-        name: 'AdminPromptStability',
-        redirect: '/admin/test/skill-prompt-preview',
-        meta: { title: 'Skill Prompt 预览', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: '/admin/skills'
       },
+      // 旧路径兼容重定向
+      { path: 'agent-registry',          redirect: '/admin/skills' },
+      { path: 'agent-registry/:agentId', redirect: (to) => `/admin/skills/${to.params.agentId}` },
+      { path: 'skill-workbench',          redirect: '/admin/skills' },
+      { path: 'skill-workbench/:agentId', redirect: (to) => `/admin/skills/${to.params.agentId}` },
       {
         path: 'test/goal-full/:conversationId?',
         name: 'AdminTestGoalConversationFull',
         component: () => import('@/views/GoalConversation.vue'),
-        meta: { title: '测试目标规划', requiresAdminAuth: true, adminGroup: 'devDebug', contextMode: 'full', isTestMode: true }
+        meta: { title: '测试目标规划', requiresAdminAuth: true, adminGroup: 'lab', contextMode: 'full', isTestMode: true }
       },
       {
         path: 'test/learning-paths',
         name: 'AdminTestLearningPaths',
-        component: () => import('@/views/admin/test/TestLearningPaths.vue'),
-        meta: { title: '测试学习路径', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        component: () => import('@/views/LearningPaths.vue'),
+        meta: { title: '测试学习路径', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
       {
         path: 'test/learning-path/:id',
         name: 'AdminTestLearningPathDetail',
-        component: () => import('@/views/admin/test/TestLearningPathDetail.vue'),
-        meta: { title: '测试学习路径详情', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        component: () => import('@/views/LearningPathDetail.vue'),
+        meta: { title: '测试学习路径详情', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
       {
         path: 'test/learning-state',
         name: 'AdminTestLearningState',
         component: () => import('@/views/LearningState.vue'),
-        meta: { title: '测试学习状态', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        meta: { title: '测试学习状态', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
 {
         path: 'test/achievements',
         name: 'AdminTestAchievements',
         component: () => import('@/views/Achievements.vue'),
-        meta: { title: '测试成就', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        meta: { title: '测试成就', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
       {
         path: 'virtual-learners',
         name: 'AdminVirtualLearners',
         component: () => import('@/views/admin/VirtualLearners.vue'),
-        meta: { title: '虚拟用户模拟', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        meta: { title: '虚拟学习者', requiresAdminAuth: true, adminGroup: 'lab' }
+      },
+      {
+        path: 'regression-lab',
+        name: 'AdminRegressionLab',
+        component: () => import('@/views/admin/RegressionLab.vue'),
+        meta: { title: '回归实验台', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId',
         name: 'AdminVirtualStoryOverview',
-        component: () => import('@/views/admin/VirtualStoryOverview.vue'),
-        meta: { title: '学情概览', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        meta: { title: '学情概览', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId/goal',
         name: 'AdminVirtualStoryGoal',
-        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}?tab=goal`,
-        meta: { title: 'Goal 学情', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        meta: { title: 'Goal 学情', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId/path',
         name: 'AdminVirtualStoryPath',
-        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}?tab=path`,
-        meta: { title: 'Path 学情', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        meta: { title: 'Path 学情', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId/learn',
         name: 'AdminVirtualStoryLearn',
-        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}?tab=learn`,
-        meta: { title: 'Learn 学情', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        meta: { title: 'Learn 学情', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId',
         name: 'AdminVirtualProfile',
-        component: () => import('@/views/admin/VirtualProfile.vue'),
-        meta: { title: '角色会话管理', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}`,
+        meta: { title: '画像', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-session/:sessionId',
         name: 'AdminVirtualSession',
-        component: () => import('@/views/admin/VirtualSession.vue'),
-        meta: { title: '模拟会话控制台', requiresAdminAuth: true, adminGroup: 'devDebug' }
+        component: () => import('@/views/admin/SessionCockpit.vue'),
+        meta: { title: '模拟会话控制台', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'test/learn/:taskId',
         name: 'AdminTestLearningPage',
         component: () => import('@/views/LearningPage.vue'),
-        meta: { title: '测试授课页面', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        meta: { title: '测试授课页面', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
       {
         path: 'test/learn/:taskId/evaluation/:sessionId',
         name: 'AdminTestLearningEvaluationPage',
         component: () => import('@/views/LearningEvaluationPage.vue'),
-        meta: { title: '测试课程评估', requiresAdminAuth: true, adminGroup: 'devDebug', isTestMode: true }
+        meta: { title: '测试课程评估', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
       },
       {
         path: 'execution-logs',
         name: 'AdminExecutionLogs',
         component: () => import('@/views/admin/ExecutionLogs.vue'),
-        meta: { title: 'Agent 执行日志', requiresAdminAuth: true, adminGroup: 'monitor' }
+        meta: { title: '执行日志', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
         path: 'prompt-call-logs',
@@ -546,29 +384,20 @@ meta: { title: 'UI Lab 问题卡片', requiresAdminAuth: true, adminGroup: 'syst
         meta: { title: 'Prompt 调用日志', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
-        path: 'orchestrators',
-        name: 'AdminOrchestrators',
-        component: () => import('@/views/admin/Orchestrators.vue'),
-        meta: { title: '编排运行监控', requiresAdminAuth: true, adminGroup: 'monitor' }
-      },
-      {
-        path: 'manifest-diagnostics',
-        name: 'AdminManifestDiagnostics',
-        component: () => import('@/views/admin/ManifestDiagnostics.vue'),
-        meta: { title: 'Agent 架构诊断(高级)', requiresAdminAuth: true, adminGroup: 'monitor' }
-      },
-      {
-        path: 'activity-stream',
-        name: 'AdminActivityStream',
-        component: () => import('@/views/admin/ActivityStream.vue'),
-        meta: { title: '活动流', requiresAdminAuth: true, adminGroup: 'monitor' }
-},
-
-      {
         path: 'skill-model-configs',
         name: 'AdminSkillModelConfigs',
         component: () => import('@/views/admin/SkillModelConfig.vue'),
-        meta: { title: '技能/组件配置', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: '外挂能力组件', requiresAdminAuth: true, adminGroup: 'ai' }
+      },
+      {
+        path: 'prompt-lab',
+        name: 'AdminPromptLab',
+        component: () => import('@/views/admin/PromptLab.vue'),
+        meta: { title: 'Prompt 实验台', requiresAdminAuth: true, adminGroup: 'ai' }
+      },
+      {
+        path: 'skill-manager',
+        redirect: '/admin/skills',
       },
     ]
   }
@@ -584,6 +413,13 @@ router.beforeEach((to, from, next) => {
   syncThemeForRoute(to.path);
   
   setTestMode(to.meta.isTestMode === true);
+  setDebugMode(to.meta.isTestMode === true);
+  if (!to.meta.isTestMode) {
+    import('@/stores/debug').then(({ useDebugStore }) => {
+      const debugStore = useDebugStore();
+      debugStore.clear();
+    });
+  }
   
   const token = localStorage.getItem('token');
   const projectionToken = getProjectionToken();

@@ -193,7 +193,7 @@ router.get('/metrics/detail', async (req: Request, res: Response) => {
  */
 router.get('/strategies/stats', async (req: Request, res: Response) => {
   try {
-    const { agentId = 'ai-teaching-agent', startTime, endTime } = req.query;
+    const { agentId = 'teaching-agent', startTime, endTime } = req.query;
 
     const where: any = { agentId };
 

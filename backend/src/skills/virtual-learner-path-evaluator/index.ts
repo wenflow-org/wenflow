@@ -3,22 +3,34 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import {
+  type VirtualLearnerPersona,
+  type VirtualLearnerStory,
+  type FrictionBudget,
+  getFrictionGuidance,
+  normalizeFrictionBudget,
+  PERSONA_FIELD_ANCHORS_HINT,
+} from '../virtual-learner-shared';
 
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE = 0.5;
 
 export interface VirtualLearnerPathEvaluatorInput {
-  learner: Record<string, any>;
-  story?: Record<string, any> | null;
+  learner: VirtualLearnerPersona | Record<string, any>;
+  story?: VirtualLearnerStory | Record<string, any> | null;
   pathProposal: Record<string, any>;
   goalState?: Record<string, any> | null;
   previousReaction?: Record<string, any> | null;
   learnerState?: Record<string, any> | null;
+  /** 控制学习者对抗度. 默认 'normal' */
+  frictionBudget?: FrictionBudget;
 }
 
 export interface VirtualLearnerPathEvaluatorOutput {
   reaction: string;
   visibleRequestedChanges?: string[];
+  /** 当 LLM 失败/校验失败时返回兜底数据, 评估时应排除这些 turn */
+  degraded?: boolean;
   debug?: {
     visibleSignal?: string;
     stateChangeReason?: string;
@@ -122,14 +134,14 @@ function sanitizeText(text: string): string {
 }
 
 function buildFallback(input: VirtualLearnerPathEvaluatorInput): VirtualLearnerPathEvaluatorOutput {
-  const availableTime = safeText(input.learner?.profile?.availableTime || input.learner?.availableTime);
-  const knowledgeLevel = safeText(input.learner?.knowledgeLevel);
+  const learner = (input.learner || {}) as Record<string, any>;
+  const availableTime = safeText(learner.profile?.availableTime || learner.availableTime);
   const domainFamiliarity = safeText(input.story?.problemKnowledge?.domainFamiliarity).toLowerCase();
   const storyStruggles = normalizeStringArray(input.story?.problemKnowledge?.struggleConcepts);
   const estimatedHours = Number(input.pathProposal?.estimatedHours || 0);
   const difficultText = safeText(input.pathProposal?.difficulty).toLowerCase();
   const overload = availableTime === 'minimal' && estimatedHours >= 30;
-  const tooHard = (domainFamiliarity === 'low' || storyStruggles.length > 0 || knowledgeLevel === 'beginner')
+  const tooHard = (domainFamiliarity === 'low' || storyStruggles.length > 0)
     && ['hard', 'advanced'].includes(difficultText);
   const decision: 'accept' | 'modify' | 'reject' = overload || tooHard ? 'modify' : 'accept';
   const modifyRequest = overload
@@ -157,7 +169,9 @@ function buildFallback(input: VirtualLearnerPathEvaluatorInput): VirtualLearnerP
 
 function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): VirtualLearnerPathEvaluatorOutput {
   const fallback = buildFallback(input);
-  const decision = parsed?.decision === 'modify' || parsed?.decision === 'reject' ? parsed.decision : 'accept';
+  // BUG FIX: prompt 要求模型输出 debug.internalDecision (不是 decision)
+  const rawDecision = parsed?.debug?.internalDecision ?? parsed?.decision;
+  const decision = rawDecision === 'modify' || rawDecision === 'reject' ? rawDecision : 'accept';
   const requestedChanges = normalizeStringArray(parsed?.visibleRequestedChanges);
   const modifyRequest = sanitizeText(parsed?.modifyRequest || '');
 
@@ -178,6 +192,8 @@ function normalizeOutput(parsed: any, input: VirtualLearnerPathEvaluatorInput): 
 }
 
 function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
+  const frictionBudget = normalizeFrictionBudget(input.frictionBudget);
+  const frictionGuidance = getFrictionGuidance(frictionBudget);
   return {
     learner: input.learner || {},
     story: input.story || null,
@@ -185,15 +201,23 @@ function buildUserPayload(input: VirtualLearnerPathEvaluatorInput) {
     previousReaction: input.previousReaction || null,
     learnerState: input.learnerState || null,
     pathProposal: input.pathProposal || {},
+    friction: {
+      budget: frictionBudget,
+      triggerProbability: frictionGuidance.triggerProbability,
+      guidance: frictionGuidance.promptHint
+    },
+    personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
     task: {
       mode: 'evaluate-virtual-learner-path-fit',
-        requirements: [
-          'evaluate path fit only from the learner perspective',
-          'if the path is mostly right but needs adjustment, prefer modify over reject',
-          'only expose learner-visible reaction to the platform',
-        ]
-      }
-    };
+      requirements: [
+        'evaluate path fit only from the learner perspective',
+        'if the path is mostly right but needs adjustment, prefer modify over reject',
+        'only expose learner-visible reaction to the platform',
+        'apply friction.guidance to calibrate how much resistance/concern this reaction expresses',
+        'let personaAnchorHint fields implicitly steer reaction style'
+      ]
+    }
+  };
 }
 
 export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvaluatorInput): Promise<SkillExecutionResult<VirtualLearnerPathEvaluatorOutput>> {
@@ -223,7 +247,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
     if (!result.success || !result.output) {
       return {
         success: true,
-        output: buildFallback(input || {} as VirtualLearnerPathEvaluatorInput),
+        output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
         duration: Date.now() - startTime,
         cached: true,
       };
@@ -245,7 +269,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
   } catch {
     return {
       success: true,
-      output: buildFallback(input || {} as VirtualLearnerPathEvaluatorInput),
+      output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
       duration: Date.now() - startTime,
       cached: true,
     };

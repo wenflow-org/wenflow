@@ -211,6 +211,23 @@ function normalizePersonaOutput(raw: any) {
   const planningFollowThrough = normalizeString(personaSeed.planningFollowThrough);
   const overloadReaction = normalizeString(personaSeed.overloadReaction);
 
+  // 校验枚举 helper
+  const enumOrNull = <T extends string>(value: any, allowed: T[]): T | null =>
+    (allowed.includes(value as T) ? (value as T) : null)
+
+  // 补齐 scenario-designer 完整 schema 中的关键字段, 让两个 skill 互通
+  // (LLM 没生成时 fallback null, 让下游 simulator 至少能识别字段名)
+  const motivationType = enumOrNull(personaSeed.motivationType, ['career', 'interest', 'necessity', 'social'] as const)
+  const personalityTraitsRaw = personaSeed.personalityTraits || {}
+  const personalityTraits = {
+    verbosity: enumOrNull(personalityTraitsRaw.verbosity, ['terse', 'normal', 'verbose'] as const),
+    enthusiasm: enumOrNull(personalityTraitsRaw.enthusiasm, ['low', 'normal', 'high'] as const),
+    confusionStyle: enumOrNull(personalityTraitsRaw.confusionStyle, ['direct', 'hinting'] as const),
+    patience: enumOrNull(personalityTraitsRaw.patience, ['low', 'normal', 'high'] as const),
+    questionStyle: enumOrNull(personalityTraitsRaw.questionStyle, ['none', 'clarifying', 'challenging'] as const),
+    emotionalRange: enumOrNull(personalityTraitsRaw.emotionalRange, ['flat', 'moderate', 'expressive'] as const),
+  }
+
   return {
     personaSeed: {
       nameHint: normalizeString(personaSeed.nameHint),
@@ -236,6 +253,12 @@ function normalizePersonaOutput(raw: any) {
       metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile) || selfAwarenessPattern,
       selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle) || planningFollowThrough,
       cognitiveLoadTolerance: normalizeString(personaSeed.cognitiveLoadTolerance) || overloadReaction,
+      // 补齐 scenario-designer 完整 schema 的字段 (兼容 simulator 的 friction 引用)
+      motivationType,
+      personalityDrivers: normalizeStringArray(personaSeed.personalityDrivers),
+      emotionalTriggers: normalizeStringArray(personaSeed.emotionalTriggers),
+      failurePatterns: normalizeStringArray(personaSeed.failurePatterns),
+      personalityTraits,
     }
   };
 }

@@ -4,7 +4,7 @@
  * 发现和管理可用 Agent
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../generated/system-client';
 import {
   AgentDefinition,
   AgentType,
@@ -41,6 +41,7 @@ export class AgentRegistry {
   private prisma: PrismaClient;
   private agents: Map<string, AgentRegistration> = new Map();
   private typeIndex: Map<AgentType, Set<string>> = new Map();
+  private registrationsCleared = false;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
@@ -74,6 +75,12 @@ export class AgentRegistry {
     const typeSet = this.typeIndex.get(definition.type);
     if (typeSet) {
       typeSet.add(definition.id);
+    }
+
+    // 首次注册前清空旧数据，确保 ID 更新后不冲突
+    if (!this.registrationsCleared) {
+      await this.prisma.agent_registrations.deleteMany();
+      this.registrationsCleared = true;
     }
 
     // 持久化注册

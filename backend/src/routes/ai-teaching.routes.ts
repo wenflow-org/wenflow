@@ -8,7 +8,7 @@
  */
 
 import { Router } from 'express';
-import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingOrchestrator';
+import aiTeachingCoordinator from '../services/ai-teaching/AITeachingCoordinator';
 import learningStateService from '../services/learning/learning-state.service';
 import aiService from '../services/ai/ai.service';
 import { authMiddleware } from '../middleware/auth.middleware';
@@ -37,7 +37,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
 
     await learningService.assertTaskReadyForLearning(taskId, userId);
 
-    const session = await aiTeachingOrchestrator.startSession({
+    const session = await aiTeachingCoordinator.startSession({
       userId,
       taskId,
       forceNew: !!req.body?.forceNew,
@@ -79,7 +79,7 @@ router.post('/sessions/:sessionId/pause', async (req: any, res) => {
     const reason = req.body?.reason === 'pagehide' ? 'pagehide' : 'manual';
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
-    await aiTeachingOrchestrator.pauseSession(sessionId, userId, reason);
+    await aiTeachingCoordinator.pauseSession(sessionId, userId, reason);
 
     res.json({ success: true, data: { sessionId, status: 'paused' } });
   } catch (error: any) {
@@ -105,7 +105,7 @@ router.post('/sessions/:sessionId/reset', async (req: any, res) => {
     const { sessionId } = req.params;
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
-    await aiTeachingOrchestrator.resetSession(sessionId, userId);
+    await aiTeachingCoordinator.resetSession(sessionId, userId);
 
     res.json({ success: true, data: { sessionId, status: 'completed' } });
   } catch (error: any) {
@@ -141,7 +141,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
       });
     }
 
-    const result = await aiTeachingOrchestrator.processStudentMessage(
+    const result = await aiTeachingCoordinator.processStudentMessage(
       sessionId,
       message
     );
@@ -201,7 +201,7 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
     
     await teachingSessionRepository.assertOwnership(sessionId, userId);
     
-    const result = await aiTeachingOrchestrator.endSession(sessionId);
+    const result = await aiTeachingCoordinator.endSession(sessionId);
 
     res.json({
       success: true,
@@ -316,7 +316,7 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
       });
     }
 
-    const result = await aiTeachingOrchestrator.processPeerMessage(
+    const result = await aiTeachingCoordinator.processPeerMessage(
       sessionId,
       message
     );
@@ -444,7 +444,7 @@ router.get('/sessions/active', async (req: any, res) => {
 
     const { taskId } = req.query;
 
-    const sessions = await aiTeachingOrchestrator.getSessionHistory(userId);
+    const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
     const activeSessions = sessions.filter(s => s.status === 'active');
     
     if (taskId) {
@@ -490,7 +490,7 @@ router.get('/sessions/history', async (req: any, res) => {
       return res.status(401).json({ success: false, error: '未登录' });
     }
 
-    const sessions = await aiTeachingOrchestrator.getSessionHistory(userId);
+    const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
 
     res.json({
       success: true,
@@ -520,7 +520,7 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
     
     await teachingSessionRepository.assertOwnership(sessionId, userId);
     
-    const session = await aiTeachingOrchestrator.getSessionDetail(sessionId, userId);
+    const session = await aiTeachingCoordinator.getSessionDetail(sessionId, userId);
 
     if (!session) {
       return res.status(404).json({ success: false, error: '会话不存在' });
@@ -551,7 +551,7 @@ router.get('/tasks/:taskId/evaluation/latest', async (req: any, res) => {
     }
 
     const { taskId } = req.params;
-    const evaluation = await aiTeachingOrchestrator.getLatestTaskEvaluation(taskId, userId);
+    const evaluation = await aiTeachingCoordinator.getLatestTaskEvaluation(taskId, userId);
 
     if (!evaluation) {
       return res.json({ success: true, data: null, message: '暂无当堂评估记录' });

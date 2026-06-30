@@ -58,7 +58,9 @@ export async function callPrompt<TInput, TOutput>(
       },
     };
   }
-  const systemPrompt = promptConfig?.systemPrompt || spec.defaultSystemPrompt;
+  const systemPrompt = context.systemPromptOverride
+    || promptConfig?.systemPrompt
+    || spec.defaultSystemPrompt;
   const userPayload = stringifyPayload(spec.buildUserPayload(input));
   const promptDrift = detectPromptDrift(spec.defaultSystemPrompt, promptConfig?.systemPrompt || null);
   const attempts: PromptAttemptTrace[] = [];
