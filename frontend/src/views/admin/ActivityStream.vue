@@ -1,21 +1,31 @@
 <template>
-  <div class="activity-stream-page" v-loading="loading">
-    <div class="activity-bg-layer">
-      <div class="activity-bg-orb activity-bg-orb--1"></div>
-      <div class="activity-bg-orb activity-bg-orb--2"></div>
-    </div>
+  <div class="admin-page activity-stream-page" v-loading="loading">
+    <AdminPageHeader
+      kicker="Activity Diagnostics"
+      title="活动流"
+      desc="查看系统活动。"
+      :icon="Clock"
+      :highlights="activityHighlights"
+    >
+      <template #actions>
+        <el-button type="primary" :loading="loading" @click="reload">刷新活动流</el-button>
+      </template>
+    </AdminPageHeader>
 
-    <div class="page-hero">
-      <span class="pill">监控诊断</span>
-      <h1 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Clock /></el-icon>
-        活动流
-      </h1>
-      <p class="page-hero__subtitle">查看最近系统动态，快速定位用户与教学事件</p>
-    </div>
+    <section class="admin-filter-panel activity-filter-panel">
+      <div class="admin-section-head activity-filter-panel__head">
+        <div class="admin-section-head__copy">
+          <span class="admin-section-head__eyebrow">Activity Filters</span>
+          <h3 class="admin-section-head__title">活动筛选</h3>
+          <p class="admin-section-head__desc">按活动类型和关键词收窄时间线范围。</p>
+        </div>
+        <div class="activity-filter-panel__summary">
+          <span>{{ filteredActivities.length }} 条结果</span>
+        </div>
+      </div>
 
-    <div class="toolbar admin-list-toolbar">
-      <div class="admin-list-toolbar__group">
+      <div class="admin-list-toolbar">
+        <div class="admin-list-toolbar__group">
         <el-select v-model="filters.type" placeholder="活动类型" clearable class="toolbar-item">
           <el-option label="学习会话" value="学习会话" />
           <el-option label="新用户注册" value="新用户注册" />
@@ -29,18 +39,23 @@
         />
       </div>
       <div class="admin-list-toolbar__group">
-        <el-button class="activity-btn activity-btn--primary" @click="reload">刷新</el-button>
+        <p class="activity-toolbar-note">{{ filters.type || filters.keyword ? '已启用筛选' : '默认范围' }}</p>
       </div>
-    </div>
+      </div>
+    </section>
 
-    <div class="stats-grid">
-      <div class="mini-stat"><span>总活动</span><strong>{{ filteredActivities.length }}</strong></div>
-      <div class="mini-stat"><span>学习会话</span><strong>{{ sessionCount }}</strong></div>
-      <div class="mini-stat"><span>新用户注册</span><strong>{{ signupCount }}</strong></div>
-      <div class="mini-stat"><span>任务完成</span><strong>{{ completedCount }}</strong></div>
-    </div>
+    <section class="admin-summary-grid">
+      <article class="admin-summary-card admin-summary-card--blue"><div class="admin-summary-card__label">总活动</div><strong class="admin-summary-card__value">{{ filteredActivities.length }}</strong></article>
+      <article class="admin-summary-card admin-summary-card--green"><div class="admin-summary-card__label">学习会话</div><strong class="admin-summary-card__value">{{ sessionCount }}</strong></article>
+      <article class="admin-summary-card"><div class="admin-summary-card__label">新用户注册</div><strong class="admin-summary-card__value">{{ signupCount }}</strong></article>
+      <article class="admin-summary-card admin-summary-card--orange"><div class="admin-summary-card__label">任务完成</div><strong class="admin-summary-card__value">{{ completedCount }}</strong></article>
+    </section>
 
-    <div class="timeline-wrap admin-list-card">
+    <section class="timeline-wrap admin-list-card">
+      <div class="timeline-wrap__head">
+        <strong>活动时间线</strong>
+        <span>按时间倒序查看系统活动</span>
+      </div>
       <el-empty v-if="pagedActivities.length === 0" description="暂无活动数据" />
       <el-timeline v-else>
         <el-timeline-item
@@ -56,7 +71,7 @@
           </div>
         </el-timeline-item>
       </el-timeline>
-    </div>
+    </section>
 
     <div class="admin-list-pagination">
       <el-pagination
@@ -74,6 +89,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Clock } from '@element-plus/icons-vue';
 import { adminDashboardApi } from '@/api/adminApi';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
 const loading = ref(false);
@@ -151,6 +167,12 @@ const pagedActivities = computed(() => {
 const sessionCount = computed(() => allActivities.value.filter((item) => item.title === '学习会话').length);
 const signupCount = computed(() => allActivities.value.filter((item) => item.title === '新用户注册').length);
 const completedCount = computed(() => allActivities.value.filter((item) => item.title === '任务完成').length);
+const activityHighlights = computed(() => [
+  { label: `${filteredActivities.value.length} 条活动`, tone: 'info' as const },
+  { label: `学习会话 ${sessionCount.value}`, tone: 'success' as const },
+  { label: `新用户 ${signupCount.value}`, tone: 'neutral' as const },
+  { label: `任务完成 ${completedCount.value}`, tone: 'warning' as const }
+]);
 
 const formatTime = (time: any) => {
   if (!time) return '暂无数据';
@@ -192,22 +214,28 @@ onMounted(reload);
   gap: 16px;
 }
 
-.activity-bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.activity-bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.activity-bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: activity-orb 26s ease-in-out infinite; }
-.activity-bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: activity-orb 30s ease-in-out infinite reverse; }
-@keyframes activity-orb { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
-
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
-
 .toolbar-item { width: 180px; }
 .toolbar-item--wide { width: 320px; }
 
-.activity-btn { height: 38px; padding: 0 16px; border-radius: 12px; border: 1px solid transparent; font-weight: 600; }
-.activity-btn--primary { color: #ffffff; background: linear-gradient(135deg, #3478f6, #3f86ff); box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24); }
+.activity-toolbar-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+.activity-filter-panel {
+  gap: 14px;
+}
+
+.activity-filter-panel__head {
+  margin-bottom: 0;
+}
+
+.activity-filter-panel__summary {
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .stats-grid {
   position: relative;
@@ -233,6 +261,26 @@ onMounted(reload);
   position: relative;
   z-index: 1;
   padding: 16px;
+}
+
+.timeline-wrap__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: var(--admin-border-subtle);
+}
+
+.timeline-wrap__head strong {
+  color: var(--admin-text-primary);
+  font-size: 14px;
+}
+
+.timeline-wrap__head span {
+  color: var(--admin-text-muted);
+  font-size: 12px;
 }
 
 .activity-card {

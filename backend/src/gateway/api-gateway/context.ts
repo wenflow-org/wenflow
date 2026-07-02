@@ -7,6 +7,7 @@ export interface RequestContext {
   agentId?: string;
   action?: string;
   skillId?: string;
+  executionLogId?: string;
   sourceEntry?: SourceEntry;
   traceId?: string;
   callerAgent?: string;

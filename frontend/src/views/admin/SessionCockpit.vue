@@ -1,13 +1,23 @@
 <template>
-  <div class="cockpit-page">
-    <!-- ============ Topbar ============ -->
-    <header class="cockpit-topbar">
-      <div class="cockpit-topbar__crumbs">
-        <el-button text size="small" @click="backToStory">
+  <div class="admin-page cockpit-page">
+    <AdminPageHeader
+      title="虚拟会话控制台"
+      :highlights="cockpitHighlights"
+      dense
+    >
+      <template #actions>
+        <el-button @click="backToStory">
           <el-icon><ArrowLeft /></el-icon>
           {{ profileName || '返回故事' }}
         </el-button>
-      </div>
+        <el-button @click="loadSession" :loading="loading">
+          <el-icon><Refresh /></el-icon>
+          刷新会话
+        </el-button>
+      </template>
+    </AdminPageHeader>
+
+    <section class="cockpit-topbar">
       <div class="cockpit-topbar__stage-strip">
         <div
           v-for="s in stageStripItems"
@@ -23,11 +33,47 @@
       </div>
       <div class="cockpit-topbar__tags">
         <el-tag :type="statusTagType" size="small" effect="dark">{{ statusText }}</el-tag>
-        <el-button size="small" @click="loadSession" :loading="loading">
-          <el-icon><Refresh /></el-icon>
-        </el-button>
       </div>
-    </header>
+    </section>
+
+    <section class="cockpit-overview">
+      <div class="cockpit-overview__main">
+        <div class="cockpit-overview__copy">
+          <h2>{{ activeStageMeta.title }}</h2>
+          <p>{{ activeStageMeta.desc }}</p>
+        </div>
+        <div class="cockpit-overview__facts">
+          <article class="cockpit-glance-card">
+            <span>当前阶段</span>
+            <strong>{{ activeStageMeta.label }}</strong>
+          </article>
+          <article class="cockpit-glance-card">
+            <span>当前任务</span>
+            <strong>{{ currentTaskTitle || '未绑定 Task' }}</strong>
+          </article>
+          <article class="cockpit-glance-card">
+            <span>路径状态</span>
+            <strong>{{ pathStatusText }}</strong>
+          </article>
+          <article class="cockpit-glance-card">
+            <span>日志条数</span>
+            <strong>{{ logEntries.length }}</strong>
+          </article>
+        </div>
+      </div>
+      <div class="cockpit-overview__summary">
+        <article class="cockpit-summary-card">
+          <span class="cockpit-summary-card__label">当前绑定</span>
+          <strong>{{ bindingSummaryLabel }}</strong>
+          <p>{{ bindingSummaryDesc }}</p>
+        </article>
+        <article class="cockpit-summary-card">
+          <span class="cockpit-summary-card__label">下一步建议</span>
+          <strong>{{ nextActionTitle }}</strong>
+          <p>{{ nextActionDesc }}</p>
+        </article>
+      </div>
+    </section>
 
     <!-- ============ 3-column main ============ -->
     <div class="cockpit-main">
@@ -261,52 +307,52 @@
       </aside>
     </div>
 
-    <!-- ============ Bottom detail ============ -->
-    <details class="cockpit-detail">
-      <summary>
-        <span class="cockpit-detail__toggle">详情</span>
+    <section class="cockpit-detail">
+      <div class="cockpit-detail__head">
+        <div>
+          <h3>会话诊断明细</h3>
+          <p>绑定、事件和快照信息</p>
+        </div>
         <el-tag size="small" type="info">{{ sessionId?.slice(0, 8) ?? '--' }}</el-tag>
-      </summary>
-      <div class="cockpit-detail__body">
-        <div class="detail-tabs">
-          <button
-            v-for="t in detailTabs"
-            :key="t.key"
-            type="button"
-            class="detail-tab"
-            :class="{ active: activeDetailTab === t.key }"
-            @click="activeDetailTab = t.key"
-          >{{ t.label }}</button>
-        </div>
+      </div>
+      <div class="detail-tabs">
+        <button
+          v-for="t in detailTabs"
+          :key="t.key"
+          type="button"
+          class="detail-tab"
+          :class="{ active: activeDetailTab === t.key }"
+          @click="activeDetailTab = t.key"
+        >{{ t.label }}</button>
+      </div>
 
-        <!-- Bindings -->
-        <div v-if="activeDetailTab === 'bindings'" class="detail-pane">
-          <div class="binding-grid">
-            <div v-for="(val, key) in bindings" :key="key" class="binding-row">
-              <span class="binding-row__key">{{ key }}</span>
-              <code class="binding-row__val">{{ val || '(空)' }}</code>
-            </div>
+      <!-- Bindings -->
+      <div v-if="activeDetailTab === 'bindings'" class="detail-pane">
+        <div class="binding-grid">
+          <div v-for="(val, key) in bindings" :key="key" class="binding-row">
+            <span class="binding-row__key">{{ key }}</span>
+            <code class="binding-row__val">{{ val || '(空)' }}</code>
           </div>
-        </div>
-
-        <!-- Events -->
-        <div v-if="activeDetailTab === 'events'" class="detail-pane">
-          <div v-if="events.length" class="event-list">
-            <div v-for="(ev, i) in events" :key="i" class="event-item">
-              <span class="event-item__time">{{ formatEventTime(ev.createdAt) }}</span>
-              <span class="event-item__type">{{ ev.type }}</span>
-              <span class="event-item__msg">{{ ev.message }}</span>
-            </div>
-          </div>
-          <div v-else class="empty-text">暂无事件记录</div>
-        </div>
-
-        <!-- Raw JSON -->
-        <div v-if="activeDetailTab === 'json'" class="detail-pane">
-          <pre class="json-block">{{ JSON.stringify(rawSession, null, 2) }}</pre>
         </div>
       </div>
-    </details>
+
+      <!-- Events -->
+      <div v-if="activeDetailTab === 'events'" class="detail-pane">
+        <div v-if="events.length" class="event-list">
+          <div v-for="(ev, i) in events" :key="i" class="event-item">
+            <span class="event-item__time">{{ formatEventTime(ev.createdAt) }}</span>
+            <span class="event-item__type">{{ ev.type }}</span>
+            <span class="event-item__msg">{{ ev.message }}</span>
+          </div>
+        </div>
+        <div v-else class="empty-text">暂无事件记录</div>
+      </div>
+
+      <!-- Raw JSON -->
+      <div v-if="activeDetailTab === 'json'" class="detail-pane">
+        <pre class="json-block">{{ JSON.stringify(rawSession, null, 2) }}</pre>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -316,6 +362,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Refresh, Finished } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
+import AdminPageHeader from './components/AdminPageHeader.vue'
 import SessionControlPanel from './components/virtual/SessionControlPanel.vue'
 import SessionLiveLog, { type LogEntry } from './components/virtual/SessionLiveLog.vue'
 
@@ -506,6 +553,86 @@ const stageStripItems = computed(() => {
     done: idx < stageIndex.value || status.value === 'completed',
     disabled: idx > stageIndex.value && status.value !== 'completed'
   }))
+})
+
+const cockpitHighlights = computed(() => [
+  { label: `状态 ${statusText.value}`, tone: status.value === 'completed' ? 'success' as const : status.value === 'failed' ? 'danger' as const : 'info' as const },
+  { label: `当前阶段 ${currentStage.value}`, tone: 'neutral' as const },
+  { label: bindings.value.currentTaskId ? `Task ${bindings.value.currentTaskId}` : '尚未绑定 Task', tone: bindings.value.currentTaskId ? 'warning' as const : 'neutral' as const },
+  { label: `Session ${sessionId}`, tone: 'neutral' as const }
+])
+
+const activeStageMeta = computed(() => {
+  switch (activeNav.value) {
+    case 'goal':
+      return {
+        key: 'goal',
+        label: 'Goal',
+        title: '目标对齐工作区',
+        desc: goalConversation.value.length
+          ? '对话进行中'
+          : '待推进 Goal 对话'
+      }
+    case 'path':
+      return {
+        key: 'path',
+        label: 'Path',
+        title: '学习路径工作区',
+        desc: pathReady.value
+          ? '路径已就绪'
+          : '待生成路径'
+      }
+    case 'learning':
+      return {
+        key: 'learning',
+        label: 'Learn',
+        title: '教学活动工作区',
+        desc: learningStarted.value
+          ? '教学轮次进行中'
+          : '待推进 Learn 轮次'
+      }
+    default:
+      return {
+        key: 'wrapup',
+        label: 'Wrapup',
+        title: '学习总结工作区',
+        desc: wrapupSummary.value
+          ? '总结已生成'
+          : '待生成总结'
+      }
+  }
+})
+
+const bindingSummaryLabel = computed(() => {
+  if (bindings.value.currentTaskId) return '已绑定当前任务'
+  if (bindings.value.learningPathId) return '已绑定路径'
+  if (bindings.value.goalConversationId) return '已绑定 Goal 对话'
+  return '待绑定'
+})
+
+const bindingSummaryDesc = computed(() => {
+  if (bindings.value.currentTaskId) return `task: ${bindings.value.currentTaskId}`
+  if (bindings.value.learningPathId) return `path: ${bindings.value.learningPathId}`
+  if (bindings.value.goalConversationId) return `goalConversation: ${bindings.value.goalConversationId}`
+  return '等待阶段产出绑定。'
+})
+
+const nextActionTitle = computed(() => {
+  if (status.value === 'failed') return '先看事件和日志'
+  if (activeNav.value === 'goal' && !goalReady.value) return '继续推进 Goal'
+  if (activeNav.value === 'path' && !pathReady.value) return '生成或复核 Path'
+  if (activeNav.value === 'learning' && learningStarted.value) return '继续推进当前 task'
+  if (activeNav.value === 'wrapup' && !wrapupSummary.value) return '生成总结'
+  return '检查当前阶段结果'
+})
+
+const nextActionDesc = computed(() => {
+  if (status.value === 'failed') return '会话已失败，查看事件和日志。'
+  if (activeNav.value === 'goal' && !goalReady.value) return '推进 Goal 对话，收敛后进入 Path。'
+  if (activeNav.value === 'path' && !pathReady.value) return 'Goal 已收敛时可从右侧发起 Path 生成。'
+  if (activeNav.value === 'learning' && learningStarted.value) return currentTaskTitle.value ? `当前任务是 ${currentTaskTitle.value}` : '推进当前学习轮次。'
+  if (activeNav.value === 'wrapup' && !wrapupSummary.value) return '完成 Learn 后可在此触发总结。'
+  return '阶段已有结果。'
 })
 
 const stageNavItems = computed(() => {
@@ -828,7 +955,20 @@ const selectStage = (key: string) => {
 }
 
 const backToStory = () => {
-  router.back()
+  const profileId = session.value?.profile?.id || session.value?.profileId || session.value?.virtualLearnerId
+  const storyId = session.value?.storyContext?.storyId || session.value?.runtime?.story?.storyId
+
+  if (profileId && storyId) {
+    router.push(`/admin/virtual-learners/${profileId}/stories/${storyId}`)
+    return
+  }
+
+  if (profileId) {
+    router.push(`/admin/virtual-learners/${profileId}`)
+    return
+  }
+
+  router.push('/admin/virtual-learners')
 }
 
 const formatEventTime = (time?: string) => {
@@ -873,7 +1013,6 @@ watch(status, (newStatus) => {
 .cockpit-page {
   display: grid;
   gap: 12px;
-  padding: 12px 16px 32px;
   background: #f6f8fc;
   min-height: 100%;
 }
@@ -884,15 +1023,8 @@ watch(status, (newStatus) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
-  background: var(--admin-bg-surface);
-  border: 1px solid #e1e8f2;
-  border-radius: 12px;
-}
-
-.cockpit-topbar__crumbs {
-  display: flex;
-  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: var(--admin-border-subtle);
 }
 
 .cockpit-topbar__stage-strip {
@@ -959,11 +1091,101 @@ watch(status, (newStatus) => {
   gap: 8px;
 }
 
+.cockpit-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  gap: 14px;
+  align-items: stretch;
+  padding-bottom: 12px;
+  border-bottom: var(--admin-border-subtle);
+}
+
+.cockpit-overview__main,
+.cockpit-overview__summary {
+  display: grid;
+  gap: 12px;
+}
+
+.cockpit-overview__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.cockpit-overview__kicker,
+.cockpit-detail__kicker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  padding: 0 10px;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--admin-text-brand);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cockpit-overview__copy h2 {
+  margin: 0;
+  color: var(--admin-text-primary);
+  font-size: 1.18rem;
+  line-height: 1.2;
+}
+
+.cockpit-overview__copy p,
+.cockpit-summary-card p,
+.cockpit-detail__head p {
+  margin: 0;
+  color: var(--admin-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cockpit-overview__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cockpit-glance-card,
+.cockpit-summary-card {
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: var(--admin-bg-surface-alt);
+}
+
+.cockpit-glance-card {
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.cockpit-glance-card span,
+.cockpit-summary-card__label {
+  color: #8a94a6;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cockpit-glance-card strong,
+.cockpit-summary-card strong {
+  color: #1a2a44;
+  font-size: 14px;
+}
+
+.cockpit-summary-card {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
 /* 3-column main */
 .cockpit-main {
   display: grid;
   grid-template-columns: 200px 1fr 340px;
-  gap: 12px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -971,10 +1193,11 @@ watch(status, (newStatus) => {
 .cockpit-nav {
   display: grid;
   gap: 4px;
-  padding: 12px;
-  background: var(--admin-bg-surface);
-  border: 1px solid #e1e8f2;
-  border-radius: 12px;
+  padding: 6px 0 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .cockpit-nav__head {
@@ -983,9 +1206,9 @@ watch(status, (newStatus) => {
   color: #94a3b8;
   font-weight: 700;
   text-transform: uppercase;
-  padding-bottom: 8px;
+  padding: 0 0 8px 4px;
   margin-bottom: 4px;
-  border-bottom: 1px solid #e1e8f2;
+  border-bottom: var(--admin-border-subtle);
 }
 
 .nav-btn {
@@ -994,8 +1217,8 @@ watch(status, (newStatus) => {
   align-items: center;
   gap: 8px;
   padding: 10px 10px;
-  background: transparent;
-  border: none;
+  background: var(--admin-bg-surface-alt);
+  border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
@@ -1006,9 +1229,10 @@ watch(status, (newStatus) => {
 
 .nav-btn:hover { background: #f0f5ff; }
 .nav-btn.active {
-  background: #e8f0ff;
+  background: var(--admin-bg-surface);
   color: #1a2a44;
   font-weight: 700;
+  border-color: rgba(52, 120, 246, 0.18);
 }
 
 .nav-btn.disabled {
@@ -1041,10 +1265,10 @@ watch(status, (newStatus) => {
 }
 
 .stage-panel {
+  padding: 16px 18px;
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
   background: var(--admin-bg-surface);
-  border: 1px solid #e1e8f2;
-  border-radius: 12px;
-  padding: 18px 20px;
 }
 
 .stage-panel__head {
@@ -1054,14 +1278,14 @@ watch(status, (newStatus) => {
   flex-wrap: wrap;
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: var(--admin-border-subtle);
 }
 
 .stage-panel__head h3 {
   margin: 0;
   font-size: 15px;
   font-weight: 800;
-  color: #1a2a44;
+  color: var(--admin-text-primary);
 }
 
 .stage-panel__task-meta {
@@ -1089,7 +1313,7 @@ watch(status, (newStatus) => {
 .stage-panel__empty {
   padding: 32px 0;
   text-align: center;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   font-size: 13px;
 }
 
@@ -1105,9 +1329,10 @@ watch(status, (newStatus) => {
   display: grid;
   gap: 6px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 13px;
   line-height: 1.55;
+  box-shadow: none;
 }
 
 .conv-round--teacher {
@@ -1176,8 +1401,8 @@ watch(status, (newStatus) => {
 .stage-panel__detail {
   margin-top: 12px;
   padding: 10px 12px;
-  background: #fafbfc;
-  border: 1px solid #e1e8f2;
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
 }
 
@@ -1222,7 +1447,8 @@ watch(status, (newStatus) => {
 .milestone-card {
   padding: 12px 14px;
   border: 1px solid #e1e8f2;
-  border-radius: 10px;
+  border-radius: 8px;
+  background: var(--admin-bg-surface-alt);
 }
 
 .milestone-card__head {
@@ -1288,8 +1514,9 @@ watch(status, (newStatus) => {
   padding: 12px 14px;
   background: #f0fdf4;
   border: 1px solid #bfe5cb;
-  border-radius: 10px;
+  border-radius: 8px;
   margin-bottom: 12px;
+  box-shadow: none;
 }
 
 .wrapup-card__head {
@@ -1320,7 +1547,7 @@ watch(status, (newStatus) => {
   padding: 12px 14px;
   background: #f0f5ff;
   border: 1px solid #c9dcfc;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .metric-grid {
@@ -1381,39 +1608,36 @@ watch(status, (newStatus) => {
   display: grid;
   gap: 12px;
   align-content: start;
+  padding-top: 4px;
+  border-top: var(--admin-border-subtle);
 }
 
 /* Bottom detail */
 .cockpit-detail {
-  background: var(--admin-bg-surface);
-  border: 1px solid #e1e8f2;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.cockpit-detail summary {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  color: #5b6577;
-  list-style: none;
-  background: #fafbfc;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: var(--admin-border-subtle);
 }
 
-.cockpit-detail summary::-webkit-details-marker { display: none; }
+.cockpit-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-.cockpit-detail__body {
-  padding: 12px 16px 16px;
+.cockpit-detail__head h3 {
+  margin: 4px 0 0;
+  color: var(--admin-text-primary);
+  font-size: 1rem;
 }
 
 .detail-tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   border-bottom: 1px solid #e1e8f2;
 }
 
@@ -1509,6 +1733,14 @@ watch(status, (newStatus) => {
 
 /* ===== Responsive ===== */
 @media (max-width: 1200px) {
+  .cockpit-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .cockpit-overview__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .cockpit-main {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
@@ -1522,5 +1754,15 @@ watch(status, (newStatus) => {
   .cockpit-nav__head { display: none; }
   .cockpit-stage { order: 2; }
   .cockpit-side { order: 3; }
+}
+
+@media (max-width: 760px) {
+  .cockpit-overview__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .cockpit-detail__head {
+    flex-direction: column;
+  }
 }
 </style>

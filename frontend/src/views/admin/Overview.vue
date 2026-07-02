@@ -1,20 +1,12 @@
 <template>
-  <div class="admin-overview">
-    <section class="page-hero">
-      <div class="page-hero__copy">
-        <span class="page-hero__eyebrow">Admin Overview</span>
-        <h1 class="page-hero__title">平台运行总览</h1>
-        <p class="page-hero__subtitle">聚焦今日活跃、Agent 运行健康度与最近平台动态。</p>
-
-        <div class="page-hero__highlights">
-          <span class="hero-pill">最近刷新 {{ lastRefreshLabel }}</span>
-          <span class="hero-pill">今日调用 {{ stats.agents?.todayCalls || 0 }}</span>
-          <span class="hero-pill">24h 异常 {{ totalTrendIssues }}</span>
-        </div>
-      </div>
-
-      <div class="page-hero__actions">
-        <el-button class="page-hero__refresh" @click="refreshAll" :loading="refreshing">
+  <div class="admin-page admin-overview">
+    <AdminPageHeader
+      kicker="Admin Console"
+      title="平台运行总览"
+      :highlights="overviewHighlights"
+    >
+      <template #actions>
+        <el-button @click="refreshAll" :loading="refreshing">
           <svg
             viewBox="0 0 24 24"
             width="16"
@@ -26,93 +18,42 @@
           ><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
           刷新数据
         </el-button>
-      </div>
-    </section>
+      </template>
+    </AdminPageHeader>
 
-    <section class="summary-grid summary-grid--headline">
-      <article class="summary-card summary-card--primary">
-        <div class="summary-card__header">
-          <span class="summary-card__label">活跃用户</span>
-          <span class="summary-card__caption">今日学习活跃</span>
-        </div>
-        <div class="summary-card__value-row">
-          <strong>{{ stats.users?.activeToday || 0 }}</strong>
-          <span class="summary-card__hint">{{ stats.users?.activeRate || 0 }}% 活跃率</span>
-        </div>
-      </article>
-
-      <article class="summary-card summary-card--highlight">
-        <div class="summary-card__header">
-          <span class="summary-card__label">Agent 成功率</span>
-          <span class="summary-card__caption">24h 调用健康</span>
-        </div>
-        <div class="summary-card__value-row">
-          <strong>{{ stats.agents?.successRate || 100 }}%</strong>
-          <span class="summary-card__hint">今日调用 {{ stats.agents?.todayCalls || 0 }}</span>
-        </div>
-      </article>
-
-      <article class="summary-card">
-        <div class="summary-card__header">
-          <span class="summary-card__label">风险告警</span>
-          <span class="summary-card__caption">异常与超时</span>
-        </div>
-        <div class="summary-card__value-row">
-          <strong>{{ totalIssueCount }}</strong>
-          <span class="summary-card__hint">今日超时 {{ stats.agents?.todayTimeouts || 0 }} 次</span>
-        </div>
-      </article>
-
-      <article class="summary-card">
-        <div class="summary-card__header">
-          <span class="summary-card__label">任务完成</span>
-          <span class="summary-card__caption">学习进度</span>
-        </div>
-        <div class="summary-card__value-row">
-          <strong>{{ stats.learning?.completedTasks || 0 }}</strong>
-          <span class="summary-card__hint">{{ stats.learning?.completionRate || 0 }}% 完成率</span>
-        </div>
-      </article>
-    </section>
-
-    <section class="insight-grid">
+    <section class="overview-hero-grid">
       <article class="insight-card insight-card--primary">
         <div class="hero-kpi__copy">
-          <span class="hero-kpi__eyebrow">业务概览</span>
+          <span class="hero-kpi__eyebrow">状态摘要</span>
           <h2>{{ overviewHeadline.title }}</h2>
-          <p>
-            {{ overviewHeadline.description }}
-          </p>
         </div>
 
-        <div class="hero-kpi__facts">
-          <div class="hero-kpi__fact">
-            <span>总用户数</span>
-            <strong>{{ stats.users?.total || 0 }}</strong>
-            <em>今日新增 {{ stats.users?.newToday || 0 }}</em>
+        <div class="overview-focus-strip overview-focus-strip--compact">
+          <div class="overview-focus-chip">
+            <span>最近节点活动</span>
+            <strong>{{ latestAgentActivityLabel }}</strong>
           </div>
-          <div class="hero-kpi__fact">
-            <span>学习路径</span>
-            <strong>{{ stats.learning?.totalPaths || 0 }}</strong>
-            <em>{{ stats.learning?.activePaths || 0 }} 条活跃</em>
+          <div class="overview-focus-chip">
+            <span>24h 异常率</span>
+            <strong>{{ overallIssueRateLabel }}</strong>
           </div>
-          <div class="hero-kpi__fact">
-            <span>目标对话</span>
-            <strong>{{ stats.conversations?.total || 0 }}</strong>
-            <em>{{ stats.conversations?.active || 0 }} 进行中</em>
+          <div class="overview-focus-chip">
+            <span>学习活跃</span>
+            <strong>{{ stats.users?.activeToday || 0 }} 人</strong>
+          </div>
+          <div class="overview-focus-chip">
+            <span>任务完成</span>
+            <strong>{{ stats.learning?.completedTasks || 0 }} 项</strong>
           </div>
         </div>
-      </article>
 
-      <article class="insight-card insight-card--secondary">
-        <div class="section-head section-head--tight">
+        <div class="section-head section-head--tight section-head--embedded">
           <div>
-            <h3 class="section-title">运行健康摘要</h3>
-            <p class="section-subtitle">把首页重点放在健康度和需要处理的风险上。</p>
+            <h3 class="section-title">关键状态</h3>
           </div>
         </div>
 
-        <div class="health-list">
+        <div class="health-list health-list--inline">
           <div class="health-item" :class="healthSummary.successRate.tone">
             <span class="health-item__dot"></span>
             <div>
@@ -135,6 +76,38 @@
             </div>
           </div>
         </div>
+
+        <div class="overview-action-bar">
+          <router-link to="/admin/execution-logs" class="overview-action-link">查看执行日志</router-link>
+          <router-link to="/admin/prompt-call-logs" class="overview-action-link">查看 Prompt 调用日志</router-link>
+          <router-link to="/admin/agents/topology" class="overview-action-link">查看 Agent 拓扑</router-link>
+          <router-link to="/admin/learner-center" class="overview-action-link">进入学习者中心</router-link>
+        </div>
+      </article>
+
+      <article class="insight-card insight-card--secondary">
+        <div class="section-head section-head--tight section-head--embedded">
+          <div>
+            <h3 class="section-title">工作区</h3>
+          </div>
+        </div>
+
+        <div class="workspace-list">
+          <router-link
+            v-for="workspace in workspaceSections"
+            :key="workspace.to"
+            :to="workspace.to"
+            class="workspace-card"
+          >
+            <div class="workspace-card__copy">
+              <strong>{{ workspace.title }}</strong>
+            </div>
+            <div class="workspace-card__meta">
+              <span :class="['workspace-card__badge', `is-${workspace.tone}`]">{{ workspace.badge }}</span>
+              <span class="workspace-card__link">进入</span>
+            </div>
+          </router-link>
+        </div>
       </article>
     </section>
 
@@ -145,54 +118,73 @@
             <div>
               <h3 class="section-title">
                 <el-icon><Cpu /></el-icon>
-                Agent / 编排器 运行状态
+                待处理事项
               </h3>
-              <p class="section-subtitle">聚焦成功率、平均耗时与最近活跃时间，首页仅保留核心观测信息。</p>
+            </div>
+            <span class="section-note">{{ priorityQueue.length }} 项</span>
+          </div>
+
+          <div v-if="priorityQueue.length" class="priority-list">
+            <article v-for="item in priorityQueue" :key="item.id" class="priority-card">
+              <div class="priority-card__head">
+                <div class="priority-card__title-wrap">
+                  <span :class="['priority-pill', `is-${item.tone}`]">{{ item.level }}</span>
+                  <strong>{{ item.title }}</strong>
+                </div>
+                <span class="priority-card__meta">{{ item.meta }}</span>
+              </div>
+
+              <p class="priority-card__description">{{ item.description }}</p>
+
+              <div class="priority-card__actions">
+                <router-link :to="item.primaryTo" class="overview-inline-link">{{ item.primaryLabel }}</router-link>
+                <router-link v-if="item.secondaryTo" :to="item.secondaryTo" class="overview-inline-link">{{ item.secondaryLabel }}</router-link>
+              </div>
+            </article>
+          </div>
+          <el-empty v-else description="暂无需要立即处理的事项" />
+        </section>
+
+        <section class="section panel-card">
+          <div class="section-head">
+            <div>
+              <h3 class="section-title">
+                <el-icon><Cpu /></el-icon>
+                运行关注项
+              </h3>
             </div>
           </div>
 
-          <el-table :data="agentStatuses" stripe class="agent-status-table">
-            <el-table-column prop="name" label="Agent" min-width="180">
-              <template #default="{ row }">
+          <div v-if="attentionAgentStatuses.length" class="attention-list">
+            <article v-for="item in attentionAgentStatuses" :key="item.name" class="attention-card">
+              <div class="attention-card__head">
                 <div class="agent-name">
-                  <el-tag :type="getAgentTagType(row.status)" size="small" class="agent-tag">
-                    {{ row.status }}
+                  <el-tag :type="getAgentTagType(item.status)" size="small" class="agent-tag">
+                    {{ item.status }}
                   </el-tag>
-                  <span class="agent-name-text">{{ getAgentDisplayName(row.name) }}</span>
+                  <span class="agent-name-text">{{ getAgentDisplayName(item.name) }}</span>
                 </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="successRate" label="成功率" width="170">
-              <template #default="{ row }">
-                <div class="table-progress-cell">
-                  <el-progress
-                    :percentage="parseFloat(row.successRate)"
-                    :status="parseFloat(row.successRate) >= 90 ? 'success' : 'warning'"
-                  />
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="avgDuration" label="平均耗时" width="120" align="center">
-              <template #default="{ row }">
-                {{ row.avgDuration }}ms
-              </template>
-            </el-table-column>
-            <el-table-column prop="totalCalls" label="总调用" width="96" align="center" />
-            <el-table-column label="成功 / 失败" width="120" align="center">
-              <template #default="{ row }">
-                <div class="call-metrics">
-                  <span class="success-count">{{ row.successCalls }}</span>
-                  <span class="call-metrics__divider">/</span>
-                  <span class="error-count">{{ row.errorCalls }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="lastActivity" label="最后活跃" width="140">
-              <template #default="{ row }">
-                {{ formatTime(row.lastActivity) }}
-              </template>
-            </el-table-column>
-          </el-table>
+                <span class="attention-card__time">{{ formatTime(item.lastActivity) }}</span>
+              </div>
+
+              <div class="attention-card__summary">
+                <strong>{{ item.summary }}</strong>
+                <p>{{ item.detail }}</p>
+              </div>
+
+              <div class="attention-card__meta">
+                <span>成功率 {{ item.successRate }}%</span>
+                <span>总调用 {{ item.totalCalls }}</span>
+                <span>平均耗时 {{ item.avgDuration }}ms</span>
+              </div>
+
+              <div class="attention-card__actions">
+                <router-link :to="item.executionLogsLink" class="overview-inline-link">执行日志</router-link>
+                <router-link :to="item.promptLogsLink" class="overview-inline-link">Prompt 日志</router-link>
+              </div>
+            </article>
+          </div>
+          <el-empty v-else description="暂无需要额外关注的节点" />
         </section>
 
         <section class="section panel-card">
@@ -200,9 +192,8 @@
             <div>
               <h3 class="section-title">
                 <el-icon><TrendCharts /></el-icon>
-                最近 24 小时调用概览
+                24h 调用概览
               </h3>
-              <p class="section-subtitle">聚焦调用高峰、异常率与最近活跃时段，给首页一个更清晰的运行结论。</p>
             </div>
           </div>
 
@@ -253,11 +244,34 @@
       <aside class="dashboard-side">
         <section class="section panel-card">
           <div class="section-head">
+            <div>
+              <h3 class="section-title">常用入口</h3>
+            </div>
+          </div>
+
+          <div class="dispatch-grid">
+            <router-link to="/admin/users" class="dispatch-card">
+              <strong>用户管理</strong>
+            </router-link>
+            <router-link to="/admin/skills" class="dispatch-card">
+              <strong>Skill 目录</strong>
+            </router-link>
+            <router-link to="/admin/api-config" class="dispatch-card">
+              <strong>API 管理</strong>
+            </router-link>
+            <router-link to="/admin/prompt-lab" class="dispatch-card">
+              <strong>Prompt Lab</strong>
+            </router-link>
+          </div>
+        </section>
+
+        <section class="section panel-card">
+          <div class="section-head">
             <h3 class="section-title">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="10" /></svg>
-              最近活动
+              活动记录
             </h3>
-            <router-link class="section-link" to="/admin/activity-stream">查看全部活动</router-link>
+            <span class="section-note">最近 {{ recentActivitySummary.length }} 条</span>
           </div>
 
           <div class="activity-feed" v-if="recentActivitySummary.length > 0">
@@ -278,8 +292,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi'
 import { Cpu, TrendCharts } from '@element-plus/icons-vue'
+import AdminPageHeader from './components/AdminPageHeader.vue'
 import { toast } from '../../utils/toast'
 
 const stats = ref<any>({})
@@ -366,6 +382,120 @@ const lastRefreshLabel = computed(() => {
   return formatTime(lastRefreshAt.value)
 })
 
+const attentionAgentStatuses = computed(() => {
+  const items = agentStatuses.value.map((item: any) => {
+    const successRate = Number(item.successRate || 0)
+    const errorCalls = Number(item.errorCalls || 0)
+    const totalCalls = Number(item.totalCalls || 0)
+    const avgDuration = Number(item.avgDuration || 0)
+    const timeoutCount = Number(item.timeoutCalls || item.timeouts || 0)
+    const severity =
+      item.status === 'error'
+        ? 3
+        : errorCalls > 0 || timeoutCount > 0
+          ? 2
+          : successRate < 90
+            ? 1
+            : 0
+
+    let summary = '运行平稳'
+    let detail = `成功率 ${successRate}%`
+
+    if (item.status === 'error') {
+      summary = '节点状态异常'
+      detail = '状态 error'
+    } else if (errorCalls > 0 || timeoutCount > 0) {
+      summary = `${errorCalls + timeoutCount} 次失败 / 超时`
+      detail = `失败 ${errorCalls} 次，超时 ${timeoutCount} 次。`
+    } else if (successRate < 90) {
+      summary = '成功率偏低'
+      detail = `成功率 ${successRate}%`
+    }
+
+    return {
+      ...item,
+      successRate,
+      totalCalls,
+      avgDuration,
+      errorCalls,
+      timeoutCount,
+      severity,
+      summary,
+      detail,
+      executionLogsLink: {
+        path: '/admin/execution-logs',
+        query: item.name ? { agentName: item.name } : undefined
+      },
+      promptLogsLink: {
+        path: '/admin/prompt-call-logs',
+        query: item.name ? { agentId: item.name } : undefined
+      }
+    }
+  })
+
+  return items
+    .filter((item) => item.severity > 0)
+    .sort((a, b) => {
+      if (b.severity !== a.severity) return b.severity - a.severity
+      if (b.errorCalls !== a.errorCalls) return b.errorCalls - a.errorCalls
+      return a.successRate - b.successRate
+    })
+    .slice(0, 5)
+})
+
+const overviewHighlights = computed(() => [
+  { label: `最近刷新 ${lastRefreshLabel.value}`, tone: 'neutral' as const },
+  { label: `今日调用 ${stats.value.agents?.todayCalls || 0}`, tone: 'info' as const },
+  {
+    label: `24h 异常 ${totalTrendIssues.value}`,
+    tone: totalTrendIssues.value > 0 ? ('warning' as const) : ('success' as const)
+  },
+  {
+    label: `活跃学习用户 ${stats.value.users?.activeToday || 0}`,
+    tone: Number(stats.value.users?.activeToday || 0) > 0 ? ('success' as const) : ('warning' as const)
+  }
+])
+
+const workspaceSections = computed(() => {
+  const activeUsers = Number(stats.value?.users?.activeToday || 0)
+  const issueCount = totalIssueCount.value
+  const successRate = Number(stats.value?.agents?.successRate || 100)
+  const completedTasks = Number(stats.value?.learning?.completedTasks || 0)
+
+  return [
+    {
+      title: '学习运营',
+      badge: activeUsers > 0 ? `${activeUsers} 人活跃` : '活跃偏低',
+      tone: activeUsers > 0 ? 'success' : 'warning',
+      to: '/admin/learner-center'
+    },
+    {
+      title: '运行目录',
+      badge: issueCount > 0 ? `${issueCount} 项异常` : '运行平稳',
+      tone: issueCount > 0 ? 'warning' : 'info',
+      to: '/admin/skills'
+    },
+    {
+      title: '诊断与回归',
+      badge: totalTrendIssues.value > 0 ? `${totalTrendIssues.value} 次异常` : '可继续巡检',
+      tone: totalTrendIssues.value > 0 ? 'danger' : 'neutral',
+      to: '/admin/execution-logs'
+    },
+    {
+      title: '平台配置',
+      badge: successRate >= 90 ? '配置稳定' : '配置波动',
+      tone: successRate >= 90 ? 'success' : 'warning',
+      to: '/admin/api-config'
+    },
+    {
+      title: '发布与调试',
+      badge: completedTasks > 0 ? `${completedTasks} 项完成` : '等待操作',
+      tone: completedTasks > 0 ? 'info' : 'neutral',
+      to: '/admin/prompt-lab'
+    }
+  ]
+})
+
 const healthSummary = computed(() => {
   const successRate = Number(stats.value?.agents?.successRate || 100)
   const timeouts = Number(stats.value?.agents?.todayTimeouts || 0)
@@ -375,17 +505,17 @@ const healthSummary = computed(() => {
     successRate: {
       tone: successRate >= 90 ? 'is-good' : 'is-warning',
       title: successRate >= 90 ? '成功率稳定' : '成功率需要关注',
-      description: `当前 Agent 成功率 ${successRate}%`
+      description: `${successRate}% · ${stats.value?.agents?.todayCalls || 0} 次调用`
     },
     timeout: {
       tone: timeouts === 0 ? 'is-good' : 'is-warning',
       title: timeouts === 0 ? '暂无超时告警' : '存在超时调用',
-      description: `今日超时 ${timeouts} 次`
+      description: `${timeouts} 次超时 · ${totalTrendIssues.value} 次异常`
     },
     activity: {
       tone: activeUsers > 0 ? 'is-neutral' : 'is-warning',
       title: activeUsers > 0 ? '今日有学习活跃' : '学习活跃偏低',
-      description: `当前活跃学习用户 ${activeUsers} 人`
+      description: `${activeUsers} 人活跃 · ${stats.value?.learning?.completedTasks || 0} 项完成`
     }
   }
 })
@@ -397,29 +527,115 @@ const overviewHeadline = computed(() => {
 
   if (issueCount > 0) {
     return {
-      title: '今天平台整体可用，但有风险点需要关注',
-      description: '当前仍有稳定调用产出，但出现了异常或失败调用，建议优先查看运行状态中的风险项。'
+      title: '调用状态异常'
     }
   }
 
   if (activeUsers === 0) {
     return {
-      title: '平台运行稳定，但今日学习活跃偏低',
-      description: '系统侧暂无明显异常，当前更值得关注的是学习活跃和用户转化，而不是运行故障。'
+      title: '学习活跃为 0'
     }
   }
 
   if (successRate >= 90) {
     return {
-      title: '今天平台整体运行平稳',
-      description: '学习活跃、路径推进与 Agent 成功率都处在可接受区间，首页重点放在业务进展和异常趋势。'
+      title: '运行平稳'
     }
   }
 
   return {
-    title: '平台有运行负载，成功率需要继续观察',
-    description: '系统仍在持续提供服务，但成功率已有下滑迹象，建议结合调用趋势和运行状态继续检查。'
+    title: '成功率偏低'
   }
+})
+
+const priorityQueue = computed(() => {
+  const items: Array<{
+    id: string
+    level: string
+    tone: 'danger' | 'warning' | 'info' | 'neutral'
+    title: string
+    description: string
+    meta: string
+    primaryLabel: string
+    primaryTo: string | { path: string; query?: Record<string, string> }
+    secondaryLabel?: string
+    secondaryTo?: string | { path: string; query?: Record<string, string> }
+    score: number
+  }> = []
+
+  const activeUsers = Number(stats.value?.users?.activeToday || 0)
+  const successRate = Number(stats.value?.agents?.successRate || 100)
+  const timeoutCount = Number(stats.value?.agents?.todayTimeouts || 0)
+  const completedTasks = Number(stats.value?.learning?.completedTasks || 0)
+
+  attentionAgentStatuses.value.forEach((item: any) => {
+    const issueTotal = Number(item.errorCalls || 0) + Number(item.timeoutCount || 0)
+    items.push({
+      id: `agent-${item.name}`,
+      level: item.severity >= 3 ? '高优先级' : '处理中',
+      tone: item.severity >= 3 ? 'danger' : 'warning',
+      title: getAgentDisplayName(item.name),
+      description: item.detail,
+      meta: `${formatTime(item.lastActivity)} · 成功率 ${item.successRate}% · ${issueTotal} 次失败/超时`,
+      primaryLabel: '执行日志',
+      primaryTo: item.executionLogsLink,
+      secondaryLabel: 'Prompt 日志',
+      secondaryTo: item.promptLogsLink,
+      score: 100 + item.severity * 10 + issueTotal
+    })
+  })
+
+  if (activeUsers === 0) {
+    items.push({
+      id: 'learning-activity',
+      level: '学习侧关注',
+      tone: 'warning',
+      title: '今日学习活跃为 0',
+      description: '学习侧无活跃用户',
+      meta: `完成任务 ${completedTasks} 项`,
+      primaryLabel: '学习者中心',
+      primaryTo: '/admin/learner-center',
+      secondaryLabel: '虚拟用户模拟',
+      secondaryTo: '/admin/virtual-learners',
+      score: 85
+    })
+  }
+
+  if (timeoutCount > 0 || successRate < 90) {
+    items.push({
+      id: 'runtime-trend',
+      level: timeoutCount > 0 ? '风险趋势' : '稳定性关注',
+      tone: timeoutCount > 0 ? 'danger' : 'warning',
+      title: timeoutCount > 0 ? '调用异常仍在发生' : '整体成功率偏低',
+      description: timeoutCount > 0
+        ? `${timeoutCount} 次超时`
+        : `成功率 ${successRate}%`,
+      meta: `24h 异常 ${totalTrendIssues.value} 次`,
+      primaryLabel: '执行日志',
+      primaryTo: '/admin/execution-logs',
+      secondaryLabel: 'Agent 拓扑',
+      secondaryTo: '/admin/agents/topology',
+      score: timeoutCount > 0 ? 92 : 74
+    })
+  }
+
+  if (!items.length) {
+    items.push({
+      id: 'stable-overview',
+      level: '今日状态',
+      tone: 'info',
+      title: '暂无高优先级异常',
+      description: '可继续巡检',
+      meta: `今日调用 ${stats.value?.agents?.todayCalls || 0} 次`,
+      primaryLabel: 'Skill 目录',
+      primaryTo: '/admin/skills',
+      secondaryLabel: 'Prompt 调用日志',
+      secondaryTo: '/admin/prompt-call-logs',
+      score: 10
+    })
+  }
+
+  return items.sort((a, b) => b.score - a.score).slice(0, 5)
 })
 
 const refreshAll = async () => {
@@ -556,167 +772,17 @@ onMounted(async () => {
 .admin-overview {
   display: grid;
   gap: 16px;
-  padding-bottom: 24px;
 }
 
-.page-hero,
 .panel-card,
 .insight-card {
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
-  box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08);
+  border: var(--admin-border);
+  border-radius: var(--admin-radius-card);
+  background: var(--admin-bg-surface);
+  box-shadow: var(--admin-shadow-xs);
 }
 
-.page-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 24px 28px;
-  margin-bottom: 2px;
-}
-
-.page-hero__copy {
-  display: grid;
-  gap: 12px;
-}
-
-.page-hero__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  min-height: 26px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: #2d6df2;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.page-hero__title {
-  margin: 0;
-  font-size: 2rem;
-  line-height: 1.1;
-  letter-spacing: -0.04em;
-  color: #23344d;
-}
-
-.page-hero__subtitle {
-  margin: 0;
-  font-size: 0.95rem;
-  color: #64748b;
-  max-width: 760px;
-}
-
-.page-hero__highlights {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.hero-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(244, 247, 254, 0.92);
-  border: 1px solid rgba(216, 224, 238, 0.92);
-  color: #5f738f;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.page-hero__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
-}
-
-.page-hero__refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(52, 120, 246, 0.14);
-  background: rgba(255, 255, 255, 0.9);
-  color: #2d6df2;
-  font-weight: 700;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.summary-grid--headline {
-  margin-bottom: 2px;
-}
-
-.summary-card {
-  min-height: 138px;
-  padding: 18px 20px;
-  border: 1px solid rgba(209, 218, 235, 0.92);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.96));
-  box-shadow: 0 14px 34px rgba(57, 85, 138, 0.08);
-  display: grid;
-  align-content: space-between;
-  gap: 18px;
-}
-
-.summary-card--primary {
-  background: linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(237, 244, 255, 0.98));
-}
-
-.summary-card--highlight {
-  background: linear-gradient(180deg, rgba(248, 249, 255, 0.98), rgba(239, 243, 255, 0.98));
-}
-
-.summary-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.summary-card__label {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #2f4059;
-}
-
-.summary-card__caption {
-  font-size: 0.75rem;
-  color: #8b9ab0;
-}
-
-.summary-card__value-row {
-  display: grid;
-  gap: 6px;
-}
-
-.summary-card__value-row strong {
-  font-size: 2rem;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: #21354f;
-}
-
-.summary-card__hint {
-  font-size: 0.875rem;
-  color: #697a91;
-}
-
-.insight-grid {
+.overview-hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
   gap: 16px;
@@ -728,7 +794,13 @@ onMounted(async () => {
 
 .insight-card--primary {
   display: grid;
-  gap: 20px;
+  gap: 18px;
+}
+
+.insight-card--secondary {
+  display: grid;
+  gap: 16px;
+  align-content: start;
 }
 
 .hero-kpi__copy {
@@ -741,61 +813,161 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #7b8ba3;
+  color: var(--admin-text-secondary);
 }
 
 .hero-kpi__copy h2 {
   margin: 0;
   font-size: 1.35rem;
-  color: #21344b;
+  color: var(--admin-text-primary);
 }
 
 .hero-kpi__copy p {
   margin: 0;
-  color: #64748b;
+  color: var(--admin-text-secondary);
   line-height: 1.65;
 }
 
-.hero-kpi__facts {
+.overview-focus-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
-.hero-kpi__fact {
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(244, 247, 254, 0.88);
-  border: 1px solid rgba(215, 224, 241, 0.94);
+.overview-focus-strip--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.overview-focus-chip {
+  border: var(--admin-border);
+  border-radius: 16px;
+  background: var(--admin-bg-surface-alt);
+}
+
+.overview-focus-chip {
+  padding: 14px 16px;
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
-.hero-kpi__fact span,
-.stat-card__label {
-  font-size: 0.8rem;
-  color: #7a899f;
+.overview-focus-chip span {
+  font-size: 0.76rem;
+  color: var(--admin-text-secondary);
 }
 
-.hero-kpi__fact strong,
-.stat-card__value {
-  font-size: 1.9rem;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: #1f314b;
-}
-
-.hero-kpi__fact em,
-.stat-card__meta {
-  font-style: normal;
-  color: #5f738f;
-  font-size: 0.86rem;
+.overview-focus-chip strong {
+  font-size: 0.95rem;
+  color: var(--admin-text-primary);
 }
 
 .health-list {
   display: grid;
   gap: 12px;
-  margin-top: 16px;
+}
+
+.health-list--inline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workspace-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 16px;
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
+  text-decoration: none;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.workspace-card:hover,
+.dispatch-card:hover {
+  border-color: rgba(52, 120, 246, 0.18);
+  background: rgba(244, 248, 255, 0.95);
+  transform: translateY(-1px);
+}
+
+.workspace-card__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workspace-card__copy strong,
+.dispatch-card strong {
+  color: var(--admin-text-primary);
+  font-size: 0.92rem;
+}
+
+.workspace-card__copy p,
+.dispatch-card p {
+  margin: 0;
+  color: var(--admin-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.workspace-card__meta {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.workspace-card__badge,
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.workspace-card__badge.is-success,
+.priority-pill.is-info {
+  background: var(--admin-color-success-bg);
+  color: var(--admin-color-success);
+}
+
+.workspace-card__badge.is-warning,
+.priority-pill.is-warning {
+  background: var(--admin-color-warning-bg);
+  color: var(--admin-color-warning);
+}
+
+.workspace-card__badge.is-danger,
+.priority-pill.is-danger {
+  background: var(--admin-color-error-bg);
+  color: var(--admin-color-error);
+}
+
+.workspace-card__badge.is-neutral {
+  background: var(--admin-color-neutral-bg);
+  color: var(--admin-color-neutral);
+}
+
+.workspace-card__badge.is-info {
+  background: var(--admin-color-info-bg);
+  color: var(--admin-text-brand);
+}
+
+.workspace-card__link {
+  color: var(--admin-color-info);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.section-head--embedded {
+  margin-bottom: 0;
 }
 
 .health-item {
@@ -803,9 +975,9 @@ onMounted(async () => {
   grid-template-columns: 12px 1fr;
   gap: 12px;
   padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(215, 224, 241, 0.94);
-  background: rgba(248, 250, 255, 0.9);
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
 }
 
 .health-item__dot {
@@ -813,41 +985,162 @@ onMounted(async () => {
   height: 10px;
   border-radius: 50%;
   margin-top: 6px;
-  background: #94a3b8;
+  background: var(--admin-text-secondary);
 }
 
 .health-item strong {
-  color: #27374f;
+  color: var(--admin-text-primary);
   font-size: 0.92rem;
 }
 
 .health-item p {
   margin: 4px 0 0;
   font-size: 0.84rem;
-  color: #697a91;
+  color: var(--admin-text-muted);
   line-height: 1.55;
 }
 
 .health-item.is-good {
-  border-color: rgba(93, 195, 128, 0.3);
-  background: rgba(244, 251, 246, 0.96);
+  border-color: var(--admin-color-success-border);
+  background: var(--admin-color-success-bg);
 }
 
 .health-item.is-good .health-item__dot {
-  background: #3db36d;
+  background: var(--admin-color-success);
 }
 
 .health-item.is-warning {
-  border-color: rgba(244, 170, 70, 0.3);
-  background: rgba(255, 249, 241, 0.96);
+  border-color: var(--admin-color-warning-border);
+  background: var(--admin-color-warning-bg);
 }
 
 .health-item.is-warning .health-item__dot {
-  background: #f0a13b;
+  background: var(--admin-color-warning);
 }
 
 .health-item.is-neutral .health-item__dot {
-  background: #5a94f8;
+  background: var(--admin-color-info);
+}
+
+.overview-action-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.overview-action-link,
+.overview-inline-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
+  color: var(--admin-text-primary);
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: all 180ms ease;
+}
+
+.overview-action-link:hover,
+.overview-inline-link:hover {
+  border-color: rgba(52, 120, 246, 0.18);
+  background: rgba(244, 248, 255, 0.95);
+  color: var(--admin-color-info);
+}
+
+.priority-list {
+  display: grid;
+  gap: 12px;
+}
+
+.priority-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
+}
+
+.priority-card__head,
+.priority-card__actions,
+.priority-card__title-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.priority-card__title-wrap {
+  justify-content: flex-start;
+}
+
+.priority-card__title-wrap strong {
+  color: var(--admin-text-primary);
+  font-size: 0.94rem;
+}
+
+.priority-card__meta,
+.priority-card__description {
+  color: var(--admin-text-secondary);
+  font-size: 0.84rem;
+}
+
+.priority-card__description {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.attention-list {
+  display: grid;
+  gap: 12px;
+}
+
+.attention-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
+}
+
+.attention-card__head,
+.attention-card__meta,
+.attention-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.attention-card__time,
+.attention-card__meta {
+  color: var(--admin-text-secondary);
+  font-size: 0.8rem;
+}
+
+.attention-card__summary {
+  display: grid;
+  gap: 4px;
+}
+
+.attention-card__summary strong {
+  color: var(--admin-text-primary);
+  font-size: 0.92rem;
+}
+
+.attention-card__summary p {
+  margin: 0;
+  color: var(--admin-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
 }
 
 .dashboard-grid {
@@ -865,6 +1158,23 @@ onMounted(async () => {
 
 .dashboard-side {
   align-content: start;
+}
+
+.dispatch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dispatch-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
+  text-decoration: none;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
 .section {
@@ -889,21 +1199,27 @@ onMounted(async () => {
   gap: 8px;
   margin: 0;
   font-size: 1.02rem;
-  color: #1f3857;
+  color: var(--admin-text-primary);
 }
 
 .section-subtitle {
   margin: 6px 0 0;
   font-size: 0.84rem;
-  color: #73839a;
+  color: var(--admin-text-secondary);
   line-height: 1.55;
 }
 
 .section-link {
-  color: #2d6df2;
+  color: var(--admin-color-info);
   font-size: 0.875rem;
   font-weight: 600;
   text-decoration: none;
+}
+
+.section-note {
+  color: var(--admin-text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .agent-name {
@@ -913,32 +1229,8 @@ onMounted(async () => {
 }
 
 .agent-name-text {
-  color: #23344d;
+  color: var(--admin-text-primary);
   font-weight: 600;
-}
-
-.table-progress-cell {
-  padding-right: 10px;
-}
-
-.call-metrics {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 700;
-}
-
-.call-metrics__divider {
-  color: #90a0b6;
-  font-weight: 500;
-}
-
-.success-count {
-  color: #2f9a58;
-}
-
-.error-count {
-  color: #d36a54;
 }
 
 .trend-panel {
@@ -957,26 +1249,26 @@ onMounted(async () => {
   display: grid;
   gap: 6px;
   padding: 16px 18px;
-  border-radius: 18px;
-  border: 1px solid rgba(216, 224, 238, 0.94);
-  background: rgba(247, 250, 255, 0.9);
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
 }
 
 .trend-summary-card span {
   font-size: 0.8rem;
-  color: #78889f;
+  color: var(--admin-text-secondary);
 }
 
 .trend-summary-card strong {
   font-size: 1.5rem;
   line-height: 1.1;
-  color: #23344d;
+  color: var(--admin-text-primary);
 }
 
 .trend-summary-card em {
   font-style: normal;
   font-size: 0.82rem;
-  color: #62758f;
+  color: var(--admin-text-muted);
 }
 
 .trend-row {
@@ -985,7 +1277,7 @@ onMounted(async () => {
   grid-template-columns: 72px minmax(0, 1fr) 92px;
   gap: 14px;
   padding: 10px 0;
-  border-bottom: 1px solid rgba(226, 232, 244, 0.86);
+  border-bottom: var(--admin-border-subtle);
 }
 
 .trend-row:last-child {
@@ -994,7 +1286,7 @@ onMounted(async () => {
 
 .trend-row--head {
   padding-top: 0;
-  color: #7b8ba3;
+  color: var(--admin-text-secondary);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -1002,7 +1294,7 @@ onMounted(async () => {
 .trend-time {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.82rem;
-  color: #33465f;
+  color: var(--admin-text-primary);
 }
 
 .trend-bars {
@@ -1015,7 +1307,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #6e8099;
+  color: var(--admin-text-muted);
   font-size: 0.8rem;
 }
 
@@ -1023,7 +1315,7 @@ onMounted(async () => {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(216, 224, 238, 0.55);
+  background: var(--admin-bg-muted);
 }
 
 .trend-bar {
@@ -1039,7 +1331,7 @@ onMounted(async () => {
 
 .trend-bars-label,
 .trend-values {
-  color: #6e8099;
+  color: var(--admin-text-muted);
   font-size: 0.82rem;
 }
 
@@ -1054,25 +1346,25 @@ onMounted(async () => {
 }
 
 .trend-rate-badge.is-good {
-  background: rgba(233, 248, 238, 0.95);
-  color: #2f9a58;
+  background: var(--admin-color-success-bg);
+  color: var(--admin-color-success);
 }
 
 .trend-rate-badge.is-warning {
-  background: rgba(255, 242, 234, 0.96);
-  color: #d98252;
+  background: var(--admin-color-warning-bg);
+  color: var(--admin-color-warning);
 }
 
 .activity-feed {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .activity-card {
   padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(215, 224, 241, 0.94);
-  background: rgba(249, 251, 255, 0.92);
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
 }
 
 .activity-card__head {
@@ -1084,12 +1376,12 @@ onMounted(async () => {
 }
 
 .activity-card__head strong {
-  color: #243750;
+  color: var(--admin-text-primary);
   font-size: 0.92rem;
 }
 
 .activity-card__head span {
-  color: #8696ab;
+  color: var(--admin-text-secondary);
   font-size: 0.76rem;
   white-space: nowrap;
 }
@@ -1097,30 +1389,13 @@ onMounted(async () => {
 .activity-card p {
   margin: 0;
   font-size: 0.84rem;
-  color: #64748b;
+  color: var(--admin-text-secondary);
   line-height: 1.6;
 }
 
-:deep(.agent-status-table) {
-  --el-table-border-color: rgba(223, 230, 242, 0.9);
-  --el-table-header-bg-color: rgba(244, 247, 252, 0.92);
-  --el-table-row-hover-bg-color: rgba(244, 248, 255, 0.8);
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-:deep(.agent-status-table .el-table__cell) {
-  padding-top: 12px;
-  padding-bottom: 12px;
-}
-
-:deep(.el-progress-bar__outer) {
-  background-color: rgba(215, 224, 241, 0.8);
-}
-
 @media (max-width: 1280px) {
-  .summary-grid,
-  .hero-kpi__facts {
+  .overview-focus-strip,
+  .health-list--inline {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1128,8 +1403,12 @@ onMounted(async () => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .insight-grid,
+  .overview-hero-grid,
   .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dispatch-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1139,30 +1418,22 @@ onMounted(async () => {
     gap: 14px;
   }
 
-  .page-hero,
   .insight-card,
   .section {
     padding: 16px;
   }
 
-  .page-hero {
-    flex-direction: column;
-  }
-
-  .page-hero__actions {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .summary-grid,
-  .hero-kpi__facts,
+  .overview-focus-strip,
+  .health-list--inline,
   .trend-summary {
     grid-template-columns: 1fr;
   }
 
-  .summary-card {
-    min-height: 120px;
+  .workspace-card,
+  .priority-card__head,
+  .workspace-card__meta {
+    display: grid;
+    justify-items: start;
   }
 
   .trend-row {

@@ -16,11 +16,11 @@
       <div class="ed-head__left">
         <button class="ed-back" @click="goBackList" title="返回列表">
           <el-icon><ArrowLeft /></el-icon>
-          <span>返回列表</span>
+          <span>返回 Skill 目录</span>
         </button>
         <div v-if="currentAgent" class="ed-title-block">
           <div class="ed-title-row">
-            <span class="ed-kind">SKILL</span>
+            <span class="ed-kind">Skill</span>
             <h1 class="ed-title">{{ currentAgent.displayName || currentAgent.agentId }}</h1>
             <span :class="['ed-health', `ed-health--${currentAgent.health}`]">
               {{ healthLabel(currentAgent.health) }}
@@ -75,10 +75,10 @@
           type="warning" 
           plain
           @click="openPromptLab"
-          title="使用实验台编辑（Beta）"
+          title="使用发布向导推进变更"
         >
           <el-icon><MagicStick /></el-icon>
-          实验台
+          发布向导
         </el-button>
       </div>
     </header>
@@ -95,6 +95,50 @@
         <span class="ed-pill__label">{{ t.label }}</span>
       </button>
     </nav>
+
+    <section v-if="currentAgent" class="ed-overview">
+      <div class="ed-overview__main">
+        <div class="ed-overview__copy">
+          <span class="ed-overview__kicker">工作台</span>
+          <h2>{{ overviewTitle }}</h2>
+          <p>{{ overviewDesc }}</p>
+        </div>
+        <div class="ed-overview__grid">
+          <article class="ed-glance-card">
+            <span>当前模式</span>
+            <strong>{{ currentTabLabel }}</strong>
+          </article>
+          <article class="ed-glance-card">
+            <span>Prompt 来源</span>
+            <strong>{{ promptSourceSummary }}</strong>
+          </article>
+          <article class="ed-glance-card">
+            <span>最近调用</span>
+            <strong>{{ lastCalledLabel }}</strong>
+          </article>
+          <article class="ed-glance-card">
+            <span>运行策略</span>
+            <strong>{{ runtimeSummary }}</strong>
+          </article>
+        </div>
+      </div>
+
+      <div class="ed-overview__side">
+        <article class="ed-summary-card">
+          <span class="ed-summary-card__label">当前判断</span>
+          <strong>{{ overviewStateTitle }}</strong>
+          <p>{{ overviewStateDesc }}</p>
+        </article>
+        <article class="ed-summary-card ed-summary-card--subtle">
+          <span class="ed-summary-card__label">工程入口</span>
+          <div class="ed-summary-actions">
+            <el-button size="small" @click="openProtocolDrawer">协议视图</el-button>
+            <el-button size="small" plain @click="openRulesOverview">规则总览</el-button>
+          </div>
+          <p>协议与规则在次入口，主流程为 Prompt 编辑与预览。</p>
+        </article>
+      </div>
+    </section>
 
     <!-- ============ Pane Body ============ -->
     <main class="ed-body" v-if="currentAgent">
@@ -152,7 +196,7 @@
     >
       <div v-if="protocolView" class="protocol-drawer">
         <p class="protocol-drawer__intro">
-          Goal → Path、Path → Learn 之间的契约形态。只读上下文。
+          阶段间契约形态（只读）
         </p>
         <article
           v-for="proto in protocolView.protocols"
@@ -326,14 +370,72 @@ const activeTab = ref<'edit' | 'preview' | 'runtime' | 'engineering'>('edit');
 
 const tabs = computed(() => {
   const base: { key: 'edit' | 'preview' | 'runtime' | 'engineering'; label: string; icon: any }[] = [
-    { key: 'edit', label: '编辑工作台', icon: Edit },
-    { key: 'preview', label: '试运行', icon: VideoPlay }
+    { key: 'edit', label: 'Prompt 编辑', icon: Edit },
+    { key: 'preview', label: '预览与试运行', icon: VideoPlay }
   ];
   if (currentAgent.value?.kind === 'skill') {
-    base.push({ key: 'runtime', label: '模型运行时', icon: Setting });
+    base.push({ key: 'runtime', label: '运行时配置', icon: Setting });
   }
-  base.push({ key: 'engineering', label: '工程视图', icon: SetUp });
+  base.push({ key: 'engineering', label: '协议与规则', icon: SetUp });
   return base;
+});
+
+const currentTabLabel = computed(() => {
+  return tabs.value.find((item) => item.key === activeTab.value)?.label || 'Prompt 编辑';
+});
+
+const promptSourceSummary = computed(() => {
+  if (currentAgent.value?.drift === 'file-vs-db-mismatch') return 'File / DB 不一致';
+  if (activePrompt.value?.version) return `DB ACTIVE v${activePrompt.value.version}`;
+  if (currentAgent.value?.file?.path) return '文件源';
+  return '待确认';
+});
+
+const lastCalledLabel = computed(() => {
+  const value = workbenchMeta.value?.stats?.lastCalledAt;
+  if (!value) return '暂无记录';
+  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+});
+
+const runtimeSummary = computed(() => {
+  if (!workbenchMeta.value?.modelConfig) return '平台默认';
+  const model = workbenchMeta.value.modelConfig.model || '平台默认模型';
+  const tier = workbenchMeta.value.modelConfig.tier || 'default';
+  return `${tier} / ${model}`;
+});
+
+const overviewTitle = computed(() => {
+  if (activeTab.value === 'edit') return '当前节点 Prompt 工作台';
+  if (activeTab.value === 'preview') return '当前节点预览与试运行';
+  if (activeTab.value === 'runtime') return '当前节点运行时配置';
+  return '当前节点协议与规则视图';
+});
+
+const overviewDesc = computed(() => {
+  if (activeTab.value === 'edit') return '修改 Prompt 并发布。';
+  if (activeTab.value === 'preview') return '验证 Prompt 输出。';
+  if (activeTab.value === 'runtime') return '调整运行参数。';
+  return '查看协议与规则。';
+});
+
+const overviewStateTitle = computed(() => {
+  if (currentAgent.value?.drift === 'file-vs-db-mismatch') return '存在 Prompt 漂移';
+  if (activePromptLoading.value) return '正在加载 Prompt';
+  if (activePrompt.value?.version) return `当前生效版本 v${activePrompt.value.version}`;
+  return '当前无明确生效版本';
+});
+
+const overviewStateDesc = computed(() => {
+  if (currentAgent.value?.drift === 'file-vs-db-mismatch') {
+    return '文件与数据库版本不一致，请确认修改目标。';
+  }
+  if (activePromptLoading.value) {
+    return '加载 Prompt 详情...';
+  }
+  if (activePrompt.value?.version) {
+    return '可继续编辑或试运行。';
+  }
+  return '依赖默认配置，请确认来源。';
 });
 
 const promptVersions = ref<any[]>([]);
@@ -383,7 +485,8 @@ async function loadAll() {
   try {
     const r = await adminPromptOpsApi.getAgentOverview();
     const items = (r.data?.data?.items || []) as AgentOverviewItem[];
-    const found = items.find((x) => x.agentId === agentIdParam.value) || null;
+    const skillId = agentIdParam.value.replace(/^skill:/, '');
+    const found = items.find((x) => x.agentId === `skill:${skillId}` || x.agentId === skillId) || null;
     if (!found) {
       toast.error(`未找到 skill: ${agentIdParam.value}`);
       currentAgent.value = null;
@@ -470,7 +573,7 @@ function groupOwner(rules: any[]): string {
 
 function jumpToAgent(agentId: string) {
   rulesDrawerVisible.value = false;
-  void router.push({ name: 'AdminAgentEditor', params: { agentId } });
+  void router.push({ name: 'AdminAgentEditor', params: { agentId: agentId.replace(/^skill:/, '') } });
 }
 
 async function publishPrompt(id: string) {
@@ -798,6 +901,107 @@ onMounted(async () => {
 .ed-pill__icon {
   font-size: 15px;
   line-height: 1;
+}
+
+.ed-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+  gap: 14px;
+}
+
+.ed-overview__main,
+.ed-overview__side {
+  display: grid;
+  gap: 12px;
+}
+
+.ed-overview__copy {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(205, 216, 238, 0.9);
+  background: var(--admin-bg-surface);
+}
+
+.ed-overview__kicker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--admin-text-brand);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ed-overview__copy h2 {
+  margin: 0;
+  color: #1a2a44;
+  font-size: 1.1rem;
+  line-height: 1.25;
+}
+
+.ed-overview__copy p,
+.ed-summary-card p {
+  margin: 0;
+  color: #62758f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ed-overview__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ed-glance-card,
+.ed-summary-card {
+  border: 1px solid rgba(223, 229, 241, 0.9);
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+
+.ed-glance-card {
+  padding: 12px 14px;
+  display: grid;
+  gap: 5px;
+}
+
+.ed-glance-card span,
+.ed-summary-card__label {
+  color: #8a94a6;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ed-glance-card strong,
+.ed-summary-card strong {
+  color: #1a2a44;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.ed-summary-card {
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.ed-summary-card--subtle {
+  background: #f8fafc;
+}
+
+.ed-summary-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ============ Body ============ */
@@ -1166,11 +1370,25 @@ onMounted(async () => {
 }
 
 @media (max-width: 900px) {
+  .ed-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .ed-overview__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .ed-head {
     grid-template-columns: 1fr;
   }
   .ed-head__right {
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .ed-overview__grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

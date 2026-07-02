@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { getAPIGateway } from '../gateway/api-gateway';
+import { getRequestContext } from '../gateway/api-gateway/context';
 import { agentConfigService } from '../services/agentConfig.service';
 import { detectPromptDrift } from './drift-detector';
 import { extractJsonObject } from './json-extractor';
@@ -35,6 +36,7 @@ export async function callPrompt<TInput, TOutput>(
   input: TInput,
   context: PromptCallContext = {}
 ): Promise<PromptCallResult<TOutput>> {
+  const requestContext = getRequestContext();
   const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
   if (spec.requireActivePrompt && !promptConfig?.systemPrompt?.trim()) {
     return {
@@ -138,7 +140,9 @@ export async function callPrompt<TInput, TOutput>(
         conversationId: context.conversationId || null,
         pipelineRunId: context.pipelineRunId || null,
         pipelineStepIndex: context.pipelineStepIndex ?? null,
-      }
+        traceId: context.traceId || requestContext.traceId || null,
+        parentExecutionId: context.parentExecutionId || requestContext.executionLogId || null,
+      } as any
     });
 
     return {
@@ -181,7 +185,9 @@ export async function callPrompt<TInput, TOutput>(
       conversationId: context.conversationId || null,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
-    }
+      traceId: context.traceId || requestContext.traceId || null,
+      parentExecutionId: context.parentExecutionId || requestContext.executionLogId || null,
+    } as any
   });
 
   return {

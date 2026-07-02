@@ -316,10 +316,12 @@ export async function executeSkill(
 
   const startedAt = Date.now();
   const parentContext = getRequestContext();
+  const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   return runWithContext({
     ...parentContext,
     skillId,
+    executionLogId,
   }, async () => {
     logger.info('[skill-executor] 开始执行', {
       skillId,
@@ -337,7 +339,7 @@ export async function executeSkill(
       const durationMs = Date.now() - startedAt;
       const output = result?.output || result;
       await recordDirectSkillStats(skillId, true, durationMs);
-      void recordSkillSpan(skillId, parentContext, input, output, durationMs, true);
+      void recordSkillSpan(executionLogId, skillId, parentContext, input, output, durationMs, true);
 
       logger.info('[skill-executor] 执行完成', {
         skillId,
@@ -349,7 +351,7 @@ export async function executeSkill(
     } catch (error: any) {
       const durationMs = Date.now() - startedAt;
       await recordDirectSkillStats(skillId, false, durationMs);
-      void recordSkillSpan(skillId, parentContext, input, null, durationMs, false, error?.message || String(error));
+      void recordSkillSpan(executionLogId, skillId, parentContext, input, null, durationMs, false, error?.message || String(error));
       logger.error('[skill-executor] 执行失败', {
         skillId,
         durationMs,
@@ -392,6 +394,7 @@ async function recordDirectSkillStats(skillId: string, success: boolean, duratio
 }
 
 async function recordSkillSpan(
+  executionLogId: string,
   skillId: string,
   ctx: ReturnType<typeof getRequestContext>,
   input: any,
@@ -405,7 +408,7 @@ async function recordSkillSpan(
     const outputStr = output ? JSON.stringify(summarizeSkillPayload(output)).slice(0, 1000) : null;
     await prisma.agent_call_logs.create({
       data: {
-        id: `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        id: executionLogId,
         agentId: `skill:${skillId}`,
         userId: ctx.userId || 'system',
         sourceEntry: ctx.sourceEntry || 'platform',

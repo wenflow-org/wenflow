@@ -1,46 +1,49 @@
 <template>
-  <div class="skill-model-config">
-    <div class="bg-layer">
-      <div class="bg-orb bg-orb--1"></div>
-      <div class="bg-orb bg-orb--2"></div>
-    </div>
-
-    <div class="page-hero">
-      <span class="pill">Component Config</span>
-      <h2 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Operation /></el-icon>
-        技能/组件配置
-      </h2>
-      <p class="page-hero__subtitle">这里仅保留外挂能力组件配置，例如网络搜索、网页提取、图片分析、记忆搜索等不属于平台主链的额外能力。</p>
-    </div>
+  <div class="admin-page skill-model-config">
+    <AdminPageHeader
+      title="外挂组件目录"
+      :icon="Operation"
+      :highlights="componentConfigHighlights"
+    >
+      <template #actions>
+        <el-button @click="refresh">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </template>
+    </AdminPageHeader>
 
     <el-alert
       class="page-notice"
       type="info"
       :closable="false"
       show-icon
-      title="此页只展示外挂能力组件"
-      description="Goal / Path / Learner / Teaching / Simulation 主链里的内部 skill 已统一纳入“运行节点管理”。这里主要保留检索、网页提取、图片分析、记忆搜索等外挂能力组件。"
-    />
+       title="此页只管理外挂能力组件"
+       description="主链 Skill 已移至“Skill 目录”，此处仅管理外挂组件。"
+      />
 
-    <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
-      <el-card class="summary-card summary-card--blue" shadow="hover">
-        <div class="label">Skill 总数</div>
-        <div class="value">{{ summary?.total }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--green" shadow="hover">
-        <div class="label">正常工作</div>
-        <div class="value">{{ summary?.working }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--orange" shadow="hover">
-        <div class="label">简化实现</div>
-        <div class="value">{{ summary?.simplified }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--red" shadow="hover">
-        <div class="label">需关注</div>
-        <div class="value danger">{{ summary?.needsAttention }}</div>
-      </el-card>
-    </div>
+    <section class="admin-summary-grid" v-show="summary">
+      <article class="admin-summary-card admin-summary-card--blue">
+        <div class="admin-summary-card__label">Skill 总数</div>
+        <strong class="admin-summary-card__value">{{ summary?.total }}</strong>
+        <div class="component-summary-meta">组件目录</div>
+      </article>
+      <article class="admin-summary-card admin-summary-card--green">
+        <div class="admin-summary-card__label">正常工作</div>
+        <strong class="admin-summary-card__value">{{ summary?.working }}</strong>
+        <div class="component-summary-meta">可用</div>
+      </article>
+      <article class="admin-summary-card admin-summary-card--orange">
+        <div class="admin-summary-card__label">简化实现</div>
+        <strong class="admin-summary-card__value">{{ summary?.simplified }}</strong>
+        <div class="component-summary-meta">简化实现</div>
+      </article>
+      <article class="admin-summary-card admin-summary-card--red">
+        <div class="admin-summary-card__label">需关注</div>
+        <strong class="admin-summary-card__value">{{ summary?.needsAttention }}</strong>
+        <div class="component-summary-meta">异常或模拟</div>
+      </article>
+    </section>
 
     <div class="filters admin-list-toolbar">
       <div class="admin-list-toolbar__group">
@@ -54,10 +57,7 @@
         <el-checkbox v-model="onlyEnabled">仅看独立配置</el-checkbox>
       </div>
       <div class="admin-list-toolbar__group">
-        <el-button @click="refresh">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <p class="component-toolbar-note">{{ filteredConfigs.length }} / {{ configs.length }} 个组件满足当前筛选</p>
       </div>
     </div>
 
@@ -119,272 +119,13 @@
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openSkillWorkbench(row)">查看设计</el-button>
+            <el-button type="primary" link @click="openSkillWorkbench(row)">进入工作台</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-drawer v-model="skillWorkbenchVisible" :title="`Skill 设计详情 · ${currentSkill?.skillId || ''}`" size="min(68%, 980px)" destroy-on-close>
-      <div class="skill-workbench" v-loading="skillWorkbenchLoading">
-        <template v-if="currentSkill">
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="中文名称">{{ getSkillDisplayName(currentSkill) }}</el-descriptions-item>
-            <el-descriptions-item label="调用名">{{ currentSkill.skillId }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <el-tag v-if="currentSkill.status" :type="getStatusTagType(currentSkill.status)" size="small">
-                {{ getStatusLabel(currentSkill.status) }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="配置模式">
-              <el-tag :type="currentSkill.enabled ? 'success' : 'info'" size="small">
-                {{ currentSkill.enabled ? '独立配置' : '继承' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="模型层级">{{ currentSkill.tier || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="模型">{{ currentSkill.model || '平台默认独立配置' }}</el-descriptions-item>
-            <el-descriptions-item label="说明" :span="2">{{ getSkillHint(currentSkill.skillId) || '-' }}</el-descriptions-item>
-          </el-descriptions>
-
-          <div class="chip-section">
-            <div class="chip-row">
-              <span class="chip-label">thinking</span>
-              <el-tag size="small" effect="plain" :type="thinkingTagType(currentSkill.thinkingMode)">
-                {{ formatThinkingMode(currentSkill.thinkingMode) }}
-              </el-tag>
-              <el-tag size="small" effect="plain" :type="effortTagType(currentSkill.reasoningEffort)">
-                {{ formatReasoningEffort(currentSkill.reasoningEffort) }}
-              </el-tag>
-            </div>
-            <div class="chip-row">
-              <span class="chip-label">runtime</span>
-              <el-tag size="small" effect="plain">T={{ currentSkill.temperature ?? '--' }}</el-tag>
-              <el-tag size="small" effect="plain">Max={{ currentSkill.maxTokens ?? '--' }}</el-tag>
-              <el-tag size="small" effect="plain">{{ formatTimeout(currentSkill.requestTimeoutMs) }}</el-tag>
-            </div>
-          </div>
-
-          <el-tabs class="skill-workbench__tabs">
-            <el-tab-pane label="Prompt 配置">
-              <div class="skill-prompt-drawer">
-                <div class="prompt-actions">
-                  <el-button type="primary" size="small" @click="openCreatePromptDialog">创建新版本</el-button>
-                  <el-button v-if="effectivePrompt" size="small" @click="openForkFromActive">基于当前版本修改</el-button>
-                  <el-button @click="loadPromptManager">刷新</el-button>
-                </div>
-
-                <div v-if="effectivePrompt" class="prompt-active-card">
-                  <div class="prompt-summary-card">
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">当前版本</span>
-                      <strong>{{ effectivePrompt.version !== null && effectivePrompt.version !== undefined ? `v${effectivePrompt.version}` : '-' }}</strong>
-                    </div>
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">状态</span>
-                      <el-tag size="small" :type="getPromptStatusTagType(effectivePrompt.status)">
-                        {{ getPromptStatusLabel(effectivePrompt.status) }}
-                      </el-tag>
-                    </div>
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">名称</span>
-                      <span>{{ effectivePrompt.name || '-' }}</span>
-                    </div>
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">来源</span>
-                      <el-tag size="small" :type="promptSourceTagType(effectivePromptSource)">
-                        {{ promptSourceLabel(effectivePromptSource) }}
-                      </el-tag>
-                    </div>
-                    <div v-if="promptDriftWarning" class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">代码同步</span>
-                      <el-tag size="small" type="danger">DB ACTIVE 与代码默认 Prompt 不一致</el-tag>
-                    </div>
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">运行参数</span>
-                      <span>T={{ effectivePrompt.temperature ?? '--' }} | Max={{ effectivePrompt.maxTokens ?? '--' }}</span>
-                    </div>
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">模型</span>
-                      <span>{{ effectivePrompt.model || '--' }}</span>
-                    </div>
-                    <div class="prompt-summary-card__row">
-                      <span class="prompt-summary-card__label">发布时间</span>
-                      <span>{{ formatDateTime(effectivePrompt.publishedAt || effectivePrompt.updatedAt || effectivePrompt.createdAt) }}</span>
-                    </div>
-                  </div>
-
-                  <div class="prompt-text-card">
-                    <div class="prompt-text-card__header">
-                      <h4>System Prompt</h4>
-                      <el-button v-if="promptPreviewText" type="primary" link @click="promptExpanded = !promptExpanded">
-                        {{ promptExpanded ? '收起全文' : '展开全文' }}
-                      </el-button>
-                    </div>
-                    <pre class="sample-json prompt-text-card__content">{{ visiblePromptText }}</pre>
-                  </div>
-                </div>
-
-                <el-empty v-else description="当前没有可展示的 Prompt。" />
-
-                <div class="prompt-versions-card">
-                  <div class="prompt-versions-card__header">
-                    <h4>最近版本</h4>
-                    <span class="prompt-versions-card__meta">{{ promptVersions.length }} 条</span>
-                  </div>
-                  <div v-if="promptVersions.length" class="prompt-versions-table">
-                    <el-table :data="promptVersions" size="small" border>
-                      <el-table-column prop="version" label="版本" width="80" />
-                      <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-                      <el-table-column label="参数" min-width="120">
-                        <template #default="{ row }">
-                          <span class="params-inline">T={{ row.temperature ?? '--' }} | {{ row.maxTokens ?? '--' }}</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="状态" width="100">
-                        <template #default="{ row }">
-                          <el-tag size="small" effect="plain" :type="getPromptStatusTagType(row.status)">
-                            {{ getPromptStatusLabel(row.status) }}
-                          </el-tag>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="model" label="模型" min-width="140" show-overflow-tooltip />
-                      <el-table-column label="更新时间" min-width="140">
-                        <template #default="{ row }">
-                          {{ formatDateTime(row.updatedAt || row.createdAt) }}
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="操作" width="180">
-                        <template #default="{ row }">
-                          <el-tag v-if="row.status === 'ACTIVE'" type="success" size="small" effect="plain">当前生效</el-tag>
-                          <el-button type="primary" link size="small" @click="editPromptVersion(row)">编辑</el-button>
-                          <el-button v-if="row.status !== 'ACTIVE'" type="success" link size="small" :loading="publishingId === row.id" @click="publishPrompt(row.id)">发布</el-button>
-                          <el-button v-if="row.status === 'DRAFT'" type="danger" link size="small" @click="deletePromptDraft(row.id)">删除</el-button>
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </div>
-                  <el-empty v-else description="暂无 Prompt 版本" />
-                </div>
-
-                <div class="prompt-versions-card">
-                  <div class="prompt-versions-card__header">
-                    <h4>Preview</h4>
-                    <el-button @click="runSkillPreview" :loading="previewLoading">运行预览</el-button>
-                  </div>
-                  <div class="contract-grid contract-grid--preview">
-                    <section class="contract-card">
-                      <span class="chip-label">Sample Input</span>
-                      <el-input
-                        v-model="skillPreviewInputText"
-                        type="textarea"
-                        :rows="16"
-                        class="preview-textarea"
-                      />
-                    </section>
-                    <section class="contract-card">
-                      <span class="chip-label">Sample Output</span>
-                      <pre v-if="skillPreviewOutput !== null" class="sample-json">{{ prettyJson(skillPreviewOutput) }}</pre>
-                      <el-empty v-else description="点击“运行预览”查看输出" />
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </el-tab-pane>
-
-            <el-tab-pane label="模型运行时">
-              <div class="skill-config-form">
-                <el-alert
-                  v-if="getSkillHint(editForm.skillId)"
-                  :title="getSkillHint(editForm.skillId)"
-                  type="info"
-                  :closable="false"
-                  show-icon
-                  class="skill-config-form__notice"
-                />
-                <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="110px">
-                  <el-form-item label="Skill ID">
-                    <el-input v-model="editForm.skillId" disabled />
-                  </el-form-item>
-                  <el-form-item label="中文名称">
-                    <el-input v-model="editForm.displayName" disabled placeholder="无" />
-                  </el-form-item>
-                  <el-form-item label="独立配置">
-                    <el-switch v-model="editForm.enabled" />
-                    <div class="field-hint">关闭后将继承当前调用方配置；若无调用方上下文，则回落平台默认。</div>
-                  </el-form-item>
-                  <el-form-item label="模型层级">
-                    <el-select v-model="editForm.tier" placeholder="选择层级" style="width: 100%" :disabled="!editForm.enabled">
-                      <el-option label="chat" value="chat" />
-                      <el-option label="reasoning" value="reasoning" />
-                    </el-select>
-                  </el-form-item>
-                  <el-form-item label="模型">
-                    <el-input v-model="editForm.model" :disabled="!editForm.enabled" placeholder="留空使用平台默认独立配置" />
-                  </el-form-item>
-                  <el-form-item label="思考模式">
-                    <el-select v-model="editForm.thinkingMode" placeholder="选择思考模式" style="width: 100%" :disabled="!editForm.enabled">
-                      <el-option label="跟随继承值 / 模型默认" value="default" />
-                      <el-option label="开启" value="enabled" />
-                      <el-option label="关闭" value="disabled" />
-                    </el-select>
-                  </el-form-item>
-                  <el-form-item label="思考强度">
-                    <el-select v-model="editForm.reasoningEffort" placeholder="选择思考强度" style="width: 100%" :disabled="!editForm.enabled || editForm.thinkingMode === 'disabled'">
-                      <el-option label="跟随继承值 / 模型默认" value="default" />
-                      <el-option label="high" value="high" />
-                      <el-option label="max" value="max" />
-                    </el-select>
-                    <div class="field-hint">仅在模型启用思考时生效</div>
-                  </el-form-item>
-                  <el-form-item label="温度">
-                    <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input :disabled="!editForm.enabled" />
-                  </el-form-item>
-                  <el-form-item label="Max Tokens">
-                    <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" :disabled="!editForm.enabled" />
-                  </el-form-item>
-                  <el-form-item label="请求超时(ms)">
-                    <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="600000" :step="10000" :disabled="!editForm.enabled" />
-                  </el-form-item>
-                </el-form>
-
-                <div class="skill-config-dialog__footer">
-                  <el-button type="warning" :disabled="!currentSkill.enabled" @click="deleteConfig(currentSkill)">恢复默认</el-button>
-                  <el-button type="primary" :loading="saving" @click="saveConfig">保存配置</el-button>
-                </div>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
-        </template>
-      </div>
-    </el-drawer>
-
-    <el-dialog v-model="promptEditDialogVisible" :title="`${currentPromptDraftId ? '编辑' : '创建'} Skill Prompt · ${currentPromptSkillId}`" width="720px" destroy-on-close>
-      <el-form :model="promptEditForm" label-width="110px" v-loading="promptDetailLoading">
-        <el-form-item label="名称">
-          <el-input v-model="promptEditForm.name" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="promptEditForm.description" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="模型">
-          <el-input v-model="promptEditForm.model" />
-        </el-form-item>
-        <el-form-item label="温度">
-          <el-slider v-model="promptEditForm.temperature" :min="0" :max="1" :step="0.1" show-input />
-        </el-form-item>
-        <el-form-item label="Max Tokens">
-          <el-input-number v-model="promptEditForm.maxTokens" :min="100" :max="40000" />
-        </el-form-item>
-        <el-form-item label="System Prompt">
-          <el-input v-model="promptEditForm.systemPrompt" type="textarea" :rows="18" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="promptEditDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="promptSaving" @click="savePromptDraft">{{ currentPromptDraftId ? '保存修改' : '创建草稿' }}</el-button>
-        <el-button v-if="!currentPromptDraftId" type="success" :loading="promptSaving" @click="createAndPublishPrompt">创建并发布</el-button>
-      </template>
-    </el-dialog>
+    <SkillNodeWorkbench v-model:visible="skillWorkbenchVisible" :skill-id="currentSkillId" @changed="fetchConfigs" />
   </div>
 </template>
 
@@ -392,10 +133,10 @@
 import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { Operation, Refresh } from '@element-plus/icons-vue';
-import { adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi';
+import { adminSkillsApi } from '@/api/adminApi';
+import AdminPageHeader from './components/AdminPageHeader.vue';
+import SkillNodeWorkbench from './components/SkillNodeWorkbench.vue';
 import { toast } from '../../utils/toast';
-import { ElMessageBox } from 'element-plus';
-import type { FormInstance } from 'element-plus';
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog';
 
 interface SkillModelConfig {
@@ -421,50 +162,7 @@ const onlyEnabled = ref(false);
 const summary = ref<{ total: number; working: number; simplified: number; needsAttention: number } | null>(null);
 
 const skillWorkbenchVisible = ref(false);
-const skillWorkbenchLoading = ref(false);
-const currentSkill = ref<SkillModelConfig | null>(null);
-const saving = ref(false);
-const promptDrawerLoading = ref(false);
-const currentPromptSkillId = ref('');
-const promptVersions = ref<any[]>([]);
-const activePrompt = ref<any | null>(null);
-const effectivePrompt = ref<any | null>(null);
-const effectivePromptSource = ref<'db-active' | 'code-fallback' | 'generated-default' | ''>('');
-const promptDriftWarning = ref(false);
-const promptExpanded = ref(false);
-const promptEditDialogVisible = ref(false);
-const promptSaving = ref(false);
-const currentPromptDraftId = ref('');
-const publishingId = ref<string | null>(null);
-const promptDetailLoading = ref(false);
-const previewLoading = ref(false);
-const skillPreviewInput = ref<any>(null);
-const skillPreviewInputText = ref('');
-const skillPreviewOutput = ref<any>(null);
-const promptEditForm = ref<any>({
-  name: '',
-  description: '',
-  systemPrompt: '',
-  temperature: 0.2,
-  maxTokens: 32000,
-  model: 'deepseek-v4-pro'
-});
-const editFormRef = ref<FormInstance>();
-const editRules = {
-  temperature: [{ required: true, message: '请设置温度', trigger: 'change' }],
-  maxTokens: [{ required: true, message: '请输入最大 Token 数', trigger: 'blur' }],
-};
-const editForm = ref<SkillModelConfig>({
-  skillId: '',
-  displayName: '',
-  tier: 'chat',
-  thinkingMode: 'default',
-  reasoningEffort: 'default',
-  temperature: 0.7,
-  maxTokens: 2000,
-  requestTimeoutMs: null,
-  enabled: false,
-});
+const currentSkillId = ref('');
 const route = useRoute();
 
 const filteredConfigs = computed(() => {
@@ -476,6 +174,13 @@ const filteredConfigs = computed(() => {
     return visibleByScope && byKeyword && byStatus && byEnabled;
   });
 });
+
+const componentConfigHighlights = computed(() => [
+  { label: `${filteredConfigs.value.length} 个组件在列表中`, tone: 'info' as const },
+  { label: summary.value ? `正常 ${summary.value.working}` : '等待统计', tone: 'success' as const },
+  { label: summary.value ? `简化 ${summary.value.simplified}` : '等待统计', tone: 'warning' as const },
+  { label: onlyEnabled.value ? '仅看独立配置' : '包含继承配置', tone: onlyEnabled.value ? 'neutral' as const : 'info' as const }
+]);
 
 const SKILL_HINTS: Record<string, string> = {
   'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput），再交给 path-agent 主生成。',
@@ -513,15 +218,6 @@ const getSkillDisplayName = (row: SkillModelConfig) => {
   return SKILL_CN_NAMES[row.skillId] || row.displayName || row.skillId;
 };
 
-watch(
-  () => editForm.value.thinkingMode,
-  (mode) => {
-    if (mode === 'disabled') {
-      editForm.value.reasoningEffort = 'default';
-    }
-  }
-);
-
 const fetchConfigs = async () => {
   loading.value = true;
   try {
@@ -535,9 +231,21 @@ const fetchConfigs = async () => {
 };
 
 const syncKeywordFromRoute = () => {
-  const raw = typeof route.query.scope === 'string' ? route.query.scope : '';
-  if (!raw) return;
-  keyword.value = raw;
+  const scope = typeof route.query.scope === 'string' ? route.query.scope.trim() : '';
+  const skillId = typeof route.query.skillId === 'string' ? route.query.skillId.trim().replace(/^skill:/, '') : '';
+  keyword.value = skillId || scope;
+};
+
+const openRequestedSkillFromQuery = () => {
+  const rawSkillId = typeof route.query.skillId === 'string' ? route.query.skillId.trim() : '';
+  if (!rawSkillId || !configs.value.length) return;
+
+  const normalizedSkillId = rawSkillId.replace(/^skill:/, '');
+  const matchedConfig = configs.value.find((item) => item.skillId === normalizedSkillId);
+  if (!matchedConfig) return;
+  if (currentSkillId.value === matchedConfig.skillId && skillWorkbenchVisible.value) return;
+
+  openSkillWorkbench(matchedConfig);
 };
 
 const updateSummary = () => {
@@ -653,369 +361,48 @@ const formatLastCalledRelative = (value: string | null | undefined) => {
   return `${days} 天前`;
 };
 
-const promptPreviewText = computed(() => effectivePrompt.value?.systemPrompt?.trim() || '');
-
-const visiblePromptText = computed(() => {
-  const text = promptPreviewText.value;
-  if (!text) return '暂无 Prompt 内容';
-  if (promptExpanded.value) return text;
-
-  const lines = text.split('\n');
-  if (lines.length <= 8) return text;
-  return `${lines.slice(0, 8).join('\n')}\n\n...`;
-});
-
-const toEditablePayload = (config: SkillModelConfig) => ({
-  tier: config.tier,
-  model: config.model,
-  thinkingMode: config.thinkingMode || 'default',
-  reasoningEffort: config.thinkingMode === 'disabled' ? 'default' : (config.reasoningEffort || 'default'),
-  temperature: config.temperature,
-  maxTokens: config.maxTokens,
-  requestTimeoutMs: config.enabled ? config.requestTimeoutMs : null,
-  enabled: config.enabled,
-});
-
-const editConfig = (row: SkillModelConfig) => {
-  editForm.value = {
-    ...row,
-    displayName: row.displayName || '',
-    thinkingMode: row.thinkingMode || 'default',
-    reasoningEffort: row.reasoningEffort || 'default',
-  };
-};
-
-const openSkillWorkbench = async (row: SkillModelConfig) => {
-  skillWorkbenchVisible.value = true;
-  skillWorkbenchLoading.value = true;
-  currentSkill.value = row;
-  currentPromptSkillId.value = row.skillId;
-  promptExpanded.value = false;
-  skillPreviewOutput.value = null;
-  effectivePrompt.value = null;
-  effectivePromptSource.value = '';
-  promptDriftWarning.value = false;
-
-  editConfig(row);
-
-  skillPreviewInput.value = row.skillId === 'path-scene-framing'
-    ? {
-        goal: '用 Python 自动化处理销售数据报表中的图表样式调整环节。',
-        currentLevel: 'beginner',
-        timePerDay: '1 小时/周',
-        structuredData: {
-          subject: '销售数据报表处理'
-        },
-        confirmedProposal: {
-          learning_direction: '先聚焦图表样式自动化的可复用模板，而不是一次性覆盖整个报表流程。',
-          first_deliverable: '一个基于 matplotlib/seaborn 的可复用图表样式函数。',
-          key_stages: [
-            '学习基本图表库语法并复现当前手动调整的图表样式',
-            '将样式参数封装成可复用的函数或样式模板',
-            '集成到现有报表脚本中，确保一键运行即可输出标准图表'
-          ],
-          out_of_scope: [
-            '暂时不处理数据清洗、汇总计算等其他自动化环节'
-          ]
-        },
-        metadata: {
-          source: 'admin-preview',
-          conversationHistory: [
-            {
-              role: 'user',
-              content: '我现在最痛苦的是每次图表出完以后还要手动调颜色、标签和布局。'
-            }
-          ]
-        }
-      }
-    : null;
-  skillPreviewInputText.value = skillPreviewInput.value ? JSON.stringify(skillPreviewInput.value, null, 2) : '';
-
-  try {
-    await loadPromptManager();
-  } finally {
-    skillWorkbenchLoading.value = false;
-  }
-};
-
-const saveConfig = async () => {
-  const valid = await editFormRef.value?.validate().catch(() => false);
-  if (!valid) return;
-  saving.value = true;
-  try {
-    await adminSkillsApi.updateSkillModelConfig(editForm.value.skillId, toEditablePayload(editForm.value));
-    toast.success('Skill 配置已更新');
-    if (currentSkill.value?.skillId === editForm.value.skillId) {
-      currentSkill.value = {
-        ...currentSkill.value,
-        ...editForm.value,
-      };
-    }
-    fetchConfigs();
-  } catch {
-    toast.error('保存失败');
-  } finally {
-    saving.value = false;
-  }
-};
-
-const deleteConfig = async (row: SkillModelConfig) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要恢复 ${row.displayName || row.skillId} 的默认模型配置吗？此操作不可撤销。`,
-      '确认恢复默认',
-      {
-        confirmButtonText: '确认恢复',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    );
-  } catch {
-    return;
-  }
-
-  try {
-    await adminSkillsApi.deleteSkillModelConfig(row.skillId);
-    toast.success('配置已恢复默认');
-    fetchConfigs();
-  } catch {
-    toast.error('删除失败');
-  }
-};
-
 const refresh = () => fetchConfigs();
-
-const loadPromptManager = async () => {
-  if (!currentPromptSkillId.value) return;
-  promptDrawerLoading.value = true;
-  const agentId = toSkillPromptAgentId(currentPromptSkillId.value);
-  try {
-    const [versionsRes, activeRes, effectiveRes] = await Promise.allSettled([
-      adminAgentPromptsApi.getPromptVersions({ agentId }),
-      adminAgentPromptsApi.getActivePrompt(agentId),
-      adminSkillsApi.getEffectiveSkillPrompt(currentPromptSkillId.value)
-    ]);
-
-    promptVersions.value = versionsRes.status === 'fulfilled'
-      ? (versionsRes.value.data?.data?.list || [])
-      : [];
-      activePrompt.value = activeRes.status === 'fulfilled'
-      ? activeRes.value.data?.data || null
-      : null;
-      effectivePrompt.value = effectiveRes.status === 'fulfilled'
-        ? effectiveRes.value.data?.data?.prompt || activePrompt.value
-        : activePrompt.value;
-      effectivePromptSource.value = effectiveRes.status === 'fulfilled'
-        ? (effectiveRes.value.data?.data?.source || '')
-        : (activePrompt.value ? 'db-active' : '');
-      promptDriftWarning.value = !!(effectiveRes.status === 'fulfilled' && effectiveRes.value.data?.data?.promptDrift);
-
-  } catch (error) {
-    toast.error('加载 Skill Prompt 失败');
-  } finally {
-    promptDrawerLoading.value = false;
-  }
-};
-
-const openForkFromActive = () => {
-  if (!effectivePrompt.value) return;
-  currentPromptDraftId.value = '';
-  const nextVersion = (Number(promptVersions.value[0]?.version) || 0) + 1;
-  promptEditForm.value = {
-    name: `v${nextVersion}-fork`,
-    description: `基于 ${effectivePrompt.value.version ? `v${effectivePrompt.value.version}` : '当前版本'} 修改`,
-    systemPrompt: effectivePrompt.value.systemPrompt || '',
-    temperature: effectivePrompt.value.temperature ?? 0.2,
-    maxTokens: effectivePrompt.value.maxTokens ?? 32000,
-    model: effectivePrompt.value.model || 'deepseek-v4-pro'
-  };
-  promptEditDialogVisible.value = true;
-};
-
-const editPromptVersion = async (version: any) => {
-  promptDetailLoading.value = true;
-  try {
-    const res = await adminAgentPromptsApi.getPromptDetail(version.id);
-    const detail = res.data?.data;
-
-    if ((version.status || '').toUpperCase() === 'DRAFT') {
-      currentPromptDraftId.value = version.id;
-      promptEditForm.value = {
-        name: detail?.name || '',
-        description: detail?.description || '',
-        systemPrompt: detail?.systemPrompt || '',
-        temperature: detail?.temperature ?? 0.2,
-        maxTokens: detail?.maxTokens ?? 32000,
-        model: detail?.model || 'deepseek-v4-pro'
-      };
-    } else {
-      currentPromptDraftId.value = '';
-      const nextVersion = (Number(promptVersions.value[0]?.version) || 0) + 1;
-      promptEditForm.value = {
-        name: `v${nextVersion}-修改`,
-        description: `基于 v${version.version || '?'} 修改`,
-        systemPrompt: detail?.systemPrompt || '',
-        temperature: detail?.temperature ?? 0.2,
-        maxTokens: detail?.maxTokens ?? 32000,
-        model: detail?.model || 'deepseek-v4-pro'
-      };
-    }
-
-    promptEditDialogVisible.value = true;
-  } catch {
-    toast.error('加载 Prompt 详情失败');
-  } finally {
-    promptDetailLoading.value = false;
-  }
-};
-
-const openCreatePromptDialog = () => {
-  currentPromptDraftId.value = '';
-  const nextVersion = (Number(promptVersions.value[0]?.version) || 0) + 1;
-  promptEditForm.value = {
-    name: `v${nextVersion}`,
-    description: '',
-    systemPrompt: effectivePrompt.value?.systemPrompt || '',
-    temperature: 0.2,
-    maxTokens: 32000,
-    model: 'deepseek-v4-pro'
-  };
-  promptEditDialogVisible.value = true;
-};
-
-const savePromptDraft = async () => {
-  if (!currentPromptSkillId.value || !promptEditForm.value.systemPrompt?.trim()) {
-    toast.error('请填写 Prompt 内容');
-    return;
-  }
-  promptSaving.value = true;
-  try {
-    if (currentPromptDraftId.value) {
-      await adminAgentPromptsApi.updatePrompt(currentPromptDraftId.value, promptEditForm.value);
-    } else {
-      await adminAgentPromptsApi.createPrompt({
-        agentId: toSkillPromptAgentId(currentPromptSkillId.value),
-        name: promptEditForm.value.name,
-        description: promptEditForm.value.description,
-        systemPrompt: promptEditForm.value.systemPrompt,
-        temperature: promptEditForm.value.temperature,
-        maxTokens: promptEditForm.value.maxTokens,
-        model: promptEditForm.value.model,
-      });
-    }
-    toast.success('Skill Prompt 草稿已保存');
-    promptEditDialogVisible.value = false;
-    await loadPromptManager();
-  } catch {
-    toast.error('保存 Skill Prompt 失败');
-  } finally {
-    promptSaving.value = false;
-  }
-};
-
-const createAndPublishPrompt = async () => {
-  if (!currentPromptSkillId.value || !promptEditForm.value.systemPrompt?.trim()) {
-    toast.error('请填写 Prompt 内容');
-    return;
-  }
-
-  promptSaving.value = true;
-  try {
-    const createRes = await adminAgentPromptsApi.createPrompt({
-      agentId: toSkillPromptAgentId(currentPromptSkillId.value),
-      name: promptEditForm.value.name,
-      description: promptEditForm.value.description,
-      systemPrompt: promptEditForm.value.systemPrompt,
-      temperature: promptEditForm.value.temperature,
-      maxTokens: promptEditForm.value.maxTokens,
-      model: promptEditForm.value.model,
-    });
-
-    const newPromptId = createRes.data?.id || createRes.data?.data?.id;
-    if (!newPromptId) {
-      toast.error('创建失败，未获取到 Prompt ID');
-      return;
-    }
-
-    await adminAgentPromptsApi.publishPrompt(newPromptId);
-    toast.success('Skill Prompt 已创建并发布');
-    promptEditDialogVisible.value = false;
-    await loadPromptManager();
-  } catch {
-    toast.error('创建或发布 Skill Prompt 失败');
-  } finally {
-    promptSaving.value = false;
-  }
-};
-
-const deletePromptDraft = async (id: string) => {
-  try {
-    await ElMessageBox.confirm('确定删除此版本？此操作不可恢复。', '删除确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    });
-
-    await adminAgentPromptsApi.deletePrompt(id);
-    toast.success('Skill Prompt 草稿已删除');
-    await loadPromptManager();
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      toast.error('删除 Skill Prompt 失败');
-    }
-  }
-};
-
-const publishPrompt = async (id: string) => {
-  publishingId.value = id;
-  try {
-    await adminAgentPromptsApi.publishPrompt(id);
-    toast.success('Skill Prompt 已发布');
-    await loadPromptManager();
-  } catch {
-    toast.error('发布 Skill Prompt 失败');
-  } finally {
-    publishingId.value = null;
-  }
-};
-
-const prettyJson = (value: any) => {
-  if (value === null || value === undefined) return '-';
-  return JSON.stringify(value, null, 2);
-};
-
-const runSkillPreview = async () => {
-  if (!currentPromptSkillId.value || !skillPreviewInputText.value.trim()) return;
-
-  let parsedInput: any;
-  try {
-    parsedInput = JSON.parse(skillPreviewInputText.value);
-  } catch {
-    toast.error('Sample Input 不是合法 JSON');
-    return;
-  }
-
-  skillPreviewInput.value = parsedInput;
-  previewLoading.value = true;
-  try {
-    const res = await adminSkillsApi.testSkill(currentPromptSkillId.value, parsedInput);
-    skillPreviewOutput.value = res.data?.data?.output ?? null;
-  } catch (error: any) {
-    toast.error(error?.response?.data?.error || 'Skill 预览失败');
-  } finally {
-    previewLoading.value = false;
-  }
+const openSkillWorkbench = (row: SkillModelConfig) => {
+  currentSkillId.value = row.skillId;
+  skillWorkbenchVisible.value = true;
 };
 
 onMounted(() => {
   syncKeywordFromRoute();
   fetchConfigs();
 });
+
+watch(
+  () => [route.query.scope, route.query.skillId] as const,
+  () => {
+    syncKeywordFromRoute();
+    openRequestedSkillFromQuery();
+  }
+);
+
+watch(
+  () => configs.value.length,
+  () => {
+    openRequestedSkillFromQuery();
+  }
+);
 </script>
 
 <style scoped>
 .skill-model-config {
-  padding: 1.25rem;
+  padding: 0;
+}
+
+.component-summary-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--admin-text-secondary);
+}
+
+.component-toolbar-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--admin-text-muted);
 }
 
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
@@ -1072,14 +459,15 @@ onMounted(() => {
 .admin-list-toolbar .select { width: 120px; }
 
 .admin-list-card {
-  border: 1px solid #d2dbf3;
-  border-radius: 28px;
-  padding: 1rem;
-  background: color-mix(in srgb, #ffffff 90%, white);
-  backdrop-filter: blur(20px);
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
+  padding: 0;
+  background: var(--admin-bg-surface);
+  backdrop-filter: none;
   position: relative;
   z-index: 1;
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16);
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .admin-list-card :deep(.el-table) {
@@ -1233,6 +621,72 @@ onMounted(() => {
   min-height: 240px;
   padding-right: 4px;
   min-width: 0;
+}
+
+.workbench-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+  gap: 16px;
+}
+
+.workbench-hero__main {
+  display: grid;
+  gap: 8px;
+}
+
+.workbench-hero__kicker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--admin-color-info-bg);
+  color: var(--admin-text-brand);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workbench-hero__main h3 {
+  margin: 0;
+  color: var(--admin-text-primary);
+  font-size: 1.2rem;
+}
+
+.workbench-hero__main p {
+  margin: 0;
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.workbench-hero__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workbench-glance-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface-alt);
+}
+
+.workbench-glance-card__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--admin-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.workbench-glance-card strong {
+  color: var(--admin-text-primary);
+  font-size: 14px;
 }
 
 .skill-workbench__tabs {
@@ -1443,6 +897,14 @@ onMounted(() => {
 }
 
 @media (max-width: 1100px) {
+  .workbench-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .workbench-hero__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .contract-grid--preview {
     grid-template-columns: 1fr;
   }

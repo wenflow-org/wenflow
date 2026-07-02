@@ -36,65 +36,26 @@
         </div>
 
         <nav class="admin-sidebar__nav">
-          <!-- 分组 1: 内容管理 -->
-          <div class="admin-sidebar__group">
-            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">内容管理</span>
-            <router-link
-              v-for="item in contentNav"
-              :key="item.to"
-              :to="item.to"
-              class="admin-sidebar__item"
-              :class="{ active: isActiveRoute(item.to) }"
-            >
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
-            </router-link>
-          </div>
+          <section
+            v-for="group in navGroups"
+            :key="group.title"
+            class="admin-sidebar__group"
+          >
+            <div class="admin-sidebar__group-head" v-show="!sidebarCollapsed">
+              <span class="admin-sidebar__group-title">{{ group.title }}</span>
+            </div>
 
-          <!-- 分组 2: 系统配置 -->
-          <div class="admin-sidebar__group">
-            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">系统配置</span>
             <router-link
-              v-for="item in systemNav"
+              v-for="item in group.items"
               :key="item.to"
               :to="item.to"
-              class="admin-sidebar__item"
+              class="admin-sidebar__item admin-sidebar__item--secondary"
               :class="{ active: isActiveRoute(item.to) }"
             >
               <el-icon><component :is="item.icon" /></el-icon>
               <span v-show="!sidebarCollapsed">{{ item.label }}</span>
             </router-link>
-          </div>
-
-          <!-- 分组 3: 监控诊断 -->
-          <div class="admin-sidebar__group">
-            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">监控诊断</span>
-            <router-link
-              v-for="item in monitorNav"
-              :key="item.to"
-              :to="item.to"
-              class="admin-sidebar__item"
-              :class="{ active: isActiveRoute(item.to) }"
-            >
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
-            </router-link>
-          </div>
-
-          <!-- 分组 4: 调试站点 -->
-          <div class="admin-sidebar__group">
-            <span class="admin-sidebar__group-title" v-show="!sidebarCollapsed">调试站点</span>
-            <router-link
-              v-for="item in devDebugNav"
-              :key="item.to"
-              :to="item.to"
-              class="admin-sidebar__item"
-              :class="{ active: isActiveRoute(item.to) }"
-            >
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
-            </router-link>
-          </div>
+          </section>
         </nav>
 
         <!-- 折叠按钮 -->
@@ -125,22 +86,22 @@ import {
   Operation,
   Connection,
   Grid,
-  Clock,
   Setting,
   ArrowDown,
   SwitchButton,
-  Expand,
-  Fold,
-  PictureRounded,
   Tickets,
   MagicStick,
-  Document,
 } from '@element-plus/icons-vue';
 
 interface NavItem {
   to: string;
   label: string;
   icon: any;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
 }
 
 const router = useRouter();
@@ -171,40 +132,65 @@ const toggleSidebar = () => {
 
 const isActiveRoute = (path: string) => {
   if (path === '/admin/dashboard') {
-    return route.path === '/admin/dashboard' || route.path === '/admin/overview';
+    return route.path === '/admin/dashboard';
   }
+
+  if (path === '/admin/skills') {
+    return route.path === '/admin/skills' || route.path.startsWith('/admin/skills/');
+  }
+
+  if (path === '/admin/virtual-learners') {
+    return route.path === '/admin/virtual-learners' || route.path.startsWith('/admin/virtual-session/');
+  }
+
   return route.path.startsWith(path);
 };
 
-const contentNav: NavItem[] = [
-  { to: '/admin/dashboard', label: '概览', icon: DataAnalysis },
-  { to: '/admin/users', label: '用户管理', icon: User },
-  { to: '/admin/learner-models', label: '学习者模型', icon: Reading },
-  { to: '/admin/teaching-sessions', label: '教学会话', icon: Reading },
-];
-
-const systemNav: NavItem[] = [
-  { to: '/admin/api-config', label: 'API 管理', icon: Setting },
-  { to: '/admin/platform-capabilities', label: '能力地图', icon: Grid },
-  { to: '/admin/agent-registry', label: '运行节点管理', icon: Grid },
-  { to: '/admin/orchestrator-definitions', label: '编排定义', icon: Connection },
-  { to: '/admin/orchestrator-registry', label: '编排配置中心', icon: Connection },
-  { to: '/admin/skill-model-configs', label: '技能/组件配置', icon: Operation },
-];
-
-const monitorNav: NavItem[] = [
-  { to: '/admin/activity-stream', label: '活动流', icon: Clock },
-  { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
-  { to: '/admin/prompt-call-logs', label: 'Prompt 调用日志', icon: MagicStick },
-  { to: '/admin/orchestrators', label: '编排运行监控', icon: Connection },
-  { to: '/admin/manifest-diagnostics', label: 'Manifest 诊断', icon: Document },
-];
-
-const devDebugNav: NavItem[] = [
-  { to: '/admin/ui-lab', label: 'UI Lab', icon: PictureRounded },
-  { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets },
-  { to: '/admin/virtual-learners', label: '虚拟用户模拟', icon: User },
-  { to: '/admin/test/skill-prompt-preview', label: 'Skill Prompt 预览', icon: MagicStick },
+const navGroups: NavGroup[] = [
+  {
+    title: '总览',
+    items: [
+      { to: '/admin/dashboard', label: '概览', icon: DataAnalysis },
+    ],
+  },
+  {
+    title: '学习运营',
+    items: [
+      { to: '/admin/users', label: '用户管理', icon: User },
+      { to: '/admin/learner-center', label: '学习者中心', icon: Reading },
+      { to: '/admin/virtual-learners', label: '虚拟用户模拟', icon: User },
+    ],
+  },
+  {
+    title: '运行目录',
+    items: [
+      { to: '/admin/skills', label: 'Skill 目录', icon: Grid },
+      { to: '/admin/agents/topology', label: 'Agent 拓扑', icon: Connection },
+      { to: '/admin/orchestrator-definitions', label: '编排结构', icon: Connection },
+    ],
+  },
+  {
+    title: '诊断与日志',
+    items: [
+      { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
+      { to: '/admin/path-generation-events', label: '流程事件', icon: Connection },
+      { to: '/admin/prompt-call-logs', label: 'Prompt 调用日志', icon: MagicStick },
+    ],
+  },
+  {
+    title: '平台配置',
+    items: [
+      { to: '/admin/api-config', label: 'API 管理', icon: Setting },
+      { to: '/admin/skill-model-configs', label: '技能/组件配置', icon: Operation },
+    ],
+  },
+  {
+    title: '发布与调试',
+    items: [
+      { to: '/admin/prompt-lab', label: 'Prompt Lab', icon: MagicStick },
+      { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets },
+    ],
+  },
 ];
 
 const handleLogout = () => {
@@ -359,7 +345,11 @@ const handleLogout = () => {
 }
 
 .admin-sidebar__group {
-  margin-bottom: 24px;
+  margin-bottom: 22px;
+}
+
+.admin-sidebar__group-head {
+  padding-bottom: 8px;
 }
 
 .admin-sidebar__group-title {
@@ -370,7 +360,6 @@ const handleLogout = () => {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0 14px;
-  margin-bottom: 10px;
   white-space: nowrap;
 }
 
@@ -407,6 +396,15 @@ const handleLogout = () => {
 .admin-sidebar__item.active::before {
   display: none;
 }
+
+.admin-sidebar__item--secondary {
+  color: #708199;
+}
+
+.admin-sidebar__item--secondary:not(.active) {
+  font-weight: 500;
+}
+
 
 .admin-sidebar__item .el-icon {
   font-size: 1.125rem;

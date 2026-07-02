@@ -1,41 +1,37 @@
 <template>
-  <div class="orchestrator-registry-page">
-    <div class="bg-layer" aria-hidden="true">
-      <div class="bg-orb bg-orb--1"></div>
-      <div class="bg-orb bg-orb--2"></div>
-      <div class="bg-orb bg-orb--3"></div>
-    </div>
+  <div class="admin-page orchestrator-registry-page">
+    <AdminPageHeader
+      title="编排配置中心"
+      :icon="Connection"
+      :highlights="orchestratorRegistryHighlights"
+    >
+      <template #actions>
+        <el-button type="primary" @click="loadRegistry" :loading="loading">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </template>
+    </AdminPageHeader>
 
-    <div class="page-hero">
-      <span class="pill">Admin</span>
-      <h2 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Connection /></el-icon>
-        编排配置中心
-      </h2>
-      <p class="page-hero__subtitle">集中维护编排器的成员、流程、输入接入和数据契约。这里用于配置编排实现，不用于判断实时运行健康。</p>
-    </div>
+    <section class="admin-summary-grid" v-show="summary">
+      <article class="admin-summary-card admin-summary-card--blue"><div class="admin-summary-card__label">编排器总数</div><strong class="admin-summary-card__value">{{ summary?.total }}</strong></article>
+      <article class="admin-summary-card admin-summary-card--green"><div class="admin-summary-card__label">可编辑成员</div><strong class="admin-summary-card__value">{{ summary?.enabledCount }}</strong></article>
+      <article class="admin-summary-card admin-summary-card--orange"><div class="admin-summary-card__label">输入接入配置</div><strong class="admin-summary-card__value">{{ summary?.configurableCount }}</strong></article>
+      <article class="admin-summary-card"><div class="admin-summary-card__label">可挂接成员</div><strong class="admin-summary-card__value orchestrator-summary-value--purple">{{ summary?.totalMemberAgents }}</strong></article>
+    </section>
 
-    <div class="summary-grid" v-show="summary" style="position: relative; z-index: 1;">
-      <el-card class="summary-card summary-card--blue" shadow="hover">
-        <div class="label">编排器总数</div>
-        <div class="value">{{ summary?.total }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--green" shadow="hover">
-        <div class="label">可编辑成员</div>
-        <div class="value">{{ summary?.enabledCount }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--orange" shadow="hover">
-        <div class="label">输入接入配置</div>
-        <div class="value">{{ summary?.configurableCount }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--purple" shadow="hover">
-        <div class="label">可挂接成员</div>
-        <div class="value">{{ summary?.totalMemberAgents }}</div>
-      </el-card>
-    </div>
+    <section class="admin-filter-panel orchestrator-filter-panel">
+      <div class="admin-section-head orchestrator-filter-panel__head">
+        <div class="admin-section-head__copy">
+          <h3 class="admin-section-head__title">编排器筛选</h3>
+        </div>
+        <div class="orchestrator-filter-panel__summary">
+          <span>{{ filteredOrchestrators.length }} / {{ orchestrators.length }} 个编排器</span>
+        </div>
+      </div>
 
-    <div class="filters admin-list-toolbar">
-      <div class="admin-list-toolbar__group">
+      <div class="admin-list-toolbar">
+        <div class="admin-list-toolbar__group">
         <el-input v-model="keyword" placeholder="搜索编排器 ID / 名称" clearable class="search" />
         <el-select v-model="health" placeholder="健康状态" clearable class="select">
           <el-option label="健康" value="healthy" />
@@ -45,14 +41,16 @@
         </el-select>
       </div>
       <div class="admin-list-toolbar__group">
-        <el-button type="primary" @click="loadRegistry" :loading="loading">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <p class="orchestrator-toolbar-note">{{ keyword || health ? '已启用筛选' : '默认范围' }}</p>
       </div>
-    </div>
+      </div>
+    </section>
 
-    <div class="admin-list-card">
+    <section class="admin-list-card orchestrator-browser">
+      <div class="orchestrator-browser__head">
+        <strong>编排配置目录</strong>
+        <span>筛选并查看详情（成员、流程在抽屉中）。</span>
+      </div>
       <el-table :data="filteredOrchestrators" v-loading="loading" stripe style="width: 100%;">
         <el-table-column label="编排器" min-width="280">
           <template #default="{ row }">
@@ -103,7 +101,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </div>
+    </section>
 
     <el-drawer
       v-model="memberDrawerVisible"
@@ -248,9 +246,7 @@
                 </div>
                 <div v-if="currentDesign?.agentId === 'simulation-orchestrator'" class="flow-description">
                   <p>
-                    这条编排链不是单个 Agent 的增强版，而是围绕虚拟学习者生命周期组织的总视图：
-                    先有稳定 persona，再进入某个 story，随后以 session 为单位推进 Goal、Path 接受判断与 Learn，
-                    最终把运行态投影成 admin 管理视图和前台平台视图。
+                    编排围绕虚拟学习者生命周期组织：persona -> story -> goal -> path -> learn -> 运行时投影。
                   </p>
                 </div>
                 <div v-if="currentDesign?.agentId === 'simulation-orchestrator'" class="chip-section">
@@ -493,6 +489,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Connection, Refresh, Plus } from '@element-plus/icons-vue';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 import {
   adminAgentsApi,
   adminAxios,
@@ -580,6 +577,13 @@ const filteredOrchestrators = computed(() => {
       return byKeyword && byHealth;
     });
 });
+
+const orchestratorRegistryHighlights = computed(() => [
+  { label: summary.value ? `${summary.value.total} 个编排器` : '等待目录加载', tone: 'info' as const },
+  { label: summary.value ? `成员 ${summary.value.totalMemberAgents}` : '等待成员统计', tone: 'success' as const },
+  { label: summary.value ? `24h 活跃 ${summary.value.active24h}` : '等待活跃统计', tone: 'warning' as const },
+  { label: health.value ? `筛选 ${health.value}` : '全部健康状态', tone: 'neutral' as const }
+]);
 
 const orchestratorRelationMap = computed(() => {
   return new Map(orchestratorRelations.value.map((item) => [item.orchestratorId, item]));
@@ -903,6 +907,20 @@ onMounted(loadRegistry);
   position: relative;
 }
 
+.orchestrator-filter-panel {
+  gap: 14px;
+}
+
+.orchestrator-filter-panel__head {
+  margin-bottom: 0;
+}
+
+.orchestrator-filter-panel__summary {
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
 .bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
@@ -956,7 +974,30 @@ onMounted(loadRegistry);
 .admin-list-toolbar .search { width: 220px; }
 .admin-list-toolbar .select { width: 120px; }
 
-.admin-list-card { background: color-mix(in srgb, #ffffff 90%, white); border: 1px solid #d2dbf3; border-radius: 28px; padding: 1rem; position: relative; z-index: 1; backdrop-filter: blur(20px); box-shadow: 0 30px 90px rgba(58, 101, 197, 0.16); }
+.admin-list-card { background: var(--admin-bg-surface); border: var(--admin-border-subtle); border-radius: var(--admin-radius-md); padding: 0; position: relative; z-index: 1; backdrop-filter: none; box-shadow: none; overflow: hidden; }
+
+.orchestrator-browser {
+  display: grid;
+  gap: 14px;
+}
+
+.orchestrator-browser__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.orchestrator-browser__head strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.orchestrator-browser__head span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
 
 .admin-list-card :deep(.el-table) { --el-table-border-color: rgba(52, 120, 246, 0.06); background: transparent; }
 
@@ -984,52 +1025,61 @@ onMounted(loadRegistry);
 .rate-mid { color: #ea580c; font-weight: 600; }
 .rate-bad { color: #dc2626; font-weight: 700; }
 
-.member-drawer { padding: 1rem; }
+.member-drawer { padding: 0; display: grid; gap: 12px; }
 .member-id { font-weight: 600; color: var(--color-primary); }
 
-.design-drawer { padding: 1rem; }
-.chip-section { margin-top: 1rem; padding: 1rem; background: color-mix(in srgb, var(--bg-surface) 60%, white); border-radius: var(--radius-md); }
+.design-drawer { padding: 0.25rem 0 0; display: grid; gap: 18px; }
+.chip-section { margin-top: 0; padding: 12px 0 0; background: transparent; border-radius: 0; border-top: var(--admin-border-subtle); }
 .chip-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
 .chip-row:last-child { margin-bottom: 0; }
 .chip-label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); min-width: 80px; }
 .empty { color: var(--text-muted); font-size: 0.75rem; }
 
-.design-tabs { margin-top: 1.5rem; }
+.design-tabs { margin-top: 6px; }
 
-.member-config-panel { padding: 1rem; }
-.member-config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.design-tabs :deep(.el-tabs__header) { margin-bottom: 14px; }
+
+.design-drawer :deep(.el-descriptions) { width: 100%; }
+
+.design-drawer :deep(.el-descriptions__body) { overflow-x: auto; }
+
+.design-drawer :deep(.el-descriptions__table) { min-width: 640px; }
+
+.member-config-panel { padding: 8px 0 0; display: grid; gap: 14px; }
+.member-config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; padding-bottom: 12px; border-bottom: var(--admin-border-subtle); }
 .member-config-header h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
-.member-config-actions { margin-top: 1rem; display: flex; justify-content: flex-end; }
-.orchestrator-config-form { display: grid; gap: 0.5rem; }
+.member-config-actions { margin-top: 0; padding-top: 12px; border-top: var(--admin-border-subtle); display: flex; justify-content: flex-end; }
+.orchestrator-config-form { display: grid; gap: 0; }
+.orchestrator-config-form :deep(.el-form-item) { margin-bottom: 14px; }
 .chip-row--switches { justify-content: space-between; }
-.contract-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-.contract-card { padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--glass-bg-light); display: grid; gap: 0.75rem; }
+.contract-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.contract-card { padding: 12px 14px; border-radius: var(--admin-radius-sm); border: 1px solid var(--admin-border-color); background: var(--admin-bg-surface-alt); display: grid; gap: 0.75rem; }
 .contract-card h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
 .contract-card p { font-size: 0.8125rem; color: var(--text-secondary); margin: 0; line-height: 1.6; }
-.contract-grid--preview { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
+.contract-grid--preview { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
 .contract-field-list { display: grid; gap: 0.75rem; }
-.contract-field-item { display: grid; gap: 0.25rem; padding: 0.75rem; border-radius: 12px; background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(52, 120, 246, 0.08); }
+.contract-field-item { display: grid; gap: 0.25rem; padding: 0.75rem; border-radius: var(--admin-radius-sm); background: var(--admin-bg-surface); border: 1px solid var(--admin-border-color); }
 .contract-field-item strong { font-size: 0.8125rem; color: var(--text-primary); }
 .contract-field-item span { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.5; }
 
-.flow-panel { padding: 1rem; }
-.flow-description { margin-bottom: 1rem; font-size: 0.875rem; color: var(--text-secondary); }
+.flow-panel { padding: 8px 0 0; display: grid; gap: 14px; }
+.flow-description { margin-bottom: 0; font-size: 0.875rem; color: var(--text-secondary); }
 .flow-steps { display: flex; flex-direction: column; gap: 0.75rem; }
-.flow-step { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: var(--glass-bg-light); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
-.flow-step__number { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; font-weight: 700; border-radius: var(--radius-full); }
+.flow-step { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: var(--admin-bg-surface-alt); border: 1px solid var(--admin-border-color); border-radius: var(--admin-radius-sm); }
+.flow-step__number { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: var(--color-primary); color: white; font-weight: 700; border-radius: 8px; }
 .flow-step__content { display: flex; align-items: center; gap: 0.75rem; }
 .flow-step__agent { font-weight: 600; color: var(--text-primary); }
 .flow-step__action { font-size: 0.75rem; color: var(--text-muted); }
 .flow-step__condition { margin-left: auto; }
 
-.sample-block { padding: 1rem; }
-.sample-block h4 { font-size: 0.875rem; font-weight: 700; margin-bottom: 0.75rem; }
+.sample-block { padding: 8px 0 0; display: grid; gap: 14px; }
+.sample-block h4 { font-size: 0.875rem; font-weight: 700; margin: 0; }
 .sample-json { font-family: monospace; font-size: 0.75rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: var(--radius-md); overflow: auto; max-height: 300px; }
 
-.orchestrator-run-preview { margin-top: 2rem; border-top: 1px solid rgba(52, 120, 246, 0.08); padding-top: 1.5rem; }
-.preview-run-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.orchestrator-run-preview { margin-top: 0; border-top: var(--admin-border-subtle); padding-top: 12px; display: grid; gap: 12px; }
+.preview-run-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; }
 .preview-run-header h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
-.preview-textarea :deep(.el-textarea__inner) { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.875rem; border-radius: 16px; background: rgba(52, 120, 246, 0.03); border-color: rgba(52, 120, 246, 0.08); }
+.preview-textarea :deep(.el-textarea__inner) { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.875rem; border-radius: var(--admin-radius-sm); background: var(--admin-bg-surface); border-color: var(--admin-border-color); }
 .preview-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
 
 @media (max-width: 768px) {

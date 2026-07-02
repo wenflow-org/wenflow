@@ -1,18 +1,22 @@
 <template>
   <div class="learner-models-page">
-    <div class="admin-overview-bg">
+    <div v-if="!embedded" class="admin-overview-bg">
       <div class="admin-overview-bg__orb admin-overview-bg__orb--1"></div>
       <div class="admin-overview-bg__orb admin-overview-bg__orb--2"></div>
     </div>
 
-    <div class="page-hero">
-      <span class="pill">学习诊断</span>
+    <div v-if="!embedded" class="page-hero">
       <h2 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Reading /></el-icon>
         学习者模型
       </h2>
-      <p class="page-hero__subtitle">查看用户当前学习状态、风险趋势与模型快照</p>
     </div>
+
+    <section v-else class="module-head">
+      <div class="module-head__copy">
+        <h2>学习者模型快照</h2>
+      </div>
+    </section>
 
     <div class="toolbar admin-list-toolbar">
       <div class="toolbar-left admin-list-toolbar__group">
@@ -131,6 +135,10 @@ import { Reading, Refresh } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 
+withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+});
+
 const router = useRouter();
 const loading = ref(false);
 const items = ref<any[]>([]);
@@ -160,8 +168,8 @@ const emptyStateTitle = computed(() => {
 
 const emptyStateDescription = computed(() => {
   return hasFiltersApplied.value
-    ? '可以先放宽筛选条件，或者回到列表重新查看最新快照。'
-    : '学习者模型会在产生真实学习轨迹后逐步累积，适合在这里做诊断和复盘。';
+    ? '放宽筛选条件后再试。'
+    : '学习轨迹累积后自动生成。';
 });
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -266,13 +274,52 @@ onMounted(loadData);
 </script>
 
 <style scoped>
+.module-head {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: var(--admin-border-subtle);
+}
+
+.module-head__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.module-head__kicker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--admin-text-brand);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.module-head__copy h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  color: var(--admin-text-primary);
+}
+
+.module-head__copy p {
+  margin: 0;
+  color: var(--admin-text-muted);
+  line-height: 1.6;
+}
+
 .admin-overview-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .admin-overview-bg__orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
 .admin-overview-bg__orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: admin-orb 26s ease-in-out infinite; }
 .admin-overview-bg__orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: admin-orb 30s ease-in-out infinite reverse; }
 @keyframes admin-orb { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
+.page-hero { position: relative; z-index: 1; padding: 4px 4px 16px; border: none; border-bottom: var(--admin-border-subtle); background: transparent; backdrop-filter: none; margin-bottom: 1rem; }
 .page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
@@ -281,15 +328,15 @@ onMounted(loadData);
   position: relative;
   z-index: 1;
   overflow-x: auto;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72));
-  backdrop-filter: blur(12px);
-  box-shadow: 0 12px 28px rgba(31, 87, 204, 0.08);
-  padding: 4px;
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-bg-surface);
+  backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
 }
 
-.toolbar { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; border: 1px solid rgba(52, 120, 246, 0.08); border-radius: 18px; backdrop-filter: blur(12px); padding: 16px 18px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(244, 247, 252, 0.72)); box-shadow: 0 10px 24px rgba(31, 87, 204, 0.06); }
+.toolbar { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; border: var(--admin-border-subtle); border-radius: var(--admin-radius-md); backdrop-filter: none; padding: 12px 16px; background: var(--admin-bg-surface-alt); box-shadow: none; }
 .toolbar-left { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .toolbar-right { display: flex; gap: 12px; }
 .pagination-container { position: relative; z-index: 1; display: flex; justify-content: flex-end; margin-top: 16px; }

@@ -2,7 +2,6 @@
 import { logger } from '../../utils/logger';
 import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
 import { StudentStateAssessment } from './state-assessment.service';
-import prisma from '../../config/database';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 
 // AI 配置 - 主模型
@@ -977,31 +976,6 @@ ${params.previousWeeks.map(w => `Week ${w.weekNumber}: ${w.title} (${w.completed
           requestPath: '/services/ai/design-week-courses'
         }
       );
-
-// 记录 Agent 调用日志（课程设计）
-      try {
-        await prisma.agent_call_logs.create({
-          data: {
-            id: `acl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-            agentId: 'course-design',
-            userId: params.userId || 'system',
-            sourceEntry: 'platform',
-            input: JSON.stringify({ weekNumber: params.weekNumber, prompt: userMessage.substring(0, 500) }),
-            output: JSON.stringify({ reply: response.choices[0]?.message?.content?.substring(0, 500) }),
-            success: true,
-            durationMs: Date.now() - startTime,
-            tokensUsed: response.usage?.total_tokens,
-            calledAt: new Date(),
-            metadata: JSON.stringify({
-              action: 'designWeekCourses',
-              model: COURSE_DESIGN_MODEL,
-              weekNumber: params.weekNumber
-            })
-          }
-        });
-      } catch (logError) {
-        logger.error('记录课程设计调用日志失败:', logError);
-      }
 
       // 检查响应是否有效
       if (!response.choices || response.choices.length === 0) {

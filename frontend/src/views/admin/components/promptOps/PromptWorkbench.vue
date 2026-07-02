@@ -228,6 +228,14 @@
               <el-icon><Connection /></el-icon>
               插入字段引用
             </el-button>
+            <el-button 
+              size="small" 
+              :type="showFieldSidebar ? 'primary' : ''"
+              @click="showFieldSidebar = !showFieldSidebar"
+            >
+              <el-icon><Menu /></el-icon>
+              {{ showFieldSidebar ? '隐藏' : '显示' }}字段侧边栏
+            </el-button>
             <el-button v-if="dirty" size="small" @click="discardDraft">
               <el-icon><Close /></el-icon>
               放弃改动
@@ -243,21 +251,70 @@
               保存并编译 (热更换)
             </el-button>
           </div>
-          <el-input
-            ref="sourceEditorRef"
-            v-model="draftSource"
-            type="textarea"
-            :autosize="{ minRows: 22, maxRows: 36 }"
-            resize="vertical"
-            placeholder="按 PROMPT_AUTHORING_PROTOCOL v1.2 协议书写: ## 身份定义 / ## 输入说明 / ## 执行规则 / ## 输出规格 ..."
-            class="workbench-source-editor"
-          />
-          <div class="workbench-source-stats">
-            <span>字符: {{ draftSource.length }}</span>
-            <span v-if="info">源 hash: <code>{{ shortHash(currentDraftHashPreview) }}</code></span>
-            <span v-if="dirty" class="workbench-source-stats__dirty">
-              有未保存改动 (Ctrl/Cmd+S 保存)
-            </span>
+
+          <!-- 编辑器 + 侧边栏布局 -->
+          <div class="editor-with-sidebar">
+            <!-- 主编辑区 -->
+            <div class="editor-main">
+              <el-input
+                ref="sourceEditorRef"
+                v-model="draftSource"
+                type="textarea"
+                :autosize="{ minRows: 22, maxRows: 36 }"
+                resize="vertical"
+                placeholder="按 PROMPT_AUTHORING_PROTOCOL v1.2 协议书写: ## 身份定义 / ## 输入说明 / ## 执行规则 / ## 输出规格 ..."
+                class="workbench-source-editor"
+              />
+              <div class="workbench-source-stats">
+                <span>字符: {{ draftSource.length }}</span>
+                <span v-if="info">源 hash: <code>{{ shortHash(currentDraftHashPreview) }}</code></span>
+                <span v-if="dirty" class="workbench-source-stats__dirty">
+                  有未保存改动 (Ctrl/Cmd+S 保存)
+                </span>
+              </div>
+            </div>
+
+            <!-- 字段引用侧边栏 -->
+            <div v-if="showFieldSidebar" class="field-sidebar">
+              <div class="field-sidebar__header">
+                <h4>可引用字段</h4>
+                <el-input
+                  v-model="fieldSearchQuery"
+                  size="small"
+                  placeholder="搜索字段..."
+                  clearable
+                  :prefix-icon="Search"
+                />
+              </div>
+
+              <div class="field-sidebar__content">
+                <template v-if="upstreamSkillsFields.length > 0">
+                  <div 
+                    v-for="skillGroup in filteredUpstreamFields" 
+                    :key="skillGroup.skillId" 
+                    class="field-group"
+                  >
+                    <div class="field-group__header">
+                      <span class="field-group__skill">{{ skillGroup.skillLabel }}</span>
+                      <el-tag size="small" type="info">{{ skillGroup.phase }}</el-tag>
+                    </div>
+                    <div class="field-list">
+                      <div 
+                        v-for="field in skillGroup.fields" 
+                        :key="field"
+                        class="field-item"
+                        @click="insertFieldReference(field)"
+                        :title="`点击插入 ${field}`"
+                      >
+                        <el-icon class="field-item__icon"><Document /></el-icon>
+                        <span class="field-item__name">{{ field }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <el-empty v-else description="暂无可引用字段" :image-size="80" />
+              </div>
+            </div>
           </div>
           
           <!-- 快速编译状态区域 -->
@@ -492,11 +549,13 @@ import {
   Cpu,
   CopyDocument,
   Edit,
-  UploadFilled,
-  Plus,
-  Loading
-} from '@element-plus/icons-vue'
-import { adminPromptOpsApi, adminPromptLabApi, adminAgentPromptsApi } from '@/api/adminApi'
+    UploadFilled,
+    Plus,
+    Loading,
+    Menu,
+    Search
+  } from '@element-plus/icons-vue'
+  import { adminPromptOpsApi, adminPromptLabApi, adminAgentPromptsApi, adminRuntimeDefinitionsApi, adminAgentTopologyApi } from '@/api/adminApi'
 import { parseSource, serializeSource, type SourceDocument } from '@/utils/sourceParser'
 import SkillFieldPicker from './SkillFieldPicker.vue'
 import FieldTableEditor from './FieldTableEditor.vue'
@@ -597,17 +656,132 @@ const publishParams = ref<PublishParams>({
 
 // ========== Helpers ==========
 
-const pickerVisible = ref(false)
-const sourceEditorRef = ref<any>(null)
-const dirty = computed(() => draftSource.value !== lastSavedSource.value)
+  const pickerVisible = ref(false)
+  const sourceEditorRef = ref<any>(null)
+  const dirty = computed(() => draftSource.value !== lastSavedSource.value)
 
-const stepDone = (key: StepKey): boolean => {
-  if (key === 'edit') {
-    // 编辑步骤完成：保存了内容且编译成功
-    if (paradigm.value === 'constrained') {
-      return !!llmCompileStats.value
+  // ========== 字段引用侧边栏 ==========
+  const showFieldSidebar = ref(false)
+  const fieldSearchQuery = ref('')
+  const topologyData = ref<any>(null)
+  const agentDefinitions = ref<any[]>([])
+
+  // 获取当前 Skill 所属的 Agent 和阶段
+  const currentSkillPhase = computed(() => {
+    if (!topologyData.value || !agentId) return null
+    const nodes = topologyData.value.nodes || []
+    const currentSkill = nodes.find((n: any) => n.id === `skill:${agentId}`)
+    return currentSkill?.parentAgentId || null
+  })
+
+  // PHASES 定义（与 OrchestratorDefinitions 保持一致）
+  const PHASES = [
+    { id: 'goal', agentId: 'goal-agent', label: 'Goal 阶段', order: 1 },
+    { id: 'path', agentId: 'path-agent', label: 'Path 阶段', order: 2 },
+    { id: 'teaching', agentId: 'teaching-agent', label: 'Teaching 阶段', order: 3 },
+    { id: 'learner', agentId: 'learner-agent', label: 'Learner 阶段', order: 4 },
+    { id: 'simulation', agentId: 'simulation-agent', label: 'Simulation 阶段', order: 5 },
+  ]
+
+  // 获取上游阶段的 Skills 及其输出字段
+  const upstreamSkillsFields = computed(() => {
+    if (!topologyData.value || !currentSkillPhase.value) return []
+    
+    const currentPhase = PHASES.find(p => p.agentId === currentSkillPhase.value)
+    if (!currentPhase) return []
+    
+    // 获取所有上游阶段（order < 当前阶段）
+    const upstreamPhases = PHASES.filter(p => p.order < currentPhase.order)
+    
+    const result: Array<{
+      skillId: string
+      skillLabel: string
+      phase: string
+      fields: string[]
+    }> = []
+    
+    const nodes = topologyData.value.nodes || []
+    
+    upstreamPhases.forEach(phase => {
+      const phaseSkills = nodes.filter((n: any) => n.type === 'skill' && n.parentAgentId === phase.agentId)
+      
+      phaseSkills.forEach((skill: any) => {
+        const def = agentDefinitions.value.find((d: any) => d.id === skill.id)
+        const produces = def?.variableBindings?.produces || []
+        
+        if (produces.length > 0) {
+          result.push({
+            skillId: skill.id,
+            skillLabel: skill.label,
+            phase: phase.label,
+            fields: produces
+          })
+        }
+      })
+    })
+    
+    return result
+  })
+
+  // 过滤后的上游字段（根据搜索查询）
+  const filteredUpstreamFields = computed(() => {
+    if (!fieldSearchQuery.value.trim()) return upstreamSkillsFields.value
+    
+    const query = fieldSearchQuery.value.toLowerCase()
+    return upstreamSkillsFields.value
+      .map(group => ({
+        ...group,
+        fields: group.fields.filter(f => f.toLowerCase().includes(query))
+      }))
+      .filter(group => group.fields.length > 0)
+  })
+
+  // 插入字段引用到编辑器
+  const insertFieldReference = (fieldPath: string) => {
+    const token = `{{${fieldPath}}}`
+    const textarea = sourceEditorRef.value?.textarea as HTMLTextAreaElement | undefined
+    
+    if (textarea && typeof textarea.selectionStart === 'number') {
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const before = draftSource.value.slice(0, start)
+      const after = draftSource.value.slice(end)
+      draftSource.value = before + token + after
+      
+      requestAnimationFrame(() => {
+        textarea.focus()
+        const cursorPos = start + token.length
+        textarea.setSelectionRange(cursorPos, cursorPos)
+      })
+    } else {
+      // 如果无法获取光标位置，追加到末尾
+      draftSource.value += token
     }
-    return !dirty.value && lastSavedSource.value.length > 0 && !!info.value?.storedCompiledAt
+  }
+
+  // 加载 Agent Topology 和 Agent Definitions 数据
+  const loadTopologyAndDefinitions = async () => {
+    try {
+      const [topologyRes, definitionsRes] = await Promise.all([
+        adminAgentTopologyApi.getTopology(),
+        adminRuntimeDefinitionsApi.getAgentDefinitions()
+      ])
+      topologyData.value = topologyRes.data?.data || null
+      agentDefinitions.value = definitionsRes.data?.data || []
+    } catch (error) {
+      console.error('Failed to load topology data:', error)
+    }
+  }
+
+  // ========== End 字段引用侧边栏 ==========
+  
+  const stepDone = (key: StepKey): boolean => {
+    if (key === 'edit') {
+      // 编辑步骤完成：保存了内容且编译成功
+      if (paradigm.value === 'constrained') {
+        return !!llmCompileStats.value
+      }
+      return !dirty.value && lastSavedSource.value.length > 0 && !!info.value?.storedCompiledAt
   }
   if (key === 'review') return stepDone('edit')
   return false
@@ -952,10 +1126,11 @@ watch(() => paradigm.value, (newParadigm) => {
   }
 })
 
-onMounted(() => {
-  loadInfo()
-  // 检查是否有源文件，自动设置范式
-  checkAndSetParadigm()
+  onMounted(() => {
+    loadInfo()
+    loadTopologyAndDefinitions() // 加载 Topology 和 Definitions 数据
+    // 检查是否有源文件，自动设置范式
+    checkAndSetParadigm()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -1524,12 +1699,117 @@ const checkAndSetParadigm = async () => {
   margin-top: 16px;
 }
 
+/* ========== 字段引用侧边栏 ========== */
+.editor-with-sidebar {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.editor-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-sidebar {
+  width: 320px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  max-height: 700px;
+}
+
+.field-sidebar__header {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.field-sidebar__header h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.field-sidebar__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.field-group {
+  margin-bottom: 16px;
+}
+
+.field-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.field-group__skill {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.field-item:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.field-item__icon {
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.field-item:hover .field-item__icon {
+  color: #3b82f6;
+}
+
+.field-item__name {
+  font-size: 12px;
+  color: #374151;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  word-break: break-all;
+}
+
 @media (max-width: 1024px) {
   .workbench-steps {
     grid-template-columns: 1fr 1fr;
   }
   .compile-diff {
     grid-template-columns: 1fr;
+  }
+  .editor-with-sidebar {
+    flex-direction: column;
+  }
+  .field-sidebar {
+    width: 100%;
+    max-height: 400px;
   }
 }
 </style>

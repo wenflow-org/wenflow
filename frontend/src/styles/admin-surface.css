@@ -581,7 +581,116 @@
 .admin-summary-card--red .admin-summary-card__value { color: var(--admin-color-error); }
 
 /* ==========================================
-   12. Pagination
+   12. Section Cards / Filter Panels
+   ========================================== */
+.admin-section-card {
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-bg-surface);
+  box-shadow: none;
+}
+
+.admin-section-card--soft {
+  background: var(--admin-bg-surface-alt);
+}
+
+.admin-section-card--padded {
+  padding: var(--admin-padding-card);
+}
+
+.admin-section-card--flat {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.admin-section-card--flat.admin-section-card--padded {
+  padding: 0;
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.admin-section-head__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-section-head__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--admin-text-muted);
+}
+
+.admin-section-head__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--admin-text-primary);
+}
+
+.admin-section-head__desc {
+  margin: 0;
+  max-width: 760px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--admin-text-secondary);
+}
+
+.admin-filter-panel {
+  display: grid;
+  gap: 14px;
+  padding: var(--admin-padding-card);
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-bg-surface-alt);
+  box-shadow: none;
+}
+
+.admin-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.admin-filter-grid--wide {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-filter-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-filter-field--span-2 {
+  grid-column: span 2;
+}
+
+.admin-filter-field__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-secondary);
+}
+
+.admin-section-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+/* ==========================================
+   13. Pagination
    ========================================== */
 .admin-pagination {
   display: flex;
@@ -598,7 +707,7 @@
 }
 
 /* ==========================================
-   13. Dialog / Drawer 统一基线
+   14. Dialog / Drawer 统一基线
    ========================================== */
 
 /* --- dialog --- */
@@ -701,7 +810,7 @@
 }
 
 /* ==========================================
-   14. 响应式
+   15. 响应式
    ========================================== */
 @media (max-width: 768px) {
   .admin-page {
@@ -714,5 +823,14 @@
 
   .admin-summary-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-filter-grid,
+  .admin-filter-grid--wide {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-filter-field--span-2 {
+    grid-column: auto;
   }
 }

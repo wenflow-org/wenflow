@@ -1,19 +1,19 @@
 <template>
-  <div class="prompt-lab-page">
-    <!-- ============ Header ============ -->
-    <header class="lab-head">
-      <button class="lab-back" @click="goBack">
-        <el-icon><ArrowLeft /></el-icon>
-        <span>返回</span>
-      </button>
-      <div class="lab-title-wrapper">
-        <h1 class="lab-title">Prompt Lab</h1>
-        <span class="beta-badge">Beta</span>
-      </div>
-      <div class="lab-head-right">
-        <el-button size="small" @click="handleReset">重置</el-button>
-      </div>
-    </header>
+  <div class="admin-page prompt-lab-page">
+    <AdminPageHeader
+      title="Prompt 发布向导"
+      :highlights="promptLabHighlights"
+      dense
+    >
+      <template #actions>
+        <el-button @click="goBack">
+          <el-icon><ArrowLeft /></el-icon>
+          返回运行节点
+        </el-button>
+        <span class="beta-badge">发布向导</span>
+        <el-button @click="handleReset">重置</el-button>
+      </template>
+    </AdminPageHeader>
 
     <!-- ============ Stepper ============ -->
     <div class="stepper-bar">
@@ -38,18 +38,15 @@
     <main class="lab-body" v-if="store.currentStep === 0">
       <div class="step-content">
         <div class="step-header">
-          <h2>编译约定</h2>
+          <h2>查看编译约定</h2>
           <span class="step-badge step-badge--lock">框架约束 · 不可编辑</span>
         </div>
-        <p class="step-intro">
-          以下约定定义了编译器如何将 Lab 源文件转换为标准 Prompt。跨所有 Skill 共享。
-        </p>
         <div class="spec-card">
           <pre class="spec-text">{{ store.compileSpec || '加载中...' }}</pre>
         </div>
         <div class="step-actions">
           <el-button type="primary" size="large" @click="store.currentStep = 1">
-            已了解，选择 Skill →
+            已了解，进入源文件 →
           </el-button>
         </div>
       </div>
@@ -59,12 +56,9 @@
     <main class="lab-body" v-if="store.currentStep === 1">
       <div class="step-content">
         <div class="step-header">
-          <h2>Skill 源文件</h2>
+          <h2>编辑源文件</h2>
           <span class="step-badge">Lab 目录</span>
         </div>
-        <p class="step-intro">
-          选择要编辑的 Skill 源文件。源文件是 Skill 的完整结构化定义，包含身份、变量、规则、输出等。
-        </p>
 
         <div class="source-selector">
           <span class="selector-label">选择 Skill：</span>
@@ -112,17 +106,13 @@
     <main class="lab-body" v-if="store.currentStep === 2">
       <div class="step-content">
         <div class="step-header">
-          <h2>LLM 编译</h2>
+          <h2>生成 Prompt</h2>
           <span class="step-badge step-badge--info">AI 编译</span>
         </div>
-        <p class="step-intro">
-          将源文件提交给 LLM。编译器会保留源文件的结构和关键约束，生成标准 Prompt 格式。
-        </p>
 
-        <div class="compile-area">
           <div v-if="!store.compiledPrompt && !store.compileError && !store.compiling" class="compile-ready">
             <el-icon class="compile-icon"><MagicStick /></el-icon>
-            <p>点击下方按钮，LLM 将基于编译定义生成标准 Prompt</p>
+            <p>点击开始编译。</p>
           </div>
 
           <div v-if="store.compiling" class="compile-progress">
@@ -141,7 +131,6 @@
               </template>
             </el-alert>
           </div>
-        </div>
 
         <div class="step-actions">
           <el-button size="large" @click="store.currentStep = 1">返回修改</el-button>
@@ -179,14 +168,10 @@
     <main class="lab-body" v-if="store.currentStep === 3">
       <div class="step-content">
         <div class="step-header">
-          <h2>审核产物</h2>
+          <h2>审核结果</h2>
           <span class="step-badge step-badge--warn">验收检查</span>
         </div>
-        <p class="step-intro">
-          检查 LLM 生成的 Prompt 是否结构完整、规则保留准确、格式规范。
-        </p>
 
-        <div class="review-stats">
           <div class="review-stat">
             <span class="review-stat__val">{{ store.compileStats?.lines ?? '-' }}</span>
             <span class="review-stat__label">行数</span>
@@ -199,7 +184,6 @@
             <span class="review-stat__val">{{ store.compileStats?.chars ?? '-' }}</span>
             <span class="review-stat__label">字符</span>
           </div>
-        </div>
 
         <div class="prompt-card">
           <div class="prompt-card__header">
@@ -223,14 +207,10 @@
     <main class="lab-body" v-if="store.currentStep === 4">
       <div class="step-content">
         <div class="step-header">
-          <h2>发布运行</h2>
+          <h2>发布生效</h2>
           <span class="step-badge step-badge--success">生产环境</span>
         </div>
-        <p class="step-intro">
-          确认运行参数和 Prompt 正文。发布将覆盖生产文件并同步到 agent_prompts，旧版本自动备份。
-        </p>
 
-        <!-- 运行参数 -->
         <div class="params-card">
           <div class="params-card__title">运行参数</div>
           <div class="params-row">
@@ -312,11 +292,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Loading, MagicStick, CopyDocument, UploadFilled, Warning } from '@element-plus/icons-vue'
 import { usePromptLabStore } from '@/stores/promptLab'
+import AdminPageHeader from './components/AdminPageHeader.vue'
 import SourceView from './components/promptLab/SourceView.vue'
 
 const router = useRouter()
@@ -329,12 +310,19 @@ onMounted(() => {
 })
 
 const steps = [
-  { title: '编译约定', desc: '框架约束' },
-  { title: '源文件', desc: 'Lab 目录' },
-  { title: 'LLM 编译', desc: '生成 Prompt' },
-  { title: '审核产物', desc: '检查验收' },
-  { title: '发布运行', desc: '入库生效' }
+  { title: '查看约定' },
+  { title: '编辑源文件' },
+  { title: '生成 Prompt' },
+  { title: '审核结果' },
+  { title: '发布生效' }
 ]
+
+const promptLabHighlights = computed(() => [
+  { label: `当前步骤 ${store.currentStep + 1} / ${steps.length}`, tone: 'info' as const },
+  { label: store.skillId ? `Skill ${store.skillId}` : '待选择 Skill', tone: store.skillId ? 'success' as const : 'warning' as const },
+  { label: store.compiledPrompt ? '已生成编译产物' : '等待编译', tone: store.compiledPrompt ? 'success' as const : 'neutral' as const },
+  { label: store.compileError ? '存在编译错误' : '发布链路正常', tone: store.compileError ? 'danger' as const : 'neutral' as const }
+])
 
 function goBack() {
   router.push('/admin/skills')
@@ -370,9 +358,9 @@ async function handlePublish() {
   try {
     const result = await store.publish()
     ElMessageBox.confirm(
-      `发布成功\n\nSkill: ${store.skillId}\n新版本: v${result.version}\n\n生成文件已写回 prompts/ 目录，DB 版本已激活。\n可在 agent-registry 查看和管理版本。`,
+      `发布成功\n\nSkill: ${store.skillId}\n新版本: v${result.version}\n\n生成文件已写回 prompts/ 目录，DB 版本已激活。\n可在 Skill 目录中继续查看版本与配置。`,
       '发布成功',
-      { confirmButtonText: '打开 agent-registry', cancelButtonText: '完成', type: 'success' }
+      { confirmButtonText: '打开 Skill 目录', cancelButtonText: '完成', type: 'success' }
     ).then(() => {
       router.push('/admin/skills')
     }).catch(() => {})
@@ -391,52 +379,10 @@ function handleReset() {
 
 <style scoped>
 .prompt-lab-page {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: calc(100vh - 32px);
   background: var(--admin-bg-page);
-}
-
-.lab-head {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 24px;
-  background: var(--admin-bg-surface);
-  border-bottom: 1px solid var(--admin-border-color, #e5e7eb);
-  flex-shrink: 0;
-}
-
-.lab-back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--admin-text-secondary, #6b7280);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.lab-back:hover {
-  background: var(--admin-bg-hover, #f3f4f6);
-}
-
-.lab-title-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.lab-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--admin-text-primary, #111827);
 }
 
 .beta-badge {
@@ -449,22 +395,15 @@ function handleReset() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-radius: 6px;
+  border-radius: 999px;
   box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
-}
-
-.lab-head-right {
-  display: flex;
-  gap: 8px;
 }
 
 .stepper-bar {
   display: flex;
-  padding: 20px 24px;
-  background: var(--admin-bg-surface);
-  border-bottom: 1px solid var(--admin-border-color, #e5e7eb);
-  flex-shrink: 0;
   gap: 0;
+  padding-bottom: 14px;
+  border-bottom: var(--admin-border-subtle);
 }
 
 .step-node {
@@ -546,10 +485,9 @@ function handleReset() {
 }
 
 .lab-body {
-  flex: 1;
   display: flex;
   justify-content: center;
-  padding: 32px 24px;
+  padding: 12px 0 0;
   overflow-y: auto;
 }
 
@@ -559,6 +497,7 @@ function handleReset() {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  padding-top: 8px;
 }
 
 .step-header {
@@ -615,8 +554,8 @@ function handleReset() {
 
 .spec-card {
   padding: 20px 24px;
-  background: var(--admin-bg-surface);
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
   max-height: 460px;
   overflow-y: auto;
@@ -636,8 +575,8 @@ function handleReset() {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--admin-bg-surface);
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
 }
 
@@ -655,8 +594,8 @@ function handleReset() {
 }
 
 .source-card {
-  background: var(--admin-bg-surface);
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
   overflow: hidden;
   max-height: 520px;
@@ -705,8 +644,8 @@ function handleReset() {
 
 .compile-area {
   padding: 24px;
-  background: var(--admin-bg-surface);
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
 }
 
@@ -752,8 +691,8 @@ function handleReset() {
   align-items: center;
   gap: 4px;
   padding: 16px;
-  background: var(--admin-bg-surface);
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
 }
 
@@ -771,8 +710,8 @@ function handleReset() {
 }
 
 .prompt-card {
-  background: var(--admin-bg-surface);
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -836,6 +775,7 @@ function handleReset() {
   gap: 12px;
   justify-content: flex-end;
   padding-top: 8px;
+  border-top: var(--admin-border-subtle);
 }
 
 /* ============ Params ============ */

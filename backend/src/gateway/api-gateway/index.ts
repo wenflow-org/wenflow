@@ -25,6 +25,7 @@ export class APIGateway {
     const executionContext: ExecutionContext = {
       userId: context?.userId || caller.userId || requestContext.userId,
       traceId: context?.traceId || requestContext.traceId,
+      executionLogId: context?.executionLogId || requestContext.executionLogId,
       sessionId: context?.sessionId,
       sourceEntry: context?.sourceEntry || requestContext.sourceEntry,
       callerAgent: context?.callerAgent || caller.agentId || requestContext.callerAgent,

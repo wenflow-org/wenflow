@@ -1,5 +1,5 @@
 ﻿export const AITeachingCoordinatorRuntimeDefinition = {
-  id: 'agent:ai-teaching',
+  id: 'teaching-agent',
   displayName: 'AI Teaching Agent',
   description: 'Task -> Context Build -> Teaching Turn -> Peer/Checkpoint -> Wrapup/Advisory 的测试授课主链。',
   category: 'agent',

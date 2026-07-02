@@ -193,12 +193,19 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="最后活跃" min-width="120">
-                <template #default="{ row }">{{ formatRelativeTime(row.updatedAt) }}</template>
-              </el-table-column>
+            <el-table-column label="最后活跃" min-width="120">
+              <template #default="{ row }">{{ formatRelativeTime(row.updatedAt) }}</template>
+            </el-table-column>
 
-              <el-table-column label="操作" width="220" align="center" fixed="right">
-                <template #default="{ row }">
+            <el-table-column label="当前焦点" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="highlightedSessionId && row.id === highlightedSessionId" size="small" type="warning">当前会话</el-tag>
+                <span v-else class="muted-marker">--</span>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="操作" width="220" align="center" fixed="right">
+              <template #default="{ row }">
                   <el-button type="primary" link size="small" @click.stop="openSessionInspector(row.id)">诊断</el-button>
                   <el-button type="primary" link size="small" :disabled="!row.bindings?.goalConversationId" @click.stop="openDebugGoal(row)">调试 Goal</el-button>
                   <el-button type="danger" link size="small" @click.stop="deleteSession(row.id)">删除</el-button>
@@ -373,6 +380,8 @@ import { setProjectionToken } from '@/utils/projection'
 const router = useRouter()
 const route = useRoute()
 const profileId = route.params.profileId as string
+const routeStoryId = computed(() => String(route.params.storyId || ''))
+const routeSessionId = computed(() => typeof route.query.sessionId === 'string' ? route.query.sessionId : '')
 const profileData = ref<any>(null)
 const sessions = ref<any[]>([])
 const storySummaries = ref<any[]>([])
@@ -464,6 +473,8 @@ const selectedStorySummary = computed(() => {
   if (!selectedStoryKey.value) return storySummaries.value[0] || null
   return storySummaries.value.find((story: any, index: number) => getStoryKey(story, index) === selectedStoryKey.value) || storySummaries.value[0] || null
 })
+
+const highlightedSessionId = computed(() => routeSessionId.value)
 
 const stageProjection = computed(() => ({
   goal: sessions.value.filter((item: any) => item.bindings?.goalConversationId).length,
@@ -711,6 +722,29 @@ const normalizeSessions = (items: any[]) => {
   return Array.isArray(items) ? items.map(normalizeSession) : []
 }
 
+const syncSelectedStoryFromRoute = () => {
+  if (!storySummaries.value.length) {
+    selectedStoryKey.value = null
+    return
+  }
+
+  if (!routeStoryId.value) {
+    if (!selectedStoryKey.value) {
+      selectedStoryKey.value = getStoryKey(storySummaries.value[0], 0)
+    }
+    return
+  }
+
+  const matched = storySummaries.value.find((story: any, index: number) => {
+    const candidateId = String(story?.storyId || story?.id || story?.key || '')
+    return candidateId === routeStoryId.value || getStoryKey(story, index) === routeStoryId.value
+  })
+
+  if (matched) {
+    selectedStoryKey.value = getStoryKey(matched, storySummaries.value.indexOf(matched))
+  }
+}
+
 const loadProfile = async () => {
   loading.value = true
   try {
@@ -725,9 +759,7 @@ const loadProfile = async () => {
       if (storiesRes.data?.success) {
         storySummaries.value = Array.isArray(storiesRes.data.data?.stories) ? storiesRes.data.data.stories : []
       }
-      if (!selectedStoryKey.value && storySummaries.value.length) {
-        selectedStoryKey.value = getStoryKey(storySummaries.value[0], 0)
-      }
+      syncSelectedStoryFromRoute()
     } else {
       ElMessage.error(profileRes.data?.error || '加载失败')
     }
@@ -868,8 +900,8 @@ const handleStartSession = async (story?: any, storyIndex?: number) => {
     const payload = story ? { storyId: story.id, storyIndex } : undefined
     const res = await adminApi.startVirtualSession(profileId, payload)
     if (res.data?.success) {
-      ElMessage.success('会话已创建')
-      await loadProfile()
+      ElMessage.success('会话已创建，进入诊断控制台')
+      router.push(`/admin/virtual-session/${res.data.data?.id}`)
     }
   } catch (error: any) {
     ElMessage.error(error.message || '创建会话失败')
@@ -1071,6 +1103,10 @@ const handleUpdateProfile = async () => {
 onMounted(() => {
   loadProfile()
 })
+
+watch(() => route.params.storyId, () => {
+  syncSelectedStoryFromRoute()
+})
 </script>
 
 <style scoped>
@@ -1124,6 +1160,11 @@ onMounted(() => {
 
 .page-header__main {
   align-items: flex-start;
+}
+
+.muted-marker {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .page-header__eyebrow {

@@ -186,12 +186,18 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
   const agentId = typeof req.query.agentId === 'string' && req.query.agentId.trim() ? req.query.agentId.trim() : null;
   const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
   const pipelineRunId = typeof req.query.pipelineRunId === 'string' && req.query.pipelineRunId.trim() ? req.query.pipelineRunId.trim() : null;
+  const traceId = typeof req.query.traceId === 'string' && req.query.traceId.trim() ? req.query.traceId.trim() : null;
+  const parentExecutionId = typeof req.query.parentExecutionId === 'string' && req.query.parentExecutionId.trim()
+    ? req.query.parentExecutionId.trim()
+    : null;
 
   const rows = await prisma.prompt_call_logs.findMany({
     where: {
       ...(agentId ? { agentId } : {}),
       ...(pathId ? { pathId } : {}),
       ...(pipelineRunId ? { pipelineRunId } : {}),
+      ...(traceId ? { traceId } : {}),
+      ...(parentExecutionId ? { parentExecutionId } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -219,6 +225,8 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
       conversationId: row.conversationId,
       pipelineRunId: row.pipelineRunId,
       pipelineStepIndex: row.pipelineStepIndex,
+      traceId: (row as any).traceId,
+      parentExecutionId: (row as any).parentExecutionId,
       createdAt: row.createdAt,
     })),
   });

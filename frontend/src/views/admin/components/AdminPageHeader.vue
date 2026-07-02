@@ -58,19 +58,19 @@ defineProps<{
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 22px 26px;
-  margin-bottom: 16px;
-  border-radius: var(--admin-radius-lg);
-  border: var(--admin-border);
-  background: var(--admin-bg-surface);
-  box-shadow: var(--admin-shadow-sm);
+  padding: 4px 4px 16px;
+  margin-bottom: 8px;
+  border: none;
+  border-bottom: var(--admin-border-subtle);
+  background: transparent;
+  box-shadow: none;
   flex-wrap: wrap;
 }
 
 .admin-page-header--dense {
-  padding: 14px 20px;
-  margin-bottom: 12px;
-  border-radius: var(--admin-radius-md);
+  padding: 0 0 12px;
+  margin-bottom: 10px;
+  border-radius: 0;
   box-shadow: none;
 }
 
@@ -190,13 +190,13 @@ defineProps<{
 /* 暗色模式 */
 :global([data-theme='dark']) .admin-page-header {
   border-color: var(--admin-border-color);
-  background: var(--admin-bg-surface);
-  box-shadow: var(--admin-shadow-sm);
+  background: transparent;
+  box-shadow: none;
 }
 
 @media (max-width: 768px) {
   .admin-page-header {
-    padding: 16px 18px;
+    padding: 0 0 12px;
     gap: 12px;
   }
   .admin-page-header__title {

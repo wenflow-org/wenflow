@@ -1,5 +1,5 @@
 export const pathAgentRuntimeDefinition = {
-  id: 'agent:path-generation',
+  id: 'path-agent',
   displayName: 'Path Generation Agent',
   description: 'Goal -> Framing -> Path Agent -> Stage Designer 的主链编排。',
   category: 'agent',

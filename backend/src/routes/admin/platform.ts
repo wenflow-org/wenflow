@@ -93,6 +93,20 @@ const classifyOutputContract = (payload: any): OutputContractBucket => {
   return 'unknown';
 };
 
+const parseLogMetadata = (metadata: string | null): Record<string, any> => {
+  if (!metadata) return {};
+  try {
+    return JSON.parse(metadata);
+  } catch {
+    return {};
+  }
+};
+
+const isPathGenerationFlowEventMetadata = (metadata: string | null): boolean => {
+  const parsed = parseLogMetadata(metadata);
+  return parsed.eventType === 'path-generation-stage';
+};
+
 const summarizeOutputContracts = (rows: Array<{ output: string | null }>) => {
   const summary = {
     sampleSize: rows.length,
@@ -1598,6 +1612,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       AND: [] as any[]
     };
 
+    where.AND.push({
+      OR: [
+        { metadata: null },
+        { NOT: { metadata: { contains: '"eventType":"path-generation-stage"' } } }
+      ]
+    });
+
     if (agentName) {
       const agentIds = AGENT_NAME_TO_IDS[agentName as string];
       if (agentIds) {
@@ -1749,21 +1770,12 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       }
     };
 
-    const parseMetadata = (metadata: string | null): Record<string, any> => {
-      if (!metadata) return {};
-      try {
-        return JSON.parse(metadata);
-      } catch {
-        return {};
-      }
-    };
-
     const inferExecutionIdentity = (log: {
       agentId: string;
       callerAgent: string | null;
       metadata: string | null;
     }) => {
-      const parsed = parseMetadata(log.metadata);
+      const parsed = parseLogMetadata(log.metadata);
       const providerId = typeof parsed.providerId === 'string' ? parsed.providerId : null;
       const metadataActorType = typeof parsed.actorType === 'string' ? parsed.actorType : null;
       const metadataActorId = typeof parsed.actorId === 'string' ? parsed.actorId : null;
@@ -1932,6 +1944,98 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       success: false,
       error: {
         message: '获取 Agent 日志失败',
+        status: 500,
+      },
+    });
+  }
+});
+
+router.get('/flow-events/path-generation', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
+    const traceId = typeof req.query.traceId === 'string' && req.query.traceId.trim() ? req.query.traceId.trim() : null;
+    const status = typeof req.query.status === 'string' && req.query.status.trim() ? req.query.status.trim() : null;
+    const phase = typeof req.query.phase === 'string' && req.query.phase.trim() ? req.query.phase.trim() : null;
+
+    const where: any = {
+      AND: [
+        {
+          metadata: { contains: '"eventType":"path-generation-stage"' }
+        }
+      ]
+    };
+
+    if (pathId) {
+      where.AND.push({ metadata: { contains: `"pathId":"${pathId}"` } });
+    }
+
+    if (traceId) {
+      where.traceId = traceId;
+    }
+
+    if (status) {
+      where.AND.push({ metadata: { contains: `"status":"${status}"` } });
+    }
+
+    if (phase) {
+      where.AND.push({ metadata: { contains: `"phase":"${phase}"` } });
+    }
+
+    const rows = await prisma.agent_call_logs.findMany({
+      where,
+      orderBy: { calledAt: 'desc' },
+      take: limit,
+    });
+
+    const events = rows
+      .map((row) => {
+        const metadata = parseLogMetadata(row.metadata);
+        if (!isPathGenerationFlowEventMetadata(row.metadata)) return null;
+
+        return {
+          id: row.id,
+          traceId: row.traceId,
+          userId: row.userId,
+          agentId: row.agentId,
+          sourceEntry: row.sourceEntry || 'platform',
+          phase: metadata.phase || null,
+          status: metadata.status || null,
+          pathId: metadata.pathId || null,
+          sourceConversationId: metadata.sourceConversationId || null,
+          triggerSource: metadata.triggerSource || null,
+          durationMs: row.durationMs,
+          success: row.success,
+          error: row.error,
+          errorCode: row.errorCode,
+          input: row.input,
+          output: row.output,
+          createdAt: row.calledAt,
+          metadata,
+        };
+      })
+      .filter(Boolean);
+
+    const summary = {
+      total: events.length,
+      success: events.filter((event: any) => event.status === 'succeeded').length,
+      failed: events.filter((event: any) => event.status === 'failed').length,
+      running: events.filter((event: any) => event.status === 'started').length,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        summary,
+        events,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[admin-platform] 获取路径流程事件失败', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取路径流程事件失败',
         status: 500,
       },
     });

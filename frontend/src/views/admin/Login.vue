@@ -13,8 +13,7 @@
     <main class="auth-shell">
       <aside class="auth-brand">
         <div class="auth-brand__content">
-          <span class="auth-brand__eyebrow">WenFlow Admin</span>
-          <h1>统一查看后台数据和系统状态。</h1>
+          <h1>后台管理控制台</h1>
           <p>登录后管理用户、查看日志、调整模型与系统配置。</p>
 
           <div class="auth-brand__points">
@@ -28,23 +27,18 @@
 
       <section class="auth-panel">
         <div class="auth-card">
-          <div class="auth-card__top">
-            <span class="auth-card__pill">管理员登录</span>
-            <router-link to="/" class="auth-back-link">← 返回用户平台</router-link>
-          </div>
-
           <div class="auth-card__header">
-            <h2>进入后台</h2>
-            <p>使用管理员账号登录，进入后台管理页面。</p>
+            <h2>管理员登录</h2>
+            <p>登录后管理后台。</p>
           </div>
 
           <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="auth-form" @keyup.enter="handleLogin">
             <el-form-item label="管理员账号" prop="name">
-              <el-input v-model="loginForm.name" type="text" placeholder="请输入管理员账号" prefix-icon="User" clearable autocomplete="username" />
+              <el-input v-model="loginForm.name" type="text" placeholder="管理员账号" prefix-icon="User" clearable autocomplete="username" />
             </el-form-item>
 
             <el-form-item label="密码" prop="password">
-              <el-input v-model="loginForm.password" type="password" placeholder="请输入登录密码" prefix-icon="Lock" show-password autocomplete="current-password" />
+              <el-input v-model="loginForm.password" type="password" placeholder="密码" prefix-icon="Lock" show-password autocomplete="current-password" />
             </el-form-item>
 
             <div class="auth-meta">
@@ -78,9 +72,9 @@ const formRef = ref<FormInstance>();
 const loading = ref(false);
 
 const adminPoints = [
-  { title: '用户管理', desc: '查看用户账号、学习路径和学习数据。' },
-  { title: '日志诊断', desc: '查看教学会话、执行日志和系统异常。' },
-  { title: '系统配置', desc: '管理 Agent、模型和后台参数。' }
+  { title: '用户管理', desc: '' },
+  { title: '日志诊断', desc: '' },
+  { title: '系统配置', desc: '' }
 ];
 
 const loginForm = reactive({

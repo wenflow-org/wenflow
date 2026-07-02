@@ -95,10 +95,10 @@ defineExpose({ startPolling, stopPolling })
 .live-log {
   display: grid;
   gap: 10px;
-  background: var(--admin-bg-surface);
-  border: 1px solid #e1e8f2;
-  border-radius: 12px;
-  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -108,6 +108,8 @@ defineExpose({ startPolling, stopPolling })
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e1e8f2;
 }
 
 .live-log__title {

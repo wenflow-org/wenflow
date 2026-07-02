@@ -3,8 +3,6 @@
  * 在教学主链判断学生需要强化时，提供同伴式讨论补强能力
  */
 
-import prisma from '../../config/database';
-import { v4 as uuidv4 } from 'uuid';
 import { ExecutionContext } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
@@ -231,25 +229,12 @@ export class PeerAgent {
       };
       return result;
     } finally {
-      try {
-        const durationMs = Date.now() - startTime;
-        await prisma.agent_call_logs.create({
-          data: {
-            id: uuidv4(),
-            agentId: AGENT_ID,
-            userId: 'system',
-            sourceEntry: 'platform',
-            success: true,
-            durationMs,
-            input: JSON.stringify(input).slice(0, 1000),
-            output: result ? JSON.stringify(result).slice(0, 500) : null,
-            error: error?.message || null,
-            calledAt: new Date(),
-          },
-        });
-      } catch (logError) {
-        logger.error('[PeerReinforcementSkill] 日志记录失败', { logError });
-      }
+      const durationMs = Date.now() - startTime;
+      logger.debug('[PeerReinforcementSkill] 执行结束', {
+        durationMs,
+        success: !error,
+        error: error?.message || null,
+      });
     }
   }
 

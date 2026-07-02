@@ -10,13 +10,13 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 1rem;
-  padding: var(--admin-padding-card);
-  border-radius: var(--admin-radius-card);
-  border: var(--admin-border);
-  background: var(--admin-bg-surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: var(--admin-shadow-xs);
+  padding: var(--admin-padding-card-compact);
+  border-radius: var(--admin-radius-md);
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface-alt);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
   position: relative;
   z-index: 1;
 }
@@ -53,19 +53,29 @@
   overflow-x: auto;
   width: 100%;
   max-width: 100%;
-  padding: 0.25rem;
-  border-radius: var(--admin-radius-card);
-  border: var(--admin-border);
+  padding: 0;
+  border-radius: var(--admin-radius-md);
+  border: var(--admin-border-subtle);
   background: var(--admin-bg-surface);
-  box-shadow: var(--admin-shadow-xs);
+  box-shadow: none;
   position: relative;
   z-index: 1;
+  overflow: hidden;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.admin-list-card--flat {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .admin-list-card .el-table {
   width: 100%;
-  border-radius: 10px;
+  border-radius: inherit;
   overflow: hidden;
   --el-table-bg-color: transparent;
   --el-bg-color: transparent;

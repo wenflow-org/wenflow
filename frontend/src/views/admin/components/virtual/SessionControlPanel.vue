@@ -254,16 +254,18 @@ const bridgeActions = computed(() => {
 .session-control-panel {
   display: grid;
   gap: 14px;
-  padding: 14px;
-  background: var(--admin-bg-surface);
-  border: 1px solid #e1e8f2;
-  border-radius: 12px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .control-panel__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e1e8f2;
 }
 
 .control-panel__title {
@@ -402,10 +404,11 @@ const bridgeActions = computed(() => {
 
 .control-panel__config,
 .control-panel__danger {
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
-  background: #fafbfc;
-  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid #e1e8f2;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0 0;
 }
 
 .control-panel__config summary,

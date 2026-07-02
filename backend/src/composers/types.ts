@@ -10,6 +10,8 @@ export interface PromptCallContext {
   conversationId?: string;
   pipelineRunId?: string;
   pipelineStepIndex?: number;
+  traceId?: string;
+  parentExecutionId?: string;
   systemPromptOverride?: string;
 }
 

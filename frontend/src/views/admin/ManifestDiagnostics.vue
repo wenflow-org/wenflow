@@ -1,37 +1,48 @@
 <template>
-  <div class="manifest-diagnostics-page" v-loading="loading">
-    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
+  <div class="admin-page manifest-diagnostics-page" v-loading="loading">
+    <AdminPageHeader
+      kicker="Architecture Diagnostics"
+      title="Agent 架构诊断"
+      desc="排查 manifest、注册表和协议漂移。"
+      :icon="WarningFilled"
+      :highlights="manifestHighlights"
+    >
+      <template #actions>
+        <el-button type="primary" :loading="loading" @click="loadData">刷新诊断</el-button>
+      </template>
+    </AdminPageHeader>
 
-    <div class="page-hero">
-      <span class="pill">高级诊断</span>
-      <h2 class="page-hero__title">
-        <el-icon class="page-hero__icon"><WarningFilled /></el-icon>
-        Agent 架构诊断
-      </h2>
-      <p class="page-hero__subtitle">用于排查 manifest、注册表、模型配置与日志协议漂移（工程治理）</p>
-    </div>
-
-    <div class="toolbar">
-      <el-button type="primary" :loading="loading" @click="loadData">刷新诊断</el-button>
-    </div>
+    <section class="manifest-intro">
+      <div class="manifest-intro__copy">
+        <span class="manifest-intro__kicker">Diagnostic Scope</span>
+        <h3>工程诊断总览</h3>
+        <p>统一查看 manifest、注册表、模型配置和日志样本之间的结构漂移。</p>
+      </div>
+      <div class="manifest-intro__stats">
+        <article class="manifest-intro-card">
+          <span>当前状态</span>
+          <strong>{{ diagnostics ? '已加载诊断结果' : '等待诊断结果' }}</strong>
+        </article>
+        <article class="manifest-intro-card">
+          <span>漂移关注</span>
+          <strong>{{ diagnostics ? `${diagnostics.summary.driftCount} 项` : '待加载' }}</strong>
+        </article>
+      </div>
+    </section>
 
     <div v-if="diagnostics" class="content-grid">
-      <el-card class="panel-card" shadow="never">
-        <template #header>
-          <div class="card-header">总览</div>
-        </template>
+      <section class="diagnostic-section">
+        <div class="card-header">总览</div>
         <div class="summary-grid">
           <div class="summary-item" v-for="item in summaryItems" :key="item.label">
             <span class="label">{{ item.label }}</span>
             <strong class="value">{{ item.value }}</strong>
           </div>
         </div>
-      </el-card>
+      </section>
 
-      <el-card class="panel-card" shadow="never">
-        <template #header>
-          <div class="card-header">漂移详情</div>
-        </template>
+      <section class="diagnostic-section">
+        <div class="card-header">漂移详情</div>
 
         <div class="drift-list">
           <div class="drift-item" v-for="item in driftItems" :key="item.label">
@@ -57,12 +68,10 @@
             </div>
           </div>
         </div>
-      </el-card>
+      </section>
 
-      <el-card class="panel-card" shadow="never">
-        <template #header>
-          <div class="card-header">输出协议健康度</div>
-        </template>
+      <section class="diagnostic-section">
+        <div class="card-header">输出协议健康度</div>
 
         <el-table :data="outputContractRows" size="small" empty-text="暂无输出协议样本" stripe>
           <el-table-column prop="source" label="来源" min-width="160" />
@@ -94,12 +103,10 @@
             </template>
           </el-table-column>
         </el-table>
-      </el-card>
+      </section>
 
-      <el-card class="panel-card" shadow="never">
-        <template #header>
-          <div class="card-header">Alias 漂移</div>
-        </template>
+      <section class="diagnostic-section">
+        <div class="card-header">Alias 漂移</div>
 
         <el-table :data="aliasRows" size="small" empty-text="无 alias 漂移" stripe>
           <el-table-column prop="type" label="来源" width="120" />
@@ -107,12 +114,10 @@
           <el-table-column prop="canonicalId" label="规范 ID" min-width="220" />
           <el-table-column prop="calls" label="调用数" width="100" />
         </el-table>
-      </el-card>
+      </section>
 
-      <el-card class="panel-card" shadow="never">
-        <template #header>
-          <div class="card-header">样本数据</div>
-        </template>
+      <section class="diagnostic-section">
+        <div class="card-header">样本数据</div>
         <div class="sample-grid">
           <div class="sample-item">
             <div class="sample-title">注册表（前 8）</div>
@@ -133,7 +138,7 @@
             </div>
           </div>
         </div>
-      </el-card>
+      </section>
     </div>
     <div v-else-if="!loading" class="empty-state">
       <el-empty description="暂无诊断数据，请点击刷新" />
@@ -145,6 +150,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { WarningFilled } from '@element-plus/icons-vue';
 import { adminAgentsApi, type ManifestDiagnosticsData } from '@/api/adminApi';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
 const loading = ref(false);
@@ -204,6 +210,12 @@ const aliasRows = computed(() => {
 const sampleRegistrationIds = computed(() => diagnostics.value?.samples.registrations.slice(0, 8).map(item => item.id) || []);
 const sampleModelConfigIds = computed(() => diagnostics.value?.samples.modelConfigs.slice(0, 8).map(item => item.agentId) || []);
 const sampleCalledIds = computed(() => diagnostics.value?.samples.calledAgents.slice(0, 8).map(item => item.agentId) || []);
+const manifestHighlights = computed(() => [
+  { label: diagnostics.value ? `漂移 ${diagnostics.value.summary.driftCount}` : '等待诊断结果', tone: diagnostics.value?.summary.driftCount ? 'warning' as const : 'info' as const },
+  { label: diagnostics.value ? `Manifest ${diagnostics.value.summary.manifestTotal}` : 'Manifest 待加载', tone: 'neutral' as const },
+  { label: diagnostics.value ? `注册表 ${diagnostics.value.summary.registrationTotal}` : '注册表待加载', tone: 'neutral' as const },
+  { label: diagnostics.value ? `日志样本 ${diagnostics.value.summary.outputContractSampleSize ?? 0}` : '日志样本待加载', tone: 'success' as const }
+]);
 
 const loadData = async () => {
   loading.value = true;
@@ -223,50 +235,98 @@ onMounted(loadData);
 
 <style scoped>
 .manifest-diagnostics-page {
-  padding: 0;
   position: relative;
 }
 
-/* Background orbs */
-.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
-@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
+.manifest-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: var(--admin-border-subtle);
+}
 
-/* Hero */
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; display: inline-flex; align-items: center; gap: 0.5rem; }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.page-hero__icon { color: var(--color-primary); }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+.manifest-intro__copy {
+  display: grid;
+  gap: 6px;
+}
 
-.toolbar {
-  margin-bottom: 1rem;
-  position: relative;
-  z-index: 1;
+.manifest-intro__kicker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--admin-text-brand);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.manifest-intro__copy h3 {
+  margin: 0;
+  color: var(--admin-text-primary);
+  font-size: 1.04rem;
+}
+
+.manifest-intro__copy p {
+  margin: 0;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.manifest-intro__stats {
+  display: grid;
+  gap: 0;
+  padding: 4px;
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-bg-surface-alt);
+}
+
+.manifest-intro-card {
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.manifest-intro-card + .manifest-intro-card {
+  border-top: var(--admin-border-subtle);
+}
+
+.manifest-intro-card span {
+  color: var(--admin-text-muted);
+  font-size: 11px;
+}
+
+.manifest-intro-card strong {
+  color: var(--admin-text-primary);
+  font-size: 14px;
 }
 
 .content-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-  gap: 1rem;
+  gap: 20px 24px;
   position: relative;
   z-index: 1;
 }
 
-/* Panel glass cards */
-.panel-card {
-  border-radius: 20px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+.diagnostic-section {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding-top: 16px;
+  border-top: var(--admin-border-subtle);
 }
 
 .card-header {
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: 700;
+  color: var(--admin-text-primary);
 }
 
 .summary-grid {
@@ -279,9 +339,9 @@ onMounted(loadData);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 1px solid var(--border-light);
-  border-left: 3px solid var(--color-primary);
-  border-radius: var(--fluent-radius-md);
+  border: 1px solid var(--admin-border-color);
+  border-left: 3px solid var(--admin-color-info);
+  border-radius: var(--admin-radius-sm);
   padding: 0.65rem 0.8rem;
   transition: border-color 0.2s;
 }
@@ -291,12 +351,12 @@ onMounted(loadData);
 }
 
 .summary-item .label {
-  color: var(--text-secondary);
+  color: var(--admin-text-secondary);
   font-size: 0.88rem;
 }
 
 .summary-item .value {
-  color: var(--text-primary);
+  color: var(--admin-text-primary);
   font-size: 1rem;
 }
 
@@ -307,8 +367,8 @@ onMounted(loadData);
 }
 
 .drift-item {
-  border: 1px solid var(--border-light);
-  border-radius: var(--fluent-radius-md);
+  border: 1px solid var(--admin-border-color);
+  border-radius: var(--admin-radius-sm);
   padding: 0.75rem;
 }
 
@@ -320,7 +380,7 @@ onMounted(loadData);
 }
 
 .drift-label {
-  color: var(--text-primary);
+  color: var(--admin-text-primary);
   font-weight: 500;
 }
 
@@ -331,7 +391,7 @@ onMounted(loadData);
 }
 
 .more {
-  color: var(--text-secondary);
+  color: var(--admin-text-secondary);
   font-size: 0.85rem;
   display: inline-flex;
   align-items: center;
@@ -344,34 +404,38 @@ onMounted(loadData);
 }
 
 .sample-item {
-  border: 1px dashed var(--border-default);
-  border-radius: var(--fluent-radius-md);
+  border: 1px dashed var(--admin-border-color);
+  border-radius: var(--admin-radius-sm);
   padding: 0.7rem;
 }
 
 .sample-title {
-  color: var(--text-secondary);
+  color: var(--admin-text-secondary);
   margin-bottom: 0.55rem;
   font-size: 0.88rem;
 }
 
 /* Table deep overrides */
-.panel-card :deep(.el-table) {
+.diagnostic-section :deep(.el-table) {
   border-radius: 12px;
   overflow: hidden;
 }
 
-.panel-card :deep(.el-table th.el-table__cell) {
+.diagnostic-section :deep(.el-table th.el-table__cell) {
   background: rgba(52, 120, 246, 0.04);
   font-weight: 600;
   font-size: 0.8125rem;
 }
 
-.panel-card :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+.diagnostic-section :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
   background: rgba(141, 107, 255, 0.02);
 }
 
 @media (max-width: 768px) {
+  .manifest-intro {
+    grid-template-columns: 1fr;
+  }
+
   .content-grid {
     grid-template-columns: 1fr;
   }

@@ -1,31 +1,28 @@
 <!--
   AgentTopology.vue
   ============================================================
-  路由�?admin/agents/topology
-  作用：可视化 5 Agent × N Skill 拓扑关系 + 调用统计
+  路由: /admin/agents/topology
+  作用: 可视化 5 Agent x N Skill 拓扑关系 + 调用统计
 
-  节点类型�?    - agent�? 个顶�?Agent（紫色大卡片�?    - skill：下�?Skill（白底小卡片，按 parent agent 列分布）
+  节点类型: agent (5 个顶层 Agent, 紫色大卡片) / skill (下属 Skill, 白底小卡片, 按 parent agent 列分布)
 
-  交互�?    - �?Skill 节点 �?跳转 Skill 编辑
-    - 时间窗口切换�?4h / 7d / 30d�?    - 失败率高亮（successRate < 90% 红边框）
+  交互: 点击 Skill 节点 -> 跳转 Skill 编辑, 时间窗口切换 (24h / 7d / 30d), 失败率高亮 (successRate < 90% 红边框)
 
   依赖：@vue-flow/core
 -->
 <template>
   <div class="topology-page">
     <AdminPageHeader
-      kicker="Agent 拓扑"
       title="5 Agent × 22 Skill 拓扑"
-      desc="可视化平�?5 个顶�?Agent �?22 �?Skill 的隶属关系与运行健康。点�?Skill 节点直达 Skill 编辑�?
     >
       <template #actions>
         <el-button type="primary" :icon="Grid" @click="router.push('/admin/skills')">
-          运行节点管理
+          Skill 目录
         </el-button>
         <el-radio-group v-model="range" size="default" @change="loadAll">
           <el-radio-button value="24h">24 小时</el-radio-button>
-          <el-radio-button value="7d">7 �?/el-radio-button>
-          <el-radio-button value="30d">30 �?/el-radio-button>
+          <el-radio-button value="7d">7 天</el-radio-button>
+          <el-radio-button value="30d">30 天</el-radio-button>
         </el-radio-group>
         <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
       </template>
@@ -90,8 +87,8 @@
                 <div class="lbl">调用</div>
               </div>
               <div class="stat-cell">
-                <div class="num">{{ data.stats?.successRate != null ? `${data.stats.successRate}%` : '�? }}</div>
-                <div class="lbl">成功�?/div>
+                <div class="num">{{ data.stats?.successRate != null ? `${data.stats.successRate}%` : '--' }}</div>
+                <div class="lbl">成功率</div>
               </div>
             </div>
           </div>
@@ -108,7 +105,7 @@
           >
             <div class="vf-skill-node__head">
               <span class="vf-skill-node__kind">SKILL</span>
-              <span v-if="data.noPromptFile" class="vf-skill-node__chip" title="无独�?prompt 文件，handler-only">handler</span>
+              <span v-if="data.noPromptFile" class="vf-skill-node__chip" title="无独立 prompt 文件，handler-only">handler</span>
             </div>
             <div class="vf-skill-node__title">{{ data.label }}</div>
             <div class="vf-skill-node__stats">
@@ -125,12 +122,12 @@
                 <span class="lbl">平均</span>
               </span>
             </div>
-            <div class="vf-skill-node__hint">点击进入 Skill 编辑 �?/div>
+            <div class="vf-skill-node__hint">点击进入 Skill 编辑 -></div>
           </div>
         </template>
       </VueFlow>
 
-      <el-empty v-else-if="!loading" description="�?manifest 数据" />
+      <el-empty v-else-if="!loading" description="无 manifest 数据" />
     </div>
   </div>
 </template>
@@ -158,8 +155,8 @@ const elements = ref<Array<Node | Edge>>([]);
 
 const rangeLabel = computed(() => {
   if (range.value === '24h') return '24 小时';
-  if (range.value === '30d') return '30 �?;
-  return '7 �?;
+  if (range.value === '30d') return '30 天';
+  return '7 天';
 });
 
 const AGENT_WIDTH = 260;
@@ -203,7 +200,7 @@ function buildElements(rawNodes: any[], rawEdges: any[]): Array<Node | Edge> {
     } as Node);
   });
 
-  // 每个 Agent 下方按列排下�?Skills
+  // 每个 Agent 下方按列排下属 Skills
   const agentIndex = new Map(agents.map((a, i) => [a.id, i]));
   const skillCountPerAgent = new Map<string, number>();
 
@@ -245,7 +242,7 @@ function buildElements(rawNodes: any[], rawEdges: any[]): Array<Node | Edge> {
 }
 
 function openSkillWorkbench(data: any) {
-  router.push({ name: 'AdminAgentEditor', params: { agentId: data.id } });
+  router.push({ name: 'AdminAgentEditor', params: { agentId: (data.id || '').replace(/^skill:/, '') } });
 }
 
 onMounted(() => {
@@ -262,7 +259,7 @@ onMounted(() => {
   min-height: 100%;
 }
 
-/* 页头�?AdminPageHeader 组件统一管理 */
+/* 页头由 AdminPageHeader 组件统一管理 */
 
 .health-strip {
   display: grid;

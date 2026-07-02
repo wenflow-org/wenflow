@@ -1,77 +1,56 @@
 <template>
-  <div class="execution-logs-page">
-    <div class="page-hero">
-      <h2 class="page-hero__title">
-        <el-icon class="title-icon"><Cpu /></el-icon>
-        运行执行日志
-      </h2>
-      <p class="page-hero__subtitle">查看运行节点的真实执行链路：从哪里触发、执行是否成功、输入输出是什么，以及是否需要继续下钻到 Prompt 调用日志。</p>
-    </div>
+  <div class="admin-page execution-logs-page">
+    <AdminPageHeader
+      title="运行执行日志"
+      :icon="Cpu"
+      :highlights="executionHighlights"
+    >
+      <template #actions>
+        <el-button @click="loadLogs" :loading="loading">
+          <el-icon><Refresh /></el-icon>
+          刷新列表
+        </el-button>
+        <el-button type="primary" plain @click="handleExport">
+          <el-icon><Download /></el-icon>
+          导出当前页
+        </el-button>
+      </template>
+    </AdminPageHeader>
 
-    <!-- 统计信息 -->
-    <div class="stats-bar" v-if="pagination.total > 0">
-      <div class="stat-item">
-        <span class="stat-label">总日志数</span>
-        <span class="stat-value">{{ formatNumber(stats.total) }}</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item success" @click="setFilter('status', 'success')">
-        <span class="stat-dot success"></span>
-        <span class="stat-label">成功</span>
-        <span class="stat-value">{{ formatNumber(stats.success) }}</span>
-        <span class="stat-percent">({{ calculatePercent(stats.success, stats.total) }}%)</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item error" @click="setFilter('status', 'error')">
-        <span class="stat-dot error"></span>
-        <span class="stat-label">失败</span>
-        <span class="stat-value">{{ formatNumber(stats.error) }}</span>
-        <span class="stat-percent">({{ calculatePercent(stats.error, stats.total) }}%)</span>
-      </div>
-      <div class="stat-divider"></div>
-<div class="stat-item warning" @click="setFilter('status', 'timeout')">
-          <span class="stat-dot warning"></span>
-          <span class="stat-label">超时</span>
-          <span class="stat-value">{{ formatNumber(stats.timeout) }}</span>
-          <span class="stat-percent">({{ calculatePercent(stats.timeout, stats.total) }}%)</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-item user" @click="setFilter('sourceEntry', 'user')">
-          <span class="stat-dot user"></span>
-          <span class="stat-label">用户侧</span>
-          <span class="stat-value">{{ stats.bySource?.user || 0 }}</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-item test" @click="setFilter('sourceEntry', 'test')">
-          <span class="stat-dot test"></span>
-          <span class="stat-label">测试站点</span>
-          <span class="stat-value">{{ stats.bySource?.test || 0 }}</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-item admin" @click="setFilter('sourceEntry', 'admin')">
-          <span class="stat-dot admin"></span>
-          <span class="stat-label">Admin</span>
-          <span class="stat-value">{{ stats.bySource?.admin || 0 }}</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-item platform" @click="setFilter('sourceEntry', 'platform')">
-          <span class="stat-dot platform"></span>
-          <span class="stat-label">平台</span>
-          <span class="stat-value">{{ stats.bySource?.platform || 0 }}</span>
-        </div>
-      </div>
+    <section class="admin-summary-grid" v-if="pagination.total > 0">
+      <article class="admin-summary-card admin-summary-card--blue">
+        <div class="admin-summary-card__label">总日志数</div>
+        <strong class="admin-summary-card__value">{{ formatNumber(stats.total) }}</strong>
+        <div class="stats-summary-meta">本页 {{ logs.length }} 条</div>
+      </article>
+      <button type="button" class="admin-summary-card admin-summary-card--green stats-summary-button" @click="setFilter('status', 'success')">
+        <div class="admin-summary-card__label">成功</div>
+        <strong class="admin-summary-card__value">{{ formatNumber(stats.success) }}</strong>
+        <div class="stats-summary-meta">{{ calculatePercent(stats.success, stats.total) }}% 成功率</div>
+      </button>
+      <button type="button" class="admin-summary-card admin-summary-card--red stats-summary-button" @click="setFilter('status', 'error')">
+        <div class="admin-summary-card__label">失败</div>
+        <strong class="admin-summary-card__value">{{ formatNumber(stats.error) }}</strong>
+        <div class="stats-summary-meta">{{ calculatePercent(stats.error, stats.total) }}% 失败率</div>
+      </button>
+      <button type="button" class="admin-summary-card admin-summary-card--orange stats-summary-button" @click="setFilter('status', 'timeout')">
+        <div class="admin-summary-card__label">超时</div>
+        <strong class="admin-summary-card__value">{{ formatNumber(stats.timeout) }}</strong>
+        <div class="stats-summary-meta">{{ calculatePercent(stats.timeout, stats.total) }}% 超时率</div>
+      </button>
+    </section>
 
-    <!-- 筛选器 -->
-    <div class="filter-section">
-      <div class="filter-section__intro">
-        <div>
-          <h3>链路筛选</h3>
-          <p>先按节点、Trace、会话、来源和状态收窄问题范围，再查看单次执行详情。</p>
+
+
+    <section class="admin-filter-panel">
+      <div class="admin-section-head">
+        <div class="admin-section-head__copy">
+          <h3 class="admin-section-head__title">链路筛选</h3>
         </div>
       </div>
-      <div class="filter-row">
-        <div class="filter-item">
-          <label>Agent</label>
+      <div class="admin-filter-grid admin-filter-grid--wide">
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">Agent</label>
           <el-select
             v-model="filters.agentName"
             placeholder="全部 Agent"
@@ -87,8 +66,8 @@
           </el-select>
         </div>
 
-        <div class="filter-item">
-          <label>Agent ID</label>
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">Agent ID</label>
           <el-input
             v-model="filters.agentId"
             placeholder="如 ai-teaching-agent"
@@ -97,8 +76,8 @@
           />
         </div>
 
-        <div class="filter-item">
-          <label>Trace ID</label>
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">Trace ID</label>
           <el-input
             v-model="filters.traceId"
             placeholder="链路追踪 ID"
@@ -107,8 +86,8 @@
           />
         </div>
 
-        <div class="filter-item">
-          <label>Session ID</label>
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">Session ID</label>
           <el-input
             v-model="filters.sessionId"
             placeholder="学习会话 ID"
@@ -117,8 +96,8 @@
           />
         </div>
 
-        <div class="filter-item">
-          <label>状态</label>
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">状态</label>
           <el-select
             v-model="filters.status"
             placeholder="全部状态"
@@ -137,8 +116,8 @@
           </el-select>
         </div>
 
-        <div class="filter-item">
-          <label>来源</label>
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">来源</label>
           <el-select v-model="filters.sourceEntry" placeholder="全部来源" clearable class="filter-select">
             <el-option label="用户侧" value="user" />
             <el-option label="测试站点" value="test" />
@@ -147,8 +126,8 @@
           </el-select>
         </div>
 
-        <div class="filter-item">
-          <label>精确时间</label>
+        <div class="admin-filter-field admin-filter-field--span-2">
+          <label class="admin-filter-field__label">精确时间</label>
           <el-date-picker
             v-model="filters.timeRangeExact"
             type="datetimerange"
@@ -163,8 +142,8 @@
           />
         </div>
 
-        <div class="filter-item search-item">
-          <label>搜索</label>
+        <div class="admin-filter-field admin-filter-field--span-2 search-item">
+          <label class="admin-filter-field__label">搜索</label>
           <el-input
             v-model="filters.keyword"
             placeholder="搜索输入/输出/错误..."
@@ -188,128 +167,65 @@
           </el-button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-left">
+    <div class="admin-list-toolbar">
+      <div class="admin-list-toolbar__group">
         <el-checkbox v-model="autoRefresh" size="small">
           自动刷新 ({{ refreshInterval }}s)
         </el-checkbox>
       </div>
-      <div class="toolbar-right">
-        <el-button type="default" size="small" @click="handleExport">
-          <el-icon><Download /></el-icon>
-          导出当前页
-        </el-button>
+      <div class="admin-list-toolbar__group">
+        <p class="admin-section-note">{{ activeExecutionFilterLabel }}</p>
       </div>
     </div>
 
     <!-- 日志列表 -->
-    <div class="logs-list" v-loading="loading">
-      <div
-        v-for="log in logs"
-        :key="log.id"
-        class="log-card"
-        :class="{ 'log-error': log.status === 'error', 'log-timeout': log.status === 'timeout' }"
-      >
-        <div class="log-header">
-          <div class="log-meta">
-            <span class="log-time">{{ formatDateTime(log.createdAt) }}</span>
-            <el-tag size="small" :type="getSourceTagType(log.sourceEntry)" effect="plain">
-              {{ getSourceLabel(log.sourceEntry) }}
-            </el-tag>
-            <el-tag size="small" :type="getExecutionLayerTagType(log.executionLayer)" effect="plain">
-              {{ getExecutionLayerLabel(log.executionLayer) }}
-            </el-tag>
-            <el-tag size="small" :type="getActorTypeTagType(log.actorType)" effect="plain">
-              {{ getActorTypeLabel(log.actorType) }}
-            </el-tag>
-            <el-tag size="small" :type="getAgentTagType(log.agentName)">
-              {{ getAgentDisplayName(log.agentName) }}
-            </el-tag>
-            <el-tag v-if="log.actorId && log.actorId !== log.agentId" size="small" type="info" effect="plain">
-              {{ log.actorId }}
-            </el-tag>
-            <el-tag size="small" :type="getLogStatusType(log.status)">
-              <el-icon class="status-icon" v-if="log.status === 'success'"><SuccessFilled /></el-icon>
-              <el-icon class="status-icon" v-if="log.status === 'timeout'"><Timer /></el-icon>
-              <el-icon class="status-icon" v-if="log.status === 'error' && !log.errorCode"><CircleCloseFilled /></el-icon>
-              <el-icon class="status-icon" v-if="log.errorCode === 'NETWORK_ERROR'"><Link /></el-icon>
-              <el-icon class="status-icon" v-if="log.errorCode === 'VALIDATION_ERROR'"><WarningFilled /></el-icon>
-              <el-icon class="status-icon" v-if="log.errorCode === 'MODEL_ERROR'"><Service /></el-icon>
-              {{ getLogStatusText(log.status) }}
-            </el-tag>
-            <span class="log-action" :class="getActionClass(log.action, log.status)">{{ log.action }}</span>
-          </div>
-          <div class="log-duration">
-            <el-icon><Timer /></el-icon>
-            {{ formatDuration(log.durationMs) }}
-          </div>
-        </div>
-
-        <div class="log-preview">
-          <div class="preview-row" v-if="log.input">
-            <span class="preview-label">输入:</span>
-            <pre class="preview-content">{{ truncateJson(log.input, 250) }}</pre>
-          </div>
-          <div class="preview-row" v-if="log.output && log.status === 'success'">
-            <span class="preview-label">输出:</span>
-            <pre class="preview-content">{{ truncateJson(log.output, 250) }}</pre>
-          </div>
-          <div class="preview-row error" v-if="log.error">
-            <span class="preview-label">错误:</span>
-            <span class="preview-content">{{ log.error }}</span>
-          </div>
-          <div class="preview-row preview-row--hint" v-if="log.pathId || log.phase || log.triggerSource">
-            <span class="preview-label">摘要:</span>
-            <span class="preview-chip" v-if="log.pathId">路径 {{ log.pathId }}</span>
-            <span class="preview-chip" v-if="log.phase">阶段 {{ log.phase }}<template v-if="log.phaseStatus"> / {{ log.phaseStatus }}</template></span>
-            <span class="preview-chip" v-if="log.triggerSource">触发 {{ log.triggerSource }}</span>
-          </div>
-          <div class="preview-row" v-if="log.traceId">
-            <span class="preview-label">Trace:</span>
-            <el-button type="primary" link size="small" class="trace-link" @click="filterByTraceId(log.traceId)">
-              {{ log.traceId }}
-            </el-button>
-          </div>
-            <div class="preview-row" v-if="log.sessionId">
-              <span class="preview-label">Session:</span>
-              <span class="preview-content">{{ log.sessionId }}</span>
-            </div>
-            <div class="preview-row" v-if="log.invokerId">
-              <span class="preview-label">发起:</span>
-              <span class="preview-content">{{ getInvokerLabel(log) }}</span>
-            </div>
-            <div class="preview-row" v-if="log.providerId">
-              <span class="preview-label">Provider:</span>
-              <span class="preview-content">{{ log.providerId }}</span>
-            </div>
-          </div>
-
-        <div class="log-actions">
-          <el-button type="primary" size="small" @click="showDetail(log)">
-            <el-icon><View /></el-icon>
-            查看详情
-          </el-button>
-          <el-button
-            v-if="canOpenPromptLogs(log)"
-            type="default"
-            size="small"
-            @click="openPromptLogs(log)"
-          >
-            Prompt 调用日志
-          </el-button>
-          <el-button type="default" size="small" @click="copyLog(log)">
-            <el-icon><DocumentCopy /></el-icon>
-            复制
-          </el-button>
+    <section class="logs-shell">
+      <div class="admin-section-head logs-shell__head">
+        <div class="admin-section-head__copy">
+          <h3 class="admin-section-head__title">日志结果流</h3>
         </div>
       </div>
+      <div class="logs-shell__toolbar">
+        <span class="logs-shell__count">{{ logs.length }} 条结果</span>
+        <p class="logs-shell__note">{{ activeExecutionFilterLabel }}</p>
+      </div>
+      <div class="logs-list" v-loading="loading">
+        <div
+          v-for="log in logs"
+          :key="log.id"
+          class="log-card"
+          @click="showDetail(log)"
+        >
+          <div class="log-card__main">
+            <div class="log-card__primary">
+              <span class="log-card__time">{{ formatTime(log.createdAt) }}</span>
+              <span class="log-card__agent">{{ getAgentDisplayName(log.agentName) }}</span>
+              <span 
+                class="log-card__status-dot" 
+                :class="`log-card__status-dot--${log.status}`"
+                :title="getLogStatusText(log.status)"
+              ></span>
+            </div>
+            <div class="log-card__secondary">
+              <span class="log-card__meta" v-if="log.traceId">trace:{{ log.traceId.slice(0, 8) }}</span>
+              <span class="log-card__meta" v-if="log.sessionId">session:{{ log.sessionId.slice(0, 8) }}</span>
+              <span class="log-card__meta" v-if="log.sourceEntry">{{ getSourceLabel(log.sourceEntry) }}</span>
+            </div>
+          </div>
+          <div class="log-card__aside">
+            <span class="log-card__duration">{{ formatDuration(log.durationMs) }}</span>
+            <el-button type="primary" link size="small" class="log-card__action">
+              详情
+            </el-button>
+          </div>
+        </div>
 
       <!-- 空状态 -->
-      <el-empty v-if="!loading && logs.length === 0" description="暂无日志记录" />
-    </div>
+      <el-empty v-if="!loading && logs.length === 0" description="暂无记录" />
+      </div>
+    </section>
 
     <!-- 分页 -->
     <div class="pagination-wrapper" v-if="pagination.total > 0">
@@ -324,184 +240,196 @@
       />
     </div>
 
-    <!-- 详情弹窗 -->
-    <el-dialog
-      v-model="detailVisible"
-      title="执行详情"
-      width="min(90vw, 960px)"
-      class="detail-dialog"
+    <!-- 详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="执行日志详情"
+      size="min(72%, 1080px)"
+      direction="rtl"
       destroy-on-close
     >
-      <div v-if="selectedLog" class="detail-content">
-        <!-- 基本信息 -->
-        <div class="detail-section">
-          <h4>基本信息</h4>
-          <div class="detail-grid">
-            <div class="detail-item">
-              <label>时间:</label>
-              <span>{{ formatDateTime(selectedLog.createdAt) }}</span>
-            </div>
-            <div class="detail-item">
-              <label>Agent:</label>
-              <el-tag size="small" :type="getAgentTagType(selectedLog.agentName)">
-                {{ getAgentDisplayName(selectedLog.agentName) }}
-              </el-tag>
-            </div>
-            <div class="detail-item">
-              <label>动作:</label>
-              <span>{{ selectedLog.action }}</span>
-            </div>
-            <div class="detail-item">
-              <label>状态:</label>
-              <el-tag size="small" :type="getLogStatusType(selectedLog.status)">
-                {{ getLogStatusText(selectedLog.status) }}
-              </el-tag>
-            </div>
-            <div class="detail-item">
-              <label>耗时:</label>
-              <span>{{ formatDuration(selectedLog.durationMs) }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.traceId">
-              <label>Trace ID:</label>
-              <span>{{ selectedLog.traceId }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.sessionId">
-              <label>Session ID:</label>
-              <span>{{ selectedLog.sessionId }}</span>
-            </div>
+      <div v-if="selectedLog" class="drawer-content">
+        <!-- Hero -->
+        <div class="drawer-hero">
+          <div class="drawer-hero__status">
+            <span 
+              class="drawer-hero__status-dot" 
+              :class="`drawer-hero__status-dot--${selectedLog.status}`"
+            ></span>
+            <span class="drawer-hero__status-text">{{ getLogStatusText(selectedLog.status) }}</span>
+          </div>
+          <h2 class="drawer-hero__title">{{ getAgentDisplayName(selectedLog.agentName) }}</h2>
+          <p class="drawer-hero__subtitle">{{ formatDateTime(selectedLog.createdAt) }} • {{ formatDuration(selectedLog.durationMs) }}</p>
+        </div>
+
+        <!-- 概览网格 -->
+        <div class="drawer-overview-grid">
+          <div class="drawer-overview-item">
+            <span class="drawer-overview-item__label">Agent</span>
+            <span class="drawer-overview-item__value">{{ getAgentDisplayName(selectedLog.agentName) }}</span>
+          </div>
+          <div class="drawer-overview-item" v-if="selectedLog.action">
+            <span class="drawer-overview-item__label">动作</span>
+            <span class="drawer-overview-item__value">{{ selectedLog.action }}</span>
+          </div>
+          <div class="drawer-overview-item" v-if="selectedLog.sourceEntry">
+            <span class="drawer-overview-item__label">来源</span>
+            <span class="drawer-overview-item__value">{{ getSourceLabel(selectedLog.sourceEntry) }}</span>
+          </div>
+          <div class="drawer-overview-item" v-if="selectedLog.executionLayer">
+            <span class="drawer-overview-item__label">执行层</span>
+            <span class="drawer-overview-item__value">{{ getExecutionLayerLabel(selectedLog.executionLayer) }}</span>
           </div>
         </div>
 
-        <div class="detail-section">
-          <h4>链路信息</h4>
-          <div class="detail-grid">
-            <div class="detail-item">
-              <label>入口来源:</label>
-              <span>{{ getSourceLabel(selectedLog.sourceEntry) }}</span>
+        <!-- Tabs -->
+        <el-tabs v-model="activeTab" class="drawer-tabs">
+          <!-- 基本信息 -->
+          <el-tab-pane label="基本信息" name="basic">
+            <el-descriptions :column="2" class="drawer-descriptions">
+              <el-descriptions-item label="Trace ID" v-if="selectedLog.traceId">
+                {{ selectedLog.traceId }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Session ID" v-if="selectedLog.sessionId">
+                {{ selectedLog.sessionId }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Actor Type" v-if="selectedLog.actorType">
+                {{ getActorTypeLabel(selectedLog.actorType) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Actor ID" v-if="selectedLog.actorId">
+                {{ selectedLog.actorId }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Invoker" v-if="selectedLog.invokerId">
+                {{ getInvokerLabel(selectedLog) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Provider" v-if="selectedLog.providerId">
+                {{ selectedLog.providerId }}
+              </el-descriptions-item>
+              <el-descriptions-item label="状态码" v-if="selectedLog.statusCode">
+                {{ selectedLog.statusCode }}
+              </el-descriptions-item>
+              <el-descriptions-item label="尝试次数" v-if="selectedLog.attempts">
+                {{ selectedLog.attempts }}<template v-if="selectedLog.maxRetries"> / {{ selectedLog.maxRetries }}</template>
+              </el-descriptions-item>
+              <el-descriptions-item label="Path ID" v-if="selectedLog.pathId">
+                {{ selectedLog.pathId }}
+              </el-descriptions-item>
+              <el-descriptions-item label="阶段" v-if="selectedLog.phase">
+                {{ selectedLog.phase }}<template v-if="selectedLog.phaseStatus"> / {{ selectedLog.phaseStatus }}</template>
+              </el-descriptions-item>
+            </el-descriptions>
+            <div class="drawer-actions" v-if="canOpenPromptLogs(selectedLog)">
+              <el-button type="primary" size="small" @click="openPromptLogs(selectedLog!)">
+                打开 Prompt 调用日志
+              </el-button>
             </div>
-            <div class="detail-item">
-              <label>执行层:</label>
-              <span>{{ getExecutionLayerLabel(selectedLog.executionLayer) }}</span>
-            </div>
-            <div class="detail-item">
-              <label>主体类型:</label>
-              <span>{{ getActorTypeLabel(selectedLog.actorType) }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.actorId">
-              <label>主体 ID:</label>
-              <span>{{ selectedLog.actorId }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.invokerId">
-              <label>发起者:</label>
-              <span>{{ getInvokerLabel(selectedLog) }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.providerId">
-              <label>Provider:</label>
-              <span>{{ selectedLog.providerId }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.routeSource">
-              <label>路由来源:</label>
-              <span>{{ selectedLog.routeSource }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.statusCode !== null && selectedLog.statusCode !== undefined">
-              <label>状态码:</label>
-              <span>{{ selectedLog.statusCode }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.attempts !== null && selectedLog.attempts !== undefined">
-              <label>尝试次数:</label>
-              <span>{{ selectedLog.attempts }}<template v-if="selectedLog.maxRetries"> / {{ selectedLog.maxRetries }}</template></span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.messageCount !== null && selectedLog.messageCount !== undefined">
-              <label>消息数:</label>
-              <span>{{ selectedLog.messageCount }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.finishReason">
-              <label>Finish Reason:</label>
-              <span>{{ selectedLog.finishReason }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.phase">
-              <label>阶段:</label>
-              <span>{{ selectedLog.phase }}<template v-if="selectedLog.phaseStatus"> / {{ selectedLog.phaseStatus }}</template></span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.pathId">
-              <label>Path ID:</label>
-              <span>{{ selectedLog.pathId }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.sourceConversationId">
-              <label>Source Conversation:</label>
-              <span>{{ selectedLog.sourceConversationId }}</span>
-            </div>
-            <div class="detail-item" v-if="selectedLog.triggerSource">
-              <label>Trigger Source:</label>
-              <span>{{ selectedLog.triggerSource }}</span>
-            </div>
-          </div>
-          <div class="detail-inline-actions" v-if="canOpenPromptLogs(selectedLog)">
-            <el-button type="primary" size="small" @click="openPromptLogs(selectedLog!)">
-              打开 Prompt 调用日志
-            </el-button>
-          </div>
-        </div>
+          </el-tab-pane>
 
-        <!-- 输入 -->
-        <div class="detail-section detail-section--input" v-if="selectedLog.input">
-          <div class="section-header">
-            <h4>
-              <el-icon class="section-icon"><DocumentCopy /></el-icon>
-              输入数据
-            </h4>
-            <el-button type="primary" link size="small" @click="copyToClipboard(selectedLog.input)">
-              <el-icon><DocumentCopy /></el-icon>
-              复制
-            </el-button>
-          </div>
-          <pre class="json-block json-block--input" v-html="highlightJson(formatJson(selectedLog.input))"></pre>
-        </div>
+          <el-tab-pane label="Prompt 子日志" name="prompts">
+            <div class="prompt-child-panel" v-loading="promptLogsLoading">
+              <template v-if="promptLogs.length">
+                <div class="prompt-child-summary-grid">
+                  <div class="prompt-child-summary-card">
+                    <span class="prompt-child-summary-card__label">子日志数</span>
+                    <strong>{{ promptLogStats.total }}</strong>
+                  </div>
+                  <div class="prompt-child-summary-card">
+                    <span class="prompt-child-summary-card__label">成功</span>
+                    <strong>{{ promptLogStats.success }}</strong>
+                  </div>
+                  <div class="prompt-child-summary-card">
+                    <span class="prompt-child-summary-card__label">失败</span>
+                    <strong>{{ promptLogStats.error }}</strong>
+                  </div>
+                  <div class="prompt-child-summary-card">
+                    <span class="prompt-child-summary-card__label">异常标记</span>
+                    <strong>{{ promptLogStats.drift }}</strong>
+                  </div>
+                </div>
 
-        <!-- 输出 -->
-        <div class="detail-section detail-section--output" v-if="selectedLog.output && selectedLog.status === 'success'">
-          <div class="section-header">
-            <h4>
-              <el-icon class="section-icon"><SuccessFilled /></el-icon>
-              输出结果
-            </h4>
-            <el-button type="primary" link size="small" @click="copyToClipboard(selectedLog.output)">
-              <el-icon><DocumentCopy /></el-icon>
-              复制
-            </el-button>
-          </div>
-          <pre class="json-block json-block--output" v-html="highlightJson(formatJson(selectedLog.output))"></pre>
-        </div>
+                <div class="prompt-child-list">
+                  <article v-for="item in promptLogs" :key="item.id" class="prompt-child-card">
+                    <div class="prompt-child-card__head">
+                      <div class="prompt-child-card__meta">
+                        <strong>{{ item.agentId }}</strong>
+                        <el-tag size="small" :type="item.success ? 'success' : 'danger'">
+                          {{ item.success ? '成功' : '失败' }}
+                        </el-tag>
+                        <el-tag v-if="item.promptDrift" size="small" type="warning">异常</el-tag>
+                        <span v-if="item.systemPromptVersion" class="prompt-child-card__version">v{{ item.systemPromptVersion }}</span>
+                      </div>
+                      <span class="prompt-child-card__duration">{{ formatDuration(item.durationMs) }}</span>
+                    </div>
+                    <div class="prompt-child-card__submeta">
+                      <span>{{ formatDateTime(item.createdAt) }}</span>
+                      <span v-if="item.pipelineRunId">Run {{ item.pipelineRunId }}</span>
+                      <span v-if="item.pipelineStepIndex !== null && item.pipelineStepIndex !== undefined">步骤 {{ item.pipelineStepIndex }}</span>
+                    </div>
+                    <p class="prompt-child-card__issue">{{ describePromptLogIssue(item) }}</p>
+                    <div v-if="item.errorMessage" class="prompt-child-card__error">{{ item.errorMessage }}</div>
+                  </article>
+                </div>
+              </template>
+              <el-empty v-else description="暂无 Prompt 子日志" />
 
-        <!-- 错误 -->
-        <div class="detail-section detail-section--error" v-if="selectedLog.error">
-          <div class="section-header">
-            <h4>
-              <el-icon class="section-icon"><CircleCloseFilled /></el-icon>
-              错误信息
-            </h4>
-            <el-button type="danger" link size="small" @click="copyToClipboard(selectedLog.error)">
-              <el-icon><DocumentCopy /></el-icon>
-              复制
-            </el-button>
-          </div>
-          <pre class="error-block">{{ selectedLog.error }}</pre>
-        </div>
+              <div class="drawer-actions" v-if="selectedLog && canOpenPromptLogs(selectedLog)">
+                <el-button type="primary" plain size="small" @click="openPromptLogs(selectedLog)">
+                  打开完整 Prompt 日志
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- 输入数据 -->
+          <el-tab-pane label="输入数据" name="input" v-if="selectedLog.input">
+            <div class="drawer-code-header">
+              <el-button type="primary" link size="small" @click="copyToClipboard(selectedLog.input)">
+                <el-icon><DocumentCopy /></el-icon>
+                复制
+              </el-button>
+            </div>
+            <pre class="drawer-code-block drawer-code-block--input" v-html="highlightJson(formatJson(selectedLog.input))"></pre>
+          </el-tab-pane>
+
+          <!-- 输出结果 -->
+          <el-tab-pane label="输出结果" name="output" v-if="selectedLog.output && selectedLog.status === 'success'">
+            <div class="drawer-code-header">
+              <el-button type="primary" link size="small" @click="copyToClipboard(selectedLog.output)">
+                <el-icon><DocumentCopy /></el-icon>
+                复制
+              </el-button>
+            </div>
+            <pre class="drawer-code-block drawer-code-block--output" v-html="highlightJson(formatJson(selectedLog.output))"></pre>
+          </el-tab-pane>
+
+          <!-- 错误信息 -->
+          <el-tab-pane label="错误信息" name="error" v-if="selectedLog.error">
+            <div class="drawer-code-header">
+              <el-button type="danger" link size="small" @click="copyToClipboard(selectedLog.error)">
+                <el-icon><DocumentCopy /></el-icon>
+                复制
+              </el-button>
+            </div>
+            <pre class="drawer-code-block drawer-code-block--error">{{ selectedLog.error }}</pre>
+          </el-tab-pane>
+        </el-tabs>
       </div>
 
       <template #footer>
-        <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button type="primary" @click="exportDetail">
-          <el-icon><Download /></el-icon>
-          导出 JSON
-        </el-button>
+        <div class="drawer-footer">
+          <el-button @click="drawerVisible = false">关闭</el-button>
+          <el-button type="primary" @click="exportDetail">
+            <el-icon><Download /></el-icon>
+            导出 JSON
+          </el-button>
+        </div>
       </template>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue';
+import { computed, ref, reactive, onMounted, onUnmounted, watch } from 'vue';
 import {
   Search,
   Refresh,
@@ -517,7 +445,8 @@ import {
   Service
 } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
-import { adminAxios } from '@/api/adminApi';
+import { adminAxios, adminRuntimeDefinitionsApi } from '@/api/adminApi';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
 interface Log {
@@ -561,6 +490,22 @@ interface Pagination {
   total: number;
   page: number;
   limit: number;
+}
+
+interface PromptLog {
+  id: string;
+  agentId: string;
+  systemPromptVersion?: number | null;
+  promptDrift?: boolean;
+  success: boolean;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  durationMs: number;
+  pipelineRunId?: string | null;
+  pipelineStepIndex?: number | null;
+  traceId?: string | null;
+  parentExecutionId?: string | null;
+  createdAt: string;
 }
 
 // 状态
@@ -615,11 +560,46 @@ const autoRefresh = ref(false);
 const refreshInterval = ref(5);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-// 详情弹窗
-const detailVisible = ref(false);
+const executionHighlights = computed(() => [
+  { label: `${formatNumber(stats.total)} 条日志`, tone: 'info' as const },
+  { label: `成功 ${calculatePercent(stats.success, stats.total)}%`, tone: 'success' as const },
+  { label: `失败 ${formatNumber(stats.error)} 条`, tone: stats.error > 0 ? 'danger' as const : 'neutral' as const },
+  { label: `超时 ${formatNumber(stats.timeout)} 条`, tone: stats.timeout > 0 ? 'warning' as const : 'neutral' as const }
+]);
+
+const activeExecutionFilterLabel = computed(() => {
+  const parts = [
+    filters.agentName ? `Agent ${filters.agentName}` : '',
+    filters.agentId ? `ID ${filters.agentId}` : '',
+    filters.traceId ? `Trace ${filters.traceId}` : '',
+    filters.sessionId ? `Session ${filters.sessionId}` : '',
+    filters.status ? `状态 ${filters.status}` : '',
+    filters.sourceEntry ? `来源 ${filters.sourceEntry}` : '',
+    filters.keyword ? `关键词 ${filters.keyword}` : ''
+  ].filter(Boolean);
+
+  if (parts.length === 0) {
+  return '默认范围';
+  }
+
+  return `当前筛选：${parts.join(' / ')}`;
+});
+
+// 详情抽屉
+const drawerVisible = ref(false);
 const selectedLog = ref<Log | null>(null);
+const activeTab = ref('basic');
+const promptLogsLoading = ref(false);
+const promptLogs = ref<PromptLog[]>([]);
 const route = useRoute();
 const router = useRouter();
+
+const promptLogStats = computed(() => ({
+  total: promptLogs.value.length,
+  success: promptLogs.value.filter((item) => item.success).length,
+  error: promptLogs.value.filter((item) => !item.success).length,
+  drift: promptLogs.value.filter((item) => item.promptDrift).length,
+}));
 
 // 加载日志
 const loadLogs = async () => {
@@ -747,19 +727,55 @@ const handleSizeChange = (size: number) => {
 // 显示详情
 const showDetail = (log: Log) => {
   selectedLog.value = log;
-  detailVisible.value = true;
+  activeTab.value = 'basic';
+  drawerVisible.value = true;
+  void loadPromptLogs(log);
 };
 
-const canOpenPromptLogs = (log: Pick<Log, 'agentId' | 'pathId'> | null | undefined) => {
-  if (!log) return false;
-  return Boolean(log.agentId || log.pathId);
-};
-
-const openPromptLogs = (log: Pick<Log, 'agentId' | 'pathId'>) => {
+const buildPromptLogQuery = (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' | 'actorType' | 'executionLayer'> | null | undefined) => {
   const query: Record<string, string> = {};
+  if (!log) return query;
+  if (log.actorType === 'skill' || log.executionLayer === 'skill') {
+    query.parentExecutionId = log.id;
+  }
+  if (log.traceId) query.traceId = log.traceId;
   if (log.agentId) query.agentId = log.agentId;
   if (log.pathId) query.pathId = log.pathId;
+  return query;
+};
+
+const canOpenPromptLogs = (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' | 'actorType' | 'executionLayer'> | null | undefined) => {
+  return Object.keys(buildPromptLogQuery(log)).length > 0;
+};
+
+const openPromptLogs = (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' | 'actorType' | 'executionLayer'>) => {
+  const query = buildPromptLogQuery(log);
   router.push({ path: '/admin/prompt-call-logs', query });
+};
+
+const loadPromptLogs = async (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' | 'actorType' | 'executionLayer'>) => {
+  const query = buildPromptLogQuery(log);
+  if (!Object.keys(query).length) {
+    promptLogs.value = [];
+    return;
+  }
+
+  promptLogsLoading.value = true;
+  try {
+    const response = await adminRuntimeDefinitionsApi.getPromptCallLogs({
+      limit: 20,
+      agentId: query.agentId,
+      pathId: query.pathId,
+      traceId: query.traceId,
+      parentExecutionId: query.parentExecutionId,
+    });
+    promptLogs.value = response.data?.data || [];
+  } catch {
+    promptLogs.value = [];
+    toast.error('加载 Prompt 子日志失败');
+  } finally {
+    promptLogsLoading.value = false;
+  }
 };
 
 // 复制日志
@@ -832,6 +848,29 @@ const formatDateTime = (dateStr: string) => {
   });
 };
 
+const formatTime = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  
+  if (isToday) {
+    return date.toLocaleString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  }
+  
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+};
+
 const formatDuration = (ms: number) => {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
@@ -871,6 +910,16 @@ const highlightJson = (json: string): string => {
     .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
     .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
     .replace(/: (true|false|null)/g, ': <span class="json-bool">$1</span>');
+};
+
+const describePromptLogIssue = (log: PromptLog) => {
+  if (log.success) {
+    if (log.promptDrift) return '成功，但有异常标记。';
+    return '成功。';
+  }
+  if (log.errorMessage) return `失败：${log.errorMessage}`;
+  if (log.errorCode) return `失败，错误码 ${log.errorCode}`;
+  return '失败。';
 };
 
 // 日志状态样式
@@ -1031,526 +1080,428 @@ onUnmounted(() => {
 
 <style scoped>
 .execution-logs-page {
-  padding: 0;
   position: relative;
+  gap: 14px;
 }
 
-/* Background orbs */
-/* Hero */
-.page-hero {
-  position: relative;
-  z-index: 1;
-  padding: 18px 22px;
-  border-radius: 22px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94));
-  margin-bottom: 12px;
-  box-shadow: 0 12px 30px rgba(42, 72, 128, 0.06);
-}
-
-.page-hero__title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.page-hero__subtitle {
-  margin: 8px 0 0;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
-.title-icon {
-  font-size: 1.75rem;
-}
-
-/* 统计栏 */
-.stats-bar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(246, 249, 255, 0.95));
-  border-radius: 20px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  margin-bottom: 1rem;
-  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
-  position: relative;
-  z-index: 1;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.stats-summary-button {
+  width: 100%;
+  text-align: left;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  transition: background 0.2s;
+  transition: transform var(--admin-transition-fast), box-shadow var(--admin-transition-fast), border-color var(--admin-transition-fast);
 }
 
-.stat-item:hover {
-  background: var(--bg-muted);
+.stats-summary-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(52, 120, 246, 0.18);
 }
 
-.stat-label {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
+.stats-summary-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--admin-text-secondary);
 }
 
-.stat-value {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.stat-percent {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.stat-divider {
-  width: 1px;
-  height: 24px;
-  background: var(--border-default);
-}
-
-.stat-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.stat-dot.success {
-  background: var(--color-success);
-}
-
-.stat-dot.error {
-  background: var(--color-danger);
-}
-
-.stat-dot.warning {
-  background: var(--color-accent);
-}
-
-.stat-dot.user {
-  background: #3b82f6;
-}
-
-.stat-dot.test {
-  background: #8b5cf6;
-}
-
-.stat-dot.admin {
-  background: #f59e0b;
-}
-
-.stat-dot.platform {
-  background: #6b7280;
-}
-
-.stat-item.user:hover {
-  background: rgba(59, 130, 246, 0.1);
-}
-
-.stat-item.test:hover {
-  background: rgba(139, 92, 246, 0.1);
-}
-
-.stat-item.admin:hover {
-  background: rgba(245, 158, 11, 0.1);
-}
-
-.stat-item.platform:hover {
-  background: rgba(107, 114, 128, 0.1);
-}
-
-/* 筛选器 */
-.filter-section {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 255, 0.92));
-  padding: 16px 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  margin-bottom: 1rem;
-  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.06);
-  position: relative;
-  z-index: 1;
-}
-
-.filter-section__intro {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.filter-section__intro h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: #22344d;
-}
-
-.filter-section__intro p {
-  margin: 6px 0 0;
-  color: #7085a6;
-  font-size: 0.875rem;
-  line-height: 1.6;
-}
-
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: flex-end;
-}
-
-.filter-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.filter-item label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.filter-select {
-  width: 160px;
-}
-
-.filter-input {
-  width: 180px;
+.filter-select,
+.filter-input,
+.search-input,
+.time-picker {
+  width: 100%;
 }
 
 .search-item {
-  flex: 1;
-  min-width: 200px;
-}
-
-.search-input {
-  width: 100%;
+  min-width: 0;
 }
 
 .filter-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-/* 工具栏 */
-.toolbar {
+.logs-shell {
+  display: grid;
+  gap: 14px;
+  padding-top: 4px;
+  border-top: var(--admin-border-subtle);
+}
+
+.logs-shell__head {
+  margin-bottom: 0;
+}
+
+.logs-shell__toolbar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-  position: relative;
-  z-index: 1;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+.logs-shell__count {
+  color: var(--admin-text-primary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-/* 日志列表 */
+.logs-shell__note {
+  margin: 0;
+  color: var(--admin-text-muted);
+  font-size: 12px;
+}
+
 .logs-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  position: relative;
-  z-index: 1;
-}
-
-.log-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 255, 0.95));
-  border-radius: 18px;
-  padding: 1rem;
-  box-shadow: 0 10px 22px rgba(42, 72, 128, 0.05);
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  border-left: 4px solid transparent;
-  transition: all var(--fluent-duration-fast) var(--fluent-easing);
-}
-
-.log-card:hover {
-  box-shadow: 0 14px 28px rgba(42, 72, 128, 0.08);
-}
-
-.log-card.log-error {
-  border-left-color: var(--color-danger);
-  box-shadow: inset 3px 0 12px -4px rgba(239, 68, 68, 0.25);
-}
-
-.log-card.log-timeout {
-  border-left-color: var(--color-accent);
-  box-shadow: inset 3px 0 12px -4px rgba(245, 158, 11, 0.25);
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.log-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.log-time {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-family: monospace;
-}
-
-.log-action {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: var(--bg-muted);
-  padding: 0.125rem 0.5rem;
-  border-radius: 4px;
-  font-weight: 500;
-  border: 1px solid rgba(52, 120, 246, 0.1);
-}
-
-.log-action--invoke {
-  color: var(--color-primary);
-  background: rgba(52, 120, 246, 0.08);
-  border-color: rgba(52, 120, 246, 0.2);
-}
-
-.log-action--error {
-  color: var(--color-danger);
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.log-action--timeout {
-  color: var(--color-accent);
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.2);
-}
-
-.log-action--create {
-  color: var(--color-success);
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.log-duration {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-.log-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
-}
-
-.preview-row {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  align-items: flex-start;
-}
-
-.preview-row .preview-label {
-  flex-shrink: 0;
-  padding-top: 0.5rem;
-}
-
-.preview-row .preview-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.preview-row.error {
-  color: var(--color-danger);
-}
-
-.preview-row--hint {
-  flex-wrap: wrap;
   gap: 8px;
 }
 
-.preview-label {
-  color: var(--text-secondary);
+/* 精简日志卡片 */
+.log-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--admin-bg-surface);
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-sm);
+  cursor: pointer;
+  transition: transform var(--admin-transition-fast), border-color var(--admin-transition-fast);
+}
+
+.log-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--admin-border-hover);
+}
+
+.log-card__main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.log-card__primary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.log-card__time {
+  font-size: 13px;
+  color: var(--admin-text-secondary);
+  font-family: var(--admin-font-mono);
   font-weight: 500;
+  min-width: 80px;
+}
+
+.log-card__agent {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--admin-text-primary);
+}
+
+.log-card__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.preview-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: #2f65d9;
-  font-size: 12px;
-  font-weight: 600;
+.log-card__status-dot--success {
+  background: var(--admin-color-success);
+  box-shadow: 0 0 0 3px var(--admin-color-success-bg);
 }
 
-.preview-content {
-  color: var(--text-primary);
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 0.8125rem;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: hidden;
-  max-height: 100px;
-  background: var(--bg-subtle);
-  padding: 0.5rem;
-  border-radius: 4px;
-  margin: 0;
+.log-card__status-dot--error {
+  background: var(--admin-color-error);
+  box-shadow: 0 0 0 3px var(--admin-color-error-bg);
 }
 
-.log-actions {
+.log-card__status-dot--timeout {
+  background: var(--admin-color-warning);
+  box-shadow: 0 0 0 3px var(--admin-color-warning-bg);
+}
+
+.log-card__secondary {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
+}
+
+.log-card__meta {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+  font-family: var(--admin-font-mono);
+}
+
+.log-card__aside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.log-card__duration {
+  font-size: 13px;
+  color: var(--admin-text-secondary);
+  font-family: var(--admin-font-mono);
+  font-weight: 500;
+  min-width: 60px;
+  text-align: right;
+}
+
+.log-card__action {
+  font-size: 13px;
 }
 
 /* 分页 */
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-default);
-  position: relative;
-  z-index: 1;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: var(--admin-border-subtle);
 }
 
-/* 详情弹窗 */
-.detail-content {
-  max-height: 600px;
-  overflow-y: auto;
+/* Drawer 样式 */
+.drawer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.detail-section {
-  margin-bottom: 1.5rem;
-  border-radius: 12px;
-  overflow: hidden;
+.drawer-hero {
+  padding-bottom: 20px;
+  border-bottom: var(--admin-border-subtle);
 }
 
-.detail-section--input {
-  background: rgba(52, 120, 246, 0.03);
-  border: 1px solid rgba(52, 120, 246, 0.1);
+.drawer-hero__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.detail-section--output {
-  background: rgba(16, 185, 129, 0.03);
-  border: 1px solid rgba(16, 185, 129, 0.1);
+.drawer-hero__status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
-.detail-section--error {
-  background: rgba(239, 68, 68, 0.06);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+.drawer-hero__status-dot--success {
+  background: var(--admin-color-success);
 }
 
-.detail-section h4 {
+.drawer-hero__status-dot--error {
+  background: var(--admin-color-error);
+}
+
+.drawer-hero__status-dot--timeout {
+  background: var(--admin-color-warning);
+}
+
+.drawer-hero__status-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--admin-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.drawer-hero__title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--admin-text-primary);
+  line-height: 1.2;
+}
+
+.drawer-hero__subtitle {
   margin: 0;
-  font-size: 1rem;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  font-size: 14px;
+  color: var(--admin-text-secondary);
+  font-family: var(--admin-font-mono);
 }
 
-.detail-section--input h4 {
-  color: var(--color-primary);
-}
-
-.detail-section--output h4 {
-  color: var(--color-success);
-}
-
-.detail-section--error h4 {
-  color: var(--color-danger);
-}
-
-.section-icon {
-  font-size: 1.125rem;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.6);
-  border-bottom: 1px solid rgba(52, 120, 246, 0.06);
-}
-
-.detail-grid {
+.drawer-overview-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
-  background: var(--bg-subtle);
-  padding: 1rem;
-  border-radius: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  padding-top: 4px;
+  border-top: var(--admin-border-subtle);
 }
 
-.detail-item {
+.prompt-child-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.prompt-child-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.prompt-child-summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 12px;
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface-alt);
+}
+
+.prompt-child-summary-card__label {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+.prompt-child-summary-card strong {
+  font-size: 22px;
+  color: var(--admin-text-primary);
+}
+
+.prompt-child-list {
+  display: grid;
+  gap: 10px;
+}
+
+.prompt-child-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface);
+}
+
+.prompt-child-card__head,
+.prompt-child-card__meta,
+.prompt-child-card__submeta {
   display: flex;
-  gap: 0.5rem;
-  font-size: 0.875rem;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.detail-item label {
-  color: var(--text-secondary);
-  font-weight: 500;
+.prompt-child-card__head {
+  justify-content: space-between;
 }
 
-.detail-inline-actions {
+.prompt-child-card__submeta,
+.prompt-child-card__duration,
+.prompt-child-card__version {
+  font-size: 12px;
+  color: var(--admin-text-secondary);
+}
+
+.prompt-child-card__issue {
+  margin: 0;
+  color: var(--admin-text-primary);
+  font-size: 13px;
+}
+
+.prompt-child-card__error {
+  color: var(--admin-color-error);
+  font-size: 12px;
+}
+
+.drawer-overview-item {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-sm);
 }
 
-.json-block,
-.error-block {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  padding: 1rem;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  overflow-x: auto;
-  white-space: pre-wrap;
+.drawer-overview-item__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.drawer-overview-item__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--admin-text-primary);
   word-break: break-word;
 }
 
-.json-block--input {
-  background: rgba(52, 120, 246, 0.02);
-  border-top: 1px solid rgba(52, 120, 246, 0.06);
+.drawer-tabs {
+  margin-top: 0;
+  padding-top: 4px;
+  border-top: var(--admin-border-subtle);
 }
 
-.json-block--output {
-  background: rgba(16, 185, 129, 0.02);
-  border-top: 1px solid rgba(16, 185, 129, 0.06);
+.drawer-tabs :deep(.el-tabs__header) {
+  margin-bottom: 12px;
 }
 
-.error-block {
-  background: rgba(239, 68, 68, 0.08);
-  color: var(--color-danger-dark);
-  border-top: 1px solid rgba(239, 68, 68, 0.15);
+.drawer-descriptions :deep(.el-descriptions__body) {
+  overflow-x: auto;
+}
+
+.drawer-descriptions :deep(.el-descriptions__table) {
+  min-width: 640px;
+}
+
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: var(--admin-border-subtle);
+}
+
+.drawer-code-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.drawer-code-block {
+  background: var(--admin-bg-surface-alt);
+  color: var(--admin-text-primary);
+  padding: 16px;
+  font-family: var(--admin-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: var(--admin-radius-md);
+  border: var(--admin-border);
+}
+
+.drawer-code-block--input {
+  background: var(--admin-color-info-bg);
+  border-color: var(--admin-color-info);
+}
+
+.drawer-code-block--output {
+  background: var(--admin-color-success-bg);
+  border-color: var(--admin-color-success);
+}
+
+.drawer-code-block--error {
+  background: var(--admin-color-error-bg);
+  border-color: var(--admin-color-error);
+  color: var(--admin-color-error);
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 /* 状态点 */
@@ -1563,28 +1514,15 @@ onUnmounted(() => {
 }
 
 .status-dot.success {
-  background: var(--color-success);
+  background: var(--admin-color-success);
 }
 
 .status-dot.error {
-  background: var(--color-danger);
+  background: var(--admin-color-error);
 }
 
 .status-dot.warning {
-  background: var(--color-accent);
-}
-
-.status-icon {
-  margin-right: 4px;
-  font-size: 12px;
-  vertical-align: middle;
-  display: inline-flex;
-  align-items: center;
-}
-
-.trace-link {
-  font-family: monospace;
-  font-size: 0.75rem;
+  background: var(--admin-color-warning);
 }
 
 .time-picker {
@@ -1592,12 +1530,12 @@ onUnmounted(() => {
 }
 
 .json-key {
-  color: var(--color-primary);
+  color: var(--admin-color-info);
   font-weight: 600;
 }
 
 .json-string {
-  color: var(--color-success-dark);
+  color: var(--admin-color-success);
 }
 
 .json-number {
@@ -1605,47 +1543,35 @@ onUnmounted(() => {
 }
 
 .json-bool {
-  color: var(--color-accent);
-}
-
-/* Responsive breakpoints */
-@media (max-width: 1200px) {
-  .filter-row {
-    gap: 0.75rem;
-  }
-  .filter-select { width: 140px; }
-  .filter-input { width: 160px; }
-}
-
-@media (max-width: 1024px) {
-  .stats-bar {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .stat-divider {
-    display: none;
-  }
-  .stat-item {
-    flex: 1;
-    min-width: 120px;
-  }
-  .filter-row {
-    flex-wrap: wrap;
-  }
-  .filter-actions {
-    width: 100%;
-    display: flex;
-    justify-content: flex-end;
-  }
+  color: var(--admin-color-warning);
 }
 
 @media (max-width: 768px) {
-  .log-meta {
+  .log-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .log-card__aside {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .log-card__primary {
     flex-wrap: wrap;
   }
-  .log-header {
-    flex-direction: column;
-    gap: 0.5rem;
+
+  .filter-actions {
+    width: 100%;
+  }
+
+  .filter-actions .el-button {
+    flex: 1;
+  }
+
+  .drawer-overview-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -1,45 +1,48 @@
 <template>
-  <div class="api-config-page">
-    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
-    <div class="page-hero">
-      <span class="pill">平台配置</span>
-      <h2 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Setting /></el-icon>
-        API 管理
-      </h2>
-      <p class="page-hero__subtitle">配置服务地址、访问凭证与默认模型，统一平台的模型连接与调用基础设置。</p>
-    </div>
+  <div class="admin-page api-config-page">
+    <AdminPageHeader
+      title="API 管理"
+      :icon="Setting"
+      :highlights="apiConfigHighlights"
+    >
+      <template #actions>
+        <el-button @click="loadConfig" :loading="loading">刷新配置</el-button>
+        <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
+      </template>
+    </AdminPageHeader>
 
-    <div class="summary-grid">
-      <div class="summary-item summary-item--primary">
-        <span class="summary-label">默认模型</span>
-        <strong class="summary-value">{{ form.defaultModel || '未设置' }}</strong>
-      </div>
-      <div class="summary-item">
-        <span class="summary-label">可用模型数</span>
-        <strong class="summary-value">{{ form.availableModels.length }}</strong>
-      </div>
-      <div class="summary-item">
-        <span class="summary-label">API Key</span>
-        <strong class="summary-value">{{ form.apiKeyConfigured ? '已配置' : '未配置' }}</strong>
-      </div>
-      <div class="summary-item">
-        <span class="summary-label">模型列表来源</span>
-        <strong class="summary-value">{{ lastFetchAt ? '已拉取' : '未拉取' }}</strong>
-      </div>
-    </div>
+    <section class="admin-summary-grid">
+      <article class="admin-summary-card admin-summary-card--blue">
+        <div class="admin-summary-card__label">默认模型</div>
+        <strong class="admin-summary-card__value">{{ form.defaultModel || '未设置' }}</strong>
+        <div class="api-summary-meta">系统默认</div>
+      </article>
+      <article class="admin-summary-card admin-summary-card--green">
+        <div class="admin-summary-card__label">可用模型数</div>
+        <strong class="admin-summary-card__value">{{ form.availableModels.length }}</strong>
+        <div class="api-summary-meta">可补充</div>
+      </article>
+      <article class="admin-summary-card" :class="form.apiKeyConfigured ? 'admin-summary-card--green' : 'admin-summary-card--red'">
+        <div class="admin-summary-card__label">API Key</div>
+        <strong class="admin-summary-card__value">{{ form.apiKeyConfigured ? '已配置' : '未配置' }}</strong>
+        <div class="api-summary-meta">留空沿用</div>
+      </article>
+      <article class="admin-summary-card" :class="lastFetchAt ? 'admin-summary-card--blue' : 'admin-summary-card--orange'">
+        <div class="admin-summary-card__label">模型列表来源</div>
+        <strong class="admin-summary-card__value">{{ lastFetchAt ? '已拉取' : '未拉取' }}</strong>
+        <div class="api-summary-meta">{{ lastFetchAt || '尚未获取模型列表' }}</div>
+      </article>
+    </section>
 
     <div class="config-shell">
-      <el-card class="config-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span class="card-title">连接与模型配置</span>
-            <div class="card-actions">
-              <el-button class="api-btn api-btn--ghost" @click="loadConfig" :loading="loading">刷新</el-button>
-              <el-button class="api-btn api-btn--primary" @click="saveConfig" :loading="saving">保存配置</el-button>
-            </div>
+      <section class="config-panel config-panel--main">
+        <div class="config-panel__header">
+          <span class="card-title">连接与模型配置</span>
+          <div class="card-actions">
+            <el-button class="api-btn api-btn--ghost" @click="loadConfig" :loading="loading">刷新</el-button>
+            <el-button class="api-btn api-btn--primary" @click="saveConfig" :loading="saving">保存配置</el-button>
           </div>
-        </template>
+        </div>
 
         <el-form :model="form" label-width="160px" class="config-form">
           <div class="form-section-title">连接配置</div>
@@ -52,9 +55,9 @@
               v-model="form.apiKeyInput"
               type="password"
               show-password
-              :placeholder="form.apiKeyConfigured ? '已配置，留空则不修改' : '输入 API Key'"
+              :placeholder="form.apiKeyConfigured ? '已配置，留空不修改' : '输入 API Key'"
             />
-            <div class="hint-text">不会回显明文 Key；留空表示沿用当前 Key。</div>
+            <div class="hint-text">Key 不显示；留空沿用。</div>
           </el-form-item>
 
           <el-form-item>
@@ -74,7 +77,7 @@
               filterable
               allow-create
               default-first-option
-              placeholder="先获取模型列表，也可手动补充"
+              placeholder="选择模型"
               style="width: 100%"
             >
               <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
@@ -84,7 +87,7 @@
           <el-form-item label="手动补充模型">
             <el-input
               v-model="manualModelInput"
-              placeholder="输入模型名，多个用英文逗号分隔"
+              placeholder="model-a, model-b"
             >
               <template #append>
                 <el-button class="api-append-btn" @click="appendManualModels">添加</el-button>
@@ -98,7 +101,7 @@
               filterable
               allow-create
               default-first-option
-              placeholder="选择或输入默认模型"
+              placeholder="默认模型"
               style="width: 100%"
             >
               <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
@@ -110,7 +113,7 @@
               <div>
                 <span class="section-kicker">高级选项</span>
                 <h3>模型分工策略</h3>
-                <p>把通用默认模型与专项模型拆开管理，适合需要分别控制推理链路和评估链路的后台场景。</p>
+                 <p>配置默认和专项模型</p>
               </div>
               <div class="section-meta">
                 <span>默认：{{ form.defaultModel || '未设置' }}</span>
@@ -121,7 +124,7 @@
             <div class="flat-form-grid">
               <div class="flat-field">
                 <label>默认推理模型</label>
-                <p>用于复杂思考、路径规划和需要更多中间推理步骤的任务。</p>
+                 <p>推理默认</p>
                 <el-select
                   v-model="form.defaultReasoningModel"
                   filterable
@@ -136,7 +139,7 @@
 
               <div class="flat-field">
                 <label>默认评估模型</label>
-                <p>用于评分、结果审阅、质量判断以及简洁的结果收束任务。</p>
+                 <p>评估默认</p>
                 <el-select
                   v-model="form.defaultEvaluationModel"
                   filterable
@@ -156,7 +159,7 @@
               <div>
                 <span class="section-kicker">模型测试</span>
                 <h3>在线验证实验台</h3>
-                <p>直接发起一次真实调用，快速确认当前配置是否可用、响应速度是否正常，以及返回文本是否符合预期。</p>
+                 <p>发起真实调用</p>
               </div>
               <div class="section-meta section-meta--status" :class="{ 'is-success': modelTestResult?.success, 'is-error': modelTestResult && !modelTestResult.success }">
                 {{ modelTesting ? '测试中' : modelTestResult ? (modelTestResult.success ? '测试通过' : '测试失败') : '待执行' }}
@@ -193,20 +196,20 @@
 
                 <div class="flat-field flat-field--prompt">
                   <label>测试提示词</label>
-                  <p>建议保持一句到两句，便于快速判断返回是否正常。即时调用，不写入配置。</p>
+                   <p>仅测试，不保存</p>
                   <el-input
                     v-model="modelTestForm.prompt"
                     class="lab-textarea"
                     type="textarea"
                     :rows="5"
-                    placeholder="例如：请用一句中文确认模型测试成功。"
+                    placeholder="请输入测试提示词"
                   />
                 </div>
 
                 <div class="lab-actions">
                   <el-button class="api-btn api-btn--primary" @click="runModelTest" :loading="modelTesting">运行模型测试</el-button>
                   <div v-if="modelTestResult" class="lab-feedback" :class="{ success: modelTestResult.success, error: !modelTestResult.success }">
-                    {{ modelTestResult.success ? '已返回有效响应，可继续观察输出内容。' : modelTestResult.message }}
+                    {{ modelTestResult.success ? '测试通过，查看输出' : modelTestResult.message }}
                   </div>
                 </div>
               </div>
@@ -226,20 +229,18 @@
                 </div>
                 <div class="result-output">
                   <label>返回内容</label>
-                  <pre class="sample-json sample-json--light">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : '执行测试后，这里会展示模型返回内容。' }}</pre>
+                  <pre class="sample-json sample-json--light">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : '此处显示模型返回内容' }}</pre>
                 </div>
               </div>
             </div>
           </section>
         </el-form>
-      </el-card>
+      </section>
 
-      <el-card class="config-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span class="card-title">当前状态</span>
-          </div>
-        </template>
+      <section class="config-panel config-panel--aside">
+        <div class="config-panel__header">
+          <span class="card-title">当前状态</span>
+        </div>
 
         <div class="registration-control">
           <div>
@@ -266,15 +267,16 @@
             <div class="status-value">{{ form.defaultModel || '未设置' }}</div>
           </div>
         </div>
-      </el-card>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { Setting } from '@element-plus/icons-vue';
 import { adminApiConfigApi } from '@/api/adminApi';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
 const loading = ref(false);
@@ -311,6 +313,13 @@ const modelTestForm = reactive({
   temperature: 0.2,
   maxTokens: 256
 });
+
+const apiConfigHighlights = computed(() => [
+  { label: form.apiUrl ? '服务地址已配置' : '服务地址待配置', tone: form.apiUrl ? 'info' as const : 'warning' as const },
+  { label: form.apiKeyConfigured ? 'API Key 已就绪' : 'API Key 未配置', tone: form.apiKeyConfigured ? 'success' as const : 'danger' as const },
+  { label: `模型 ${form.availableModels.length} 个`, tone: 'neutral' as const },
+  { label: modelTestResult.value?.success ? '最近测试通过' : '建议执行在线测试', tone: modelTestResult.value?.success ? 'success' as const : 'warning' as const }
+])
 
 async function loadConfig() {
   loading.value = true;
@@ -457,33 +466,17 @@ onMounted(() => {
 
 <style scoped>
 .api-config-page {
-  padding: 0;
   position: relative;
   display: grid;
   gap: 16px;
 }
 
-/* Background orbs */
-.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
-@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
-/* Hero */
-.page-hero,
-.summary-item,
-.config-card {
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
-  box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08);
+.api-summary-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--admin-text-secondary);
 }
-
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 24px; background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94)); margin-bottom: 0; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
-.admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
-.page-hero__subtitle { margin: 6px 0 0; color: #62758f; font-size: 0.95rem; line-height: 1.65; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(52, 120, 246, 0.08); color: #2d6df2; font-size: 12px; font-weight: 700; }
 
 .summary-grid {
   position: relative;
@@ -526,19 +519,30 @@ onMounted(() => {
   gap: 16px;
 }
 
-.config-card {
-  border-radius: 24px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+.config-panel {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
 }
 
-.config-card :deep(.el-card__header) {
-  border-bottom-color: rgba(52, 120, 246, 0.06);
-  padding: 18px 24px;
+.config-panel--main {
+  padding-top: 4px;
+  border-top: var(--admin-border-subtle);
 }
 
-.config-card :deep(.el-card__body) {
-  padding: 20px 24px;
+.config-panel--aside {
+  padding: 4px 0 0 18px;
+  border-left: var(--admin-border-subtle);
+  align-content: start;
+}
+
+.config-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 12px;
+  border-bottom: var(--admin-border-subtle);
 }
 
 .card-header {
@@ -918,6 +922,13 @@ onMounted(() => {
 
   .config-shell {
     grid-template-columns: 1fr;
+  }
+
+  .config-panel--aside {
+    padding-left: 0;
+    padding-top: 16px;
+    border-left: 0;
+    border-top: var(--admin-border-subtle);
   }
 
   .section-heading {

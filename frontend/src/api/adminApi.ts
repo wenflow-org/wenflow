@@ -263,7 +263,7 @@ export interface AdminRegistryAgent {
   name: string;
   type: string;
   role?: string;
-  kind?: 'agent' | 'skill' | 'alias';
+   kind?: 'agent' | 'skill' | 'orchestrator' | 'alias';
   aliases?: string[];
   runtimeEnabled?: boolean;
   lifecycleStatus: 'draft' | 'staging' | 'published';
@@ -298,8 +298,8 @@ export interface AgentDesignDetail {
     description: string;
   };
   runtime: {
-    role: 'agent';
-    kind: 'agent' | 'alias';
+    role: 'agent' | 'orchestrator';
+    kind: 'agent' | 'orchestrator' | 'alias';
     runtimeEnabled: boolean;
     userVisible: boolean;
     monitoringGroup: string | null;
@@ -340,7 +340,17 @@ export interface AgentRelationItem {
   members: Array<{
     agentId: string;
     name: string;
-    role: 'agent';
+    role: 'agent' | 'orchestrator';
+  }>;
+}
+
+export interface OrchestratorRelationItem {
+  orchestratorId: string;
+  group: string;
+  members: Array<{
+    agentId: string;
+    name: string;
+    role: 'agent' | 'orchestrator';
   }>;
 }
 
@@ -482,6 +492,12 @@ export const adminAgentsApi = {
     return adminAxios.get<{ data: { agents: AgentRelationItem[] } }>('/admin/agents/relations');
   },
 
+  getOrchestratorRelations: async () => {
+    return adminAxios.get<{ data: { agents: OrchestratorRelationItem[]; orchestrators: OrchestratorRelationItem[] } }>(
+      '/admin/agents/relations'
+    );
+  },
+
   getAgentConfig: async (agentId: string) => {
     return adminAxios.get<{ data: {
       agentId: string;
@@ -516,6 +532,40 @@ export const adminAgentsApi = {
     );
   },
 
+  getOrchestratorConfig: async (agentId: string) => {
+    return adminAxios.get<{ data: {
+      agentId: string;
+      config: PathAgentInputConfig;
+      defaults: PathAgentInputConfig;
+      availableSourcePaths: Record<string, string[]>;
+    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config`);
+  },
+
+  getOrchestratorDataContract: async (agentId: string) => {
+    return adminAxios.get<{ data: {
+      agentId: string;
+      entryPayload: AgentDataContractSection;
+      derivedInput: AgentDataContractSection;
+      outputContract: AgentDataContractSection;
+    } }>(`/admin/agents/${encodeURIComponent(agentId)}/data-contract`);
+  },
+
+  previewOrchestratorConfig: async (agentId: string, sampleGoalFinalPayload: Record<string, any>) => {
+    return adminAxios.post<{ data: {
+      agentId: string;
+      normalizedInput: PathAgentNormalizedInputPreview;
+    } }>(`/admin/agents/${encodeURIComponent(agentId)}/config-preview`, {
+      sampleGoalFinalPayload
+    });
+  },
+
+  updateOrchestratorConfig: async (agentId: string, config: PathAgentInputConfig) => {
+    return adminAxios.put<{ data: { agentId: string; config: PathAgentInputConfig } }>(
+      `/admin/agents/${encodeURIComponent(agentId)}/config`,
+      config
+    );
+  },
+
 getManifestDiagnostics: async () => {
     return adminAxios.get<{ data: ManifestDiagnosticsData }>('/admin/manifest/diagnostics');
   },
@@ -537,13 +587,33 @@ export const adminRuntimeDefinitionsApi = {
     return adminAxios.get(`/admin/runtime-definitions/agents/${encodeURIComponent(id)}`);
   },
 
+  getOrchestratorDefinitions: async () => {
+    return adminAxios.get('/admin/runtime-definitions/orchestrators');
+  },
+
+  getOrchestratorDefinitionDetail: async (id: string) => {
+    return adminAxios.get(`/admin/runtime-definitions/orchestrators/${encodeURIComponent(id)}`);
+  },
+
   getPromptCallLogs: async (params?: {
     limit?: number;
     agentId?: string;
     pathId?: string;
     pipelineRunId?: string;
+    traceId?: string;
+    parentExecutionId?: string;
   }) => {
     return adminAxios.get('/admin/runtime-definitions/prompt-call-logs', { params });
+  },
+
+  getPathGenerationEvents: async (params?: {
+    limit?: number;
+    pathId?: string;
+    traceId?: string;
+    status?: string;
+    phase?: string;
+  }) => {
+    return adminAxios.get('/admin/flow-events/path-generation', { params });
   },
 };
 

@@ -10,10 +10,10 @@ import { pathSceneFramingRuntimeDefinition } from '../skills/path-scene-framing/
 import { stageDesignerRuntimeDefinition } from '../skills/stage-designer/definition';
 import { virtualLearnerPersonaDesignerRuntimeDefinition } from '../skills/virtual-learner-persona-designer/definition';
 import { virtualLearnerScenarioDesignerRuntimeDefinition } from '../skills/virtual-learner-scenario-designer/definition';
-import { pathOrchestratorRuntimeDefinition } from '../coordinators/path.definition';
+import { pathAgentRuntimeDefinition as pathOrchestratorRuntimeDefinition } from '../coordinators/path.definition';
 import { AITeachingCoordinatorRuntimeDefinition } from '../coordinators/ai-teaching.definition';
-import { learnerOrchestratorRuntimeDefinition } from '../coordinators/learner.definition';
-import { simulationOrchestratorRuntimeDefinition } from '../coordinators/simulation.definition';
+import { learnerAgentRuntimeDefinition as learnerOrchestratorRuntimeDefinition } from '../coordinators/learner.definition';
+import { simulationAgentRuntimeDefinition as simulationOrchestratorRuntimeDefinition } from '../coordinators/simulation.definition';
 
 dotenv.config();
 

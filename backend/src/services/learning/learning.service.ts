@@ -1606,6 +1606,8 @@ class LearningService {
           errorCode: payload.errorCode || null,
           calledAt: new Date(),
           metadata: JSON.stringify({
+            eventType: 'path-generation-stage',
+            executionLayer: 'flow-event',
             phase: payload.phase,
             status: payload.status,
             pathId: payload.pathId || null,

@@ -1,52 +1,55 @@
 <template>
-  <div class="platform-capabilities-page">
-    <div class="bg-layer" aria-hidden="true">
-      <div class="bg-orb bg-orb--1"></div>
-      <div class="bg-orb bg-orb--2"></div>
-      <div class="bg-orb bg-orb--3"></div>
-    </div>
-
-    <div class="page-hero">
-      <span class="pill">Platform</span>
-      <h2 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Grid /></el-icon>
-        平台能力管理
-      </h2>
-      <p class="page-hero__subtitle">按平台能力查看主入口、编排链与挂载组件，减少 Agent / Skill 术语混用带来的理解成本。</p>
-    </div>
-
-    <div class="summary-grid" v-if="summary">
-      <el-card class="summary-card summary-card--blue" shadow="hover">
-        <div class="label">平台能力</div>
-        <div class="value">{{ summary.capabilityCount }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--green" shadow="hover">
-        <div class="label">主运行节点</div>
-        <div class="value">{{ summary.runtimeCount }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--purple" shadow="hover">
-        <div class="label">挂载能力成员</div>
-        <div class="value">{{ summary.memberCount }}</div>
-      </el-card>
-      <el-card class="summary-card summary-card--orange" shadow="hover">
-        <div class="label">关联编排能力</div>
-        <div class="value">{{ summary.activeCount }}</div>
-      </el-card>
-    </div>
-
-    <div class="admin-list-toolbar">
-      <div class="admin-list-toolbar__group">
-        <el-input v-model="keyword" placeholder="搜索能力 / 运行节点 / 成员" clearable class="search" />
-      </div>
-      <div class="admin-list-toolbar__group">
+  <div class="admin-page platform-capabilities-page">
+    <AdminPageHeader
+      kicker="Capability Directory"
+      title="平台能力管理"
+      desc="按能力查看主入口、编排链和挂载组件。"
+      :icon="Grid"
+      :highlights="capabilityHighlights"
+    >
+      <template #actions>
         <el-button type="primary" :loading="loading" @click="loadData">
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
-      </div>
-    </div>
+      </template>
+    </AdminPageHeader>
 
-    <div class="capability-grid" v-loading="loading">
+    <section class="admin-summary-grid" v-if="summary">
+      <article class="admin-summary-card admin-summary-card--blue"><div class="admin-summary-card__label">平台能力</div><strong class="admin-summary-card__value">{{ summary.capabilityCount }}</strong></article>
+      <article class="admin-summary-card admin-summary-card--green"><div class="admin-summary-card__label">主运行节点</div><strong class="admin-summary-card__value">{{ summary.runtimeCount }}</strong></article>
+      <article class="admin-summary-card"><div class="admin-summary-card__label">挂载能力成员</div><strong class="admin-summary-card__value capability-summary-value--purple">{{ summary.memberCount }}</strong></article>
+      <article class="admin-summary-card admin-summary-card--orange"><div class="admin-summary-card__label">关联编排能力</div><strong class="admin-summary-card__value">{{ summary.activeCount }}</strong></article>
+    </section>
+
+    <section class="admin-filter-panel capability-filter-panel">
+      <div class="admin-section-head capability-filter-panel__head">
+        <div class="admin-section-head__copy">
+          <span class="admin-section-head__eyebrow">Capability Directory</span>
+          <h3 class="admin-section-head__title">能力筛选</h3>
+          <p class="admin-section-head__desc">按能力、运行节点和挂载成员搜索能力目录。</p>
+        </div>
+        <div class="capability-filter-panel__summary">
+          <span>{{ filteredCapabilities.length }} 个能力卡</span>
+        </div>
+      </div>
+
+      <div class="admin-list-toolbar">
+        <div class="admin-list-toolbar__group">
+        <el-input v-model="keyword" placeholder="搜索能力 / 运行节点 / 成员" clearable class="search" />
+      </div>
+      <div class="admin-list-toolbar__group">
+        <p class="capability-toolbar-note">{{ keyword ? '已启用搜索' : '默认范围' }}</p>
+      </div>
+      </div>
+    </section>
+
+    <section class="capability-browser">
+      <div class="capability-browser__head">
+        <strong>能力目录</strong>
+        <span>每张卡对应一个平台能力，以及它的主节点、编排链和挂载成员</span>
+      </div>
+      <div class="capability-grid" v-loading="loading">
       <article v-for="item in filteredCapabilities" :key="item.id" class="capability-card">
         <div class="capability-card__head">
           <div>
@@ -90,12 +93,12 @@
         </div>
 
         <div class="capability-footer">
-          <router-link :to="item.primaryRoute" class="capability-link">查看主节点详情</router-link>
+          <router-link :to="item.primaryRoute" class="capability-link">查看 Skill 目录</router-link>
           <router-link v-if="item.definitionRoute" :to="item.definitionRoute" class="capability-link capability-link--ghost">查看编排结构</router-link>
-          <router-link v-if="item.monitorRoute" :to="item.monitorRoute" class="capability-link capability-link--ghost">查看编排监控</router-link>
         </div>
       </article>
-    </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -103,6 +106,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Grid, Refresh } from '@element-plus/icons-vue'
 import { adminAgentsApi, adminSkillsApi, type AdminRegistryAgent, type OrchestratorRelationItem } from '@/api/adminApi'
+import AdminPageHeader from './components/AdminPageHeader.vue'
 import { toast } from '@/utils/toast'
 
 interface SkillModelConfigRow {
@@ -125,7 +129,6 @@ interface CapabilityCard {
   members: string[];
   primaryRoute: string;
   definitionRoute?: string;
-  monitorRoute?: string;
 }
 
 const loading = ref(false)
@@ -159,7 +162,6 @@ const CAPABILITY_SPECS = [
     memberSkillIds: [],
     primaryRoute: '/admin/agent-registry',
     definitionRoute: '/admin/orchestrator-definitions',
-    monitorRoute: '/admin/orchestrators',
   },
   {
     id: 'path-planning',
@@ -170,7 +172,6 @@ const CAPABILITY_SPECS = [
     memberSkillIds: ['path-scene-framing', 'stage-designer'],
     primaryRoute: '/admin/agent-registry',
     definitionRoute: '/admin/orchestrator-definitions',
-    monitorRoute: '/admin/orchestrators',
   },
   {
     id: 'learner-center',
@@ -181,7 +182,6 @@ const CAPABILITY_SPECS = [
     memberSkillIds: ['goal-profile-inference', 'learning-pattern-distiller', 'session-knowledge-distiller', 'dialogue-concept-extractor'],
     primaryRoute: '/admin/learner-models',
     definitionRoute: '/admin/orchestrator-definitions',
-    monitorRoute: '/admin/orchestrators',
   },
   {
     id: 'ai-teaching',
@@ -192,7 +192,6 @@ const CAPABILITY_SPECS = [
     memberSkillIds: ['peer-reinforcement'],
     primaryRoute: '/admin/agent-registry',
     definitionRoute: '/admin/orchestrator-definitions',
-    monitorRoute: '/admin/orchestrators',
   },
   {
     id: 'simulation-lab',
@@ -209,7 +208,6 @@ const CAPABILITY_SPECS = [
     ],
     primaryRoute: '/admin/virtual-learners',
     definitionRoute: '/admin/orchestrator-definitions',
-    monitorRoute: '/admin/orchestrators',
   },
 ] as const
 
@@ -252,7 +250,6 @@ const capabilityCards = computed<CapabilityCard[]>(() => {
       members: Array.from(memberSet),
       primaryRoute: spec.primaryRoute,
       definitionRoute: spec.definitionRoute,
-      monitorRoute: spec.monitorRoute,
     }
   })
 })
@@ -278,6 +275,13 @@ const summary = computed(() => ({
   memberCount: capabilityCards.value.reduce((sum, item) => sum + item.members.length, 0),
   activeCount: capabilityCards.value.filter((item) => item.orchestrators.length > 0).length,
 }))
+
+const capabilityHighlights = computed(() => [
+  { label: `${summary.value.capabilityCount} 个平台能力`, tone: 'info' as const },
+  { label: `${summary.value.runtimeCount} 个主节点`, tone: 'success' as const },
+  { label: `${summary.value.memberCount} 个挂载成员`, tone: 'neutral' as const },
+  { label: `${summary.value.activeCount} 个关联编排能力`, tone: 'warning' as const }
+])
 
 const getKindLabel = (kind?: AdminRegistryAgent['kind']) => {
   if (kind === 'orchestrator') return '编排器'
@@ -311,29 +315,32 @@ onMounted(() => {
 
 <style scoped>
 .platform-capabilities-page {
-  padding: 1.25rem;
+  padding: 0;
 }
 
-.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.16; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.28), transparent 70%); }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); }
-.bg-orb--3 { width: 320px; height: 320px; right: 20%; bottom: 40px; background: radial-gradient(circle, rgba(16, 185, 129, 0.16), transparent 70%); }
+.capability-summary-value--purple {
+  color: #7c3aed;
+}
 
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
-.admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
+.capability-toolbar-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
 
-.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; position: relative; z-index: 1; }
-.summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }
-.summary-card .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
-.summary-card .value { font-size: 1.75rem; font-weight: 800; margin-top: 0.25rem; }
-.summary-card--blue .value { color: var(--color-primary); }
-.summary-card--green .value { color: #16a34a; }
-.summary-card--purple .value { color: #7c3aed; }
-.summary-card--orange .value { color: #ea580c; }
+.capability-filter-panel {
+  gap: 14px;
+}
+
+.capability-filter-panel__head {
+  margin-bottom: 0;
+}
+
+.capability-filter-panel__summary {
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .admin-list-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; position: relative; z-index: 1; }
 .admin-list-toolbar__group { display: flex; align-items: center; gap: 0.5rem; }
@@ -347,13 +354,38 @@ onMounted(() => {
   z-index: 1;
 }
 
+.capability-browser {
+  display: grid;
+  gap: 14px;
+  padding-top: 4px;
+  border-top: var(--admin-border-subtle);
+}
+
+.capability-browser__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.capability-browser__head strong {
+  color: var(--admin-text-primary);
+  font-size: 14px;
+}
+
+.capability-browser__head span {
+  color: var(--admin-text-muted);
+  font-size: 12px;
+}
+
 .capability-card {
-  border: 1px solid #d2dbf3;
-  border-radius: 28px;
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
   padding: 1.1rem;
-  background: color-mix(in srgb, #ffffff 90%, white);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 30px 90px rgba(58, 101, 197, 0.14);
+  background: var(--admin-bg-surface);
+  backdrop-filter: none;
+  box-shadow: none;
   display: grid;
   gap: 1rem;
 }
@@ -362,6 +394,8 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 12px;
+  border-bottom: var(--admin-border-subtle);
 }
 
 .capability-card__eyebrow {
@@ -396,6 +430,8 @@ onMounted(() => {
 .capability-section {
   display: grid;
   gap: 0.6rem;
+  padding-top: 12px;
+  border-top: var(--admin-border-subtle);
 }
 
 .capability-section__label {
@@ -419,9 +455,9 @@ onMounted(() => {
   display: grid;
   gap: 0.15rem;
   padding: 0.75rem 0.85rem;
-  border-radius: 18px;
-  background: rgba(244, 249, 255, 0.96);
-  border: 1px solid rgba(52, 120, 246, 0.14);
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-bg-surface-alt);
+  border: 1px solid var(--admin-border-color);
   min-width: 180px;
 }
 
@@ -443,8 +479,8 @@ onMounted(() => {
   min-height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  background: rgba(247, 250, 255, 0.98);
-  border: 1px solid rgba(216, 224, 238, 0.95);
+  background: var(--admin-bg-surface-alt);
+  border: 1px solid var(--admin-border-color);
   color: #44556c;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -464,6 +500,8 @@ onMounted(() => {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: var(--admin-border-subtle);
 }
 
 .capability-link {

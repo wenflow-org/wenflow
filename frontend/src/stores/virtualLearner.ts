@@ -7,7 +7,7 @@
  * - storiesByProfileId: 故事池缓存（key: profileId）
  * - sessionsBySessionId: 单个 session 详情缓存（key: sessionId）
  *
- * 接入策略：渐进式。新写的页面（RegressionLab）和重构后的 VirtualProfile 优先用；
+ * 接入策略：渐进式。重构后的 VirtualProfile / SessionCockpit 优先用；
  * 其它页面（VirtualSession / VirtualStoryOverview）后续按需切。
  *
  * TTL = 30 秒；变更动作（create/update/delete/start session 等）显式 invalidate。

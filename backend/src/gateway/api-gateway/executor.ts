@@ -309,6 +309,10 @@ export class APIExecutor {
       return;
     }
 
+    if (context.executionLogId) {
+      return;
+    }
+
     try {
       const metadataSkillId = typeof context.skillId === 'string' ? context.skillId : null;
       const metadataAgentId = typeof context.agentId === 'string' ? context.agentId : null;

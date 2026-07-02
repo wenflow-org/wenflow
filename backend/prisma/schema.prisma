@@ -163,12 +163,16 @@ model prompt_call_logs {
   conversationId      String?
   pipelineRunId       String?
   pipelineStepIndex   Int?
+  traceId             String?
+  parentExecutionId   String?
   createdAt           DateTime @default(now())
 
   @@index([agentId, createdAt])
   @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])
+  @@index([traceId])
+  @@index([parentExecutionId])
 }
 
 model arena_agent_logs {

@@ -241,7 +241,7 @@ const routes: RouteRecordRaw[] = [
         path: 'skills',
         name: 'AdminAgentRegistry',
         component: () => import('@/views/admin/AgentRegistry.vue'),
-        meta: { title: 'Skill 运行节点', requiresAdminAuth: true, adminGroup: 'ai' }
+        meta: { title: 'Skill 目录', requiresAdminAuth: true, adminGroup: 'ai' }
       },
       {
         path: 'skills/:agentId',
@@ -260,7 +260,7 @@ const routes: RouteRecordRaw[] = [
         alias: 'agent-definitions',
         name: 'AdminOrchestratorDefinitions',
         component: () => import('@/views/admin/OrchestratorDefinitions.vue'),
-        meta: { title: '字段契约', requiresAdminAuth: true, adminGroup: 'ai' }
+        meta: { title: '编排结构', requiresAdminAuth: true, adminGroup: 'ai' }
       },
       {
         path: 'test/dashboard',
@@ -320,37 +320,37 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'regression-lab',
         name: 'AdminRegressionLab',
-        component: () => import('@/views/admin/RegressionLab.vue'),
+        redirect: '/admin/agents/topology',
         meta: { title: '回归实验台', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId',
         name: 'AdminVirtualStoryOverview',
-        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        component: () => import('@/views/admin/VirtualProfile.vue'),
         meta: { title: '学情概览', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId/goal',
         name: 'AdminVirtualStoryGoal',
-        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}`,
         meta: { title: 'Goal 学情', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId/path',
         name: 'AdminVirtualStoryPath',
-        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}`,
         meta: { title: 'Path 学情', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId/stories/:storyId/learn',
         name: 'AdminVirtualStoryLearn',
-        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}&story=${to.params.storyId}`,
+        redirect: (to) => `/admin/virtual-learners/${to.params.profileId}/stories/${to.params.storyId}`,
         meta: { title: 'Learn 学情', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
         path: 'virtual-learners/:profileId',
         name: 'AdminVirtualProfile',
-        redirect: (to) => `/admin/virtual-learners?profile=${to.params.profileId}`,
+        component: () => import('@/views/admin/VirtualProfile.vue'),
         meta: { title: '画像', requiresAdminAuth: true, adminGroup: 'lab' }
       },
       {
@@ -376,6 +376,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminExecutionLogs',
         component: () => import('@/views/admin/ExecutionLogs.vue'),
         meta: { title: '执行日志', requiresAdminAuth: true, adminGroup: 'monitor' }
+      },
+      {
+        path: 'path-generation-events',
+        name: 'AdminPathGenerationEvents',
+        component: () => import('@/views/admin/PathGenerationEvents.vue'),
+        meta: { title: '流程事件', requiresAdminAuth: true, adminGroup: 'monitor' }
       },
       {
         path: 'prompt-call-logs',

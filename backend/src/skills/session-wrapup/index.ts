@@ -1,6 +1,4 @@
-﻿import prisma from '../../config/database';
-import { v4 as uuidv4 } from 'uuid';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+﻿import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
@@ -526,25 +524,12 @@ export class SessionWrapupAgent {
       };
       return result;
     } finally {
-      try {
-        const durationMs = Date.now() - startTime;
-        await prisma.agent_call_logs.create({
-          data: {
-            id: uuidv4(),
-            agentId: AGENT_ID,
-            userId: 'system',
-            sourceEntry: 'platform',
-            success: result !== null && error === null,
-            durationMs,
-            input: JSON.stringify(input).slice(0, 1000),
-            output: result ? JSON.stringify(result).slice(0, 500) : null,
-            error: error?.message || null,
-            calledAt: new Date(),
-          },
-        });
-      } catch (logError) {
-        logger.error('[SessionWrapupAgent] 日志记录失败', { logError });
-      }
+      const durationMs = Date.now() - startTime;
+      logger.debug('[SessionWrapupAgent] 执行结束', {
+        durationMs,
+        success: result !== null && error === null,
+        error: error?.message || null,
+      });
     }
   }
 

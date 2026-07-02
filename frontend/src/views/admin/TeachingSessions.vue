@@ -1,14 +1,18 @@
 <template>
   <div class="teaching-sessions-page">
-    <div class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
-    <div class="page-hero">
-      <span class="pill">教学巡检</span>
+    <div v-if="!embedded" class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
+    <div v-if="!embedded" class="page-hero">
       <h1 class="page-hero__title admin-page-title">
         <el-icon class="admin-page-title__icon"><Reading /></el-icon>
         教学会话巡检
       </h1>
-      <p class="page-hero__subtitle">查看会话状态、产物质量与人工关注项，快速定位需要复核的教学过程。</p>
     </div>
+
+    <section v-else class="module-head">
+      <div class="module-head__copy">
+        <h2>教学会话巡检</h2>
+      </div>
+    </section>
 
     <div class="stats-grid">
       <div class="mini-stat"><span>总会话</span><strong>{{ sessions.length }}</strong></div>
@@ -137,7 +141,7 @@
           </div>
           <div v-else class="detail-empty-block">
             <strong>当前没有生成会话总结</strong>
-            <p>这通常表示会话尚未完成，或完成后没有成功产出总结与评估结果。</p>
+            <p>会话未完成或总结未生成。</p>
           </div>
         </el-card>
         <el-card shadow="never" class="detail-card">
@@ -174,6 +178,10 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Reading } from '@element-plus/icons-vue';
 import { adminTeachingSessionsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
+
+withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+});
 
 const loading = ref(false);
 const sessions = ref<any[]>([]);
@@ -319,12 +327,12 @@ const getAttentionTag = (row: any) => {
 };
 
 const getAttentionText = (row: any) => {
-  if (row.status === 'timeout') return '会话超时，建议人工复核';
-  if (row.status === 'error') return '会话错误，建议查看日志';
+  if (row.status === 'timeout') return '会话超时';
+  if (row.status === 'error') return '会话错误';
   if (row.status === 'completed' && !row.wrapup) return '已完成但无会话总结';
-  if (row.advisory?.priority === 'high') return '高优先级建议，建议跟进';
-  if (row.advisory?.priority === 'medium') return '中优先级建议，可人工确认';
-  if (row.wrapup && !row.wrapup.summary?.topicSummary) return '会话总结缺少摘要信息';
+  if (row.advisory?.priority === 'high') return '高优先级建议';
+  if (row.advisory?.priority === 'medium') return '中优先级建议';
+  if (row.wrapup && !row.wrapup.summary?.topicSummary) return '缺少摘要';
   return '状态稳定';
 };
 
@@ -336,12 +344,12 @@ const getAttentionTone = (row: any) => {
 };
 
 const getDetailHeadline = (row: any) => {
-  if (row.status === 'timeout') return '该会话已经超时，建议优先核查执行链路与产物缺失原因。';
-  if (row.status === 'error') return '该会话执行出错，建议结合日志与产物状态定位问题。';
-  if (row.status === 'completed' && !row.wrapup) return '该会话已完成，但没有成功产出会话总结。';
-  if (row.status === 'active' && !row.messageCount) return '该会话仍在进行中，但当前几乎没有有效互动数据。';
-  if (row.advisory?.shouldSuggest) return row.advisory?.recommendation || '该会话触发了额外建议，建议人工复核。';
-  return '当前会话状态整体稳定，可重点查看产物与建议摘要。';
+  if (row.status === 'timeout') return '会话超时，请核查执行链路。';
+  if (row.status === 'error') return '会话出错，请查看日志。';
+  if (row.status === 'completed' && !row.wrapup) return '已完成但未产出总结。';
+  if (row.status === 'active' && !row.messageCount) return '会话进行中但缺少互动。';
+  if (row.advisory?.shouldSuggest) return row.advisory?.recommendation || '已触发建议，请复核。';
+  return '会话稳定，查看产物摘要。';
 };
 
 const getStatusType = (status: string) => {
@@ -380,6 +388,45 @@ onMounted(loadSessions);
 </script>
 
 <style scoped>
+.module-head {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: var(--admin-border-subtle);
+}
+
+.module-head__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.module-head__kicker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--admin-text-brand);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.module-head__copy h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  color: var(--admin-text-primary);
+}
+
+.module-head__copy p {
+  margin: 0;
+  color: var(--admin-text-muted);
+  line-height: 1.6;
+}
+
 .teaching-sessions-page { display: grid; gap: 16px; position: relative; overflow: visible; }
 
 /* Background orbs */
@@ -390,18 +437,16 @@ onMounted(loadSessions);
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 /* Hero */
-.page-hero,
 .glass-toolbar,
 .table-wrap,
-.mini-stat,
 .detail-card,
 .detail-collapse {
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
-  box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08);
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface);
+  box-shadow: none;
 }
 
-.page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 24px; background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94)); margin-bottom: 0; }
+.page-hero { position: relative; z-index: 1; padding: 4px 4px 16px; border: none; border-bottom: var(--admin-border-subtle); border-radius: 0; background: transparent; box-shadow: none; margin-bottom: 0; }
 .page-hero__title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; }
 .page-hero__subtitle { margin: 6px 0 0; color: #62758f; font-size: 0.95rem; line-height: 1.65; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(52, 120, 246, 0.08); color: #2d6df2; font-size: 12px; font-weight: 700; }
@@ -418,8 +463,11 @@ onMounted(loadSessions);
 }
 
 .mini-stat {
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface-alt);
+  box-shadow: none;
   padding: 12px 14px;
-  border-radius: 16px;
+  border-radius: 14px;
   display: grid;
   gap: 6px;
 }
@@ -428,7 +476,7 @@ onMounted(loadSessions);
 .mini-stat strong { font-size: 20px; color: var(--text-primary); line-height: 1.2; }
 
 /* Content z-index */
-.table-wrap { position: relative; z-index: 1; border-radius: 24px; padding: 4px; }
+.table-wrap { position: relative; z-index: 1; border-radius: var(--admin-radius-md); padding: 0; }
 
 /* Table overrides */
 .topic-cell, .user-cell, .summary-cell { display: grid; gap: 4px; overflow: hidden; }
@@ -543,11 +591,11 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px;
 }
 
 .detail-card {
-  border-radius: 20px;
+  border-radius: 16px;
 }
 
 .detail-collapse {
-  border-radius: 18px;
+  border-radius: 16px;
   overflow: hidden;
 }
 
