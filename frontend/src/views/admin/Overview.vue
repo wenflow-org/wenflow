@@ -3,6 +3,7 @@
     <AdminPageHeader
       kicker="Admin Console"
       title="平台运行总览"
+      :icon="DataAnalysis"
       :highlights="overviewHighlights"
     >
       <template #actions>
@@ -294,7 +295,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi'
-import { Cpu, TrendCharts } from '@element-plus/icons-vue'
+import { Cpu, TrendCharts, DataAnalysis } from '@element-plus/icons-vue'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import { toast } from '../../utils/toast'
 

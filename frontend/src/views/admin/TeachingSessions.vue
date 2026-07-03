@@ -1,12 +1,18 @@
 <template>
-  <div class="teaching-sessions-page">
-    <div v-if="!embedded" class="bg-layer"><div class="bg-orb bg-orb--1"></div><div class="bg-orb bg-orb--2"></div></div>
-    <div v-if="!embedded" class="page-hero">
-      <h1 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Reading /></el-icon>
-        教学会话巡检
-      </h1>
-    </div>
+  <div class="admin-page teaching-sessions-page">
+    <AdminPageHeader
+      v-if="!embedded"
+      title="教学会话巡检"
+      :icon="Reading"
+      :highlights="sessionHighlights"
+    >
+      <template #actions>
+        <el-button :loading="loading" @click="loadSessions">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </template>
+    </AdminPageHeader>
 
     <section v-else class="module-head">
       <div class="module-head__copy">
@@ -14,31 +20,25 @@
       </div>
     </section>
 
-    <div class="stats-grid">
-      <div class="mini-stat"><span>总会话</span><strong>{{ sessions.length }}</strong></div>
-      <div class="mini-stat"><span>进行中</span><strong>{{ statusSummary.active }}</strong></div>
-      <div class="mini-stat"><span>已完成</span><strong>{{ statusSummary.completed }}</strong></div>
-      <div class="mini-stat"><span>超时/错误</span><strong>{{ statusSummary.timeout + statusSummary.error }}</strong></div>
-      <div class="mini-stat"><span>有建议</span><strong>{{ advisoryCount }}</strong></div>
-    </div>
-
-    <div class="toolbar glass-toolbar admin-list-toolbar">
-      <div class="admin-list-toolbar__group">
-        <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
-        <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
-          <el-option label="进行中" value="active" />
-          <el-option label="已完成" value="completed" />
-          <el-option label="超时" value="timeout" />
-          <el-option label="错误" value="error" />
-        </el-select>
-        <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
-        <el-checkbox v-model="filters.onlyAttention">仅看待关注</el-checkbox>
-        <el-checkbox v-model="filters.onlyMissingWrapup">仅看缺少会话总结</el-checkbox>
+    <section class="admin-filter-panel">
+      <div class="admin-section-head">
+        <h3 class="admin-section-head__title">筛选与过滤</h3>
       </div>
-      <div class="admin-list-toolbar__group">
-        <el-button class="session-btn session-btn--primary" @click="loadSessions">刷新</el-button>
+      <div class="admin-list-toolbar">
+        <div class="admin-list-toolbar__group">
+          <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
+          <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
+            <el-option label="进行中" value="active" />
+            <el-option label="已完成" value="completed" />
+            <el-option label="超时" value="timeout" />
+            <el-option label="错误" value="error" />
+          </el-select>
+          <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
+          <el-checkbox v-model="filters.onlyAttention">仅看待关注</el-checkbox>
+          <el-checkbox v-model="filters.onlyMissingWrapup">仅看缺少会话总结</el-checkbox>
+        </div>
       </div>
-    </div>
+    </section>
 
     <div class="table-wrap admin-list-card"><el-table v-loading="loading" :data="sessions" stripe>
       <el-table-column label="会话" min-width="260">
@@ -93,7 +93,7 @@
       </el-table-column>
       <el-table-column label="操作" width="112" align="center">
         <template #default="{ row }">
-          <el-button class="session-btn session-btn--row" @click="selectSession(row)">查看</el-button>
+          <el-button type="primary" link size="small" @click="selectSession(row)">查看</el-button>
         </template>
       </el-table-column>
     </el-table></div>
@@ -167,7 +167,7 @@
         </el-collapse>
       </div>
       <template #footer>
-        <el-button class="session-btn session-btn--ghost" @click="detailVisible = false">关闭</el-button>
+        <el-button @click="detailVisible = false">关闭</el-button>
       </template>
     </el-drawer>
   </div>
@@ -175,9 +175,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Reading } from '@element-plus/icons-vue';
+import { Reading, Refresh } from '@element-plus/icons-vue';
 import { adminTeachingSessionsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 
 withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
@@ -209,6 +210,14 @@ const statusSummary = computed(() => {
 });
 
 const advisoryCount = computed(() => sessions.value.filter((item) => item.advisory?.shouldSuggest).length);
+
+const sessionHighlights = computed(() => [
+  { label: `${sessions.value.length} 个会话`, tone: 'info' as const },
+  { label: `${statusSummary.value.active} 进行中`, tone: 'success' as const },
+  { label: `${statusSummary.value.completed} 已完成`, tone: 'neutral' as const },
+  { label: `${statusSummary.value.timeout + statusSummary.value.error} 超时/错误`, tone: statusSummary.value.timeout + statusSummary.value.error > 0 ? 'danger' as const : 'neutral' as const },
+  { label: `${advisoryCount.value} 有建议`, tone: advisoryCount.value > 0 ? 'warning' as const : 'neutral' as const },
+]);
 
 const getTaskTypeLabel = (type: string) => ({
   reading: '阅读',
@@ -427,17 +436,12 @@ onMounted(loadSessions);
   line-height: 1.6;
 }
 
-.teaching-sessions-page { display: grid; gap: 16px; position: relative; overflow: visible; }
+.teaching-sessions-page {
+  display: grid;
+  gap: 16px;
+}
 
-/* Background orbs */
-.bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
-.bg-orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: orb-d 30s ease-in-out infinite reverse; }
-@keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
-
-/* Hero */
-.glass-toolbar,
+/* Content */
 .table-wrap,
 .detail-card,
 .detail-collapse {
@@ -446,37 +450,17 @@ onMounted(loadSessions);
   box-shadow: none;
 }
 
-.page-hero { position: relative; z-index: 1; padding: 4px 4px 16px; border: none; border-bottom: var(--admin-border-subtle); border-radius: 0; background: transparent; box-shadow: none; margin-bottom: 0; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; }
-.page-hero__subtitle { margin: 6px 0 0; color: #62758f; font-size: 0.95rem; line-height: 1.65; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: rgba(52, 120, 246, 0.08); color: #2d6df2; font-size: 12px; font-weight: 700; }
-
-/* Toolbar glass */
-.toolbar-item { width: 180px; }
-
-.stats-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+.toolbar-item {
+  width: 180px;
 }
-
-.mini-stat {
-  border: var(--admin-border-subtle);
-  background: var(--admin-bg-surface-alt);
-  box-shadow: none;
-  padding: 12px 14px;
-  border-radius: 14px;
-  display: grid;
-  gap: 6px;
-}
-
-.mini-stat span { color: var(--text-secondary); font-size: 12px; }
-.mini-stat strong { font-size: 20px; color: var(--text-primary); line-height: 1.2; }
 
 /* Content z-index */
-.table-wrap { position: relative; z-index: 1; border-radius: var(--admin-radius-md); padding: 0; }
+.table-wrap {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--admin-radius-md);
+  padding: 0;
+}
 
 /* Table overrides */
 .topic-cell, .user-cell, .summary-cell { display: grid; gap: 4px; overflow: hidden; }
@@ -542,52 +526,6 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px;
   color: #62758f;
   line-height: 1.65;
   font-size: 0.88rem;
-}
-
-.session-btn {
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.session-btn--primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #3478f6, #3f86ff);
-  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24);
-}
-
-.session-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.3);
-}
-
-.session-btn--row {
-  min-height: 30px;
-  padding: 0 12px;
-  color: var(--color-primary-dark, #1f57cc);
-  background: rgba(244, 249, 255, 0.96);
-  border-color: rgba(52, 120, 246, 0.16);
-}
-
-.session-btn--row:hover {
-  color: var(--color-primary-dark, #1f57cc);
-  background: rgba(236, 244, 255, 0.98);
-  border-color: rgba(52, 120, 246, 0.3);
-}
-
-.session-btn--ghost {
-  color: #335aa4;
-  border-color: rgba(52, 120, 246, 0.2);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.session-btn--ghost:hover {
-  color: #22478f;
-  border-color: rgba(52, 120, 246, 0.38);
-  background: rgba(238, 245, 255, 0.92);
 }
 
 .detail-card {

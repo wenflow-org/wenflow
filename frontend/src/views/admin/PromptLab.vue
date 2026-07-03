@@ -2,8 +2,8 @@
   <div class="admin-page prompt-lab-page">
     <AdminPageHeader
       title="Prompt 发布向导"
+      :icon="EditPen"
       :highlights="promptLabHighlights"
-      dense
     >
       <template #actions>
         <el-button @click="goBack">
@@ -295,7 +295,7 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Loading, MagicStick, CopyDocument, UploadFilled, Warning } from '@element-plus/icons-vue'
+import { ArrowLeft, Loading, MagicStick, CopyDocument, UploadFilled, Warning, EditPen } from '@element-plus/icons-vue'
 import { usePromptLabStore } from '@/stores/promptLab'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SourceView from './components/promptLab/SourceView.vue'
@@ -379,10 +379,9 @@ function handleReset() {
 
 <style scoped>
 .prompt-lab-page {
-  display: grid;
+  /* 继承 admin-page 的 padding 和 gap */
   grid-template-rows: auto auto minmax(0, 1fr);
   min-height: calc(100vh - 32px);
-  background: var(--admin-bg-page);
 }
 
 .beta-badge {

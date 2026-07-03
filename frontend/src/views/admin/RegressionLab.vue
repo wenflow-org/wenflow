@@ -1,36 +1,14 @@
 <template>
-  <div class="regression-lab-page">
+  <div class="admin-page regression-lab-page">
     <AdminPageHeader
       title="回归测试实验台"
+      :icon="DataAnalysis"
       :highlights="regressionHighlights"
     >
       <template #actions>
         <el-button :loading="loading" @click="loadProfiles">刷新</el-button>
       </template>
     </AdminPageHeader>
-
-    <section class="admin-summary-grid">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">画像样本</div>
-        <strong class="admin-summary-card__value">{{ profiles.length }}</strong>
-        <div class="regression-summary-meta">可用画像</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">Goal Prompt 版本</div>
-        <strong class="admin-summary-card__value">{{ goalVersions.length }}</strong>
-        <div class="regression-summary-meta">可选版本</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--orange">
-        <div class="admin-summary-card__label">Path Prompt 版本</div>
-        <strong class="admin-summary-card__value">{{ pathVersions.length }}</strong>
-        <div class="regression-summary-meta">可选版本</div>
-      </article>
-      <article class="admin-summary-card" :class="result ? 'admin-summary-card--green' : 'admin-summary-card--blue'">
-        <div class="admin-summary-card__label">最近结果</div>
-        <strong class="admin-summary-card__value">{{ result ? '已完成' : '待运行' }}</strong>
-        <div class="regression-summary-meta">{{ result?.sessionId ? `Session ${result.sessionId}` : '待运行' }}</div>
-      </article>
-    </section>
 
     <main class="regression-launchpad">
       <section class="regression-config admin-section-card admin-section-card--padded">
@@ -214,6 +192,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { DataAnalysis } from '@element-plus/icons-vue';
 import { adminApi } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 

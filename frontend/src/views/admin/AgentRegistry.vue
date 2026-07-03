@@ -14,29 +14,6 @@
       </template>
     </AdminPageHeader>
 
-    <section class="admin-summary-grid" v-show="summary">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">Skill 数量</div>
-        <strong class="admin-summary-card__value">{{ summary?.total }}</strong>
-        <div class="registry-summary-meta">目录总量</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">24h 活跃</div>
-        <strong class="admin-summary-card__value">{{ summary?.active24h }}</strong>
-        <div class="registry-summary-meta">24h 内调用</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--orange">
-        <div class="admin-summary-card__label">未调用</div>
-        <strong class="admin-summary-card__value">{{ summary?.neverCalled }}</strong>
-        <div class="registry-summary-meta">暂无调用记录</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--red">
-        <div class="admin-summary-card__label">需关注</div>
-        <strong class="admin-summary-card__value">{{ summary?.unhealthy }}</strong>
-        <div class="registry-summary-meta">预警或异常</div>
-      </article>
-    </section>
-
     <section class="admin-filter-panel skill-filter-panel">
       <div class="admin-section-head skill-filter-panel__head">
         <div class="admin-section-head__copy">

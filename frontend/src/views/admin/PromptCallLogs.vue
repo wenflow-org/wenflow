@@ -2,31 +2,9 @@
   <div class="admin-page prompt-call-logs-page">
     <AdminPageHeader
       title="Prompt 调用日志"
+      :icon="Document"
       :highlights="promptLogHighlights"
     />
-
-    <section class="admin-summary-grid" v-if="logs.length">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">记录总数</div>
-        <strong class="admin-summary-card__value">{{ logs.length }}</strong>
-        <div class="prompt-summary-meta">本页</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">成功</div>
-        <strong class="admin-summary-card__value">{{ successCount }}</strong>
-        <div class="prompt-summary-meta">{{ logs.length ? Math.round((successCount / logs.length) * 100) : 0 }}% 成功率</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--red">
-        <div class="admin-summary-card__label">失败</div>
-        <strong class="admin-summary-card__value">{{ errorCount }}</strong>
-        <div class="prompt-summary-meta">{{ logs.length ? Math.round((errorCount / logs.length) * 100) : 0 }}% 失败率</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--orange">
-        <div class="admin-summary-card__label">异常标记</div>
-        <strong class="admin-summary-card__value">{{ driftCount }}</strong>
-        <div class="prompt-summary-meta">需关注</div>
-      </article>
-    </section>
 
     <section class="admin-filter-panel">
       <div class="admin-section-head">
@@ -215,6 +193,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { Document } from '@element-plus/icons-vue';
 import { adminRuntimeDefinitionsApi } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '@/utils/toast';

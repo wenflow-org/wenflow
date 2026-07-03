@@ -1,16 +1,18 @@
 <template>
-  <div class="learner-models-page">
-    <div v-if="!embedded" class="admin-overview-bg">
-      <div class="admin-overview-bg__orb admin-overview-bg__orb--1"></div>
-      <div class="admin-overview-bg__orb admin-overview-bg__orb--2"></div>
-    </div>
-
-    <div v-if="!embedded" class="page-hero">
-      <h2 class="page-hero__title admin-page-title">
-        <el-icon class="admin-page-title__icon"><Reading /></el-icon>
-        学习者模型
-      </h2>
-    </div>
+  <div class="admin-page learner-models-page">
+    <AdminPageHeader
+      v-if="!embedded"
+      title="学习者模型"
+      :icon="Reading"
+      :highlights="modelHighlights"
+    >
+      <template #actions>
+        <el-button :loading="loading" @click="loadData">
+          <el-icon><Refresh /></el-icon>
+          刷新数据
+        </el-button>
+      </template>
+    </AdminPageHeader>
 
     <section v-else class="module-head">
       <div class="module-head__copy">
@@ -18,17 +20,25 @@
       </div>
     </section>
 
-    <div class="toolbar admin-list-toolbar">
-      <div class="toolbar-left admin-list-toolbar__group">
-        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
-        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
-        <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
-        <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
+    <section class="admin-filter-panel">
+      <div class="admin-section-head">
+        <h3 class="admin-section-head__title">筛选与过滤</h3>
       </div>
-      <div class="toolbar-right admin-list-toolbar__group">
-        <el-button class="learner-btn learner-btn--ghost" @click="resetFilters"><el-icon><Refresh /></el-icon>重置</el-button>
+      <div class="admin-list-toolbar">
+        <div class="admin-list-toolbar__group">
+          <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
+          <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
+          <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
+          <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
+        </div>
+        <div class="admin-list-toolbar__group">
+          <el-button @click="resetFilters">
+            <el-icon><RefreshLeft /></el-icon>
+            重置
+          </el-button>
+        </div>
       </div>
-    </div>
+    </section>
 
     <section v-if="showEmptyState" class="empty-state-card admin-list-card">
       <div class="empty-state-card__copy">
@@ -37,10 +47,10 @@
         <p>{{ emptyStateDescription }}</p>
       </div>
       <div class="empty-state-card__actions">
-        <el-button type="primary" class="learner-btn" @click="loadData">
+        <el-button type="primary" @click="loadData">
           重新加载
         </el-button>
-        <el-button class="learner-btn learner-btn--ghost" @click="resetFilters">
+        <el-button @click="resetFilters">
           清空筛选
         </el-button>
       </div>
@@ -131,9 +141,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Reading, Refresh } from '@element-plus/icons-vue';
+import { Reading, Refresh, RefreshLeft } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
+import AdminPageHeader from './components/AdminPageHeader.vue';
 
 withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
@@ -161,6 +172,20 @@ const showEmptyState = computed(() => !loading.value && items.value.length === 0
 const hasFiltersApplied = computed(() => {
   return Boolean(filters.userId || filters.pathId || filters.riskOnly || filters.staleOnly);
 });
+
+const riskCount = computed(() => items.value.filter((item) => item.riskLevel === 'high' || item.riskLevel === 'medium').length);
+const staleCount = computed(() => items.value.filter((item) => {
+  if (!item.lastUpdatedAt) return false;
+  const diffMs = Date.now() - new Date(item.lastUpdatedAt).getTime();
+  return diffMs > 7 * 86400000; // 7天
+}).length);
+
+const modelHighlights = computed(() => [
+  { label: `${pagination.total} 个快照`, tone: 'info' as const },
+  { label: `${riskCount.value} 个风险用户`, tone: riskCount.value > 0 ? 'danger' as const : 'neutral' as const },
+  { label: `${staleCount.value} 个过期快照`, tone: staleCount.value > 0 ? 'warning' as const : 'neutral' as const },
+  { label: hasFiltersApplied.value ? '筛选已启用' : '查看全部', tone: hasFiltersApplied.value ? 'success' as const : 'neutral' as const },
+]);
 
 const emptyStateTitle = computed(() => {
   return hasFiltersApplied.value ? '当前筛选下没有匹配的学习者快照' : '还没有可展示的学习者模型';
@@ -274,6 +299,11 @@ onMounted(loadData);
 </script>
 
 <style scoped>
+.learner-models-page {
+  display: grid;
+  gap: 16px;
+}
+
 .module-head {
   margin-bottom: 12px;
   padding-bottom: 12px;
@@ -285,21 +315,6 @@ onMounted(loadData);
   gap: 6px;
 }
 
-.module-head__kicker {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 24px;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: var(--admin-text-brand);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .module-head__copy h2 {
   margin: 0;
   font-size: 1.05rem;
@@ -307,46 +322,21 @@ onMounted(loadData);
   color: var(--admin-text-primary);
 }
 
-.module-head__copy p {
-  margin: 0;
-  color: var(--admin-text-muted);
-  line-height: 1.6;
-}
-
-.admin-overview-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.admin-overview-bg__orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.admin-overview-bg__orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: admin-orb 26s ease-in-out infinite; }
-.admin-overview-bg__orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: admin-orb 30s ease-in-out infinite reverse; }
-@keyframes admin-orb { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
-
-.page-hero { position: relative; z-index: 1; padding: 4px 4px 16px; border: none; border-bottom: var(--admin-border-subtle); background: transparent; backdrop-filter: none; margin-bottom: 1rem; }
-.page-hero__title { margin: 8px 0 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.03em; }
-.page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
-.pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
-
 .table-container {
   position: relative;
-  z-index: 1;
   overflow-x: auto;
   border: var(--admin-border-subtle);
   border-radius: var(--admin-radius-md);
   background: var(--admin-bg-surface);
-  backdrop-filter: none;
   box-shadow: none;
   padding: 0;
 }
 
-.toolbar { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; border: var(--admin-border-subtle); border-radius: var(--admin-radius-md); backdrop-filter: none; padding: 12px 16px; background: var(--admin-bg-surface-alt); box-shadow: none; }
-.toolbar-left { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-.toolbar-right { display: flex; gap: 12px; }
-.pagination-container { position: relative; z-index: 1; display: flex; justify-content: flex-end; margin-top: 16px; }
-
-.learner-btn {
-  height: 38px;
-  border-radius: 12px;
-  font-weight: 600;
-  padding: 0 16px;
-  border: 1px solid transparent;
+.pagination-container {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .empty-state-card {

@@ -2,8 +2,8 @@
   <div class="admin-page cockpit-page">
     <AdminPageHeader
       title="虚拟会话控制台"
+      :icon="Monitor"
       :highlights="cockpitHighlights"
-      dense
     >
       <template #actions>
         <el-button @click="backToStory">
@@ -360,7 +360,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Refresh, Finished } from '@element-plus/icons-vue'
+import { ArrowLeft, Refresh, Finished, Monitor } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SessionControlPanel from './components/virtual/SessionControlPanel.vue'

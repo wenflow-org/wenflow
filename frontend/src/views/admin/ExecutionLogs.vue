@@ -17,31 +17,6 @@
       </template>
     </AdminPageHeader>
 
-    <section class="admin-summary-grid" v-if="pagination.total > 0">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">总日志数</div>
-        <strong class="admin-summary-card__value">{{ formatNumber(stats.total) }}</strong>
-        <div class="stats-summary-meta">本页 {{ logs.length }} 条</div>
-      </article>
-      <button type="button" class="admin-summary-card admin-summary-card--green stats-summary-button" @click="setFilter('status', 'success')">
-        <div class="admin-summary-card__label">成功</div>
-        <strong class="admin-summary-card__value">{{ formatNumber(stats.success) }}</strong>
-        <div class="stats-summary-meta">{{ calculatePercent(stats.success, stats.total) }}% 成功率</div>
-      </button>
-      <button type="button" class="admin-summary-card admin-summary-card--red stats-summary-button" @click="setFilter('status', 'error')">
-        <div class="admin-summary-card__label">失败</div>
-        <strong class="admin-summary-card__value">{{ formatNumber(stats.error) }}</strong>
-        <div class="stats-summary-meta">{{ calculatePercent(stats.error, stats.total) }}% 失败率</div>
-      </button>
-      <button type="button" class="admin-summary-card admin-summary-card--orange stats-summary-button" @click="setFilter('status', 'timeout')">
-        <div class="admin-summary-card__label">超时</div>
-        <strong class="admin-summary-card__value">{{ formatNumber(stats.timeout) }}</strong>
-        <div class="stats-summary-meta">{{ calculatePercent(stats.timeout, stats.total) }}% 超时率</div>
-      </button>
-    </section>
-
-
-
     <section class="admin-filter-panel">
       <div class="admin-section-head">
         <div class="admin-section-head__copy">

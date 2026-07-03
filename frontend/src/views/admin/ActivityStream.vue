@@ -44,13 +44,6 @@
       </div>
     </section>
 
-    <section class="admin-summary-grid">
-      <article class="admin-summary-card admin-summary-card--blue"><div class="admin-summary-card__label">总活动</div><strong class="admin-summary-card__value">{{ filteredActivities.length }}</strong></article>
-      <article class="admin-summary-card admin-summary-card--green"><div class="admin-summary-card__label">学习会话</div><strong class="admin-summary-card__value">{{ sessionCount }}</strong></article>
-      <article class="admin-summary-card"><div class="admin-summary-card__label">新用户注册</div><strong class="admin-summary-card__value">{{ signupCount }}</strong></article>
-      <article class="admin-summary-card admin-summary-card--orange"><div class="admin-summary-card__label">任务完成</div><strong class="admin-summary-card__value">{{ completedCount }}</strong></article>
-    </section>
-
     <section class="timeline-wrap admin-list-card">
       <div class="timeline-wrap__head">
         <strong>活动时间线</strong>

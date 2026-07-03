@@ -13,26 +13,6 @@
       </template>
     </AdminPageHeader>
 
-    <section class="admin-summary-grid users-summary-grid">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">用户总数</div>
-        <strong class="admin-summary-card__value">{{ pagination.total }}</strong>
-        <div class="users-summary-card__meta">本页 {{ users.length }} 人</div>
-      </article>
-
-      <article class="admin-summary-card admin-summary-card--red">
-        <div class="admin-summary-card__label">管理员</div>
-        <strong class="admin-summary-card__value">{{ adminCount }}</strong>
-        <div class="users-summary-card__meta">本页统计</div>
-      </article>
-
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">已登录</div>
-        <strong class="admin-summary-card__value">{{ loggedInCount }}</strong>
-        <div class="users-summary-card__meta">本页已登录用户</div>
-      </article>
-    </section>
-
     <section class="admin-filter-panel users-filter-panel">
       <div class="admin-section-head users-filter-panel__head">
         <div class="admin-section-head__copy">

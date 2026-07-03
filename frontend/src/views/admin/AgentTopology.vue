@@ -11,9 +11,11 @@
   依赖：@vue-flow/core
 -->
 <template>
-  <div class="topology-page">
+  <div class="admin-page topology-page">
     <AdminPageHeader
-      title="5 Agent × 22 Skill 拓扑"
+      title="Agent 拓扑"
+      :icon="Connection"
+      :highlights="topologyHighlights"
     >
       <template #actions>
         <el-button type="primary" :icon="Grid" @click="router.push('/admin/skills')">
@@ -27,29 +29,6 @@
         <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
       </template>
     </AdminPageHeader>
-
-    <section class="health-strip" v-if="summary">
-      <div class="health-card">
-        <div class="label">顶层 Agent</div>
-        <div class="value">{{ summary.agentCount }}</div>
-      </div>
-      <div class="health-card">
-        <div class="label">下辖 Skill</div>
-        <div class="value">{{ summary.skillCount }}</div>
-      </div>
-      <div class="health-card">
-        <div class="label">{{ rangeLabel }} 调用</div>
-        <div class="value">{{ summary.totalCalls }}</div>
-      </div>
-      <div class="health-card" :class="{ 'health-card--danger': summary.unhealthyCount > 0 }">
-        <div class="label">异常节点</div>
-        <div class="value">{{ summary.unhealthyCount }}</div>
-      </div>
-      <div class="health-card health-card--muted">
-        <div class="label">空闲 Skill</div>
-        <div class="value">{{ summary.idleCount }}</div>
-      </div>
-    </section>
 
     <div class="topology-canvas" v-loading="loading">
       <VueFlow
@@ -135,7 +114,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Refresh, Grid } from '@element-plus/icons-vue';
+import { Refresh, Grid, Connection } from '@element-plus/icons-vue';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { VueFlow, Position, type Node, type Edge } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
@@ -158,6 +137,22 @@ const rangeLabel = computed(() => {
   if (range.value === '30d') return '30 天';
   return '7 天';
 });
+
+const topologyHighlights = computed(() => {
+  if (!summary.value) return [];
+  return [
+    { label: `${summary.value.agentCount} 个 Agent`, tone: 'info' },
+    { label: `${summary.value.skillCount} 个 Skill`, tone: 'neutral' },
+    { label: `${summary.value.totalCalls} 次调用 (${rangeLabel.value})`, tone: 'neutral' },
+    { 
+      label: summary.value.unhealthyCount > 0 
+        ? `${summary.value.unhealthyCount} 个异常` 
+        : '全部健康',
+      tone: summary.value.unhealthyCount > 0 ? 'danger' : 'success'
+    }
+  ];
+});
+
 
 const AGENT_WIDTH = 260;
 const AGENT_HEIGHT = 180;
@@ -252,53 +247,11 @@ onMounted(() => {
 
 <style scoped>
 .topology-page {
-  display: flex;
-  flex-direction: column;
+  /* 继承 admin-page 的 display: grid, padding, background */
   gap: 16px;
-  padding: 20px 24px;
-  min-height: 100%;
 }
 
 /* 页头由 AdminPageHeader 组件统一管理 */
-
-.health-strip {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-}
-
-.health-card {
-  background: var(--admin-bg-surface);
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  border-radius: 12px;
-  padding: 14px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.health-card .label {
-  font-size: 12px;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-}
-
-.health-card .value {
-  font-size: 28px;
-  font-weight: 800;
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  color: #1a2a44;
-}
-
-.health-card--danger .value {
-  color: #b91c1c;
-}
-
-.health-card--muted .value {
-  color: #94a3b8;
-}
 
 .topology-canvas {
   flex: 1;
@@ -345,6 +298,7 @@ onMounted(() => {
   background: var(--admin-bg-surface);
   padding: 3px 8px;
   border-radius: 6px;
+  color: #1a2a44;
 }
 
 .vf-agent-node__pulse {
@@ -396,6 +350,7 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 800;
   font-family: 'JetBrains Mono', Consolas, monospace;
+  color: #1a2a44;
 }
 
 .vf-agent-node__stats .lbl {
@@ -403,6 +358,7 @@ onMounted(() => {
   opacity: 0.75;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  color: #64748b;
 }
 
 /* ========== Skill node ========== */

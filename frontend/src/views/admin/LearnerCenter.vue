@@ -1,37 +1,10 @@
 <template>
-  <div class="learner-center-page">
+  <div class="admin-page learner-center-page">
     <AdminPageHeader
       title="学习者中心"
       :icon="Reading"
       :highlights="centerHighlights"
     />
-
-    <!-- Summary Cards -->
-    <section class="admin-summary-grid">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">学习者模型</div>
-        <strong class="admin-summary-card__value">{{ stats.totalModels }}</strong>
-        <div class="summary-card-meta">{{ stats.activeModels }} 活跃</div>
-      </article>
-
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">教学会话</div>
-        <strong class="admin-summary-card__value">{{ stats.totalSessions }}</strong>
-        <div class="summary-card-meta">{{ stats.activeSessions }} 进行中</div>
-      </article>
-
-      <article class="admin-summary-card admin-summary-card--orange">
-        <div class="admin-summary-card__label">需关注</div>
-        <strong class="admin-summary-card__value">{{ stats.needAttention }}</strong>
-        <div class="summary-card-meta">风险或异常</div>
-      </article>
-
-      <article class="admin-summary-card admin-summary-card--purple">
-        <div class="admin-summary-card__label">7天活跃</div>
-        <strong class="admin-summary-card__value">{{ stats.activeIn7Days }}</strong>
-        <div class="summary-card-meta">最近活跃</div>
-      </article>
-    </section>
 
     <section class="learner-center-shell">
       <div class="learner-center-shell__head">
@@ -107,6 +80,10 @@ const activeTabMeta = computed(() => {
 })
 
 const centerHighlights = computed(() => [
+  { label: `${stats.value.totalModels} 个模型`, tone: 'info' as const },
+  { label: `${stats.value.activeModels} 活跃`, tone: 'success' as const },
+  { label: `${stats.value.needAttention} 需关注`, tone: stats.value.needAttention > 0 ? 'danger' as const : 'neutral' as const },
+  { label: `${stats.value.totalSessions} 个会话`, tone: 'neutral' as const }
 ])
 
 // 加载统计数据

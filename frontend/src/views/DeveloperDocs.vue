@@ -47,35 +47,84 @@
     <!-- 主体内容 -->
     <div class="docs-container">
       <!-- 侧边栏导航 -->
-      <aside class="docs-sidebar">
+      <aside class="docs-sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <button class="sidebar-toggle" @click="toggleSidebar" :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'">
+          <span class="toggle-icon">{{ sidebarCollapsed ? '→' : '←' }}</span>
+        </button>
+        
         <div class="sidebar-section">
-          <h3 class="sidebar-title">入门指南</h3>
+          <h3 class="sidebar-title" v-show="!sidebarCollapsed">入门指南</h3>
           <ul class="sidebar-menu">
-            <li><a href="#quickstart" :class="{ active: activeSection === 'quickstart' }">快速开始</a></li>
-            <li><a href="#architecture" :class="{ active: activeSection === 'architecture' }">技术架构</a></li>
-            <li><a href="#setup" :class="{ active: activeSection === 'setup' }">环境配置</a></li>
+            <li>
+              <a href="#quickstart" :class="{ active: activeSection === 'quickstart' }" :title="sidebarCollapsed ? '快速开始' : ''">
+                <span class="menu-icon">🚀</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">快速开始</span>
+              </a>
+            </li>
+            <li>
+              <a href="#architecture" :class="{ active: activeSection === 'architecture' }" :title="sidebarCollapsed ? '技术架构' : ''">
+                <span class="menu-icon">🏗️</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">技术架构</span>
+              </a>
+            </li>
+            <li>
+              <a href="#setup" :class="{ active: activeSection === 'setup' }" :title="sidebarCollapsed ? '环境配置' : ''">
+                <span class="menu-icon">⚙️</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">环境配置</span>
+              </a>
+            </li>
           </ul>
         </div>
 
         <div class="sidebar-section">
-          <h3 class="sidebar-title">核心开发</h3>
+          <h3 class="sidebar-title" v-show="!sidebarCollapsed">核心开发</h3>
           <ul class="sidebar-menu">
-            <li><a href="#agent-development" :class="{ active: activeSection === 'agent-development' }">Agent 开发</a></li>
-            <li><a href="#agent-registration" :class="{ active: activeSection === 'agent-registration' }">Agent 注册流程</a></li>
-            <li><a href="#api-reference" :class="{ active: activeSection === 'api-reference' }">API 参考</a></li>
+            <li>
+              <a href="#agent-development" :class="{ active: activeSection === 'agent-development' }" :title="sidebarCollapsed ? 'Agent 开发' : ''">
+                <span class="menu-icon">🤖</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">Agent 开发</span>
+              </a>
+            </li>
+            <li>
+              <a href="#agent-registration" :class="{ active: activeSection === 'agent-registration' }" :title="sidebarCollapsed ? 'Agent 注册流程' : ''">
+                <span class="menu-icon">📝</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">Agent 注册流程</span>
+              </a>
+            </li>
+            <li>
+              <a href="#api-reference" :class="{ active: activeSection === 'api-reference' }" :title="sidebarCollapsed ? 'API 参考' : ''">
+                <span class="menu-icon">📡</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">API 参考</span>
+              </a>
+            </li>
           </ul>
         </div>
 
         <div class="sidebar-section">
-          <h3 class="sidebar-title">进阶主题</h3>
+          <h3 class="sidebar-title" v-show="!sidebarCollapsed">进阶主题</h3>
           <ul class="sidebar-menu">
-            <li><a href="#mcp-integration" :class="{ active: activeSection === 'mcp-integration' }">MCP 集成</a></li>
-            <li><a href="#arena-system" :class="{ active: activeSection === 'arena-system' }">Arena 竞技场</a></li>
-            <li><a href="#examples" :class="{ active: activeSection === 'examples' }">示例代码</a></li>
+            <li>
+              <a href="#mcp-integration" :class="{ active: activeSection === 'mcp-integration' }" :title="sidebarCollapsed ? 'MCP 集成' : ''">
+                <span class="menu-icon">🔌</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">MCP 集成</span>
+              </a>
+            </li>
+            <li>
+              <a href="#arena-system" :class="{ active: activeSection === 'arena-system' }" :title="sidebarCollapsed ? 'Arena 竞技场' : ''">
+                <span class="menu-icon">🏆</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">Arena 竞技场</span>
+              </a>
+            </li>
+            <li>
+              <a href="#examples" :class="{ active: activeSection === 'examples' }" :title="sidebarCollapsed ? '示例代码' : ''">
+                <span class="menu-icon">💡</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">示例代码</span>
+              </a>
+            </li>
           </ul>
         </div>
 
-        <div class="sidebar-section">
+        <div class="sidebar-section" v-show="!sidebarCollapsed">
           <h3 class="sidebar-title">外部链接</h3>
           <ul class="sidebar-menu">
             <li><a href="https://github.com/your-repo/wenflow/blob/main/docs/architecture" target="_blank">架构文档</a></li>
@@ -86,7 +135,7 @@
       </aside>
 
       <!-- 主内容区 -->
-      <main class="docs-content">
+      <main class="docs-content" :class="{ expanded: sidebarCollapsed }">
         <!-- 快速开始 -->
         <section id="quickstart" class="content-section">
           <h2 class="section-title">🚀 快速开始</h2>
@@ -867,6 +916,13 @@ async function generateContent(prompt: string) {
 import { ref, onMounted, onUnmounted } from 'vue';
 
 const activeSection = ref('quickstart');
+const sidebarCollapsed = ref(false);
+
+const toggleSidebar = () => {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  // 保存到 localStorage
+  localStorage.setItem('docs-sidebar-collapsed', String(sidebarCollapsed.value));
+};
 
 const copyCode = (codeId: string) => {
   // TODO: 实现代码复制功能
@@ -892,6 +948,12 @@ const handleScroll = () => {
 onMounted(() => {
   window.addEventListener('scroll', handleScroll);
   handleScroll(); // 初始化
+  
+  // 恢复侧边栏状态
+  const saved = localStorage.getItem('docs-sidebar-collapsed');
+  if (saved !== null) {
+    sidebarCollapsed.value = saved === 'true';
+  }
 });
 
 onUnmounted(() => {
@@ -1072,9 +1134,14 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 3rem;
-  max-width: 1280px;
+  max-width: 1480px;
   margin: 0 auto;
   padding: 3rem 2rem;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.docs-container:has(.docs-sidebar.collapsed) {
+  grid-template-columns: 70px 1fr;
 }
 
 /* 侧边栏 */
@@ -1083,7 +1150,67 @@ onUnmounted(() => {
   top: 100px;
   height: calc(100vh - 120px);
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 1rem;
+  transition: all 0.3s ease;
+  width: 280px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+.docs-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.docs-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.docs-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.docs-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.docs-sidebar.collapsed {
+  width: 70px;
+  padding-right: 0;
+}
+
+/* 折叠按钮 */
+.sidebar-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 100%;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-muted);
+  border-color: var(--color-primary);
+}
+
+.toggle-icon {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.sidebar-toggle:hover .toggle-icon {
+  color: var(--color-primary);
 }
 
 .sidebar-section {
@@ -1097,6 +1224,15 @@ onUnmounted(() => {
   color: var(--text-muted);
   margin-bottom: 1rem;
   letter-spacing: 0.05em;
+  padding: 0 1rem;
+  transition: opacity 0.3s ease;
+}
+
+.docs-sidebar.collapsed .sidebar-title {
+  opacity: 0;
+  height: 0;
+  margin: 0;
+  overflow: hidden;
 }
 
 .sidebar-menu {
@@ -1110,18 +1246,46 @@ onUnmounted(() => {
 }
 
 .sidebar-menu a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.5rem 1rem;
   color: var(--text-secondary);
   text-decoration: none;
   border-radius: var(--radius-lg);
   transition: all 0.2s ease;
   font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.docs-sidebar.collapsed .sidebar-menu a {
+  padding: 0.75rem;
+  justify-content: center;
+}
+
+.menu-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.menu-text {
+  transition: opacity 0.3s ease;
+}
+
+.docs-sidebar.collapsed .menu-text {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
 }
 
 .sidebar-menu a:hover {
   background: var(--bg-muted);
   color: var(--color-primary);
+}
+
+.sidebar-menu a:hover .menu-icon {
+  transform: scale(1.1);
 }
 
 .sidebar-menu a.active {
@@ -1130,9 +1294,24 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+.docs-sidebar.collapsed .sidebar-menu a.active {
+  background: var(--color-primary);
+}
+
+.docs-sidebar.collapsed .sidebar-menu a.active .menu-icon {
+  filter: brightness(0) invert(1);
+}
+
 /* 主内容区 */
 .docs-content {
   min-width: 0;
+  max-width: 900px;
+  margin: 0 auto;
+  transition: max-width 0.3s ease;
+}
+
+.docs-content.expanded {
+  max-width: 1100px;
 }
 
 .content-section {
@@ -1711,13 +1890,35 @@ onUnmounted(() => {
 @media (max-width: 968px) {
   .docs-container {
     grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  
+  .docs-container:has(.docs-sidebar.collapsed) {
+    grid-template-columns: 1fr;
   }
 
   .docs-sidebar {
     position: static;
     height: auto;
     padding-right: 0;
+    width: 100%;
     margin-bottom: 2rem;
+  }
+  
+  .docs-sidebar.collapsed {
+    width: 100%;
+  }
+  
+  .sidebar-toggle {
+    display: none;
+  }
+  
+  .docs-content {
+    max-width: 100%;
+  }
+  
+  .docs-content.expanded {
+    max-width: 100%;
   }
 
   .docs-nav {

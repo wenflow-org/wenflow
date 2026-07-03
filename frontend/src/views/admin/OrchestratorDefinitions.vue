@@ -1,10 +1,13 @@
 <template>
-  <div class="runtime-definitions-page">
-    <div class="page-hero">
-      <span class="pill">Platform</span>
-      <h2 class="page-hero__title admin-page-title">平台 Agent 架构</h2>
-      <p class="page-hero__subtitle">5 个核心 Agent 协同完成个性化学习全流程，每个 Agent 由多个 Skill 编排而成。</p>
-    </div>
+  <div class="admin-page orchestrator-definitions-page">
+    <AdminPageHeader
+      title="平台 Agent 架构"
+      :icon="Connection"
+    >
+      <template #actions>
+        <el-button :icon="Refresh" :loading="loading" @click="loadOrchestrators">刷新</el-button>
+      </template>
+    </AdminPageHeader>
 
     <el-tabs v-model="selectedPhaseId" class="agent-tabs" @tab-click="handlePhaseTabChange">
       <el-tab-pane 
@@ -22,41 +25,50 @@
     </el-tabs>
 
     <div v-if="currentPhase" class="definition-detail-grid">
-      <section class="detail-hero-card">
-        <div class="detail-hero-card__main">
-          <div class="detail-hero-card__header">
-            <span class="pill">{{ currentPhase.label }}</span>
-          </div>
-          <h3>{{ currentPhase.description }}</h3>
-          <p v-if="currentOrchestrator">{{ currentOrchestrator.description || '当前阶段暂无补充说明。' }}</p>
-          <p v-else>该阶段暂无编排器定义。</p>
-          <div class="detail-hero-card__meta">
-            <span>{{ currentPhase.agentId }}</span>
-          </div>
-        </div>
-        <div class="detail-hero-card__stats">
-          <div class="detail-stat-card">
-            <span class="detail-stat-card__label">Skills 数量</span>
-            <strong>{{ currentPhaseSkills.length }}</strong>
-          </div>
-          <div class="detail-stat-card" v-if="currentOrchestrator">
-            <span class="detail-stat-card__label">编排步骤</span>
-            <strong>{{ currentOrchestrator.steps?.length || 0 }}</strong>
-          </div>
-          <div class="detail-stat-card" v-if="currentOrchestrator">
-            <span class="detail-stat-card__label">变量总数</span>
-            <strong>{{ totalUniqueVariables }}</strong>
+      <!-- 统计卡片网格 -->
+      <section class="admin-summary-grid">
+        <article class="admin-summary-card admin-summary-card--blue">
+          <div class="admin-summary-card__label">Skills</div>
+          <strong class="admin-summary-card__value">{{ currentPhaseSkills.length }}</strong>
+          <div class="admin-summary-meta">Skills 数量</div>
+        </article>
+        <article class="admin-summary-card admin-summary-card--green">
+          <div class="admin-summary-card__label">步骤</div>
+          <strong class="admin-summary-card__value">{{ currentOrchestrator?.steps?.length || 0 }}</strong>
+          <div class="admin-summary-meta">编排步骤</div>
+        </article>
+        <article class="admin-summary-card admin-summary-card--purple">
+          <div class="admin-summary-card__label">变量</div>
+          <strong class="admin-summary-card__value">{{ totalUniqueVariables }}</strong>
+          <div class="admin-summary-meta">流转变量</div>
+        </article>
+        <article class="admin-summary-card admin-summary-card--orange">
+          <div class="admin-summary-card__label">阶段</div>
+          <strong class="admin-summary-card__value">{{ currentPhase.order }}</strong>
+          <div class="admin-summary-meta">/ 5 学习阶段</div>
+        </article>
+      </section>
+
+      <!-- 阶段描述区域 -->
+      <section class="admin-filter-panel">
+        <div class="admin-section-head">
+          <div class="admin-section-head__copy">
+            <h3 class="admin-section-head__title">{{ currentPhase.icon }} {{ currentPhase.label }}</h3>
+            <p class="admin-section-head__desc">{{ currentOrchestrator?.description || currentPhase.description }}</p>
           </div>
         </div>
       </section>
 
-      <el-card shadow="never" class="detail-card topology-card" v-if="currentOrchestrator">
-        <template #header>
-          <div class="section-card__header">
-            <strong>编排器内部流程</strong>
-            <span>{{ currentOrchestrator.steps?.length || 0 }} 个步骤</span>
+      <!-- 内部流程图 -->
+      <section class="admin-list-card" v-if="currentOrchestrator">
+        <div class="admin-section-head">
+          <div class="admin-section-head__copy">
+            <h3 class="admin-section-head__title">内部流程</h3>
           </div>
-        </template>
+          <div class="admin-section-head__meta">
+            <span>{{ currentOrchestrator.steps?.length || 0 }} 步</span>
+          </div>
+        </div>
 
         <div class="topology-canvas" v-if="flowElements.length">
           <VueFlow
@@ -153,22 +165,21 @@
             </template>
           </VueFlow>
         </div>
-        <el-empty v-else description="暂无步骤定义" />
-      </el-card>
+      </section>
 
-      <!-- 无编排器时：展示 Skills 列表和跨阶段数据流向 -->
-      <template v-else-if="currentPhaseSkills.length > 0">
-        <!-- Skills 列表卡片 -->
-        <el-card shadow="never" class="detail-card">
-          <template #header>
-            <div class="section-card__header">
-              <strong>阶段 Skills</strong>
-              <span>{{ currentPhaseSkills.length }} 个 Skill</span>
-            </div>
-          </template>
-          
-          <div class="skills-grid">
-            <div v-for="skill in currentPhaseSkills" :key="skill.id" class="skill-card">
+      <!-- 无编排器时：展示 Skills 列表 -->
+      <section class="admin-list-card" v-else-if="currentPhaseSkills.length > 0">
+        <div class="admin-section-head">
+          <div class="admin-section-head__copy">
+            <h3 class="admin-section-head__title">阶段 Skills</h3>
+          </div>
+          <div class="admin-section-head__meta">
+            <span>{{ currentPhaseSkills.length }} 个</span>
+          </div>
+        </div>
+        
+        <div class="skills-grid">
+          <div v-for="skill in currentPhaseSkills" :key="skill.id" class="skill-card">
               <div class="skill-card__header">
                 <h4>{{ skill.label }}</h4>
                 <el-tag size="small" type="info">{{ skill.id }}</el-tag>
@@ -201,89 +212,89 @@
                 </div>
               </div>
               
-              <el-button size="small" text type="primary" @click="goToSkillEditor(skill.id)">
-                编辑 Skill →
-              </el-button>
+            <el-button size="small" text type="primary" @click="goToSkillEditor(skill.id)">
+              编辑 Skill →
+            </el-button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 跨阶段数据流向 -->
+      <section class="admin-list-card" v-if="getNextPhase() && currentPhaseSkills.length > 0">
+        <div class="admin-section-head">
+          <div class="admin-section-head__copy">
+            <h3 class="admin-section-head__title">阶段间传递</h3>
+            <p class="admin-section-head__desc">{{ currentPhase.shortName }} → {{ getNextPhase()?.shortName }}</p>
+          </div>
+        </div>
+        
+        <div class="cross-agent-flow">
+          <!-- 当前阶段 -->
+          <div class="flow-section">
+            <h5>{{ currentPhase.icon }} {{ currentPhase.label }}</h5>
+            <div class="flow-skills">
+              <div v-for="skill in currentPhaseSkills" :key="skill.id" class="flow-skill-node">
+                <div class="flow-skill-name">{{ skill.label }}</div>
+                <div class="flow-produces" v-if="getSkillProduces(skill.id).length > 0">
+                  <el-tag 
+                    v-for="v in getSkillProduces(skill.id).slice(0, 3)" 
+                    :key="v" 
+                    size="small"
+                    effect="plain"
+                  >
+                    {{ v }}
+                  </el-tag>
+                  <span v-if="getSkillProduces(skill.id).length > 3" class="var-more">
+                    +{{ getSkillProduces(skill.id).length - 3 }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </el-card>
-
-        <!-- 跨阶段数据流向 -->
-        <el-card shadow="never" class="detail-card" v-if="getNextPhase()">
-          <template #header>
-            <div class="section-card__header">
-              <strong>跨阶段数据流向</strong>
-              <span>{{ currentPhase.shortName }} → {{ getNextPhase()?.shortName }}</span>
-            </div>
-          </template>
           
-          <div class="cross-agent-flow">
-            <!-- 当前阶段 -->
-            <div class="flow-section">
-              <h5>{{ currentPhase.icon }} {{ currentPhase.label }}</h5>
-              <div class="flow-skills">
-                <div v-for="skill in currentPhaseSkills" :key="skill.id" class="flow-skill-node">
-                  <div class="flow-skill-name">{{ skill.label }}</div>
-                  <div class="flow-produces" v-if="getSkillProduces(skill.id).length > 0">
-                    <el-tag 
-                      v-for="v in getSkillProduces(skill.id).slice(0, 3)" 
-                      :key="v" 
-                      size="small"
-                      effect="plain"
-                    >
-                      {{ v }}
-                    </el-tag>
-                    <span v-if="getSkillProduces(skill.id).length > 3" class="var-more">
-                      +{{ getSkillProduces(skill.id).length - 3 }}
-                    </span>
-                  </div>
+          <div class="flow-arrow">→</div>
+          
+          <!-- 下一阶段 -->
+          <div class="flow-section">
+            <h5>{{ getNextPhase()?.icon }} {{ getNextPhase()?.label }}</h5>
+            <div class="flow-skills">
+              <div 
+                v-for="consumer in getConsumersFromNextPhase()" 
+                :key="consumer.skillId" 
+                class="flow-skill-node flow-skill-node--consumer"
+              >
+                <div class="flow-skill-name">{{ consumer.skillLabel }}</div>
+                <div class="flow-consumes" v-if="consumer.consumes.length > 0">
+                  <el-tag 
+                    v-for="v in consumer.consumes.slice(0, 3)" 
+                    :key="v" 
+                    size="small" 
+                    type="info"
+                    effect="plain"
+                  >
+                    {{ v }}
+                  </el-tag>
+                  <span v-if="consumer.consumes.length > 3" class="var-more">
+                    +{{ consumer.consumes.length - 3 }}
+                  </span>
                 </div>
               </div>
-            </div>
-            
-            <div class="flow-arrow">→</div>
-            
-            <!-- 下一阶段 -->
-            <div class="flow-section">
-              <h5>{{ getNextPhase()?.icon }} {{ getNextPhase()?.label }}</h5>
-              <div class="flow-skills">
-                <div 
-                  v-for="consumer in getConsumersFromNextPhase()" 
-                  :key="consumer.skillId" 
-                  class="flow-skill-node flow-skill-node--consumer"
-                >
-                  <div class="flow-skill-name">{{ consumer.skillLabel }}</div>
-                  <div class="flow-consumes" v-if="consumer.consumes.length > 0">
-                    <el-tag 
-                      v-for="v in consumer.consumes.slice(0, 3)" 
-                      :key="v" 
-                      size="small" 
-                      type="info"
-                      effect="plain"
-                    >
-                      {{ v }}
-                    </el-tag>
-                    <span v-if="consumer.consumes.length > 3" class="var-more">
-                      +{{ consumer.consumes.length - 3 }}
-                    </span>
-                  </div>
-                </div>
-                <div v-if="getConsumersFromNextPhase().length === 0" class="flow-empty">
-                  暂无直接消费关系
-                </div>
+              <div v-if="getConsumersFromNextPhase().length === 0" class="flow-empty">
+                暂无直接消费关系
               </div>
             </div>
           </div>
-        </el-card>
-      </template>
+        </div>
+      </section>
 
-      <el-card shadow="never" class="detail-card" v-if="currentOrchestrator">
-        <template #header>
-          <div class="section-card__header">
-            <strong>变量流向矩阵</strong>
-            <span>步骤产出与消费关系</span>
+      <!-- 变量流向 -->
+      <section class="admin-list-card" v-if="currentOrchestrator">
+        <div class="admin-section-head">
+          <div class="admin-section-head__copy">
+            <h3 class="admin-section-head__title">变量流向</h3>
           </div>
-        </template>
+        </div>
+        
         <el-table :data="variableFlowMatrix" border v-if="variableFlowMatrix.length">
           <el-table-column label="步骤" width="100">
             <template #default="{ row }">
@@ -308,8 +319,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-else description="暂无变量流向数据" />
-      </el-card>
+      </section>
     </div>
   </div>
 </template>
@@ -325,6 +335,8 @@ import '@vue-flow/core/dist/theme-default.css';
 import '@vue-flow/controls/dist/style.css';
 import { adminRuntimeDefinitionsApi, adminAgentTopologyApi } from '@/api/adminApi';
 import { toast } from '@/utils/toast';
+import AdminPageHeader from './components/AdminPageHeader.vue';
+import { Connection, Refresh } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const loading = ref(false);
@@ -693,54 +705,44 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.runtime-definitions-page {
-  display: grid;
+/* ========== 页面容器 ========== */
+.orchestrator-definitions-page {
+  display: flex;
+  flex-direction: column;
   gap: 20px;
 }
 
-.page-hero {
-  padding: 24px 28px;
-  border-radius: 24px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.94));
-  box-shadow: 0 16px 42px rgba(42, 72, 128, 0.08);
+/* ========== 统计卡片补充样式 ========== */
+.admin-summary-meta {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-top: 6px;
+  font-weight: 500;
 }
 
-.admin-page-title {
-  margin: 8px 0 0;
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: #22344d;
-  letter-spacing: -0.03em;
+/* 覆盖平台统计卡片样式，增大字号 */
+.admin-summary-card__label {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  margin-bottom: 8px !important;
 }
 
-.page-hero__subtitle {
-  margin: 6px 0 0;
-  color: #62758f;
-  font-size: 0.95rem;
-  line-height: 1.7;
+.admin-summary-card__value {
+  font-size: 2.5rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  min-height: 26px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: #2d6df2;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* Agent Tabs */
+/* ========== Agent Tabs ========== */
 .agent-tabs {
-  margin-top: 20px;
+  margin-top: 24px;
+  margin-bottom: 8px;
 }
 
 .agent-tabs :deep(.el-tabs__header) {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e2e8f0;
 }
 
 .agent-tabs :deep(.el-tabs__nav-wrap::after) {
@@ -751,261 +753,64 @@ onMounted(() => {
   font-size: 15px;
   font-weight: 600;
   color: #64748b;
-  padding: 0 24px;
-  height: 48px;
-  line-height: 48px;
+  padding: 0 28px;
+  height: 52px;
+  line-height: 52px;
+  transition: all 0.2s ease;
 }
 
-.agent-tabs :deep(.el-tabs__item.is-active) {
+.agent-tabs :deep(.el-tabs__item:hover) {
   color: #3b82f6;
 }
 
+.agent-tabs :deep(.el-tabs__item.is-active) {
+  color: #3478f6;
+  font-weight: 700;
+}
+
 .agent-tabs :deep(.el-tabs__active-bar) {
-  background-color: #3b82f6;
+  background: linear-gradient(90deg, #3478f6, #60a5fa);
   height: 3px;
+  border-radius: 3px 3px 0 0;
 }
 
 .agent-tab-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .agent-tab-icon {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
-}
-
-/* Agent Grid - 删除，不再需要 */
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.summary-card {
-  border-radius: 18px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 255, 0.96));
-  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.08);
-}
-
-.summary-card .label {
-  font-size: 0.75rem;
-  color: #7b8ba3;
-  font-weight: 600;
-}
-
-.summary-card .value {
-  font-size: 1.85rem;
-  font-weight: 800;
-  margin-top: 0.3rem;
-  color: #22344d;
-  line-height: 1;
-}
-
-.summary-card--blue .value { color: var(--color-primary); }
-.summary-card--green .value { color: #16a34a; }
-.summary-card--purple .value { color: #7c3aed; }
-
-:deep(.summary-card .el-card__body) {
-  padding: 16px 18px;
-}
-
-.filters {
-  padding: 16px 18px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 255, 0.92));
-  box-shadow: 0 12px 28px rgba(42, 72, 128, 0.08);
-}
-
-.admin-list-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.admin-list-toolbar__group {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.search {
-  width: 260px;
-}
-
-.admin-list-card {
-  width: 100%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 255, 0.94));
-  border: 1px solid #d2dbf3;
-  border-radius: 28px;
-  padding: 0.8rem;
-  box-shadow: 0 18px 40px rgba(42, 72, 128, 0.1);
-}
-
-.definition-btn,
-.table-link-btn {
-  border-radius: 14px;
-  font-weight: 700;
-}
-
-.definition-btn--primary {
-  color: #fff;
-  border-color: transparent;
-  background: linear-gradient(135deg, #3478f6, #3f86ff);
-}
-
-.table-link-btn {
-  min-height: 30px;
-  padding: 0 12px;
-  color: var(--color-primary-dark, #1f57cc);
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  background: rgba(244, 249, 255, 0.96);
-}
-
-.table-link-btn--primary {
-  color: #fff;
-  border-color: transparent;
-  background: linear-gradient(135deg, #3478f6, #3f86ff);
-}
-
-.table-link-btn--sm {
-  min-height: 28px;
-  padding: 0 10px;
-}
-
-.definition-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.definition-cell__id {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.definition-cell__desc {
-  font-size: 13px;
-  color: #4b5563;
 }
 
 .definition-detail-grid {
   display: grid;
-  gap: 16px;
+  gap: 24px;
+  margin-top: 8px;
 }
 
-.detail-hero-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
-  gap: 16px;
-  padding: 20px 22px;
-  border-radius: 24px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 255, 0.95));
-  box-shadow: 0 16px 38px rgba(42, 72, 128, 0.08);
+/* ========== 阶段描述区域优化 ========== */
+.admin-filter-panel {
+  padding: 20px 24px !important;
 }
 
-.detail-hero-card__main h3 {
-  margin: 10px 0 0;
-  color: #22344d;
-  font-size: 1.4rem;
+.admin-filter-panel .admin-section-head__title {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+  letter-spacing: -0.01em;
 }
 
-.detail-hero-card__header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 4px;
+.admin-filter-panel .admin-section-head__desc {
+  font-size: 14px !important;
+  color: #64748b !important;
+  margin-top: 6px !important;
+  line-height: 1.6 !important;
 }
 
-.detail-hero-card__main p {
-  margin: 10px 0 0;
-  color: #7085a6;
-  line-height: 1.7;
-}
-
-.detail-hero-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  margin-top: 14px;
-  color: #7085a6;
-  font-size: 0.875rem;
-}
-
-.detail-hero-card__stats {
-  display: grid;
-  gap: 10px;
-}
-
-.detail-stat-card,
-.detail-card {
-  border: 1px solid rgba(205, 216, 238, 0.86);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.95));
-}
-
-.detail-stat-card {
-  border-radius: 18px;
-  padding: 14px 16px;
-  display: grid;
-  gap: 4px;
-}
-
-.detail-stat-card__label {
-  color: #7b8ba3;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.detail-stat-card strong {
-  color: #22344d;
-  font-size: 1.1rem;
-}
-
-.detail-card :deep(.el-card__body) {
-  padding: 0 18px 18px;
-}
-
-.section-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  color: #7085a6;
-  font-size: 13px;
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-
-.step-agent-cell {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.step-agent-cell__actions {
-  display: inline-flex;
-  gap: 8px;
-}
-
-/* VueFlow 拓扑图样式 */
-.topology-card {
-  min-height: 600px;
-}
-
+/* ========== VueFlow 拓扑图样式 ========== */
 .topology-canvas {
   height: 600px;
   border-radius: 12px;

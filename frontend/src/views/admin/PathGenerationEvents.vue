@@ -6,29 +6,6 @@
       </template>
     </AdminPageHeader>
 
-    <section class="admin-summary-grid" v-if="summary.total > 0">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">事件总数</div>
-        <strong class="admin-summary-card__value">{{ summary.total }}</strong>
-        <div class="events-summary-meta">当前结果集</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">成功</div>
-        <strong class="admin-summary-card__value">{{ summary.success }}</strong>
-        <div class="events-summary-meta">已完成阶段</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--orange">
-        <div class="admin-summary-card__label">进行中</div>
-        <strong class="admin-summary-card__value">{{ summary.running }}</strong>
-        <div class="events-summary-meta">started</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--red">
-        <div class="admin-summary-card__label">失败</div>
-        <strong class="admin-summary-card__value">{{ summary.failed }}</strong>
-        <div class="events-summary-meta">需处理</div>
-      </article>
-    </section>
-
     <section class="admin-filter-panel">
       <div class="admin-section-head">
         <div class="admin-section-head__copy">

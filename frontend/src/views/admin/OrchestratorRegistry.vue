@@ -13,13 +13,6 @@
       </template>
     </AdminPageHeader>
 
-    <section class="admin-summary-grid" v-show="summary">
-      <article class="admin-summary-card admin-summary-card--blue"><div class="admin-summary-card__label">编排器总数</div><strong class="admin-summary-card__value">{{ summary?.total }}</strong></article>
-      <article class="admin-summary-card admin-summary-card--green"><div class="admin-summary-card__label">可编辑成员</div><strong class="admin-summary-card__value">{{ summary?.enabledCount }}</strong></article>
-      <article class="admin-summary-card admin-summary-card--orange"><div class="admin-summary-card__label">输入接入配置</div><strong class="admin-summary-card__value">{{ summary?.configurableCount }}</strong></article>
-      <article class="admin-summary-card"><div class="admin-summary-card__label">可挂接成员</div><strong class="admin-summary-card__value orchestrator-summary-value--purple">{{ summary?.totalMemberAgents }}</strong></article>
-    </section>
-
     <section class="admin-filter-panel orchestrator-filter-panel">
       <div class="admin-section-head orchestrator-filter-panel__head">
         <div class="admin-section-head__copy">

@@ -11,29 +11,6 @@
       </template>
     </AdminPageHeader>
 
-    <section class="admin-summary-grid">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">默认模型</div>
-        <strong class="admin-summary-card__value">{{ form.defaultModel || '未设置' }}</strong>
-        <div class="api-summary-meta">系统默认</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">可用模型数</div>
-        <strong class="admin-summary-card__value">{{ form.availableModels.length }}</strong>
-        <div class="api-summary-meta">可补充</div>
-      </article>
-      <article class="admin-summary-card" :class="form.apiKeyConfigured ? 'admin-summary-card--green' : 'admin-summary-card--red'">
-        <div class="admin-summary-card__label">API Key</div>
-        <strong class="admin-summary-card__value">{{ form.apiKeyConfigured ? '已配置' : '未配置' }}</strong>
-        <div class="api-summary-meta">留空沿用</div>
-      </article>
-      <article class="admin-summary-card" :class="lastFetchAt ? 'admin-summary-card--blue' : 'admin-summary-card--orange'">
-        <div class="admin-summary-card__label">模型列表来源</div>
-        <strong class="admin-summary-card__value">{{ lastFetchAt ? '已拉取' : '未拉取' }}</strong>
-        <div class="api-summary-meta">{{ lastFetchAt || '尚未获取模型列表' }}</div>
-      </article>
-    </section>
-
     <div class="config-shell">
       <section class="config-panel config-panel--main">
         <div class="config-panel__header">

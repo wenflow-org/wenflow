@@ -4,7 +4,7 @@
       kicker="Architecture Diagnostics"
       title="Agent 架构诊断"
       desc="排查 manifest、注册表和协议漂移。"
-      :icon="WarningFilled"
+      :icon="Tools"
       :highlights="manifestHighlights"
     >
       <template #actions>
@@ -148,7 +148,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { WarningFilled } from '@element-plus/icons-vue';
+import { Tools } from '@element-plus/icons-vue';
 import { adminAgentsApi, type ManifestDiagnosticsData } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';

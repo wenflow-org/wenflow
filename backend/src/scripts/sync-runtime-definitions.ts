@@ -10,6 +10,7 @@ import { pathSceneFramingRuntimeDefinition } from '../skills/path-scene-framing/
 import { stageDesignerRuntimeDefinition } from '../skills/stage-designer/definition';
 import { virtualLearnerPersonaDesignerRuntimeDefinition } from '../skills/virtual-learner-persona-designer/definition';
 import { virtualLearnerScenarioDesignerRuntimeDefinition } from '../skills/virtual-learner-scenario-designer/definition';
+import { goalAgentRuntimeDefinition as goalOrchestratorRuntimeDefinition } from '../coordinators/goal.definition';
 import { pathAgentRuntimeDefinition as pathOrchestratorRuntimeDefinition } from '../coordinators/path.definition';
 import { AITeachingCoordinatorRuntimeDefinition } from '../coordinators/ai-teaching.definition';
 import { learnerAgentRuntimeDefinition as learnerOrchestratorRuntimeDefinition } from '../coordinators/learner.definition';
@@ -39,6 +40,7 @@ async function main() {
   ];
 
   const orchestratorDefinitions = [
+    goalOrchestratorRuntimeDefinition,
     pathOrchestratorRuntimeDefinition,
     AITeachingCoordinatorRuntimeDefinition,
     learnerOrchestratorRuntimeDefinition,

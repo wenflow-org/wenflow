@@ -102,23 +102,23 @@ defineProps<{
 
 .admin-page-header__title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--admin-text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .admin-page-header--dense .admin-page-header__title {
-  font-size: 1.125rem;
+  font-size: 1.25rem;
 }
 
 .admin-page-header__icon {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   color: var(--admin-text-brand);
   flex-shrink: 0;
 }
@@ -135,20 +135,20 @@ defineProps<{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 6px;
 }
 
 .admin-page-header__pill {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 14px;
   border-radius: var(--admin-radius-pill);
   background: var(--admin-bg-muted);
   border: var(--admin-border-subtle);
   color: var(--admin-text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 

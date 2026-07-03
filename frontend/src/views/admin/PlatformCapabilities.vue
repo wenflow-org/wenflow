@@ -4,7 +4,7 @@
       kicker="Capability Directory"
       title="平台能力管理"
       desc="按能力查看主入口、编排链和挂载组件。"
-      :icon="Grid"
+      :icon="Tools"
       :highlights="capabilityHighlights"
     >
       <template #actions>
@@ -14,13 +14,6 @@
         </el-button>
       </template>
     </AdminPageHeader>
-
-    <section class="admin-summary-grid" v-if="summary">
-      <article class="admin-summary-card admin-summary-card--blue"><div class="admin-summary-card__label">平台能力</div><strong class="admin-summary-card__value">{{ summary.capabilityCount }}</strong></article>
-      <article class="admin-summary-card admin-summary-card--green"><div class="admin-summary-card__label">主运行节点</div><strong class="admin-summary-card__value">{{ summary.runtimeCount }}</strong></article>
-      <article class="admin-summary-card"><div class="admin-summary-card__label">挂载能力成员</div><strong class="admin-summary-card__value capability-summary-value--purple">{{ summary.memberCount }}</strong></article>
-      <article class="admin-summary-card admin-summary-card--orange"><div class="admin-summary-card__label">关联编排能力</div><strong class="admin-summary-card__value">{{ summary.activeCount }}</strong></article>
-    </section>
 
     <section class="admin-filter-panel capability-filter-panel">
       <div class="admin-section-head capability-filter-panel__head">
@@ -104,7 +97,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Grid, Refresh } from '@element-plus/icons-vue'
+import { Tools, Refresh } from '@element-plus/icons-vue'
 import { adminAgentsApi, adminSkillsApi, type AdminRegistryAgent, type OrchestratorRelationItem } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import { toast } from '@/utils/toast'

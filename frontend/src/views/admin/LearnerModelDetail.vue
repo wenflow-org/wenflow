@@ -1,17 +1,13 @@
 <template>
-  <div class="learner-model-detail-page" v-loading="loading">
-    <div class="admin-overview-bg">
-      <div class="admin-overview-bg__orb admin-overview-bg__orb--1"></div>
-      <div class="admin-overview-bg__orb admin-overview-bg__orb--2"></div>
-    </div>
-
+  <div class="admin-page learner-model-detail-page" v-loading="loading">
     <AdminPageHeader
       title="学习者模型详情"
       :icon="Reading"
+      :highlights="detailHighlights"
     >
       <template #actions>
-        <el-button class="detail-btn detail-btn--ghost" @click="goBack">返回列表</el-button>
-        <el-button class="detail-btn detail-btn--primary" :loading="recomputing" @click="recompute">重算模型</el-button>
+        <el-button @click="goBack">返回列表</el-button>
+        <el-button type="primary" :loading="recomputing" @click="recompute">重算模型</el-button>
       </template>
     </AdminPageHeader>
 
@@ -340,6 +336,13 @@ const confidenceText = computed(() => {
 const highRiskEvidenceCount = computed(() => evidence.value.filter((item) => Number(item.score) >= 0.8).length);
 const latestEvidenceAt = computed(() => evidence.value[0]?.happenedAt ? formatTime(evidence.value[0].happenedAt) : '--');
 
+const detailHighlights = computed(() => [
+  { label: `版本 ${snapshot.value?.snapshotVersion || '--'}`, tone: 'info' as const },
+  { label: `趋势 ${trendText.value}`, tone: snapshot.value?.dynamicState?.recentTrend === 'improving' ? 'success' as const : snapshot.value?.dynamicState?.recentTrend === 'declining' ? 'warning' as const : 'neutral' as const },
+  { label: `风险 ${riskText.value}`, tone: snapshot.value?.dynamicState?.fatigueRisk === 'high' ? 'danger' as const : snapshot.value?.dynamicState?.fatigueRisk === 'medium' ? 'warning' as const : 'neutral' as const },
+  { label: `${conceptRows.value.length} 个知识点`, tone: 'neutral' as const }
+]);
+
 const conceptRows = computed(() => snapshot.value?.knowledgeMemory?.currentPath?.conceptStates || []);
 
 const loadData = async () => {
@@ -383,14 +386,8 @@ onMounted(loadData);
 </script>
 
 <style scoped>
-.admin-overview-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-.admin-overview-bg__orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
-.admin-overview-bg__orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: admin-orb 26s ease-in-out infinite; }
-.admin-overview-bg__orb--2 { width: 380px; height: 380px; left: -100px; bottom: 120px; background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%); animation: admin-orb 30s ease-in-out infinite reverse; }
-@keyframes admin-orb { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
-
 .learner-model-detail-page {
-  display: grid;
+  /* 继承 admin-page 的 display: grid */
   gap: 16px;
 }
 
@@ -562,37 +559,6 @@ onMounted(loadData);
 
 .action-item strong {
   color: var(--text-primary);
-}
-
-.detail-btn {
-  height: 38px;
-  padding: 0 16px;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  font-weight: 700;
-}
-
-.detail-btn--ghost {
-  color: #335aa4;
-  border-color: rgba(52, 120, 246, 0.2);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.detail-btn--ghost:hover {
-  color: #22478f;
-  border-color: rgba(52, 120, 246, 0.4);
-  background: rgba(238, 245, 255, 0.92);
-}
-
-.detail-btn--primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #3478f6, #3f86ff);
-  box-shadow: 0 10px 20px rgba(52, 120, 246, 0.24);
-}
-
-.detail-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.3);
 }
 
 .detail-section :deep(.el-table) { border-radius: 14px; overflow: hidden; }

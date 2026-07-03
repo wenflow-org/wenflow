@@ -22,29 +22,6 @@
        description="主链 Skill 已移至“Skill 目录”，此处仅管理外挂组件。"
       />
 
-    <section class="admin-summary-grid" v-show="summary">
-      <article class="admin-summary-card admin-summary-card--blue">
-        <div class="admin-summary-card__label">Skill 总数</div>
-        <strong class="admin-summary-card__value">{{ summary?.total }}</strong>
-        <div class="component-summary-meta">组件目录</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--green">
-        <div class="admin-summary-card__label">正常工作</div>
-        <strong class="admin-summary-card__value">{{ summary?.working }}</strong>
-        <div class="component-summary-meta">可用</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--orange">
-        <div class="admin-summary-card__label">简化实现</div>
-        <strong class="admin-summary-card__value">{{ summary?.simplified }}</strong>
-        <div class="component-summary-meta">简化实现</div>
-      </article>
-      <article class="admin-summary-card admin-summary-card--red">
-        <div class="admin-summary-card__label">需关注</div>
-        <strong class="admin-summary-card__value">{{ summary?.needsAttention }}</strong>
-        <div class="component-summary-meta">异常或模拟</div>
-      </article>
-    </section>
-
     <div class="filters admin-list-toolbar">
       <div class="admin-list-toolbar__group">
         <el-input v-model="keyword" placeholder="搜索组件 ID / 名称" clearable class="search" />
@@ -390,7 +367,7 @@ watch(
 
 <style scoped>
 .skill-model-config {
-  padding: 0;
+  /* 继承 admin-page 的默认 padding */
 }
 
 .component-summary-meta {
