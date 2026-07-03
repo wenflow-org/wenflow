@@ -4,14 +4,8 @@
       title="学习者中心"
       :icon="Reading"
       :highlights="centerHighlights"
-    />
-
-    <section class="learner-center-shell">
-      <div class="learner-center-shell__head">
-        <div class="learner-center-shell__copy">
-          <span class="learner-center-shell__kicker">模块导航</span>
-          <h2>{{ activeTabMeta.title }}</h2>
-        </div>
+    >
+      <template #actions>
         <div class="learner-center-shell__switcher" role="tablist" aria-label="学习者中心模块切换">
           <button
             v-for="item in tabOptions"
@@ -26,8 +20,10 @@
             <span>{{ item.short }}</span>
           </button>
         </div>
-      </div>
+      </template>
+    </AdminPageHeader>
 
+    <section class="learner-center-shell">
       <div class="learner-center-shell__body">
         <LearnerModelsPanel v-if="activeTab === 'models'" embedded />
         <TeachingSessionsPanel v-else embedded />
@@ -117,65 +113,13 @@ watch(activeTab, (next) => {
 .learner-center-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   position: relative;
 }
 
 .learner-center-shell {
   position: relative;
   z-index: 1;
-  display: grid;
-  gap: 18px;
-}
-
-.learner-center-shell__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding-bottom: 16px;
-  border-bottom: var(--admin-border-subtle);
-}
-
-.learner-center-shell__copy {
-  display: grid;
-  gap: 6px;
-  max-width: 720px;
-}
-
-.learner-center-shell__kicker {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 24px;
-  padding: 0 10px;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--admin-color-info-bg);
-  color: var(--admin-text-brand);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.summary-card-meta {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--admin-text-secondary);
-}
-
-.learner-center-shell__copy h2 {
-  margin: 0;
-  font-size: 1.2rem;
-  line-height: 1.2;
-  color: var(--admin-text-primary);
-}
-
-.learner-center-shell__copy p {
-  margin: 0;
-  color: var(--admin-text-secondary);
-  line-height: 1.6;
 }
 
 .learner-center-shell__switcher {

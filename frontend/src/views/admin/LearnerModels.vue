@@ -14,31 +14,20 @@
       </template>
     </AdminPageHeader>
 
-    <section v-else class="module-head">
-      <div class="module-head__copy">
-        <h2>学习者模型快照</h2>
+    <div class="admin-list-toolbar">
+      <div class="admin-list-toolbar__group">
+        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
+        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
+        <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
+        <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
       </div>
-    </section>
-
-    <section class="admin-filter-panel">
-      <div class="admin-section-head">
-        <h3 class="admin-section-head__title">筛选与过滤</h3>
+      <div class="admin-list-toolbar__group">
+        <el-button @click="resetFilters">
+          <el-icon><RefreshLeft /></el-icon>
+          重置
+        </el-button>
       </div>
-      <div class="admin-list-toolbar">
-        <div class="admin-list-toolbar__group">
-          <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
-          <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
-          <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
-          <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
-        </div>
-        <div class="admin-list-toolbar__group">
-          <el-button @click="resetFilters">
-            <el-icon><RefreshLeft /></el-icon>
-            重置
-          </el-button>
-        </div>
-      </div>
-    </section>
+    </div>
 
     <section v-if="showEmptyState" class="empty-state-card admin-list-card">
       <div class="empty-state-card__copy">
@@ -436,6 +425,21 @@ onMounted(loadData);
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+}
+
+/* 固定列在浮动时需要背景，继承表格单元格的背景 */
+:deep(.el-table__fixed-right .el-table__row .el-table__cell) {
+  background-color: #ffffff;
+}
+
+/* 保持斑马纹效果 */
+:deep(.el-table__fixed-right .el-table__row.el-table__row--striped .el-table__cell) {
+  background-color: #fafafa;
+}
+
+/* 保持hover效果 */
+:deep(.el-table__fixed-right .el-table__row:hover .el-table__cell) {
+  background-color: rgba(52, 120, 246, 0.03) !important;
 }
 
 .model-action-btn {

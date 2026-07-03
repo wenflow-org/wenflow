@@ -38,82 +38,73 @@
 
     <main class="layout-shell">
       <section class="main">
-        <el-tabs v-model="activeTab" class="profile-tabs">
-          <!-- Tab 1: 人物概览 -->
-          <el-tab-pane label="人物概览" name="overview">
-            <section class="panel profile-overview">
-              <div class="panel-head panel-head--profile">
-                <div class="panel-head__title-wrap">
-                  <div class="panel-title">人物概览</div>
-                  <div class="panel-meta">保留长期人物底座，具体冲突和开场由故事目录承载。</div>
+        <section class="panel profile-overview">
+          <div class="panel-head panel-head--profile">
+            <div class="panel-head__title-wrap">
+              <div class="panel-title">人物概览</div>
+              <div class="panel-meta">保留长期人物底座，具体冲突和开场由故事目录承载。</div>
+            </div>
+          </div>
+          <div class="profile-overview__content">
+            <div class="profile-summary-card">
+              <div class="profile-header profile-header--compact">
+                <div class="profile-avatar">{{ profileData?.userName?.charAt(0) || '?' }}</div>
+                <div class="profile-identity">
+                  <strong>{{ profileData?.userName || '--' }}</strong>
+                  <span>{{ profileData?.profile?.occupation || '虚拟学习者' }}</span>
                 </div>
               </div>
-              <div class="profile-overview__content">
-                <div class="profile-summary-card">
-                  <div class="profile-header profile-header--compact">
-                    <div class="profile-avatar">{{ profileData?.userName?.charAt(0) || '?' }}</div>
-                    <div class="profile-identity">
-                      <strong>{{ profileData?.userName || '--' }}</strong>
-                      <span>{{ profileData?.profile?.occupation || '虚拟学习者' }}</span>
-                    </div>
-                  </div>
-                  <div class="profile-summary-card__intro">
-                    <h2>{{ personaHeadline }}</h2>
-                    <p>{{ personaNarrative }}</p>
-                  </div>
-                </div>
-                <div class="profile-overview__facts">
-                  <article v-for="item in personaFactCards" :key="item.label" class="persona-fact-card">
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                  </article>
-                </div>
+              <div class="profile-summary-card__intro">
+                <h2>{{ personaHeadline }}</h2>
+                <p>{{ personaNarrative }}</p>
               </div>
-            </section>
+            </div>
+            <div class="profile-overview__facts">
+              <article v-for="item in personaFactCards" :key="item.label" class="persona-fact-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </article>
+            </div>
+          </div>
+        </section>
 
-            <section class="panel trait-panel">
-              <div class="panel-head">
-                <div>
-                  <div class="panel-title">人物反应</div>
+        <section class="panel trait-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">人物反应</div>
+            </div>
+          </div>
+          <div class="trait-grid">
+            <article v-for="item in traitSummaryCards" :key="item.label" class="trait-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <p>{{ item.helper }}</p>
+            </article>
+          </div>
+          <el-collapse class="raw-json-collapse">
+            <el-collapse-item name="profile-json">
+              <template #title>
+                <div class="raw-json-collapse__title">
+                  <span>原始画像 JSON</span>
+                  <em>查看 persona 原始结构</em>
                 </div>
-              </div>
-              <div class="trait-grid">
-                <article v-for="item in traitSummaryCards" :key="item.label" class="trait-card">
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
-                  <p>{{ item.helper }}</p>
-                </article>
-              </div>
-              <el-collapse class="raw-json-collapse">
-                <el-collapse-item name="profile-json">
-                  <template #title>
-                    <div class="raw-json-collapse__title">
-                      <span>原始画像 JSON</span>
-                      <em>查看 persona 原始结构</em>
-                    </div>
-                  </template>
-                  <pre class="raw-json-block">{{ profileRawJson }}</pre>
-                </el-collapse-item>
-              </el-collapse>
-            </section>
-          </el-tab-pane>
+              </template>
+              <pre class="raw-json-block">{{ profileRawJson }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+        </section>
 
-          <!-- Tab 2: 故事目录 -->
-          <el-tab-pane name="stories">
-            <template #label>
-              故事目录 <el-badge v-if="storyPool.length" :value="storyPool.length" class="tab-badge" />
-            </template>
-            <section class="panel story-pool-panel">
-              <div class="panel-head">
-                <div>
-                  <div class="panel-title">故事目录</div>
-                </div>
-                <div class="draft-actions">
-                  <el-button :loading="draftStoriesLoading" @click="generateStoryDraft">生成新故事</el-button>
-                </div>
-              </div>
+        <section class="panel story-pool-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">故事目录</div>
+            </div>
+            <div class="draft-actions">
+              <el-button :loading="draftStoriesLoading" @click="generateStoryDraft">生成新故事</el-button>
+            </div>
+          </div>
 
-              <div v-if="storySummaries.length" class="story-list story-list--compact">
+          <div v-if="storySummaries.length" class="story-list story-list--compact">
             <article
               v-for="(story, index) in storySummaries"
               :key="story.key || story.storyId || index"
@@ -129,22 +120,6 @@
                 </div>
                 <strong>{{ story.storyTitle || story.title || `故事 ${index + 1}` }}</strong>
                 <p>{{ story.storyOutline || story.storyTriggerEvent || '暂无故事摘要' }}</p>
-                
-                <div v-if="story.pressurePoints && story.pressurePoints.length > 0" class="story-feature-card__pressures">
-                  <span class="pressure-label">💥 对抗剖析点 ({{ story.pressurePoints.length }})：</span>
-                  <div class="pressure-tags">
-                    <el-tag
-                      v-for="(point, idx) in story.pressurePoints"
-                      :key="idx"
-                      size="small"
-                      type="warning"
-                      effect="plain"
-                    >
-                      {{ point }}
-                    </el-tag>
-                  </div>
-                </div>
-                
                 <div class="story-feature-card__lines story-feature-card__lines--inline">
                   <span>Goal 对话 {{ story.stats?.goalCount || 0 }}</span>
                   <span>Path 路径 {{ story.stats?.pathCount || 0 }}</span>
@@ -160,13 +135,6 @@
 
           <div v-else class="empty-box">当前还没有故事条目。先生成 1 个故事，再从该故事开始观察。</div>
         </section>
-      </el-tab-pane>
-
-      <!-- Tab 3: 运行历史 -->
-      <el-tab-pane name="sessions">
-        <template #label>
-          运行历史 <el-badge v-if="sessions.length" :value="sessions.length" class="tab-badge" />
-        </template>
 
         <section class="panel">
           <div class="panel-head">
@@ -246,10 +214,8 @@
             </el-table>
           </template>
         </section>
-      </el-tab-pane>
-    </el-tabs>
-  </section>
-</main>
+      </section>
+    </main>
 
     <el-dialog v-model="editDialogVisible" title="编辑画像" width="640px" destroy-on-close>
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
@@ -434,7 +400,6 @@ const editingStoryIndex = ref<number | null>(null)
 const projectionDialogVisible = ref(false)
 const projectionLoading = ref(false)
 const testProjection = ref<any | null>(null)
-const activeTab = ref('overview')
 
 const projectionEntryLabelMap: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -1258,42 +1223,6 @@ watch(() => route.params.storyId, () => {
   color: #1f2937;
 }
 
-.profile-tabs {
-  background: transparent;
-}
-
-.profile-tabs :deep(.el-tabs__header) {
-  margin-bottom: 16px;
-  background: #fff;
-  border-radius: 12px;
-  padding: 8px 12px;
-  border: 1px solid #e5eaf2;
-}
-
-.profile-tabs :deep(.el-tabs__nav-wrap::after) {
-  display: none;
-}
-
-.profile-tabs :deep(.el-tabs__item) {
-  font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
-  padding: 10px 16px;
-}
-
-.profile-tabs :deep(.el-tabs__item.is-active) {
-  color: #3478f6;
-  font-weight: 600;
-}
-
-.profile-tabs :deep(.el-tabs__active-bar) {
-  background-color: #3478f6;
-}
-
-.tab-badge {
-  margin-left: 6px;
-}
-
 .panel-head {
   justify-content: space-between;
   gap: 12px;
@@ -2053,26 +1982,6 @@ watch(() => route.params.storyId, () => {
 .story-feature-card__lines span {
   font-size: 12px;
   color: #6b7280;
-}
-
-.story-feature-card__pressures {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed #e5e7eb;
-}
-
-.pressure-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: #d46b08;
-  font-weight: 600;
-}
-
-.pressure-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .story-feature-card__actions {

@@ -58,8 +58,8 @@ defineProps<{
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 4px 4px 16px;
-  margin-bottom: 8px;
+  padding: 4px 4px 12px;
+  margin-bottom: 16px;
   border: none;
   border-bottom: var(--admin-border-subtle);
   background: transparent;

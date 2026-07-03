@@ -14,31 +14,20 @@
       </template>
     </AdminPageHeader>
 
-    <section v-else class="module-head">
-      <div class="module-head__copy">
-        <h2>教学会话巡检</h2>
+    <div class="admin-list-toolbar">
+      <div class="admin-list-toolbar__group">
+        <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
+        <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
+          <el-option label="进行中" value="active" />
+          <el-option label="已完成" value="completed" />
+          <el-option label="超时" value="timeout" />
+          <el-option label="错误" value="error" />
+        </el-select>
+        <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
+        <el-checkbox v-model="filters.onlyAttention">仅看待关注</el-checkbox>
+        <el-checkbox v-model="filters.onlyMissingWrapup">仅看缺少会话总结</el-checkbox>
       </div>
-    </section>
-
-    <section class="admin-filter-panel">
-      <div class="admin-section-head">
-        <h3 class="admin-section-head__title">筛选与过滤</h3>
-      </div>
-      <div class="admin-list-toolbar">
-        <div class="admin-list-toolbar__group">
-          <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
-          <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
-            <el-option label="进行中" value="active" />
-            <el-option label="已完成" value="completed" />
-            <el-option label="超时" value="timeout" />
-            <el-option label="错误" value="error" />
-          </el-select>
-          <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
-          <el-checkbox v-model="filters.onlyAttention">仅看待关注</el-checkbox>
-          <el-checkbox v-model="filters.onlyMissingWrapup">仅看缺少会话总结</el-checkbox>
-        </div>
-      </div>
-    </section>
+    </div>
 
     <div class="table-wrap admin-list-card"><el-table v-loading="loading" :data="sessions" stripe>
       <el-table-column label="会话" min-width="260">

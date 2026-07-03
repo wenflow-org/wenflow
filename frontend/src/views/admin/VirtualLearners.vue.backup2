@@ -17,7 +17,7 @@
       </template>
     </AdminPageHeader>
 
-    <div class="toolbar-card">
+    <div class="toolbar-card admin-list-toolbar">
       <div class="toolbar-card__group">
         <el-input
           v-model="searchKeyword"
@@ -30,6 +30,14 @@
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
+        <el-button-group v-if="filteredProfiles.length > 0" class="view-mode-toggle">
+          <el-button :type="focusPanelCollapsed ? '' : 'primary'" size="small" @click="focusPanelCollapsed = false">
+            <el-icon><Grid /></el-icon>
+          </el-button>
+          <el-button :type="focusPanelCollapsed ? 'primary' : ''" size="small" @click="focusPanelCollapsed = true">
+            <el-icon><Expand /></el-icon>
+          </el-button>
+        </el-button-group>
       </div>
       <div class="toolbar-card__filters">
         <button
@@ -59,7 +67,7 @@
       </button>
     </div>
 
-    <main class="page-shell">
+    <main class="page-shell" :class="{ 'page-shell--collapsed': focusPanelCollapsed }">
       <section class="lab-main">
         <section class="lab-panel lab-panel--profiles">
           <div class="lab-panel__head">
@@ -84,148 +92,78 @@
 
           <div v-if="loading" class="empty-state">正在加载虚拟学习者...</div>
           <div v-else-if="filteredProfiles.length === 0" class="empty-state">无匹配虚拟学习者</div>
-          <div v-else class="profile-accordion">
+          <div v-else class="profile-grid">
             <template v-for="(group, groupIndex) in pagedProfilesGrouped" :key="group.initial">
               <div v-if="filteredProfiles.length > 20" class="group-header" :data-letter="group.initial">
                 {{ group.initial }}
               </div>
-              
               <article
                 v-for="row in group.profiles"
                 :key="row.id"
-                class="profile-accordion-item"
-                :class="{ 
-                  'profile-accordion-item--expanded': isProfileExpanded(row.id),
-                  'profile-accordion-item--selected': selectedIds.has(row.id)
-                }"
+                class="profile-card"
+                :class="[
+                  { 'profile-card--selected': selectedIds.has(row.id), 'profile-card--focused': focusedProfile?.id === row.id },
+                  getProfileRowClass(row)
+                ]"
+                @click="focusProfile(row)"
               >
-                <!-- VLearner 头部（可点击展开/折叠） -->
-                <div class="profile-accordion-header" @click="toggleProfileExpand(row.id)">
-                  <div class="profile-accordion-header__left">
-                    <el-checkbox
-                      :model-value="selectedIds.has(row.id)"
-                      @change="toggleSelect(row.id)"
-                      @click.stop
-                    />
-                    <el-icon class="expand-icon">
-                      <component :is="isProfileExpanded(row.id) ? 'ArrowDown' : 'ArrowRight'" />
-                    </el-icon>
-                    <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
-                    <div class="profile-accordion-header__identity">
-                      <strong>{{ row.userName }}</strong>
-                      <span class="profile-meta-compact">
-                        {{ row.profile?.occupation || '未填写职业' }}
-                        <template v-if="row.profile?.age"> · {{ row.profile.age }}岁</template>
-                        <template v-if="row.profile?.education"> · {{ row.profile.education }}</template>
-                      </span>
-                    </div>
+              <div class="profile-card__select">
+                <el-checkbox
+                  :model-value="selectedIds.has(row.id)"
+                  @change="toggleSelect(row.id)"
+                  @click.stop
+                />
+              </div>
+
+              <div class="profile-card__primary">
+                <div class="profile-card__head">
+                  <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
+                  <div class="profile-card__identity">
+                    <strong>{{ row.userName }}</strong>
+                    <span class="profile-card__meta-compact">
+                      {{ row.profile?.occupation || '未填写职业' }}
+                      <template v-if="row.profile?.age"> · {{ row.profile.age }}岁</template>
+                      <template v-if="row.profile?.education"> · {{ row.profile.education }}</template>
+                    </span>
                   </div>
-                  
-                  <div class="profile-accordion-header__right">
-                    <span class="meta-badge">
-                      <el-icon><Collection /></el-icon> {{ getStoryPool(row).length }}
-                    </span>
-                    <span class="meta-badge">
-                      <el-icon><TrendCharts /></el-icon> {{ row.sessionCount || 0 }}
-                    </span>
-                    <span class="status-pill" :class="getProfileStageStatus(row).className">
-                      {{ getProfileStageStatus(row).label }}
-                    </span>
-                    <el-dropdown trigger="click" @click.stop>
-                      <el-button class="profile-card__more" size="small" aria-label="更多操作">
-                        <el-icon><MoreFilled /></el-icon>
-                      </el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item @click="goToProfile(row)">查看详情</el-dropdown-item>
-                          <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
-                          <el-dropdown-item @click="openSessionDrawer(row)">查看会话</el-dropdown-item>
-                          <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
+                  <div class="profile-card__badges">
+                    <span v-if="focusedProfile?.id === row.id" class="status-pill status-pill--primary">焦点</span>
+                    <span v-else class="status-pill" :class="getProfileStageStatus(row).className">{{ getProfileStageStatus(row).label }}</span>
                   </div>
                 </div>
 
-                <!-- VLearner 展开内容（Story 列表） -->
-                <div v-show="isProfileExpanded(row.id)" class="profile-accordion-content">
-                  <div class="profile-accordion-actions">
-                    <el-button size="small" @click="goToProfile(row)">查看完整详情</el-button>
-                    <el-button size="small" @click="generateStoryForProfile(row)">
-                      <el-icon><MagicStick /></el-icon> 生成新故事
-                    </el-button>
-                  </div>
-                  
-                  <div v-if="getStoryPool(row).length === 0" class="empty-story-hint">
-                    暂无故事。点击"生成新故事"为该学习者创建测试场景。
-                  </div>
-                  
-                  <div v-else class="story-list">
-                    <article
-                      v-for="(story, storyIndex) in getStoryPool(row)"
-                      :key="story.storyId || story.id || storyIndex"
-                      class="story-card"
-                    >
-                      <div class="story-card__header">
-                        <div class="story-card__title">
-                          <span class="story-card__icon">📖</span>
-                          <strong>{{ story.title || story.storyTitle || `故事 ${storyIndex + 1}` }}</strong>
-                          <el-tag size="small" effect="plain">{{ getStorySourceLabel(story.sourceType) }}</el-tag>
-                        </div>
-                      </div>
-                      
-                      <p class="story-card__outline">
-                        {{ story.storyOutline || story.storyTriggerEvent || '暂无故事摘要' }}
-                      </p>
-                      
-                      <div v-if="story.pressurePoints && story.pressurePoints.length > 0" class="story-card__pressures">
-                        <span class="pressure-label">💥 对抗剖析点 ({{ story.pressurePoints.length }})：</span>
-                        <div class="pressure-tags">
-                          <el-tag
-                            v-for="(point, idx) in story.pressurePoints.slice(0, 3)"
-                            :key="idx"
-                            size="small"
-                            type="warning"
-                            effect="plain"
-                          >
-                            {{ point }}
-                          </el-tag>
-                          <el-tag v-if="story.pressurePoints.length > 3" size="small" type="info" effect="plain">
-                            +{{ story.pressurePoints.length - 3 }} 更多
-                          </el-tag>
-                        </div>
-                      </div>
-                      
-                      <div class="story-card__stats">
-                        <template v-if="!getStorySessionStats(row, story.storyId || story.id).isEmpty">
-                          <span class="stat-item">
-                            运行：{{ getStorySessionStats(row, story.storyId || story.id).total }} 次
-                          </span>
-                          <span class="stat-item stat-item--success">
-                            完成：{{ getStorySessionStats(row, story.storyId || story.id).completed }} 次
-                          </span>
-                          <span class="stat-item">
-                            完成率：{{ getStorySessionStats(row, story.storyId || story.id).completionRate }}%
-                          </span>
-                          <span class="stat-item stat-item--muted">
-                            最近：{{ formatRelativeTime(getStorySessionStats(row, story.storyId || story.id).lastRunTime) }}
-                          </span>
-                        </template>
-                        <span v-else class="stat-item stat-item--warning">待测试</span>
-                      </div>
-                      
-                      <div class="story-card__actions">
-                        <el-button type="primary" size="small" @click="openStoryDetail(row, story)">
-                          查看 Story 详情
-                        </el-button>
-                        <el-button size="small" @click="startSessionWithStory(row, story)">
-                          快速开局
-                        </el-button>
-                      </div>
-                    </article>
+                <div class="profile-meta-row">
+                  <span class="meta-item"><el-icon><Collection /></el-icon> {{ getStoryPool(row).length }} 个故事</span>
+                  <span class="meta-item"><el-icon><TrendCharts /></el-icon> {{ row.sessionCount || 0 }} 次会话</span>
+                </div>
+
+                <div v-if="(row.sessions || []).length > 0" class="profile-card__stage-progress">
+                  <span class="stage-label">最近会话</span>
+                  <div class="session-funnel session-funnel--inline">
+                    <span :class="{ active: getLatestSessionGoalReady(row) }">Goal</span>
+                    <span :class="{ active: getLatestSessionPathReady(row) }">Path</span>
+                    <span :class="{ active: getLatestSessionLearnStarted(row), done: getLatestSessionCompleted(row) }">Learn</span>
                   </div>
                 </div>
-              </article>
+              </div>
+
+              <div class="profile-card__footer">
+                <el-button type="primary" size="small" @click="goToProfile(row)">详情</el-button>
+                <el-button size="small" @click="handleProfileSecondaryAction(row)">{{ getProfileActionLabel(row) }}</el-button>
+                <el-dropdown trigger="click">
+                  <el-button class="profile-card__more" size="small" aria-label="更多操作">
+                    <el-icon><MoreFilled /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="openSessionDrawer(row)">查看会话</el-dropdown-item>
+                      <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
+                      <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </article>
             </template>
           </div>
 
@@ -240,6 +178,99 @@
           </div>
         </section>
       </section>
+
+      <aside class="lab-side">
+        <section class="lab-panel lab-panel--focus">
+          <div class="lab-panel__head lab-panel__head--stack">
+            <div>
+              <div class="lab-panel__title">当前焦点样本</div>
+              <div class="lab-panel__meta lab-panel__meta--stack">先确定当前人物、故事池和下一步动作，再进入详情或开局。</div>
+            </div>
+          </div>
+
+          <div v-if="focusedProfile" class="focus-profile">
+            <div class="focus-profile__hero">
+              <div class="focus-profile__identity">
+                <div class="avatar-badge avatar-badge--lg">{{ focusedProfile.userName?.charAt(0) || '?' }}</div>
+                <div class="focus-profile__copy">
+                  <strong>{{ focusedProfile.userName }}</strong>
+                  <span>{{ focusedProfile.profile?.occupation || '未填写职业' }}</span>
+                  <div class="focus-profile__badges">
+                    <span class="status-pill" :class="getStoryStatus(focusedProfile).className">{{ getStoryStatus(focusedProfile).label }}</span>
+                    <span class="status-pill" :class="getProfileStageStatus(focusedProfile).className">{{ getProfileStageStatus(focusedProfile).label }}</span>
+                  </div>
+                </div>
+              </div>
+              <p class="focus-profile__summary">{{ focusedProfile.profile?.background || focusedProfile.profile?.corePersonality || '进入详情查看完整画像、故事目录和运行记录。' }}</p>
+            </div>
+
+            <div class="focus-profile__metrics">
+              <article class="focus-metric-card">
+                <span>故事池</span>
+                <strong>{{ getStoryPool(focusedProfile).length }}</strong>
+              </article>
+              <article class="focus-metric-card">
+                <span>会话</span>
+                <strong>{{ focusedProfile.sessionCount || 0 }}</strong>
+              </article>
+              <article class="focus-metric-card">
+                <span>最近阶段</span>
+                <strong>{{ getProfileStageLabel(focusedProfile) }}</strong>
+              </article>
+            </div>
+
+            <div class="focus-profile__actions">
+              <el-button type="primary" @click="goToProfile(focusedProfile)">进入详情</el-button>
+              <el-button @click="handleProfileSecondaryAction(focusedProfile)">{{ getProfileActionLabel(focusedProfile) }}</el-button>
+              <el-button plain @click="openSessionDrawer(focusedProfile)">查看会话</el-button>
+            </div>
+
+            <div class="focus-profile__hint" v-if="getStoryPool(focusedProfile).length">
+              已有 {{ getStoryPool(focusedProfile).length }} 个故事。进入详情后再选故事、看运行历史。
+            </div>
+
+            <div v-else class="focus-profile__empty">
+              这个样本还没有故事池。先进入详情补故事，再开始实验。
+            </div>
+          </div>
+
+          <div v-else class="empty-state small">当前筛选下没有焦点样本</div>
+        </section>
+
+        <section class="lab-panel lab-panel--sessions">
+          <div class="lab-panel__head">
+            <div>
+              <div class="lab-panel__title">最近诊断样本</div>
+              <div class="lab-panel__meta lab-panel__meta--stack">最近运行样本。</div>
+            </div>
+          </div>
+
+          <div v-if="recentSessions.length === 0" class="empty-state small">还没有可回看的样本</div>
+          <div v-else class="session-list session-list--compact">
+            <article v-for="item in recentSessions" :key="item.id" class="session-row">
+              <div class="session-row__top">
+                <div class="session-row__main">
+                  <div class="session-row__identity">
+                    <strong>{{ item.profileName }}</strong>
+                    <span class="session-status" :class="getSessionStatusClass(item.status)">{{ getSessionStatusLabel(item.status) }}</span>
+                  </div>
+                  <p>{{ item.goal || '暂无学习目标' }}</p>
+                </div>
+                <el-button type="primary" link @click="goToSession(item.id)">进入诊断</el-button>
+              </div>
+              <div class="session-funnel" aria-label="运行阶段">
+                <span :class="{ active: item.goalReady }">Goal</span>
+                <span :class="{ active: item.pathReady }">Path</span>
+                <span :class="{ active: item.learnStarted, done: item.learnCompleted }">Learn</span>
+              </div>
+              <div class="session-row__meta">
+                <span v-if="item.roundCount !== null">{{ item.roundCount }} 轮</span>
+                <span class="session-row__active">最后活跃 {{ formatRelativeTime(item.updatedAt) }}</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </aside>
     </main>
 
     <el-dialog
@@ -424,8 +455,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowDown,
-  ArrowRight,
   Collection,
   DataAnalysis,
   Expand,
@@ -515,7 +544,6 @@ const startSessionDialogVisible = ref(false)
 const startSessionTarget = ref<any | null>(null)
 const startSessionStoryIndex = ref(0)
 const focusPanelCollapsed = ref(false)
-const expandedProfileIds = ref<Set<string>>(new Set())
 
 const startSessionPrimaryActionLabel = computed(() => {
   return getStoryPool(startSessionTarget.value).length ? '用该故事进入详情' : '进入详情生成故事'
@@ -911,27 +939,6 @@ const getStoryPool = (profile: any) => {
   return Array.isArray(profileData.storyPool) ? profileData.storyPool.filter((story: any) => story && typeof story === 'object') : []
 }
 
-const getStorySessionStats = (profile: any, storyId: string) => {
-  const sessions = profile?.sessions || []
-  const storySessions = sessions.filter((s: any) => s.storyId === storyId || s.story?.id === storyId)
-  const total = storySessions.length
-  const completed = storySessions.filter((s: any) => s.status === 'completed').length
-  const running = storySessions.filter((s: any) => s.status === 'running').length
-  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
-  
-  const lastSession = storySessions.length > 0 ? storySessions[0] : null
-  const lastRunTime = lastSession ? lastSession.updatedAt || lastSession.createdAt : null
-  
-  return {
-    total,
-    completed,
-    running,
-    completionRate,
-    lastRunTime,
-    isEmpty: total === 0
-  }
-}
-
 const getLatestSession = (profile: any) => {
   const sessions = profile?.sessions || []
   return sessions[0] || null
@@ -1114,51 +1121,6 @@ const toggleSelect = (id: string) => {
   selectedIds.value = next
 }
 
-const toggleProfileExpand = (profileId: string) => {
-  const next = new Set(expandedProfileIds.value)
-  if (next.has(profileId)) {
-    next.delete(profileId)
-  } else {
-    next.add(profileId)
-  }
-  expandedProfileIds.value = next
-}
-
-const isProfileExpanded = (profileId: string) => {
-  return expandedProfileIds.value.has(profileId)
-}
-
-const openStoryDetail = (profile: any, story: any) => {
-  const storyId = story.storyId || story.id || story.title
-  router.push(`/admin/virtual-learners/${profile.id}/stories/${storyId}`)
-}
-
-const startSessionWithStory = async (profile: any, story: any) => {
-  try {
-    const storyIndex = getStoryPool(profile).findIndex((s: any) => 
-      (s.storyId || s.id) === (story.storyId || story.id)
-    )
-    const response = await adminApi.startVirtualSession(profile.id, { storyIndex })
-    const sessionId = response.data?.sessionId || response.data?.id
-    if (sessionId) {
-      ElMessage.success('会话已创建')
-      router.push(`/admin/virtual-session/${sessionId}`)
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '创建会话失败')
-  }
-}
-
-const generateStoryForProfile = async (profile: any) => {
-  try {
-    await adminApi.draftVirtualLearnerStories(profile.id)
-    ElMessage.success('故事生成成功')
-    loadProfiles()
-  } catch (error: any) {
-    ElMessage.error(error.message || '生成故事失败')
-  }
-}
-
 const handleBatchDelete = async () => {
   const count = selectedIds.value.size
   if (count === 0) return
@@ -1332,19 +1294,6 @@ watch(filteredProfiles, () => {
 .learner-lab-page {
   min-height: 100vh;
   color: #1f2937;
-  display: flex !important;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.learner-lab-page :deep(.admin-page-header) {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  height: fit-content;
-}
-
-.learner-lab-page :deep(.admin-page-header__highlights) {
-  margin-top: 6px;
 }
 
 .page-header,
@@ -1353,11 +1302,20 @@ watch(filteredProfiles, () => {
 .page-shell {
   max-width: 1440px;
   margin: 0 auto;
-  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  transition: grid-template-columns 0.3s ease;
 }
 
-.lab-main {
-  width: 100%;
+.page-shell--collapsed {
+  grid-template-columns: 1fr 0px;
+}
+
+.page-shell--collapsed .lab-side {
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .summary-grid {
@@ -1459,41 +1417,12 @@ watch(filteredProfiles, () => {
 }
 
 .toolbar-card {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   margin-bottom: 12px;
   width: 100%;
-  height: fit-content;
-  padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(209, 218, 235, 0.7);
-  background: #fafbfc;
-}
-
-.page-shell {
-  margin-top: 0;
-}
-
-.lab-panel {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.lab-panel__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 0 0 14px;
-  margin-bottom: 0;
-  border-bottom: var(--admin-border-subtle);
 }
 
 .toolbar-card__group {
@@ -1588,6 +1517,14 @@ watch(filteredProfiles, () => {
   margin-top: 8px;
 }
 
+.page-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 840px) 320px;
+  justify-content: center;
+  gap: 16px;
+  align-items: start;
+}
+
 .lab-main,
 .lab-side,
 .session-list,
@@ -1670,236 +1607,6 @@ watch(filteredProfiles, () => {
   grid-template-columns: 1fr;
   gap: 12px;
   padding: 0;
-}
-
-.profile-accordion {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-}
-
-.profile-accordion-item {
-  border: 1px solid #e6ebf2;
-  border-radius: 10px;
-  background: #ffffff;
-  overflow: hidden;
-  transition: all 0.2s ease;
-  width: 100%;
-}
-
-.profile-accordion-item:hover {
-  border-color: #d0dae8;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.profile-accordion-item--expanded {
-  border-color: #3478f6;
-  box-shadow: 0 2px 12px rgba(52, 120, 246, 0.12);
-}
-
-.profile-accordion-item--selected {
-  background: #f0f5ff;
-}
-
-.profile-accordion-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s ease;
-}
-
-.profile-accordion-header:hover {
-  background: #fafbfc;
-}
-
-.profile-accordion-header__left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-  max-width: 50%;
-}
-
-.profile-accordion-header__identity {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.profile-accordion-header__identity strong {
-  font-size: 15px;
-  color: #1f2937;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.profile-meta-compact {
-  font-size: 13px;
-  color: #6b7280;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.profile-accordion-header__right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.expand-icon {
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-  color: #6b7280;
-}
-
-.meta-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  background: #f3f4f6;
-  border-radius: 999px;
-  font-size: 13px;
-  color: #6b7280;
-  white-space: nowrap;
-}
-
-.meta-badge .el-icon {
-  font-size: 14px;
-}
-
-.profile-accordion-content {
-  border-top: 1px solid #e6ebf2;
-  padding: 16px;
-  background: #fafbfc;
-  animation: slideDown 0.2s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.profile-accordion-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.empty-story-hint {
-  padding: 32px;
-  text-align: center;
-  color: #8b94a6;
-  font-size: 14px;
-  background: #ffffff;
-  border-radius: 8px;
-  border: 1px dashed #d1d5db;
-}
-
-.story-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.story-card {
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e6ebf2;
-  border-radius: 8px;
-  transition: all 0.15s ease;
-}
-
-.story-card:hover {
-  border-color: #3478f6;
-  box-shadow: 0 2px 8px rgba(52, 120, 246, 0.08);
-}
-
-.story-card__header {
-  margin-bottom: 12px;
-}
-
-.story-card__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.story-card__icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.story-card__title strong {
-  font-size: 15px;
-  color: #1f2937;
-  flex: 1;
-}
-
-.story-card__outline {
-  margin: 0 0 12px 0;
-  color: #526074;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.story-card__pressures {
-  margin-bottom: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed #e5e7eb;
-}
-
-.story-card__stats {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  background: #f9fafb;
-  border-radius: 6px;
-  flex-wrap: wrap;
-}
-
-.stat-item {
-  font-size: 12px;
-  color: #6b7280;
-  white-space: nowrap;
-}
-
-.stat-item--success {
-  color: #15957b;
-  font-weight: 600;
-}
-
-.stat-item--warning {
-  color: #d9822b;
-  font-weight: 600;
-}
-
-.stat-item--muted {
-  color: #9ca3af;
-}
-
-.story-card__actions {
-  display: flex;
-  gap: 8px;
 }
 
 .profile-card {
