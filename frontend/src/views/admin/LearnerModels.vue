@@ -427,21 +427,6 @@ onMounted(loadData);
   gap: 0.5rem;
 }
 
-/* 固定列在浮动时需要背景，继承表格单元格的背景 */
-:deep(.el-table__fixed-right .el-table__row .el-table__cell) {
-  background-color: #ffffff;
-}
-
-/* 保持斑马纹效果 */
-:deep(.el-table__fixed-right .el-table__row.el-table__row--striped .el-table__cell) {
-  background-color: #fafafa;
-}
-
-/* 保持hover效果 */
-:deep(.el-table__fixed-right .el-table__row:hover .el-table__cell) {
-  background-color: rgba(52, 120, 246, 0.03) !important;
-}
-
 .model-action-btn {
   min-height: 30px;
   padding: 0 12px;

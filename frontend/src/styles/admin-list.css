@@ -82,6 +82,31 @@
   --el-fill-color-blank: transparent;
 }
 
+/* Element Plus 2.x 的固定列使用 sticky 单元格。
+   当列表皮肤把表格底色设为 transparent 时，需要单独补回不透明背景，
+   否则固定操作列会透出底下内容。 */
+.admin-list-card .el-table__body-wrapper td.el-table-fixed-column--left,
+.admin-list-card .el-table__body-wrapper td.el-table-fixed-column--right,
+.admin-list-card .el-table__footer-wrapper td.el-table-fixed-column--left,
+.admin-list-card .el-table__footer-wrapper td.el-table-fixed-column--right {
+  background: var(--admin-bg-surface);
+  z-index: calc(var(--el-table-index) + 2);
+}
+
+.admin-list-card .el-table__header-wrapper th.el-table-fixed-column--left,
+.admin-list-card .el-table__header-wrapper th.el-table-fixed-column--right,
+.admin-list-card .el-table__footer-wrapper th.el-table-fixed-column--left,
+.admin-list-card .el-table__footer-wrapper th.el-table-fixed-column--right,
+.admin-list-card .el-table__header-wrapper .el-table__fixed-right-patch,
+.admin-list-card .el-table__body-wrapper .el-table__fixed-right-patch,
+.admin-list-card .el-table__footer-wrapper .el-table__fixed-right-patch {
+  z-index: calc(var(--el-table-index) + 2);
+}
+
+.admin-list-card .el-table__fixed-right-patch {
+  background: var(--admin-bg-surface);
+}
+
 .admin-list-card .el-table__body-wrapper {
   overflow-x: auto;
 }

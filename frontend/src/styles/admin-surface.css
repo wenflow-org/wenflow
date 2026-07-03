@@ -344,6 +344,28 @@
   --el-table-border-color: rgba(225, 232, 242, 0.6);
 }
 
+.admin-table-surface .el-table__body-wrapper td.el-table-fixed-column--left,
+.admin-table-surface .el-table__body-wrapper td.el-table-fixed-column--right,
+.admin-table-surface .el-table__footer-wrapper td.el-table-fixed-column--left,
+.admin-table-surface .el-table__footer-wrapper td.el-table-fixed-column--right {
+  background: var(--admin-bg-surface);
+  z-index: calc(var(--el-table-index) + 2);
+}
+
+.admin-table-surface .el-table__header-wrapper th.el-table-fixed-column--left,
+.admin-table-surface .el-table__header-wrapper th.el-table-fixed-column--right,
+.admin-table-surface .el-table__footer-wrapper th.el-table-fixed-column--left,
+.admin-table-surface .el-table__footer-wrapper th.el-table-fixed-column--right,
+.admin-table-surface .el-table__header-wrapper .el-table__fixed-right-patch,
+.admin-table-surface .el-table__body-wrapper .el-table__fixed-right-patch,
+.admin-table-surface .el-table__footer-wrapper .el-table__fixed-right-patch {
+  z-index: calc(var(--el-table-index) + 2);
+}
+
+.admin-table-surface .el-table__fixed-right-patch {
+  background: var(--admin-bg-surface);
+}
+
 .admin-table-surface .el-table th.el-table__cell {
   background: var(--admin-bg-surface-alt);
   font-weight: 700;

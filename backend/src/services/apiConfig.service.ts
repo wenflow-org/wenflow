@@ -1,9 +1,9 @@
 // API配置管理服务 - 持久化版本
 import { logger } from '../utils/logger';
-import { PrismaClient } from '@prisma/client';
+import systemPrisma from '../config/system-database';
 import { getAPIGateway } from '../gateway/api-gateway';
 
-const prisma = new PrismaClient();
+const prisma = systemPrisma;
 
 export interface APIConfig {
   apiUrl: string;
@@ -158,8 +158,10 @@ class APIConfigService {
    */
   async getOpenAIConfig() {
     const config = await this.getConfig();
+    const normalizedBase = String(config.apiUrl || '').trim().replace(/\/$/, '');
+
     return {
-      baseURL: `${config.apiUrl}/v1`,
+      baseURL: normalizedBase.endsWith('/v1') ? normalizedBase : `${normalizedBase}/v1`,
       apiKey: config.apiKey,
     };
   }
@@ -185,7 +187,12 @@ class APIConfigService {
     }
 
     try {
-      const response = await fetch(`${url}/v1/models`, {
+      const normalizedBase = String(url).trim().replace(/\/$/, '');
+      const modelsEndpoint = normalizedBase.endsWith('/v1')
+        ? `${normalizedBase}/models`
+        : `${normalizedBase}/v1/models`;
+
+      const response = await fetch(modelsEndpoint, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${key}`,
@@ -268,6 +275,7 @@ class APIConfigService {
     evaluationModel: string;
     availableModels: string[];
     connectionStatus: string;
+    lastCheckedAt: Date | null;
   }> {
     const config = await this.getConfig();
     const dbConfig = await prisma.platform_api_configs.findUnique({
@@ -282,6 +290,7 @@ class APIConfigService {
       evaluationModel: config.defaultEvaluationModel,
       availableModels: config.availableModels,
       connectionStatus: dbConfig?.connectionStatus || 'unknown',
+      lastCheckedAt: dbConfig?.lastCheckedAt || null,
     };
   }
 }

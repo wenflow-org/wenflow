@@ -26,7 +26,8 @@ router.get('/', async (req, res) => {
         chatModels: config.chatModels || [],
         reasoningModels: config.reasoningModels || [],
         lightModels: config.lightModels || [],
-        connectionStatus: platformDefault.connectionStatus
+        connectionStatus: platformDefault.connectionStatus,
+        lastCheckedAt: platformDefault.lastCheckedAt
       }
     });
   } catch (error: any) {

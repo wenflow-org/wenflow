@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { CallerInfo, ResolvedRoute } from './types';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
@@ -119,7 +120,7 @@ export class APIRouter {
 
   private async getSkillConfig(skillId: string, inheritedRoute: ResolvedRoute): Promise<ResolvedRoute | null> {
     try {
-      const config = await prisma.skill_model_configs.findFirst({
+      const config = await systemPrisma.skill_model_configs.findFirst({
         where: {
           skillId,
           enabled: true,
@@ -245,7 +246,7 @@ export class APIRouter {
 
   private async getAgentConfig(agentId: string): Promise<Config | null> {
     try {
-      const config = await prisma.agent_model_configs.findFirst({
+      const config = await systemPrisma.agent_model_configs.findFirst({
         where: {
           agentId,
           enabled: true
@@ -267,7 +268,7 @@ export class APIRouter {
   }
 
   private async getPlatformConfigRecord() {
-    return prisma.platform_api_configs.findFirst({
+    return systemPrisma.platform_api_configs.findFirst({
       where: { id: 'platform' },
       select: {
         apiUrl: true,
@@ -335,7 +336,7 @@ export class APIRouter {
 
   private async getPlatformDefault(): Promise<ResolvedRoute> {
     try {
-      const config = await prisma.platform_api_configs.findFirst({
+      const config = await systemPrisma.platform_api_configs.findFirst({
         where: {
           id: 'platform'
         }
