@@ -14,6 +14,26 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../gateway/api-gateway';
 
 const router = Router();
 
+function sortSkillList(list: { id: string; name: string; file: string; existsInLab?: boolean }[]) {
+  return list.sort((a, b) => a.id.localeCompare(b.id, 'en'))
+}
+
+function looksLikeMojibake(value: unknown) {
+  if (typeof value !== 'string') return false;
+  return /[�鍔浣瀛韬唤璺緞]/.test(value);
+}
+
+function buildDefaultFrontmatter(skillId: string, prompt: string) {
+  const archetypeMatch = prompt.match(/^archetype:\s*(\w+)/m);
+  return {
+    agentId: `skill:${skillId}`,
+    name: `default-skill-${skillId}`,
+    archetype: archetypeMatch?.[1] || 'conversational',
+    description: '',
+    acceptableAgentIds: [] as string[]
+  };
+}
+
 /**
  * POST /api/prompt-lab/compile-skill
  * 使用 Compiler Skill (LLM) 编译简化配置为完整 Prompt
@@ -111,14 +131,27 @@ ${config}
 router.get('/sources', async (req, res) => {
   try {
     const sourcesDir = path.join(process.cwd(), '../prompt-lab/sources');
-    const files = await fs.readdir(sourcesDir);
-    const list = files
+    const promptsDir = path.join(process.cwd(), '../prompts');
+
+    const sourceFiles = await fs.readdir(sourcesDir).catch(() => [] as string[]);
+    const promptFiles = await fs.readdir(promptsDir).catch(() => [] as string[]);
+
+    const sourceIds = sourceFiles
       .filter((f: string) => f.endsWith('.md'))
-      .map((f: string) => ({
-        id: f.replace('.md', ''),
-        name: f.replace('.md', ''),
-        file: f
-      }));
+      .map((f: string) => f.replace('.md', ''));
+
+    const promptIds = promptFiles
+      .filter((f: string) => /^skill\..+\.md$/.test(f))
+      .map((f: string) => f.replace(/^skill\./, '').replace(/\.md$/, ''));
+
+    const mergedIds = Array.from(new Set([...sourceIds, ...promptIds]));
+    const list = sortSkillList(mergedIds.map((id) => ({
+      id,
+      name: id,
+      file: `${id}.md`,
+      existsInLab: sourceIds.includes(id)
+    })));
+
     res.json({ success: true, data: list });
   } catch (error) {
     res.status(500).json({ error: '读取失败', details: (error as Error).message });
@@ -396,11 +429,26 @@ router.post('/publish', async (req, res) => {
       }
     } catch {
       frontmatter = {
-        agentId: `skill:${skillId}`,
-        name: `default-skill-${skillId}`,
+        ...buildDefaultFrontmatter(skillId, prompt),
         temperature: 0.7,
         maxTokens: 8000
       };
+    }
+
+    if (!frontmatter || typeof frontmatter !== 'object') {
+      frontmatter = buildDefaultFrontmatter(skillId, prompt);
+    }
+
+    if (looksLikeMojibake(frontmatter.description)) {
+      frontmatter.description = '';
+    }
+
+    if (looksLikeMojibake(frontmatter.name)) {
+      frontmatter.name = `default-skill-${skillId}`;
+    }
+
+    if (looksLikeMojibake(frontmatter.archetype)) {
+      frontmatter.archetype = 'conversational';
     }
 
     const agentId = frontmatter.agentId || `skill:${skillId}`;
@@ -438,7 +486,7 @@ router.post('/publish', async (req, res) => {
       `agentId: ${agentId}`,
       `name: ${name}`,
       `archetype: ${frontmatter.archetype || 'conversational'}`,
-      `description: ${frontmatter.description || ''}`,
+      `description: ${description || ''}`,
       `temperature: ${temperature}`,
       `maxTokens: ${maxTokens}`,
     ];

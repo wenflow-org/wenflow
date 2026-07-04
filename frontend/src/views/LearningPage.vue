@@ -59,7 +59,6 @@
 
         <div v-if="task.week?.weekNumber" class="learning-header-card__meta">
           <span>阶段 {{ task.week.weekNumber }}</span>
-          <span v-if="virtualDebugSummary">{{ virtualDebugSummary }}</span>
         </div>
       </section>
 
@@ -120,79 +119,6 @@
                     <el-icon><CopyDocument /></el-icon> 复制
                   </el-button>
                 </div>
-                <details
-                  v-if="isTestMode && ((msg.role === 'assistant' && getLearningTraceCard(msg)) || (msg.role === 'user' && getLearningInputTraceCard(msg)))"
-                  class="learning-msg-trace"
-                >
-                  <summary class="learning-msg-trace__summary">
-                    {{ getLearningTraceSummaryLabelForMessage(msg) }}
-                  </summary>
-
-                  <template v-if="msg.role === 'user' && getLearningInputTraceCard(msg)">
-                    <div class="learning-msg-trace__meta">
-                      <span>{{ getLearningInputTraceCard(msg)?.kindLabel }}</span>
-                      <span>{{ getLearningInputTraceCard(msg)?.summary }}</span>
-                      <span v-if="getLearningInputTraceCard(msg)?.promptVersionLabel">{{ getLearningInputTraceCard(msg)?.promptVersionLabel }}</span>
-                    </div>
-
-                    <div v-for="section in getLearningInputTraceCard(msg)?.sections || []" :key="section.key" class="learning-msg-trace__section">
-                      <span class="learning-msg-trace__label">{{ section.label }}</span>
-                      <pre>{{ section.content }}</pre>
-                    </div>
-
-                    <div class="learning-msg-trace__actions">
-                      <el-button size="small" text @click="openTurnDebugDialog(getAssistantMessageForUserTurn(msg), 'input')">查看输入</el-button>
-                    </div>
-                  </template>
-
-                  <template v-else-if="getLearningTraceCard(msg)">
-                    <div class="learning-msg-trace__meta">
-                      <span>{{ getLearningTraceCard(msg)?.kindLabel }}</span>
-                      <span>{{ getLearningTraceCard(msg)?.summary }}</span>
-                      <span v-if="getLearningTraceCard(msg)?.promptVersionLabel">{{ getLearningTraceCard(msg)?.promptVersionLabel }}</span>
-                    </div>
-
-                    <div v-if="getLearningTraceCard(msg)?.metricChips.length" class="learning-msg-trace__metric-grid">
-                      <article
-                        v-for="metric in getLearningTraceCard(msg)?.metricChips || []"
-                        :key="metric.label"
-                        class="learning-msg-trace__metric"
-                      >
-                        <span>{{ metric.label }}</span>
-                        <strong>{{ metric.value }}</strong>
-                      </article>
-                    </div>
-
-                    <div v-for="section in getLearningTraceCard(msg)?.sections || []" :key="section.key" class="learning-msg-trace__section">
-                      <span class="learning-msg-trace__label">{{ section.label }}</span>
-                      <pre>{{ section.content }}</pre>
-                    </div>
-
-                    <section v-if="getLearningTraceCard(msg)?.peerCard" class="learning-msg-trace__peer">
-                      <div class="learning-msg-trace__peer-head">
-                        <div>
-                          <span class="learning-msg-trace__peer-eyebrow">伴学介入</span>
-                          <strong>{{ getLearningTraceCard(msg)?.peerCard?.title }}</strong>
-                        </div>
-                        <span class="learning-msg-trace__peer-badge">skill:peer-reinforcement</span>
-                      </div>
-
-                      <div v-if="getLearningTraceCard(msg)?.peerCard?.summary" class="learning-msg-trace__peer-summary">
-                        {{ getLearningTraceCard(msg)?.peerCard?.summary }}
-                      </div>
-
-                      <div v-for="section in getLearningTraceCard(msg)?.peerCard?.sections || []" :key="section.key" class="learning-msg-trace__section">
-                        <span class="learning-msg-trace__label">{{ section.label }}</span>
-                        <pre>{{ section.content }}</pre>
-                      </div>
-                    </section>
-
-                    <div class="learning-msg-trace__actions">
-                      <el-button v-if="getPromptDebugPayload(msg)" size="small" text @click="openTurnDebugDialog(msg, 'input')">查看输入</el-button>
-                      <el-button v-if="msg.promptDebug?.normalizedOutput || msg.promptDebug?.rawModelOutput" size="small" text @click="openTurnDebugDialog(msg, 'output')">查看输出</el-button>
-                    </div>
-                  </template>
-                </details>
                 <div v-if="msg.quickReplies && msg.quickReplies.length && !msg.quickRepliesUsed && index === 0" class="quick-replies">
                   <div
                     v-for="reply in msg.quickReplies"
@@ -294,22 +220,6 @@
       >
         <el-icon><ChatDotRound /></el-icon>
       </el-button>
-
-
-      <el-dialog
-        v-model="showTurnDebugDialog"
-        :title="turnDebugDialogTitle"
-        width="960px"
-        class="learning-debug-dialog"
-      >
-        <div v-if="selectedTurnDebugSections.length" class="learning-debug-dialog__grid">
-          <section v-for="section in selectedTurnDebugSections" :key="section.key" class="learning-debug-card">
-            <span class="learning-debug-card__eyebrow">{{ section.label }}</span>
-            <pre>{{ section.content }}</pre>
-          </section>
-        </div>
-        <div v-else class="learning-debug-dialog__empty">当前没有可展示的调试数据。</div>
-      </el-dialog>
     </template>
 
     <el-dialog
@@ -385,6 +295,12 @@ const learningPathDetailBasePath = computed(() => {
   }
   return '/learning-path';
 });
+const learningEvaluationBasePath = computed(() => {
+  if (isTestMode.value && isAdminRoute.value) {
+    return '/admin/test/learn';
+  }
+  return '/learn';
+});
 
 const pageLoading = ref(true);
 const task = ref<any>(null);
@@ -422,41 +338,18 @@ interface ChatMessage {
   promptDebug?: any;
   peerTriggered?: boolean;
   peerMessage?: string | null;
+  peerDebug?: any;
 }
 
-interface TraceMetricChip {
-  label: string;
-  value: string;
-}
-
-interface TraceSectionView {
-  key: string;
-  label: string;
+type PeerChatMessage = {
+  role: 'user' | 'peer';
   content: string;
-}
+  timestamp: string;
+};
 
-interface LearningPeerTraceCard {
-  title: string;
-  summary: string;
-  sections: TraceSectionView[];
-}
-
-interface LearningTraceCard {
-  kind: 'opening' | 'teaching-turn';
-  kindLabel: string;
-  summary: string;
-  promptVersionLabel?: string;
-  metricChips: TraceMetricChip[];
-  sections: TraceSectionView[];
-  peerCard?: LearningPeerTraceCard | null;
-}
-
-interface LearningInputTraceCard {
-  kindLabel: string;
-  summary: string;
-  promptVersionLabel?: string;
-  sections: TraceSectionView[];
-}
+type MessageResultWithRecovery = Awaited<ReturnType<typeof aiTeachingAPI.sendMessage>> & {
+  recovered?: boolean;
+};
 
 type CompletionPromptReason = 'completion-candidate' | 'learner-requested-end' | null;
 
@@ -476,7 +369,7 @@ const completionDurationSeconds = ref(0);
 
 const peerNotificationVisible = ref(false);
 const peerChatWindowVisible = ref(false);
-const peerChatMessages = ref<Array<{ role: string; content: string; timestamp: string }>>([]);
+const peerChatMessages = ref<PeerChatMessage[]>([]);
 const peerInitializing = ref(false);
 
 const elapsedTime = ref(0);
@@ -534,12 +427,7 @@ const sessionWrapup = ref<WrapupArtifact>({
   },
 });
 const sessionAdvisory = ref<ReplanAdvisory | null>(null);
-const showStrategyHints = false;
 const autoPausing = ref(false);
-const showPathInputDialog = ref(false);
-const showTurnDebugDialog = ref(false);
-const selectedTurnDebugMode = ref<'input' | 'output'>('input');
-const selectedTurnDebug = ref<any | null>(null);
 
 const sessionInitMessage = computed(() => sessionInitMode.value === 'resumed'
   ? '正在恢复上次授课进度...'
@@ -568,516 +456,11 @@ const kpStatusLabel = (status: string) => {
   return map[status] || status;
 };
 
-const STRATEGY_LABELS: Record<string, string> = {
-  'socratic-questioning': '苏格拉底式引导',
-  'analogy': '类比隐喻',
-  'example': '举例说明',
-  'decomposition': '脚手架拆解',
-  'visualization': '双重编码',
-  'storytelling': '情境导入',
-  'challenge': '挑战提问',
-  'reflection': '元认知追问',
-  'scaffolding': '支架式教学',
-  'direct-instruction': '直接讲解',
-  'empathy-first': '共情优先',
-  'quick-win': '快速成功',
-  'backtrack': '回溯基础',
-  'ice-breaker': '破冰',
-  'encourage-try': '鼓励尝试',
-  'predict-first': '先预测',
-};
-
-const strategyLabel = (id: string) => {
-  return STRATEGY_LABELS[id] || id;
-};
-
-const prettyTraceValue = (value: any) => {
-  if (value === null || value === undefined || value === '') return null;
-  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-};
-
-const buildTraceSection = (key: string, label: string, value: any): TraceSectionView | null => {
-  const content = prettyTraceValue(value);
-  if (!content) return null;
-  return { key, label, content };
-};
-
-const latestTeachingInputDebug = computed(() => {
-  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
-    const msg = messages.value[index];
-    if (msg.role === 'assistant' && msg.promptDebug?.userPayload) {
-      return msg.promptDebug;
-    }
-  }
-  return null;
-});
-
-const latestTeachingInputPayload = computed(() => {
-  const raw = latestTeachingInputDebug.value?.userPayload;
-  if (!raw || typeof raw !== 'string') return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-});
-
-const latestTeachingInputSummary = computed(() => {
-  const payload = latestTeachingInputPayload.value;
-  if (!payload || typeof payload !== 'object') {
-    return '展示 teaching-turn 最近一次 userPayload';
-  }
-
-  const latestLearnerMessage = typeof payload.latestLearnerMessage === 'string'
-    ? payload.latestLearnerMessage.trim()
-    : '';
-  const taskTitle = typeof payload?.scenario?.taskTitle === 'string'
-    ? payload.scenario.taskTitle
-    : '';
-  const coreConcept = typeof payload?.scenario?.cognitiveFrame?.currentCoreConcept?.name === 'string'
-    ? payload.scenario.cognitiveFrame.currentCoreConcept.name
-    : '';
-
-  return [taskTitle, coreConcept, latestLearnerMessage ? `最近输入：${latestLearnerMessage}` : '']
-    .filter(Boolean)
-    .join(' · ') || '展示 teaching-turn 最近一次 userPayload';
-});
-
-const showPeerFloatButton = computed(() => peerChatMessages.value.length > 0 && !peerChatWindowVisible.value);
-const showLearningDebugFloat = computed(() => {
-  return isTestMode.value && (
-    pathHandoffSections.value.length > 0
-    || pathInputSections.value.length > 0
-    || latestTeachingInputDebug.value !== null
-    || latestPeerPromptDebug.value !== null
-  );
-});
-
-const learningDebugQuickChipText = computed(() => {
-  const chips = [
-    pathHandoffSections.value.length > 0 ? `Path ${pathHandoffSections.value.length}` : '',
-    pathInputSections.value.length > 0 ? `Input ${pathInputSections.value.length}` : '',
-    latestTeachingInputDebug.value?.systemPromptVersion ? `Prompt v${latestTeachingInputDebug.value.systemPromptVersion}` : '',
-    latestPeerPromptDebug.value ? 'Peer skill' : ''
-  ].filter(Boolean);
-
-  return chips.length > 0 ? chips.slice(0, 3).join(' · ') : '查看 Learn 原始数据';
-});
-
-const virtualDebugSummary = computed(() => {
-  if (!virtualContext.value) return '';
-  const profile = virtualContext.value.profile || {};
-  const story = virtualContext.value.storyContext || {};
-  const bindings = virtualContext.value.bindings || {};
-  return [
-    profile.userName ? `画像：${profile.userName}` : '',
-    story.title ? `故事：${story.title}` : '',
-    bindings.teachingSessionId ? `session：${String(bindings.teachingSessionId).slice(0, 8)}` : '未启动 Learn session'
-  ].filter(Boolean).join(' · ');
-});
-
-const pathInputSections = computed(() => {
-  const payload = latestTeachingInputPayload.value;
-  if (!payload || typeof payload !== 'object') return [];
-
-  const scenario = payload.scenario || {};
-  const sections = [
-    {
-      key: 'taskProfile',
-      label: '任务画像 taskProfile',
-      value: scenario.taskProfile || null,
-    },
-    {
-      key: 'cognitiveFrame',
-      label: '局部认知图景 cognitiveFrame',
-      value: scenario.cognitiveFrame || null,
-    },
-    {
-      key: 'taskKnowledgeScope',
-      label: '任务知识范围 taskKnowledgeScope',
-      value: scenario.taskKnowledgeScope || null,
-    },
-    {
-      key: 'teachingStrategyGuidance',
-      label: '教学策略 guidance',
-      value: scenario.teachingStrategyGuidance || null,
-    },
-    {
-      key: 'pathContext',
-      label: '路径上下文',
-      value: {
-        pathTitle: scenario.pathTitle || null,
-        pathSummary: scenario.pathSummary || null,
-        currentMilestoneTitle: scenario.currentMilestoneTitle || null,
-        currentStageNumber: scenario.currentStageNumber || null,
-        currentTaskOrder: scenario.currentTaskOrder || null,
-        totalTasksInMilestone: scenario.totalTasksInMilestone || null,
-      },
-    },
-  ];
-
-  return sections
-    .filter((section) => section.value && (typeof section.value !== 'object' || Object.keys(section.value).length > 0))
-    .map((section) => ({
-      key: section.key,
-      label: section.label,
-      content: JSON.stringify(section.value, null, 2),
-    }));
-});
-
-const pathHandoffSections = computed(() => {
-  if (!task.value) return [];
-
-  const sections = [
-    {
-      key: 'taskMeta',
-      label: '当前任务基础信息',
-      value: {
-        taskId: task.value.id || null,
-        title: task.value.title || null,
-        description: task.value.description || null,
-        taskType: task.value.taskType || null,
-      },
-    },
-    {
-      key: 'taskProfile',
-      label: 'Path 交付的任务画像',
-      value: {
-        displayLabel: task.value.displayLabel || null,
-        knowledgeType: task.value.knowledgeType || null,
-        cognitiveLevel: task.value.cognitiveLevel || null,
-        coreConcept: task.value.coreConcept || null,
-        learningObjectives: task.value.week?.learningObjectives || null,
-      },
-    },
-    {
-      key: 'pathContext',
-      label: 'Path / 阶段上下文',
-      value: {
-        learningPathId: task.value.learningPath?.id || null,
-        learningPathName: task.value.learningPath?.name || null,
-        weekNumber: task.value.week?.weekNumber || null,
-        weekTitle: task.value.week?.title || null,
-        weekGoal: task.value.week?.goal || null,
-      },
-    },
-  ];
-
-  return sections
-    .filter((section) => section.value && Object.values(section.value).some((value) => value !== null && value !== undefined && value !== ''))
-    .map((section) => ({
-      key: section.key,
-      label: section.label,
-      content: JSON.stringify(section.value, null, 2),
-    }));
-});
-
-const buildPromptDebugSections = (promptDebug: any) => {
-  if (!promptDebug || typeof promptDebug !== 'object') return [] as Array<{ key: string; label: string; content: string }>;
-
-  return [
-    { key: 'userPayload', label: 'userPayload', value: promptDebug.userPayload || null },
-    { key: 'normalizedOutput', label: 'normalizedOutput', value: promptDebug.normalizedOutput || null },
-    { key: 'rawModelOutput', label: 'rawModelOutput', value: promptDebug.rawModelOutput || null },
-    { key: 'attempts', label: 'attempts', value: promptDebug.attempts || null },
-  ]
-    .filter((section) => section.value !== null && section.value !== undefined && section.value !== '')
-    .map((section) => ({
-      key: section.key,
-      label: section.label,
-      content: typeof section.value === 'string' ? section.value : JSON.stringify(section.value, null, 2),
-    }));
-};
-
-const latestPeerPromptDebug = computed(() => {
-  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
-    const msg = messages.value[index] as any;
-    if (msg?.peerDebug?.promptDebug) {
-      return msg.peerDebug.promptDebug;
-    }
-  }
-  return null;
-});
-
-const latestTeachingPromptDebugSections = computed(() => buildPromptDebugSections(latestTeachingInputDebug.value));
-const latestPeerPromptDebugSections = computed(() => buildPromptDebugSections(latestPeerPromptDebug.value));
-
 const buildRouteQuery = (extra: Record<string, string> = {}) => {
   const query: Record<string, string> = {};
   if (virtualSessionId.value) query.virtualSessionId = virtualSessionId.value;
   if (viewMode.value) query.viewMode = viewMode.value;
   return { ...query, ...extra };
-};
-
-const turnDebugDialogTitle = computed(() => selectedTurnDebugMode.value === 'input' ? '本轮教学输入' : '本轮教学输出');
-
-const selectedTurnDebugSections = computed(() => {
-  const debug = selectedTurnDebug.value;
-  if (!debug) return [];
-
-  if (selectedTurnDebugMode.value === 'input') {
-    const payload = getPromptDebugPayload(debug);
-    if (!payload) {
-      return debug.promptDebug?.userPayload
-        ? [{ key: 'rawUserPayload', label: 'Raw Payload', content: String(debug.promptDebug.userPayload) }]
-        : [];
-    }
-
-    const sections = [
-      { key: 'latestLearnerMessage', label: '最近输入', value: payload.latestLearnerMessage || null },
-      { key: 'taskProfile', label: '任务画像', value: payload.scenario?.taskProfile || null },
-      { key: 'cognitiveFrame', label: '局部认知图景', value: payload.scenario?.cognitiveFrame || null },
-      { key: 'learner', label: '学习者状态', value: payload.learner || null },
-      { key: 'knowledge', label: '当前知识看板', value: payload.knowledge || null },
-      { key: 'recentDialogueContext', label: '最近对话上下文', value: payload.recentDialogueContext || null },
-    ];
-
-    return sections
-      .filter((section) => section.value !== null && section.value !== undefined && section.value !== '')
-      .map((section) => ({
-        key: section.key,
-        label: section.label,
-        content: typeof section.value === 'string' ? section.value : JSON.stringify(section.value, null, 2),
-      }));
-  }
-
-  const promptDebug = debug.promptDebug || {};
-  const sections = [
-    { key: 'normalizedOutput', label: '结构化输出 normalizedOutput', value: promptDebug.normalizedOutput || null },
-    { key: 'rawModelOutput', label: '模型原始输出 rawModelOutput', value: promptDebug.rawModelOutput || null },
-    { key: 'attempts', label: '重试轨迹 attempts', value: promptDebug.attempts || null },
-  ];
-
-  return sections
-    .filter((section) => section.value !== null && section.value !== undefined && section.value !== '')
-    .map((section) => ({
-      key: section.key,
-      label: section.label,
-      content: typeof section.value === 'string' ? section.value : JSON.stringify(section.value, null, 2),
-    }));
-});
-
-const getPromptDebugPayload = (msg: any) => {
-  const raw = msg?.promptDebug?.userPayload;
-  if (!raw || typeof raw !== 'string') return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-const getPromptDebugNormalizedOutput = (msg: any) => {
-  const value = msg?.promptDebug?.normalizedOutput;
-  return value && typeof value === 'object' ? value : null;
-};
-
-const resolveDebugAnalysis = (msg: any) => {
-  if (msg?.analysis && typeof msg.analysis === 'object') {
-    return msg.analysis;
-  }
-
-  const normalized = getPromptDebugNormalizedOutput(msg);
-  const analysis = normalized?.analysis;
-  return analysis && typeof analysis === 'object' ? analysis : null;
-};
-
-const resolveDebugKnowledgePoint = (msg: any) => {
-  if (typeof msg?.knowledgePoint === 'string' && msg.knowledgePoint.trim()) {
-    return msg.knowledgePoint;
-  }
-
-  const normalized = getPromptDebugNormalizedOutput(msg);
-  const currentPoint = normalized?.knowledge?.currentPoint;
-  return typeof currentPoint === 'string' && currentPoint.trim() ? currentPoint : null;
-};
-
-const resolveDebugStrategies = (msg: any) => {
-  if (Array.isArray(msg?.strategies) && msg.strategies.length > 0) {
-    return msg.strategies;
-  }
-
-  const normalized = getPromptDebugNormalizedOutput(msg);
-  const strategies = normalized?.pedagogy?.strategies;
-  return Array.isArray(strategies) ? strategies : [];
-};
-
-const getPromptDebugPromptVersionLabel = (msg: any) => {
-  const version = msg?.promptDebug?.systemPromptVersion;
-  if (version === null || version === undefined || version === '') return '';
-  return `Prompt v${version}`;
-};
-
-const buildOpeningTraceCard = (msg: ChatMessage): LearningTraceCard | null => {
-  const openingMode = typeof msg.analysis?.openingMode === 'string' ? msg.analysis.openingMode : null;
-  const quickReplies = Array.isArray(msg.quickReplies)
-    ? msg.quickReplies.map((item) => item.text).filter(Boolean)
-    : [];
-
-  if (!openingMode && quickReplies.length === 0) return null;
-
-  const sections = [
-    buildTraceSection('visibleReply', '开场可见内容', msg.content),
-    buildTraceSection('openingMode', '开场模式', openingMode),
-    buildTraceSection('quickReplies', '快捷回复', quickReplies),
-  ].filter(Boolean) as TraceSectionView[];
-
-  return {
-    kind: 'opening',
-    kindLabel: '开场交互块',
-    summary: openingMode ? `mode: ${openingMode}` : '首轮开场消息',
-    metricChips: [
-      { label: 'mode', value: openingMode || '--' },
-      { label: 'quickReplies', value: String(quickReplies.length) },
-    ],
-    sections,
-    peerCard: null,
-  };
-};
-
-const buildPeerTraceCard = (msg: ChatMessage): LearningPeerTraceCard | null => {
-  if (!msg.peerTriggered && !msg.peerMessage && !msg.peerDebug) return null;
-
-  const analysis = resolveDebugAnalysis(msg);
-  const sections = [
-    buildTraceSection('triggerReason', '触发上下文', {
-      cognitiveLevel: analysis?.cognitiveLevel || null,
-      understanding: analysis?.understanding ?? null,
-      engagement: analysis?.engagement ?? null,
-      knowledgePoint: resolveDebugKnowledgePoint(msg),
-      strategies: resolveDebugStrategies(msg),
-    }),
-    buildTraceSection('peerInput', '伴学 Skill 输入', msg.peerDebug?.input || null),
-    buildTraceSection('peerMessage', '伴学输出', msg.peerMessage || '本轮触发了伴学，但当前没有返回可见文案。'),
-    buildTraceSection('followUpQuestions', '伴学追问', msg.peerDebug?.followUpQuestions || null),
-    buildTraceSection('peerPromptDebug', '伴学结构化调试', msg.peerDebug?.promptDebug || null),
-  ].filter(Boolean) as TraceSectionView[];
-
-  return {
-    title: 'Peer Reinforcement Skill',
-    summary: msg.peerTriggered ? '本轮 teaching-turn 决定触发伴学 skill。' : '存在伴学输出。',
-    sections,
-  };
-};
-
-const buildTeachingTurnTraceCard = (msg: ChatMessage): LearningTraceCard | null => {
-  const payload = getPromptDebugPayload(msg);
-  const normalized = getPromptDebugNormalizedOutput(msg);
-  const analysis = resolveDebugAnalysis(msg);
-  const knowledgePoint = resolveDebugKnowledgePoint(msg);
-  const strategies = resolveDebugStrategies(msg);
-
-  if (!payload && !normalized && !analysis && !knowledgePoint && strategies.length === 0 && !msg.peerTriggered && !msg.peerMessage && !msg.peerDebug) {
-    return null;
-  }
-
-  const sections = [
-    buildTraceSection('latestLearnerMessage', '本轮用户输入', payload?.latestLearnerMessage || null),
-    buildTraceSection('taskProfile', '任务画像 taskProfile', payload?.scenario?.taskProfile || null),
-    buildTraceSection('cognitiveFrame', '局部认知图景 cognitiveFrame', payload?.scenario?.cognitiveFrame || null),
-    buildTraceSection('knowledgeBoard', '当前知识看板 knowledge', payload?.knowledge || null),
-    buildTraceSection('visibleReply', '可见回复', msg.content),
-    buildTraceSection('completionCandidateEvidence', '完成判定依据', normalized?.control?.completionCandidateEvidence || null),
-    buildTraceSection('normalizedOutput', '结构化输出 normalizedOutput', normalized || null),
-  ].filter(Boolean) as TraceSectionView[];
-
-  return {
-    kind: 'teaching-turn',
-    kindLabel: '教学回合',
-    summary: buildTurnDebugSummary(msg),
-    promptVersionLabel: getPromptDebugPromptVersionLabel(msg),
-    metricChips: [
-      { label: 'knowledgePoint', value: knowledgePoint || '--' },
-      { label: 'cognitiveLevel', value: analysis?.cognitiveLevel || '--' },
-      { label: 'understanding', value: analysis?.understanding !== undefined && analysis?.understanding !== null ? String(analysis.understanding) : '--' },
-      { label: 'engagement', value: analysis?.engagement !== undefined && analysis?.engagement !== null ? String(analysis.engagement) : '--' },
-      { label: 'strategies', value: strategies.length ? strategies.map(strategyLabel).join(' / ') : '--' },
-    ],
-    sections,
-    peerCard: buildPeerTraceCard(msg),
-  };
-};
-
-const getLearningTraceCard = (msg: ChatMessage): LearningTraceCard | null => {
-  const openingCard = buildOpeningTraceCard(msg);
-  if (openingCard) return openingCard;
-  return buildTeachingTurnTraceCard(msg);
-};
-
-const getAssistantMessageForUserTurn = (msg: ChatMessage) => {
-  const index = messages.value.indexOf(msg);
-  if (index < 0) return null;
-  for (let cursor = index + 1; cursor < messages.value.length; cursor += 1) {
-    const candidate = messages.value[cursor];
-    if (candidate.role === 'assistant') {
-      return candidate;
-    }
-  }
-  return null;
-};
-
-const getLearningInputTraceCard = (msg: ChatMessage): LearningInputTraceCard | null => {
-  if (msg.role !== 'user') return null;
-  const assistantMsg = getAssistantMessageForUserTurn(msg);
-  const payload = getPromptDebugPayload(assistantMsg);
-  if (!payload) return null;
-
-  const sections = [
-    buildTraceSection('latestLearnerMessage', '本轮用户输入', payload?.latestLearnerMessage || msg.content),
-    buildTraceSection('taskProfile', '任务画像 taskProfile', payload?.scenario?.taskProfile || null),
-    buildTraceSection('cognitiveFrame', '局部认知图景 cognitiveFrame', payload?.scenario?.cognitiveFrame || null),
-    buildTraceSection('learner', '学习者状态', payload?.learner || null),
-    buildTraceSection('knowledgeBoard', '当前知识看板 knowledge', payload?.knowledge || null),
-    buildTraceSection('recentDialogueContext', '最近对话上下文', payload?.recentDialogueContext || null),
-  ].filter(Boolean) as TraceSectionView[];
-
-  if (sections.length === 0) return null;
-
-  const coreConcept = payload?.scenario?.cognitiveFrame?.currentCoreConcept?.name || payload?.scenario?.taskProfile?.coreConcept || '';
-  const learnerMessage = typeof payload?.latestLearnerMessage === 'string' ? payload.latestLearnerMessage : '';
-
-  return {
-    kindLabel: '教学输入',
-    summary: [coreConcept, learnerMessage ? `最近输入：${learnerMessage}` : ''].filter(Boolean).join(' · ') || '查看本轮教学输入',
-    promptVersionLabel: getPromptDebugPromptVersionLabel(assistantMsg),
-    sections,
-  };
-};
-
-const getLearningTraceSummaryLabelForMessage = (msg: ChatMessage) => {
-  if (msg.role === 'user') {
-    return getLearningInputTraceCard(msg) ? '查看本轮教学输入' : '';
-  }
-  return getLearningTraceSummaryLabel(msg);
-};
-
-const getLearningTraceSummaryLabel = (msg: ChatMessage) => {
-  const card = getLearningTraceCard(msg);
-  if (!card) return '查看本轮教学输入与输出';
-  if (card.kind === 'opening') return '查看开场交互块';
-  return card.peerCard ? '查看本轮教学输入、输出与伴学介入' : '查看本轮教学输入与输出';
-};
-
-const buildTurnDebugSummary = (msg: any) => {
-  const payload = getPromptDebugPayload(msg);
-  if (!payload) {
-    return '查看这一轮的 teaching-turn 输入输出';
-  }
-
-  const coreConcept = payload?.scenario?.cognitiveFrame?.currentCoreConcept?.name || payload?.scenario?.taskProfile?.coreConcept || '';
-  const learnerMessage = typeof payload?.latestLearnerMessage === 'string' ? payload.latestLearnerMessage : '';
-  return [coreConcept, learnerMessage ? `最近输入：${learnerMessage}` : ''].filter(Boolean).join(' · ') || '查看这一轮的 teaching-turn 输入输出';
-};
-
-const openPathInputDialog = () => {
-  showPathInputDialog.value = true;
-};
-
-const openTurnDebugDialog = (msg: any, mode: 'input' | 'output') => {
-  if (!msg) return;
-  selectedTurnDebug.value = msg;
-  selectedTurnDebugMode.value = mode;
-  showTurnDebugDialog.value = true;
 };
 
 const copyMessage = async (content: string) => {
@@ -1339,7 +722,7 @@ const sendMessage = async () => {
     const result = await aiTeachingAPI.sendMessage(
       sessionInfo.value.sessionId,
       text
-    );
+    ) as MessageResultWithRecovery;
     
     messages.value.push({
       role: 'assistant',
@@ -1372,13 +755,13 @@ const sendMessage = async () => {
 
       toast.success(result.wrapup?.evaluation ? '本节课已自动结束并生成评估' : '本节课已自动结束并生成总结');
 
-      await nextTick();
-      const pathId = task.value?.learningPath?.id || '';
-      router.push({
-        path: `/learn/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
-        query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery(),
-      });
-      return;
+        await nextTick();
+        const pathId = task.value?.learningPath?.id || '';
+        router.push({
+          path: `${learningEvaluationBasePath.value}/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+          query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery(),
+        });
+        return;
     }
 
     if (result.knowledgePoints && result.knowledgePoints.length > 0) {
@@ -1671,7 +1054,7 @@ const endSession = async (options?: {
     } else if (!options?.skipEvaluationDialog) {
       const pathId = task.value?.learningPath?.id || '';
       router.push({
-        path: `/learn/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
+        path: `${learningEvaluationBasePath.value}/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
         query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery()
       });
       return;
@@ -1753,7 +1136,7 @@ const handleWrapupAdvisoryAction = async (action: string) => {
     const newPathId = payload?.result?.newPathId || payload?.data?.result?.newPathId;
     toast.success('已调整当前路径的后续阶段');
     if (newPathId) {
-      router.push({ path: `/learning-path/${newPathId}`, query: buildRouteQuery() });
+      router.push({ path: `${learningPathDetailBasePath.value}/${newPathId}`, query: buildRouteQuery() });
     }
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -1803,13 +1186,6 @@ const formatTime = (seconds: number | string) => {
   const mins = Math.floor(s / 60);
   const secs = s % 60;
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-};
-
-const formatDateTime = (iso: string) => {
-  if (!iso) return '--';
-  const d = new Date(iso);
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 const pauseAndLeave = async () => {
@@ -2220,46 +1596,6 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.learning-debug-float-btn {
-  position: fixed;
-  right: max(16px, calc(16px + var(--safe-area-right)));
-  bottom: calc(28px + var(--safe-area-bottom));
-  z-index: 9998;
-  display: grid;
-  gap: 4px;
-  min-width: 156px;
-  padding: 12px 14px;
-  border: 0;
-  border-radius: 18px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
-  color: #fff;
-  text-align: left;
-}
-
-.learning-debug-float-btn--stacked {
-  bottom: calc(168px + var(--safe-area-bottom));
-}
-
-.learning-debug-float-btn strong {
-  font-size: 14px;
-}
-
-.learning-debug-float-btn span {
-  font-size: 11px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.learning-debug-drawer :deep(.el-drawer__header) {
-  margin-bottom: 0;
-  padding-bottom: 12px;
-}
-
-.learning-debug-drawer :deep(.el-drawer__body) {
-  padding-top: 0;
-}
-
 .learning-layout--no-sidebar {
   grid-template-columns: 1fr;
   height: 100%;
@@ -2559,208 +1895,6 @@ onUnmounted(() => {
   background: rgba(23, 32, 51, 0.08);
 }
 
-.learning-msg-trace {
-  margin-top: 10px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.04);
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  overflow: hidden;
-}
-
-.learning-msg-trace__summary {
-  cursor: pointer;
-  color: var(--accent-deep);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 12px 14px;
-}
-
-.learning-msg-trace__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 14px 12px;
-}
-
-.learning-msg-trace__meta span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #49638f;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.learning-msg-trace__metric-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 14px;
-  padding: 0 14px 12px;
-}
-
-.learning-msg-trace__metric {
-  display: grid;
-  gap: 4px;
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(15, 23, 42, 0.06);
-}
-
-.learning-msg-trace__metric span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.learning-msg-trace__metric strong {
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.learning-msg-trace__section {
-  padding: 0 14px 12px;
-}
-
-.learning-msg-trace__label {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.learning-msg-trace pre {
-  margin: 0;
-  padding: 12px;
-  border-radius: 12px;
-  background: #0f172a;
-  color: #e2e8f0;
-  overflow: auto;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.learning-msg-trace__peer {
-  margin: 0 14px 12px;
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(47, 186, 118, 0.08);
-  border: 1px solid rgba(47, 186, 118, 0.14);
-}
-
-.learning-msg-trace__peer-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.learning-msg-trace__peer-eyebrow {
-  display: block;
-  color: #4e8a67;
-  font-size: 11px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.learning-msg-trace__peer-head strong {
-  color: #1d3a29;
-  font-size: 13px;
-}
-
-.learning-msg-trace__peer-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #3a7553;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.learning-msg-trace__peer-summary {
-  margin-bottom: 10px;
-  color: #43644f;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.learning-msg-trace__actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 0 14px 12px;
-}
-
-.learning-msg-trace__actions :deep(.el-button) {
-  font-size: 11px;
-  padding: 4px 8px;
-}
-
-.learning-debug-dialog__summary {
-  margin-bottom: 14px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.learning-debug-dialog__group + .learning-debug-dialog__group {
-  margin-top: 18px;
-}
-
-.learning-debug-dialog__group-title {
-  margin-bottom: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.learning-debug-dialog__grid {
-  display: grid;
-  gap: 14px;
-}
-
-.learning-debug-dialog__empty {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.learning-debug-card {
-  border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.96);
-  overflow: hidden;
-}
-
-.learning-debug-card__eyebrow {
-  display: block;
-  padding: 12px 14px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent-deep);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-}
-
-.learning-debug-card pre {
-  margin: 0;
-  padding: 14px;
-  max-height: 320px;
-  overflow: auto;
-  font-size: 12px;
-  line-height: 1.65;
-  color: #dbe7ff;
-  background: #0f172a;
-}
-
 .message-error {
   display: flex;
   align-items: center;
@@ -3057,10 +2191,6 @@ onUnmounted(() => {
     margin-left: 0;
   }
 
-  .learning-msg-debug__grid {
-    grid-template-columns: 1fr;
-  }
-
   .learning-bottom {
     gap: 12px;
   }
@@ -3078,14 +2208,6 @@ onUnmounted(() => {
     right: max(12px, calc(12px + var(--safe-area-right)));
   }
 
-  .learning-debug-float-btn {
-    right: max(12px, calc(12px + var(--safe-area-right)));
-    bottom: calc(16px + var(--safe-area-bottom));
-  }
-
-  .learning-debug-float-btn--stacked {
-    bottom: calc(140px + var(--safe-area-bottom));
-  }
 }
 
 @media (max-width: 520px) {
@@ -3127,14 +2249,5 @@ onUnmounted(() => {
     bottom: calc(76px + var(--safe-area-bottom));
   }
 
-  .learning-debug-float-btn {
-    left: 16px;
-    right: 16px;
-    min-width: 0;
-  }
-
-  .learning-debug-float-btn--stacked {
-    bottom: calc(132px + var(--safe-area-bottom));
-  }
 }
 </style>

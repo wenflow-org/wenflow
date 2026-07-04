@@ -31,9 +31,17 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     return { temperature: 0.7, maxTokens: 8000, model: null, thinkingMode: 'default', reasoningEffort: 'default' }
   }
 
+  function getPromptLabToken() {
+    return localStorage.getItem('admin_token')
+      || sessionStorage.getItem('admin_token')
+      || localStorage.getItem('token')
+      || sessionStorage.getItem('token')
+      || ''
+  }
+
   async function fetchCompileSpec() {
     try {
-      const token = localStorage.getItem('token')
+      const token = getPromptLabToken()
       const resp = await fetch(`${API}/compile-spec`, {
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -46,7 +54,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
 
   async function fetchParams(id: string) {
     try {
-      const token = localStorage.getItem('token')
+      const token = getPromptLabToken()
       const resp = await fetch(`${API}/params/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -61,14 +69,19 @@ export const usePromptLabStore = defineStore('promptLab', () => {
 
   async function fetchSourceList() {
     try {
-      const token = localStorage.getItem('token')
+      const token = getPromptLabToken()
       const resp = await fetch(`${API}/sources`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (resp.ok) {
         const result = await resp.json()
         sourceList.value = result.data || []
+        if (!sourceList.value.some((item) => item.id === skillId.value) && sourceList.value.length > 0) {
+          skillId.value = sourceList.value[0].id
+        }
+        return
       }
+      ElMessage.warning('Skill 列表加载失败')
     } catch { /* ignore */ }
   }
 
@@ -76,7 +89,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     skillId.value = id
     loadingSource.value = true
     try {
-      const token = localStorage.getItem('token')
+      const token = getPromptLabToken()
       const resp = await fetch(`${API}/source/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -108,7 +121,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     compileError.value = null
 
     try {
-      const token = localStorage.getItem('token')
+      const token = getPromptLabToken()
       const response = await fetch(`${API}/compile-source`, {
         method: 'POST',
         headers: {
@@ -143,7 +156,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
   async function publish(): Promise<{ version: number; agentId: string }> {
     compiling.value = true
     try {
-      const token = localStorage.getItem('token')
+      const token = getPromptLabToken()
       const resp = await fetch(`${API}/publish`, {
         method: 'POST',
         headers: {

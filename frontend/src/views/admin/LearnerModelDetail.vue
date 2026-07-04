@@ -1,7 +1,7 @@
 <template>
   <div class="admin-page learner-model-detail-page" v-loading="loading">
     <AdminPageHeader
-      title="学习者模型详情"
+      title="学习者模型"
       :icon="Reading"
       :highlights="detailHighlights"
     >
@@ -12,10 +12,10 @@
     </AdminPageHeader>
 
     <div v-if="snapshot" class="summary-meta">
-      <div class="summary-meta__item"><span>快照版本</span><strong>{{ snapshot.snapshotVersion || '--' }}</strong></div>
-      <div class="summary-meta__item"><span>生成时间</span><strong>{{ formatTime(snapshot.freshness?.generatedAt) }}</strong></div>
+      <div class="summary-meta__item"><span>版本</span><strong>{{ snapshot.snapshotVersion || '--' }}</strong></div>
+      <div class="summary-meta__item"><span>生成于</span><strong>{{ formatTime(snapshot.freshness?.generatedAt) }}</strong></div>
       <div class="summary-meta__item"><span>置信度</span><strong>{{ confidenceText }}</strong></div>
-      <div class="summary-meta__item"><span>模式</span><strong>{{ pathId ? '路径模型' : '全局模型' }}</strong></div>
+      <div class="summary-meta__item"><span>范围</span><strong>{{ pathId ? '路径模型' : '全局模型' }}</strong></div>
     </div>
 
     <el-tabs v-if="snapshot" v-model="activeTab">
@@ -41,7 +41,7 @@
 
         <div class="grid two-col detail-section-row">
           <section class="detail-surface overview-card">
-            <div class="detail-surface__header">学习进度</div>
+            <div class="detail-surface__header">进度</div>
             <div class="kv-list">
               <div class="kv-item"><span>路径</span><strong>{{ pathOverview.pathTitle }}</strong></div>
               <div class="kv-item"><span>里程碑进度</span><strong>{{ milestoneProgressText }}</strong></div>
@@ -49,7 +49,7 @@
             <el-progress :percentage="milestoneProgress" :stroke-width="10" :show-text="false" class="overview-progress" />
           </section>
           <section class="detail-surface overview-card">
-            <div class="detail-surface__header">风险摘要</div>
+            <div class="detail-surface__header">风险</div>
             <div class="risk-summary">
               <el-tag size="small" type="danger">前置缺口 {{ prerequisiteGapCount }}</el-tag>
               <el-tag size="small" type="info">脆弱 {{ fragileCount }}</el-tag>
@@ -61,7 +61,7 @@
 
         <section class="detail-section">
           <div class="detail-section__header">
-            <h3>教学动作建议</h3>
+            <h3>动作建议</h3>
           </div>
           <div class="action-grid">
             <div class="action-item"><span>推荐节奏</span><strong>{{ snapshot.dynamicState?.recommendedPacing || '--' }}</strong></div>
@@ -96,7 +96,7 @@
 
         <div class="grid two-col detail-section-row">
           <section class="detail-surface">
-            <div class="detail-surface__header">叙述型画像</div>
+            <div class="detail-surface__header">叙述</div>
             <div class="text-list">
               <div class="text-item"><strong>目标叙述</strong><p>{{ snapshot.profile.narrativeInsights?.goalNarrative || '暂无' }}</p></div>
               <div class="text-item"><strong>背景上下文</strong><p>{{ snapshot.profile.narrativeInsights?.backgroundContextNote || '暂无' }}</p></div>
@@ -106,7 +106,7 @@
             </div>
           </section>
           <section class="detail-surface">
-            <div class="detail-surface__header">学习模式叙述</div>
+            <div class="detail-surface__header">学习模式</div>
             <div class="text-list">
               <div class="text-item"><strong>内容接收方式</strong><p>{{ snapshot.profile.narrativeInsights?.contentReceptionPattern || '暂无' }}</p></div>
               <div class="text-item"><strong>练习偏好</strong><p>{{ snapshot.profile.narrativeInsights?.practicePreferenceNote || '暂无' }}</p></div>
@@ -126,7 +126,7 @@
         </div>
         <section class="detail-section">
           <div class="detail-section__header">
-            <h3>推荐交互</h3>
+            <h3>交互建议</h3>
           </div>
           <div class="kv-list">
             <div class="kv-item"><span>节奏</span><strong>{{ snapshot.dynamicState.recommendedPacing }}</strong></div>
@@ -139,7 +139,7 @@
       <el-tab-pane label="知识记忆" name="memory">
         <div class="grid two-col" v-if="snapshot.knowledgeMemory.currentPath">
           <section class="detail-surface path-card">
-            <div class="detail-surface__header">当前路径位置</div>
+            <div class="detail-surface__header">当前路径</div>
             <div class="kv-list">
               <div class="kv-item"><span>路径</span><strong>{{ snapshot.knowledgeMemory.currentPath.pathTitle }}</strong></div>
               <div class="kv-item"><span>当前阶段</span><strong>{{ snapshot.knowledgeMemory.currentPath.currentPosition.milestoneTitle }}</strong></div>
@@ -149,7 +149,7 @@
             <el-progress :percentage="milestoneProgress" :stroke-width="10" :show-text="false" class="overview-progress" />
           </section>
           <section class="detail-surface">
-            <div class="detail-surface__header">风险与前置缺口</div>
+            <div class="detail-surface__header">风险与缺口</div>
             <div class="risk-summary risk-summary--memory">
               <el-tag size="small" type="danger">前置缺口 {{ prerequisiteGapCount }}</el-tag>
               <el-tag size="small" type="info">脆弱 {{ fragileCount }}</el-tag>
@@ -193,7 +193,7 @@
             <div class="text-block">{{ snapshot.teachingHints.recommendedApproach || '暂无' }}</div>
           </section>
           <section class="detail-surface">
-            <div class="detail-surface__header">Prompt Enhancement</div>
+            <div class="detail-surface__header">Prompt 增强</div>
             <div class="text-block">{{ snapshot.teachingHints.promptEnhancement || '暂无' }}</div>
           </section>
         </div>
@@ -215,7 +215,7 @@
         </div>
         <section class="detail-section">
           <div class="detail-section__header">
-            <h3>课程调参建议</h3>
+            <h3>课程调参</h3>
           </div>
           <div class="kv-list">
             <div class="kv-item"><span>任务粒度</span><strong>{{ snapshot.profile.curriculumControls?.taskGranularityLevel || '--' }}</strong></div>
@@ -337,7 +337,6 @@ const highRiskEvidenceCount = computed(() => evidence.value.filter((item) => Num
 const latestEvidenceAt = computed(() => evidence.value[0]?.happenedAt ? formatTime(evidence.value[0].happenedAt) : '--');
 
 const detailHighlights = computed(() => [
-  { label: `版本 ${snapshot.value?.snapshotVersion || '--'}`, tone: 'info' as const },
   { label: `趋势 ${trendText.value}`, tone: snapshot.value?.dynamicState?.recentTrend === 'improving' ? 'success' as const : snapshot.value?.dynamicState?.recentTrend === 'declining' ? 'warning' as const : 'neutral' as const },
   { label: `风险 ${riskText.value}`, tone: snapshot.value?.dynamicState?.fatigueRisk === 'high' ? 'danger' as const : snapshot.value?.dynamicState?.fatigueRisk === 'medium' ? 'warning' as const : 'neutral' as const },
   { label: `${conceptRows.value.length} 个知识点`, tone: 'neutral' as const }

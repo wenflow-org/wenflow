@@ -117,35 +117,22 @@
       </template>
 
       <div v-if="selectedLog" class="detail-body">
-        <section class="detail-hero">
-          <div class="detail-hero__main">
-            <h3>{{ selectedLog.agentId }}</h3>
-            <p>查看输入、输出、JSON 和标准化结果。</p>
-          </div>
-          <div class="detail-hero__summary">
-            <div class="detail-summary-card">
-              <span class="detail-summary-card__label">状态</span>
+        <div class="detail-overview-grid detail-overview-grid--lead">
+          <div class="detail-overview-card">
+            <span class="detail-overview-card__label">状态</span>
+            <div class="detail-overview-card__tags">
               <el-tag size="small" :type="selectedLog.success ? 'success' : 'danger'">{{ selectedLog.success ? '成功' : '失败' }}</el-tag>
-              <p>{{ selectedLog.errorMessage || '本次调用未记录错误信息。' }}</p>
-            </div>
-            <div class="detail-summary-card">
-              <span class="detail-summary-card__label">Prompt 版本</span>
-              <strong>{{ selectedLog.systemPromptVersion ? `v${selectedLog.systemPromptVersion}` : '未记录' }}</strong>
-              <p>{{ selectedLog.promptDrift ? '有异常标记，建议核对 JSON。' : '本次调用无异常标记。' }}</p>
+              <el-tag v-if="selectedLog.promptDrift" size="small" type="warning">漂移</el-tag>
             </div>
           </div>
-        </section>
-
-        <el-alert
-          v-if="selectedLog.promptDrift || selectedLog.errorMessage"
-          :title="selectedLog.promptDrift ? '异常标记，请检查 JSON 与输出。' : '调用失败，请核对模型输出与错误字段。'
-          "
-          :type="selectedLog.promptDrift ? 'warning' : 'error'"
-          :closable="false"
-          show-icon
-        />
-
-        <div class="detail-overview-grid">
+          <div class="detail-overview-card">
+            <span class="detail-overview-card__label">Prompt 版本</span>
+            <strong>{{ selectedLog.systemPromptVersion ? `v${selectedLog.systemPromptVersion}` : '未记录' }}</strong>
+          </div>
+          <div class="detail-overview-card">
+            <span class="detail-overview-card__label">时间</span>
+            <strong>{{ formatTime(selectedLog.createdAt) }}</strong>
+          </div>
           <div class="detail-overview-card">
             <span class="detail-overview-card__label">耗时</span>
             <strong>{{ selectedLog.durationMs }}ms</strong>
@@ -166,6 +153,18 @@
             <span class="detail-overview-card__label">Trace</span>
             <strong>{{ selectedLog.traceId || '未记录' }}</strong>
           </div>
+          <div v-if="selectedLog.errorCode" class="detail-overview-card">
+            <span class="detail-overview-card__label">错误码</span>
+            <strong>{{ selectedLog.errorCode }}</strong>
+          </div>
+        </div>
+
+        <div
+          v-if="selectedLog.promptDrift || selectedLog.errorMessage"
+          class="detail-issue-row"
+          :class="selectedLog.promptDrift ? 'detail-issue-row--warning' : 'detail-issue-row--error'"
+        >
+          <span class="detail-issue-message">{{ selectedLog.errorMessage || '发现 promptDrift 标记' }}</span>
         </div>
 
         <el-tabs class="detail-tabs">
@@ -559,40 +558,9 @@ watch(filters, () => {
   gap: 18px;
 }
 
-.detail-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.9fr);
-  gap: 14px;
-  padding: 0 0 18px;
-  border-bottom: var(--admin-border-subtle);
-}
-
-.detail-hero__main,
-.detail-hero__summary,
 .detail-overview-grid {
   min-width: 0;
 }
-
-.detail-hero__main h3 {
-  margin: 10px 0 0;
-  color: var(--admin-text-primary);
-  font-size: 1.35rem;
-}
-
-.detail-hero__main p {
-  margin: 10px 0 0;
-  color: var(--admin-text-secondary);
-  line-height: 1.7;
-}
-
-.detail-hero__summary {
-  display: grid;
-  gap: 10px;
-  padding-left: 16px;
-  border-left: var(--admin-border-subtle);
-}
-
-.detail-summary-card,
 .detail-overview-card {
   border: 1px solid var(--admin-border-color);
   border-radius: var(--admin-radius-sm);
@@ -602,24 +570,23 @@ watch(filters, () => {
   gap: 6px;
 }
 
-.detail-summary-card__label,
 .detail-overview-card__label {
   color: #7b8ba3;
   font-size: 12px;
   font-weight: 700;
 }
 
-.detail-summary-card strong,
 .detail-overview-card strong {
   color: var(--admin-text-primary);
   font-size: 15px;
+  word-break: break-word;
 }
 
-.detail-summary-card p {
-  margin: 0;
-  color: var(--admin-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+.detail-overview-card__tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .detail-overview-grid {
@@ -628,6 +595,33 @@ watch(filters, () => {
   gap: 12px;
   padding-top: 4px;
   border-top: var(--admin-border-subtle);
+}
+
+.detail-overview-grid--lead {
+  padding-top: 0;
+  border-top: none;
+}
+
+.detail-issue-row {
+  padding: 12px 14px;
+  border-radius: var(--admin-radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.detail-issue-row--warning {
+  background: var(--admin-color-warning-bg);
+  color: #9a3412;
+}
+
+.detail-issue-row--error {
+  background: var(--admin-color-error-bg);
+  color: #b91c1c;
+}
+
+.detail-issue-message {
+  display: block;
+  word-break: break-word;
 }
 
 .detail-descriptions :deep(.el-descriptions__body) {
@@ -659,17 +653,9 @@ watch(filters, () => {
 }
 
 @media (max-width: 960px) {
-  .detail-hero,
   .detail-overview-grid,
   .prompt-log-card__head {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .detail-hero__summary {
-    padding-left: 0;
-    padding-top: 12px;
-    border-left: none;
-    border-top: var(--admin-border-subtle);
   }
 
   .prompt-filter-grid {

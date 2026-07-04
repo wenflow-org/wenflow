@@ -158,7 +158,28 @@ watch(() => props.content, parse)
 .table-editor {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+
+.editable-table {
+  --el-table-border-color: rgba(226, 232, 240, 0.9);
+  --el-table-header-bg-color: rgba(248, 250, 252, 0.92);
+  --el-table-row-hover-bg-color: rgba(239, 246, 255, 0.65);
+}
+
+.editable-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.editable-table :deep(th.el-table__cell) {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.editable-table :deep(td.el-table__cell) {
+  background: rgba(255, 255, 255, 0.68);
 }
 
 .editable-table :deep(.el-input__inner) {
@@ -183,5 +204,6 @@ watch(() => props.content, parse)
 
 .add-btn {
   align-self: flex-start;
+  padding-left: 0;
 }
 </style>

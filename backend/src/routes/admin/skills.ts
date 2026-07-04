@@ -8,6 +8,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
+import { getAPIGateway } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
@@ -749,8 +750,8 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const parentAgent = getAgentOfSkill(canonicalId);
 
     // 并发拉取
-    const [modelConfig, promptVersions, contract, callStats] = await Promise.all([
-      systemPrisma.agent_model_configs.findUnique({ where: { agentId: canonicalId } }),
+    const [skillConfig, promptVersions, contract, callStats, resolvedRoute] = await Promise.all([
+      systemPrisma.skill_model_configs.findFirst({ where: { skillId: canonicalId.replace(/^skill:/, '') } }),
       systemPrisma.agent_prompts.findMany({
         where: { agentId: canonicalId },
         orderBy: { version: 'desc' },
@@ -775,7 +776,8 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         _count: { _all: true },
         _avg: { durationMs: true },
         _max: { calledAt: true }
-      })
+      }),
+      getAPIGateway().resolveRoute({ agentId: parentAgent?.id, skillId: canonicalId.replace(/^skill:/, '') }).catch(() => null)
     ]);
 
     const totalCalls = callStats.reduce((s, g) => s + g._count._all, 0);
@@ -809,18 +811,20 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
           name: parentAgent.name,
           monitoringGroup: parentAgent.monitoringGroup
         } : null,
-        modelConfig: modelConfig ? {
-          temperature: modelConfig.temperature,
-          maxTokens: modelConfig.maxTokens,
-          model: modelConfig.model,
-          tier: modelConfig.tier
-        } : (manifest.defaultModelConfig ? {
-          temperature: manifest.defaultModelConfig.temperature,
-          maxTokens: manifest.defaultModelConfig.maxTokens,
-          model: null,
-          tier: 'chat',
-          fromManifestDefault: true
-        } : null),
+        modelConfig: {
+          enabled: !!skillConfig?.enabled,
+          tier: skillConfig?.tier || (resolvedRoute?.thinkingMode === 'enabled' || resolvedRoute?.reasoningEffort === 'high' || resolvedRoute?.reasoningEffort === 'max' ? 'reasoning' : 'chat'),
+          model: resolvedRoute?.model || skillConfig?.model || null,
+          thinkingMode: resolvedRoute?.thinkingMode || skillConfig?.thinkingMode || 'default',
+          reasoningEffort: resolvedRoute?.reasoningEffort || skillConfig?.reasoningEffort || 'default',
+          temperature: resolvedRoute?.temperature ?? skillConfig?.temperature ?? manifest.defaultModelConfig?.temperature ?? null,
+          maxTokens: resolvedRoute?.maxTokens ?? skillConfig?.maxTokens ?? manifest.defaultModelConfig?.maxTokens ?? null,
+          timeoutMs: resolvedRoute?.timeoutMs ?? skillConfig?.requestTimeoutMs ?? null,
+          source: skillConfig?.enabled ? 'skill-override' : parentAgent ? 'agent-or-platform' : 'platform-default',
+          inheritedFromAgent: !!parentAgent && !skillConfig?.enabled,
+          hasSkillOverride: !!skillConfig?.enabled,
+          manifestDefault: manifest.defaultModelConfig || null,
+        },
         contract: contract ? {
           stage: contract.stage,
           displayName: contract.displayName,

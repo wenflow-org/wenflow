@@ -139,7 +139,7 @@
                         <el-dropdown-menu>
                           <el-dropdown-item @click="goToProfile(row)">查看详情</el-dropdown-item>
                           <el-dropdown-item @click="openEditDialog(row)">编辑画像</el-dropdown-item>
-                          <el-dropdown-item @click="openSessionDrawer(row)">查看会话</el-dropdown-item>
+                          <el-dropdown-item @click="openSessionDrawer(row)">会话记录</el-dropdown-item>
                           <el-dropdown-item @click="handleDelete(row)">删除画像</el-dropdown-item>
                         </el-dropdown-menu>
                       </template>
@@ -156,9 +156,7 @@
                     </el-button>
                   </div>
                   
-                  <div v-if="getStoryPool(row).length === 0" class="empty-story-hint">
-                    暂无故事。点击"生成新故事"为该学习者创建测试场景。
-                  </div>
+                  <div v-if="getStoryPool(row).length === 0" class="empty-story-hint">暂无故事</div>
                   
                   <div v-else class="story-list">
                     <article
@@ -175,7 +173,7 @@
                       </div>
                       
                       <p class="story-card__outline">
-                        {{ story.storyOutline || story.storyTriggerEvent || '暂无故事摘要' }}
+                        {{ summarizeStory(story.storyOutline || story.storyTriggerEvent || '暂无故事摘要') }}
                       </p>
                       
                       <div v-if="story.pressurePoints && story.pressurePoints.length > 0" class="story-card__pressures">
@@ -250,9 +248,8 @@
     >
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
         <el-form-item label="学习者称呼" prop="name">
-          <el-input v-model="formData.name" placeholder="这个虚拟学习者怎么称呼，如：小林 / 王姐 / 店长A" />
+          <el-input v-model="formData.name" placeholder="如：小林 / 王姐 / 店长A" />
         </el-form-item>
-        <div class="ai-generate-hint">用于在人物详情、会话和故事中称呼这个学习者。</div>
 
         <el-divider>基础身份</el-divider>
         <div class="ai-generate-section">
@@ -261,62 +258,55 @@
             AI 一键生成身份
           </el-button>
         </div>
-        <div class="ai-generate-hint ai-generate-hint--block">
-          创建时如果画像信息不足，系统会自动补全基础身份与稳定特质，并自动生成 1 个故事；也可以先点按钮预览后再创建。
-        </div>
-
         <el-form-item label="年龄">
           <el-input-number v-model="formData.profile.age" :min="18" :max="60" style="width: 120px" />
         </el-form-item>
 
         <el-form-item label="职业">
-          <el-input v-model="formData.profile.occupation" placeholder="如：产品经理、工程师、学生" />
+          <el-input v-model="formData.profile.occupation" placeholder="如：产品经理" />
         </el-form-item>
 
         <el-form-item label="学历">
-          <el-input v-model="formData.profile.education" placeholder="如：本科、硕士、大专" />
+          <el-input v-model="formData.profile.education" placeholder="如：本科" />
         </el-form-item>
 
         <el-form-item label="背景描述">
-          <el-input v-model="formData.profile.background" type="textarea" :rows="2" placeholder="简要背景经历..." />
+          <el-input v-model="formData.profile.background" type="textarea" :rows="2" placeholder="简要背景" />
         </el-form-item>
 
         <el-divider>稳定特质</el-divider>
-        <div class="ai-generate-hint ai-generate-hint--block">
-          这组字段描述这个人长期稳定的表达习惯、求助方式和受压反应。
-        </div>
 
         <el-form-item label="核心人格">
-          <el-input v-model="formData.profile.corePersonality" placeholder="如：遇到真实压力时会先保留判断，不会一上来把话说满" />
+          <el-input v-model="formData.profile.corePersonality" placeholder="长期反应特征" />
         </el-form-item>
 
         <el-form-item label="情感底色">
-          <el-input v-model="formData.profile.emotionalBaseline" type="textarea" :rows="2" placeholder="如：平时不一定明显表达，但在连续受挫或公开出错时会明显紧张" />
+          <el-input v-model="formData.profile.emotionalBaseline" type="textarea" :rows="2" placeholder="常见情绪基调" />
         </el-form-item>
 
         <el-form-item label="求助模式">
-          <el-input v-model="formData.profile.helpSeekingPattern" type="textarea" :rows="2" placeholder="如：先自己试，卡两次才问；一旦开口就希望对方给具体例子" />
+          <el-input v-model="formData.profile.helpSeekingPattern" type="textarea" :rows="2" placeholder="遇阻时怎么求助" />
         </el-form-item>
 
         <el-form-item label="对抗模式">
-          <el-input v-model="formData.profile.adversarialPattern" type="textarea" :rows="2" placeholder="如：建议太理想化时，会先说时间不够或条件不允许" />
+          <el-input v-model="formData.profile.adversarialPattern" type="textarea" :rows="2" placeholder="不认同时的反应" />
         </el-form-item>
 
         <el-form-item label="元认知特征">
-          <el-input v-model="formData.profile.metacognitiveProfile" type="textarea" :rows="2" placeholder="如：能感觉到自己没懂，但不太会立刻说清具体卡点" />
+          <el-input v-model="formData.profile.metacognitiveProfile" type="textarea" :rows="2" placeholder="如何觉察卡点" />
         </el-form-item>
 
         <el-form-item label="负荷容忍度">
-          <el-input v-model="formData.profile.cognitiveLoadTolerance" placeholder="如：信息一多就容易先抓表面，之后才慢慢整理重点" />
+          <el-input v-model="formData.profile.cognitiveLoadTolerance" placeholder="信息过载时的反应" />
         </el-form-item>
 
         <el-form-item label="纠错方式">
-          <el-input v-model="formData.profile.memoryRepairPattern" placeholder="如：忘了会先模糊带过，被追问后才承认没记住" />
+          <el-input v-model="formData.profile.memoryRepairPattern" placeholder="出错后的修正方式" />
         </el-form-item>
 
         <el-divider>内部信息</el-divider>
         <el-form-item label="管理员备注">
-          <el-input v-model="formData.notes" type="textarea" :rows="2" placeholder="仅管理员可见的补充说明" />
+          <el-input v-model="formData.notes" type="textarea" :rows="2" placeholder="管理员备注" />
         </el-form-item>
       </el-form>
 
@@ -334,25 +324,6 @@
       size="620px"
       direction="rtl"
     >
-      <div class="drawer-summary">
-        <strong>{{ currentSessionProfile?.learningGoal || '暂无学习目标' }}</strong>
-        <span v-if="getStoryPool(currentSessionProfile).length">{{ getStoryPool(currentSessionProfile).length }} 个故事</span>
-      </div>
-
-      <div v-if="getStoryPool(currentSessionProfile).length" class="story-pool-preview">
-        <article v-for="(story, index) in getStoryPool(currentSessionProfile)" :key="story.id || index" class="story-pool-card">
-          <div class="story-pool-card__head">
-            <strong>{{ story.title || `故事 ${index + 1}` }}</strong>
-            <el-tag size="small" effect="plain">{{ getStorySourceLabel(story.sourceType) }}</el-tag>
-          </div>
-          <p>{{ story.storyOutline || story.visibleOpening || '暂无故事摘要' }}</p>
-          <div class="story-pool-card__meta">{{ story.triggerEvent || '暂无触发事件' }}</div>
-          <div class="story-pool-card__actions">
-            <el-button type="primary" link size="small" @click="startSession(currentSessionProfile, story)">用此故事开局</el-button>
-          </div>
-        </article>
-      </div>
-
       <el-table :data="currentSessions" v-loading="sessionsLoading" stripe size="small">
         <template #empty>
           <el-empty description="暂无会话记录" :image-size="60" />
@@ -389,11 +360,10 @@
       </el-table>
     </el-drawer>
 
-    <el-dialog v-model="startSessionDialogVisible" title="选择故事" width="560px">
+    <el-dialog v-model="startSessionDialogVisible" title="选择开局故事" width="560px">
       <div class="start-session-panel">
         <div class="start-session-panel__head">
           <strong>{{ startSessionTarget?.userName || '虚拟学习者' }}</strong>
-          <span>先选故事，再进入详情与实验</span>
         </div>
         <div v-if="getStoryPool(startSessionTarget).length" class="start-session-story-list">
           <label
@@ -405,11 +375,11 @@
             <input v-model="startSessionStoryIndex" type="radio" :value="index" />
             <div>
               <strong>{{ story.title || `故事 ${index + 1}` }}</strong>
-              <p>{{ story.storyOutline || story.visibleOpening || '暂无故事摘要' }}</p>
+              <p>{{ summarizeStory(story.storyOutline || story.visibleOpening || '暂无故事摘要', 48) }}</p>
             </div>
           </label>
         </div>
-        <div v-else class="empty-state small">这个学习者还没有故事池，先进入详情页生成故事，再开始实验。</div>
+        <div v-else class="empty-state small">暂无故事，请先到详情页生成。</div>
       </div>
       <template #footer>
         <el-button @click="startSessionDialogVisible = false">取消</el-button>
@@ -518,8 +488,14 @@ const focusPanelCollapsed = ref(false)
 const expandedProfileIds = ref<Set<string>>(new Set())
 
 const startSessionPrimaryActionLabel = computed(() => {
-  return getStoryPool(startSessionTarget.value).length ? '用该故事进入详情' : '进入详情生成故事'
+  return getStoryPool(startSessionTarget.value).length ? '创建会话并进入详情' : '进入详情页'
 })
+
+const summarizeStory = (value: string, limit = 72) => {
+  if (!value) return ''
+  const compact = value.replace(/\s+/g, ' ').trim()
+  return compact.length > limit ? `${compact.slice(0, limit)}...` : compact
+}
 
 const formData = ref<VirtualLearnerForm>(createEmptyFormData())
 
@@ -1267,10 +1243,17 @@ const confirmStartSession = async () => {
   if (!startSessionTarget.value) return
   const storyPool = getStoryPool(startSessionTarget.value)
   const story = storyPool[startSessionStoryIndex.value] || storyPool[0]
+
+  if (!story) {
+    startSessionDialogVisible.value = false
+    router.push(`/admin/virtual-learners/${startSessionTarget.value.id}`)
+    return
+  }
+
   try {
-    const res = await adminApi.startVirtualSession(startSessionTarget.value.id, story ? { storyId: story.id, storyIndex: startSessionStoryIndex.value } : undefined)
+    const res = await adminApi.startVirtualSession(startSessionTarget.value.id, { storyId: story.id, storyIndex: startSessionStoryIndex.value })
     if (res.data?.success) {
-      ElMessage.success('已创建 session，进入人物控制中心')
+      ElMessage.success('已创建会话，进入详情页')
       startSessionDialogVisible.value = false
       router.push(`/admin/virtual-learners/${startSessionTarget.value.id}?sessionId=${res.data.data?.id}`)
     }
@@ -1593,8 +1576,7 @@ watch(filteredProfiles, () => {
 .session-list,
 .story-draft-panel,
 .start-session-panel,
-.start-session-story-list,
-.story-pool-preview {
+.start-session-story-list {
   display: grid;
   gap: 12px;
 }
@@ -2413,8 +2395,6 @@ watch(filteredProfiles, () => {
   padding: 22px;
 }
 
-.drawer-summary,
-.story-pool-card,
 .start-session-story,
 .story-card,
 .story-draft-panel__head {
@@ -2423,18 +2403,7 @@ watch(filteredProfiles, () => {
   background: #fbfcfe;
 }
 
-.drawer-summary {
-  margin-bottom: 16px;
-  padding: 14px;
-}
-
-.drawer-summary strong {
-  display: block;
-  margin-bottom: 6px;
-}
-
 .story-draft-panel__head,
-.story-pool-card,
 .story-card,
 .start-session-story {
   padding: 12px 14px;
@@ -2447,7 +2416,6 @@ watch(filteredProfiles, () => {
 }
 
 .story-card__head,
-.story-pool-card__head,
 .start-session-panel__head {
   display: flex;
   justify-content: space-between;
@@ -2457,9 +2425,7 @@ watch(filteredProfiles, () => {
 }
 
 .story-card p,
-.story-pool-card p,
-.start-session-story p,
-.start-session-panel__head span {
+.start-session-story p {
   margin: 0;
   color: #5f6b7d;
   font-size: 12px;
@@ -2476,8 +2442,7 @@ watch(filteredProfiles, () => {
   margin-bottom: 0;
 }
 
-.story-card__line span,
-.story-pool-card__meta {
+.story-card__line span {
   color: #8a94a6;
   font-size: 11px;
 }
@@ -2487,11 +2452,6 @@ watch(filteredProfiles, () => {
   font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
-}
-
-.story-pool-card__meta,
-.story-pool-card__actions {
-  margin-top: 8px;
 }
 
 .start-session-story {

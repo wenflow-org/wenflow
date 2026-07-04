@@ -1,14 +1,14 @@
 <template>
   <div class="admin-page execution-logs-page">
     <AdminPageHeader
-      title="运行执行日志"
+      title="执行日志"
       :icon="Cpu"
       :highlights="executionHighlights"
     >
       <template #actions>
         <el-button @click="loadLogs" :loading="loading">
           <el-icon><Refresh /></el-icon>
-          刷新列表
+          刷新
         </el-button>
         <el-button type="primary" plain @click="handleExport">
           <el-icon><Download /></el-icon>
@@ -20,7 +20,7 @@
     <section class="admin-filter-panel">
       <div class="admin-section-head">
         <div class="admin-section-head__copy">
-          <h3 class="admin-section-head__title">链路筛选</h3>
+          <h3 class="admin-section-head__title">筛选</h3>
         </div>
       </div>
       <div class="admin-filter-grid admin-filter-grid--wide">
@@ -121,7 +121,7 @@
           <label class="admin-filter-field__label">搜索</label>
           <el-input
             v-model="filters.keyword"
-            placeholder="搜索输入/输出/错误..."
+            placeholder="搜索输入/输出/错误"
             clearable
             class="search-input"
           >
@@ -150,21 +150,17 @@
           自动刷新 ({{ refreshInterval }}s)
         </el-checkbox>
       </div>
-      <div class="admin-list-toolbar__group">
-        <p class="admin-section-note">{{ activeExecutionFilterLabel }}</p>
-      </div>
     </div>
 
     <!-- 日志列表 -->
     <section class="logs-shell">
       <div class="admin-section-head logs-shell__head">
         <div class="admin-section-head__copy">
-          <h3 class="admin-section-head__title">日志结果流</h3>
+          <h3 class="admin-section-head__title">日志</h3>
         </div>
       </div>
       <div class="logs-shell__toolbar">
         <span class="logs-shell__count">{{ logs.length }} 条结果</span>
-        <p class="logs-shell__note">{{ activeExecutionFilterLabel }}</p>
       </div>
       <div class="logs-list" v-loading="loading">
         <div
@@ -239,10 +235,6 @@
 
         <!-- 概览网格 -->
         <div class="drawer-overview-grid">
-          <div class="drawer-overview-item">
-            <span class="drawer-overview-item__label">Agent</span>
-            <span class="drawer-overview-item__value">{{ getAgentDisplayName(selectedLog.agentName) }}</span>
-          </div>
           <div class="drawer-overview-item" v-if="selectedLog.action">
             <span class="drawer-overview-item__label">动作</span>
             <span class="drawer-overview-item__value">{{ selectedLog.action }}</span>
@@ -541,24 +533,6 @@ const executionHighlights = computed(() => [
   { label: `失败 ${formatNumber(stats.error)} 条`, tone: stats.error > 0 ? 'danger' as const : 'neutral' as const },
   { label: `超时 ${formatNumber(stats.timeout)} 条`, tone: stats.timeout > 0 ? 'warning' as const : 'neutral' as const }
 ]);
-
-const activeExecutionFilterLabel = computed(() => {
-  const parts = [
-    filters.agentName ? `Agent ${filters.agentName}` : '',
-    filters.agentId ? `ID ${filters.agentId}` : '',
-    filters.traceId ? `Trace ${filters.traceId}` : '',
-    filters.sessionId ? `Session ${filters.sessionId}` : '',
-    filters.status ? `状态 ${filters.status}` : '',
-    filters.sourceEntry ? `来源 ${filters.sourceEntry}` : '',
-    filters.keyword ? `关键词 ${filters.keyword}` : ''
-  ].filter(Boolean);
-
-  if (parts.length === 0) {
-  return '默认范围';
-  }
-
-  return `当前筛选：${parts.join(' / ')}`;
-});
 
 // 详情抽屉
 const drawerVisible = ref(false);
@@ -1118,12 +1092,6 @@ onUnmounted(() => {
   color: var(--admin-text-primary);
   font-size: 12px;
   font-weight: 700;
-}
-
-.logs-shell__note {
-  margin: 0;
-  color: var(--admin-text-muted);
-  font-size: 12px;
 }
 
 .logs-list {

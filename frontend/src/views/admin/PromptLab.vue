@@ -10,7 +10,44 @@
           <el-icon><ArrowLeft /></el-icon>
           返回运行节点
         </el-button>
-        <span class="beta-badge">发布向导</span>
+        <el-popover
+          placement="bottom-end"
+          :width="360"
+          trigger="click"
+          popper-class="prompt-lab-help-popover"
+        >
+          <template #reference>
+            <el-button class="assistant-trigger" aria-label="查看发布向导说明">
+              发布助手
+            </el-button>
+          </template>
+
+          <div class="help-card">
+            <div class="help-card__title">发布向导用途</div>
+            <div class="help-card__grid">
+              <article class="help-item">
+                <strong>1. 看约定</strong>
+                <span>先确认编译规则和不可改边界。</span>
+              </article>
+              <article class="help-item">
+                <strong>2. 改源文件</strong>
+                <span>在源文档里调整结构、字段和内容。</span>
+              </article>
+              <article class="help-item">
+                <strong>3. 生成 Prompt</strong>
+                <span>把源文件编译成可发布 Prompt 产物。</span>
+              </article>
+              <article class="help-item">
+                <strong>4. 审核结果</strong>
+                <span>检查编译结果，再决定是否打回。</span>
+              </article>
+              <article class="help-item">
+                <strong>5. 发布生效</strong>
+                <span>把产物写回 `prompts/` 并激活版本。</span>
+              </article>
+            </div>
+          </div>
+        </el-popover>
         <el-button @click="handleReset">重置</el-button>
       </template>
     </AdminPageHeader>
@@ -29,7 +66,6 @@
         <div class="step-circle">{{ idx < store.currentStep ? '✓' : idx + 1 }}</div>
         <div class="step-text">
           <div class="step-title">{{ step.title }}</div>
-          <div class="step-desc">{{ step.desc }}</div>
         </div>
       </div>
     </div>
@@ -38,16 +74,16 @@
     <main class="lab-body" v-if="store.currentStep === 0">
       <div class="step-content">
         <div class="step-header">
-          <h2>查看编译约定</h2>
-          <span class="step-badge step-badge--lock">框架约束 · 不可编辑</span>
+          <div class="step-header__main">
+            <h2>编译约定</h2>
+            <span class="step-badge step-badge--lock">只读</span>
+          </div>
         </div>
         <div class="spec-card">
-          <pre class="spec-text">{{ store.compileSpec || '加载中...' }}</pre>
+          <pre class="spec-text">{{ store.compileSpec || '未返回内容' }}</pre>
         </div>
         <div class="step-actions">
-          <el-button type="primary" size="large" @click="store.currentStep = 1">
-            已了解，进入源文件 →
-          </el-button>
+          <el-button type="primary" size="large" @click="store.currentStep = 1">返回编辑</el-button>
         </div>
       </div>
     </main>
@@ -56,8 +92,13 @@
     <main class="lab-body" v-if="store.currentStep === 1">
       <div class="step-content">
         <div class="step-header">
-          <h2>编辑源文件</h2>
-          <span class="step-badge">Lab 目录</span>
+          <div class="step-header__main">
+            <h2>编辑源文件</h2>
+            <span class="step-badge">Lab 目录</span>
+          </div>
+          <div class="step-header__actions">
+            <el-button text @click="store.currentStep = 0">查看编译约定</el-button>
+          </div>
         </div>
 
         <div class="source-selector">
@@ -89,7 +130,6 @@
         </div>
 
         <div class="step-actions">
-          <el-button size="large" @click="store.currentStep = 0">上一步</el-button>
           <el-button
             type="primary"
             size="large"
@@ -106,31 +146,28 @@
     <main class="lab-body" v-if="store.currentStep === 2">
       <div class="step-content">
         <div class="step-header">
-          <h2>生成 Prompt</h2>
-          <span class="step-badge step-badge--info">AI 编译</span>
+          <div class="step-header__main">
+            <h2>生成 Prompt</h2>
+            <span class="step-badge step-badge--info">AI 编译</span>
+          </div>
         </div>
 
-          <div v-if="!store.compiledPrompt && !store.compileError && !store.compiling" class="compile-ready">
-            <el-icon class="compile-icon"><MagicStick /></el-icon>
-            <p>点击开始编译。</p>
-          </div>
+        <div v-if="store.compiling" class="compile-progress">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>LLM 正在编译 {{ store.skillId }}...</span>
+        </div>
 
-          <div v-if="store.compiling" class="compile-progress">
-            <el-icon class="is-loading"><Loading /></el-icon>
-            <span>LLM 正在编译 {{ store.skillId }}...</span>
-          </div>
+        <div v-if="store.compileError" class="compile-error">
+          <el-alert type="error" :title="store.compileError" :closable="false" show-icon />
+        </div>
 
-          <div v-if="store.compileError" class="compile-error">
-            <el-alert type="error" :title="store.compileError" :closable="false" show-icon />
-          </div>
-
-          <div v-if="store.compiledPrompt" class="compile-success">
-            <el-alert type="success" title="编译完成" :closable="false" show-icon>
-              <template #default>
-                <span>{{ store.compileStats?.lines ?? '-' }} 行 · {{ store.compileStats?.rules ?? '-' }} 条规则 · {{ store.compileStats?.chars ?? '-' }} 字符</span>
-              </template>
-            </el-alert>
-          </div>
+        <div v-if="store.compiledPrompt" class="compile-success">
+          <el-alert type="success" title="编译完成" :closable="false" show-icon>
+            <template #default>
+              <span>{{ store.compileStats?.lines ?? '-' }} 行 · {{ store.compileStats?.rules ?? '-' }} 条规则 · {{ store.compileStats?.chars ?? '-' }} 字符</span>
+            </template>
+          </el-alert>
+        </div>
 
         <div class="step-actions">
           <el-button size="large" @click="store.currentStep = 1">返回修改</el-button>
@@ -168,8 +205,10 @@
     <main class="lab-body" v-if="store.currentStep === 3">
       <div class="step-content">
         <div class="step-header">
-          <h2>审核结果</h2>
-          <span class="step-badge step-badge--warn">验收检查</span>
+          <div class="step-header__main">
+            <h2>审核结果</h2>
+            <span class="step-badge step-badge--warn">验收检查</span>
+          </div>
         </div>
 
           <div class="review-stat">
@@ -207,8 +246,10 @@
     <main class="lab-body" v-if="store.currentStep === 4">
       <div class="step-content">
         <div class="step-header">
-          <h2>发布生效</h2>
-          <span class="step-badge step-badge--success">生产环境</span>
+          <div class="step-header__main">
+            <h2>发布生效</h2>
+            <span class="step-badge step-badge--success">生产环境</span>
+          </div>
         </div>
 
         <div class="params-card">
@@ -295,7 +336,7 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Loading, MagicStick, CopyDocument, UploadFilled, Warning, EditPen } from '@element-plus/icons-vue'
+import { ArrowLeft, Loading, CopyDocument, UploadFilled, Warning, EditPen } from '@element-plus/icons-vue'
 import { usePromptLabStore } from '@/stores/promptLab'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SourceView from './components/promptLab/SourceView.vue'
@@ -304,13 +345,16 @@ const router = useRouter()
 const store = usePromptLabStore()
 
 onMounted(() => {
+  if (store.currentStep === 0) {
+    store.currentStep = 1
+  }
   store.fetchCompileSpec()
   store.fetchSourceList()
   store.loadSource(store.skillId)
 })
 
 const steps = [
-  { title: '查看约定' },
+  { title: '编译约定' },
   { title: '编辑源文件' },
   { title: '生成 Prompt' },
   { title: '审核结果' },
@@ -320,8 +364,10 @@ const steps = [
 const promptLabHighlights = computed(() => [
   { label: `当前步骤 ${store.currentStep + 1} / ${steps.length}`, tone: 'info' as const },
   { label: store.skillId ? `Skill ${store.skillId}` : '待选择 Skill', tone: store.skillId ? 'success' as const : 'warning' as const },
-  { label: store.compiledPrompt ? '已生成编译产物' : '等待编译', tone: store.compiledPrompt ? 'success' as const : 'neutral' as const },
-  { label: store.compileError ? '存在编译错误' : '发布链路正常', tone: store.compileError ? 'danger' as const : 'neutral' as const }
+  {
+    label: store.compileError ? '编译错误' : store.compiledPrompt ? '已编译' : '未编译',
+    tone: store.compileError ? 'danger' as const : store.compiledPrompt ? 'success' as const : 'neutral' as const
+  }
 ])
 
 function goBack() {
@@ -371,6 +417,7 @@ async function handlePublish() {
 
 function handleReset() {
   store.reset()
+  store.currentStep = 1
   store.fetchCompileSpec()
   store.fetchSourceList()
   store.loadSource(store.skillId)
@@ -384,18 +431,55 @@ function handleReset() {
   min-height: calc(100vh - 32px);
 }
 
-.beta-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.assistant-trigger {
+  border-color: rgba(245, 158, 11, 0.22);
+  color: #c66700;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.96));
+  font-weight: 800;
   border-radius: 999px;
-  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+  padding: 0 14px;
+}
+
+.assistant-trigger:hover {
+  border-color: rgba(245, 158, 11, 0.34);
+  color: #9a4d00;
+  background: linear-gradient(135deg, rgba(255, 243, 224, 0.98), rgba(255, 232, 196, 0.98));
+}
+
+.help-card {
+  display: grid;
+  gap: 14px;
+}
+
+.help-card__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--admin-text-primary, #111827);
+}
+
+.help-card__grid {
+  display: grid;
+  gap: 10px;
+}
+
+.help-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--admin-bg-surface-alt, #f8fafc);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.help-item strong {
+  font-size: 13px;
+  color: var(--admin-text-primary, #111827);
+}
+
+.help-item span {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--admin-text-secondary, #6b7280);
 }
 
 .stepper-bar {
@@ -417,7 +501,7 @@ function handleReset() {
 .step-node + .step-node::before {
   content: '';
   position: absolute;
-  top: 16px;
+  top: 17px;
   left: -50%;
   right: 50%;
   height: 2px;
@@ -462,12 +546,18 @@ function handleReset() {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  position: relative;
+  z-index: 1;
+  padding-right: 10px;
 }
 
 .step-title {
+  width: fit-content;
+  padding-right: 6px;
   font-size: 13px;
   font-weight: 600;
   color: var(--admin-text-muted, #9ca3af);
+  background: var(--admin-bg-base, #ffffff);
 }
 
 .step-node--active .step-title {
@@ -476,11 +566,6 @@ function handleReset() {
 
 .step-node--done .step-title {
   color: var(--admin-text-primary, #111827);
-}
-
-.step-desc {
-  font-size: 11px;
-  color: var(--admin-text-muted, #d1d5db);
 }
 
 .lab-body {
@@ -502,7 +587,22 @@ function handleReset() {
 .step-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
+}
+
+.step-header__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.step-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .step-header h2 {
@@ -646,22 +746,6 @@ function handleReset() {
   background: var(--admin-bg-surface-alt);
   border: var(--admin-border-subtle);
   border-radius: 8px;
-}
-
-.compile-ready {
-  text-align: center;
-  padding: 24px 0;
-}
-
-.compile-icon {
-  font-size: 40px;
-  color: var(--admin-color-brand, #3b82f6);
-  margin-bottom: 12px;
-}
-
-.compile-ready p {
-  color: var(--admin-text-secondary, #6b7280);
-  font-size: 14px;
 }
 
 .compile-progress {

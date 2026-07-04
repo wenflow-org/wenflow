@@ -14,6 +14,7 @@
   <div class="admin-page topology-page">
     <AdminPageHeader
       title="Agent 拓扑"
+      desc="查看 5 个主编排与下辖 Skill 的运行拓扑，结合时间窗口快速定位空闲和异常节点。"
       :icon="Connection"
       :highlights="topologyHighlights"
     >
@@ -30,84 +31,116 @@
       </template>
     </AdminPageHeader>
 
-    <div class="topology-canvas" v-loading="loading">
-      <VueFlow
-        v-if="elements.length > 0"
-        :model-value="elements"
-        :nodes-draggable="false"
-        :nodes-connectable="false"
-        :elements-selectable="true"
-        :pan-on-drag="true"
-        :zoom-on-scroll="true"
-        :min-zoom="0.3"
-        :max-zoom="1.5"
-        :default-viewport="{ x: 0, y: 0, zoom: 0.85 }"
-        fit-view-on-init
-        class="vf-canvas"
-      >
-        <Background pattern-color="#cdd8ee" :gap="24" />
-        <Controls />
+    <section class="admin-list-card topology-panel">
+      <div class="admin-section-head topology-panel__head">
+        <div class="admin-section-head__copy">
+          <h3 class="admin-section-head__title">运行拓扑</h3>
+          <p class="admin-section-head__desc">按 5 个主编排纵览下辖 Skill 的分布与健康状态，点击 Skill 可先快速查看。</p>
+        </div>
+        <div class="topology-panel__meta">
+          <span>{{ rangeLabel }} 视图</span>
+          <span v-if="summary">{{ summary.agentCount }} Agent / {{ summary.skillCount }} Skill</span>
+        </div>
+      </div>
 
-        <template #node-agent="{ data }">
-          <div class="vf-agent-node" :class="`vf-agent-node--${data.monitoringGroup?.toLowerCase()}`">
-            <div class="vf-agent-node__head">
-              <span class="vf-agent-node__kind">AGENT</span>
-              <span v-if="data.stats?.totalCalls > 0" class="vf-agent-node__pulse"></span>
-            </div>
-            <div class="vf-agent-node__title">{{ data.label }}</div>
-            <div class="vf-agent-node__desc">{{ data.description }}</div>
-            <div class="vf-agent-node__stats">
-              <div class="stat-cell">
-                <div class="num">{{ data.memberCount }}</div>
-                <div class="lbl">下辖 Skill</div>
-              </div>
-              <div class="stat-cell">
-                <div class="num">{{ data.stats?.totalCalls || 0 }}</div>
-                <div class="lbl">调用</div>
-              </div>
-              <div class="stat-cell">
-                <div class="num">{{ data.stats?.successRate != null ? `${data.stats.successRate}%` : '--' }}</div>
-                <div class="lbl">成功率</div>
-              </div>
-            </div>
-          </div>
-        </template>
+      <div class="topology-panel__legend">
+        <span class="topology-panel__legend-item">
+          <span class="topology-panel__legend-dot topology-panel__legend-dot--agent"></span>
+          Agent 节点
+        </span>
+        <span class="topology-panel__legend-item">
+          <span class="topology-panel__legend-dot topology-panel__legend-dot--skill"></span>
+          Skill 节点
+        </span>
+        <span class="topology-panel__legend-item">
+          <span class="topology-panel__legend-dot topology-panel__legend-dot--idle"></span>
+          空闲 / 低调用
+        </span>
+        <span class="topology-panel__legend-item">
+          <span class="topology-panel__legend-dot topology-panel__legend-dot--danger"></span>
+          成功率异常
+        </span>
+      </div>
 
-        <template #node-skill="{ data }">
-          <div
-            class="vf-skill-node"
-            :class="{
-              'vf-skill-node--idle': !data.stats?.totalCalls,
-              'vf-skill-node--unhealthy': data.stats?.totalCalls > 0 && (data.stats?.successRate ?? 100) < 90
-            }"
-            @click="openSkillWorkbench(data)"
-          >
-            <div class="vf-skill-node__head">
-              <span class="vf-skill-node__kind">SKILL</span>
-              <span v-if="data.noPromptFile" class="vf-skill-node__chip" title="无独立 prompt 文件，handler-only">handler</span>
-            </div>
-            <div class="vf-skill-node__title">{{ data.label }}</div>
-            <div class="vf-skill-node__stats">
-              <span class="mini-stat">
-                <span class="num">{{ data.stats?.totalCalls || 0 }}</span>
-                <span class="lbl">调用</span>
-              </span>
-              <span class="mini-stat" v-if="data.stats?.successRate != null">
-                <span class="num">{{ data.stats.successRate }}%</span>
-                <span class="lbl">成功</span>
-              </span>
-              <span class="mini-stat" v-if="data.stats?.avgDuration">
-                <span class="num">{{ Math.round(data.stats.avgDuration / 100) / 10 }}s</span>
-                <span class="lbl">平均</span>
-              </span>
-            </div>
-            <div class="vf-skill-node__hint">点击进入 Skill 编辑 -></div>
-          </div>
-        </template>
-      </VueFlow>
+      <div class="topology-canvas" v-loading="loading">
+        <VueFlow
+          v-if="elements.length > 0"
+          :model-value="elements"
+          :nodes-draggable="false"
+          :nodes-connectable="false"
+          :elements-selectable="true"
+          :pan-on-drag="true"
+          :zoom-on-scroll="true"
+          :min-zoom="0.3"
+          :max-zoom="1.5"
+          :default-viewport="{ x: 0, y: 0, zoom: 0.85 }"
+          fit-view-on-init
+          class="vf-canvas"
+        >
+          <Background pattern-color="#d8e0ed" :gap="18" />
+          <Controls />
 
-      <el-empty v-else-if="!loading" description="无 manifest 数据" />
-    </div>
+          <template #node-agent="{ data }">
+            <div class="vf-agent-node" :class="`vf-agent-node--${data.monitoringGroup?.toLowerCase()}`">
+              <div class="vf-agent-node__head">
+                <span class="vf-agent-node__kind">AGENT</span>
+                <span v-if="data.stats?.totalCalls > 0" class="vf-agent-node__pulse"></span>
+              </div>
+              <div class="vf-agent-node__title">{{ data.label }}</div>
+              <div class="vf-agent-node__desc">{{ data.description }}</div>
+              <div class="vf-agent-node__stats">
+                <div class="stat-cell">
+                  <div class="num">{{ data.memberCount }}</div>
+                  <div class="lbl">下辖 Skill</div>
+                </div>
+                <div class="stat-cell">
+                  <div class="num">{{ data.stats?.totalCalls || 0 }}</div>
+                  <div class="lbl">调用</div>
+                </div>
+                <div class="stat-cell">
+                  <div class="num">{{ data.stats?.successRate != null ? `${data.stats.successRate}%` : '--' }}</div>
+                  <div class="lbl">成功率</div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template #node-skill="{ data }">
+            <div
+              class="vf-skill-node"
+              :class="{
+                'vf-skill-node--idle': !data.stats?.totalCalls,
+                'vf-skill-node--unhealthy': data.stats?.totalCalls > 0 && (data.stats?.successRate ?? 100) < 90
+              }"
+              @click="openSkillWorkbench(data)"
+            >
+              <div class="vf-skill-node__head">
+                <span class="vf-skill-node__kind">SKILL</span>
+                <span v-if="data.noPromptFile" class="vf-skill-node__chip" title="无独立 prompt 文件，handler-only">handler</span>
+              </div>
+              <div class="vf-skill-node__title">{{ data.label }}</div>
+              <div class="vf-skill-node__stats">
+                <span class="mini-stat">
+                  <span class="num">{{ data.stats?.totalCalls || 0 }}</span>
+                  <span class="lbl">调用</span>
+                </span>
+                <span class="mini-stat" v-if="data.stats?.successRate != null">
+                  <span class="num">{{ data.stats.successRate }}%</span>
+                  <span class="lbl">成功</span>
+                </span>
+                <span class="mini-stat" v-if="data.stats?.avgDuration">
+                  <span class="num">{{ Math.round(data.stats.avgDuration / 100) / 10 }}s</span>
+                  <span class="lbl">平均</span>
+                </span>
+              </div>
+              <div class="vf-skill-node__hint">点击进入 Skill 编辑</div>
+            </div>
+          </template>
+        </VueFlow>
+
+        <el-empty v-else-if="!loading" description="暂无拓扑数据" />
+      </div>
+    </section>
   </div>
 </template>
 
@@ -251,13 +284,68 @@ onMounted(() => {
   gap: 16px;
 }
 
-/* 页头由 AdminPageHeader 组件统一管理 */
+.topology-panel {
+  padding: 18px 20px;
+}
+
+.topology-panel__head {
+  margin-bottom: 12px;
+}
+
+.topology-panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.topology-panel__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 12px;
+  color: var(--admin-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.topology-panel__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topology-panel__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.topology-panel__legend-dot--agent {
+  background: #2f5dac;
+}
+
+.topology-panel__legend-dot--skill {
+  background: var(--admin-text-brand);
+}
+
+.topology-panel__legend-dot--danger {
+  background: var(--admin-color-error);
+}
+
+.topology-panel__legend-dot--idle {
+  background: transparent;
+  border: 1px dashed #94a3b8;
+}
 
 .topology-canvas {
   flex: 1;
   min-height: 720px;
-  background: linear-gradient(180deg, #f8fafc, #eef2ff);
-  border: 1px solid rgba(205, 216, 238, 0.9);
+  background: linear-gradient(180deg, #fcfdff, #f6f8fc);
+  border: var(--admin-border-subtle);
   border-radius: 16px;
   overflow: hidden;
   position: relative;
@@ -273,14 +361,15 @@ onMounted(() => {
 .vf-agent-node {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #6d28d9, #4338ca);
-  color: white;
+  background: linear-gradient(180deg, #f7faff, #eef4ff);
+  color: var(--admin-text-primary);
+  border: 1px solid rgba(52, 120, 246, 0.28);
   border-radius: 14px;
   padding: 14px 16px;
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 12px 28px rgba(46, 86, 148, 0.12);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   cursor: default;
   user-select: none;
 }
@@ -294,11 +383,11 @@ onMounted(() => {
 .vf-agent-node__kind {
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  background: var(--admin-bg-surface);
+  letter-spacing: 0.08em;
+  background: rgba(52, 120, 246, 0.08);
   padding: 3px 8px;
-  border-radius: 6px;
-  color: #1a2a44;
+  border-radius: 999px;
+  color: var(--admin-text-brand);
 }
 
 .vf-agent-node__pulse {
@@ -317,14 +406,15 @@ onMounted(() => {
 }
 
 .vf-agent-node__title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
+  color: var(--admin-text-primary);
 }
 
 .vf-agent-node__desc {
   font-size: 11px;
-  opacity: 0.85;
-  line-height: 1.4;
+  color: var(--admin-text-secondary);
+  line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -334,31 +424,33 @@ onMounted(() => {
 .vf-agent-node__stats {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 4px;
+  gap: 1px;
   margin-top: auto;
-  background: var(--admin-bg-surface);
-  border-radius: 8px;
-  padding: 8px 4px;
+  background: rgba(205, 216, 238, 0.95);
+  border: 1px solid rgba(205, 216, 238, 0.95);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .vf-agent-node__stats .stat-cell {
   text-align: center;
   font-size: 11px;
+  padding: 8px 4px;
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .vf-agent-node__stats .num {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   font-family: 'JetBrains Mono', Consolas, monospace;
-  color: #1a2a44;
+  color: var(--admin-text-primary);
 }
 
 .vf-agent-node__stats .lbl {
   font-size: 9px;
-  opacity: 0.75;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #64748b;
+  color: var(--admin-text-muted);
 }
 
 /* ========== Skill node ========== */
@@ -366,31 +458,32 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   background: var(--admin-bg-surface);
-  border: 1.5px solid rgba(139, 92, 246, 0.25);
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(52, 120, 246, 0.18);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(46, 86, 148, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
-  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .vf-skill-node:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.18);
-  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 12px 28px rgba(46, 86, 148, 0.12);
+  border-color: rgba(52, 120, 246, 0.26);
 }
 
 .vf-skill-node--idle {
   opacity: 0.6;
   border-style: dashed;
+  background: var(--admin-bg-surface-alt);
 }
 
 .vf-skill-node--unhealthy {
-  border-color: rgba(239, 68, 68, 0.6);
+  border-color: rgba(239, 68, 68, 0.45);
   background: linear-gradient(180deg, white, rgba(239, 68, 68, 0.04));
 }
 
@@ -401,29 +494,29 @@ onMounted(() => {
 }
 
 .vf-skill-node__kind {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  background: rgba(139, 92, 246, 0.1);
-  color: #6d28d9;
-  padding: 2px 6px;
-  border-radius: 4px;
+  letter-spacing: 0.08em;
+  background: rgba(52, 120, 246, 0.08);
+  color: var(--admin-text-brand);
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 .vf-skill-node__chip {
   font-size: 9px;
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--admin-color-warning);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 999px;
   font-weight: 700;
 }
 
 .vf-skill-node__title {
   font-size: 13px;
   font-weight: 700;
-  color: #1a2a44;
-  line-height: 1.3;
+  color: var(--admin-text-primary);
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -445,19 +538,19 @@ onMounted(() => {
 .vf-skill-node__stats .num {
   font-size: 12px;
   font-weight: 700;
-  color: #1a2a44;
+  color: var(--admin-text-primary);
   font-family: 'JetBrains Mono', Consolas, monospace;
 }
 
 .vf-skill-node__stats .lbl {
   font-size: 9px;
-  color: #94a3b8;
+  color: var(--admin-text-muted);
   text-transform: uppercase;
 }
 
 .vf-skill-node__hint {
   font-size: 10px;
-  color: #8b5cf6;
+  color: var(--admin-text-brand);
   font-weight: 600;
   text-align: right;
   opacity: 0;
@@ -466,5 +559,35 @@ onMounted(() => {
 
 .vf-skill-node:hover .vf-skill-node__hint {
   opacity: 1;
+}
+
+.topology-panel :deep(.vue-flow__controls) {
+  border-radius: 12px;
+  border: 1px solid rgba(205, 216, 238, 0.95);
+  overflow: hidden;
+}
+
+.topology-panel :deep(.vue-flow__edge-textbg) {
+  fill: rgba(255, 255, 255, 0.9);
+}
+
+.topology-panel :deep(.vue-flow__attribution) {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .topology-panel {
+    padding: 16px;
+  }
+
+  .topology-panel__meta,
+  .topology-panel__legend {
+    gap: 10px;
+  }
+
+  .topology-canvas,
+  .vf-canvas {
+    min-height: 580px;
+  }
 }
 </style>

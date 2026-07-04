@@ -68,8 +68,10 @@
       </div>
       <div class="ed-head__right">
         <el-button :icon="Refresh" :loading="loading" size="small" @click="loadAll">刷新</el-button>
-        <el-button size="small" @click="openProtocolDrawer">协议视图</el-button>
-        <el-button size="small" type="primary" plain @click="openRulesOverview">规则总览</el-button>
+        <template v-if="activeTab === 'engineering'">
+          <el-button size="small" @click="openProtocolDrawer">协议</el-button>
+          <el-button size="small" type="primary" plain @click="openRulesOverview">规则</el-button>
+        </template>
         <el-button 
           size="small" 
           type="warning" 
@@ -96,50 +98,6 @@
       </button>
     </nav>
 
-    <section v-if="currentAgent" class="ed-overview">
-      <div class="ed-overview__main">
-        <div class="ed-overview__copy">
-          <span class="ed-overview__kicker">工作台</span>
-          <h2>{{ overviewTitle }}</h2>
-          <p>{{ overviewDesc }}</p>
-        </div>
-        <div class="ed-overview__grid">
-          <article class="ed-glance-card">
-            <span>当前模式</span>
-            <strong>{{ currentTabLabel }}</strong>
-          </article>
-          <article class="ed-glance-card">
-            <span>Prompt 来源</span>
-            <strong>{{ promptSourceSummary }}</strong>
-          </article>
-          <article class="ed-glance-card">
-            <span>最近调用</span>
-            <strong>{{ lastCalledLabel }}</strong>
-          </article>
-          <article class="ed-glance-card">
-            <span>运行策略</span>
-            <strong>{{ runtimeSummary }}</strong>
-          </article>
-        </div>
-      </div>
-
-      <div class="ed-overview__side">
-        <article class="ed-summary-card">
-          <span class="ed-summary-card__label">当前判断</span>
-          <strong>{{ overviewStateTitle }}</strong>
-          <p>{{ overviewStateDesc }}</p>
-        </article>
-        <article class="ed-summary-card ed-summary-card--subtle">
-          <span class="ed-summary-card__label">工程入口</span>
-          <div class="ed-summary-actions">
-            <el-button size="small" @click="openProtocolDrawer">协议视图</el-button>
-            <el-button size="small" plain @click="openRulesOverview">规则总览</el-button>
-          </div>
-          <p>协议与规则在次入口，主流程为 Prompt 编辑与预览。</p>
-        </article>
-      </div>
-    </section>
-
     <!-- ============ Pane Body ============ -->
     <main class="ed-body" v-if="currentAgent">
       <!-- File ↔ DB 漂移警告 -->
@@ -151,19 +109,12 @@
         class="drift-warning"
       >
         <template #title>
-          <strong>检测到 File ↔ DB 不一致</strong>
+          <strong>File / DB Prompt 不一致</strong>
         </template>
         <div class="drift-warning__content">
-          <p>该 Skill 的 Prompt 在两处存在差异：</p>
-          <ul>
-            <li><strong>文件源</strong>：<code>{{ currentAgent.file?.path || 'prompts/skill.*.md' }}</code></li>
-            <li><strong>数据库</strong>：当前 ACTIVE 版本（v{{ currentAgent.db?.version || '?' }}）</li>
-          </ul>
-          <p class="drift-warning__advice">
-            <strong>建议：</strong>
-            <span v-if="activeTab === 'edit'">在此页面编辑会修改数据库版本。如需同步文件源，请使用「实验台」或手动编辑 <code>prompts/</code> 文件。</span>
-            <span v-else>切换到「编辑工作台」查看详情并选择编辑入口。</span>
-          </p>
+          <code>{{ currentAgent.file?.path || 'prompts/skill.*.md' }}</code>
+          <span>DB ACTIVE v{{ currentAgent.db?.version || '?' }}</span>
+          <span v-if="activeTab !== 'edit'">切到「Prompt 编辑」处理</span>
         </div>
       </el-alert>
 
@@ -334,7 +285,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Refresh, Edit, VideoPlay, DataAnalysis, Setting, SetUp, MagicStick } from '@element-plus/icons-vue';
+import { ArrowLeft, Refresh, Edit, VideoPlay, Setting, SetUp, MagicStick } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
 import {
   adminPromptOpsApi,
@@ -370,72 +321,14 @@ const activeTab = ref<'edit' | 'preview' | 'runtime' | 'engineering'>('edit');
 
 const tabs = computed(() => {
   const base: { key: 'edit' | 'preview' | 'runtime' | 'engineering'; label: string; icon: any }[] = [
-    { key: 'edit', label: 'Prompt 编辑', icon: Edit },
-    { key: 'preview', label: '预览与试运行', icon: VideoPlay }
+    { key: 'edit', label: '编辑', icon: Edit },
+    { key: 'preview', label: '预览', icon: VideoPlay }
   ];
   if (currentAgent.value?.kind === 'skill') {
-    base.push({ key: 'runtime', label: '运行时配置', icon: Setting });
+    base.push({ key: 'runtime', label: '运行时', icon: Setting });
   }
-  base.push({ key: 'engineering', label: '协议与规则', icon: SetUp });
+  base.push({ key: 'engineering', label: '协议规则', icon: SetUp });
   return base;
-});
-
-const currentTabLabel = computed(() => {
-  return tabs.value.find((item) => item.key === activeTab.value)?.label || 'Prompt 编辑';
-});
-
-const promptSourceSummary = computed(() => {
-  if (currentAgent.value?.drift === 'file-vs-db-mismatch') return 'File / DB 不一致';
-  if (activePrompt.value?.version) return `DB ACTIVE v${activePrompt.value.version}`;
-  if (currentAgent.value?.file?.path) return '文件源';
-  return '待确认';
-});
-
-const lastCalledLabel = computed(() => {
-  const value = workbenchMeta.value?.stats?.lastCalledAt;
-  if (!value) return '暂无记录';
-  return new Date(value).toLocaleString('zh-CN', { hour12: false });
-});
-
-const runtimeSummary = computed(() => {
-  if (!workbenchMeta.value?.modelConfig) return '平台默认';
-  const model = workbenchMeta.value.modelConfig.model || '平台默认模型';
-  const tier = workbenchMeta.value.modelConfig.tier || 'default';
-  return `${tier} / ${model}`;
-});
-
-const overviewTitle = computed(() => {
-  if (activeTab.value === 'edit') return '当前节点 Prompt 工作台';
-  if (activeTab.value === 'preview') return '当前节点预览与试运行';
-  if (activeTab.value === 'runtime') return '当前节点运行时配置';
-  return '当前节点协议与规则视图';
-});
-
-const overviewDesc = computed(() => {
-  if (activeTab.value === 'edit') return '修改 Prompt 并发布。';
-  if (activeTab.value === 'preview') return '验证 Prompt 输出。';
-  if (activeTab.value === 'runtime') return '调整运行参数。';
-  return '查看协议与规则。';
-});
-
-const overviewStateTitle = computed(() => {
-  if (currentAgent.value?.drift === 'file-vs-db-mismatch') return '存在 Prompt 漂移';
-  if (activePromptLoading.value) return '正在加载 Prompt';
-  if (activePrompt.value?.version) return `当前生效版本 v${activePrompt.value.version}`;
-  return '当前无明确生效版本';
-});
-
-const overviewStateDesc = computed(() => {
-  if (currentAgent.value?.drift === 'file-vs-db-mismatch') {
-    return '文件与数据库版本不一致，请确认修改目标。';
-  }
-  if (activePromptLoading.value) {
-    return '加载 Prompt 详情...';
-  }
-  if (activePrompt.value?.version) {
-    return '可继续编辑或试运行。';
-  }
-  return '依赖默认配置，请确认来源。';
 });
 
 const promptVersions = ref<any[]>([]);
@@ -464,6 +357,13 @@ const agentIdParam = computed(() => {
   const v = route.params.agentId;
   return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : '';
 });
+
+const syncActiveTabFromRoute = () => {
+  const tab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  if (tab === 'runtime' || tab === 'preview' || tab === 'engineering' || tab === 'edit') {
+    activeTab.value = tab
+  }
+}
 
 function healthLabel(h: 'good' | 'warn' | 'risk'): string {
   if (h === 'good') return '健康';
@@ -653,7 +553,12 @@ watch(agentIdParam, (next, prev) => {
   }
 });
 
+watch(() => route.query.tab, () => {
+  syncActiveTabFromRoute()
+})
+
 onMounted(async () => {
+  syncActiveTabFromRoute()
   await loadAll();
 });
 </script>
@@ -903,107 +808,6 @@ onMounted(async () => {
   line-height: 1;
 }
 
-.ed-overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
-  gap: 14px;
-}
-
-.ed-overview__main,
-.ed-overview__side {
-  display: grid;
-  gap: 12px;
-}
-
-.ed-overview__copy {
-  display: grid;
-  gap: 6px;
-  padding: 16px 18px;
-  border-radius: 14px;
-  border: 1px solid rgba(205, 216, 238, 0.9);
-  background: var(--admin-bg-surface);
-}
-
-.ed-overview__kicker {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 24px;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: var(--admin-text-brand);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.ed-overview__copy h2 {
-  margin: 0;
-  color: #1a2a44;
-  font-size: 1.1rem;
-  line-height: 1.25;
-}
-
-.ed-overview__copy p,
-.ed-summary-card p {
-  margin: 0;
-  color: #62758f;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.ed-overview__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.ed-glance-card,
-.ed-summary-card {
-  border: 1px solid rgba(223, 229, 241, 0.9);
-  border-radius: 12px;
-  background: #fbfcfe;
-}
-
-.ed-glance-card {
-  padding: 12px 14px;
-  display: grid;
-  gap: 5px;
-}
-
-.ed-glance-card span,
-.ed-summary-card__label {
-  color: #8a94a6;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.ed-glance-card strong,
-.ed-summary-card strong {
-  color: #1a2a44;
-  font-size: 14px;
-  line-height: 1.4;
-  word-break: break-word;
-}
-
-.ed-summary-card {
-  padding: 14px;
-  display: grid;
-  gap: 8px;
-}
-
-.ed-summary-card--subtle {
-  background: #f8fafc;
-}
-
-.ed-summary-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 /* ============ Body ============ */
 .ed-body {
   background: var(--admin-bg-surface);
@@ -1020,21 +824,12 @@ onMounted(async () => {
 }
 
 .drift-warning__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   line-height: 1.6;
-}
-
-.drift-warning__content p {
-  margin: 8px 0;
-}
-
-.drift-warning__content ul {
-  margin: 8px 0;
-  padding-left: 20px;
-}
-
-.drift-warning__content li {
-  margin: 4px 0;
 }
 
 .drift-warning__content code {
@@ -1046,12 +841,8 @@ onMounted(async () => {
   border-radius: 4px;
 }
 
-.drift-warning__advice {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: rgba(245, 158, 11, 0.08);
-  border-radius: 8px;
-  border-left: 3px solid #f59e0b;
+.drift-warning__content span {
+  color: #9a3412;
 }
 
 /* ============ Drawer styles (复用列表页) ============ */
@@ -1370,25 +1161,11 @@ onMounted(async () => {
 }
 
 @media (max-width: 900px) {
-  .ed-overview {
-    grid-template-columns: 1fr;
-  }
-
-  .ed-overview__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .ed-head {
     grid-template-columns: 1fr;
   }
   .ed-head__right {
     justify-content: flex-end;
-  }
-}
-
-@media (max-width: 640px) {
-  .ed-overview__grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

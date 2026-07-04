@@ -14,21 +14,21 @@
         </button>
 
         <nav class="header-nav" aria-label="应用导航">
-          <router-link :to="dashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
-          <router-link :to="goalConversationPath" class="nav-item">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
-          <router-link :to="learningPathsPath" class="nav-item">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
-          <router-link :to="learningStatePath" class="nav-item">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
-          <router-link :to="achievementsPath" class="nav-item nav-item--active">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
+          <router-link :to="dashboardPath" class="nav-item">学习台</router-link>
+          <router-link :to="goalConversationPath" class="nav-item">目标规划</router-link>
+          <router-link :to="learningPathsPath" class="nav-item">学习路径</router-link>
+          <router-link :to="learningStatePath" class="nav-item">学习状态</router-link>
+          <router-link :to="achievementsPath" class="nav-item nav-item--active">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -192,11 +192,11 @@ const achievementsPath = computed(() => {
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerNavItems = computed(() => [
-  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
-  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
-  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
-  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
-  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+  { label: '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard', '/admin/test/dashboard'] },
+  { label: '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full', '/admin/test/goal-full'] },
+  { label: '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/', '/admin/test/learning-paths', '/admin/test/learning-path/'] },
+  { label: '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state', '/admin/test/learning-state'] },
+  { label: '成就', to: achievementsPath.value, matchPrefixes: ['/achievements', '/admin/test/achievements'] }
 ]);
 const scrolled = ref(false);
 const loading = ref(true);

@@ -3,37 +3,33 @@
     <AdminPageHeader
       title="学习者中心"
       :icon="Reading"
-      :highlights="centerHighlights"
     >
       <template #actions>
-        <div class="learner-center-shell__switcher" role="tablist" aria-label="学习者中心模块切换">
+        <div class="learner-center-tabs" role="tablist" aria-label="学习者内容切换">
           <button
             v-for="item in tabOptions"
             :key="item.key"
             type="button"
-            class="learner-center-shell__tab"
+            class="learner-center-tabs__item"
             :class="{ 'is-active': activeTab === item.key }"
             :aria-pressed="activeTab === item.key"
             @click="activeTab = item.key"
           >
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.short }}</span>
+            {{ item.label }}
           </button>
         </div>
       </template>
     </AdminPageHeader>
 
-    <section class="learner-center-shell">
-      <div class="learner-center-shell__body">
-        <LearnerModelsPanel v-if="activeTab === 'models'" embedded />
-        <TeachingSessionsPanel v-else embedded />
-      </div>
-    </section>
+    <div class="learner-center-content">
+      <LearnerModelsPanel v-if="activeTab === 'models'" embedded />
+      <TeachingSessionsPanel v-else embedded />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Reading } from '@element-plus/icons-vue'
 import LearnerModelsPanel from './LearnerModels.vue'
@@ -44,64 +40,22 @@ const route = useRoute()
 const router = useRouter()
 const activeTab = ref<'models' | 'sessions'>('models')
 
-// 统计数据
-const stats = ref({
-  totalModels: 0,
-  activeModels: 0,
-  totalSessions: 0,
-  activeSessions: 0,
-  needAttention: 0,
-  activeIn7Days: 0
-})
-
 const tabOptions = [
   {
     key: 'models' as const,
-    label: '学习者模型',
-    short: '快照目录',
-    title: '学习者模型快照',
-    desc: ''
+    label: '模型快照'
   },
   {
     key: 'sessions' as const,
-    label: '教学会话',
-    short: '质量巡检',
-    title: '教学会话巡检',
-    desc: ''
+    label: '教学会话'
   }
 ]
-
-const activeTabMeta = computed(() => {
-  return tabOptions.find((item) => item.key === activeTab.value) || tabOptions[0]
-})
-
-const centerHighlights = computed(() => [
-  { label: `${stats.value.totalModels} 个模型`, tone: 'info' as const },
-  { label: `${stats.value.activeModels} 活跃`, tone: 'success' as const },
-  { label: `${stats.value.needAttention} 需关注`, tone: stats.value.needAttention > 0 ? 'danger' as const : 'neutral' as const },
-  { label: `${stats.value.totalSessions} 个会话`, tone: 'neutral' as const }
-])
-
-// 加载统计数据
-const loadStats = async () => {
-  // TODO: 从 API 加载真实数据
-  // 这里先使用模拟数据
-  stats.value = {
-    totalModels: 156,
-    activeModels: 42,
-    totalSessions: 89,
-    activeSessions: 23,
-    needAttention: 7,
-    activeIn7Days: 58
-  }
-}
 
 onMounted(() => {
   const tabFromQuery = String(route.query.tab || '')
   if (tabFromQuery === 'sessions' || tabFromQuery === 'models') {
     activeTab.value = tabFromQuery
   }
-  loadStats()
 })
 
 watch(activeTab, (next) => {
@@ -117,70 +71,55 @@ watch(activeTab, (next) => {
   position: relative;
 }
 
-.learner-center-shell {
-  position: relative;
-  z-index: 1;
-}
-
-.learner-center-shell__switcher {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
+.learner-center-tabs {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  width: min(420px, 100%);
   padding: 4px;
   border-radius: var(--admin-radius-md);
   border: var(--admin-border-subtle);
   background: var(--admin-bg-surface-alt);
 }
 
-.learner-center-shell__tab {
-  display: grid;
-  gap: 4px;
-  padding: 12px 14px;
+.learner-center-tabs__item {
+  min-height: 40px;
+  padding: 0 14px;
   border-radius: calc(var(--admin-radius-md) - 4px);
   border: none;
   background: transparent;
-  text-align: left;
+  text-align: center;
   color: var(--admin-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
   transition: all 180ms ease;
   cursor: pointer;
 }
 
-.learner-center-shell__tab strong {
-  font-size: 0.95rem;
+.learner-center-tabs__item:hover {
+  background: rgba(255, 255, 255, 0.72);
   color: var(--admin-text-primary);
 }
 
-.learner-center-shell__tab span {
-  font-size: 0.78rem;
-  color: var(--admin-text-muted);
-}
-
-.learner-center-shell__tab:hover {
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.learner-center-shell__tab.is-active {
+.learner-center-tabs__item.is-active {
   background: var(--admin-bg-surface);
   box-shadow: inset 0 0 0 1px rgba(52, 120, 246, 0.12);
+  color: var(--admin-text-primary);
 }
 
-.learner-center-shell__body {
-  min-width: 0;
-}
-
-.learner-center-shell__tab.is-active {
-  border-color: var(--admin-color-info-border);
-  background: var(--admin-color-info-bg);
-  box-shadow: var(--admin-shadow-sm);
-}
-
-.learner-center-shell__body {
+.learner-center-content {
   min-width: 0;
 }
 
 @media (max-width: 900px) {
-  .learner-center-shell__switcher {
+  .learner-center-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .learner-center-tabs {
     grid-template-columns: 1fr;
   }
 }

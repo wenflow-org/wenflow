@@ -1,5 +1,6 @@
 <template>
-  <div class="admin-dashboard">
+  <router-view v-if="isTestRoute" />
+  <div v-else class="admin-dashboard">
     <!-- 顶部栏 -->
     <header class="admin-header">
       <div class="admin-header__brand">
@@ -31,10 +32,6 @@
     <div class="admin-layout">
       <!-- 侧边栏 -->
       <aside class="admin-sidebar" :class="{ collapsed: sidebarCollapsed }">
-        <div class="admin-sidebar__brand" v-show="!sidebarCollapsed">
-          <span>Admin Console</span>
-        </div>
-
         <nav class="admin-sidebar__nav">
           <section
             v-for="group in navGroups"
@@ -75,24 +72,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { toast } from '../../utils/toast';
-  import {
-    DataAnalysis,
-    User,
-    Reading,
-    Cpu,
-    Operation,
-    Connection,
-    Grid,
-    Setting,
-    ArrowDown,
-    SwitchButton,
-    Tickets,
-    Document,
-    EditPen,
-  } from '@element-plus/icons-vue';
+import {
+  DataAnalysis,
+  User,
+  Reading,
+  Cpu,
+  Operation,
+  Connection,
+  Grid,
+  Setting,
+  ArrowDown,
+  SwitchButton,
+  Tickets,
+  Document,
+  EditPen,
+} from '@element-plus/icons-vue';
 
 interface NavItem {
   to: string;
@@ -107,6 +104,7 @@ interface NavGroup {
 
 const router = useRouter();
 const route = useRoute();
+const isTestRoute = computed(() => route.path.startsWith('/admin/test/'));
 
 const currentUser = ref<any>(null);
 const sidebarCollapsed = ref(false);
@@ -151,44 +149,44 @@ const navGroups: NavGroup[] = [
   {
     title: '总览',
     items: [
-      { to: '/admin/dashboard', label: '平台运行总览', icon: DataAnalysis },
+      { to: '/admin/dashboard', label: '平台总览', icon: DataAnalysis },
     ],
   },
   {
-    title: '学习运营',
+    title: '学习',
     items: [
-      { to: '/admin/users', label: '管理系统用户账号', icon: User },
+      { to: '/admin/users', label: '用户', icon: User },
       { to: '/admin/learner-center', label: '学习者中心', icon: Reading },
       { to: '/admin/virtual-learners', label: '虚拟学习者', icon: User },
     ],
   },
   {
-    title: '运行目录',
+    title: '运行',
     items: [
-      { to: '/admin/skills', label: 'Skill 管理中心', icon: Grid },
+      { to: '/admin/skills', label: 'Skill 目录', icon: Grid },
       { to: '/admin/agents/topology', label: 'Agent 拓扑', icon: Connection },
-      { to: '/admin/orchestrator-definitions', label: '平台 Agent 架构', icon: Connection },
+      { to: '/admin/orchestrator-definitions', label: '编排架构', icon: Connection },
     ],
   },
   {
-    title: '诊断与日志',
+    title: '日志',
     items: [
-      { to: '/admin/execution-logs', label: '运行执行日志', icon: Cpu },
+      { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
       { to: '/admin/path-generation-events', label: '流程事件', icon: Connection },
-      { to: '/admin/prompt-call-logs', label: 'Prompt 调用日志', icon: Document },
+      { to: '/admin/prompt-call-logs', label: 'Prompt 日志', icon: Document },
     ],
   },
   {
-    title: '平台配置',
+    title: '配置',
     items: [
-      { to: '/admin/api-config', label: 'API 管理', icon: Setting },
-      { to: '/admin/skill-model-configs', label: '外挂组件目录', icon: Operation },
+      { to: '/admin/api-config', label: 'API 配置', icon: Setting },
+      { to: '/admin/skill-model-configs', label: '外挂组件', icon: Operation },
     ],
   },
   {
-    title: '发布与调试',
+    title: '调试',
     items: [
-      { to: '/admin/prompt-lab', label: 'Prompt 发布向导', icon: EditPen },
+      { to: '/admin/prompt-lab', label: 'Prompt 发布', icon: EditPen },
       { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets },
     ],
   },
@@ -313,21 +311,6 @@ const handleLogout = () => {
   padding: 16px 0;
   overflow: hidden;
   transition: width 0.25s ease;
-}
-
-.admin-sidebar__brand {
-  padding: 0 20px 16px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid rgba(223, 229, 241, 0.9);
-}
-
-.admin-sidebar__brand span {
-  display: block;
-  font-size: 0.7rem;
-  font-weight: 800;
-  color: #2d6df2;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .admin-sidebar.collapsed {

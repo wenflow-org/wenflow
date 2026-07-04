@@ -14,21 +14,21 @@
         </button>
 
         <nav class="header-nav" aria-label="应用导航">
-          <router-link :to="dashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
-          <router-link :to="goalConversationPath" class="nav-item">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
-          <router-link :to="learningPathsPath" class="nav-item">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
-          <router-link :to="learningStatePath" class="nav-item nav-item--active">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
-          <router-link :to="achievementsPath" class="nav-item">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
+          <router-link :to="dashboardPath" class="nav-item">学习台</router-link>
+          <router-link :to="goalConversationPath" class="nav-item">目标规划</router-link>
+          <router-link :to="learningPathsPath" class="nav-item">学习路径</router-link>
+          <router-link :to="learningStatePath" class="nav-item nav-item--active">学习状态</router-link>
+          <router-link :to="achievementsPath" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -62,7 +62,7 @@
               <span class="pill">学习状态</span>
               <div class="app-page-head__actions">
                 <router-link :to="learningPathsPath" class="btn btn-primary">查看学习路径</router-link>
-                <router-link to="/dashboard" class="btn btn-ghost">回到学习台</router-link>
+                <router-link :to="dashboardPath" class="btn btn-ghost">回到学习台</router-link>
               </div>
             </div>
 
@@ -95,59 +95,13 @@
         </section>
 
         <div v-loading="loading" class="state-content">
-          <!-- 空状态：预览骨架 + 解释将来会看到什么 -->
-          <div v-if="!state" class="empty-state-preview">
-            <div class="empty-state-preview__head">
-              <span class="section-kicker">预览</span>
-              <h2>完成第一次学习后，这里会显示你的学习状态</h2>
-              <p>WenFlow 会从你的学习节奏、掌握情况和疲劳变化中提炼可视化指标，帮你判断要继续推进还是先放慢一点。</p>
-            </div>
-
-            <div class="empty-state-preview__grid">
-              <article class="preview-card preview-card--metric">
-                <span class="preview-card__label">学习节奏</span>
-                <strong class="preview-card__value">--</strong>
-                <span class="preview-card__hint">看见每周的真实投入分布</span>
-                <div class="preview-card__sparkline">
-                  <span v-for="i in 7" :key="i" class="preview-card__bar" :style="{ height: 30 + ((i * 13) % 50) + '%' }"></span>
-                </div>
-              </article>
-
-              <article class="preview-card preview-card--metric">
-                <span class="preview-card__label">掌握度</span>
-                <strong class="preview-card__value">--</strong>
-                <span class="preview-card__hint">每个知识点的稳定程度</span>
-                <div class="preview-card__bars">
-                  <span class="preview-card__hbar" style="width: 64%"></span>
-                  <span class="preview-card__hbar" style="width: 42%"></span>
-                  <span class="preview-card__hbar" style="width: 78%"></span>
-                </div>
-              </article>
-
-              <article class="preview-card preview-card--metric">
-                <span class="preview-card__label">疲劳变化</span>
-                <strong class="preview-card__value">--</strong>
-                <span class="preview-card__hint">连续学习时的负荷曲线</span>
-                <svg class="preview-card__line" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
-                  <path d="M0,30 Q15,20 30,22 T60,18 T90,24 T120,16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                </svg>
-              </article>
-
-              <article class="preview-card preview-card--insight">
-                <span class="preview-card__label">智能建议</span>
-                <strong class="preview-card__value">--</strong>
-                <span class="preview-card__hint">系统会根据节奏给出个性化建议，比如"今天先做一个最小任务"或"该休息一下"。</span>
-              </article>
-            </div>
-
-            <div class="empty-state-preview__cta">
-              <router-link :to="learningPathsPath" class="btn btn--primary">
-                <el-icon><FolderOpened /></el-icon>
-                <span>开始第一次学习</span>
-              </router-link>
-              <router-link :to="goalConversationPath" class="btn btn--ghost">
-                <span>先规划学习目标</span>
-              </router-link>
+          <div v-if="!state" class="empty-state glass-card">
+            <div class="empty-icon">📈</div>
+            <h3 class="empty-title">还没有可展示的学习状态</h3>
+            <p class="empty-desc">完成第一轮真实学习后，这里会汇总你的节奏、掌握情况和疲劳变化。</p>
+            <div class="empty-state__actions">
+              <router-link :to="learningPathsPath" class="btn btn-primary">查看学习路径</router-link>
+              <router-link :to="goalConversationPath" class="btn btn-ghost">先规划学习目标</router-link>
             </div>
           </div>
 
@@ -308,7 +262,6 @@ import { toast } from '../utils/toast';
 import request from '../utils/request';
 import { metricsAPI } from '../api/metrics';
 import { userAPI, type LearnerCenterSnapshot } from '../api/user';
-import { adminDevtoolsApi, type AdvanceTimePreviewResponse } from '../api/adminApi';
 import { getReplanActionText, getReplanPriorityText } from '../utils/replanSignal';
 import { Chart } from 'chart.js/auto';
 import { useUserStore } from '../stores/user';
@@ -357,14 +310,20 @@ const achievementsPath = computed(() => {
   }
   return '/achievements';
 });
+const learningPathBasePath = computed(() => {
+  if (isTestMode.value && isAdminRoute.value) {
+    return '/admin/test/learning-path';
+  }
+  return '/learning-path';
+});
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerNavItems = computed(() => [
-  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
-  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
-  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
-  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
-  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+  { label: '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard', '/admin/test/dashboard'] },
+  { label: '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full', '/admin/test/goal-full'] },
+  { label: '学习路径', to: learningPathsPath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/', '/admin/test/learning-paths', '/admin/test/learning-path/'] },
+  { label: '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state', '/admin/test/learning-state'] },
+  { label: '成就', to: achievementsPath.value, matchPrefixes: ['/achievements', '/admin/test/achievements'] }
 ]);
 
 type TrendRangeKey = 0 | 7 | 30;
@@ -400,13 +359,8 @@ const warnings = ref<Array<{
   suggestion: string;
 }>>([]);
 const learnerCenter = ref<LearnerCenterSnapshot | null>(null);
-const stateDebugDrawerVisible = ref(false);
-const simulatedAdvanceDays = ref(7);
-const advancePreviewLoading = ref(false);
-const advancePreviewResult = ref<AdvanceTimePreviewResponse | null>(null);
 let chartInstance: Chart | null = null;
 const trendCache = new Map<TrendRangeKey, { trends: TrendData[]; range: TrendRangeMeta }>();
-const advanceDayOptions = [1, 3, 7, 14, 30];
 const trendRangeOptions: Array<{ key: TrendRangeKey; label: string }> = [
   { key: 0, label: '注册至今' },
   { key: 7, label: '7天' },
@@ -417,11 +371,9 @@ const statePageTitle = computed(() => '看见最近的学习状态，再决定�
 const statePageSubtitle = computed(() => '这里会汇总你的学习节奏、掌握情况和疲劳变化，帮助你判断要继续推进，还是先放慢一点。');
 
 const stateWarningSummary = computed(() => {
-  if (adaptiveSummary.value?.global?.hasWarnings) return '当前状态存在需关注项，建议先看预警再决定是否继续推进。';
+  if (warnings.value.length > 0) return '当前状态存在需关注项，建议先看预警再决定是否继续推进。';
   return '';
 });
-
-const adaptiveSummary = computed(() => null);
 
 const stateGuidanceActions = computed(() => {
   const pathId = learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId;
@@ -430,7 +382,7 @@ const stateGuidanceActions = computed(() => {
       title: '查看当前路径',
       desc: '回到当前任务，确认状态影响的是哪一步。',
       action: '查看路径',
-      to: pathId ? `/learning-path/${pathId}` : learningPathsPath.value,
+      to: pathId ? `${learningPathBasePath.value}/${pathId}` : learningPathsPath.value,
     },
     {
       title: '继续学习',
@@ -452,7 +404,7 @@ const replanPriorityText = computed(() => getReplanPriorityText(learnerReplanSig
 const replanActionText = computed(() => getReplanActionText(learnerReplanSignal.value));
 const currentPathDetailPath = computed(() => {
   const pathId = learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId;
-  return pathId ? `/learning-path/${pathId}` : learningPathsPath.value;
+  return pathId ? `${learningPathBasePath.value}/${pathId}` : learningPathsPath.value;
 });
 const learnerNarrativeSummary = computed(() => {
   const narrative = learnerCenter.value?.profile?.narrativeInsights;
@@ -468,93 +420,6 @@ const blockedFoundationsText = computed(() => {
   return values.length > 0 ? values.slice(0, 6).join('、') : '暂无高风险前置。';
 });
 
-const learnerCenterDisplayMetrics = computed(() => {
-  const metrics = learnerCenter.value?.dynamicState?.metrics;
-  if (!metrics) return null;
-  return {
-    lss: Number((Number(metrics.lss || 0) * 10).toFixed(2)),
-    ktl: Number((Number(metrics.ktl || 0) * 10).toFixed(2)),
-    lf: Number((Number(metrics.lf || 0) * 10).toFixed(2)),
-    lsb: Number((Number(metrics.lsb || 0) * 10).toFixed(2)),
-  };
-});
-
-const stateDebugQuickChips = computed(() => {
-  const metrics = learnerCenterDisplayMetrics.value || state.value;
-  const control = learnerCenter.value?.learningControlState;
-  const signal = learnerCenter.value?.replanSignal;
-  return [
-    metrics ? { label: 'LSB', value: Number(metrics.lsb || 0).toFixed(2) } : null,
-    control ? { label: 'paceMode', value: control.paceMode } : null,
-    signal ? { label: 'replan', value: signal.recommendation || 'keep' } : null,
-    learnerCenter.value?.freshness?.basedOn?.latestMetricAt ? { label: '最新指标', value: formatPreviewDateTime(learnerCenter.value.freshness.basedOn.latestMetricAt) } : null,
-  ].filter(Boolean) as Array<{ label: string; value: string }>;
-});
-
-const stateDebugQuickChipText = computed(() => {
-  return stateDebugQuickChips.value.map((item) => `${item.label} ${item.value}`).join(' · ') || '打开状态调试';
-});
-
-const stateDebugAdaptiveCopyJson = computed(() => JSON.stringify({
-  note: '学习状态页当前不走 /adaptive-guidance/copy。首屏内容来自 /state/current、/state/trends、/state/warnings 和 /users/me/learner-center。'
-}, null, 2));
-const stateDebugAdaptiveSummaryJson = computed(() => JSON.stringify({
-  note: '学习状态页当前没有独立的 snapshot/rule summary 载荷；页面直接组合状态指标、趋势、预警与 learner center 数据。'
-}, null, 2));
-const stateDebugLearnerCenterJson = computed(() => JSON.stringify(learnerCenter.value || null, null, 2));
-const stateDebugAdvancePreviewJson = computed(() => JSON.stringify(advancePreviewResult.value || null, null, 2));
-
-const advanceMetricCompareCards = computed(() => {
-  const before = advancePreviewResult.value?.before?.dynamicState?.metrics;
-  const after = advancePreviewResult.value?.after?.dynamicState?.metrics;
-  if (!before || !after) return [];
-
-  const buildCard = (label: string, key: 'lss' | 'ktl' | 'lf' | 'lsb') => {
-    const beforeValue = Number(before[key] || 0);
-    const afterValue = Number(after[key] || 0);
-    const delta = afterValue - beforeValue;
-    const deltaPrefix = delta > 0 ? '+' : '';
-    return {
-      label,
-      before: beforeValue.toFixed(2),
-      after: afterValue.toFixed(2),
-      delta: `${deltaPrefix}${delta.toFixed(2)}`,
-    };
-  };
-
-  return [
-    buildCard('LSS 学习压力', 'lss'),
-    buildCard('KTL 知识掌握', 'ktl'),
-    buildCard('LF 学习疲劳', 'lf'),
-    buildCard('LSB 状态平衡', 'lsb'),
-  ];
-});
-
-const advanceControlStateDiffs = computed(() => {
-  const before = advancePreviewResult.value?.before?.learningControlState;
-  const after = advancePreviewResult.value?.after?.learningControlState;
-  if (!before || !after) return [];
-  return [
-    { label: 'paceMode', before: before.paceMode, after: after.paceMode },
-    { label: 'conceptLoad', before: before.conceptLoad, after: after.conceptLoad },
-    { label: 'reviewPriority', before: before.reviewPriority, after: after.reviewPriority },
-    { label: 'challengeLevelCap', before: before.challengeLevelCap, after: after.challengeLevelCap },
-    { label: 'checkpointNeed', before: before.checkpointNeed, after: after.checkpointNeed },
-  ];
-});
-
-const advanceSignalDiffItems = computed(() => {
-  const before = advancePreviewResult.value?.before?.replanSignal;
-  const after = advancePreviewResult.value?.after?.replanSignal;
-  if (!before || !after) return [];
-  return [
-    { label: 'shouldSuggest', before: before.shouldSuggest ? 'true' : 'false', after: after.shouldSuggest ? 'true' : 'false' },
-    { label: 'priority', before: before.priority || 'none', after: after.priority || 'none' },
-    { label: 'recommendation', before: before.recommendation || 'keep', after: after.recommendation || 'keep' },
-    { label: 'scope', before: before.scope || 'none', after: after.scope || 'none' },
-    { label: 'reasonCodes', before: Array.isArray(before.reasonCodes) && before.reasonCodes.length ? before.reasonCodes.join('、') : '无', after: Array.isArray(after.reasonCodes) && after.reasonCodes.length ? after.reasonCodes.join('、') : '无' },
-  ];
-});
 
 const stateMetricCards = computed(() => {
   if (!state.value) return [];
@@ -607,9 +472,9 @@ interface StateMetrics {
   lsb: number;
   updatedAt?: string;
   suggestion?: {
-    level: 'critical' | 'warning' | 'normal' | 'optimal';
-    message: string;
-    action: string;
+    level?: 'critical' | 'warning' | 'normal' | 'optimal' | string;
+    message?: string;
+    action?: string;
     categories?: {
       pressure: { status: string; message: string };
       state: { status: string; message: string };
@@ -720,7 +585,7 @@ const trendSummaryCards = computed<TrendSummaryCard[]>(() => {
     {
       label: '最新记录',
       value: latestPoint ? formatTrendDate(latestPoint.date, true) : '--',
-      note: state.value?.updatedAt ? `更新时间 ${formatPreviewDateTime(state.value.updatedAt)}` : '按自然日持续更新',
+      note: state.value?.updatedAt ? `更新时间 ${formatStateDateTime(state.value.updatedAt)}` : '按自然日持续更新',
       tone: 'neutral',
     },
   ];
@@ -834,7 +699,6 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
           suggestedMax: 100,
           grid: {
             color: 'rgba(0, 0, 0, 0.05)',
-            drawBorder: false,
           },
           ticks: {
             color: '#6b7280',
@@ -986,25 +850,7 @@ const loadLearnerCenter = async () => {
   }
 };
 
-const runAdvancePreview = async () => {
-  advancePreviewLoading.value = true;
-  try {
-    advancePreviewResult.value = await adminDevtoolsApi.advanceTimePreview({
-      days: simulatedAdvanceDays.value,
-      pathId: learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId,
-    });
-  } catch (error: any) {
-    toast.error(error?.message || '模拟自然天推进失败');
-  } finally {
-    advancePreviewLoading.value = false;
-  }
-};
-
-const clearAdvancePreview = () => {
-  advancePreviewResult.value = null;
-};
-
-const formatPreviewDateTime = (value?: string) => {
+const formatStateDateTime = (value?: string) => {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -1860,283 +1706,6 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-.state-debug-panel {
-  margin-top: 20px;
-}
-
-.state-debug-float-btn {
-  position: fixed;
-  right: 28px;
-  bottom: 28px;
-  z-index: 1100;
-  display: grid;
-  gap: 4px;
-  min-width: 148px;
-  padding: 12px 14px;
-  border: 0;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #3478f6, #1f57cc);
-  box-shadow: 0 18px 38px rgba(31, 87, 204, 0.28);
-  color: #fff;
-  text-align: left;
-}
-
-.state-debug-float-btn strong {
-  font-size: 14px;
-}
-
-.state-debug-float-btn span {
-  font-size: 11px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.state-debug-drawer :deep(.el-drawer__header) {
-  margin-bottom: 0;
-  padding-bottom: 12px;
-}
-
-.state-debug-drawer :deep(.el-drawer__body) {
-  padding-top: 0;
-}
-
-.state-debug-drawer__body {
-  display: grid;
-  gap: 14px;
-  padding-bottom: 24px;
-}
-
-.state-debug-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.state-debug-quick-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(52, 120, 246, 0.08);
-}
-
-.state-debug-quick-chip strong {
-  font-size: 12px;
-  color: #172033;
-}
-
-.state-debug-quick-chip em {
-  font-style: normal;
-  font-size: 12px;
-  color: #66758d;
-  font-weight: 700;
-}
-
-.state-debug-collapse {
-  border-radius: 20px;
-  background: rgba(243, 246, 251, 0.72);
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  padding: 14px 16px;
-}
-
-.state-debug-collapse + .state-debug-collapse {
-  margin-top: 14px;
-}
-
-.state-debug-collapse summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.state-debug-collapse summary::-webkit-details-marker {
-  display: none;
-}
-
-.state-debug-collapse__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.state-debug-collapse__head strong {
-  display: block;
-  color: #172033;
-  line-height: 1.4;
-}
-
-.state-debug-collapse__badge {
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.1);
-  color: #1f57cc;
-  font-size: 12px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.state-debug-day-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.state-debug-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.state-debug-panel__actions--top {
-  margin-top: 0;
-}
-
-.state-debug-preview {
-  margin-top: 18px;
-  display: grid;
-  gap: 16px;
-}
-
-.state-debug-preview__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  font-size: 12px;
-  color: #7a8599;
-}
-
-.state-debug-empty {
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: rgba(244, 247, 252, 0.9);
-  color: #5d6b82;
-}
-
-.state-debug-compare-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.state-debug-compare-card {
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(244, 247, 252, 0.92);
-  border: 1px solid rgba(23, 32, 51, 0.05);
-  display: grid;
-  gap: 6px;
-}
-
-.state-debug-compare-card span {
-  font-size: 12px;
-  color: #7a8599;
-}
-
-.state-debug-compare-card strong {
-  font-size: 22px;
-  color: #172033;
-}
-
-.state-debug-compare-card p {
-  margin: 0;
-  color: #4b5565;
-}
-
-.state-debug-sections {
-  display: grid;
-  gap: 14px;
-}
-
-.state-debug-json-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 16px;
-}
-
-.state-debug-json-card {
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(23, 32, 51, 0.05);
-}
-
-.state-debug-json-card summary {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-weight: 800;
-  color: #172033;
-}
-
-.state-debug-json-card summary em {
-  font-style: normal;
-  font-size: 12px;
-  font-weight: 700;
-  color: #66758d;
-}
-
-.state-debug-json-card pre {
-  margin: 12px 0 0;
-  max-height: 320px;
-  overflow: auto;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(243, 246, 251, 0.92);
-  border: 1px solid rgba(23, 32, 51, 0.05);
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.state-debug-section {
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(23, 32, 51, 0.05);
-  display: grid;
-  gap: 12px;
-}
-
-.state-debug-section strong {
-  color: #172033;
-}
-
-.state-debug-kv-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.state-debug-kv-item {
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(244, 247, 252, 0.9);
-}
-
-.state-debug-kv-item span {
-  display: block;
-  font-size: 12px;
-  color: #7a8599;
-  margin-bottom: 6px;
-}
-
-.state-debug-kv-item p {
-  margin: 0;
-  color: #172033;
-  line-height: 1.6;
-}
-
 .state-trend-panel h2,
 .state-insight-card__title {
   margin: 0;
@@ -2280,153 +1849,7 @@ onUnmounted(() => {
   margin: 0 0 1rem 0;
 }
 
-/* ========== 预览空状态：展示将来会看到什么 ========== */
-.empty-state-preview {
-  display: grid;
-  gap: 28px;
-  padding: 32px;
-  border-radius: 28px;
-  border: 1px solid rgba(23, 32, 51, 0.06);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 250, 255, 0.78));
-  box-shadow: 0 22px 44px rgba(31, 87, 204, 0.06);
-  backdrop-filter: blur(14px);
-}
-
-[data-theme="dark"] .empty-state-preview {
-  background: linear-gradient(180deg, rgba(28, 36, 52, 0.9), rgba(20, 28, 42, 0.78));
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-.empty-state-preview__head {
-  display: grid;
-  gap: 8px;
-  max-width: 640px;
-}
-
-.empty-state-preview__head .section-kicker {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.1);
-  color: var(--color-primary-dark, #1f57cc);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  width: fit-content;
-}
-
-.empty-state-preview__head h2 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.4;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.empty-state-preview__head p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.empty-state-preview__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-.preview-card {
-  display: grid;
-  gap: 8px;
-  padding: 18px;
-  border-radius: 18px;
-  border: 1px solid rgba(23, 32, 51, 0.05);
-  background: rgba(255, 255, 255, 0.6);
-  position: relative;
-  overflow: hidden;
-  /* 视觉上让用户感受到这是占位 */
-  opacity: 0.92;
-}
-
-[data-theme="dark"] .preview-card {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-.preview-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, transparent 60%, rgba(52, 120, 246, 0.04));
-  pointer-events: none;
-}
-
-.preview-card__label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: 0.04em;
-}
-
-.preview-card__value {
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  opacity: 0.55;
-}
-
-.preview-card__hint {
-  font-size: 12px;
-  color: var(--text-muted, #66758d);
-  line-height: 1.5;
-}
-
-.preview-card__sparkline {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 40px;
-  margin-top: 4px;
-}
-
-.preview-card__bar {
-  flex: 1;
-  background: linear-gradient(180deg, var(--color-primary-light, #5a94f8), var(--color-primary, #3478f6));
-  border-radius: 4px 4px 2px 2px;
-  opacity: 0.6;
-}
-
-.preview-card__bars {
-  display: grid;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.preview-card__hbar {
-  display: block;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--color-primary-light, #5a94f8), var(--color-primary, #3478f6));
-  opacity: 0.6;
-}
-
-.preview-card__line {
-  width: 100%;
-  height: 40px;
-  color: var(--color-primary, #3478f6);
-  opacity: 0.55;
-  margin-top: 4px;
-}
-
-.preview-card--insight {
-  background: linear-gradient(135deg, rgba(52, 120, 246, 0.06), rgba(141, 107, 255, 0.04));
-  border-color: rgba(52, 120, 246, 0.12);
-}
-
-.empty-state-preview__cta {
+.empty-state__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -2434,12 +1857,13 @@ onUnmounted(() => {
 }
 
 @media (max-width: 720px) {
-  .empty-state-preview {
-    padding: 22px;
+  .empty-state__actions {
+    width: 100%;
   }
 
-  .empty-state-preview__head h2 {
-    font-size: 20px;
+  .empty-state__actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -3093,12 +2517,6 @@ section {
     order: 2;
   }
 
-  .state-debug-compare-grid,
-  .state-debug-kv-grid,
-  .state-debug-json-grid {
-    grid-template-columns: 1fr;
-  }
-
   .state-side-panels {
     order: 3;
     position: static;
@@ -3145,11 +2563,6 @@ section {
     height: 300px;
   }
 
-  .state-debug-float-btn {
-    right: 16px;
-    bottom: 16px;
-    min-width: 132px;
-  }
 }
 
 @media (max-width: 640px) {

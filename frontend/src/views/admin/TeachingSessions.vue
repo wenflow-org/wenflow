@@ -111,39 +111,42 @@
         </div>
 
         <el-card shadow="never" class="detail-card">
-          <template #header>会话概况</template>
+          <template #header>会话上下文</template>
           <div class="kv-list">
-            <div class="kv-item"><span>用户</span><strong>{{ selectedSession.userName || selectedSession.userId }}</strong></div>
-            <div class="kv-item"><span>状态</span><strong>{{ getStatusLabel(selectedSession.status) }}</strong></div>
-            <div class="kv-item"><span>时长</span><strong>{{ formatDuration(selectedSession.duration) }}</strong></div>
-            <div class="kv-item"><span>消息数</span><strong>{{ selectedSession.messageCount || 0 }}</strong></div>
-            <div class="kv-item"><span>关注等级</span><strong>{{ getAttentionLevel(selectedSession) }}</strong></div>
+            <div class="kv-item"><span>用户 ID</span><strong>{{ selectedSession.userId }}</strong></div>
+            <div class="kv-item"><span>学科 / 任务</span><strong>{{ selectedSession.subject }} · {{ getTaskTypeLabel(selectedSession.taskType) }}</strong></div>
+            <div class="kv-item"><span>开始时间</span><strong>{{ formatTime(selectedSession.startTime) }}</strong></div>
+            <div class="kv-item"><span>结束时间</span><strong>{{ formatTime(selectedSession.endTime) }}</strong></div>
+            <div class="kv-item"><span>关联知识点</span><strong>{{ selectedSession.knowledgePointCount || 0 }}</strong></div>
+            <div v-if="selectedSession.learningPathId" class="kv-item"><span>路径 ID</span><strong>{{ selectedSession.learningPathId }}</strong></div>
+            <div v-if="selectedSession.milestoneId" class="kv-item"><span>里程碑 ID</span><strong>{{ selectedSession.milestoneId }}</strong></div>
+            <div v-if="selectedSession.taskId" class="kv-item"><span>任务 ID</span><strong>{{ selectedSession.taskId }}</strong></div>
           </div>
         </el-card>
         <el-card shadow="never" class="detail-card">
           <template #header>会话总结</template>
-          <div v-if="selectedSession.wrapup" class="kv-list">
-            <div class="kv-item"><span>状态</span><strong>{{ getWrapupStatusText(selectedSession) }}</strong></div>
-            <div class="kv-item"><span>总结来源</span><strong>{{ selectedSession.wrapup?.sources?.summary || '--' }}</strong></div>
-            <div class="kv-item"><span>评估来源</span><strong>{{ selectedSession.wrapup?.sources?.evaluation || '--' }}</strong></div>
-            <div class="kv-item kv-item--stack"><span>摘要</span><strong>{{ selectedSession.wrapup?.summary?.topicSummary || '暂无摘要内容' }}</strong></div>
+          <div v-if="selectedSession.wrapup?.summary" class="kv-list">
+            <div v-if="selectedSession.wrapup?.summary?.topicSummary" class="kv-item kv-item--stack"><span>主题摘要</span><strong>{{ selectedSession.wrapup.summary.topicSummary }}</strong></div>
+            <div v-if="selectedSession.wrapup?.summary?.knowledgeSummary" class="kv-item kv-item--stack"><span>知识总结</span><strong>{{ selectedSession.wrapup.summary.knowledgeSummary }}</strong></div>
+            <div v-if="selectedSession.wrapup?.summary?.practiceAdvice" class="kv-item kv-item--stack"><span>练习建议</span><strong>{{ selectedSession.wrapup.summary.practiceAdvice }}</strong></div>
+            <div v-if="selectedSession.wrapup?.summary?.learningEvaluation" class="kv-item kv-item--stack"><span>学习评估</span><strong>{{ selectedSession.wrapup.summary.learningEvaluation }}</strong></div>
+            <div v-if="selectedSession.wrapup?.sources?.summary || selectedSession.wrapup?.sources?.evaluation" class="kv-item"><span>来源</span><strong>{{ getWrapupSourceText(selectedSession.wrapup) }}</strong></div>
           </div>
           <div v-else class="detail-empty-block">
-            <strong>当前没有生成会话总结</strong>
-            <p>会话未完成或总结未生成。</p>
+            <strong>暂无会话总结</strong>
           </div>
         </el-card>
         <el-card shadow="never" class="detail-card">
-          <template #header>Advisory 摘要</template>
-          <div v-if="selectedSession.advisory" class="kv-list">
-            <div class="kv-item"><span>是否触发</span><strong>{{ selectedSession.advisory?.shouldSuggest ? '是' : '否' }}</strong></div>
-            <div class="kv-item"><span>优先级</span><strong>{{ selectedSession.advisory?.priority || '--' }}</strong></div>
-            <div class="kv-item kv-item--stack"><span>建议</span><strong>{{ selectedSession.advisory?.recommendation || '暂无建议内容' }}</strong></div>
-            <div class="kv-item"><span>UI 标题</span><strong>{{ selectedSession.advisory?.ui?.title || '--' }}</strong></div>
+          <template #header>Advisory</template>
+          <div v-if="selectedSession.advisory?.shouldSuggest" class="kv-list">
+            <div class="kv-item"><span>优先级</span><strong>{{ selectedSession.advisory.priority || '--' }}</strong></div>
+            <div v-if="selectedSession.advisory?.recommendation" class="kv-item kv-item--stack"><span>建议</span><strong>{{ selectedSession.advisory.recommendation }}</strong></div>
+            <div v-if="selectedSession.advisory?.ui?.title" class="kv-item kv-item--stack"><span>UI 标题</span><strong>{{ selectedSession.advisory.ui.title }}</strong></div>
+            <div v-if="selectedSession.advisory?.ui?.body" class="kv-item kv-item--stack"><span>UI 文案</span><strong>{{ selectedSession.advisory.ui.body }}</strong></div>
+            <div v-if="selectedSession.advisory?.rationale" class="kv-item kv-item--stack"><span>触发原因</span><strong>{{ selectedSession.advisory.rationale }}</strong></div>
           </div>
           <div v-else class="detail-empty-block">
-            <strong>当前没有 Advisory 建议</strong>
-            <p>说明系统没有触发额外提醒，或当前会话还没有形成足够的判断依据。</p>
+            <strong>未触发额外建议</strong>
           </div>
         </el-card>
         <el-collapse v-if="selectedSession.wrapup || selectedSession.advisory" class="detail-collapse">
@@ -280,6 +283,11 @@ const formatDuration = (duration: number | null | undefined) => {
   return `${min}m ${sec}s`;
 };
 
+const formatTime = (value: string | null | undefined) => {
+  if (!value) return '--';
+  return new Date(value).toLocaleString('zh-CN');
+};
+
 const getWrapupStatusText = (row: any) => {
   if (!row.wrapup) return '缺失';
   if (row.wrapup.status === 'complete') return '完成';
@@ -299,6 +307,13 @@ const getAdvisoryStatusText = (row: any) => {
 const getAdvisoryStatusTag = (row: any) => {
   if (!row.advisory?.shouldSuggest) return 'info';
   return priorityTag(row.advisory.priority);
+};
+
+const getWrapupSourceText = (wrapup: any) => {
+  const parts = [];
+  if (wrapup?.sources?.summary) parts.push(`总结 ${wrapup.sources.summary}`);
+  if (wrapup?.sources?.evaluation) parts.push(`评估 ${wrapup.sources.evaluation}`);
+  return parts.join(' / ') || '--';
 };
 
 const getArtifactSummary = (row: any) => {
@@ -503,18 +518,12 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px;
 }
 .detail-empty-block {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   padding: 4px 0;
 }
 .detail-empty-block strong {
   color: #22344d;
   font-size: 0.95rem;
-}
-.detail-empty-block p {
-  margin: 0;
-  color: #62758f;
-  line-height: 1.65;
-  font-size: 0.88rem;
 }
 
 .detail-card {

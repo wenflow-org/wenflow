@@ -1,10 +1,8 @@
 <template>
   <div class="admin-page admin-overview">
     <AdminPageHeader
-      kicker="Admin Console"
       title="平台运行总览"
       :icon="DataAnalysis"
-      :highlights="overviewHighlights"
     >
       <template #actions>
         <el-button @click="refreshAll" :loading="refreshing">
@@ -25,32 +23,12 @@
     <section class="overview-hero-grid">
       <article class="insight-card insight-card--primary">
         <div class="hero-kpi__copy">
-          <span class="hero-kpi__eyebrow">状态摘要</span>
           <h2>{{ overviewHeadline.title }}</h2>
-        </div>
-
-        <div class="overview-focus-strip overview-focus-strip--compact">
-          <div class="overview-focus-chip">
-            <span>最近节点活动</span>
-            <strong>{{ latestAgentActivityLabel }}</strong>
-          </div>
-          <div class="overview-focus-chip">
-            <span>24h 异常率</span>
-            <strong>{{ overallIssueRateLabel }}</strong>
-          </div>
-          <div class="overview-focus-chip">
-            <span>学习活跃</span>
-            <strong>{{ stats.users?.activeToday || 0 }} 人</strong>
-          </div>
-          <div class="overview-focus-chip">
-            <span>任务完成</span>
-            <strong>{{ stats.learning?.completedTasks || 0 }} 项</strong>
-          </div>
         </div>
 
         <div class="section-head section-head--tight section-head--embedded">
           <div>
-            <h3 class="section-title">关键状态</h3>
+            <h3 class="section-title">当前判断</h3>
           </div>
         </div>
 
@@ -79,35 +57,10 @@
         </div>
 
         <div class="overview-action-bar">
-          <router-link to="/admin/execution-logs" class="overview-action-link">查看执行日志</router-link>
-          <router-link to="/admin/prompt-call-logs" class="overview-action-link">查看 Prompt 调用日志</router-link>
-          <router-link to="/admin/agents/topology" class="overview-action-link">查看 Agent 拓扑</router-link>
-          <router-link to="/admin/learner-center" class="overview-action-link">进入学习者中心</router-link>
-        </div>
-      </article>
-
-      <article class="insight-card insight-card--secondary">
-        <div class="section-head section-head--tight section-head--embedded">
-          <div>
-            <h3 class="section-title">工作区</h3>
-          </div>
-        </div>
-
-        <div class="workspace-list">
-          <router-link
-            v-for="workspace in workspaceSections"
-            :key="workspace.to"
-            :to="workspace.to"
-            class="workspace-card"
-          >
-            <div class="workspace-card__copy">
-              <strong>{{ workspace.title }}</strong>
-            </div>
-            <div class="workspace-card__meta">
-              <span :class="['workspace-card__badge', `is-${workspace.tone}`]">{{ workspace.badge }}</span>
-              <span class="workspace-card__link">进入</span>
-            </div>
-          </router-link>
+          <router-link to="/admin/execution-logs" class="overview-action-link">排查执行日志</router-link>
+          <router-link to="/admin/prompt-call-logs" class="overview-action-link">核对 Prompt 调用</router-link>
+          <router-link to="/admin/agents/topology" class="overview-action-link">检查 Agent 拓扑</router-link>
+          <router-link to="/admin/learner-center" class="overview-action-link">处理学习者状态</router-link>
         </div>
       </article>
     </section>
@@ -144,48 +97,6 @@
             </article>
           </div>
           <el-empty v-else description="暂无需要立即处理的事项" />
-        </section>
-
-        <section class="section panel-card">
-          <div class="section-head">
-            <div>
-              <h3 class="section-title">
-                <el-icon><Cpu /></el-icon>
-                运行关注项
-              </h3>
-            </div>
-          </div>
-
-          <div v-if="attentionAgentStatuses.length" class="attention-list">
-            <article v-for="item in attentionAgentStatuses" :key="item.name" class="attention-card">
-              <div class="attention-card__head">
-                <div class="agent-name">
-                  <el-tag :type="getAgentTagType(item.status)" size="small" class="agent-tag">
-                    {{ item.status }}
-                  </el-tag>
-                  <span class="agent-name-text">{{ getAgentDisplayName(item.name) }}</span>
-                </div>
-                <span class="attention-card__time">{{ formatTime(item.lastActivity) }}</span>
-              </div>
-
-              <div class="attention-card__summary">
-                <strong>{{ item.summary }}</strong>
-                <p>{{ item.detail }}</p>
-              </div>
-
-              <div class="attention-card__meta">
-                <span>成功率 {{ item.successRate }}%</span>
-                <span>总调用 {{ item.totalCalls }}</span>
-                <span>平均耗时 {{ item.avgDuration }}ms</span>
-              </div>
-
-              <div class="attention-card__actions">
-                <router-link :to="item.executionLogsLink" class="overview-inline-link">执行日志</router-link>
-                <router-link :to="item.promptLogsLink" class="overview-inline-link">Prompt 日志</router-link>
-              </div>
-            </article>
-          </div>
-          <el-empty v-else description="暂无需要额外关注的节点" />
         </section>
 
         <section class="section panel-card">
@@ -245,29 +156,6 @@
       <aside class="dashboard-side">
         <section class="section panel-card">
           <div class="section-head">
-            <div>
-              <h3 class="section-title">常用入口</h3>
-            </div>
-          </div>
-
-          <div class="dispatch-grid">
-            <router-link to="/admin/users" class="dispatch-card">
-              <strong>用户管理</strong>
-            </router-link>
-            <router-link to="/admin/skills" class="dispatch-card">
-              <strong>Skill 目录</strong>
-            </router-link>
-            <router-link to="/admin/api-config" class="dispatch-card">
-              <strong>API 管理</strong>
-            </router-link>
-            <router-link to="/admin/prompt-lab" class="dispatch-card">
-              <strong>Prompt Lab</strong>
-            </router-link>
-          </div>
-        </section>
-
-        <section class="section panel-card">
-          <div class="section-head">
             <h3 class="section-title">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="10" /></svg>
               活动记录
@@ -293,7 +181,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { RouterLink } from 'vue-router'
 import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi'
 import { Cpu, TrendCharts, DataAnalysis } from '@element-plus/icons-vue'
 import AdminPageHeader from './components/AdminPageHeader.vue'
@@ -368,16 +255,6 @@ const totalIssueCount = computed(() => {
   return timeoutCount + errorCount
 })
 
-const latestAgentActivityLabel = computed(() => {
-  const times = agentStatuses.value
-    .map((item) => item.lastActivity)
-    .filter(Boolean)
-    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-
-  if (!times.length) return '暂无数据'
-  return formatTime(times[0])
-})
-
 const lastRefreshLabel = computed(() => {
   if (!lastRefreshAt.value) return '尚未刷新'
   return formatTime(lastRefreshAt.value)
@@ -444,59 +321,6 @@ const attentionAgentStatuses = computed(() => {
     .slice(0, 5)
 })
 
-const overviewHighlights = computed(() => [
-  { label: `最近刷新 ${lastRefreshLabel.value}`, tone: 'neutral' as const },
-  { label: `今日调用 ${stats.value.agents?.todayCalls || 0}`, tone: 'info' as const },
-  {
-    label: `24h 异常 ${totalTrendIssues.value}`,
-    tone: totalTrendIssues.value > 0 ? ('warning' as const) : ('success' as const)
-  },
-  {
-    label: `活跃学习用户 ${stats.value.users?.activeToday || 0}`,
-    tone: Number(stats.value.users?.activeToday || 0) > 0 ? ('success' as const) : ('warning' as const)
-  }
-])
-
-const workspaceSections = computed(() => {
-  const activeUsers = Number(stats.value?.users?.activeToday || 0)
-  const issueCount = totalIssueCount.value
-  const successRate = Number(stats.value?.agents?.successRate || 100)
-  const completedTasks = Number(stats.value?.learning?.completedTasks || 0)
-
-  return [
-    {
-      title: '学习运营',
-      badge: activeUsers > 0 ? `${activeUsers} 人活跃` : '活跃偏低',
-      tone: activeUsers > 0 ? 'success' : 'warning',
-      to: '/admin/learner-center'
-    },
-    {
-      title: '运行目录',
-      badge: issueCount > 0 ? `${issueCount} 项异常` : '运行平稳',
-      tone: issueCount > 0 ? 'warning' : 'info',
-      to: '/admin/skills'
-    },
-    {
-      title: '诊断与回归',
-      badge: totalTrendIssues.value > 0 ? `${totalTrendIssues.value} 次异常` : '可继续巡检',
-      tone: totalTrendIssues.value > 0 ? 'danger' : 'neutral',
-      to: '/admin/execution-logs'
-    },
-    {
-      title: '平台配置',
-      badge: successRate >= 90 ? '配置稳定' : '配置波动',
-      tone: successRate >= 90 ? 'success' : 'warning',
-      to: '/admin/api-config'
-    },
-    {
-      title: '发布与调试',
-      badge: completedTasks > 0 ? `${completedTasks} 项完成` : '等待操作',
-      tone: completedTasks > 0 ? 'info' : 'neutral',
-      to: '/admin/prompt-lab'
-    }
-  ]
-})
-
 const healthSummary = computed(() => {
   const successRate = Number(stats.value?.agents?.successRate || 100)
   const timeouts = Number(stats.value?.agents?.todayTimeouts || 0)
@@ -506,16 +330,16 @@ const healthSummary = computed(() => {
     successRate: {
       tone: successRate >= 90 ? 'is-good' : 'is-warning',
       title: successRate >= 90 ? '成功率稳定' : '成功率需要关注',
-      description: `${successRate}% · ${stats.value?.agents?.todayCalls || 0} 次调用`
+      description: `${successRate}% · 今日 ${stats.value?.agents?.todayCalls || 0} 次调用`
     },
     timeout: {
       tone: timeouts === 0 ? 'is-good' : 'is-warning',
-      title: timeouts === 0 ? '暂无超时告警' : '存在超时调用',
-      description: `${timeouts} 次超时 · ${totalTrendIssues.value} 次异常`
+      title: timeouts === 0 ? '超时正常' : '存在超时',
+      description: `${timeouts} 次超时 · 24h ${totalTrendIssues.value} 次异常`
     },
     activity: {
       tone: activeUsers > 0 ? 'is-neutral' : 'is-warning',
-      title: activeUsers > 0 ? '今日有学习活跃' : '学习活跃偏低',
+      title: activeUsers > 0 ? '学习侧有活跃' : '学习活跃偏低',
       description: `${activeUsers} 人活跃 · ${stats.value?.learning?.completedTasks || 0} 项完成`
     }
   }
@@ -578,9 +402,9 @@ const priorityQueue = computed(() => {
       title: getAgentDisplayName(item.name),
       description: item.detail,
       meta: `${formatTime(item.lastActivity)} · 成功率 ${item.successRate}% · ${issueTotal} 次失败/超时`,
-      primaryLabel: '执行日志',
+      primaryLabel: '排查执行日志',
       primaryTo: item.executionLogsLink,
-      secondaryLabel: 'Prompt 日志',
+      secondaryLabel: '核对 Prompt 调用',
       secondaryTo: item.promptLogsLink,
       score: 100 + item.severity * 10 + issueTotal
     })
@@ -592,11 +416,11 @@ const priorityQueue = computed(() => {
       level: '学习侧关注',
       tone: 'warning',
       title: '今日学习活跃为 0',
-      description: '学习侧无活跃用户',
+      description: '暂未发现活跃学习用户',
       meta: `完成任务 ${completedTasks} 项`,
-      primaryLabel: '学习者中心',
+      primaryLabel: '处理学习者状态',
       primaryTo: '/admin/learner-center',
-      secondaryLabel: '虚拟用户模拟',
+      secondaryLabel: '启动虚拟学习者',
       secondaryTo: '/admin/virtual-learners',
       score: 85
     })
@@ -612,9 +436,9 @@ const priorityQueue = computed(() => {
         ? `${timeoutCount} 次超时`
         : `成功率 ${successRate}%`,
       meta: `24h 异常 ${totalTrendIssues.value} 次`,
-      primaryLabel: '执行日志',
+      primaryLabel: '排查执行日志',
       primaryTo: '/admin/execution-logs',
-      secondaryLabel: 'Agent 拓扑',
+      secondaryLabel: '检查 Agent 拓扑',
       secondaryTo: '/admin/agents/topology',
       score: timeoutCount > 0 ? 92 : 74
     })
@@ -626,11 +450,11 @@ const priorityQueue = computed(() => {
       level: '今日状态',
       tone: 'info',
       title: '暂无高优先级异常',
-      description: '可继续巡检',
+      description: `最近刷新 ${lastRefreshLabel.value}`,
       meta: `今日调用 ${stats.value?.agents?.todayCalls || 0} 次`,
-      primaryLabel: 'Skill 目录',
+      primaryLabel: '检查 Skill 目录',
       primaryTo: '/admin/skills',
-      secondaryLabel: 'Prompt 调用日志',
+      secondaryLabel: '核对 Prompt 调用',
       secondaryTo: '/admin/prompt-call-logs',
       score: 10
     })
@@ -785,7 +609,7 @@ onMounted(async () => {
 
 .overview-hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -798,66 +622,14 @@ onMounted(async () => {
   gap: 18px;
 }
 
-.insight-card--secondary {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-}
-
 .hero-kpi__copy {
   display: grid;
-  gap: 8px;
-}
-
-.hero-kpi__eyebrow {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--admin-text-secondary);
+  gap: 4px;
 }
 
 .hero-kpi__copy h2 {
   margin: 0;
   font-size: 1.35rem;
-  color: var(--admin-text-primary);
-}
-
-.hero-kpi__copy p {
-  margin: 0;
-  color: var(--admin-text-secondary);
-  line-height: 1.65;
-}
-
-.overview-focus-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.overview-focus-strip--compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.overview-focus-chip {
-  border: var(--admin-border);
-  border-radius: 16px;
-  background: var(--admin-bg-surface-alt);
-}
-
-.overview-focus-chip {
-  padding: 14px 16px;
-  display: grid;
-  gap: 5px;
-}
-
-.overview-focus-chip span {
-  font-size: 0.76rem;
-  color: var(--admin-text-secondary);
-}
-
-.overview-focus-chip strong {
-  font-size: 0.95rem;
   color: var(--admin-text-primary);
 }
 
@@ -870,59 +642,13 @@ onMounted(async () => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.workspace-list {
-  display: grid;
-  gap: 10px;
-}
-
-.workspace-card {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 15px 16px;
-  border-radius: var(--admin-radius-card);
-  border: var(--admin-border);
-  background: var(--admin-bg-surface-alt);
-  text-decoration: none;
-  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
-}
-
-.workspace-card:hover,
-.dispatch-card:hover {
+.overview-action-link:hover,
+.overview-inline-link:hover {
   border-color: rgba(52, 120, 246, 0.18);
   background: rgba(244, 248, 255, 0.95);
   transform: translateY(-1px);
 }
 
-.workspace-card__copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.workspace-card__copy strong,
-.dispatch-card strong {
-  color: var(--admin-text-primary);
-  font-size: 0.92rem;
-}
-
-.workspace-card__copy p,
-.dispatch-card p {
-  margin: 0;
-  color: var(--admin-text-secondary);
-  font-size: 0.82rem;
-  line-height: 1.55;
-}
-
-.workspace-card__meta {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.workspace-card__badge,
 .priority-pill {
   display: inline-flex;
   align-items: center;
@@ -933,38 +659,19 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-.workspace-card__badge.is-success,
 .priority-pill.is-info {
   background: var(--admin-color-success-bg);
   color: var(--admin-color-success);
 }
 
-.workspace-card__badge.is-warning,
 .priority-pill.is-warning {
   background: var(--admin-color-warning-bg);
   color: var(--admin-color-warning);
 }
 
-.workspace-card__badge.is-danger,
 .priority-pill.is-danger {
   background: var(--admin-color-error-bg);
   color: var(--admin-color-error);
-}
-
-.workspace-card__badge.is-neutral {
-  background: var(--admin-color-neutral-bg);
-  color: var(--admin-color-neutral);
-}
-
-.workspace-card__badge.is-info {
-  background: var(--admin-color-info-bg);
-  color: var(--admin-text-brand);
-}
-
-.workspace-card__link {
-  color: var(--admin-color-info);
-  font-size: 0.8rem;
-  font-weight: 600;
 }
 
 .section-head--embedded {
@@ -1044,13 +751,6 @@ onMounted(async () => {
   font-size: 0.84rem;
   font-weight: 600;
   transition: all 180ms ease;
-}
-
-.overview-action-link:hover,
-.overview-inline-link:hover {
-  border-color: rgba(52, 120, 246, 0.18);
-  background: rgba(244, 248, 255, 0.95);
-  color: var(--admin-color-info);
 }
 
 .priority-list {
@@ -1159,23 +859,6 @@ onMounted(async () => {
 
 .dashboard-side {
   align-content: start;
-}
-
-.dispatch-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.dispatch-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: var(--admin-radius-card);
-  border: var(--admin-border);
-  background: var(--admin-bg-surface-alt);
-  text-decoration: none;
-  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
 .section {
@@ -1395,7 +1078,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 1280px) {
-  .overview-focus-strip,
   .health-list--inline {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1409,9 +1091,6 @@ onMounted(async () => {
     grid-template-columns: 1fr;
   }
 
-  .dispatch-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 768px) {
@@ -1424,15 +1103,13 @@ onMounted(async () => {
     padding: 16px;
   }
 
-  .overview-focus-strip,
   .health-list--inline,
   .trend-summary {
     grid-template-columns: 1fr;
   }
 
-  .workspace-card,
   .priority-card__head,
-  .workspace-card__meta {
+  .priority-card__actions {
     display: grid;
     justify-items: start;
   }

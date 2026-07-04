@@ -111,7 +111,7 @@
 
         <el-table-column label="操作" width="108" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button class="table-link-btn" @click="openNode(row.skillId)">查看工作台</el-button>
+            <el-button class="table-link-btn" @click="openNode(row.skillId)">快速查看</el-button>
           </template>
         </el-table-column>
       </el-table>

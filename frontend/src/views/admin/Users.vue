@@ -1,7 +1,7 @@
 <template>
   <div class="admin-page admin-users">
     <AdminPageHeader
-      title="管理系统用户账号"
+      title="用户"
       :icon="User"
       :highlights="userHighlights"
     >
@@ -16,46 +16,40 @@
     <section class="admin-filter-panel users-filter-panel">
       <div class="admin-section-head users-filter-panel__head">
         <div class="admin-section-head__copy">
-          <h3 class="admin-section-head__title">筛选与目录范围</h3>
+          <h3 class="admin-section-head__title">筛选</h3>
         </div>
         <div class="users-filter-panel__summary">
           <span v-if="selectedUserIds.length > 0">已选 {{ selectedUserIds.length }} 人</span>
-          <span v-else>当前页 {{ users.length }} 人</span>
+          <span v-else>本页 {{ users.length }} 人</span>
         </div>
       </div>
 
       <div class="admin-list-toolbar users-filter-toolbar">
         <div class="admin-list-toolbar__group">
-        <el-input
-          v-model="filterForm.search"
-          placeholder="搜索昵称或邮箱"
-          style="width: 260px"
-          clearable
-          @input="handleSearch"
-          @keyup.enter="handleSearchImmediate"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
+          <el-input
+            v-model="filterForm.search"
+            placeholder="搜索昵称/邮箱"
+            style="width: 260px"
+            clearable
+            @input="handleSearch"
+            @keyup.enter="handleSearchImmediate"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
 
-        <el-select
-          v-model="filterForm.role"
-          placeholder="用户角色"
-          style="width: 140px; margin-left: 0.75rem"
-          clearable
-          @change="handleFilter"
-        >
-          <el-option label="普通用户" value="user" />
-          <el-option label="管理员" value="admin" />
-        </el-select>
-      </div>
-
-      <div class="admin-list-toolbar__group">
-        <p class="users-filter-toolbar__note">
-          {{ filterForm.search || filterForm.role ? '已启用筛选' : '默认范围' }}
-        </p>
-      </div>
+          <el-select
+            v-model="filterForm.role"
+            placeholder="角色"
+            style="width: 140px; margin-left: 0.75rem"
+            clearable
+            @change="handleFilter"
+          >
+            <el-option label="普通用户" value="user" />
+            <el-option label="管理员" value="admin" />
+          </el-select>
+        </div>
       </div>
     </section>
 
@@ -138,13 +132,13 @@
       <div class="drawer-content">
         <el-form ref="createFormRef" class="drawer-form" :model="createForm" :rules="createRules" label-width="100px">
           <el-form-item label="昵称" prop="name">
-            <el-input v-model="createForm.name" placeholder="请输入昵称" />
+            <el-input v-model="createForm.name" placeholder="昵称" />
           </el-form-item>
           <el-form-item label="邮箱" prop="email">
-            <el-input v-model="createForm.email" placeholder="请输入邮箱" />
+            <el-input v-model="createForm.email" placeholder="邮箱" />
           </el-form-item>
           <el-form-item label="密码" prop="password">
-            <el-input v-model="createForm.password" type="password" show-password placeholder="至少 8 位，含字母和数字" />
+            <el-input v-model="createForm.password" type="password" show-password placeholder="设置密码" />
           </el-form-item>
           <el-form-item label="管理员">
             <el-switch v-model="createForm.isAdmin" />
@@ -178,16 +172,16 @@
 
         <el-form ref="editFormRef" class="drawer-form" :model="editForm" :rules="editRules" label-width="100px">
           <el-form-item label="昵称" prop="name">
-            <el-input v-model="editForm.name" placeholder="请输入昵称" />
+            <el-input v-model="editForm.name" placeholder="昵称" />
           </el-form-item>
           <el-form-item label="邮箱" prop="email">
-            <el-input v-model="editForm.email" placeholder="请输入邮箱" />
+            <el-input v-model="editForm.email" placeholder="邮箱" />
           </el-form-item>
           <el-form-item label="管理员">
             <el-switch v-model="editForm.isAdmin" />
           </el-form-item>
           <el-form-item label="重置密码" prop="password">
-            <el-input v-model="editForm.password" type="password" show-password placeholder="留空不修改；填写需 8 位+字母+数字" />
+            <el-input v-model="editForm.password" type="password" show-password placeholder="留空则不修改" />
           </el-form-item>
         </el-form>
       </div>
@@ -536,12 +530,6 @@ onMounted(() => {
   color: var(--admin-text-secondary);
   font-size: 12px;
   font-weight: 600;
-}
-
-.users-filter-toolbar__note {
-  margin: 0;
-  color: var(--admin-text-muted);
-  font-size: 12px;
 }
 
 /* 表格 */

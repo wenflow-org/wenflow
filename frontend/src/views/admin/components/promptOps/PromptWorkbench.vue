@@ -39,7 +39,10 @@
         @click="activeStep = step.key"
       >
         <span class="workbench-step__index">{{ idx + 1 }}</span>
-        <span class="workbench-step__label">{{ step.label }}</span>
+        <span class="workbench-step__content">
+          <span class="workbench-step__label">{{ step.label }}</span>
+          <span class="workbench-step__hint">{{ step.hint }}</span>
+        </span>
         <el-icon v-if="stepDone(step.key) && step.key !== 'edit'" class="workbench-step__check">
           <Check />
         </el-icon>
@@ -47,13 +50,16 @@
     </div>
 
     <!-- 顶栏状态条 -->
-    <div v-if="info || llmCompileStats" class="workbench-statusbar">
+    <div class="workbench-statusbar">
+      <div class="workbench-statusbar__summary">
+        <span class="workbench-statusbar__mode">
+          {{ paradigm === 'constrained' ? '源文件模式' : directModeLabel }}
+        </span>
+        <span class="workbench-statusbar__state">{{ statusSummary }}</span>
+      </div>
       <template v-if="paradigm === 'direct' && info">
-        <el-tag size="small" :type="info.status === 'fresh' ? 'success' : 'danger'">
-          {{ info.status === 'fresh' ? '产物 fresh' : '产物 failed' }}
-        </el-tag>
         <el-tag v-if="info.storedCompiledAt" size="small" type="info" effect="plain">
-          DB 产物时间: {{ formatTime(info.storedCompiledAt) }}
+          {{ formatTime(info.storedCompiledAt) }}
         </el-tag>
         <el-tag v-if="info.rewritten" size="small" type="warning" effect="plain">
           重写 {{ info.fieldsApplied }} 字段
@@ -63,9 +69,6 @@
         </span>
       </template>
       <template v-if="paradigm === 'constrained'">
-        <el-tag size="small" :type="llmCompileStats ? 'success' : 'warning'">
-          {{ llmCompileStats ? 'LLM 编译完成' : 'LLM 编译未执行' }}
-        </el-tag>
         <template v-if="llmCompileStats">
           <span class="workbench-statusbar__meta">
             {{ llmCompileStats.lines }} 行
@@ -93,7 +96,7 @@
       <!-- 编辑工具栏 -->
       <div class="workbench-edit-toolbar">
         <div class="toolbar-left">
-          <span class="toolbar-label">编辑模式：</span>
+          <span class="toolbar-label">编辑方式</span>
           <el-segmented v-model="paradigm" :options="[
             { label: '源文件编辑', value: 'constrained' },
             { label: '直接编辑', value: 'direct' }
@@ -160,7 +163,7 @@
             <span class="workbench-structured-hint" v-if="structuredModifiedCount > 0">
               {{ structuredModifiedCount }} 处修改
             </span>
-            <span class="workbench-structured-hint" v-else>
+            <span class="workbench-structured-hint workbench-structured-hint--muted" v-else>
               无未保存改动
             </span>
           </div>
@@ -173,7 +176,7 @@
           <div class="compile-section">
             <div class="compile-section__header">
               <h5>LLM 编译</h5>
-              <p class="compile-section__hint">源文件将通过 LLM 编译为完整 Prompt（约 10-20 秒）</p>
+              <p class="compile-section__hint">将结构化源文件整理为运行时 Prompt，预计 10-20 秒。</p>
             </div>
             <div class="compile-llm-state">
               <div v-if="llmCompiling" class="compile-llm-status">
@@ -204,7 +207,7 @@
                 <el-alert type="error" :title="llmCompileError" :closable="false" show-icon />
               </div>
               <div v-else class="compile-llm-empty">
-                <span class="compile-llm-hint">将使用源文件通过 LLM 编译为完整的 Prompt</span>
+                <span class="compile-llm-hint">尚未生成运行时产物，准备后可直接进入审核。</span>
               </div>
             </div>
             <div class="compile-section__actions">
@@ -369,10 +372,10 @@
     <section v-show="activeStep === 'review'" class="workbench-section">
       <header class="workbench-section__head">
         <div>
-          <h4>2. 审核产物</h4>
+          <h4>审核产物</h4>
           <p class="workbench-section__hint">
-            <template v-if="paradigm === 'constrained'">LLM 编译产生的成品 Prompt，下方为编译统计信息。</template>
-            <template v-else>左侧源, 右侧实际喂给 LLM 的产物。高亮区段为编译期被重写的部分。</template>
+            <template v-if="paradigm === 'constrained'">检查 LLM 整理后的运行时 Prompt 是否可直接发布。</template>
+            <template v-else>左侧为源文本，右侧为实际运行产物，高亮区段表示编译时重写。</template>
           </p>
         </div>
       </header>
@@ -422,7 +425,7 @@
     <section v-show="activeStep === 'publish'" class="workbench-section">
       <header class="workbench-section__head">
         <div>
-          <h4>3. 发布运行</h4>
+          <h4>发布运行</h4>
           <p class="workbench-section__hint">
             配置运行时参数（将同步到 skill_model_configs），选择发布方式
           </p>
@@ -545,10 +548,8 @@ import {
   Connection,
   Grid,
   Document,
-  List,
   Cpu,
   CopyDocument,
-  Edit,
     UploadFilled,
     Plus,
     Loading,
@@ -607,12 +608,13 @@ interface PublishParams {
 const props = defineProps<{ agentId: string | null }>()
 
 const route = useRoute()
+const agentId = computed(() => props.agentId || '')
 const bareSkillId = computed(() => (props.agentId || '').replace(/^skill:/, ''))
 
 const steps = [
-  { key: 'edit',    label: '编辑', hint: '编辑与编译' },
-  { key: 'review',  label: '审核', hint: '审阅产物' },
-  { key: 'publish', label: '发布', hint: '参数与发布' }
+  { key: 'edit',    label: '修改源', hint: '整理内容' },
+  { key: 'review',  label: '审核产物', hint: '确认运行效果' },
+  { key: 'publish', label: '发布生效', hint: '参数与上线' }
 ] as const
 
 type StepKey = typeof steps[number]['key']
@@ -668,9 +670,9 @@ const publishParams = ref<PublishParams>({
 
   // 获取当前 Skill 所属的 Agent 和阶段
   const currentSkillPhase = computed(() => {
-    if (!topologyData.value || !agentId) return null
+    if (!topologyData.value || !agentId.value) return null
     const nodes = topologyData.value.nodes || []
-    const currentSkill = nodes.find((n: any) => n.id === `skill:${agentId}`)
+    const currentSkill = nodes.find((n: any) => n.id === `skill:${agentId.value}`)
     return currentSkill?.parentAgentId || null
   })
 
@@ -775,8 +777,8 @@ const publishParams = ref<PublishParams>({
 
   // ========== End 字段引用侧边栏 ==========
   
-  const stepDone = (key: StepKey): boolean => {
-    if (key === 'edit') {
+const stepDone = (key: StepKey): boolean => {
+  if (key === 'edit') {
       // 编辑步骤完成：保存了内容且编译成功
       if (paradigm.value === 'constrained') {
         return !!llmCompileStats.value
@@ -786,6 +788,24 @@ const publishParams = ref<PublishParams>({
   if (key === 'review') return stepDone('edit')
   return false
 }
+
+const directModeLabel = computed(() => editMode.value === 'fields' ? '字段表模式' : '直接编辑模式')
+
+const statusSummary = computed(() => {
+  if (paradigm.value === 'constrained') {
+    if (llmCompiling.value) return '正在编译运行时产物'
+    if (llmCompileError.value) return '最近一次编译失败'
+    if (llmCompileStats.value) return '已生成运行时产物'
+    if (structuredModifiedCount.value > 0) return '有未同步修改'
+    return '尚未生成运行时产物'
+  }
+
+  if (!info.value) return dirty.value ? '有未保存改动' : '等待加载编译信息'
+  if (dirty.value) return '有未保存改动'
+  if (saving.value) return '正在保存并编译'
+  if (compiling.value) return '正在重新编译'
+  return info.value.status === 'fresh' ? '当前产物可运行' : '当前产物编译异常'
+})
 
 const currentDraftHashPreview = computed(() => info.value?.sourceHash || '')
 
@@ -1184,9 +1204,9 @@ const checkAndSetParadigm = async () => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f8fafc 100%);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 10px;
   margin-bottom: 16px;
 }
 
@@ -1212,34 +1232,34 @@ const checkAndSetParadigm = async () => {
 .workbench-steps {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 0;
-  margin-bottom: 16px;
+  gap: 10px;
+  padding: 2px 0 0;
 }
 
 .workbench-step {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  background: var(--admin-bg-surface);
+  padding: 10px 14px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
   cursor: pointer;
   transition: all 0.18s ease;
   position: relative;
-  flex: 1;
+  min-width: 0;
+  flex: 1 1 0;
 }
 
 .workbench-step:hover {
-  border-color: #c7d2fe;
+  border-color: rgba(165, 180, 252, 0.95);
   background: #fafbff;
 }
 
 .workbench-step--active {
-  border-color: #4f46e5;
-  background: linear-gradient(135deg, #eef2ff 0%, #fafbff 100%);
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.1);
+  border-color: rgba(79, 70, 229, 0.45);
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.96) 0%, rgba(250, 251, 255, 1) 100%);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.1);
 }
 
 .workbench-step--done .workbench-step__index {
@@ -1249,8 +1269,8 @@ const checkAndSetParadigm = async () => {
 }
 
 .workbench-step--dirty {
-  border-color: #f59e0b;
-  background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
+  border-color: rgba(245, 158, 11, 0.42);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.92) 0%, #fff 100%);
 }
 
 .workbench-step__index {
@@ -1282,6 +1302,20 @@ const checkAndSetParadigm = async () => {
   white-space: nowrap;
 }
 
+.workbench-step__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workbench-step__hint {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .workbench-step__check {
   margin-left: auto;
   color: #10b981;
@@ -1294,11 +1328,29 @@ const checkAndSetParadigm = async () => {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 8px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding: 10px 14px;
+  background: rgba(248, 250, 252, 0.84);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
   font-size: 12px;
+}
+
+.workbench-statusbar__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+}
+
+.workbench-statusbar__mode {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.workbench-statusbar__state {
+  font-size: 12px;
+  color: #64748b;
 }
 
 .workbench-statusbar__meta {
@@ -1326,11 +1378,8 @@ const checkAndSetParadigm = async () => {
 .workbench-section {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  background: var(--admin-bg-surface);
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  gap: 16px;
+  padding: 4px 2px 0;
 }
 
 .workbench-section__head {
@@ -1338,6 +1387,8 @@ const checkAndSetParadigm = async () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .workbench-section__head h4 {
@@ -1364,6 +1415,7 @@ const checkAndSetParadigm = async () => {
   gap: 8px;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .workbench-section__footer {
@@ -1423,6 +1475,11 @@ const checkAndSetParadigm = async () => {
   font-size: 12px;
   color: #f59e0b;
   font-weight: 600;
+}
+
+.workbench-structured-hint--muted {
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 /* ========== Compile Meta ========== */
@@ -1647,11 +1704,11 @@ const checkAndSetParadigm = async () => {
 
 /* ========== Compile Section (in Edit Step) ========== */
 .compile-section {
-  margin-top: 24px;
-  padding: 16px;
-  background: #fafbfc;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  margin-top: 12px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(250, 251, 252, 0.92) 0%, rgba(248, 250, 252, 0.76) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
 }
 
 .compile-section__header {
@@ -1696,7 +1753,9 @@ const checkAndSetParadigm = async () => {
 
 .constrained-editor,
 .direct-editor {
-  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* ========== 字段引用侧边栏 ========== */
@@ -1799,7 +1858,8 @@ const checkAndSetParadigm = async () => {
 
 @media (max-width: 1024px) {
   .workbench-steps {
-    grid-template-columns: 1fr 1fr;
+    flex-direction: column;
+    align-items: stretch;
   }
   .compile-diff {
     grid-template-columns: 1fr;

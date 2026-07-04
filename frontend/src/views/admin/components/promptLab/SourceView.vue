@@ -49,10 +49,10 @@
         <div
           v-for="child in root.children"
           :key="child.id"
-          class="section-card"
+          class="section-row"
           :class="{
-            [`section-card--${child.contentType}`]: true,
-            'section-card--modified': modifiedSections.has(child.id)
+            [`section-row--${child.contentType}`]: true,
+            'section-row--modified': modifiedSections.has(child.id)
           }"
         >
           <!-- Section header -->
@@ -242,38 +242,43 @@ function contentTypeLabel(type: string): string {
 /* Stats bar */
 .source-stats {
   display: flex;
-  gap: 16px;
-  padding: 8px 12px;
-  background: var(--admin-bg-surface);
-  border-radius: 6px;
-  border: 1px solid var(--admin-border-color, #e5e7eb);
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f8fafc 100%);
+  border-radius: 10px;
+  border: 1px solid rgba(229, 231, 235, 0.92);
 }
 
 .source-stats__item {
   font-size: 12px;
   font-weight: 600;
-  color: var(--admin-text-secondary, #6b7280);
+  color: var(--admin-text-secondary, #64748b);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
 }
 
 /* Root block */
 .root-block {
-  border: 1px solid var(--admin-border-color, #e5e7eb);
-  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
   overflow: hidden;
-  background: var(--admin-bg-surface);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 251, 253, 0.98) 100%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.03);
 }
 
 .root-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 14px 16px;
   cursor: pointer;
   user-select: none;
-  background: var(--admin-bg-hover, #f9fafb);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98) 0%, rgba(243, 246, 251, 0.96) 100%);
 }
 
-.root-header:hover { background: var(--admin-bg-surface-alt, #f3f4f6); }
+.root-header:hover { background: linear-gradient(180deg, #f8fbff 0%, #eef3fa 100%); }
 
 .root-arrow {
   transition: transform 0.2s;
@@ -294,9 +299,9 @@ function contentTypeLabel(type: string): string {
 .root-count {
   font-size: 11px;
   color: var(--admin-text-muted, #9ca3af);
-  background: var(--admin-bg-surface);
-  padding: 2px 8px;
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
+  padding: 3px 10px;
+  border-radius: 999px;
 }
 
 .root-actions {
@@ -310,25 +315,27 @@ function contentTypeLabel(type: string): string {
 }
 
 .root-body {
-  padding: 8px;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-/* Section card */
-.section-card {
-  border: 1px solid var(--admin-border-color, #e5e7eb);
-  border-radius: 6px;
+/* Section row */
+.section-row {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
   overflow: hidden;
-  background: var(--admin-bg-page);
+  background: rgba(255, 255, 255, 0.76);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.section-card:hover {
-  border-color: var(--admin-color-brand, #3b82f6);
+.section-row:hover {
+  border-color: rgba(59, 130, 246, 0.42);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.05);
 }
 
-.section-card--modified {
+.section-row--modified {
   border-left: 3px solid var(--admin-color-warning, #f59e0b);
 }
 
@@ -336,13 +343,14 @@ function contentTypeLabel(type: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   cursor: pointer;
   user-select: none;
+  min-width: 0;
 }
 
 .section-header:hover {
-  background: var(--admin-bg-hover, #f9fafb);
+  background: rgba(248, 250, 252, 0.88);
 }
 
 .section-arrow {
@@ -367,6 +375,7 @@ function contentTypeLabel(type: string): string {
   font-size: 11px;
   color: var(--admin-text-muted, #9ca3af);
   flex-shrink: 0;
+  padding: 2px 0;
 }
 
 .section-modified-dot {
@@ -390,9 +399,9 @@ function contentTypeLabel(type: string): string {
 }
 
 .section-body {
-  padding: 12px;
-  border-top: 1px solid var(--admin-border-color, #e5e7eb);
-  background: var(--admin-bg-surface);
+  padding: 14px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(248, 250, 252, 0.82) 100%);
 }
 
 .section-editor {

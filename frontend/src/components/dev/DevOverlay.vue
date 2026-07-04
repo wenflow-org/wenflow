@@ -116,6 +116,101 @@
         <!-- A 类层：路由特定数据 -->
         <section class="dev-section" v-if="hasRouteSpecificData">
           <div class="dev-section-title">当前页面数据（独立拉取）</div>
+          <div v-if="dashboardDebugOverview" class="dev-card">
+            <div class="dev-card-label">Dashboard 调试总览</div>
+            <div class="dev-dashboard-source-row">
+              <span class="dev-dashboard-source-badge" :class="dashboardSourceToneClass">
+                {{ dashboardDebugOverview.sourceBadge }}
+              </span>
+              <span class="dev-dashboard-source-note">{{ dashboardDebugOverview.sourceNote }}</span>
+            </div>
+            <p class="dev-dashboard-lead">{{ dashboardDebugOverview.lead }}</p>
+            <div class="dev-dashboard-grid">
+              <article v-for="item in dashboardDebugOverview.cards" :key="item.label" class="dev-dashboard-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <p>{{ item.meta }}</p>
+              </article>
+            </div>
+            <div class="dev-dashboard-step-row">
+              <article
+                v-for="step in dashboardDebugOverview.steps"
+                :key="step.label"
+                class="dev-dashboard-step"
+                :class="`dev-dashboard-step--${step.tone}`"
+              >
+                <span>{{ step.label }}</span>
+                <strong>{{ step.value }}</strong>
+                <p>{{ step.desc }}</p>
+              </article>
+            </div>
+            <div class="dev-dashboard-links">
+              <el-button size="small" @click="goToRoute(dashboardDebugOverview.links.goal)">测试目标规划</el-button>
+              <el-button size="small" @click="goToRoute(dashboardDebugOverview.links.path)">测试学习路径详情</el-button>
+              <el-button size="small" @click="goToRoute(dashboardDebugOverview.links.state)">测试学习状态</el-button>
+              <el-button size="small" @click="goToRoute(dashboardDebugOverview.links.promptLogs)">Path Prompt 调用日志</el-button>
+              <el-button size="small" @click="goToRoute(dashboardDebugOverview.links.executionLogs)">Path 执行日志</el-button>
+            </div>
+          </div>
+
+          <div v-if="dashboardDebugSnapshots" class="dev-card">
+            <div class="dev-card-label">Dashboard 隐藏数据</div>
+
+            <div v-if="dashboardDebugSnapshots.metricCards?.length" class="dev-dashboard-mini-grid">
+              <article v-for="item in dashboardDebugSnapshots.metricCards" :key="item.label" class="dev-dashboard-mini-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <p>{{ item.note }}</p>
+              </article>
+            </div>
+
+            <div v-if="dashboardDebugSnapshots.skillMeta?.length" class="dev-dashboard-kv-grid">
+              <div v-for="item in dashboardDebugSnapshots.skillMeta" :key="item.label" class="dev-dashboard-kv-item">
+                <span>{{ item.label }}</span>
+                <p>{{ item.value }}</p>
+              </div>
+            </div>
+
+            <div v-if="dashboardDebugSnapshots.outputItems?.length" class="dev-dashboard-kv-grid">
+              <div v-for="item in dashboardDebugSnapshots.outputItems" :key="item.label" class="dev-dashboard-kv-item">
+                <span>{{ item.label }}</span>
+                <p>{{ item.value }}</p>
+              </div>
+            </div>
+
+            <details v-if="dashboardDebugSnapshots.controlItems?.length" class="dev-dashboard-details">
+              <summary>学习控制快照</summary>
+              <div class="dev-dashboard-kv-grid">
+                <div v-for="item in dashboardDebugSnapshots.controlItems" :key="item.label" class="dev-dashboard-kv-item">
+                  <span>{{ item.label }}</span>
+                  <p>{{ item.value }}</p>
+                </div>
+              </div>
+            </details>
+
+            <details v-if="dashboardDebugSnapshots.signalItems?.length" class="dev-dashboard-details">
+              <summary>重调信号</summary>
+              <div class="dev-dashboard-kv-grid">
+                <div v-for="item in dashboardDebugSnapshots.signalItems" :key="item.label" class="dev-dashboard-kv-item">
+                  <span>{{ item.label }}</span>
+                  <p>{{ item.value }}</p>
+                </div>
+              </div>
+            </details>
+
+            <div v-if="dashboardDebugSnapshots.rawHint" class="dev-dashboard-note">
+              {{ dashboardDebugSnapshots.rawHint }}
+            </div>
+
+            <details v-for="card in dashboardDebugSnapshots.jsonCards || []" :key="card.key" class="dev-dashboard-json-card">
+              <summary>
+                <strong>{{ card.title }}</strong>
+                <em>{{ card.badge }}</em>
+              </summary>
+              <pre class="dev-json">{{ card.content }}</pre>
+            </details>
+          </div>
+
           <div class="dev-card">
             <pre class="dev-json">{{ JSON.stringify(routeSpecificData, null, 2) }}</pre>
           </div>
@@ -253,6 +348,13 @@ const hasRouteSpecificData = computed(() =>
   routeSpecificData.value && Object.keys(routeSpecificData.value).length > 0
 );
 
+const dashboardDebugOverview = computed(() => routeSpecificData.value?.dashboardDebug?.overview || null);
+const dashboardDebugSnapshots = computed(() => routeSpecificData.value?.dashboardDebug?.snapshots || null);
+const dashboardSourceToneClass = computed(() => {
+  const label = dashboardDebugOverview.value?.sourceBadge || '';
+  return label.includes('冷数据') ? 'is-cold' : 'is-hot';
+});
+
 watch(drawerVisible, (visible) => {
   if (visible) {
     trace.refresh();
@@ -265,6 +367,11 @@ watch(drawerVisible, (visible) => {
 function goToExecutionLogs() {
   if (!debugStore.currentTraceId) return;
   router.push({ path: '/admin/execution-logs', query: { traceId: debugStore.currentTraceId } });
+}
+
+function goToRoute(target: any) {
+  if (!target) return;
+  router.push(target);
 }
 
 function formatTime(time: string | number): string {
@@ -437,6 +544,157 @@ async function exitProjection() {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   font-weight: 500;
+}
+.dev-dashboard-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dev-dashboard-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.dev-dashboard-source-badge.is-hot {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+.dev-dashboard-source-badge.is-cold {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+.dev-dashboard-source-note {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.dev-dashboard-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+}
+.dev-dashboard-grid,
+.dev-dashboard-mini-grid,
+.dev-dashboard-kv-grid {
+  display: grid;
+  gap: 10px;
+}
+.dev-dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.dev-dashboard-mini-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.dev-dashboard-card,
+.dev-dashboard-step,
+.dev-dashboard-mini-card,
+.dev-dashboard-kv-item {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--el-border-color-lighter);
+  padding: 10px 12px;
+}
+.dev-dashboard-card,
+.dev-dashboard-step,
+.dev-dashboard-mini-card {
+  display: grid;
+  gap: 6px;
+}
+.dev-dashboard-card span,
+.dev-dashboard-step span,
+.dev-dashboard-mini-card span,
+.dev-dashboard-kv-item span {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.dev-dashboard-card strong,
+.dev-dashboard-step strong,
+.dev-dashboard-mini-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 15px;
+}
+.dev-dashboard-card p,
+.dev-dashboard-step p,
+.dev-dashboard-mini-card p,
+.dev-dashboard-kv-item p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+}
+.dev-dashboard-step-row,
+.dev-dashboard-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.dev-dashboard-step {
+  flex: 1 1 220px;
+}
+.dev-dashboard-step--done {
+  background: rgba(34, 197, 94, 0.08);
+}
+.dev-dashboard-step--active {
+  background: rgba(59, 130, 246, 0.08);
+}
+.dev-dashboard-step--attention {
+  background: rgba(245, 158, 11, 0.12);
+}
+.dev-dashboard-step--idle {
+  background: rgba(148, 163, 184, 0.1);
+}
+.dev-dashboard-kv-item {
+  display: grid;
+  gap: 4px;
+}
+.dev-dashboard-details {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid var(--el-border-color-lighter);
+  padding: 10px 12px;
+}
+.dev-dashboard-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.dev-dashboard-details .dev-dashboard-kv-grid {
+  margin-top: 10px;
+}
+.dev-dashboard-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.dev-dashboard-json-card {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--el-border-color-lighter);
+  padding: 10px 12px;
+}
+.dev-dashboard-json-card summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dev-dashboard-json-card summary strong {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+.dev-dashboard-json-card summary em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 .dev-trace-row {
   display: flex;
@@ -675,5 +933,13 @@ async function exitProjection() {
   color: var(--el-text-color-placeholder);
   font-family: monospace;
   margin-top: 2px;
+}
+
+@media (max-width: 768px) {
+  .dev-dashboard-grid,
+  .dev-dashboard-mini-grid,
+  .dev-dashboard-kv-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

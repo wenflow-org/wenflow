@@ -13,21 +13,21 @@
         </button>
 
         <nav class="header-nav" aria-label="应用导航">
-          <router-link :to="dashboardPath" class="nav-item">{{ isTestMode ? '测试学习台' : '学习台' }}</router-link>
-          <router-link :to="goalConversationPath" class="nav-item">{{ isTestMode ? '测试目标规划' : '目标规划' }}</router-link>
-          <router-link :to="learningPathsBasePath" class="nav-item nav-item--active">{{ isTestMode ? '测试学习路径' : '学习路径' }}</router-link>
-          <router-link :to="learningStatePath" class="nav-item">{{ isTestMode ? '测试学习状态' : '学习状态' }}</router-link>
-          <router-link :to="achievementsPath" class="nav-item">{{ isTestMode ? '测试成就' : '成就' }}</router-link>
+          <router-link :to="dashboardPath" class="nav-item">学习台</router-link>
+          <router-link :to="goalConversationPath" class="nav-item">目标规划</router-link>
+          <router-link :to="learningPathsBasePath" class="nav-item nav-item--active">学习路径</router-link>
+          <router-link :to="learningStatePath" class="nav-item">学习状态</router-link>
+          <router-link :to="achievementsPath" class="nav-item">成就</router-link>
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">{{ isTestMode ? '创建新测试目标' : '创建新目标' }}</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: isTestMode ? '创建新测试目标' : '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -73,42 +73,7 @@
             <p>{{ goalSceneDescription }}</p>
           </div>
 
-          <div v-if="showGoalSceneDebugMeta" class="paths-scene-banner__meta">
-            <div class="paths-scene-banner__steps">
-              <span
-                v-for="step in goalSceneSteps"
-                :key="step.key"
-                class="paths-scene-step"
-                :class="{
-                  'paths-scene-step--active': step.active,
-                  'paths-scene-step--done': step.done
-                }"
-              >
-                {{ step.label }}
-              </span>
-            </div>
-
-            <div v-if="goalSceneHighlights.length > 0" class="paths-scene-banner__chips">
-              <span v-for="item in goalSceneHighlights" :key="item" class="paths-scene-chip">{{ item }}</span>
-            </div>
-
-            <div class="paths-scene-banner__actions">
-              <button
-                v-if="goalScenePath.id && goalSceneState === 'ready'"
-                type="button"
-                class="btn btn-primary"
-                @click="goToPathDetail(goalScenePath.id)"
-              >查看这版路径</button>
-              <button
-                v-else
-                type="button"
-                class="btn btn-ghost"
-                @click="loadPaths"
-              >刷新状态</button>
-            </div>
-          </div>
-
-          <div v-else class="paths-scene-banner__actions paths-scene-banner__actions--single">
+          <div class="paths-scene-banner__actions paths-scene-banner__actions--single">
             <button
               v-if="goalScenePath?.id && goalSceneState === 'ready'"
               type="button"
@@ -313,12 +278,11 @@
       </template>
     </el-dialog>
 
-    <!-- 测试模式：Path Goal / Raw 调试抽屉 -->
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
@@ -375,11 +339,15 @@ const achievementsPath = computed(() => {
 
 const userInitial = computed(() => userStore.user?.name?.charAt(0) || 'U');
 const headerNavItems = computed(() => [
-  { label: isTestMode.value ? '测试学习台' : '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard'] },
-  { label: isTestMode.value ? '测试目标规划' : '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full'] },
-  { label: isTestMode.value ? '测试学习路径' : '学习路径', to: learningPathsBasePath.value, matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/'] },
-  { label: isTestMode.value ? '测试学习状态' : '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state'] },
-  { label: isTestMode.value ? '测试成就' : '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
+  { label: '学习台', to: dashboardPath.value, matchPrefixes: ['/dashboard', '/admin/test/dashboard'] },
+  { label: '目标规划', to: goalConversationPath.value, matchPrefixes: ['/goal-conversation', '/test/goal-full', '/admin/test/goal-full'] },
+  {
+    label: '学习路径',
+    to: learningPathsBasePath.value,
+    matchPrefixes: ['/learning-paths', '/learning-path/', '/test/learning-paths', '/test/learning-path/', '/admin/test/learning-paths', '/admin/test/learning-path/']
+  },
+  { label: '学习状态', to: learningStatePath.value, matchPrefixes: ['/learning-state', '/admin/test/learning-state'] },
+  { label: '成就', to: achievementsPath.value, matchPrefixes: ['/achievements', '/admin/test/achievements'] }
 ])
 const scrolled = ref(false);
 const loading = ref(true);
@@ -456,9 +424,15 @@ const getPrimaryActionTask = (path: any) => {
 const getPathContinueTarget = (path: any) => {
   const nextTask = getPrimaryActionTask(path);
   if (nextTask?.id) {
+    if (isTestMode.value) {
+      return isAdminRoute.value ? `/admin/test/learn/${nextTask.id}` : `/learn/${nextTask.id}`;
+    }
     return `/learn/${nextTask.id}`;
   }
-  return isTestMode.value ? `/test/learning-path/${path.id}` : `/learning-path/${path.id}`;
+  if (isTestMode.value) {
+    return isAdminRoute.value ? `/admin/test/learning-path/${path.id}` : `/test/learning-path/${path.id}`;
+  }
+  return `/learning-path/${path.id}`;
 };
 
 const getPathNextTaskLabel = (path: any) => {
@@ -670,9 +644,7 @@ const goalSourceConversationId = computed(() => {
   const raw = route.query.conversationId;
   return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
 });
-const showGoalSceneBanner = computed(() => isTestMode.value && Boolean(goalScenePath.value));
-const showGoalSceneDebugMeta = computed(() => isTestMode.value);
-
+const showGoalSceneBanner = computed(() => route.query.from === 'goal' && Boolean(goalScenePath.value));
 const getCoreStepLabel = (path: any) => {
   const step = path?.generationStatus?.coreStep;
   if (step === 'framing') return '正在确认路径重点';
@@ -705,162 +677,6 @@ const goalSceneCandidates = computed(() => {
 
 const goalScenePath = computed(() => goalSceneCandidates.value[0] || null);
 
-// ============================================================
-// 测试模式：Path Goal / Raw 调试抽屉
-// ============================================================
-const goalDataCache = ref<Record<string, any>>({});
-const loadingGoalId = ref<string | null>(null);
-const pathsDebugDrawerVisible = ref(false);
-const debugPathId = ref('');
-
-const getPathStateLabel = (path: any) => {
-  const state = getPathDisplayState(path);
-  if (state === 'generating') return '生成中';
-  if (state === 'attention') return '待处理';
-  return '进行中';
-};
-
-const debuggablePaths = computed(() => sortedPaths.value.filter((path: any) => Boolean(
-  path?.generationStatus?.sourceConversationId
-  || path?.sceneSummary
-  || path?.generationStatus
-)));
-
-const currentDebugPath = computed(() => {
-  return debuggablePaths.value.find((path: any) => path.id === debugPathId.value)
-    || goalScenePath.value
-    || primaryPath.value
-    || debuggablePaths.value[0]
-    || null;
-});
-
-const currentDebugConversationId = computed(() => {
-  const raw = currentDebugPath.value?.generationStatus?.sourceConversationId;
-  return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
-});
-
-const currentDebugGoalRaw = computed(() => {
-  return currentDebugConversationId.value
-    ? goalDataCache.value[currentDebugConversationId.value]?.raw || null
-    : null;
-});
-
-const currentDebugPathMetaItems = computed(() => {
-  const path = currentDebugPath.value;
-  if (!path) return [] as Array<{ label: string; value: string }>;
-
-  return [
-    { label: 'pathId', value: path.id || '--' },
-    { label: 'sourceConversationId', value: currentDebugConversationId.value || '--' },
-    { label: 'state', value: getPathStateLabel(path) },
-    { label: 'coreStep', value: path?.generationStatus?.coreStep || '--' },
-    { label: 'estimatedHours', value: `${getPathEstimatedHours(path)} 小时` },
-    { label: 'progress', value: `${getPathProgress(path)}%` },
-  ];
-});
-
-const formatDebugJson = (value: any, emptyText = '当前没有可展示的数据。') => {
-  if (value === null || value === undefined || value === '') return emptyText;
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
-const currentDebugJsonCards = computed(() => {
-  const path = currentDebugPath.value;
-  if (!path) return [] as Array<{ key: string; title: string; badge: string; content: string }>;
-
-  return [
-    {
-      key: 'sceneSummary',
-      title: 'sceneSummary',
-      badge: 'path summary',
-      content: formatDebugJson(path.sceneSummary, '当前没有 sceneSummary。')
-    },
-    {
-      key: 'generationStatus',
-      title: 'generationStatus',
-      badge: 'path status',
-      content: formatDebugJson(path.generationStatus, '当前没有 generationStatus。')
-    },
-    {
-      key: 'goalConversationRaw',
-      title: 'goalConversationRaw',
-      badge: 'goal raw',
-      content: currentDebugConversationId.value
-        ? formatDebugJson(currentDebugGoalRaw.value, '当前还没有加载这条路径的 Goal 原始数据。')
-        : '当前路径没有 sourceConversationId。'
-    },
-    {
-      key: 'pathSnapshot',
-      title: 'pathSnapshot',
-      badge: 'path raw',
-      content: formatDebugJson(path, '当前没有路径快照。')
-    },
-  ];
-});
-
-const pathsDebugQuickChips = computed(() => {
-  const path = currentDebugPath.value;
-  if (!path) return [] as Array<{ label: string; value: string }>;
-
-  return [
-    { label: '路径', value: getPathTitle(path) },
-    { label: '状态', value: getPathStateLabel(path) },
-    currentDebugConversationId.value ? { label: 'Goal', value: currentDebugConversationId.value.slice(0, 8) } : null,
-    path?.generationStatus?.stageDesign ? { label: 'Stage', value: String(path.generationStatus.stageDesign) } : null,
-  ].filter(Boolean) as Array<{ label: string; value: string }>;
-});
-
-const pathsDebugQuickChipText = computed(() => {
-  const parts = pathsDebugQuickChips.value.slice(0, 3).map((item) => `${item.label} ${item.value}`);
-  return parts.length > 0 ? parts.join(' · ') : '查看 Goal 与原始数据';
-});
-
-const selectDebugPath = (pathId: string) => {
-  debugPathId.value = pathId;
-};
-
-const loadGoalData = async (conversationId: string) => {
-  if (goalDataCache.value[conversationId]) return;
-  loadingGoalId.value = conversationId;
-  try {
-    const response = await request.get(`/goal-conversation/${conversationId}`);
-    const data = response.data.data;
-    goalDataCache.value[conversationId] = {
-      raw: data,
-      understanding: data.understanding || data.collected?.understanding || {},
-      confirmedProposal: data.confirmedProposal || data.collected?.confirmedProposal || null,
-      collected: data.collected || {}
-    };
-  } catch (error: any) {
-    console.error('加载目标对话数据失败:', error);
-    toast.error(error.response?.data?.error?.message || '加载目标数据失败');
-  } finally {
-    loadingGoalId.value = null;
-  }
-};
-
-watch(debuggablePaths, (list) => {
-  if (list.length === 0) {
-    debugPathId.value = '';
-    return;
-  }
-
-  const exists = list.some((path: any) => path.id === debugPathId.value);
-  if (!exists) {
-    debugPathId.value = goalScenePath.value?.id || primaryPath.value?.id || list[0].id;
-  }
-}, { immediate: true });
-
-watch([pathsDebugDrawerVisible, currentDebugConversationId], ([visible, conversationId]) => {
-  if (!visible || !conversationId || goalDataCache.value[conversationId]) return;
-  void loadGoalData(conversationId);
-});
-
 const goalSceneState = computed<'processing' | 'ready' | 'attention'>(() => {
   const path = goalScenePath.value;
   if (!path) return 'processing';
@@ -874,12 +690,12 @@ const goalSceneState = computed<'processing' | 'ready' | 'attention'>(() => {
 
 const goalSceneTitle = computed(() => {
   const path = goalScenePath.value;
-  if (!path) return isTestMode.value ? '正在生成你的第一版完整学习路径' : '学习路径正在生成';
+  if (!path) return '正在生成你的第一版学习路径';
   if (goalSceneState.value === 'attention') {
-    return isTestMode.value ? '这版路径需要你重试或稍后刷新' : '这版路径暂时还没准备好';
+    return '这版路径暂时还没准备好';
   }
   if (goalSceneState.value === 'ready') {
-    return isTestMode.value ? '这版完整学习路径已经准备好了' : '已经可以查看这版路径';
+    return '这版学习路径已经准备好了';
   }
   return getCoreStepLabel(path);
 });
@@ -887,14 +703,10 @@ const goalSceneTitle = computed(() => {
 const goalSceneDescription = computed(() => {
   const path = goalScenePath.value;
   if (!path) {
-    return isTestMode.value
-      ? '我们会先收敛路径重点，再生成完整任务级路径，最后准备学习内容。'
-      : '系统正在根据刚确认的目标生成第一版学习路径。';
+    return '系统正在根据刚确认的目标生成第一版学习路径。';
   }
   if (goalSceneState.value === 'attention') {
-    return isTestMode.value
-      ? (path.learningBlockedReason || path.summary || '当前生成遇到问题，可以先刷新状态或直接重试。')
-      : '你可以先稍后再回来查看，系统会继续处理。';
+    return path.learningBlockedReason || path.summary || '当前生成遇到问题，可以先刷新状态或直接重试。';
   }
   if (goalSceneState.value === 'ready') {
     return path.summary || '你现在可以直接查看路径结构，并按阶段开始推进。';
@@ -902,37 +714,6 @@ const goalSceneDescription = computed(() => {
   const scene = path.sceneSummary || path.generationStatus?.scene || {};
   const firstDeliverable = scene.firstDeliverable ? `先拿到「${scene.firstDeliverable}」` : '先收敛第一版可交付结果';
   return `${firstDeliverable}，期间会按你的时间投入拆成完整任务级路径。`;
-});
-
-const goalSceneHighlights = computed(() => {
-  const path = goalScenePath.value;
-  if (!path) return [];
-  const scene = path.sceneSummary || path.generationStatus?.scene || {};
-  return [
-    scene.timeBudget ? `时间投入：${scene.timeBudget}` : '',
-    scene.timeHorizon ? `周期：${scene.timeHorizon}` : '',
-    typeof scene.milestoneCount === 'number' && scene.milestoneCount > 0 ? `${scene.milestoneCount} 个阶段` : '',
-    typeof scene.taskCount === 'number' && scene.taskCount > 0 ? `${scene.taskCount} 个任务` : '',
-  ].filter(Boolean);
-});
-
-const goalSceneSteps = computed(() => {
-  const path = goalScenePath.value;
-  const coreStep = path?.generationStatus?.coreStep;
-  const coreStatus = path?.generationStatus?.core;
-  const enrichmentStatus = path?.generationStatus?.enrichment;
-
-  const framingDone = coreStep !== 'framing' && !!coreStep;
-  const planningDone = coreStep === 'persist' || coreStep === 'completed' || coreStatus === 'succeeded';
-  const persistDone = coreStatus === 'succeeded';
-  const enrichmentDone = enrichmentStatus === 'succeeded';
-
-  return [
-    { key: 'framing', label: '方向收敛', active: coreStep === 'framing', done: framingDone },
-    { key: 'planning', label: '任务拆解', active: coreStep === 'planning', done: planningDone },
-    { key: 'persist', label: '路径落成', active: coreStep === 'persist', done: persistDone },
-    { key: 'enrichment', label: '阶段任务生成', active: enrichmentStatus === 'pending' || enrichmentStatus === 'processing', done: enrichmentDone }
-  ];
 });
 
 const confirmRegenerate = (path: any) => {
@@ -997,7 +778,11 @@ const regeneratePath = async () => {
 };
 
 const goToPathDetail = (id: string) => {
-  router.push(isTestMode.value ? `/test/learning-path/${id}` : `/learning-path/${id}`);
+  if (isTestMode.value) {
+    router.push(isAdminRoute.value ? `/admin/test/learning-path/${id}` : `/test/learning-path/${id}`);
+    return;
+  }
+  router.push(`/learning-path/${id}`);
 };
 
 const continuePath = (path: any) => {
@@ -1111,61 +896,6 @@ onUnmounted(() => {
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.7;
-}
-
-.paths-scene-banner__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.paths-scene-banner__steps {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.paths-scene-step {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0.7rem 0.9rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
-  background: rgba(255, 255, 255, 0.55);
-  color: var(--text-secondary);
-  font-size: 0.93rem;
-  font-weight: 600;
-}
-
-.paths-scene-step--active {
-  border-color: rgba(99, 102, 241, 0.35);
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--text-primary);
-}
-
-.paths-scene-step--done {
-  border-color: rgba(34, 197, 94, 0.28);
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--text-primary);
-}
-
-.paths-scene-banner__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-}
-
-.paths-scene-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.45rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.06);
-  color: var(--text-secondary);
-  font-size: 0.88rem;
 }
 
 .paths-scene-banner__actions {
@@ -2669,7 +2399,6 @@ onUnmounted(() => {
     padding: 12px 14px;
   }
 
-  .paths-scene-banner__meta,
   .path-overview-card__brief {
     grid-template-columns: 1fr;
   }

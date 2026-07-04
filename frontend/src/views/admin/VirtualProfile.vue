@@ -20,8 +20,8 @@
         </div>
       </div>
       <div class="page-header__actions">
-        <el-button type="primary" @click="showVirtualCredentials">登录账号</el-button>
-        <el-button plain @click="openLatestSessionInspector">最近诊断</el-button>
+        <el-button type="primary" @click="openProjectionDialog">投影入口</el-button>
+        <el-button plain @click="openLatestSessionInspector">最近会话诊断</el-button>
         <el-dropdown trigger="click">
           <el-button>
             更多
@@ -45,7 +45,6 @@
               <div class="panel-head panel-head--profile">
                 <div class="panel-head__title-wrap">
                   <div class="panel-title">人物概览</div>
-                  <div class="panel-meta">保留长期人物底座，具体冲突和开场由故事目录承载。</div>
                 </div>
               </div>
               <div class="profile-overview__content">
@@ -58,8 +57,8 @@
                     </div>
                   </div>
                   <div class="profile-summary-card__intro">
-                    <h2>{{ personaHeadline }}</h2>
-                    <p>{{ personaNarrative }}</p>
+                    <h2 class="text-clamp-2">{{ personaHeadline }}</h2>
+                    <p class="text-clamp-3">{{ personaNarrative }}</p>
                   </div>
                 </div>
                 <div class="profile-overview__facts">
@@ -80,16 +79,15 @@
               <div class="trait-grid">
                 <article v-for="item in traitSummaryCards" :key="item.label" class="trait-card">
                   <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
-                  <p>{{ item.helper }}</p>
+                  <strong class="text-clamp-2">{{ item.value }}</strong>
+                  <p v-if="item.helper" class="text-clamp-2">{{ item.helper }}</p>
                 </article>
               </div>
               <el-collapse class="raw-json-collapse">
                 <el-collapse-item name="profile-json">
                   <template #title>
                     <div class="raw-json-collapse__title">
-                      <span>原始画像 JSON</span>
-                      <em>查看 persona 原始结构</em>
+                      <span>画像 JSON（调试）</span>
                     </div>
                   </template>
                   <pre class="raw-json-block">{{ profileRawJson }}</pre>
@@ -114,53 +112,58 @@
               </div>
 
               <div v-if="storySummaries.length" class="story-list story-list--compact">
-            <article
-              v-for="(story, index) in storySummaries"
-              :key="story.key || story.storyId || index"
-              class="story-feature-card"
-              :class="{ active: selectedStoryKey === getStoryKey(story, index) }"
-            >
-              <button type="button" class="story-feature-card__main" @click="selectStory(story, index)">
-                <div class="story-feature-card__head">
-                  <span class="story-feature-card__index">
-                    故事 {{ index + 1 }}
-                  </span>
-                  <span class="story-feature-card__source">{{ getStorySourceLabel(story.sourceType) }}</span>
-                </div>
-                <strong>{{ story.storyTitle || story.title || `故事 ${index + 1}` }}</strong>
-                <p>{{ story.storyOutline || story.storyTriggerEvent || '暂无故事摘要' }}</p>
-                
-                <div v-if="story.pressurePoints && story.pressurePoints.length > 0" class="story-feature-card__pressures">
-                  <span class="pressure-label">💥 对抗剖析点 ({{ story.pressurePoints.length }})：</span>
-                  <div class="pressure-tags">
-                    <el-tag
-                      v-for="(point, idx) in story.pressurePoints"
-                      :key="idx"
-                      size="small"
-                      type="warning"
-                      effect="plain"
-                    >
-                      {{ point }}
-                    </el-tag>
-                  </div>
-                </div>
-                
-                <div class="story-feature-card__lines story-feature-card__lines--inline">
-                  <span>Goal 对话 {{ story.stats?.goalCount || 0 }}</span>
-                  <span>Path 路径 {{ story.stats?.pathCount || 0 }}</span>
-                  <span>Learn 记录 {{ story.stats?.learnCount || 0 }}</span>
-                </div>
-              </button>
-              <div class="story-feature-card__actions">
-                <el-button size="small" type="primary" @click="openStoryOverview(story)">进入学情概览</el-button>
-                <el-button size="small" type="danger" plain @click="deleteStory(story, story.index)">删除</el-button>
-              </div>
-            </article>
-          </div>
+                <article
+                  v-for="(story, index) in storySummaries"
+                  :key="story.key || story.storyId || index"
+                  class="story-feature-card"
+                  :class="{ active: selectedStoryKey === getStoryKey(story, index) }"
+                >
+                  <button type="button" class="story-feature-card__main" @click="selectStory(story, index)">
+                    <div class="story-feature-card__head">
+                      <span class="story-feature-card__index">
+                        故事 {{ index + 1 }}
+                      </span>
+                      <span class="story-feature-card__source">{{ getStorySourceLabel(story.sourceType) }}</span>
+                    </div>
+                    <strong>{{ story.storyTitle || story.title || `故事 ${index + 1}` }}</strong>
+                    <p class="text-clamp-2" :title="story.storyOutline || story.storyTriggerEvent || ''">
+                      {{ summarizeStory(story.storyOutline || story.storyTriggerEvent || '未填写摘要', 56) }}
+                    </p>
 
-          <div v-else class="empty-box">当前还没有故事条目。先生成 1 个故事，再从该故事开始观察。</div>
-        </section>
-      </el-tab-pane>
+                    <div v-if="story.pressurePoints && story.pressurePoints.length > 0" class="story-feature-card__pressures">
+                      <span class="pressure-label">压力点 {{ story.pressurePoints.length }}</span>
+                      <div class="pressure-tags">
+                        <el-tag
+                          v-for="(point, idx) in story.pressurePoints.slice(0, 3)"
+                          :key="idx"
+                          size="small"
+                          type="warning"
+                          effect="plain"
+                        >
+                          {{ summarizeStory(point, 18) }}
+                        </el-tag>
+                        <el-tag v-if="story.pressurePoints.length > 3" size="small" effect="plain">
+                          +{{ story.pressurePoints.length - 3 }}
+                        </el-tag>
+                      </div>
+                    </div>
+
+                    <div class="story-feature-card__lines story-feature-card__lines--inline">
+                      <span>Goal {{ story.stats?.goalCount || 0 }}</span>
+                      <span>Path {{ story.stats?.pathCount || 0 }}</span>
+                      <span>Learn {{ story.stats?.learnCount || 0 }}</span>
+                    </div>
+                  </button>
+                  <div class="story-feature-card__actions">
+                    <el-button size="small" type="primary" @click="openStoryOverview(story)">学情概览</el-button>
+                    <el-button size="small" type="danger" plain @click="deleteStory(story, story.index)">删除</el-button>
+                  </div>
+                </article>
+              </div>
+
+              <div v-else class="empty-box">还没有故事</div>
+            </section>
+          </el-tab-pane>
 
       <!-- Tab 3: 运行历史 -->
       <el-tab-pane name="sessions">
@@ -170,16 +173,14 @@
 
         <section class="panel">
           <div class="panel-head">
-            <div class="panel-title">全部运行历史</div>
-            <div class="panel-meta">跨故事 · 共 {{ sessions.length }} 个会话</div>
+            <div class="panel-title">运行历史</div>
+            <div class="panel-meta">{{ sessions.length }} 个会话</div>
           </div>
 
           <template v-if="sessions.length === 0 && !loading">
             <div class="empty-session-state">
-              <div class="empty-session-icon">📋</div>
-              <h3>还没有创建过会话</h3>
-              <p>先从某个故事启动一次运行。</p>
-              <el-button type="primary" @click="handleStartSession">创建第一个会话</el-button>
+              <h3>还没有会话</h3>
+              <el-button type="primary" @click="handleStartSession">创建会话</el-button>
             </div>
           </template>
           <template v-else>
@@ -252,50 +253,48 @@
 </main>
 
     <el-dialog v-model="editDialogVisible" title="编辑画像" width="640px" destroy-on-close>
-      <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
+        <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
         <el-form-item label="学习者称呼" prop="name">
-          <el-input v-model="formData.name" placeholder="这个虚拟学习者怎么称呼，如：小林 / 王姐 / 店长A" />
+          <el-input v-model="formData.name" placeholder="如：小林 / 王姐 / 店长A" />
         </el-form-item>
-        <div class="panel-meta">用于在人物详情、会话和故事中称呼这个学习者。</div>
-        <el-divider>基础身份</el-divider>
+          <el-divider>基础身份</el-divider>
         <el-form-item label="年龄">
           <el-input-number v-model="formData.profile.age" :min="18" :max="60" style="width: 120px" />
         </el-form-item>
         <el-form-item label="职业">
-          <el-input v-model="formData.profile.occupation" placeholder="如：产品经理、工程师、学生" />
+          <el-input v-model="formData.profile.occupation" placeholder="如：产品经理" />
         </el-form-item>
         <el-form-item label="学历">
-          <el-input v-model="formData.profile.education" placeholder="如：本科、硕士、大专" />
+          <el-input v-model="formData.profile.education" placeholder="如：本科" />
         </el-form-item>
         <el-form-item label="背景描述">
-          <el-input v-model="formData.profile.background" type="textarea" :rows="2" placeholder="简要背景经历..." />
+          <el-input v-model="formData.profile.background" type="textarea" :rows="2" placeholder="简要背景" />
         </el-form-item>
         <el-divider>稳定特质</el-divider>
-        <div class="panel-meta panel-meta--block">这组字段描述这个人长期稳定的表达习惯、求助方式和受压反应。</div>
         <el-form-item label="核心人格">
-          <el-input v-model="formData.profile.corePersonality" placeholder="如：遇到真实压力时会先保留判断，不会一上来把话说满" />
+          <el-input v-model="formData.profile.corePersonality" placeholder="长期反应特征" />
         </el-form-item>
         <el-form-item label="情感底色">
-          <el-input v-model="formData.profile.emotionalBaseline" type="textarea" :rows="2" placeholder="如：平时不一定明显表达，但在连续受挫或公开出错时会明显紧张" />
+          <el-input v-model="formData.profile.emotionalBaseline" type="textarea" :rows="2" placeholder="常见情绪基调" />
         </el-form-item>
         <el-form-item label="求助模式">
-          <el-input v-model="formData.profile.helpSeekingPattern" type="textarea" :rows="2" placeholder="如：先自己试，卡两次才问；一旦开口就希望对方给具体例子" />
+          <el-input v-model="formData.profile.helpSeekingPattern" type="textarea" :rows="2" placeholder="遇阻时怎么求助" />
         </el-form-item>
         <el-form-item label="对抗模式">
-          <el-input v-model="formData.profile.adversarialPattern" type="textarea" :rows="2" placeholder="如：建议太理想化时，会先说时间不够或条件不允许" />
+          <el-input v-model="formData.profile.adversarialPattern" type="textarea" :rows="2" placeholder="不认同时的反应" />
         </el-form-item>
         <el-form-item label="元认知特征">
-          <el-input v-model="formData.profile.metacognitiveProfile" type="textarea" :rows="2" placeholder="如：能感觉到自己没懂，但不太会立刻说清具体卡点" />
+          <el-input v-model="formData.profile.metacognitiveProfile" type="textarea" :rows="2" placeholder="如何觉察卡点" />
         </el-form-item>
         <el-form-item label="负荷容忍度">
-          <el-input v-model="formData.profile.cognitiveLoadTolerance" placeholder="如：信息一多就容易先抓表面，之后才慢慢整理重点" />
+          <el-input v-model="formData.profile.cognitiveLoadTolerance" placeholder="信息过载时的反应" />
         </el-form-item>
         <el-form-item label="纠错方式">
-          <el-input v-model="formData.profile.memoryRepairPattern" placeholder="如：忘了会先模糊带过，被追问后才承认没记住" />
+          <el-input v-model="formData.profile.memoryRepairPattern" placeholder="出错后的修正方式" />
         </el-form-item>
         <el-divider>内部信息</el-divider>
         <el-form-item label="管理员备注">
-          <el-input v-model="formData.notes" type="textarea" :rows="2" placeholder="仅管理员可见的补充说明" />
+          <el-input v-model="formData.notes" type="textarea" :rows="2" placeholder="管理员备注" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -307,39 +306,39 @@
     <el-dialog v-model="storyEditDialogVisible" :title="storyEditDialogTitle" width="640px" destroy-on-close>
       <el-form ref="storyFormRef" :model="storyFormData" :rules="storyFormRules" label-width="100px">
         <el-form-item label="故事标题" prop="title">
-          <el-input v-model="storyFormData.title" maxlength="80" show-word-limit placeholder="如：第一次独立做复盘时卡住" />
+          <el-input v-model="storyFormData.title" maxlength="80" show-word-limit placeholder="如：第一次独立复盘" />
         </el-form-item>
         <el-form-item label="故事摘要" prop="storyOutline">
-          <el-input v-model="storyFormData.storyOutline" type="textarea" :rows="4" maxlength="300" show-word-limit placeholder="用 2-4 句描述这个具体场景、前因后果和卡点。" />
+          <el-input v-model="storyFormData.storyOutline" type="textarea" :rows="4" maxlength="300" show-word-limit placeholder="简要场景与卡点" />
         </el-form-item>
         <el-form-item label="触发事件" prop="storyTriggerEvent">
-          <el-input v-model="storyFormData.storyTriggerEvent" type="textarea" :rows="3" maxlength="160" show-word-limit placeholder="如：明天要向主管汇报，但她发现自己还说不清关键问题。" />
+          <el-input v-model="storyFormData.storyTriggerEvent" type="textarea" :rows="3" maxlength="160" show-word-limit placeholder="触发事件" />
         </el-form-item>
         <el-form-item label="自然开场" prop="visibleOpening">
-          <el-input v-model="storyFormData.visibleOpening" type="textarea" :rows="3" maxlength="180" show-word-limit placeholder="如果是真人第一轮开口，他最可能怎么说。" />
+          <el-input v-model="storyFormData.visibleOpening" type="textarea" :rows="3" maxlength="180" show-word-limit placeholder="第一轮开场" />
         </el-form-item>
         <el-form-item label="压力点" prop="pressurePointsText">
-          <el-input v-model="storyFormData.pressurePointsText" type="textarea" :rows="3" maxlength="240" show-word-limit placeholder="每行一个压力点，如：害怕在主管面前讲不清楚&#10;担心临时被追问细节" />
+          <el-input v-model="storyFormData.pressurePointsText" type="textarea" :rows="3" maxlength="240" show-word-limit placeholder="每行一个压力点" />
         </el-form-item>
         <el-divider>问题基础</el-divider>
         <el-form-item label="熟悉度">
-          <el-select v-model="storyFormData.problemKnowledge.domainFamiliarity" placeholder="当前问题熟悉度">
+          <el-select v-model="storyFormData.problemKnowledge.domainFamiliarity" placeholder="选择熟悉度">
             <el-option label="低" value="low" />
             <el-option label="中" value="medium" />
             <el-option label="高" value="high" />
           </el-select>
         </el-form-item>
         <el-form-item label="已经会的">
-          <el-input v-model="storyFormData.problemKnowledge.knownConceptsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个，写这次问题里已经会的点" />
+          <el-input v-model="storyFormData.problemKnowledge.knownConceptsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个已掌握点" />
         </el-form-item>
         <el-form-item label="容易卡的">
-          <el-input v-model="storyFormData.problemKnowledge.struggleConceptsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个，写这次问题里容易卡的点" />
+          <el-input v-model="storyFormData.problemKnowledge.struggleConceptsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个卡点" />
         </el-form-item>
         <el-form-item label="自我判断">
-          <el-input v-model="storyFormData.problemKnowledge.selfAssessment" type="textarea" :rows="2" maxlength="180" show-word-limit placeholder="这个人会怎么描述自己在这件事上的基础" />
+          <el-input v-model="storyFormData.problemKnowledge.selfAssessment" type="textarea" :rows="2" maxlength="180" show-word-limit placeholder="自我判断" />
         </el-form-item>
         <el-form-item label="隐藏缺口">
-          <el-input v-model="storyFormData.problemKnowledge.hiddenGapsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个，写他自己未必意识到的缺口" />
+          <el-input v-model="storyFormData.problemKnowledge.hiddenGapsText" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="每行一个隐藏缺口" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -348,40 +347,22 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="projectionDialogVisible" title="投影入口" width="720px" destroy-on-close>
+    <el-dialog v-model="projectionDialogVisible" title="前台 / 调试入口" width="720px" destroy-on-close>
       <div class="projection-runtime" v-loading="projectionLoading">
         <template v-if="testProjection">
-          <section class="projection-runtime__summary">
-            <article class="projection-runtime__card">
-              <span>当前账号</span>
-              <strong>{{ testProjection.profile?.userName || profileData?.userName || '--' }}</strong>
-              <em>{{ testProjection.profile?.email || profileData?.email || '账号待同步' }}</em>
-            </article>
-            <article class="projection-runtime__card">
-              <span>当前故事</span>
-              <strong>{{ testProjection.activeStory?.title || '未进入故事' }}</strong>
-              <em>{{ testProjection.activeStory?.triggerEvent || '当前还没有 story 运行态' }}</em>
-            </article>
-            <article class="projection-runtime__card">
-              <span>最近运行</span>
-              <strong>{{ projectionSessionLabel }}</strong>
-              <em>{{ projectionSessionMeta }}</em>
-            </article>
-          </section>
-
           <section class="projection-runtime__focus">
             <div>
-              <div class="panel-title">推荐入口</div>
-              <div class="panel-meta">{{ testProjection.recommendedReason }}</div>
+              <div class="panel-title">建议入口</div>
+              <div class="panel-meta text-clamp-2">{{ projectionSummary }}</div>
             </div>
-            <el-button type="primary" @click="openProjectionEntry(testProjection.recommendedEntry)">
+            <el-button plain @click="openProjectionEntry(testProjection.recommendedEntry)">
               打开{{ projectionEntryLabelMap[testProjection.recommendedEntry] }}
             </el-button>
           </section>
 
           <section class="projection-runtime__section">
-            <div class="panel-title">前台投影</div>
-            <div class="projection-runtime__actions">
+              <div class="panel-title">前台入口</div>
+              <div class="projection-runtime__actions">
               <el-button @click="openProjectionEntry('dashboard')">Dashboard</el-button>
               <el-button :disabled="!testProjection.entries?.formal?.goal" @click="openProjectionEntry('goal')">Goal</el-button>
               <el-button :disabled="!testProjection.entries?.formal?.path" @click="openProjectionEntry('path')">Path</el-button>
@@ -390,8 +371,8 @@
           </section>
 
           <section class="projection-runtime__section">
-            <div class="panel-title">Test 调试</div>
-            <div class="projection-runtime__actions">
+              <div class="panel-title">调试入口</div>
+              <div class="projection-runtime__actions">
               <el-button plain :disabled="!testProjection.entries?.test?.goal" @click="openTestDebugEntry('goal')">调试 Goal</el-button>
               <el-button plain :disabled="!testProjection.entries?.test?.path" @click="openTestDebugEntry('path')">调试 Path</el-button>
               <el-button plain :disabled="!testProjection.entries?.test?.learn" @click="openTestDebugEntry('learn')">调试 Learn</el-button>
@@ -441,6 +422,16 @@ const projectionEntryLabelMap: Record<string, string> = {
   goal: 'Goal',
   path: 'Path',
   learn: 'Learn'
+}
+
+const summarizeStory = (value: string, limit = 84) => {
+  if (!value) return ''
+  const compact = value.replace(/\s+/g, ' ').trim()
+  return compact.length > limit ? `${compact.slice(0, limit)}...` : compact
+}
+
+const compactText = (value: string | null | undefined, fallback = '--', limit = 72) => {
+  return summarizeStory(value || fallback, limit)
 }
 
 const formData = ref({
@@ -549,13 +540,20 @@ const projectionCards = computed(() => [
 
 const personaHeadline = computed(() => {
   const occupation = profileData.value?.profile?.occupation || '学习者'
-  const summary = profileData.value?.profile?.behavioralProfileSummary || profileData.value?.profile?.corePersonality || '带着真实限制来求助'
+  const summary = compactText(
+    profileData.value?.profile?.behavioralProfileSummary || profileData.value?.profile?.corePersonality,
+    '带着真实限制来求助',
+    40
+  )
   return `${occupation}，${summary}`
 })
 
 const personaNarrative = computed(() => {
-  return profileData.value?.profile?.background
-    || '这是一个长期稳定的人物底座。具体某一次 session 的冲突、触发点和开场表达，由下方故事池决定。'
+  return compactText(
+    profileData.value?.profile?.background,
+    '稳定人物底座，具体冲突看下方故事。',
+    96
+  )
 })
 
 const personaFactCards = computed(() => [
@@ -570,28 +568,40 @@ const traitSummaryCards = computed(() => {
   return [
     {
       label: '核心人格',
-      value: p.corePersonality || '会先从眼前场景判断有没有用，不会轻易接受脱离现实的建议。',
-      helper: p.behavioralProfileSummary || '这是这个人物更长期的表达与反应基线。'
+      value: compactText(
+        p.corePersonality || p.behavioralProfileSummary,
+        '先判断建议是否贴近现实。',
+        44
+      ),
+      helper: p.behavioralProfileSummary ? summarizeStory(p.behavioralProfileSummary, 52) : ''
     },
     {
       label: '情感底色',
-      value: p.emotionalBaseline || '平时未显性表达，但会受真实压力影响',
-      helper: '重点看他在压力上来时，情绪会怎么外露。'
+      value: compactText(p.emotionalBaseline, '压力上来时才更明显。', 44),
+      helper: ''
     },
     {
       label: '求助与对抗',
-      value: p.helpSeekingPattern || '遇到卡点时会按自己的节奏决定何时开口求助',
-      helper: p.adversarialPattern || '当建议不贴脸时，可能会先保留或确认，而不是立即接受'
+      value: compactText(p.helpSeekingPattern, '遇到卡点后会按自己的节奏求助。', 44),
+      helper: p.adversarialPattern ? summarizeStory(p.adversarialPattern, 52) : ''
     },
     {
       label: '自我觉察',
-      value: p.selfAwarenessPattern || p.metacognitiveProfile || '能感觉到自己不顺，但不一定会马上说清根因。',
-      helper: p.planningFollowThrough || p.selfRegulationStyle || '会怎么计划、掉队后怎么补，是这个人的长期执行习惯。'
+      value: compactText(
+        p.selfAwarenessPattern || p.metacognitiveProfile,
+        '能感觉到不顺，但未必马上说清。',
+        44
+      ),
+      helper: summarizeStory(p.planningFollowThrough || p.selfRegulationStyle || '', 52)
     },
     {
       label: '负荷反应',
-      value: p.overloadReaction || p.cognitiveLoadTolerance || '信息一多时，会先抓最表面的可执行点。',
-      helper: p.memoryRepairPattern || '忘了或没完全懂时，通常会先模糊带过，再慢慢承认或修正。'
+      value: compactText(
+        p.overloadReaction || p.cognitiveLoadTolerance,
+        '信息一多时会先抓可执行点。',
+        44
+      ),
+      helper: p.memoryRepairPattern ? summarizeStory(p.memoryRepairPattern, 52) : ''
     }
   ]
 })
@@ -610,6 +620,22 @@ const projectionSessionLabel = computed(() => {
 const projectionSessionMeta = computed(() => {
   if (!testProjection.value?.latestSession?.updatedAt) return '当前还没有运行记录'
   return `最近活跃 ${formatRelativeTime(testProjection.value.latestSession.updatedAt)}`
+})
+
+const projectionSummary = computed(() => {
+  if (!testProjection.value) return ''
+
+  const parts = [compactText(testProjection.value.recommendedReason, '', 36)]
+
+  if (testProjection.value.activeStory?.title) {
+    parts.push(`故事 ${summarizeStory(testProjection.value.activeStory.title, 18)}`)
+  }
+
+  if (projectionSessionMeta.value !== '当前还没有运行记录') {
+    parts.push(projectionSessionMeta.value)
+  }
+
+  return summarizeStory(parts.filter(Boolean).join(' · '), 72)
 })
 
 const getAvailableTimeLabel = (value?: string) => {
@@ -960,7 +986,7 @@ const openLatestSessionInspector = () => {
   openSessionInspector(latestProjectionSession.value.id)
 }
 
-const showVirtualCredentials = async () => {
+const openProjectionDialog = async () => {
   if (!profileData.value?.id) {
     ElMessage.warning('当前账号信息不完整')
     return
@@ -1233,6 +1259,21 @@ watch(() => route.params.storyId, () => {
   font-size: 12px;
 }
 
+.text-clamp-2,
+.text-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.text-clamp-3 {
+  -webkit-line-clamp: 3;
+}
+
 .layout {
   display: flex;
   flex-direction: column;
@@ -1329,41 +1370,11 @@ watch(() => route.params.storyId, () => {
   gap: 16px;
 }
 
-.projection-runtime__summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.projection-runtime__card,
 .projection-runtime__focus,
 .projection-runtime__section {
   border: 1px solid #e5eaf2;
   border-radius: 14px;
   background: #fff;
-}
-
-.projection-runtime__card {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-}
-
-.projection-runtime__card span {
-  font-size: 12px;
-  color: #8b94a6;
-}
-
-.projection-runtime__card strong {
-  font-size: 15px;
-  color: #1f2937;
-}
-
-.projection-runtime__card em {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #607086;
-  font-style: normal;
 }
 
 .projection-runtime__focus {
@@ -2097,17 +2108,8 @@ watch(() => route.params.storyId, () => {
 }
 
 .raw-json-collapse__title {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
   font-size: 13px;
   color: #425066;
-}
-
-.raw-json-collapse__title em {
-  font-style: normal;
-  font-size: 12px;
-  color: #8b94a6;
 }
 
 .raw-json-block {
@@ -2122,6 +2124,7 @@ watch(() => route.params.storyId, () => {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-x: auto;
+  max-height: 280px;
 }
 
 .trait-grid {
@@ -2205,7 +2208,6 @@ watch(() => route.params.storyId, () => {
   .trait-grid,
   .engine-grid,
   .projection-grid,
-  .projection-runtime__summary,
   .story-grid,
   .story-stage-grid {
     grid-template-columns: 1fr;
