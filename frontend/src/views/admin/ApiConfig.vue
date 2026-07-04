@@ -1,248 +1,224 @@
 <template>
   <div class="admin-page api-config-page">
     <AdminPageHeader
-      title="API 管理"
+      title="模型接入与路由"
       :icon="Setting"
       :highlights="apiConfigHighlights"
     >
       <template #actions>
-        <el-button class="topbar-btn" @click="loadConfig" :loading="loading">刷新</el-button>
-        <el-button type="primary" class="topbar-btn topbar-btn--primary" @click="saveConfig" :loading="saving">保存</el-button>
+        <el-button class="topbar-btn" @click="loadConfig" :loading="loading">刷新配置</el-button>
+        <el-button type="primary" class="topbar-btn topbar-btn--primary" @click="saveConfig" :loading="saving">保存变更</el-button>
       </template>
     </AdminPageHeader>
 
-    <section class="signal-strip">
-      <article class="signal-tile" :class="`signal-tile--${connectionTone}`">
+    <section class="summary-strip">
+      <div class="summary-strip__item">
         <span>连接</span>
         <strong>{{ connectionStateLabel }}</strong>
-        <em>{{ lastFetchLabel }}</em>
-      </article>
-      <article class="signal-tile">
-        <span>Endpoint</span>
-        <strong>{{ compactApiUrl }}</strong>
-        <em>{{ keyStateLabel }}</em>
-      </article>
-      <article class="signal-tile">
-        <span>目录</span>
-        <strong>{{ form.availableModels.length }}</strong>
-        <em>{{ primaryModelLabel }}</em>
-      </article>
-      <article class="signal-tile" :class="`signal-tile--${modelTestTone}`">
-        <span>测试</span>
-        <strong>{{ modelTestStateLabel }}</strong>
-        <em>{{ modelTestResult?.model || modelTestForm.model || 'NO MODEL' }}</em>
-      </article>
+      </div>
+      <div class="summary-strip__item">
+        <span>密钥</span>
+        <strong>{{ keyStateLabel }}</strong>
+      </div>
+      <div class="summary-strip__item">
+        <span>模型目录</span>
+        <strong>{{ form.availableModels.length }} 个模型</strong>
+      </div>
+      <div class="summary-strip__item">
+        <span>默认路由</span>
+        <strong>{{ routeFillCount }}/3 已设置</strong>
+      </div>
     </section>
 
-    <div class="workbench-grid">
-      <section class="studio-card studio-card--primary">
-        <div class="studio-card__head">
-          <div>
-            <span class="studio-card__eyebrow">CONFIG</span>
-            <h2>接入与路由</h2>
-          </div>
-          <span class="head-badge">{{ routeFillCount }}/3</span>
+    <section class="flow-section">
+      <div class="flow-section__head">
+        <div>
+          <h2>接入</h2>
+        </div>
+      </div>
+
+      <el-form :model="form" label-position="top" class="config-form">
+        <div class="field-grid field-grid--two">
+          <el-form-item label="服务地址">
+            <el-input v-model="form.apiUrl" placeholder="https://api.example.com/v1" />
+          </el-form-item>
+
+          <el-form-item label="API Key">
+            <el-input
+              v-model="form.apiKeyInput"
+              type="password"
+              show-password
+              :placeholder="form.apiKeyConfigured ? '留空则沿用' : '输入 API Key'"
+            />
+          </el-form-item>
+        </div>
+      </el-form>
+
+      <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
+        <span>{{ testResult.message }}</span>
+      </div>
+    </section>
+
+    <section class="flow-section">
+      <div class="flow-section__head flow-section__head--split">
+        <div>
+          <h2>模型目录</h2>
+        </div>
+        <div class="flow-section__meta-actions">
+          <span class="section-meta">最近拉取：{{ lastFetchLabel }}</span>
+          <el-button class="api-btn api-btn--ghost" @click="fetchModels" :loading="testing">连接并拉取模型</el-button>
+        </div>
+      </div>
+
+      <div class="model-directory-panel">
+        <div class="directory-summary">
+          <span>当前收录</span>
+          <strong>{{ form.availableModels.length }} 个模型</strong>
         </div>
 
-        <el-form :model="form" label-position="top" class="config-form">
-          <section class="form-block">
-            <div class="form-block__title">接入</div>
-            <div class="field-grid field-grid--two">
-              <el-form-item label="服务地址">
-                <el-input v-model="form.apiUrl" placeholder="http://localhost:3000" />
-              </el-form-item>
+        <div v-if="form.availableModels.length" class="model-chip-list">
+          <span v-for="model in form.availableModels" :key="model" class="model-chip">{{ model }}</span>
+        </div>
+        <el-empty v-else description="暂无模型" :image-size="56" />
 
-              <el-form-item label="API Key">
-                <el-input
-                  v-model="form.apiKeyInput"
-                  type="password"
-                  show-password
-                  :placeholder="form.apiKeyConfigured ? '留空沿用' : '输入 API Key'"
-                />
-              </el-form-item>
-            </div>
-          </section>
+        <el-form :model="form" label-position="top" class="config-form config-form--tight">
+          <el-form-item label="可用模型">
+            <el-select
+              v-model="form.availableModels"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择或补充模型"
+            >
+              <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
 
-          <section class="form-block">
-            <div class="form-block__row">
-              <div class="form-block__title">目录</div>
-              <div class="inline-actions">
-                <el-button class="api-btn api-btn--ghost" @click="fetchModels" :loading="testing">获取模型</el-button>
-                <span v-if="testResult" class="inline-status" :class="{ 'is-success': testResult.connected, 'is-error': !testResult.connected }">
-                  {{ testResult.message }}
-                </span>
-              </div>
-            </div>
-
-            <div class="field-stack">
-              <el-form-item label="可用模型">
-                <el-select
-                  v-model="form.availableModels"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="手动补充">
-                <el-input v-model="manualModelInput" placeholder="model-a, model-b">
-                  <template #append>
-                    <el-button class="api-append-btn" @click="appendManualModels">添加</el-button>
-                  </template>
-                </el-input>
-              </el-form-item>
-            </div>
-          </section>
-
-          <section class="form-block">
-            <div class="form-block__title">路由</div>
-            <div class="field-grid field-grid--three">
-              <el-form-item label="默认模型">
-                <el-select
-                  v-model="form.defaultModel"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="默认模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="推理模型">
-                <el-select
-                  v-model="form.defaultReasoningModel"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="推理模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="评估模型">
-                <el-select
-                  v-model="form.defaultEvaluationModel"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="评估模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-            </div>
-          </section>
+          <el-form-item label="手动补充">
+            <el-input v-model="manualModelInput" placeholder="model-a, model-b">
+              <template #append>
+                <el-button class="api-append-btn" @click="appendManualModels">添加</el-button>
+              </template>
+            </el-input>
+          </el-form-item>
         </el-form>
-      </section>
+      </div>
+    </section>
 
-      <section class="side-column">
-        <section class="studio-card studio-card--status">
-          <div class="studio-card__head">
-            <div>
-              <span class="studio-card__eyebrow">STATE</span>
-              <h2>状态</h2>
-            </div>
+    <section class="flow-section">
+      <div class="flow-section__head">
+        <div>
+          <h2>默认路由</h2>
+        </div>
+        <span class="section-meta">{{ routeFillCount }}/3 已设置</span>
+      </div>
+
+      <el-form :model="form" label-position="top" class="config-form">
+        <div class="field-grid field-grid--three">
+          <el-form-item label="对话默认">
+            <el-select
+              v-model="form.defaultModel"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择对话默认模型"
+            >
+              <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="推理默认">
+            <el-select
+              v-model="form.defaultReasoningModel"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择推理默认模型"
+            >
+              <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="评估默认">
+            <el-select
+              v-model="form.defaultEvaluationModel"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择评估默认模型"
+            >
+              <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+        </div>
+      </el-form>
+    </section>
+
+    <section class="flow-section">
+      <div class="flow-section__head flow-section__head--split">
+        <div>
+          <h2>验证</h2>
+        </div>
+        <span class="head-badge" :class="`head-badge--${modelTestTone}`">{{ modelTestStateLabel }}</span>
+      </div>
+
+      <el-form :model="modelTestForm" label-position="top" class="test-form">
+        <div class="field-grid field-grid--test">
+          <el-form-item label="测试模型">
+            <el-select
+              v-model="modelTestForm.model"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择测试模型"
+            >
+              <el-option v-for="model in modelOptions" :key="`test-${model}`" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="温度">
+            <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" />
+          </el-form-item>
+
+          <el-form-item label="最大输出">
+            <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="提示词">
+          <el-input
+            v-model="modelTestForm.prompt"
+            class="lab-textarea"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入测试提示词"
+          />
+        </el-form-item>
+      </el-form>
+
+      <div class="terminal-actions">
+        <el-button class="api-btn api-btn--primary" @click="runModelTest" :loading="modelTesting">运行测试</el-button>
+      </div>
+
+      <div class="result-panel" :class="{ 'is-error': modelTestResult && !modelTestResult.success }">
+        <div class="result-meta-grid">
+          <div class="result-meta">
+            <span>模型</span>
+            <strong>{{ modelTestResult?.model || modelTestForm.model || '--' }}</strong>
           </div>
-
-          <div class="status-grid">
-            <div class="status-chip">
-              <span>连接</span>
-              <strong>{{ connectionStateLabel }}</strong>
-            </div>
-            <div class="status-chip">
-              <span>API Key</span>
-              <strong>{{ keyStateLabel }}</strong>
-            </div>
-            <div class="status-chip status-chip--wide">
-              <span>Endpoint</span>
-              <strong class="break-all">{{ compactApiUrl }}</strong>
-            </div>
-            <div class="status-chip">
-              <span>模型数</span>
-              <strong>{{ form.availableModels.length }}</strong>
-            </div>
-            <div class="status-chip">
-              <span>默认模型</span>
-              <strong>{{ form.defaultModel || '--' }}</strong>
-            </div>
-            <div class="status-chip">
-              <span>最近拉取</span>
-              <strong>{{ lastFetchLabel }}</strong>
-            </div>
+          <div class="result-meta">
+            <span>耗时</span>
+            <strong>{{ modelTestResult?.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
           </div>
-        </section>
-
-        <section class="studio-card studio-card--terminal">
-          <div class="studio-card__head">
-            <div>
-              <span class="studio-card__eyebrow">TEST</span>
-              <h2>模型测试</h2>
-            </div>
-            <span class="head-badge" :class="`head-badge--${modelTestTone}`">{{ modelTestStateLabel }}</span>
+          <div class="result-meta">
+            <span>Tokens</span>
+            <strong>{{ modelTestResult ? formatUsage(modelTestResult.usage) : '--' }}</strong>
           </div>
-
-          <el-form :model="modelTestForm" label-position="top" class="test-form">
-            <div class="field-grid field-grid--test">
-              <el-form-item label="测试模型">
-                <el-select
-                  v-model="modelTestForm.model"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="测试模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`test-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="温度">
-                <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" />
-              </el-form-item>
-
-              <el-form-item label="最大输出">
-                <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" />
-              </el-form-item>
-            </div>
-
-            <el-form-item label="提示词">
-              <el-input
-                v-model="modelTestForm.prompt"
-                class="lab-textarea"
-                type="textarea"
-                :rows="4"
-                placeholder="请输入测试提示词"
-              />
-            </el-form-item>
-          </el-form>
-
-          <div class="terminal-actions">
-            <el-button class="api-btn api-btn--primary" @click="runModelTest" :loading="modelTesting">运行测试</el-button>
-          </div>
-
-          <div class="terminal-panel" :class="{ 'is-error': modelTestResult && !modelTestResult.success }">
-            <div class="terminal-meta">
-              <span>MODEL</span>
-              <strong>{{ modelTestResult?.model || modelTestForm.model || '--' }}</strong>
-            </div>
-            <div class="terminal-meta">
-              <span>LATENCY</span>
-              <strong>{{ modelTestResult?.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
-            </div>
-            <div class="terminal-meta">
-              <span>TOKENS</span>
-              <strong>{{ modelTestResult ? formatUsage(modelTestResult.usage) : '--' }}</strong>
-            </div>
-            <pre class="terminal-output">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : 'READY' }}</pre>
-          </div>
-        </section>
-      </section>
-    </div>
+        </div>
+        <pre class="result-output">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : '--' }}</pre>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -292,8 +268,8 @@ const modelTestForm = reactive({
 const apiConfigHighlights = computed(() => [
   { label: connectionStateLabel.value, tone: connectionTone.value },
   { label: keyStateLabel.value, tone: form.apiKeyConfigured ? 'success' as const : 'danger' as const },
-  { label: `${form.availableModels.length} Models`, tone: 'neutral' as const },
-  { label: modelTestStateLabel.value, tone: modelTestTone.value }
+  { label: `${form.availableModels.length} 个模型`, tone: 'neutral' as const },
+  { label: `${routeFillCount.value}/3 已设置`, tone: routeFillCount.value === 3 ? 'success' as const : 'neutral' as const }
 ])
 
 const connectionStateLabel = computed(() => {
@@ -315,7 +291,7 @@ const connectionTone = computed<'info' | 'success' | 'warning' | 'danger' | 'neu
 
 const modelTestStateLabel = computed(() => {
   if (modelTesting.value) return '测试中'
-  if (!modelTestResult.value) return '待执行'
+  if (!modelTestResult.value) return '未执行'
   return modelTestResult.value.success ? '测试通过' : '测试失败'
 })
 
@@ -326,10 +302,9 @@ const modelTestTone = computed<'info' | 'success' | 'warning' | 'danger' | 'neut
 })
 
 const compactApiUrl = computed(() => form.apiUrl || '未配置')
-const keyStateLabel = computed(() => form.apiKeyConfigured ? 'KEY READY' : 'KEY EMPTY')
-const primaryModelLabel = computed(() => form.defaultModel || form.defaultReasoningModel || form.defaultEvaluationModel || 'NO DEFAULT')
+const keyStateLabel = computed(() => form.apiKeyConfigured ? '已配置密钥' : '未配置密钥')
 const routeFillCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
-const lastFetchLabel = computed(() => lastFetchAt.value || '未拉取')
+const lastFetchLabel = computed(() => lastFetchAt.value || '--')
 
 async function loadConfig() {
   loading.value = true;
@@ -406,7 +381,7 @@ async function fetchModels() {
       connected: true,
       message: Array.isArray(models) && models.length > 0
         ? `已获取 ${models.length} 个模型`
-        : `连接成功，发现 ${response.data?.data?.modelsCount ?? 0} 个模型（接口未返回具体列表）`
+        : `连接成功`
     };
     toast.success('模型列表获取成功');
   } catch (error: any) {
@@ -484,6 +459,160 @@ onMounted(() => {
   gap: 18px;
 }
 
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid rgba(223, 231, 243, 0.92);
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(248, 250, 255, 0.88);
+}
+
+.summary-strip__item {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+}
+
+.summary-strip__item + .summary-strip__item {
+  border-left: 1px solid rgba(223, 231, 243, 0.92);
+}
+
+.summary-strip__item span {
+  font-size: 12px;
+  color: #7b8ba3;
+  font-weight: 700;
+}
+
+.summary-strip__item strong {
+  color: #22344d;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.flow-section {
+  display: grid;
+  gap: 16px;
+  padding: 18px 0 22px;
+  border-bottom: 1px solid rgba(223, 231, 243, 0.92);
+}
+
+.flow-section:last-child {
+  border-bottom: none;
+}
+
+.flow-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.flow-section__head--split {
+  flex-wrap: wrap;
+}
+
+.flow-section__head h2 {
+  margin: 0;
+  color: #20324d;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.flow-section__head p {
+  margin: 6px 0 0;
+  color: #7085a6;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.flow-section__meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-meta {
+  font-size: 12px;
+  color: #7085a6;
+  font-weight: 700;
+}
+
+.issue-row {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(223, 231, 243, 0.92);
+  background: rgba(248, 250, 255, 0.76);
+  color: #43566f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.issue-row--success {
+  border-color: rgba(67, 193, 120, 0.22);
+  background: rgba(245, 255, 248, 0.9);
+  color: #237b4a;
+}
+
+.issue-row--danger {
+  border-color: rgba(233, 82, 82, 0.22);
+  background: rgba(255, 247, 247, 0.92);
+  color: #b64349;
+}
+
+.model-directory-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.directory-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.directory-summary span {
+  font-size: 12px;
+  color: #7b8ba3;
+  font-weight: 700;
+}
+
+.directory-summary strong {
+  color: #22344d;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.model-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.model-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(223, 231, 243, 0.92);
+  background: rgba(248, 250, 255, 0.92);
+  color: #294a80;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.config-form--tight {
+  gap: 14px;
+}
+
 .topbar-btn {
   min-height: 38px;
   padding: 0 16px;
@@ -493,136 +622,6 @@ onMounted(() => {
 
 .topbar-btn--primary {
   box-shadow: 0 14px 26px rgba(52, 120, 246, 0.22);
-}
-
-.signal-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.signal-tile {
-  position: relative;
-  overflow: hidden;
-  padding: 18px 18px 16px;
-  border-radius: 24px;
-  border: 1px solid rgba(206, 220, 244, 0.95);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 255, 0.92));
-  box-shadow: 0 18px 36px rgba(31, 87, 204, 0.08);
-  display: grid;
-  gap: 10px;
-}
-
-.signal-tile::after {
-  content: '';
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, rgba(52, 120, 246, 0.42), rgba(52, 120, 246, 0));
-}
-
-.signal-tile span {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #7788a1;
-}
-
-.signal-tile strong {
-  color: #1f2f47;
-  font-size: 1.3rem;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.03em;
-  word-break: break-word;
-}
-
-.signal-tile em {
-  font-style: normal;
-  color: #69809f;
-  font-size: 12px;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.signal-tile--success {
-  border-color: rgba(67, 193, 120, 0.28);
-  background: linear-gradient(180deg, rgba(249, 255, 251, 0.98), rgba(241, 252, 246, 0.94));
-}
-
-.signal-tile--success::after {
-  background: linear-gradient(90deg, rgba(67, 193, 120, 0.52), rgba(67, 193, 120, 0));
-}
-
-.signal-tile--danger {
-  border-color: rgba(233, 82, 82, 0.24);
-  background: linear-gradient(180deg, rgba(255, 250, 250, 0.98), rgba(255, 244, 245, 0.94));
-}
-
-.signal-tile--danger::after {
-  background: linear-gradient(90deg, rgba(233, 82, 82, 0.5), rgba(233, 82, 82, 0));
-}
-
-.signal-tile--info::after {
-  background: linear-gradient(90deg, rgba(93, 128, 255, 0.52), rgba(93, 128, 255, 0));
-}
-
-.workbench-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
-  gap: 18px;
-}
-
-.side-column {
-  display: grid;
-  gap: 18px;
-  align-content: start;
-}
-
-.studio-card {
-  min-width: 0;
-  padding: 22px;
-  border-radius: 30px;
-  border: 1px solid rgba(211, 221, 240, 0.95);
-  background:
-    radial-gradient(circle at top right, rgba(52, 120, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.94));
-  box-shadow: 0 24px 54px rgba(31, 87, 204, 0.09);
-}
-
-.studio-card--primary {
-  padding: 24px;
-}
-
-.studio-card__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.studio-card__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: #2d67de;
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-}
-
-.studio-card__head h2 {
-  margin: 8px 0 0;
-  color: #20324d;
-  font-size: 1.18rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
 }
 
 .head-badge {
@@ -657,31 +656,6 @@ onMounted(() => {
   gap: 16px;
 }
 
-.form-block {
-  display: grid;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 24px;
-  border: 1px solid rgba(217, 226, 241, 0.94);
-  background: rgba(249, 251, 255, 0.88);
-}
-
-.form-block__title {
-  color: #6f8098;
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.form-block__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .field-grid,
 .field-stack {
   display: grid;
@@ -705,20 +679,6 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.inline-status {
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
-.inline-status.is-success {
-  color: #237b4a;
-}
-
-.inline-status.is-error {
-  color: #b64349;
 }
 
 .api-btn {
@@ -758,41 +718,6 @@ onMounted(() => {
   color: #335aa4;
 }
 
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.status-chip {
-  min-height: 92px;
-  padding: 15px 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(216, 224, 238, 0.92);
-  background: rgba(249, 251, 255, 0.88);
-  display: grid;
-  gap: 10px;
-}
-
-.status-chip--wide {
-  grid-column: span 2;
-}
-
-.status-chip span {
-  color: #7788a1;
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.status-chip strong {
-  color: #20324d;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.45;
-}
-
 .test-form {
   display: grid;
   gap: 14px;
@@ -804,49 +729,54 @@ onMounted(() => {
   justify-content: flex-start;
 }
 
-.terminal-panel {
-  margin-top: 16px;
+.result-panel {
   padding: 16px;
-  border-radius: 24px;
-  border: 1px solid rgba(92, 122, 182, 0.18);
-  background: linear-gradient(180deg, #10192a, #121f35);
-  color: #dbe5ff;
+  border-radius: 18px;
+  border: 1px solid rgba(223, 231, 243, 0.92);
+  background: rgba(248, 250, 255, 0.92);
+  color: #22344d;
   display: grid;
   gap: 12px;
 }
 
-.terminal-panel.is-error {
-  border-color: rgba(233, 82, 82, 0.2);
-  background: linear-gradient(180deg, #2a1219, #231019);
-  color: #ffd8df;
-}
-
-.terminal-meta {
-  display: flex;
-  justify-content: space-between;
+.result-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px dashed rgba(160, 186, 243, 0.18);
 }
 
-.terminal-meta span {
-  color: rgba(183, 200, 236, 0.74);
+.result-panel.is-error {
+  border-color: rgba(233, 82, 82, 0.22);
+  background: rgba(255, 247, 247, 0.94);
+  color: #8f2d3a;
+}
+
+.result-meta {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(203, 214, 233, 0.92);
+}
+
+.result-meta span {
+  color: #7b8ba3;
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-.terminal-meta strong {
+.result-meta strong {
   color: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
-  text-align: right;
+  text-align: left;
   word-break: break-word;
 }
 
-.terminal-output {
+.result-output {
   margin: 0;
-  min-height: 180px;
+  min-height: 160px;
   max-height: 320px;
   overflow: auto;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -854,6 +784,10 @@ onMounted(() => {
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(223, 231, 243, 0.92);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .break-all {
@@ -900,38 +834,32 @@ onMounted(() => {
 }
 
 @media (max-width: 1024px) {
-  .signal-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .workbench-grid {
+  .field-grid--three,
+  .field-grid--test {
     grid-template-columns: 1fr;
   }
 
-  .field-grid--three,
-  .field-grid--test {
+  .summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .terminal-meta-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .signal-strip,
-  .status-grid {
+  .summary-strip {
     grid-template-columns: 1fr;
   }
 
-  .status-chip--wide {
-    grid-column: span 1;
+  .summary-strip__item + .summary-strip__item {
+    border-left: none;
+    border-top: 1px solid rgba(223, 231, 243, 0.92);
   }
 
   .field-grid--two {
     grid-template-columns: 1fr;
-  }
-
-  .studio-card,
-  .studio-card--primary {
-    padding: 18px;
-    border-radius: 24px;
   }
 }
 </style>

@@ -1,371 +1,222 @@
-# 编译器使用指南
+# Prompt Lab 编译指南
 
-## 概述
+## 本文作用
 
-Skill 编译器负责将 YAML 蓝图编译成可执行的 Markdown 提示词。
+本文定义 Prompt Lab 当前和目标态的编译模型，用来回答三件事：
 
+1. Prompt Lab 到底编译什么
+2. 哪些部分应由代码确定性生成
+3. 哪些部分适合交给内部 prompt skills 生成
+
+## 两种编译，必须分开命名
+
+### 1. Source Compile
+
+Prompt Lab 自己的作者态编译。
+
+输入：
+
+- `sources/<skillId>.md`
+- `manifests/<skillId>.yaml`
+
+输出：
+
+- `compiled/<skillId>.md`
+- 导出所需 metadata
+
+职责：
+
+- 把作者态 source 转成 canonical candidate prompt
+
+### 2. Runtime Compile
+
+平台运行时编译。
+
+输入：
+
+- published prompt
+- runtime routing / refs / context
+
+输出：
+
+- runtime effective prompt
+
+职责：
+
+- 让平台在运行阶段拿到适合执行的 prompt
+
+## 当前状态
+
+### 已存在能力
+
+- Prompt Lab 已有 `compile-source`
+- 当前会读取 `sources/*.md` 和 `compiler-skill/compile-spec.md`
+- 生成物会落到 `compiled/*.md`
+
+### 当前问题
+
+当前 `compile-source` 仍然偏向：
+
+- 把 source 全量丢给 LLM
+- 让模型同时负责结构映射和 prose 成文
+
+这会导致：
+
+- 结构权责不稳定
+- metadata 与章节规则难以严控
+- compile 行为不容易做精细验证
+
+## 正式推荐模型
+
+推荐使用：
+
+> 确定性结构编译 + 受约束 prose skill
+
+也就是 hybrid compile。
+
+## 职责拆分
+
+### 确定性结构编译器负责
+
+- 读取 source body 与 manifest
+- 建立 PromptLab IR
+- archetype 校验
+- section 映射
+- section 顺序
+- 章节标题
+- frontmatter 生成
+- input/output schema 结构生成
+- stage scaffold 生成
+- 编号策略
+- 平台禁用字段
+- 最终 compose
+- compile diagnostics
+
+### 内部 prose skill 负责
+
+- 身份段的措辞整理
+- 行为规则 prose 化
+- 字段说明 prose 化
+- 示例文案草稿
+- 风格收紧和一致性润色
+
+### 内部 prose skill 不负责
+
+- 新增或删除章节
+- 修改字段名
+- 决定 JSON key
+- 决定 archetype
+- 决定编号体系
+- 决定状态机硬门槛
+- 生成 frontmatter
+
+## 推荐流水线
+
+```text
+Load Source Body
+  -> Load Source Manifest
+  -> Parse Source
+  -> Build PromptLab IR
+  -> Validate Source
+  -> Deterministic Structure Compile
+  -> Call Internal Prose Skill
+  -> Compose Candidate
+  -> Lint Candidate
+  -> Review / Acceptance
+  -> Export / Publish
 ```
-YAML 蓝图  →  编译器  →  Markdown 提示词
-```
 
----
+## Deterministic Structure Compile
 
-## 命令行使用
+建议先由代码生成一份骨架，再把需要 prose 的位置标成 slots。
 
-### 基础编译
+示例：
 
-```bash
-cd wenflow/frontend
-npx tsx scripts/test-compiler.ts
-```
-
-**输入**: `prompt-lab/blueprints/goal-conversation.yaml`
-
-**输出**: `prompt-lab/prompts/goal-conversation.md`
-
----
-
-## 编译选项
-
-### 完整编译（默认）
-
-```typescript
-import { compileBlueprint } from '@/utils/blueprintCompiler'
-
-const compiled = compileBlueprint(blueprint, {
-  includeComments: false,  // 不包含注释
-  ruleNumbering: true      // 自动生成编号
-})
-```
-
-### 无编号模式
-
-```typescript
-const compiled = compileBlueprint(blueprint, {
-  ruleNumbering: false  // 不生成 RULE-XX 编号
-})
-```
-
----
-
-## 编译规则
-
-### 1. 自动编号
-
-编译器自动为规则生成 `RULE-XX` 编号：
-
-**输入（YAML）**:
-```yaml
-rules:
-  context_usage:
-    evaluation_mode: "fresh_turn"
-    priority: "state优先"
-  behavior:
-    max_questions_per_turn: 1
-```
-
-**输出（Markdown）**:
-```markdown
-RULE-01: 这是 fresh turn evaluation。state优先...
-RULE-02: 每次最多问 1 个核心问题...
-```
-
-编号**全局递增**，跨越不同规则块。
-
----
-
-### 2. 身份定义展开
-
-**输入（YAML）**:
-```yaml
-identity:
-  role: "学习目标澄清助手"
-  mission: "通过对话澄清学习目标"
-  scope:
-    not_business_consultant: true
-    not_full_path_generator: true
-```
-
-**输出（Markdown）**:
-```markdown
+```text
 ## 身份定义
+{{identityText}}
 
-你是一个学习目标澄清助手。
-
-你的任务是通过对话澄清学习目标。你不是业务顾问，也不是正式的学习路径生成器。
-```
-
----
-
-### 3. 规则块编译
-
-#### 上下文使用规则
-
-**输入**:
-```yaml
-rules:
-  context_usage:
-    evaluation_mode: "fresh_turn"
-    priority: "state优先，依据state判断阶段和缺口"
-    conflict_resolution: "userInput_always_wins"
-    fabrication_policy: "forbidden"
-    fabrication_fallback: "不确定就空白或继续追问"
-```
-
-**输出**:
-```markdown
-### 上下文使用规则
-
-RULE-01: 这是 fresh turn evaluation。state优先，依据state判断阶段和缺口，不要把 conversationContext 当作需要续写的多轮聊天。
-RULE-02: 若 state 与 current turn payload 里的 userInput 冲突，必须以 userInput 为准，并在输出中修正状态。
-RULE-03: 不要为了补全字段而编造用户没有明确提供的信息；不确定就空白或继续追问。
-```
-
-#### 行为规则
-
-**输入**:
-```yaml
-rules:
-  behavior:
-    max_questions_per_turn: 1
-    understanding_stage:
-      reply_structure: "理解总结 + 说明 + 问题"
-      tone: "natural_transition"
-      no_interrogation: "不能像问卷或审问"
-```
-
-**输出**:
-```markdown
-### 行为规则
-
-RULE-09: 每次最多问 1 个核心问题，避免连续追问。
-RULE-10: 在 understanding 阶段，reply 默认先用 理解总结 + 说明 + 问题。
-RULE-11: 提问语气不能像问卷或审问，优先使用自然过渡。
-```
-
----
-
-### 4. 输出规格编译
-
-**输入**:
-```yaml
-output:
-  format: "json"
-  wrapper: false
-  top_level_fields:
-    - reply
-    - state
-    - understanding
-```
-
-**输出**:
-```markdown
-## 输出规格
-
-OUT-01: 只输出一个合法JSON对象，不要输出额外说明文本。
-OUT-02: JSON 顶层字段固定为：reply、state、understanding
-OUT-03: JSON 前后不能有任何前言、解释、总结、道歉、注释、markdown 包装或自然语言。
-```
-
----
-
-### 5. 边界约束编译
-
-**输入**:
-```yaml
-constraints:
-  - subject: "默认面向提问者本人"
-  - fabrication: "不编造未提供的信息"
-  - scope: "不解决业务问题"
-```
-
-**输出**:
-```markdown
-## 边界约束
-
-CON-01: 默认面向提问者本人
-CON-02: 不编造未提供的信息
-CON-03: 不解决业务问题
-```
-
----
-
-## Archetype 模板
-
-不同的 archetype 使用不同的编译模板：
-
-### conversational（对话型）
-
-**特点**:
-- 生成状态机章节
-- 包含阶段转换规则
-- 强调多轮对话策略
-
-**编译时添加**:
-```markdown
-## 状态机
-
-### 阶段定义
-...
-
-### 阶段转换
-...
-```
-
-### generator（生成型）
-
-**特点**:
-- 强调输入数据说明
-- 详细的生成步骤
-- 明确的输出格式
-
-### extractor（提取型）
-
-**特点**:
-- 提取目标定义
-- 匹配规则说明
-- 结构化输出要求
-
----
-
-## 完整编译示例
-
-### 输入文件: `blueprints/goal-conversation.yaml`
-
-```yaml
-blueprintId: goal-conversation
-archetype: conversational
-name: 目标对话
-version: 3.0.0
-
-identity:
-  role: "学习目标澄清助手"
-  mission: "通过对话澄清目标"
-
-rules:
-  behavior:
-    max_questions_per_turn: 1
-    tone: "natural"
-
-output:
-  format: "json"
-  top_level_fields: ["reply", "state"]
-
-constraints:
-  - "不编造信息"
-```
-
-### 运行编译
-
-```bash
-npx tsx scripts/test-compiler.ts
-```
-
-### 输出文件: `prompts/goal-conversation.md`
-
-```markdown
----
-agentId: skill:goal-conversation
-archetype: conversational
-description: 学习目标澄清助手
-temperature: 0.7
-maxTokens: 8000
----
-
-## 身份定义
-
-你是一个学习目标澄清助手。
-
-你的任务是通过对话澄清目标。
+## 输入说明
+...由代码生成字段骨架...
 
 ## 执行规则
-
-### 行为规则
-
-RULE-01: 每次最多问 1 个核心问题，避免连续追问。
-RULE-02: 提问语气保持 natural。
+### 上下文处理
+{{rule.context_1}}
+{{rule.context_2}}
 
 ## 输出规格
-
-OUT-01: 只输出一个合法JSON对象，不要输出额外说明文本。
-OUT-02: JSON 顶层字段固定为：reply、state
-
-## 边界约束
-
-CON-01: 不编造信息
+...由代码生成字段结构...
+{{fieldNote.understanding.real_problem}}
 ```
 
----
+这样模型只填 slot，不拥有整体结构。
 
-## 前端集成
+## 内部 Prose Skill
 
-### 在 Prompt Lab 中使用
+推荐第一阶段只保留一个核心内部 skill：
 
-```typescript
-import { loadAndCompile } from '@/utils/blueprintCompiler'
+- `prose-compiler`
 
-// 加载 YAML 文件
-const yamlContent = await fetch('/prompt-lab/blueprints/goal-conversation.yaml')
-  .then(r => r.text())
+它接收结构化 JSON 输入，返回结构化 JSON 输出。
 
-// 编译
-const compiledPrompt = loadAndCompile(yamlContent, {
-  ruleNumbering: true
-})
+不建议第一阶段就做：
 
-// 显示预览
-console.log(compiledPrompt)
-```
+- 多 skill 串联生成整篇 prompt
+- 让 LLM 直接返回最终 markdown 全文
 
----
+## Compile Diagnostics
 
-## 调试技巧
+Prompt Lab compile 应把错误和警告当成正式概念。
 
-### 1. 查看编译日志
+### Error
 
-```typescript
-const compiled = compileBlueprint(blueprint, {
-  includeComments: true  // 包含注释，便于调试
-})
-```
+- source 缺失必需 section
+- archetype 与 section 不匹配
+- `Input` 表格字段不合法
+- `Output Schema` 缺失核心定义
+- `Stages` 结构不完整
+- manifest 缺失 `skillId / agentId / archetype`
 
-### 2. 验证 YAML 格式
+### Warning
 
-```bash
-# 安装 YAML lint
-npm install -g yaml-lint
+- prose slot 为空
+- 示例未提供
+- 约束与规则描述可能重复
+- candidate 过长
+- 可导出但建议补齐 metadata
 
-# 验证文件
-yamllint blueprints/goal-conversation.yaml
-```
+## 与当前 `compile-spec.md` 的关系
 
-### 3. 对比编译结果
+`compiler-skill/compile-spec.md` 目前仍是 live compile contract。
 
-```bash
-# 编译前后对比
-diff prompts/goal-conversation.md.old prompts/goal-conversation.md
-```
+在 hybrid compile 体系下，它的角色应逐步收敛为：
 
----
+- section 映射规则说明
+- deterministic compiler 的参考契约
+- 内部 prose skill 的上下文补充材料
 
-## 常见问题
+而不是继续充当“整篇 markdown 生成提示词”的唯一黑盒入口。
 
-### Q1: 编译后编号不连续？
+## 与简化 YAML config 的关系
 
-A: 检查 YAML 中是否有空的规则块，编译器会跳过空规则。
+`compiler-skill/config-spec.md` 代表另一类入口：
 
-### Q2: 输出的提示词太长？
+- sparse config
+- 快速原型
+- 草拟新 skill
 
-A: 检查 YAML 中是否有冗余配置，精简蓝图内容。
+它可以继续存在，但不应取代 `sources/*.md + manifests/*.yaml` 这条正式 authoring 流程。
 
-### Q3: 某些字段没有被编译？
+推荐关系：
 
-A: 确认字段名是否符合规范，参考 `BLUEPRINT_SPEC_V3.md`。
+- `config-spec.md`：草拟入口
+- `sources/*.md`：正式 source body
+- `manifests/*.yaml`：正式 metadata truth
 
----
+## 第一阶段落地建议
 
-## 下一步
-
-- 查看 [蓝图规范](./BLUEPRINT_SPEC_V3.md) 了解 YAML 格式
-- 查看 [架构说明](./ARCHITECTURE.md) 了解整体设计
-- 创建自己的蓝图并编译测试
+1. 先把 `manifests/` 接入 source compile
+2. 先做 `parse source -> IR -> deterministic skeleton`
+3. 用一个 `prose-compiler` 内部 skill 只填 prose slots
+4. 用现有 lint / schema 能力校验 candidate
+5. publish 只从 Prompt Lab truth 导出，不再借平台 `prompts/*.md` frontmatter

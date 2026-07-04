@@ -4096,6 +4096,12 @@ export namespace Prisma {
     name: string | null
     description: string | null
     systemPrompt: string | null
+    compiledSystemPrompt: string | null
+    compileStatus: string | null
+    compileError: string | null
+    sourceHash: string | null
+    compileContextHash: string | null
+    compiledAt: Date | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4117,6 +4123,12 @@ export namespace Prisma {
     name: string | null
     description: string | null
     systemPrompt: string | null
+    compiledSystemPrompt: string | null
+    compileStatus: string | null
+    compileError: string | null
+    sourceHash: string | null
+    compileContextHash: string | null
+    compiledAt: Date | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4138,6 +4150,12 @@ export namespace Prisma {
     name: number
     description: number
     systemPrompt: number
+    compiledSystemPrompt: number
+    compileStatus: number
+    compileError: number
+    sourceHash: number
+    compileContextHash: number
+    compiledAt: number
     temperature: number
     maxTokens: number
     model: number
@@ -4179,6 +4197,12 @@ export namespace Prisma {
     name?: true
     description?: true
     systemPrompt?: true
+    compiledSystemPrompt?: true
+    compileStatus?: true
+    compileError?: true
+    sourceHash?: true
+    compileContextHash?: true
+    compiledAt?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4200,6 +4224,12 @@ export namespace Prisma {
     name?: true
     description?: true
     systemPrompt?: true
+    compiledSystemPrompt?: true
+    compileStatus?: true
+    compileError?: true
+    sourceHash?: true
+    compileContextHash?: true
+    compiledAt?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4221,6 +4251,12 @@ export namespace Prisma {
     name?: true
     description?: true
     systemPrompt?: true
+    compiledSystemPrompt?: true
+    compileStatus?: true
+    compileError?: true
+    sourceHash?: true
+    compileContextHash?: true
+    compiledAt?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4329,6 +4365,12 @@ export namespace Prisma {
     name: string
     description: string | null
     systemPrompt: string
+    compiledSystemPrompt: string | null
+    compileStatus: string | null
+    compileError: string | null
+    sourceHash: string | null
+    compileContextHash: string | null
+    compiledAt: Date | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4369,6 +4411,12 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     systemPrompt?: boolean
+    compiledSystemPrompt?: boolean
+    compileStatus?: boolean
+    compileError?: boolean
+    sourceHash?: boolean
+    compileContextHash?: boolean
+    compiledAt?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4390,6 +4438,12 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     systemPrompt?: boolean
+    compiledSystemPrompt?: boolean
+    compileStatus?: boolean
+    compileError?: boolean
+    sourceHash?: boolean
+    compileContextHash?: boolean
+    compiledAt?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4411,6 +4465,12 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     systemPrompt?: boolean
+    compiledSystemPrompt?: boolean
+    compileStatus?: boolean
+    compileError?: boolean
+    sourceHash?: boolean
+    compileContextHash?: boolean
+    compiledAt?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4436,6 +4496,12 @@ export namespace Prisma {
       name: string
       description: string | null
       systemPrompt: string
+      compiledSystemPrompt: string | null
+      compileStatus: string | null
+      compileError: string | null
+      sourceHash: string | null
+      compileContextHash: string | null
+      compiledAt: Date | null
       temperature: number | null
       maxTokens: number | null
       model: string | null
@@ -4847,6 +4913,12 @@ export namespace Prisma {
     readonly name: FieldRef<"agent_prompts", 'String'>
     readonly description: FieldRef<"agent_prompts", 'String'>
     readonly systemPrompt: FieldRef<"agent_prompts", 'String'>
+    readonly compiledSystemPrompt: FieldRef<"agent_prompts", 'String'>
+    readonly compileStatus: FieldRef<"agent_prompts", 'String'>
+    readonly compileError: FieldRef<"agent_prompts", 'String'>
+    readonly sourceHash: FieldRef<"agent_prompts", 'String'>
+    readonly compileContextHash: FieldRef<"agent_prompts", 'String'>
+    readonly compiledAt: FieldRef<"agent_prompts", 'DateTime'>
     readonly temperature: FieldRef<"agent_prompts", 'Float'>
     readonly maxTokens: FieldRef<"agent_prompts", 'Int'>
     readonly model: FieldRef<"agent_prompts", 'String'>
@@ -17286,6 +17358,12 @@ export namespace Prisma {
     name: 'name',
     description: 'description',
     systemPrompt: 'systemPrompt',
+    compiledSystemPrompt: 'compiledSystemPrompt',
+    compileStatus: 'compileStatus',
+    compileError: 'compileError',
+    sourceHash: 'sourceHash',
+    compileContextHash: 'compileContextHash',
+    compiledAt: 'compiledAt',
     temperature: 'temperature',
     maxTokens: 'maxTokens',
     model: 'model',
@@ -17795,6 +17873,12 @@ export namespace Prisma {
     name?: StringFilter<"agent_prompts"> | string
     description?: StringNullableFilter<"agent_prompts"> | string | null
     systemPrompt?: StringFilter<"agent_prompts"> | string
+    compiledSystemPrompt?: StringNullableFilter<"agent_prompts"> | string | null
+    compileStatus?: StringNullableFilter<"agent_prompts"> | string | null
+    compileError?: StringNullableFilter<"agent_prompts"> | string | null
+    sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
+    compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
+    compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
@@ -17816,6 +17900,12 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrderInput | SortOrder
     systemPrompt?: SortOrder
+    compiledSystemPrompt?: SortOrderInput | SortOrder
+    compileStatus?: SortOrderInput | SortOrder
+    compileError?: SortOrderInput | SortOrder
+    sourceHash?: SortOrderInput | SortOrder
+    compileContextHash?: SortOrderInput | SortOrder
+    compiledAt?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
@@ -17841,6 +17931,12 @@ export namespace Prisma {
     name?: StringFilter<"agent_prompts"> | string
     description?: StringNullableFilter<"agent_prompts"> | string | null
     systemPrompt?: StringFilter<"agent_prompts"> | string
+    compiledSystemPrompt?: StringNullableFilter<"agent_prompts"> | string | null
+    compileStatus?: StringNullableFilter<"agent_prompts"> | string | null
+    compileError?: StringNullableFilter<"agent_prompts"> | string | null
+    sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
+    compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
+    compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
@@ -17862,6 +17958,12 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrderInput | SortOrder
     systemPrompt?: SortOrder
+    compiledSystemPrompt?: SortOrderInput | SortOrder
+    compileStatus?: SortOrderInput | SortOrder
+    compileError?: SortOrderInput | SortOrder
+    sourceHash?: SortOrderInput | SortOrder
+    compileContextHash?: SortOrderInput | SortOrder
+    compiledAt?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
@@ -17891,6 +17993,12 @@ export namespace Prisma {
     name?: StringWithAggregatesFilter<"agent_prompts"> | string
     description?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     systemPrompt?: StringWithAggregatesFilter<"agent_prompts"> | string
+    compiledSystemPrompt?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    compileStatus?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    compileError?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    sourceHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    compileContextHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    compiledAt?: DateTimeNullableWithAggregatesFilter<"agent_prompts"> | Date | string | null
     temperature?: FloatNullableWithAggregatesFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     model?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
@@ -19309,6 +19417,12 @@ export namespace Prisma {
     name: string
     description?: string | null
     systemPrompt: string
+    compiledSystemPrompt?: string | null
+    compileStatus?: string | null
+    compileError?: string | null
+    sourceHash?: string | null
+    compileContextHash?: string | null
+    compiledAt?: Date | string | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -19330,6 +19444,12 @@ export namespace Prisma {
     name: string
     description?: string | null
     systemPrompt: string
+    compiledSystemPrompt?: string | null
+    compileStatus?: string | null
+    compileError?: string | null
+    sourceHash?: string | null
+    compileContextHash?: string | null
+    compiledAt?: Date | string | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -19351,6 +19471,12 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
+    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
+    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    compileError?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19372,6 +19498,12 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
+    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
+    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    compileError?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19393,6 +19525,12 @@ export namespace Prisma {
     name: string
     description?: string | null
     systemPrompt: string
+    compiledSystemPrompt?: string | null
+    compileStatus?: string | null
+    compileError?: string | null
+    sourceHash?: string | null
+    compileContextHash?: string | null
+    compiledAt?: Date | string | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -19414,6 +19552,12 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
+    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
+    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    compileError?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19435,6 +19579,12 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
+    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
+    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    compileError?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
+    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -21228,6 +21378,12 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     systemPrompt?: SortOrder
+    compiledSystemPrompt?: SortOrder
+    compileStatus?: SortOrder
+    compileError?: SortOrder
+    sourceHash?: SortOrder
+    compileContextHash?: SortOrder
+    compiledAt?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -21258,6 +21414,12 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     systemPrompt?: SortOrder
+    compiledSystemPrompt?: SortOrder
+    compileStatus?: SortOrder
+    compileError?: SortOrder
+    sourceHash?: SortOrder
+    compileContextHash?: SortOrder
+    compiledAt?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -21279,6 +21441,12 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     systemPrompt?: SortOrder
+    compiledSystemPrompt?: SortOrder
+    compileStatus?: SortOrder
+    compileError?: SortOrder
+    sourceHash?: SortOrder
+    compileContextHash?: SortOrder
+    compiledAt?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder

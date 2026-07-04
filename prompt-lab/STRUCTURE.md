@@ -1,218 +1,205 @@
 # Prompt Lab 目录结构
 
-```
+本文件描述的是 Prompt Lab 当前正式目录模型，而不是早期 blueprint / YAML 实验目录。
+
+## 当前目录树
+
+```text
 prompt-lab/
-│
-├── blueprints/                          # 基础设施数据（源文件）⭐
-│   ├── goal-conversation.yaml               # 目标对话蓝图
-│   └── goal-conversation.schema.json        # I/O 字段定义
-│
-├── prompts/                             # 编译产物（自动生成）✨
-│   └── goal-conversation.md                 # 编译后的提示词
-│
-├── docs/                                # 文档
-│   ├── ARCHITECTURE.md                      # 架构说明
-│   ├── BLUEPRINT_SPEC_V3.md                 # 蓝图规范 v3.0
-│   └── COMPILER_GUIDE.md                    # 编译器使用指南
-│
-├── prompts-legacy/                      # 旧版提示词（参考）
-│   ├── skill.goal-conversation.md           # 原始手写提示词
-│   ├── skill.path-planning.md
-│   ├── skill.peer-reinforcement.md
-│   ├── skill.session-wrapup.md
-│   └── skill.teaching-turn.md
-│
-├── skills/                              # 旧版蓝本结构（待迁移）
-│   └── goal-conversation/
-│       ├── identity.md
-│       ├── rules/
-│       ├── io-schema.json
-│       └── ...
-│
-└── README.md                            # 项目说明
+  sources/                       # 唯一正文真相源
+    goal-conversation.md
+    path-planning.md
+    teaching-turn.md
+    ...
+
+  manifests/                     # 唯一元数据真相源
+    _template.yaml
+    README.md
+    # 后续正式接入后，每个 publishable skill 一个 manifest
+
+  compiled/                      # 候选编译产物
+    goal-conversation.md
+    label-generator.md
+    ...
+
+  backups/                       # 导出/发布前快照
+    goal-conversation/
+    path-planning/
+    adaptive-guidance-copy/
+
+  compiler-skill/                # 编译相关资产
+    README.md
+    compile-spec.md
+    config-spec.md
+    prose-compiler-contract.md
+    test-cases.md
+
+  docs/                          # 规范与治理文档
+    ARCHITECTURE.md
+    SOURCE_PROTOCOL_V1.md
+    INTERNAL_PROMPT_SKILLS.md
+    COMPILER_GUIDE.md
+    ...
+
+  README.md
+  STRUCTURE.md
 ```
 
----
+## 目录职责
 
-## 目录说明
+### `sources/`
 
-### 📁 blueprints/ - **核心工作目录**
+唯一正文真相源。
 
-**性质**: 源文件，可编辑
+约束：
 
-**内容**: YAML 蓝图 + JSON Schema
+- 每个 publishable skill 一个文件：`sources/<skillId>.md`
+- 使用 `# DEFINITIONS` / `# EXECUTION` 结构
+- 面向作者态编辑
+- 不承载平台 runtime 生成态信息
 
-**用途**:
-- ✅ 在 Prompt Lab 中编辑
-- ✅ Git 版本控制
-- ✅ 字段级别配置
+### `manifests/`
 
-**编辑方式**: 可视化表单编辑器
+唯一元数据真相源。
 
-**文件格式**:
-```
-{skill-name}.yaml        # 蓝图主文件
-{skill-name}.schema.json # I/O 字段定义
-```
+建议每个 skill 一个 manifest：`manifests/<skillId>.yaml`
 
----
+典型字段：
 
-### 📁 prompts/ - **编译输出目录**
+- `skillId`
+- `agentId`
+- `name`
+- `archetype`
+- `description`
+- `acceptableAgentIds`
+- `runtimeDefaults`
+- `publish`
+- `ownership`
 
-**性质**: 编译产物，只读
+其中：
 
-**内容**: Markdown 提示词
+- `runtimeDefaults.tier` 用于运行路由分层
+- `ownership.tier` 用于作者态治理分层
 
-**用途**:
-- ✅ 预览编译结果
-- ✅ 复制到生产环境
-- ⚠️ 不要手动编辑！
+### `compiled/`
 
-**生成方式**: 编译器自动生成
+候选编译产物目录。
 
-**文件格式**:
-```
-{skill-name}.md          # 编译后的提示词
-```
+特点：
 
----
+- 由 source compile 生成
+- 用于 review / diff / 验收
+- 可被覆盖，不承担真相源职责
 
-### 📁 docs/ - **文档目录**
+### `backups/`
 
-**内容**:
-- `ARCHITECTURE.md` - 架构设计说明
-- `BLUEPRINT_SPEC_V3.md` - YAML 蓝图格式规范
-- `COMPILER_GUIDE.md` - 编译器使用指南
+发布或导出前的快照目录。
 
----
+特点：
 
-### 📁 prompts-legacy/ - **旧版参考**
+- 以 skill 为子目录
+- 一次发布一个时间戳文件
+- 仅用于回滚或审计
 
-**内容**: 原始手写的 Markdown 提示词
+### `compiler-skill/`
 
-**用途**:
-- 参考原有的提示词内容
-- 迁移到 YAML 蓝图时对比
+Prompt Lab 编译系统资产目录。
 
-**状态**: 归档，不再维护
+这里放两类东西：
 
----
+- 当前 live compile contract
+- 后续 hybrid compile 所需的内部 prompt skill 约定
 
-### 📁 skills/ - **旧版蓝本结构**
+重要边界：
 
-**内容**: 旧的分文件蓝本结构
+- 这里存放的是编译系统资产，不是对外 publishable skill source
+- 不要把它和 `sources/` 混成同一语义空间
 
-**状态**: 待迁移到 YAML 格式
+### `docs/`
 
-**迁移计划**:
-- [ ] goal-conversation (已有 YAML)
-- [ ] path-planning
-- [ ] teaching-turn
-- [ ] session-wrapup
-- [ ] peer-reinforcement
+Prompt Lab 正式文档目录。
 
----
+推荐阅读顺序：
 
-## 工作流程
-
-### 1. 编辑蓝图
-
-```
-在 Prompt Lab 中打开
-  ↓
-blueprints/goal-conversation.yaml
-  ↓
-修改字段：max_questions_per_turn: 2
-  ↓
-保存
-```
-
-### 2. 编译
-
-```
-点击"编译"按钮
-  ↓
-编译器读取 YAML
-  ↓
-生成 prompts/goal-conversation.md
-```
-
-### 3. 预览
-
-```
-查看编译结果
-  ↓
-prompts/goal-conversation.md (只读)
-```
-
-### 4. 测试
-
-```
-复制提示词
-  ↓
-在测试环境运行
-  ↓
-验证输出
-```
-
-### 5. 发布
-
-```
-编译通过
-  ↓
-复制到生产环境
-  ↓
-wenflow/prompts/skill.goal-conversation.md
-```
-
----
+1. `ARCHITECTURE.md`
+2. `SOURCE_PROTOCOL_V1.md`
+3. `INTERNAL_PROMPT_SKILLS.md`
+4. `COMPILER_GUIDE.md`
 
 ## 文件命名规范
 
-### 蓝图文件
-```
-blueprints/{skill-name}.yaml
-blueprints/{skill-name}.schema.json
-```
+### Source Body
 
-### 编译产物
-```
-prompts/{skill-name}.md
+```text
+sources/<skillId>.md
 ```
 
-### 生产环境
+示例：
+
+```text
+sources/goal-conversation.md
+sources/path-planning.md
 ```
-wenflow/prompts/skill.{skill-name}.md
+
+### Source Manifest
+
+```text
+manifests/<skillId>.yaml
 ```
 
-**注意**: 蓝图文件不带 `skill.` 前缀，生产环境才带。
+示例：
 
----
+```text
+manifests/goal-conversation.yaml
+manifests/path-planning.yaml
+```
 
-## 当前状态
+### Candidate Artifact
 
-### ✅ 已完成
-- [x] 目录结构重组
-- [x] goal-conversation YAML 蓝图
-- [x] 编译器实现
-- [x] 文档完善
+```text
+compiled/<skillId>.md
+```
 
-### 🚧 待完成
-- [ ] 其他 4 个 skill 的 YAML 蓝图
-- [ ] 前端 YAML 编辑器
-- [ ] 自动化编译流程
-- [ ] 生产环境部署
+### Backup Snapshot
 
----
+```text
+backups/<skillId>/<timestamp>.md
+```
 
-## 重要提醒
+## 数据所有权
 
-⚠️ **只编辑 blueprints/ 中的文件！**
+Prompt Lab 内部的所有权约束：
 
-- ✅ blueprints/*.yaml - 可编辑
-- ❌ prompts/*.md - 只读，自动生成
-- ❌ prompts-legacy/*.md - 归档，不要修改
+- `sources/` 拥有 body truth
+- `manifests/` 拥有 metadata truth
+- `compiled/` 只拥有 candidate snapshot
+- `backups/` 只拥有 rollback snapshot
 
-⚠️ **prompts/ 目录的文件会被编译器覆盖！**
+平台侧对象不拥有 Prompt Lab source truth：
 
-所有修改都应该在 blueprints/ 中进行。
+- `wenflow/prompts/*.md`
+- `agent_prompts`
+- `compiledSystemPrompt`
+- runtime cache
+
+## 当前迁移状态
+
+### 已经成立
+
+- `sources/*.md` 已经是 live source body
+- `compiled/*.md` 已经被 `compile-source` 使用
+- `backups/` 已经承担发布前快照职责
+
+### 正在补齐
+
+- `manifests/` 作为 metadata truth 的正式接入
+- source compile 与 runtime compile 的职责分离
+- internal prompt skills 的 hybrid compile 设计
+
+### 明确不再作为当前结构真相的旧模型
+
+以下目录模型属于历史实验，而不是当前正式结构：
+
+- `blueprints/`
+- `prompts/` 作为 Prompt Lab 内部编译产物目录
+- 前端 `blueprintCompiler.ts` 作为 Prompt Lab 当前唯一编译器

@@ -2217,6 +2217,41 @@ router.get('/activity', async (req: Request, res: Response) => {
       }
     });
 
+    const [recentProjectionGrantUses, activeProjectionGrantCount] = await Promise.all([
+      prisma.projection_access_grants.findMany({
+        take: 20,
+        where: {
+          lastUsedAt: { not: null }
+        },
+        orderBy: { lastUsedAt: 'desc' },
+        include: {
+          users: {
+            select: { id: true, email: true, name: true }
+          }
+        }
+      }),
+      prisma.projection_access_grants.count({
+        where: {
+          revokedAt: null,
+          expiresAt: { gt: new Date() }
+        }
+      })
+    ]);
+
+    const adminIds = Array.from(new Set(
+      recentProjectionGrantUses
+        .map((grant) => grant.lastUsedByAdminId)
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    ));
+
+    const adminUsers = adminIds.length > 0
+      ? await prisma.users.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, email: true, name: true }
+        })
+      : [];
+    const adminUserMap = new Map(adminUsers.map((user) => [user.id, user]));
+
     res.json({
       success: true,
       data: {
@@ -2237,7 +2272,40 @@ router.get('/activity', async (req: Request, res: Response) => {
             : null,
         })),
         recentUsers,
-        completedTasks
+        completedTasks,
+        activeProjectionGrantCount,
+        recentProjectionGrantUses: recentProjectionGrantUses.map((grant) => ({
+          id: grant.id,
+          scope: grant.scope,
+          purpose: grant.purpose || null,
+          expiresAt: grant.expiresAt,
+          revokedAt: grant.revokedAt,
+          useCount: grant.useCount,
+          lastUsedAt: grant.lastUsedAt,
+          user: grant.users
+            ? {
+                id: grant.users.id,
+                email: grant.users.email,
+                name: grant.users.name,
+              }
+            : null,
+          adminUser: grant.lastUsedByAdminId
+            ? (() => {
+                const adminUser = adminUserMap.get(grant.lastUsedByAdminId)
+                return adminUser
+                  ? {
+                      id: adminUser.id,
+                      email: adminUser.email,
+                      name: adminUser.name,
+                    }
+                  : {
+                      id: grant.lastUsedByAdminId,
+                      email: null,
+                      name: '管理员'
+                    }
+              })()
+            : null,
+        }))
       }
     });
   } catch (error: any) {

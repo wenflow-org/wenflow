@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
+import prisma from '../config/database';
 import { verifyProjectionToken } from '../utils/projection-token';
 
 interface JwtPayload {
@@ -20,11 +21,14 @@ declare global {
         projection?: {
           active: boolean;
           targetUserId: string;
-          sourceProfileId: string;
+          sourceProfileId?: string | null;
           issuedByAdminId: string;
+          grantSource?: 'virtual-learner' | 'access-grant';
+          grantId?: string | null;
           storyId?: string | null;
           virtualSessionId?: string | null;
           scope?: string;
+          scopeDefinition?: string | null;
         };
       };
     }
@@ -57,17 +61,43 @@ export const authMiddleware = async (
 
     if (projectionToken) {
       const projection = verifyProjectionToken(projectionToken);
+
+      if ((projection.grantSource || 'virtual-learner') === 'access-grant') {
+        const grant = await prisma.projection_access_grants.findUnique({
+          where: { id: projection.grantId }
+        });
+
+        if (!grant || grant.userId !== projection.targetUserId || grant.revokedAt || grant.expiresAt.getTime() <= Date.now()) {
+          return res.status(401).json({
+            success: false,
+            error: { message: '投影授权已失效' }
+          });
+        }
+
+        await prisma.projection_access_grants.update({
+          where: { id: grant.id },
+          data: {
+            lastUsedAt: new Date(),
+            lastUsedByAdminId: projection.issuedByAdminId,
+            useCount: { increment: 1 }
+          }
+        });
+      }
+
       req.user = {
         userId: projection.targetUserId,
         email: `${projection.targetUserId}@projection.local`,
         projection: {
           active: true,
           targetUserId: projection.targetUserId,
-          sourceProfileId: projection.sourceProfileId,
+          sourceProfileId: projection.sourceProfileId || null,
           issuedByAdminId: projection.issuedByAdminId,
+          grantSource: projection.grantSource || 'virtual-learner',
+          grantId: projection.grantId || null,
           storyId: projection.storyId || null,
           virtualSessionId: projection.virtualSessionId || null,
           scope: projection.scope,
+          scopeDefinition: projection.scopeDefinition || null,
         }
       };
       next();

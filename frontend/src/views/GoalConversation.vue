@@ -477,7 +477,6 @@ const acceptedMimeTypes = [
   'image/jpeg'
 ];
 const acceptedExtensions = ['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx', 'png', 'jpg', 'jpeg'];
-const acceptedFileTypes = '.pdf,.docx,.txt,.md,.csv,.xlsx,.png,.jpg,.jpeg';
 const isDraggingFile = ref(false);
 
 type PlanningUploadStatus = 'ready' | 'error';
@@ -495,8 +494,6 @@ interface PlanningUploadFile {
 }
 
 const uploadedFiles = ref<PlanningUploadFile[]>([]);
-
-const hasUploadedFiles = computed(() => uploadedFiles.value.length > 0);
 
 const isQuickReplySelected = (text: string) => {
   return selectedQuickReplies.value.includes(text);
@@ -743,15 +740,6 @@ const sortedMessages = computed(() => {
   });
 });
 
-const isVirtualSessionView = computed(() => !!virtualSessionId.value);
-
-const stages = {
-  understanding: { label: '理解中', color: 'info' },
-  proposing: { label: '方案确认中', color: 'warning' },
-  ready: { label: '理解完成', color: 'success' },
-  completed: { label: '已生成路径', color: 'success' }
-};
-
 const suggestions = [
   { text: '我想用 Python 自动化处理 Excel 报表，每天能节省时间', icon: '🐍', type: 'tech' },
   { text: '我想学会沟通技巧，提高职场表达和人际交往能力', icon: '💬', type: 'soft' },
@@ -762,17 +750,6 @@ const suggestions = [
 ];
 
 const currentAiMessage = computed(() => aiMessages.value[aiMessages.value.length - 1] || null);
-const activeQuickReplyMessage = computed(() => {
-  for (let i = aiMessages.value.length - 1; i >= 0; i--) {
-    const msg = aiMessages.value[i];
-    if (msg.quickReplies?.length && !msg.quickRepliesUsed) {
-      return msg;
-    }
-  }
-
-  return null;
-});
-
 const hasConversationStarted = computed(() => Boolean(conversationId.value || userMessages.value.length > 0 || loading.value));
 const showPlanningSidePanels = computed(() => hasConversationStarted.value);
 const entryPromptExamples = computed(() => suggestions.slice(0, 3).map((item) => item.text));
@@ -885,10 +862,6 @@ const currentBaselineText = computed(() => getValidText(
 
 const baselineEvidenceText = computed(() => getValidText(understanding.value.current_baseline?.evidence));
 
-const backgroundExperienceText = computed(() => [currentBaselineText.value, baselineEvidenceText.value]
-  .filter((item, index, array) => item && array.indexOf(item) === index)
-  .join(' · '));
-
 const availableTimeText = computed(() => getValidText(
   understanding.value.background?.available_time,
   understanding.value.available_resources?.time_budget,
@@ -922,15 +895,6 @@ const successCriteriaTexts = computed(() => uniqueTextList([
   ...toTextArray(understanding.value.success_criteria?.time_window)
 ]));
 
-const outOfScopeTexts = computed(() => {
-  const explicit = constraintChips.value.filter((item) => /(暂不|先不|不要|不做|不处理|不包含|避免)/.test(item));
-  if (explicit.length > 0) {
-    return explicit.slice(0, 2);
-  }
-
-  return constraintChips.value.slice(0, 2);
-});
-
 const proposalKeyStages = computed(() => uniqueTextList(toTextArray(confirmedProposal.value?.key_stages)));
 
 const proposalDirectionText = computed(() => getValidText(
@@ -958,17 +922,6 @@ const proposalOutcomeText = computed(() => getValidText(
   proposalDirectionText.value
 ));
 
-const proposalCommitmentText = computed(() => {
-  return [availableTimeText.value, expectedTimeText.value]
-    .filter((item, index, array) => item && array.indexOf(item) === index)
-    .join(' · ');
-});
-
-const proposalMetaPills = computed(() => uniqueTextList([
-  availableTimeText.value,
-  expectedTimeText.value
-]));
-
 const normalizedUrgencyText = computed(() => {
   const value = urgencyText.value;
   if (!value) return '';
@@ -976,10 +929,6 @@ const normalizedUrgencyText = computed(() => {
   if (/(低|不急|以后|慢慢)/.test(value)) return '较低';
   if (/(中|适中|一般)/.test(value)) return '适中';
   return value;
-});
-
-const proposalStageOverviewText = computed(() => {
-  return proposalStageHighlights.value.join(' / ');
 });
 
 const pitfallExperienceText = computed(() => getValidText(

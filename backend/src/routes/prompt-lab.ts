@@ -4,17 +4,54 @@
  */
 
 import { Router } from 'express';
-import { executeSkill } from '../skills';
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
 import systemPrisma from '../config/system-database';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../gateway/api-gateway';
+import { compilePrompt } from '../services/prompt-compiler';
+import { promptCache } from '../services/cache/prompt-cache.service';
+import { getAgentRoutings } from '../services/field-dispatcher';
 
 const router = Router();
 
-function sortSkillList(list: { id: string; name: string; file: string; existsInLab?: boolean }[]) {
+const PROMPT_LAB_DIR = path.join(process.cwd(), '../prompt-lab');
+const SOURCES_DIR = path.join(PROMPT_LAB_DIR, 'sources');
+const COMPILED_DIR = path.join(PROMPT_LAB_DIR, 'compiled');
+const MANIFESTS_DIR = path.join(PROMPT_LAB_DIR, 'manifests');
+const BACKUPS_DIR = path.join(PROMPT_LAB_DIR, 'backups');
+const PROMPTS_DIR = path.join(process.cwd(), '../prompts');
+
+type PromptLabManifest = {
+  version: string;
+  skillId: string;
+  agentId: string;
+  name: string;
+  archetype: string;
+  description: string;
+  acceptableAgentIds: string[];
+  publish: {
+    enabled: boolean;
+    exportTargets: string[];
+  };
+  runtimeDefaults: {
+    tier: string;
+    temperature: number;
+    maxTokens: number;
+    model: string | null;
+    thinkingMode: string;
+    reasoningEffort: string;
+  };
+  ownership: {
+    tier: string;
+    visibility: string;
+  };
+  tags: string[];
+  notes: string;
+};
+
+function sortSkillList(list: { id: string; name: string; file: string; existsInLab?: boolean; hasManifest?: boolean }[]) {
   return list.sort((a, b) => a.id.localeCompare(b.id, 'en'))
 }
 
@@ -23,15 +60,251 @@ function looksLikeMojibake(value: unknown) {
   return /[�鍔浣瀛韬唤璺緞]/.test(value);
 }
 
-function buildDefaultFrontmatter(skillId: string, prompt: string) {
-  const archetypeMatch = prompt.match(/^archetype:\s*(\w+)/m);
+function sanitizeString(value: unknown, fallback = '') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed || looksLikeMojibake(trimmed)) return fallback;
+  return trimmed;
+}
+
+function sanitizeStringArray(value: unknown, fallback: string[] = []) {
+  if (!Array.isArray(value)) return fallback;
+  const next = value
+    .map((item) => sanitizeString(item, ''))
+    .filter(Boolean);
+  return Array.from(new Set(next));
+}
+
+function isSupportedExportTarget(value: string) {
+  return value === 'platform-prompts';
+}
+
+function assertValidSkillId(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new Error('skillId 必须是字符串');
+  }
+  const skillId = value.trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(skillId)) {
+    throw new Error(`非法 skillId: ${value}`);
+  }
+  return skillId;
+}
+
+function sanitizeNumber(value: unknown, fallback: number, min?: number, max?: number) {
+  const next = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  if (min !== undefined && next < min) return fallback;
+  if (max !== undefined && next > max) return fallback;
+  return next;
+}
+
+function inferArchetype(skillId: string, sourceContent = '') {
+  if (/^##\s+Stages$/m.test(sourceContent) || /^##\s+Stage Logic$/m.test(sourceContent)) {
+    return 'conversational';
+  }
+  if (/extractor/i.test(skillId)) return 'extractor';
+  if (/distiller|inference/i.test(skillId)) return 'distiller';
+  if (/copy|label-generator/i.test(skillId)) return 'copywriter';
+  return 'generator';
+}
+
+function buildDefaultManifest(skillId: string, sourceContent = ''): PromptLabManifest {
   return {
+    version: 'prompt-lab-manifest/v1',
+    skillId,
     agentId: `skill:${skillId}`,
     name: `default-skill-${skillId}`,
-    archetype: archetypeMatch?.[1] || 'conversational',
+    archetype: inferArchetype(skillId, sourceContent),
     description: '',
-    acceptableAgentIds: [] as string[]
+    acceptableAgentIds: [],
+    publish: {
+      enabled: true,
+      exportTargets: ['platform-prompts']
+    },
+    runtimeDefaults: {
+      tier: 'chat',
+      temperature: 0.7,
+      maxTokens: 8000,
+      model: null,
+      thinkingMode: 'default',
+      reasoningEffort: 'default'
+    },
+    ownership: {
+      tier: 'production',
+      visibility: 'internal'
+    },
+    tags: [],
+    notes: ''
   };
+}
+
+function normalizeManifest(skillId: string, manifestInput: any, sourceContent = ''): PromptLabManifest {
+  const base = buildDefaultManifest(skillId, sourceContent);
+  const manifest = manifestInput && typeof manifestInput === 'object' ? manifestInput : {};
+  const runtimeDefaults = manifest.runtimeDefaults && typeof manifest.runtimeDefaults === 'object'
+    ? manifest.runtimeDefaults
+    : {};
+  const publish = manifest.publish && typeof manifest.publish === 'object'
+    ? manifest.publish
+    : {};
+  const ownership = manifest.ownership && typeof manifest.ownership === 'object'
+    ? manifest.ownership
+    : {};
+
+  return {
+    version: sanitizeString(manifest.version, base.version),
+    skillId,
+    agentId: sanitizeString(manifest.agentId, `skill:${skillId}`),
+    name: sanitizeString(manifest.name, base.name),
+    archetype: sanitizeString(manifest.archetype, base.archetype),
+    description: sanitizeString(manifest.description, ''),
+    acceptableAgentIds: sanitizeStringArray(manifest.acceptableAgentIds, base.acceptableAgentIds),
+    publish: {
+      enabled: typeof publish.enabled === 'boolean' ? publish.enabled : true,
+      exportTargets: sanitizeStringArray(publish.exportTargets, ['platform-prompts']).filter(isSupportedExportTarget)
+    },
+    runtimeDefaults: {
+      tier: ['chat', 'reasoning', 'light'].includes(sanitizeString(runtimeDefaults.tier, base.runtimeDefaults.tier))
+        ? sanitizeString(runtimeDefaults.tier, base.runtimeDefaults.tier)
+        : base.runtimeDefaults.tier,
+      temperature: sanitizeNumber(runtimeDefaults.temperature, base.runtimeDefaults.temperature, 0, 2),
+      maxTokens: sanitizeNumber(runtimeDefaults.maxTokens, base.runtimeDefaults.maxTokens, 1000, 64000),
+      model: sanitizeString(runtimeDefaults.model, '') || null,
+      thinkingMode: sanitizeString(runtimeDefaults.thinkingMode, base.runtimeDefaults.thinkingMode),
+      reasoningEffort: sanitizeString(runtimeDefaults.reasoningEffort, base.runtimeDefaults.reasoningEffort)
+    },
+    ownership: {
+      tier: sanitizeString(ownership.tier, base.ownership.tier),
+      visibility: sanitizeString(ownership.visibility, base.ownership.visibility)
+    },
+    tags: sanitizeStringArray(manifest.tags, []),
+    notes: typeof manifest.notes === 'string' ? manifest.notes.trim() : ''
+  };
+}
+
+function serializeManifest(manifest: PromptLabManifest) {
+  const ordered = {
+    version: manifest.version,
+    skillId: manifest.skillId,
+    agentId: manifest.agentId,
+    name: manifest.name,
+    archetype: manifest.archetype,
+    description: manifest.description,
+    acceptableAgentIds: manifest.acceptableAgentIds,
+    publish: manifest.publish,
+    runtimeDefaults: manifest.runtimeDefaults,
+    ownership: manifest.ownership,
+    tags: manifest.tags,
+    notes: manifest.notes
+  };
+  return yaml.dump(ordered, { lineWidth: -1, noRefs: true }).trimEnd() + '\n';
+}
+
+async function loadSourceContent(skillId: string) {
+  const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
+  return fs.readFile(filePath, 'utf-8');
+}
+
+async function loadPromptFrontmatter(skillId: string) {
+  const filePath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const match = raw.match(/^---\n([\s\S]*?)\n---/);
+    if (!match) return null;
+    const parsed = yaml.load(match[1]) || {};
+    return parsed && typeof parsed === 'object' ? parsed as any : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeManifestWithPromptFrontmatter(skillId: string, manifest: PromptLabManifest, frontmatter: any, sourceContent = '') {
+  if (!frontmatter || typeof frontmatter !== 'object') {
+    return manifest;
+  }
+  return normalizeManifest(skillId, {
+    ...manifest,
+    agentId: sanitizeString(frontmatter.agentId, manifest.agentId),
+    name: sanitizeString(frontmatter.name, manifest.name),
+    archetype: sanitizeString(frontmatter.archetype, manifest.archetype),
+    description: sanitizeString(frontmatter.description, manifest.description),
+    acceptableAgentIds: Array.isArray(frontmatter.acceptableAgentIds)
+      ? frontmatter.acceptableAgentIds
+      : manifest.acceptableAgentIds,
+    runtimeDefaults: {
+      ...manifest.runtimeDefaults,
+      tier: manifest.runtimeDefaults.tier,
+      temperature: typeof frontmatter.temperature === 'number' ? frontmatter.temperature : manifest.runtimeDefaults.temperature,
+      maxTokens: typeof frontmatter.maxTokens === 'number' ? frontmatter.maxTokens : manifest.runtimeDefaults.maxTokens,
+      model: sanitizeString(frontmatter.model, '') || manifest.runtimeDefaults.model,
+      thinkingMode: sanitizeString(frontmatter.thinkingMode, manifest.runtimeDefaults.thinkingMode),
+      reasoningEffort: sanitizeString(frontmatter.reasoningEffort, manifest.runtimeDefaults.reasoningEffort)
+    }
+  }, sourceContent);
+}
+
+async function loadManifest(skillId: string, sourceContent = '') {
+  const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const parsed = yaml.load(raw) || {};
+    return {
+      exists: true,
+      filePath,
+      manifest: normalizeManifest(skillId, parsed, sourceContent)
+    };
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      const promptFrontmatter = await loadPromptFrontmatter(skillId);
+      const migrated = mergeManifestWithPromptFrontmatter(
+        skillId,
+        buildDefaultManifest(skillId, sourceContent),
+        promptFrontmatter,
+        sourceContent
+      );
+      return {
+        exists: false,
+        filePath,
+        manifest: migrated
+      };
+    }
+    throw error;
+  }
+}
+
+async function writeManifest(skillId: string, manifestInput: any, sourceContent = '') {
+  const manifest = normalizeManifest(skillId, manifestInput, sourceContent);
+  const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
+  await fs.mkdir(MANIFESTS_DIR, { recursive: true });
+  await fs.writeFile(filePath, serializeManifest(manifest), 'utf-8');
+  return manifest;
+}
+
+async function getPlatformReasoningDefaultModel() {
+  try {
+    const row = await systemPrisma.platform_api_configs.findFirst({
+      select: { defaultReasoningModel: true }
+    });
+    return sanitizeString(row?.defaultReasoningModel, '') || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveCompileRoutingKey(agentId: string, skillId: string) {
+  const candidates = Array.from(new Set([
+    agentId,
+    skillId,
+    agentId.startsWith('skill:') ? agentId.slice(6) : ''
+  ].filter(Boolean)));
+
+  for (const candidate of candidates) {
+    const routings = await getAgentRoutings(candidate);
+    if (routings.length > 0) {
+      return candidate;
+    }
+  }
+
+  return agentId;
 }
 
 /**
@@ -85,8 +358,7 @@ ${config}
     const response = await gateway.execute({
       messages,
       max_tokens: 8000,
-      temperature: 0.2,
-      model: 'deepseek-v4-pro'
+      temperature: 0.2
     }, caller, {});
 
     let compiledPrompt = response.choices[0]?.message?.content || '';
@@ -130,26 +402,29 @@ ${config}
  */
 router.get('/sources', async (req, res) => {
   try {
-    const sourcesDir = path.join(process.cwd(), '../prompt-lab/sources');
-    const promptsDir = path.join(process.cwd(), '../prompts');
-
-    const sourceFiles = await fs.readdir(sourcesDir).catch(() => [] as string[]);
-    const promptFiles = await fs.readdir(promptsDir).catch(() => [] as string[]);
+    const sourceFiles = await fs.readdir(SOURCES_DIR).catch(() => [] as string[]);
+    const manifestFiles = await fs.readdir(MANIFESTS_DIR).catch(() => [] as string[]);
+    const promptFiles = await fs.readdir(PROMPTS_DIR).catch(() => [] as string[]);
 
     const sourceIds = sourceFiles
       .filter((f: string) => f.endsWith('.md'))
       .map((f: string) => f.replace('.md', ''));
 
+    const manifestIds = manifestFiles
+      .filter((f: string) => f.endsWith('.yaml') && !f.startsWith('_'))
+      .map((f: string) => f.replace(/\.yaml$/, ''));
+
     const promptIds = promptFiles
       .filter((f: string) => /^skill\..+\.md$/.test(f))
       .map((f: string) => f.replace(/^skill\./, '').replace(/\.md$/, ''));
 
-    const mergedIds = Array.from(new Set([...sourceIds, ...promptIds]));
+    const mergedIds = Array.from(new Set([...sourceIds, ...manifestIds, ...promptIds]));
     const list = sortSkillList(mergedIds.map((id) => ({
       id,
       name: id,
       file: `${id}.md`,
-      existsInLab: sourceIds.includes(id)
+      existsInLab: sourceIds.includes(id),
+      hasManifest: manifestIds.includes(id)
     })));
 
     res.json({ success: true, data: list });
@@ -164,9 +439,8 @@ router.get('/sources', async (req, res) => {
  */
 router.get('/source/:skillId', async (req, res) => {
   try {
-    const { skillId } = req.params;
-    const sourcesDir = path.join(process.cwd(), '../prompt-lab/sources');
-    const filePath = path.join(sourcesDir, `${skillId}.md`);
+    const skillId = assertValidSkillId(req.params.skillId);
+    const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
     
     try {
       const content = await fs.readFile(filePath, 'utf-8');
@@ -180,14 +454,101 @@ router.get('/source/:skillId', async (req, res) => {
 });
 
 /**
+ * PUT /api/prompt-lab/source/:skillId
+ * 保存源文件内容
+ */
+router.put('/source/:skillId', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    const { content } = req.body || {};
+
+    if (typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: '缺少有效的源文件内容' });
+    }
+
+    const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
+
+    await fs.mkdir(SOURCES_DIR, { recursive: true });
+    await fs.writeFile(filePath, content.trim() + '\n', 'utf-8');
+
+    res.json({ success: true, data: content.trim() + '\n' });
+  } catch (error) {
+    res.status(500).json({ error: '保存失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * GET /api/prompt-lab/manifest/:skillId
+ * 获取 Prompt Lab manifest
+ */
+router.get('/manifest/:skillId', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    let sourceContent = '';
+    try {
+      sourceContent = await loadSourceContent(skillId);
+    } catch {
+      // ignore missing source, manifest 仍可独立存在
+    }
+
+    const { exists, manifest } = await loadManifest(skillId, sourceContent);
+    res.json({ success: true, exists, data: manifest });
+  } catch (error) {
+    res.status(500).json({ error: '读取 manifest 失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * PUT /api/prompt-lab/manifest/:skillId
+ * 保存 Prompt Lab manifest
+ */
+router.put('/manifest/:skillId', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    const incoming = req.body?.manifest ?? req.body ?? {};
+    let sourceContent = '';
+    try {
+      sourceContent = await loadSourceContent(skillId);
+    } catch {
+      // allow manifest-only save
+    }
+
+    const { manifest: currentManifest } = await loadManifest(skillId, sourceContent);
+    const nextManifest = {
+      ...currentManifest,
+      ...incoming,
+      publish: {
+        ...currentManifest.publish,
+        ...(incoming.publish || {})
+      },
+      runtimeDefaults: {
+        ...currentManifest.runtimeDefaults,
+        ...(incoming.runtimeDefaults || {})
+      },
+      ownership: {
+        ...currentManifest.ownership,
+        ...(incoming.ownership || {})
+      },
+      acceptableAgentIds: incoming.acceptableAgentIds ?? currentManifest.acceptableAgentIds,
+      tags: incoming.tags ?? currentManifest.tags,
+      notes: incoming.notes ?? currentManifest.notes
+    };
+
+    const savedManifest = await writeManifest(skillId, nextManifest, sourceContent);
+    res.json({ success: true, data: savedManifest });
+  } catch (error) {
+    res.status(500).json({ error: '保存 manifest 失败', details: (error as Error).message });
+  }
+});
+
+/**
  * POST /api/prompt-lab/source/:skillId/create
  * 创建源文件模板
  */
 router.post('/source/:skillId/create', async (req, res) => {
   try {
-    const { skillId } = req.params;
-    const sourcesDir = path.join(process.cwd(), '../prompt-lab/sources');
-    const filePath = path.join(sourcesDir, `${skillId}.md`);
+    const skillId = assertValidSkillId(req.params.skillId);
+    const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
     
     // 检查文件是否已存在
     try {
@@ -244,8 +605,15 @@ router.post('/source/:skillId/create', async (req, res) => {
 - 保持一致性
 `;
     
+    await fs.mkdir(SOURCES_DIR, { recursive: true });
     await fs.writeFile(filePath, template, 'utf-8');
-    res.json({ success: true, message: '源文件模板已创建', skillId });
+
+    const existingManifest = await loadManifest(skillId, template);
+    if (!existingManifest.exists) {
+      await writeManifest(skillId, existingManifest.manifest, template);
+    }
+
+    res.json({ success: true, message: '源文件模板已创建', skillId, manifestCreated: !existingManifest.exists });
   } catch (error) {
     res.status(500).json({ error: '创建失败', details: (error as Error).message });
   }
@@ -253,30 +621,37 @@ router.post('/source/:skillId/create', async (req, res) => {
 
 /**
  * GET /api/prompt-lab/params/:skillId
- * 从生产文件 frontmatter 读取 skill 运行参数
+ * 从 Prompt Lab manifest 读取 skill 运行参数
  */
 router.get('/params/:skillId', async (req, res) => {
   try {
-    const { skillId } = req.params;
-    const prodPath = path.join(process.cwd(), '../prompts', `skill.${skillId}.md`);
-    let fm: any = {};
-
+    const skillId = assertValidSkillId(req.params.skillId);
+    let sourceContent = '';
     try {
-      const raw = await fs.readFile(prodPath, 'utf-8');
-      const match = raw.match(/^---\n([\s\S]*?)\n---/);
-      if (match) fm = yaml.load(match[1]) || {};
+      sourceContent = await loadSourceContent(skillId);
     } catch {
-      // 文件不存在，返回默认值
+      // allow params on manifest-only skill
     }
+
+    const { exists, manifest } = await loadManifest(skillId, sourceContent);
 
     res.json({
       success: true,
       data: {
-        temperature: fm.temperature ?? 0.7,
-        maxTokens: fm.maxTokens ?? 8000,
-        model: fm.model || null,
-        thinkingMode: fm.thinkingMode || 'default',
-        reasoningEffort: fm.reasoningEffort || 'default'
+        tier: manifest.runtimeDefaults.tier,
+        temperature: manifest.runtimeDefaults.temperature,
+        maxTokens: manifest.runtimeDefaults.maxTokens,
+        model: manifest.runtimeDefaults.model,
+        thinkingMode: manifest.runtimeDefaults.thinkingMode,
+        reasoningEffort: manifest.runtimeDefaults.reasoningEffort,
+        manifestExists: exists
+      },
+      manifest: {
+        skillId: manifest.skillId,
+        agentId: manifest.agentId,
+        archetype: manifest.archetype,
+        name: manifest.name,
+        description: manifest.description
       }
     });
   } catch (error) {
@@ -304,24 +679,18 @@ router.get('/compile-spec', async (req, res) => {
  */
 router.post('/compile-source', async (req, res) => {
   try {
-    const { skillId } = req.body;
+    const skillId = assertValidSkillId(req.body?.skillId);
 
-    if (!skillId) {
-      return res.status(400).json({ error: '缺少 skillId 参数' });
-    }
-
-    // 1. 加载源文件
-    const sourcesDir = path.join(process.cwd(), '../prompt-lab/sources');
-    const sourceFilePath = path.join(sourcesDir, `${skillId}.md`);
-    
     let sourceContent: string;
     try {
-      sourceContent = await fs.readFile(sourceFilePath, 'utf-8');
+      sourceContent = await loadSourceContent(skillId);
     } catch {
       return res.status(404).json({ 
         error: `源文件不存在: ${skillId}` 
       });
     }
+
+    const { exists: manifestExists, manifest } = await loadManifest(skillId, sourceContent);
 
     // 2. 加载编译规则 (compile-spec)
     const compileSpecPath = path.join(
@@ -334,6 +703,18 @@ router.post('/compile-source', async (req, res) => {
     const fullPrompt = `${compileSpec}
 
 ---
+
+## 当前 Skill 元数据
+
+\`\`\`yaml
+${yaml.dump({
+  skillId: manifest.skillId,
+  agentId: manifest.agentId,
+  name: manifest.name,
+  archetype: manifest.archetype,
+  description: manifest.description
+}, { lineWidth: -1, noRefs: true }).trim()}
+\`\`\`
 
 ## 现在请编译以下 Skill 源文件
 
@@ -357,8 +738,7 @@ ${sourceContent}
     const response = await gateway.execute({
       messages,
       max_tokens: 8000,
-      temperature: 0.2,
-      model: 'deepseek-v4-pro'
+      temperature: 0.2
     }, caller, {});
 
     let compiledPrompt = response.choices[0]?.message?.content || '';
@@ -373,11 +753,10 @@ ${sourceContent}
       .replace(/\n?```\s*$/, '');
 
     // 5. 可写回 compiled/（暂不覆盖 prompts/）
-    const compiledDir = path.join(process.cwd(), '../prompt-lab/compiled');
     try {
-      await fs.mkdir(compiledDir, { recursive: true });
+      await fs.mkdir(COMPILED_DIR, { recursive: true });
       await fs.writeFile(
-        path.join(compiledDir, `${skillId}.md`),
+        path.join(COMPILED_DIR, `${skillId}.md`),
         compiledPrompt,
         'utf-8'
       );
@@ -394,7 +773,9 @@ ${sourceContent}
       success: true,
       skillId,
       prompt: compiledPrompt,
-      stats: { lines, rules, chars }
+      stats: { lines, rules, chars },
+      manifestExists,
+      manifest
     });
 
   } catch (error) {
@@ -409,57 +790,61 @@ ${sourceContent}
 /**
  * POST /api/prompt-lab/publish
  * 将编译产物发布：备份当前 → 写回 prompts/ → 创建 DB ACTIVE 版本
+ * 元数据优先来自 Prompt Lab manifests/
  */
 router.post('/publish', async (req, res) => {
   try {
-    const { skillId, prompt, params } = req.body;
+    const skillId = assertValidSkillId(req.body?.skillId);
+    const { prompt, params } = req.body || {};
 
-    if (!skillId || !prompt) {
+    if (!prompt) {
       return res.status(400).json({ error: '缺少 skillId 或 prompt 参数' });
     }
 
-    // 1. 读当前 prompts/ 文件提取 frontmatter
-    const prodPath = path.join(process.cwd(), '../prompts', `skill.${skillId}.md`);
-    let frontmatter: any = {};
+    let sourceContent = '';
     try {
-      const raw = await fs.readFile(prodPath, 'utf-8');
-      const match = raw.match(/^---\n([\s\S]*?)\n---/);
-      if (match) {
-        frontmatter = yaml.load(match[1]) || {};
-      }
+      sourceContent = await loadSourceContent(skillId);
     } catch {
-      frontmatter = {
-        ...buildDefaultFrontmatter(skillId, prompt),
-        temperature: 0.7,
-        maxTokens: 8000
-      };
+      // allow publish from compiled prompt even if source is missing, using manifest/defaults
     }
 
-    if (!frontmatter || typeof frontmatter !== 'object') {
-      frontmatter = buildDefaultFrontmatter(skillId, prompt);
+    const loadedManifest = await loadManifest(skillId, sourceContent);
+    const currentManifest = loadedManifest.manifest;
+
+    const nextManifest = normalizeManifest(skillId, {
+      ...currentManifest,
+      runtimeDefaults: {
+        ...currentManifest.runtimeDefaults,
+        tier: params?.tier ?? currentManifest.runtimeDefaults.tier,
+        temperature: params?.temperature ?? currentManifest.runtimeDefaults.temperature,
+        maxTokens: params?.maxTokens ?? currentManifest.runtimeDefaults.maxTokens,
+        model: params?.model ?? currentManifest.runtimeDefaults.model,
+        thinkingMode: params?.thinkingMode ?? currentManifest.runtimeDefaults.thinkingMode,
+        reasoningEffort: params?.reasoningEffort ?? currentManifest.runtimeDefaults.reasoningEffort
+      }
+    }, sourceContent);
+
+    if (!nextManifest.publish.enabled) {
+      return res.status(400).json({ error: `当前 manifest 禁止发布: ${skillId}` });
     }
 
-    if (looksLikeMojibake(frontmatter.description)) {
-      frontmatter.description = '';
+    if (!nextManifest.publish.exportTargets.includes('platform-prompts')) {
+      return res.status(400).json({ error: `当前 manifest 未声明 platform-prompts 导出目标: ${skillId}` });
     }
 
-    if (looksLikeMojibake(frontmatter.name)) {
-      frontmatter.name = `default-skill-${skillId}`;
-    }
+    await writeManifest(skillId, nextManifest, sourceContent);
 
-    if (looksLikeMojibake(frontmatter.archetype)) {
-      frontmatter.archetype = 'conversational';
-    }
-
-    const agentId = frontmatter.agentId || `skill:${skillId}`;
-    const name = frontmatter.name || `default-skill-${skillId}`;
-    // 允许前端覆盖参数
-    const temperature = params?.temperature ?? frontmatter.temperature ?? 0.7;
-    const maxTokens = params?.maxTokens ?? frontmatter.maxTokens ?? 8000;
-    const model = params?.model || frontmatter.model || process.env.AI_MODEL || 'deepseek-v4-flash';
-    const thinkingMode = params?.thinkingMode || frontmatter.thinkingMode || 'default';
-    const reasoningEffort = params?.reasoningEffort || frontmatter.reasoningEffort || 'default';
-    const description = frontmatter.description || `${name} Skill`;
+    const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
+    const agentId = nextManifest.agentId;
+    const name = nextManifest.name;
+    const archetype = nextManifest.archetype;
+    const temperature = nextManifest.runtimeDefaults.temperature;
+    const maxTokens = nextManifest.runtimeDefaults.maxTokens;
+    const model = nextManifest.runtimeDefaults.model;
+    const tier = nextManifest.runtimeDefaults.tier || 'chat';
+    const thinkingMode = nextManifest.runtimeDefaults.thinkingMode;
+    const reasoningEffort = nextManifest.runtimeDefaults.reasoningEffort;
+    const description = nextManifest.description || `${name} Skill`;
 
     // 2. 查最新 version
     const latest = await systemPrisma.agent_prompts.findFirst({
@@ -471,7 +856,7 @@ router.post('/publish', async (req, res) => {
 
     // 3. 备份当前生产文件
     const now = new Date().toISOString();
-    const backupsDir = path.join(process.cwd(), '../prompt-lab/backups', skillId);
+    const backupsDir = path.join(BACKUPS_DIR, skillId);
     try {
       await fs.mkdir(backupsDir, { recursive: true });
       const ts = now.replace(/[:.]/g, '-');
@@ -481,22 +866,35 @@ router.post('/publish', async (req, res) => {
     }
 
     // 4. 写回 prompts/
-    const yamlLines = [
-      '---',
-      `agentId: ${agentId}`,
-      `name: ${name}`,
-      `archetype: ${frontmatter.archetype || 'conversational'}`,
-      `description: ${description || ''}`,
-      `temperature: ${temperature}`,
-      `maxTokens: ${maxTokens}`,
-    ];
-    if (frontmatter.acceptableAgentIds?.length) {
-      yamlLines.push('acceptableAgentIds:');
-      frontmatter.acceptableAgentIds.forEach((a: string) => yamlLines.push(`  - ${a}`));
+    const frontmatter: any = {
+      agentId,
+      name,
+      archetype,
+      description,
+      temperature,
+      maxTokens
+    };
+    if (nextManifest.acceptableAgentIds.length > 0) {
+      frontmatter.acceptableAgentIds = nextManifest.acceptableAgentIds;
     }
-    yamlLines.push('---', '', prompt.trim());
+    if (model) {
+      frontmatter.model = model;
+    }
+    if (thinkingMode && thinkingMode !== 'default') {
+      frontmatter.thinkingMode = thinkingMode;
+    }
+    if (reasoningEffort && reasoningEffort !== 'default') {
+      frontmatter.reasoningEffort = reasoningEffort;
+    }
 
-    await fs.writeFile(prodPath, yamlLines.join('\n') + '\n', 'utf-8');
+    const frontmatterYaml = yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd();
+    await fs.writeFile(prodPath, `---\n${frontmatterYaml}\n---\n\n${prompt.trim()}\n`, 'utf-8');
+
+    const compileRoutingKey = await resolveCompileRoutingKey(agentId, skillId);
+    const effectiveModel = tier === 'reasoning' && !model
+      ? (await getPlatformReasoningDefaultModel()) || null
+      : model;
+    const compileResult = await compilePrompt(prompt.trim(), compileRoutingKey);
 
     // 5. 创建 DB ACTIVE 版本
     const promptId = uuidv4();
@@ -506,12 +904,39 @@ router.post('/publish', async (req, res) => {
         agentId,
         name: `${name} v${newVersion}`,
         systemPrompt: prompt.trim(),
+        compiledSystemPrompt: compileResult.compiled,
+        compileStatus: compileResult.status,
+        compileError: compileResult.error || null,
+        sourceHash: compileResult.sourceHash,
+        compileContextHash: compileResult.compileContextHash,
+        compiledAt: new Date(),
         status: 'ACTIVE',
         version: newVersion,
         temperature,
         maxTokens,
-        model,
+        model: effectiveModel,
         description,
+        metadata: JSON.stringify({
+          promptLab: {
+            source: 'prompt-lab',
+            manifestVersion: nextManifest.version,
+            sourceSkillId: nextManifest.skillId,
+            runtimeDefaults: nextManifest.runtimeDefaults,
+            exportTargets: nextManifest.publish.exportTargets,
+            tags: nextManifest.tags,
+            notes: nextManifest.notes
+          },
+          compile: {
+            status: compileResult.status,
+            sourceHash: compileResult.sourceHash,
+            compileContextHash: compileResult.compileContextHash,
+            warnings: compileResult.warnings,
+            error: compileResult.error || null,
+            rewritten: compileResult.rewritten,
+            fieldsApplied: compileResult.fieldsApplied,
+            compiledAt: new Date().toISOString()
+          }
+        }),
         publishedAt: new Date(),
         createdBy: 'prompt-lab'
       }
@@ -531,9 +956,10 @@ router.post('/publish', async (req, res) => {
       await systemPrisma.skill_model_configs.update({
         where: { id: existingCfg.id },
         data: {
+          tier,
           temperature,
           maxTokens,
-          model: model || null,
+          model: effectiveModel || null,
           thinkingMode,
           reasoningEffort,
           updatedAt: new Date().toISOString()
@@ -545,9 +971,10 @@ router.post('/publish', async (req, res) => {
         data: {
           id: uuidv4(),
           skillId,
+          tier,
           temperature,
           maxTokens,
-          model,
+          model: effectiveModel || null,
           thinkingMode,
           reasoningEffort,
           enabled: true,
@@ -556,11 +983,26 @@ router.post('/publish', async (req, res) => {
       });
     }
 
+    try {
+      promptCache.clearAgentCache(agentId);
+      if (agentId !== skillId) {
+        promptCache.clearAgentCache(skillId);
+      }
+      getAPIGateway().invalidateCache(undefined, undefined, skillId);
+      getAPIGateway().invalidateCache(undefined, agentId);
+    } catch (cacheErr: any) {
+      console.warn('Failed to invalidate prompt/gateway cache:', cacheErr?.message || cacheErr);
+    }
+
     res.json({
       success: true,
       version: newVersion,
       agentId,
-      promptId
+      promptId,
+      manifestUpdated: true,
+      compileStatus: compileResult.status,
+      compileWarnings: compileResult.warnings,
+      compileError: compileResult.error || null
     });
 
   } catch (error) {

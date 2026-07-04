@@ -1,222 +1,176 @@
-# Prompt Lab - 基础设施配置工作区
+# Prompt Lab
 
-这个目录不是存储"提示词"的地方，而是存储**基础设施数据**的地方。
+Prompt Lab 是 WenFlow 的独立 Prompt authoring / build 工作区。
 
-## 核心概念
+它的职责不是直接充当平台运行时 `prompts/` 目录的编辑器，而是维护一套独立的作者态真相源，并把这套真相源编译、审核、导出到平台集成目标。
 
-```
-蓝图（Blueprint）         →  Skill 编译  →  提示词（Prompt）
-基础设施数据，字段化            编译器         LLM 可执行
-```
+## 当前正式定义
 
-类比编程语言：
+Prompt Lab 内部的真相源分两部分：
 
-```
-TypeScript 源码          →  tsc 编译  →  JavaScript
-高级语言                    编译器         可执行代码
+- `sources/*.md`：Prompt 正文的唯一真相源
+- `manifests/*.yaml`：Prompt 元数据的唯一真相源
 
-YAML 蓝图               →  Skill 编译  →  Markdown Prompt
-基础设施数据                 编译器         LLM 可执行
-```
+Prompt Lab 内部的派生产物：
 
----
+- `compiled/*.md`：候选编译产物，用于审核，不是源
+- `backups/`：发布前快照或回滚材料，不是源
+
+平台侧对象与 Prompt Lab 的关系：
+
+- `wenflow/prompts/*.md`：当前平台集成目标之一，不是 Prompt Lab 的真相源
+- `agent_prompts` / `compiledSystemPrompt` / runtime cache：运行时对象，不是 Prompt Lab 的真相源
+
+一句话：
+
+> Prompt Lab 负责作者态建模与编译；平台负责运行态消费与执行。
 
 ## 目录结构
 
-```
+```text
 prompt-lab/
-├── blueprints/                    # 基础设施数据（源文件）
-│   ├── goal-conversation.yaml           # 目标对话蓝图
-│   ├── goal-conversation.schema.json    # I/O 字段定义
-│   ├── path-planning.yaml               # 路径规划蓝图
-│   └── ...
-│
-├── prompts/                       # 编译产物（只读，自动生成）
-│   ├── goal-conversation.md             # 编译后的提示词
-│   ├── path-planning.md
-│   └── ...
-│
-├── docs/                          # 规范文档
-│   ├── BLUEPRINT_SPEC_V3.md             # 蓝图规范 v3.0
-│   ├── COMPILER_GUIDE.md                # 编译器使用指南
-│   └── ARCHITECTURE.md                  # 架构说明
-│
-└── README.md                      # 本文件
+  sources/                 # 作者态正文真相源（唯一 body truth）
+  manifests/               # 作者态元数据真相源（唯一 metadata truth）
+  compiled/                # 候选编译产物（review target）
+  backups/                 # 导出/发布前快照
+  compiler-skill/          # 编译相关约定、内部 prompt skill 资产
+  docs/                    # 架构、协议、编译与治理文档
+  README.md
+  STRUCTURE.md
 ```
 
----
+详见：
 
-## 文件类型说明
+- `STRUCTURE.md`
+- `docs/ARCHITECTURE.md`
+- `docs/SOURCE_PROTOCOL_V1.md`
+- `docs/INTERNAL_PROMPT_SKILLS.md`
 
-### 1. 蓝图（Blueprints）- 可编辑的基础设施数据
+## 核心对象
 
-**位置**: `blueprints/*.yaml`
+### 1. Source Body
 
-**性质**:
-- ✅ 结构化数据（YAML 格式）
-- ✅ 字段级别编辑
-- ✅ 声明式（what，不是 how）
-- ✅ 无编号、无冗余
-- ✅ 人类可读、机器可解析
-- ❌ 不能直接给 LLM 执行
+位置：`sources/<skillId>.md`
 
-**用途**:
-- 在 Prompt Lab 中可视化编辑
-- 版本控制（Git）
-- 字段级别的修改和配置
+职责：
 
-**示例**:
-```yaml
-rules:
-  behavior:
-    max_questions_per_turn: 1
-    tone: "natural_transition"
+- 存放 `DEFINITIONS / EXECUTION` 结构化作者态正文
+- 面向运营、策划、提示词设计者编辑
+- 不直接等于平台当前运行 Prompt
+
+### 2. Source Manifest
+
+位置：`manifests/<skillId>.yaml`
+
+职责：
+
+- 存放 `skillId / agentId / archetype / name / description / runtimeDefaults` 等元数据
+- 作为发布与导出的 metadata truth
+- 让 Prompt Lab 不再依赖平台现有 `prompts/*.md` frontmatter 回读
+
+`runtimeDefaults` 内建议显式包含 runtime `tier`，它和 `ownership.tier` 不是一回事：
+
+- `runtimeDefaults.tier`：运行路由层级，例如 `chat / reasoning / light`
+- `ownership.tier`：作者态归属或治理分层，例如 `production / experimental`
+
+### 3. Candidate Artifact
+
+位置：`compiled/<skillId>.md`
+
+职责：
+
+- 存放源码编译后的候选 Prompt
+- 供审核、diff、验收使用
+- 可被覆盖重算，不承担真相源职责
+
+### 4. Export Target
+
+当前平台集成目标之一：
+
+- `wenflow/prompts/skill.*.md`
+- `agent_prompts` ACTIVE 版本
+
+注意：导出目标可以有多个，但都不应反向定义 Prompt Lab source。
+
+### 5. Effective Runtime Prompt
+
+运行时真正喂给模型的 prompt，可能进一步经过字段路由、引用展开、runtime compile 或缓存层处理。
+
+它属于平台运行时层，不属于 Prompt Lab authoring truth。
+
+## 生命周期
+
+```text
+Source Body + Source Manifest
+  -> Source Validate
+  -> Source Compile
+  -> Candidate Review
+  -> Export / Publish
+  -> Platform Published Prompt
+  -> Runtime Compile / Runtime Injection
+  -> Effective Runtime Prompt
 ```
 
----
+关键边界：
 
-### 2. 提示词（Prompts）- 编译产物
+- 保存 source 不会自动重写运行态 truth
+- compile 生成 candidate，不等于生效
+- publish/export 才会推动到平台集成目标
+- runtime compile 属于平台层，不属于 Prompt Lab source compile
 
-**位置**: `prompts/*.md`
+## 页面职责
 
-**性质**:
-- ✅ 自然语言（Markdown 格式）
-- ✅ 详细展开说明
-- ✅ 带编号（RULE-XX）
-- ✅ 指令式（how，明确指示）
-- ✅ LLM 可直接执行
-- ⚠️ 只读文件（自动生成，不要手动编辑）
+### Prompt Lab
 
-**用途**:
-- 实际运行时给 LLM 执行
-- 测试验证
-- 预览编译结果
+负责：
 
-**示例**:
-```markdown
-RULE-09: 每次最多问 1 个核心问题，避免连续追问。
-RULE-11: 提问语气不能像问卷或审问，优先使用自然过渡...
-```
+- 编辑 source body
+- 编辑 source manifest
+- 编译 candidate
+- 审核 candidate
+- 导出或发布
 
----
+不负责：
 
-## 工作流程
+- 直接定义平台 runtime effective prompt 为真相源
+- 承担运行时诊断页面的职责
 
-### 1. 编辑阶段（人工操作）
+### Skill 编辑器 / Runtime Workbench
 
-```
-运营人员在 Prompt Lab 中
-  ↓
-打开蓝图：blueprints/goal-conversation.yaml
-  ↓
-字段级别编辑：max_questions_per_turn: 2
-  ↓
-保存蓝图
-```
+负责：
 
-### 2. 编译阶段（平台自动）
+- 查看当前 effective prompt
+- 查看 runtime compile 状态
+- 查看调用、漂移、缓存与参数
+- 跳转到 Prompt Lab 进行 source 编辑
 
-```
-点击"编译"按钮
-  ↓
-Skill 编译器读取 YAML
-  ↓
-应用 conversational archetype 模板
-  ↓
-自动生成 RULE-XX 编号
-  ↓
-生成自然语言描述
-  ↓
-输出到 prompts/goal-conversation.md
-```
+不负责：
 
-### 3. 测试阶段（验证）
+- 充当 Prompt Lab 唯一 source 编辑入口
 
-```
-预览编译后的提示词
-  ↓
-在测试环境运行
-  ↓
-验证 LLM 输出
-  ↓
-通过 → 发布到生产
-失败 → 回到编辑阶段
-```
+## 当前实现与目标架构的关系
 
-### 4. 发布阶段（部署）
+当前代码已经具备一部分真实能力：
 
-```
-编译通过
-  ↓
-复制 prompts/goal-conversation.md
-  ↓
-到生产环境：wenflow/prompts/skill.goal-conversation.md
-  ↓
-LLM 执行新提示词
-```
+- `sources/*.md` 已经是 live 作者态正文
+- `compile-source` 已经会把 source 编译到 `compiled/*.md`
+- `PromptLab.vue` 和 `PromptWorkbench.vue` 已经能编辑 source
 
----
+但仍有几项待收口债务：
 
-## 蓝图规范
+- 当前 compile 仍偏向 LLM 全文生成，而不是 hybrid compile
+- publish 结果还未完全与平台 runtime compile 字段模型统一
+- `sources/` 与 `compiler-skill/` 的资产分类仍需继续清晰化
 
-详见 `docs/BLUEPRINT_SPEC_V3.md`
+这些债务不影响 Prompt Lab 的正式定义，但会影响后续落地节奏。
 
-核心原则：
-1. **结构化** - YAML 格式，类型清晰
-2. **无编号** - 编译器自动生成 RULE-XX
-3. **声明式** - 描述"是什么"，不是"怎么做"
-4. **字段化** - 每个配置项都是独立字段
+## 文档分层
 
----
+当前文档以这几份为准：
 
-## 编译器
+- `docs/ARCHITECTURE.md`：系统边界与对象模型
+- `docs/SOURCE_PROTOCOL_V1.md`：source 文件协议
+- `docs/INTERNAL_PROMPT_SKILLS.md`：内部 prompt skill 设计
+- `docs/COMPILER_GUIDE.md`：编译流程与职责拆分
 
-详见 `docs/COMPILER_GUIDE.md`
-
-**位置**: `wenflow/frontend/src/utils/blueprintCompiler.ts`
-
-**命令行使用**:
-```bash
-cd wenflow/frontend
-npx tsx scripts/test-compiler.ts
-```
-
-**前端集成**:
-```typescript
-import { compileBlueprint } from '@/utils/blueprintCompiler'
-
-const compiled = compileBlueprint(blueprint)
-```
-
----
-
-## 当前状态
-
-### ✅ 已完成
-- [x] YAML 蓝图格式规范 v3.0
-- [x] 蓝图编译器实现
-- [x] goal-conversation 蓝图示例
-- [x] 编译测试通过
-
-### 🚧 进行中
-- [ ] 前端 YAML 蓝图加载器
-- [ ] 可视化蓝图编辑器
-- [ ] 编译按钮和预览功能
-
-### 📋 待完成
-- [ ] 其他 4 个 skill 的蓝图
-- [ ] 生产环境部署流程
-- [ ] CI/CD 自动编译
-
----
-
-## 重要提醒
-
-⚠️ **prompts/ 目录中的文件是编译产物，不要手动编辑！**
-
-如果需要修改提示词内容：
-1. 编辑 `blueprints/*.yaml`（基础设施数据）
-2. 运行编译器
-3. 查看 `prompts/*.md`（自动生成）
-
-⚠️ **blueprints/ 才是源文件，才应该被版本控制和编辑！**
+旧的 blueprint / YAML 设计文档仍保留为历史探索材料，但不再代表当前 Prompt Lab 的正式模型。

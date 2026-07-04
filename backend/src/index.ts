@@ -176,6 +176,7 @@ import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
+import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
 import adminDevtoolsRoutes from './routes/admin/devtools';
 import adminTestRoutes from './routes/admin/test';
 import adminDebugRoutes from './routes/admin/debug';
@@ -191,6 +192,7 @@ import userApiConfigRoutes from './routes/user-api-config';
 import userAgentModelConfigsRoutes from './routes/user-agent-model-configs';
 import userMcpRoutes from './routes/user-mcp';
 import userDeveloperRoutes from './routes/user-developer';
+import { projectionAccessPolicy } from './middleware/projection-access.middleware';
 
 // API路由
 app.get('/api', (req, res) => {
@@ -246,10 +248,31 @@ agents: {
 });
 
 // 路由注册
+const dashboardProjectionPolicy = projectionAccessPolicy({
+  dashboardReadPaths: [
+    '/stats',
+    '/paths',
+    '/current',
+    '/copy',
+    '/me',
+    '/me/learner-center',
+    '/me/sessions',
+    '/sessions/active',
+    '/sessions/history',
+    '/sessions/:sessionId/detail',
+    '/tasks/:taskId/evaluation/latest'
+  ]
+});
+
+const denyGrantProjectionPolicy = projectionAccessPolicy({
+  denyAccessGrant: true,
+  denyMessage: '当前开发视角许可不允许进入该接口，请让用户自行管理授权或使用后台受控入口'
+});
+
 // Platform 层路由 - 核心学习功能（平台内部调用）
-app.use('/api/learning', authMiddleware, acpContextMiddleware('platform'), learningRoutes);
-app.use('/api/state', authMiddleware, acpContextMiddleware('platform'), stateTrackingRoutes);
-app.use('/api/achievements', authMiddleware, acpContextMiddleware('platform'), achievementsRoutes);
+app.use('/api/learning', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), learningRoutes);
+app.use('/api/state', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), stateTrackingRoutes);
+app.use('/api/achievements', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), achievementsRoutes);
 app.use('/api/reports', authMiddleware, acpContextMiddleware('platform'), reportRoutes);
 app.use('/api/metrics', authMiddleware, acpContextMiddleware('platform'), metricsRoutes);
 
@@ -278,17 +301,18 @@ app.use('/api/admin/users', authMiddleware, acpContextMiddleware('admin'), admin
 app.use('/api/admin/learner-models', authMiddleware, acpContextMiddleware('admin'), adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', authMiddleware, acpContextMiddleware('admin'), adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', authMiddleware, acpContextMiddleware('admin'), adminVirtualLearnersRoutes);
+app.use('/api/admin/projection-access-grants', authMiddleware, acpContextMiddleware('admin'), adminProjectionAccessGrantsRoutes);
 app.use('/api/admin/prompt-lab', authMiddleware, acpContextMiddleware('admin'), promptLabRoutes);
 app.use('/api/admin/test', authMiddleware, acpContextMiddleware('admin'), adminTestRoutes);
 app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminDebugRoutes);
 app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminDevtoolsRoutes);
 app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminPlatformRoutes);
-app.use('/api/users', authMiddleware, acpContextMiddleware('user'), userRoutes);
+app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
 app.use('/api/skills', authMiddleware, acpContextMiddleware('user'), skillsRoutes);
-app.use('/api/adaptive-guidance', authMiddleware, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
+app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
 app.use('/api/plugins', authMiddleware, acpContextMiddleware('user'), pluginRoutes);
-app.use('/api/ai-teaching', authMiddleware, acpContextMiddleware('user'), aiTeachingRoutes);
+app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
 app.use('/api/feedback', authMiddleware, acpContextMiddleware('user'), feedbackRoutes);
 app.use('/api/ab-testing', authMiddleware, acpContextMiddleware('user'), abTestingRoutes);
 
@@ -299,7 +323,7 @@ app.use('/api/user/skills', authMiddleware, acpContextMiddleware('user'), userSk
 app.use('/api/user/api-config', authMiddleware, acpContextMiddleware('user'), userApiConfigRoutes);
 app.use('/api/user/agent-model-configs', authMiddleware, acpContextMiddleware('user'), userAgentModelConfigsRoutes);
 app.use('/api/user/mcp', authMiddleware, acpContextMiddleware('user'), userMcpRoutes);
-app.use('/api/user/developer', authMiddleware, acpContextMiddleware('user'), userDeveloperRoutes);
+app.use('/api/user/developer', authMiddleware, denyGrantProjectionPolicy, acpContextMiddleware('user'), userDeveloperRoutes);
 
 // 错误处理中间件
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

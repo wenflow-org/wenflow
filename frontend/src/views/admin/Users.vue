@@ -184,6 +184,63 @@
             <el-input v-model="editForm.password" type="password" show-password placeholder="留空则不修改" />
           </el-form-item>
         </el-form>
+
+        <section v-loading="projectionGrantLoading" class="projection-grant-panel">
+          <div class="projection-grant-panel__head">
+            <div>
+              <div class="projection-grant-panel__eyebrow">授权协助</div>
+              <h3>开发视角许可</h3>
+            </div>
+            <div class="projection-grant-panel__actions">
+              <el-tag :type="projectionGrantStatusTagType" effect="plain">{{ projectionGrantStatusLabel }}</el-tag>
+              <el-button size="small" @click="loadProjectionGrantForEdit">刷新</el-button>
+            </div>
+          </div>
+
+          <p class="projection-grant-panel__copy">
+            仅当用户明确授予协助许可后，才能基于该许可打开开发调试站的新页，进入该用户的开发视角排查问题。
+          </p>
+
+          <div v-if="projectionGrantMessage" class="projection-grant-panel__notice">
+            {{ projectionGrantMessage }}
+          </div>
+
+          <div class="projection-grant-grid">
+            <div class="projection-grant-item">
+              <span>许可状态</span>
+              <strong>{{ projectionGrantStatusLabel }}</strong>
+            </div>
+            <div class="projection-grant-item">
+              <span>开放范围</span>
+              <strong>{{ projectionGrantScopeLabel }}</strong>
+            </div>
+            <div class="projection-grant-item">
+              <span>创建时间</span>
+              <strong>{{ projectionGrantGrantedAtLabel }}</strong>
+            </div>
+            <div class="projection-grant-item">
+              <span>到期时间</span>
+              <strong>{{ projectionGrantExpiresAtLabel }}</strong>
+            </div>
+          </div>
+
+          <div class="projection-grant-note">
+            <span>协助说明</span>
+            <strong>{{ projectionGrantNoteLabel }}</strong>
+          </div>
+
+          <div class="projection-grant-entry-row">
+            <el-button
+              type="primary"
+              :disabled="projectionGrantStatus !== 'active'"
+              :loading="projectionOpening"
+              @click="openProjectionDebugStation"
+            >
+              打开开发调试站
+            </el-button>
+            <span class="projection-grant-entry-hint">将以新页打开 `/admin/test/dashboard`，并沿用现有 projection token 模式。</span>
+          </div>
+        </section>
       </div>
       <template #footer>
         <div class="drawer-footer">
@@ -202,6 +259,12 @@ import { adminUsersApi } from '@/api/adminApi';
 import { User, Search } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
 import type { FormInstance } from 'element-plus';
+import {
+  getProjectionGrantStatus,
+  normalizeProjectionGrant,
+  type ProjectionGrant
+} from '@/api/userCustom';
+import { setProjectionToken } from '@/utils/projection';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
@@ -217,6 +280,10 @@ const editVisible = ref(false);
 const updating = ref(false);
 const selectedUserIds = ref<string[]>([]);
 const batchDeleting = ref(false);
+const projectionGrantLoading = ref(false);
+const projectionOpening = ref(false);
+const projectionGrant = ref<ProjectionGrant | null>(null);
+const projectionGrantMessage = ref('');
 
 const createForm = reactive({
   name: '',
@@ -278,6 +345,22 @@ const userHighlights = computed(() => [
   { label: `当前页管理员 ${adminCount.value}`, tone: 'danger' as const },
   { label: `当前页已登录 ${loggedInCount.value}`, tone: 'success' as const }
 ]);
+const projectionGrantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value));
+const projectionGrantStatusLabel = computed(() => {
+  if (projectionGrantStatus.value === 'active') return '已授权协助';
+  if (projectionGrantStatus.value === 'expired') return '许可已过期';
+  if (projectionGrantStatus.value === 'revoked') return '许可已撤销';
+  return '未授权';
+});
+const projectionGrantStatusTagType = computed(() => {
+  if (projectionGrantStatus.value === 'active') return 'success';
+  if (projectionGrantStatus.value === 'expired') return 'warning';
+  return 'info';
+});
+const projectionGrantScopeLabel = computed(() => projectionGrant.value?.scope === 'full' ? '完整开发视角' : '学习台视角');
+const projectionGrantGrantedAtLabel = computed(() => formatDateTime(projectionGrant.value?.grantedAt));
+const projectionGrantExpiresAtLabel = computed(() => formatDateTime(projectionGrant.value?.expiresAt));
+const projectionGrantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '用户未填写协助说明');
 
 const loadUsers = async () => {
   loading.value = true;
@@ -354,6 +437,17 @@ const formatTime = (time: string) => {
   return new Date(time).toLocaleString('zh-CN');
 };
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '未设置';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未设置';
+  return date.toLocaleString('zh-CN');
+};
+
+const getErrorMessage = (error: any, fallback: string) => {
+  return error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || fallback;
+};
+
 const openCreateDialog = () => {
   createForm.name = '';
   createForm.email = '';
@@ -368,6 +462,34 @@ const closeCreateDialog = () => {
   createForm.email = '';
   createForm.password = '';
   createForm.isAdmin = false;
+};
+
+const loadProjectionGrantForEdit = async () => {
+  if (!editForm.id) {
+    projectionGrant.value = null;
+    projectionGrantMessage.value = '未选择用户';
+    return;
+  }
+
+  projectionGrantLoading.value = true;
+  projectionGrantMessage.value = '';
+  try {
+    const response: any = await adminUsersApi.getProjectionGrant(editForm.id);
+    projectionGrant.value = normalizeProjectionGrant(response?.data || response);
+    if (!projectionGrant.value) {
+      projectionGrantMessage.value = '该用户当前没有生效中的开发视角许可。';
+    }
+  } catch (error: any) {
+    projectionGrant.value = null;
+    if (error?.response?.status === 404) {
+      projectionGrantMessage.value = '该用户当前没有生效中的开发视角许可。';
+    } else {
+      projectionGrantMessage.value = '开发视角许可读取失败。';
+      toast.error(getErrorMessage(error, '开发视角许可读取失败'));
+    }
+  } finally {
+    projectionGrantLoading.value = false;
+  }
 };
 
 const handleCreateUser = async () => {
@@ -464,7 +586,10 @@ const openEditDialog = (row: any) => {
   editForm.email = row.email || '';
   editForm.isAdmin = !!row.isAdmin;
   editForm.password = '';
+  projectionGrant.value = null;
+  projectionGrantMessage.value = '';
   editVisible.value = true;
+  loadProjectionGrantForEdit();
 };
 
 const closeEditDialog = () => {
@@ -474,6 +599,56 @@ const closeEditDialog = () => {
   editForm.email = '';
   editForm.isAdmin = false;
   editForm.password = '';
+  projectionGrant.value = null;
+  projectionGrantMessage.value = '';
+};
+
+const openProjectionDebugStation = async () => {
+  if (!editForm.id) {
+    toast.warning('未选择用户');
+    return;
+  }
+
+  if (projectionGrantStatus.value !== 'active') {
+    toast.warning('当前用户没有可用的开发视角许可');
+    return;
+  }
+
+  projectionOpening.value = true;
+  try {
+    if (!projectionGrant.value?.id) {
+      throw new Error('当前许可缺少 grantId，无法打开开发调试站');
+    }
+
+    const response: any = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
+      scope: projectionGrant.value?.scope === 'full' ? 'full' : 'dashboard',
+      entry: 'dashboard'
+    });
+    const body = response?.data || response;
+    if (!body?.success) {
+      throw new Error(body?.error?.message || body?.error || '创建开发视角 token 失败');
+    }
+
+    const token = body?.data?.token;
+    if (!token) {
+      throw new Error('投影 token 缺失');
+    }
+
+    setProjectionToken(token, {
+      userId: editForm.id,
+      userName: editForm.name,
+      email: editForm.email,
+      scope: projectionGrant.value?.scope === 'full' ? 'full' : 'dashboard',
+      source: 'user-projection-grant'
+    });
+
+    window.open('/admin/test/dashboard', '_blank');
+    toast.success('已在新页打开开发调试站');
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '打开开发调试站失败'));
+  } finally {
+    projectionOpening.value = false;
+  }
 };
 
 const handleUpdateUser = async () => {
@@ -640,6 +815,93 @@ onMounted(() => {
   padding-top: 2px;
 }
 
+.projection-grant-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.12);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(67, 176, 216, 0.03));
+}
+
+.projection-grant-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.projection-grant-panel__head h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  color: var(--admin-text-primary);
+}
+
+.projection-grant-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.projection-grant-panel__eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--admin-text-secondary);
+}
+
+.projection-grant-panel__copy,
+.projection-grant-entry-hint {
+  margin: 0;
+  color: var(--admin-text-secondary);
+  line-height: 1.7;
+}
+
+.projection-grant-panel__notice {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px dashed rgba(52, 120, 246, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--admin-text-secondary);
+}
+
+.projection-grant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projection-grant-item,
+.projection-grant-note {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.projection-grant-item span,
+.projection-grant-note span {
+  font-size: 12px;
+  color: var(--admin-text-secondary);
+}
+
+.projection-grant-item strong,
+.projection-grant-note strong {
+  color: var(--admin-text-primary);
+  line-height: 1.6;
+}
+
+.projection-grant-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 :deep(.drawer-form .el-form-item) {
   margin-bottom: 18px;
 }
@@ -658,6 +920,17 @@ onMounted(() => {
 @media (max-width: 768px) {
   .users-filter-panel__head {
     align-items: flex-start;
+  }
+
+  .projection-grant-panel__head,
+  .projection-grant-entry-row,
+  .drawer-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .projection-grant-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

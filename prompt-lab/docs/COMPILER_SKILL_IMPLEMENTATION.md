@@ -1,5 +1,17 @@
 # Compiler Skill 实现总结
 
+> 状态：历史实现记录。
+>
+> 本文档记录的是 2026-06-26 这轮 Compiler Skill / 简化 YAML 配置实验。
+> 当前 Prompt Lab 的正式架构与规范，请以以下文档为准：
+>
+> - `prompt-lab/docs/ARCHITECTURE.md`
+> - `prompt-lab/docs/SOURCE_PROTOCOL_V1.md`
+> - `prompt-lab/docs/INTERNAL_PROMPT_SKILLS.md`
+> - `prompt-lab/docs/COMPILER_GUIDE.md`
+>
+> 文中提到的 `prompt-lab/compiler-skill/prompt.md`、蓝图型 YAML 流程等内容属于历史探索，不再代表当前唯一正式模型。
+
 ## 📅 完成时间
 2026-06-26
 

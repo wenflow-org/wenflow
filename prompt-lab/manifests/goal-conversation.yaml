@@ -1,0 +1,39 @@
+version: prompt-lab-manifest/v1
+
+skillId: goal-conversation
+agentId: skill:goal-conversation
+
+name: default-skill-goal-conversation
+archetype: conversational
+description: 学习目标澄清与方向收敛助手
+
+acceptableAgentIds:
+  - skill:goal-conversation
+  - goal-conversation
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+runtimeDefaults:
+  tier: chat
+  temperature: 0.7
+  maxTokens: 8000
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags:
+  - core-skill
+  - conversational
+  - prompt-lab-source
+
+notes: >
+  这是 Prompt Lab manifest 接入的种子文件。
+  目标是让 publish/export metadata 逐步从 Prompt Lab 自己产生，
+  而不是继续回读平台现有 prompts frontmatter。

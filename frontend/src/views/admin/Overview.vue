@@ -71,6 +71,24 @@
           <div class="section-head">
             <div>
               <h3 class="section-title">
+                <el-icon><DataAnalysis /></el-icon>
+                学习主链
+              </h3>
+            </div>
+          </div>
+
+          <div class="overview-kpi-strip">
+            <article v-for="item in overviewKpiItems" :key="item.label" class="overview-kpi-chip">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="section panel-card">
+          <div class="section-head">
+            <div>
+              <h3 class="section-title">
                 <el-icon><Cpu /></el-icon>
                 待处理事项
               </h3>
@@ -174,6 +192,27 @@
           </div>
           <el-empty v-else description="暂无最近活动" />
         </section>
+
+        <section class="section panel-card">
+          <div class="section-head">
+            <h3 class="section-title">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 4v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V7l7-4z" /><path d="M9.5 12.5l1.8 1.8 3.7-3.8" /></svg>
+              协助许可
+            </h3>
+            <span class="section-note">活跃 {{ activeProjectionGrantCount }} 份</span>
+          </div>
+
+          <div class="activity-feed" v-if="recentProjectionGrantSummary.length > 0">
+            <article v-for="grant in recentProjectionGrantSummary" :key="grant.id" class="activity-card">
+              <div class="activity-card__head">
+                <strong>{{ grant.title }}</strong>
+                <span>{{ formatTime(grant.createdAt) }}</span>
+              </div>
+              <p>{{ grant.description }}</p>
+            </article>
+          </div>
+          <el-empty v-else description="暂无最近协助许可使用记录" />
+        </section>
       </aside>
     </section>
   </div>
@@ -189,10 +228,38 @@ import { toast } from '../../utils/toast'
 const stats = ref<any>({})
 const agentStatuses = ref<any[]>([])
 const recentActivities = ref<any[]>([])
+const recentProjectionGrantUses = ref<any[]>([])
+const activeProjectionGrantCount = ref(0)
 const refreshing = ref(false)
 const lastRefreshAt = ref<Date | null>(null)
 
 const recentActivitySummary = computed(() => recentActivities.value.slice(0, 5))
+const recentProjectionGrantSummary = computed(() => recentProjectionGrantUses.value.slice(0, 5).map((grant: any) => ({
+  id: grant.id,
+  title: `${grant.adminUser?.name || '管理员'} 使用了 ${grant.user?.name || '用户'} 的开发视角`,
+  description: [
+    grant.scope === 'full' ? '完整开发视角' : '学习台视角',
+    grant.purpose ? `说明：${grant.purpose}` : '',
+    typeof grant.useCount === 'number' ? `累计 ${grant.useCount} 次` : ''
+  ].filter(Boolean).join(' · '),
+  createdAt: grant.lastUsedAt || grant.createdAt
+})))
+const overviewKpiItems = computed(() => {
+  const users = stats.value?.users || {}
+  const learning = stats.value?.learning || {}
+  const conversations = stats.value?.conversations || {}
+
+  return [
+    { label: '用户', value: String(users.total || 0) },
+    { label: '今日活跃', value: String(users.activeToday || 0) },
+    { label: 'Goal', value: String(conversations.total || 0) },
+    { label: '活跃 Goal', value: String(conversations.active || 0) },
+    { label: '路径', value: String(learning.totalPaths || 0) },
+    { label: '活跃路径', value: String(learning.activePaths || 0) },
+    { label: '任务', value: String(learning.totalTasks || 0) },
+    { label: '完成率', value: `${learning.completionRate || 0}%` }
+  ]
+})
 
 const trendPoints = computed(() => {
   const points = stats.value?.agents?.last24h || []
@@ -538,6 +605,8 @@ const loadActivity = async () => {
 
     activities.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     recentActivities.value = activities.slice(0, 50)
+    recentProjectionGrantUses.value = data.recentProjectionGrantUses || []
+    activeProjectionGrantCount.value = Number(data.activeProjectionGrantCount || 0)
   } catch (error: any) {
     console.error('加载活动日志失败:', error)
   }
@@ -756,6 +825,32 @@ onMounted(async () => {
 .priority-list {
   display: grid;
   gap: 12px;
+}
+
+.overview-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview-kpi-chip {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: var(--admin-radius-card);
+  border: var(--admin-border);
+  background: var(--admin-bg-surface-alt);
+}
+
+.overview-kpi-chip span {
+  color: var(--admin-text-secondary);
+  font-size: 0.78rem;
+}
+
+.overview-kpi-chip strong {
+  color: var(--admin-text-primary);
+  font-size: 1.2rem;
+  line-height: 1.1;
 }
 
 .priority-card {
@@ -1086,6 +1181,10 @@ onMounted(async () => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .overview-kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .overview-hero-grid,
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -1105,6 +1204,10 @@ onMounted(async () => {
 
   .health-list--inline,
   .trend-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-kpi-strip {
     grid-template-columns: 1fr;
   }
 

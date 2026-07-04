@@ -117,14 +117,108 @@
           </div>
         </article>
       </section>
+
+      <section>
+        <article v-loading="projectionGrantLoading" class="glass-card profile-card grant-card">
+          <div class="profile-card__head profile-card__head--spread">
+            <div>
+              <span class="section-kicker">授权协助</span>
+              <h3>开发视角许可</h3>
+            </div>
+            <div class="grant-card__head-actions">
+              <el-tag :type="projectionGrantStatusTagType" effect="plain">{{ projectionGrantStatusLabel }}</el-tag>
+              <el-button size="small" @click="loadProjectionGrant">刷新</el-button>
+            </div>
+          </div>
+
+          <p class="card-copy">
+            你可以明确授权平台管理员在开发调试站中临时使用你的学习视角协助排查问题。许可只用于开发视角与问题定位，不涉及任何登录口令。
+          </p>
+
+          <div v-if="projectionGrantMessage" class="grant-card__notice">
+            {{ projectionGrantMessage }}
+          </div>
+
+          <div class="snapshot-list grant-card__summary">
+            <div class="snapshot-item">
+              <span>当前许可</span>
+              <strong>{{ projectionGrantStatusLabel }}</strong>
+            </div>
+            <div class="snapshot-item">
+              <span>开放范围</span>
+              <strong>{{ projectionGrantScopeLabel }}</strong>
+            </div>
+            <div class="snapshot-item">
+              <span>创建时间</span>
+              <strong>{{ projectionGrantGrantedAtLabel }}</strong>
+            </div>
+            <div class="snapshot-item">
+              <span>到期时间</span>
+              <strong>{{ projectionGrantExpiresAtLabel }}</strong>
+            </div>
+          </div>
+
+          <div class="grant-card__note">
+            <span>协助说明</span>
+            <strong>{{ projectionGrantNoteLabel }}</strong>
+          </div>
+
+          <div class="grant-form-grid">
+            <label class="grant-form-field">
+              <span>开放范围</span>
+              <el-select v-model="projectionGrantForm.scope">
+                <el-option label="学习台视角" value="dashboard" />
+                <el-option label="完整开发视角" value="full" />
+              </el-select>
+            </label>
+
+            <label class="grant-form-field">
+              <span>有效时长</span>
+              <el-input-number v-model="projectionGrantForm.expiresInHours" :min="1" :max="168" />
+            </label>
+          </div>
+
+          <label class="grant-form-field grant-form-field--full">
+            <span>协助说明</span>
+            <el-input
+              v-model="projectionGrantForm.note"
+              type="textarea"
+              :rows="3"
+              maxlength="200"
+              show-word-limit
+              placeholder="例如：同意管理员在 24 小时内进入开发视角，协助定位学习台异常。"
+            />
+          </label>
+
+          <div class="action-row">
+            <el-button type="primary" :loading="projectionGrantSubmitting" @click="handleCreateProjectionGrant">
+              {{ projectionGrantActionLabel }}
+            </el-button>
+            <el-button :disabled="projectionGrantStatus === 'inactive'" :loading="projectionGrantRevoking" @click="handleRevokeProjectionGrant">
+              撤销许可
+            </el-button>
+          </div>
+        </article>
+      </section>
     </div>
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
+import {
+  createUserProjectionGrant,
+  getProjectionGrantStatus,
+  getUserProjectionGrant,
+  normalizeProjectionGrant,
+  revokeUserProjectionGrant,
+  type ProjectionGrant,
+  type ProjectionGrantScope
+} from '@/api/userCustom'
+import { toast } from '@/utils/toast'
 import { useUserStore } from '../stores/user'
 import { userAPI, type LearnerCenterSnapshot } from '../api/user'
 
@@ -139,6 +233,16 @@ const user = ref({
   role: 'user'
 })
 const learnerCenter = ref<LearnerCenterSnapshot | null>(null)
+const projectionGrant = ref<ProjectionGrant | null>(null)
+const projectionGrantLoading = ref(false)
+const projectionGrantSubmitting = ref(false)
+const projectionGrantRevoking = ref(false)
+const projectionGrantMessage = ref('')
+const projectionGrantForm = reactive({
+  scope: 'dashboard' as ProjectionGrantScope,
+  expiresInHours: 24,
+  note: ''
+})
 
 const paceLabel = computed(() => {
   const pace = learnerCenter.value?.learningControlState?.paceMode
@@ -157,6 +261,27 @@ const currentPathDescription = computed(() => {
 })
 const currentPathMeta = computed(() => (currentPathId.value ? '进行中的学习路径' : '暂无进行中路径'))
 const nextActionLabel = computed(() => (currentPathId.value ? '回到当前路径继续学习' : '先创建或选择一条路径'))
+const projectionGrantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
+const projectionGrantStatusLabel = computed(() => {
+  if (projectionGrantStatus.value === 'active') return '已授权协助'
+  if (projectionGrantStatus.value === 'expired') return '许可已过期'
+  if (projectionGrantStatus.value === 'revoked') return '许可已撤销'
+  return '未授权'
+})
+const projectionGrantStatusTagType = computed(() => {
+  if (projectionGrantStatus.value === 'active') return 'success'
+  if (projectionGrantStatus.value === 'expired') return 'warning'
+  if (projectionGrantStatus.value === 'revoked') return 'info'
+  return 'info'
+})
+const projectionGrantScopeLabel = computed(() => {
+  const scope = projectionGrant.value?.scope || projectionGrantForm.scope
+  return scope === 'full' ? '完整开发视角' : '学习台视角'
+})
+const projectionGrantGrantedAtLabel = computed(() => formatDateTime(projectionGrant.value?.grantedAt))
+const projectionGrantExpiresAtLabel = computed(() => formatDateTime(projectionGrant.value?.expiresAt))
+const projectionGrantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '未填写协助说明')
+const projectionGrantActionLabel = computed(() => (projectionGrantStatus.value === 'active' ? '更新许可' : '创建许可'))
 
 const goCurrentPath = () => {
   if (currentPathId.value) {
@@ -167,8 +292,25 @@ const goCurrentPath = () => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadUserProfile(), loadLearnerCenter()])
+  await Promise.all([loadUserProfile(), loadLearnerCenter(), loadProjectionGrant()])
 })
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '未设置'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未设置'
+  return date.toLocaleString('zh-CN')
+}
+
+function getErrorMessage(error: any, fallback: string) {
+  return error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || fallback
+}
+
+function hydrateProjectionGrantForm(grant: ProjectionGrant | null) {
+  if (!grant) return
+  projectionGrantForm.scope = grant.scope === 'full' ? 'full' : 'dashboard'
+  projectionGrantForm.note = grant.note || grant.purpose || ''
+}
 
 async function loadUserProfile() {
   await userStore.fetchProfile()
@@ -185,6 +327,86 @@ async function loadUserProfile() {
 
 async function loadLearnerCenter() {
   learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' })
+}
+
+async function loadProjectionGrant() {
+  projectionGrantLoading.value = true
+  projectionGrantMessage.value = ''
+  try {
+    const res = await getUserProjectionGrant()
+    projectionGrant.value = normalizeProjectionGrant(res)
+    hydrateProjectionGrantForm(projectionGrant.value)
+
+    if (!projectionGrant.value) {
+      projectionGrantMessage.value = '当前还没有生效中的开发视角许可。'
+    }
+  } catch (error: any) {
+    projectionGrant.value = null
+    if (error?.response?.status === 404) {
+      projectionGrantMessage.value = '当前还没有生效中的开发视角许可。'
+      return
+    }
+    projectionGrantMessage.value = '开发视角许可读取失败，请稍后重试。'
+    console.error('读取开发视角许可失败:', error)
+  } finally {
+    projectionGrantLoading.value = false
+  }
+}
+
+async function handleCreateProjectionGrant() {
+  projectionGrantSubmitting.value = true
+  try {
+    const res = await createUserProjectionGrant({
+      scope: projectionGrantForm.scope,
+      expiresInHours: projectionGrantForm.expiresInHours,
+      note: projectionGrantForm.note
+    })
+
+    projectionGrant.value = normalizeProjectionGrant(res)
+    if (!projectionGrant.value) {
+      await loadProjectionGrant()
+    } else {
+      hydrateProjectionGrantForm(projectionGrant.value)
+      projectionGrantMessage.value = ''
+    }
+    toast.success('开发视角许可已更新')
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '开发视角许可创建失败'))
+  } finally {
+    projectionGrantSubmitting.value = false
+  }
+}
+
+async function handleRevokeProjectionGrant() {
+  if (projectionGrantStatus.value === 'inactive') {
+    toast.info('当前没有可撤销的开发视角许可')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      '撤销后，管理员将不能再基于这份许可打开你的开发视角，确认继续吗？',
+      '撤销开发视角许可',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+
+  projectionGrantRevoking.value = true
+  try {
+    const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
+    projectionGrant.value = normalizeProjectionGrant(res)
+    if (!projectionGrant.value) {
+      projectionGrantMessage.value = '开发视角许可已撤销。'
+    }
+    toast.success('开发视角许可已撤销')
+    await loadProjectionGrant()
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, '撤销开发视角许可失败'))
+  } finally {
+    projectionGrantRevoking.value = false
+  }
 }
 </script>
 
@@ -361,6 +583,87 @@ async function loadLearnerCenter() {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.grant-card {
+  display: grid;
+  gap: 16px;
+}
+
+.grant-card__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.grant-card__notice {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px dashed rgba(52, 120, 246, 0.16);
+  background: rgba(52, 120, 246, 0.04);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.grant-card__summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grant-card__note {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(52, 120, 246, 0.08);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.05), rgba(67, 176, 216, 0.035));
+}
+
+.grant-card__note span,
+.grant-form-field span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.grant-card__note strong {
+  color: var(--color-primary-dark);
+  line-height: 1.6;
+}
+
+.grant-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.grant-form-field {
+  display: grid;
+  gap: 8px;
+}
+
+.grant-form-field--full {
+  width: 100%;
+}
+
+.grant-form-field :deep(.el-select),
+.grant-form-field :deep(.el-input-number),
+.grant-form-field :deep(.el-textarea) {
+  width: 100%;
+}
+
+[data-theme='dark'] .grant-card__notice {
+  border-color: rgba(96, 165, 250, 0.16);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+[data-theme='dark'] .grant-card__note {
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.1), rgba(67, 176, 216, 0.05));
+  border-color: rgba(96, 165, 250, 0.1);
+}
+
+[data-theme='dark'] .grant-card__note strong {
+  color: #9fc3ff;
+}
+
 .shortcut-card {
   text-align: left;
   cursor: pointer;
@@ -378,7 +681,9 @@ async function loadLearnerCenter() {
   .profile-grid,
   .profile-grid--bottom,
   .shortcut-list,
-  .profile-stats {
+  .profile-stats,
+  .grant-card__summary,
+  .grant-form-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -763,6 +763,26 @@ model user_skill_configs {
   @@unique([userId, skillName])
 }
 
+model projection_access_grants {
+  id                String   @id @default(uuid())
+  userId            String
+  scope             String   @default("dashboard")
+  scopeDefinition   String?
+  purpose           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  lastUsedAt        DateTime?
+  lastUsedByAdminId String?
+  useCount          Int      @default(0)
+  users             users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
 model users {
   id                        String                     @id
   email                     String                     @unique
@@ -784,6 +804,7 @@ model users {
   learning_metrics          learning_metrics[]
   learning_paths            learning_paths[]
   path_decompositions       path_decompositions[]
+  projection_access_grants  projection_access_grants[]
   student_baselines         student_baselines?
   subtasks                  subtasks[]
   teaching_sessions         teaching_sessions[]

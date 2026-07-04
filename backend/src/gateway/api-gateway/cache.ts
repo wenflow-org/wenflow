@@ -3,9 +3,19 @@ import { CallerInfo, ResolvedRoute, RouteCacheEntry } from './types';
 export class GatewayCache {
   private routeCache = new Map<string, RouteCacheEntry>();
   private readonly ttl = 60000;
+  private readonly keySeparator = '::';
 
   private generateKey(caller: CallerInfo, userId?: string): string {
-    return `${userId || 'anonymous'}:${caller.agentId || 'default'}:${caller.skillId || 'default'}`;
+    return [
+      userId || 'anonymous',
+      caller.agentId || 'default',
+      caller.skillId || 'default'
+    ].join(this.keySeparator);
+  }
+
+  private parseKey(key: string): [string, string, string] {
+    const parts = key.split(this.keySeparator);
+    return [parts[0] || 'anonymous', parts[1] || 'default', parts[2] || 'default'];
   }
 
   getRoute(caller: CallerInfo, userId?: string): ResolvedRoute | null {
@@ -41,7 +51,7 @@ export class GatewayCache {
     const keysToDelete: string[] = [];
     
     for (const key of this.routeCache.keys()) {
-      const [cachedUserId, cachedAgentId, cachedSkillId] = key.split(':');
+      const [cachedUserId, cachedAgentId, cachedSkillId] = this.parseKey(key);
       
       if (userId && cachedUserId === userId) {
         keysToDelete.push(key);

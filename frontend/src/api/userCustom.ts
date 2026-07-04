@@ -3,6 +3,84 @@ import request from '@/utils/request';
 
 const API_BASE = '/user';
 const USER_ME_BASE = '/users/me';
+const USER_PROJECTION_GRANT_BASE = `${API_BASE}/developer/access-grants`;
+
+export type ProjectionGrantScope = 'dashboard' | 'full';
+
+export interface ProjectionGrant {
+  id?: string;
+  userId?: string | null;
+  status?: string | null;
+  scope: ProjectionGrantScope;
+  note?: string | null;
+  purpose?: string | null;
+  grantedAt?: string | null;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  scopeDefinition?: any;
+  purpose?: string | null;
+  lastUsedAt?: string | null;
+  lastUsedByAdminId?: string | null;
+  useCount?: number;
+  [key: string]: any;
+}
+
+export const normalizeProjectionGrant = (payload: any): ProjectionGrant | null => {
+  if (payload?.success === false) return null;
+
+  const raw = payload?.data?.grant || payload?.data?.grants?.[0] || payload?.data || payload?.grant || payload;
+  if (!raw || typeof raw !== 'object') return null;
+  if (
+    raw?.success === false ||
+    !(
+      'scope' in raw ||
+      'grantScope' in raw ||
+      'status' in raw ||
+      'state' in raw ||
+      'expiresAt' in raw ||
+      'expireAt' in raw ||
+      'grantedAt' in raw ||
+      'createdAt' in raw ||
+      'note' in raw ||
+      'reason' in raw
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    ...raw,
+    scope: raw.scope === 'full' || raw.grantScope === 'full' ? 'full' : 'dashboard',
+    status: raw.status ?? raw.state ?? null,
+    note: raw.note ?? raw.reason ?? raw.description ?? raw.purpose ?? null,
+    purpose: raw.purpose ?? raw.note ?? raw.reason ?? null,
+    grantedAt: raw.grantedAt ?? raw.createdAt ?? raw.issuedAt ?? null,
+    expiresAt: raw.expiresAt ?? raw.expireAt ?? raw.expiresAtIso ?? null,
+    revokedAt: raw.revokedAt ?? null
+  };
+};
+
+export const getProjectionGrantStatus = (
+  grant: ProjectionGrant | null
+): 'inactive' | 'active' | 'expired' | 'revoked' => {
+  if (!grant) return 'inactive';
+
+  const rawStatus = String(grant.status || '').toLowerCase();
+  if (rawStatus === 'inactive' || rawStatus === 'none') return 'inactive';
+  if (rawStatus === 'revoked' || grant.revokedAt) return 'revoked';
+  if (rawStatus === 'expired') return 'expired';
+
+  if (grant.expiresAt) {
+    const expiresAt = new Date(grant.expiresAt).getTime();
+    if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
+      return 'expired';
+    }
+  }
+
+  return 'active';
+};
 
 // ==================== 对话日志 ====================
 
@@ -33,6 +111,38 @@ export const exportAgentLogs = async (params?: {
     params,
     responseType: params?.format === 'csv' ? 'blob' : 'json'
   });
+  return response.data;
+};
+
+// ==================== 投影视角许可 ====================
+
+export const getUserProjectionGrant = async () => {
+  const response = await request.get(USER_PROJECTION_GRANT_BASE, { params: { status: 'active' } });
+  return response.data;
+};
+
+export const createUserProjectionGrant = async (data: {
+  scope?: ProjectionGrantScope;
+  expiresInHours?: number;
+  note?: string;
+}) => {
+  const hours = Number(data.expiresInHours || 24);
+  const note = data.note?.trim();
+  const response = await request.post(USER_PROJECTION_GRANT_BASE, {
+    scope: data.scope || 'dashboard',
+    expiresInHours: hours,
+    ttlHours: hours,
+    expiresInMinutes: hours * 60,
+    ...(note ? { note, reason: note, purpose: note } : {})
+  });
+  return response.data;
+};
+
+export const revokeUserProjectionGrant = async (grantId?: string) => {
+  if (!grantId) {
+    throw new Error('grantId 缺失，无法撤销许可');
+  }
+  const response = await request.post(`${USER_PROJECTION_GRANT_BASE}/${grantId}/revoke`);
   return response.data;
 };
 

@@ -1,0 +1,31 @@
+version: prompt-lab-manifest/v1
+
+skillId: example-skill
+agentId: skill:example-skill
+
+name: default-skill-example-skill
+archetype: conversational
+description: 请替换为该 Skill 的简短说明
+
+acceptableAgentIds:
+  - skill:example-skill
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+runtimeDefaults:
+  tier: chat
+  temperature: 0.7
+  maxTokens: 8000
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags: []
+notes: ''

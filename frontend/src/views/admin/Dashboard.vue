@@ -42,16 +42,17 @@
               <span class="admin-sidebar__group-title">{{ group.title }}</span>
             </div>
 
-            <router-link
+            <component
               v-for="item in group.items"
               :key="item.to"
-              :to="item.to"
+              :is="item.external ? 'a' : 'router-link'"
+              v-bind="item.external ? { href: item.to, target: '_blank' } : { to: item.to }"
               class="admin-sidebar__item admin-sidebar__item--secondary"
-              :class="{ active: isActiveRoute(item.to) }"
+              :class="item.external ? null : { active: isActiveRoute(item.to) }"
             >
               <el-icon><component :is="item.icon" /></el-icon>
-              <span v-show="!sidebarCollapsed">{{ item.label }}</span>
-            </router-link>
+              <span v-show="!sidebarCollapsed">{{ item.external ? `${item.label}（新开）` : item.label }}</span>
+            </component>
           </section>
         </nav>
 
@@ -95,6 +96,7 @@ interface NavItem {
   to: string;
   label: string;
   icon: any;
+  external?: boolean;
 }
 
 interface NavGroup {
@@ -187,7 +189,7 @@ const navGroups: NavGroup[] = [
     title: '调试',
     items: [
       { to: '/admin/prompt-lab', label: 'Prompt 发布', icon: EditPen },
-      { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets },
+      { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets, external: true },
     ],
   },
 ];

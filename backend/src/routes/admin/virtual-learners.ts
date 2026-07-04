@@ -2109,6 +2109,8 @@ router.post('/:id/projection-token', async (req: any, res) => {
       targetUserId: profile.userId,
       sourceProfileId: profile.id,
       issuedByAdminId: operatorId,
+      grantSource: 'virtual-learner',
+      grantId: null,
       storyId: typeof req.body?.storyId === 'string' && req.body.storyId.trim() ? req.body.storyId.trim() : null,
       virtualSessionId: typeof req.body?.virtualSessionId === 'string' && req.body.virtualSessionId.trim() ? req.body.virtualSessionId.trim() : null,
       scope: req.body?.scope === 'full' ? 'full' : 'dashboard',
@@ -2119,6 +2121,8 @@ router.post('/:id/projection-token', async (req: any, res) => {
       success: true,
       data: {
         token,
+        grantSource: 'virtual-learner',
+        grantId: null,
         targetUserId: profile.userId,
         profileId: profile.id,
         userName: profile.users.name,
@@ -2172,6 +2176,10 @@ router.post('/projection/resolve', async (req: any, res) => {
 
     const payload = verifyProjectionToken(token)
 
+    if ((payload.grantSource || 'virtual-learner') !== 'virtual-learner' || !payload.sourceProfileId) {
+      return res.status(400).json({ success: false, error: '该投影 token 不属于虚拟学习者投影' })
+    }
+
     const profile = await prisma.virtual_learner_profiles.findUnique({
       where: { id: payload.sourceProfileId },
       include: {
@@ -2191,9 +2199,12 @@ router.post('/projection/resolve', async (req: any, res) => {
         targetUserId: payload.targetUserId,
         sourceProfileId: payload.sourceProfileId,
         issuedByAdminId: payload.issuedByAdminId,
+        grantSource: payload.grantSource || 'virtual-learner',
+        grantId: payload.grantId || null,
         storyId: payload.storyId || null,
         virtualSessionId: payload.virtualSessionId || null,
         scope: payload.scope,
+        scopeDefinition: payload.scopeDefinition || null,
         profile: {
           id: profile.id,
           userId: profile.userId,

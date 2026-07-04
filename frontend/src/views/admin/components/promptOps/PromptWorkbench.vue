@@ -411,6 +411,16 @@
           <pre class="compile-text compile-text--full">{{ llmCompiledPrompt }}</pre>
         </div>
         <el-empty v-else description="请先在编辑步骤中执行 LLM 编译" />
+
+        <div v-if="runtimePromptText" class="compile-llm-preview compile-llm-preview--runtime">
+          <div class="compile-llm-preview__bar">
+            <span class="compile-llm-preview__meta">当前运行态 Prompt · {{ runtimePromptText.length }} 字符</span>
+            <el-tag size="small" type="info" effect="plain">
+              v{{ effectivePromptInfo?.prompt?.version ?? '-' }}
+            </el-tag>
+          </div>
+          <pre class="compile-text compile-text--full">{{ runtimePromptText }}</pre>
+        </div>
       </template>
 
       <div class="workbench-section__footer">
@@ -481,10 +491,18 @@
       <!-- 产物快照 -->
       <div class="publish-snapshot">
         <div class="publish-snapshot__bar">
-          <el-tag size="small" type="info">{{ paradigm === 'constrained' ? 'LLM 编译' : '快速编译' }}</el-tag>
+          <el-tag size="small" type="warning">待发布产物</el-tag>
           <span class="publish-snapshot__meta">{{ publishTargetPrompt.length }} 字符</span>
         </div>
         <pre class="compile-text compile-text--compact">{{ publishTargetPrompt.slice(0, 600) }}{{ publishTargetPrompt.length > 600 ? '\n\n... (略)' : '' }}</pre>
+      </div>
+
+      <div v-if="runtimePromptText" class="publish-snapshot publish-snapshot--runtime">
+        <div class="publish-snapshot__bar">
+          <el-tag size="small" type="info">当前运行态</el-tag>
+          <span class="publish-snapshot__meta">{{ runtimePromptText.length }} 字符</span>
+        </div>
+        <pre class="compile-text compile-text--compact">{{ runtimePromptText.slice(0, 600) }}{{ runtimePromptText.length > 600 ? '\n\n... (略)' : '' }}</pre>
       </div>
 
       <!-- 发布提示 -->
@@ -603,6 +621,18 @@ interface PublishParams {
   reasoningEffort: string
 }
 
+interface EffectivePromptInfo {
+  source: string
+  prompt: {
+    systemPrompt: string
+    version: number | null
+    name: string
+    description?: string | null
+    _usedCompiled?: boolean
+    _compileStatus?: string | null
+  }
+}
+
 // ========== Props & Computed ==========
 
 const props = defineProps<{ agentId: string | null }>()
@@ -641,6 +671,7 @@ const llmCompiling = ref(false)
 const llmCompiledPrompt = ref('')
 const llmCompileError = ref<string | null>(null)
 const llmCompileStats = ref<LlmCompileStats | null>(null)
+const effectivePromptInfo = ref<EffectivePromptInfo | null>(null)
 
 // Structured editor state (new)
 const structuredLoading = ref(false)
@@ -794,10 +825,10 @@ const directModeLabel = computed(() => editMode.value === 'fields' ? '字段表�
 const statusSummary = computed(() => {
   if (paradigm.value === 'constrained') {
     if (llmCompiling.value) return '正在编译运行时产物'
+    if (structuredModifiedCount.value > 0) return '源码已修改，当前运行态未变'
     if (llmCompileError.value) return '最近一次编译失败'
     if (llmCompileStats.value) return '已生成运行时产物'
-    if (structuredModifiedCount.value > 0) return '有未同步修改'
-    return '尚未生成运行时产物'
+    return '当前运行态未变，等待显式编译'
   }
 
   if (!info.value) return dirty.value ? '有未保存改动' : '等待加载编译信息'
@@ -813,6 +844,8 @@ const publishTargetPrompt = computed(() => {
   if (paradigm.value === 'constrained') return llmCompiledPrompt.value
   return info.value?.compiled || ''
 })
+
+const runtimePromptText = computed(() => effectivePromptInfo.value?.prompt?.systemPrompt || '')
 
 const shortHash = (hash: string | null | undefined) => hash ? hash.slice(0, 12) : '-'
 
@@ -916,14 +949,40 @@ const loadStructuredSource = async () => {
 const onStructuredUpdate = (doc: SourceDocument) => {
   structuredSourceDoc.value = doc
   structuredModifiedCount.value++
+  llmCompiledPrompt.value = ''
+  llmCompileStats.value = null
+  llmCompileError.value = null
 }
 
 const saveStructuredToSource = () => {
   if (!structuredSourceDoc.value) return
-  draftSource.value = serializeSource(structuredSourceDoc.value)
-  lastSavedSource.value = draftSource.value
-  structuredModifiedCount.value = 0
-  ElMessage.success('已同步到编辑区，可进入编译步骤')
+  const save = async () => {
+    try {
+      const serialized = serializeSource(structuredSourceDoc.value!)
+      await adminPromptLabApi.saveSource(bareSkillId.value, serialized)
+      draftSource.value = serialized
+      lastSavedSource.value = serialized
+      structuredModifiedCount.value = 0
+      ElMessage.success('源文件已保存')
+      await loadEffectivePrompt()
+    } catch (error: any) {
+      ElMessage.error(error?.response?.data?.error || error?.message || '保存源文件失败')
+    }
+  }
+  void save()
+}
+
+const loadEffectivePrompt = async () => {
+  if (!bareSkillId.value) {
+    effectivePromptInfo.value = null
+    return
+  }
+  try {
+    const res: any = await adminSkillsApi.getEffectiveSkillPrompt(bareSkillId.value)
+    effectivePromptInfo.value = res.data?.data || null
+  } catch {
+    effectivePromptInfo.value = null
+  }
 }
 
 // ========== Edit Tab: Fields Mode ==========
@@ -1049,6 +1108,7 @@ const onPublishToProd = async () => {
       '发布成功',
       { confirmButtonText: '返回编辑', cancelButtonText: '查看列表', type: 'success', distinguishCancelAndClose: true }
     ).then(() => {
+      loadEffectivePrompt()
       activeStep.value = 'edit'
     }).catch(() => {
       // navigate to list — emit event
@@ -1130,6 +1190,7 @@ const onKeydown = (e: KeyboardEvent) => {
 
 watch(() => props.agentId, () => {
   loadInfo()
+  loadEffectivePrompt()
   structuredSourceDoc.value = null
   structuredModifiedCount.value = 0
   llmCompiledPrompt.value = ''
@@ -1148,6 +1209,7 @@ watch(() => paradigm.value, (newParadigm) => {
 
   onMounted(() => {
     loadInfo()
+    loadEffectivePrompt()
     loadTopologyAndDefinitions() // 加载 Topology 和 Definitions 数据
     // 检查是否有源文件，自动设置范式
     checkAndSetParadigm()
@@ -1622,6 +1684,11 @@ const checkAndSetParadigm = async () => {
   overflow: hidden;
 }
 
+.compile-llm-preview--runtime {
+  margin-top: 12px;
+  border-style: dashed;
+}
+
 .compile-llm-preview__bar {
   display: flex;
   align-items: center;
@@ -1680,6 +1747,11 @@ const checkAndSetParadigm = async () => {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.publish-snapshot--runtime {
+  margin-top: 12px;
+  border-style: dashed;
 }
 
 .publish-snapshot__bar {

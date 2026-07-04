@@ -1,6 +1,100 @@
 import express from 'express';
+import prisma from '../config/database';
 
 const router = express.Router();
+const DEFAULT_GRANT_TTL_MINUTES = 24 * 60;
+
+function normalizeProjectionScope(value: any): 'dashboard' | 'full' {
+  return value === 'full' ? 'full' : 'dashboard';
+}
+
+function serializeScopeDefinition(value: any): string | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  return JSON.stringify(value);
+}
+
+function parseScopeDefinition(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function resolveGrantStatus(grant: { revokedAt?: Date | null; expiresAt: Date }) {
+  if (grant.revokedAt) {
+    return 'revoked';
+  }
+
+  if (grant.expiresAt.getTime() <= Date.now()) {
+    return 'expired';
+  }
+
+  return 'active';
+}
+
+function formatGrant(grant: any) {
+  return {
+    id: grant.id,
+    userId: grant.userId,
+    scope: grant.scope,
+    scopeDefinition: parseScopeDefinition(grant.scopeDefinition),
+    purpose: grant.purpose || null,
+    status: resolveGrantStatus(grant),
+    createdAt: grant.createdAt,
+    updatedAt: grant.updatedAt,
+    expiresAt: grant.expiresAt,
+    revokedAt: grant.revokedAt || null,
+    lastUsedAt: grant.lastUsedAt || null,
+    lastUsedByAdminId: grant.lastUsedByAdminId || null,
+    useCount: grant.useCount || 0
+  };
+}
+
+function parseExpiresAt(body: any) {
+  if (typeof body?.expiresAt === 'string' && body.expiresAt.trim()) {
+    const parsed = new Date(body.expiresAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+    return null;
+  }
+
+  if (body?.expiresInMinutes !== undefined) {
+    const expiresInMinutes = Number(body.expiresInMinutes);
+    if (!Number.isFinite(expiresInMinutes) || expiresInMinutes <= 0) {
+      return null;
+    }
+
+    return new Date(Date.now() + expiresInMinutes * 60 * 1000);
+  }
+
+  return new Date(Date.now() + DEFAULT_GRANT_TTL_MINUTES * 60 * 1000);
+}
+
+function ensureDirectUserSession(req: any, res: any) {
+  if (req.user?.projection?.active) {
+    res.status(403).json({
+      success: false,
+      error: { message: '投影视角下不允许管理 access grant' }
+    });
+    return false;
+  }
+
+  return true;
+}
 
 router.get('/overview', async (req, res) => {
   const userId = req.user?.userId || 'unknown';
@@ -37,6 +131,11 @@ router.get('/overview', async (req, res) => {
           name: 'User Capability',
           basePath: '/api/user',
           endpoints: ['GET /agents', 'GET /skills', 'GET /api-config', 'GET /mcp']
+        },
+        {
+          name: 'Projection Access',
+          basePath: '/api/user/developer/access-grants',
+          endpoints: ['GET /', 'POST /', 'POST /:grantId/revoke']
         }
       ]
     }
@@ -63,6 +162,134 @@ router.get('/quickstart', async (req, res) => {
   ].join('\n');
 
   res.json({ success: true, data: { quickstart } });
+});
+
+router.get('/access-grants', async (req: any, res) => {
+  try {
+    if (!ensureDirectUserSession(req, res)) {
+      return;
+    }
+
+    const userId = req.user?.userId;
+    const status = typeof req.query?.status === 'string' ? req.query.status.trim() : '';
+    const now = new Date();
+    const where: any = { userId };
+
+    if (status === 'active') {
+      where.revokedAt = null;
+      where.expiresAt = { gt: now };
+    } else if (status === 'revoked') {
+      where.revokedAt = { not: null };
+    } else if (status === 'expired') {
+      where.revokedAt = null;
+      where.expiresAt = { lte: now };
+    }
+
+    const grants = await prisma.projection_access_grants.findMany({
+      where,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        grants: grants.map(formatGrant)
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || '查询 access grant 失败' }
+    });
+  }
+});
+
+router.post('/access-grants', async (req: any, res) => {
+  try {
+    if (!ensureDirectUserSession(req, res)) {
+      return;
+    }
+
+    const userId = req.user?.userId;
+    const expiresAt = parseExpiresAt(req.body);
+    if (!expiresAt) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'expiresAt 格式无效' }
+      });
+    }
+
+    if (expiresAt.getTime() <= Date.now()) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'expiresAt 必须晚于当前时间' }
+      });
+    }
+
+    const grant = await prisma.projection_access_grants.create({
+      data: {
+        userId,
+        scope: normalizeProjectionScope(req.body?.scope),
+        scopeDefinition: serializeScopeDefinition(req.body?.scopeDefinition),
+        purpose: typeof req.body?.purpose === 'string' && req.body.purpose.trim()
+          ? req.body.purpose.trim()
+          : null,
+        expiresAt
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      data: formatGrant(grant)
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || '创建 access grant 失败' }
+    });
+  }
+});
+
+router.post('/access-grants/:grantId/revoke', async (req: any, res) => {
+  try {
+    if (!ensureDirectUserSession(req, res)) {
+      return;
+    }
+
+    const userId = req.user?.userId;
+    const grantId = req.params.grantId;
+
+    const existing = await prisma.projection_access_grants.findFirst({
+      where: {
+        id: grantId,
+        userId
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'access grant 不存在' }
+      });
+    }
+
+    const grant = existing.revokedAt
+      ? existing
+      : await prisma.projection_access_grants.update({
+          where: { id: grantId },
+          data: { revokedAt: new Date() }
+        });
+
+    res.json({
+      success: true,
+      data: formatGrant(grant)
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || '撤销 access grant 失败' }
+    });
+  }
 });
 
 export default router;

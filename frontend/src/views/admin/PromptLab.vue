@@ -104,8 +104,8 @@
         <div class="source-selector">
           <span class="selector-label">选择 Skill：</span>
           <el-select
-            v-model="store.skillId"
-            @change="store.loadSource(store.skillId)"
+            v-model="selectedSkillId"
+            @change="handleSkillChange"
             size="default"
             :loading="store.loadingSource"
           >
@@ -118,6 +118,110 @@
           </el-select>
         </div>
 
+        <el-alert
+          v-if="store.sourceDirty || store.manifestDirty"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="当前存在未保存改动，编译前将自动保存 source 和 manifest。"
+        />
+
+        <div class="manifest-card" v-loading="store.loadingManifest">
+          <div class="manifest-card__header">
+            <div>
+              <div class="manifest-card__title">Skill 元数据</div>
+              <div class="manifest-card__hint">这里维护 Prompt Lab 的 manifest truth，会参与编译与发布。</div>
+            </div>
+            <el-button size="small" :loading="savingManifest" @click="handleSaveManifest">
+              保存元数据
+            </el-button>
+          </div>
+
+          <div class="manifest-grid">
+            <div class="manifest-field">
+              <span class="manifest-label">Skill ID</span>
+              <el-input :model-value="store.manifest.skillId" disabled />
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Agent ID</span>
+              <el-input :model-value="store.manifest.agentId" disabled />
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Name</span>
+              <el-input v-model="store.manifest.name" placeholder="default-skill-xxx" @input="store.markManifestDirty()" />
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Archetype</span>
+              <el-select v-model="store.manifest.archetype" placeholder="选择类型" @change="store.markManifestDirty()">
+                <el-option label="conversational" value="conversational" />
+                <el-option label="generator" value="generator" />
+                <el-option label="extractor" value="extractor" />
+                <el-option label="distiller" value="distiller" />
+                <el-option label="copywriter" value="copywriter" />
+                <el-option label="code-only" value="code-only" />
+              </el-select>
+            </div>
+            <div class="manifest-field manifest-field--full">
+              <span class="manifest-label">Description</span>
+              <el-input v-model="store.manifest.description" type="textarea" :rows="2" placeholder="Skill 简短描述" @input="store.markManifestDirty()" />
+            </div>
+            <div class="manifest-field manifest-field--full">
+              <span class="manifest-label">Acceptable Agent IDs</span>
+              <el-input
+                v-model="acceptableAgentIdsText"
+                type="textarea"
+                :rows="2"
+                placeholder="每行一个，例如：&#10;skill:goal-conversation&#10;goal-conversation"
+                @input="store.markManifestDirty()"
+              />
+            </div>
+          </div>
+
+          <div class="manifest-card__subhead">Runtime Defaults</div>
+          <div class="manifest-grid manifest-grid--runtime">
+            <div class="manifest-field">
+              <span class="manifest-label">Tier</span>
+              <el-select v-model="store.params.tier" @change="store.markManifestDirty()">
+                <el-option label="chat" value="chat" />
+                <el-option label="reasoning" value="reasoning" />
+                <el-option label="light" value="light" />
+              </el-select>
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Temperature</span>
+              <el-input-number v-model="store.params.temperature" :min="0" :max="2" :step="0.1" :precision="1" controls-position="right" @change="store.markManifestDirty()" />
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">MaxTokens</span>
+              <el-input-number v-model="store.params.maxTokens" :min="1000" :max="64000" :step="1000" controls-position="right" @change="store.markManifestDirty()" />
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Model</span>
+              <el-select v-model="store.params.model" clearable placeholder="继承平台默认" @change="store.markManifestDirty()">
+                <el-option label="deepseek-v4-flash" value="deepseek-v4-flash" />
+                <el-option label="deepseek-v4-pro" value="deepseek-v4-pro" />
+                <el-option label="deepseek-r1" value="deepseek-r1" />
+              </el-select>
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Thinking</span>
+              <el-select v-model="store.params.thinkingMode" @change="store.markManifestDirty()">
+                <el-option label="default" value="default" />
+                <el-option label="enabled" value="enabled" />
+                <el-option label="disabled" value="disabled" />
+              </el-select>
+            </div>
+            <div class="manifest-field">
+              <span class="manifest-label">Reasoning Effort</span>
+              <el-select v-model="store.params.reasoningEffort" @change="store.markManifestDirty()">
+                <el-option label="default" value="default" />
+                <el-option label="high" value="high" />
+                <el-option label="max" value="max" />
+              </el-select>
+            </div>
+          </div>
+        </div>
+
         <div v-if="store.sourceDocument" class="source-editor">
           <SourceView
             :source-doc="store.sourceDocument"
@@ -126,10 +230,21 @@
         </div>
         <div v-else class="source-card source-card--loading">
           <el-icon class="is-loading" v-if="store.loadingSource"><Loading /></el-icon>
-          <p v-else>加载源文件...</p>
+          <template v-else>
+            <p>当前 Skill 还没有 Prompt Lab 源文件。</p>
+            <el-button size="small" type="primary" @click="handleCreateSource">创建源文件模板</el-button>
+          </template>
         </div>
 
         <div class="step-actions">
+          <el-button
+            v-if="store.sourceDocument"
+            size="large"
+            :loading="savingSource"
+            @click="handleSaveSource"
+          >
+            保存源文件
+          </el-button>
           <el-button
             type="primary"
             size="large"
@@ -265,6 +380,7 @@
                 :precision="1"
                 size="small"
                 controls-position="right"
+                @change="store.markManifestDirty()"
               />
             </div>
             <div class="param-item">
@@ -276,13 +392,22 @@
                 :step="1000"
                 size="small"
                 controls-position="right"
+                @change="store.markManifestDirty()"
               />
             </div>
           </div>
           <div class="params-row">
+            <div class="param-item">
+              <span class="param-label">Tier</span>
+              <el-select v-model="store.params.tier" size="small" @change="store.markManifestDirty()">
+                <el-option label="chat" value="chat" />
+                <el-option label="reasoning" value="reasoning" />
+                <el-option label="light" value="light" />
+              </el-select>
+            </div>
             <div class="param-item param-item--wide">
               <span class="param-label">Model</span>
-              <el-select v-model="store.params.model" size="small" clearable placeholder="平台默认">
+              <el-select v-model="store.params.model" size="small" clearable placeholder="平台默认" @change="store.markManifestDirty()">
                 <el-option label="deepseek-v4-flash" value="deepseek-v4-flash" />
                 <el-option label="deepseek-v4-pro" value="deepseek-v4-pro" />
                 <el-option label="deepseek-r1" value="deepseek-r1" />
@@ -290,10 +415,18 @@
             </div>
             <div class="param-item">
               <span class="param-label">Thinking</span>
-              <el-select v-model="store.params.thinkingMode" size="small">
+              <el-select v-model="store.params.thinkingMode" size="small" @change="store.markManifestDirty()">
                 <el-option label="default" value="default" />
                 <el-option label="enabled" value="enabled" />
                 <el-option label="disabled" value="disabled" />
+              </el-select>
+            </div>
+            <div class="param-item">
+              <span class="param-label">Reasoning Effort</span>
+              <el-select v-model="store.params.reasoningEffort" size="small" @change="store.markManifestDirty()">
+                <el-option label="default" value="default" />
+                <el-option label="high" value="high" />
+                <el-option label="max" value="max" />
               </el-select>
             </div>
           </div>
@@ -333,7 +466,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Loading, CopyDocument, UploadFilled, Warning, EditPen } from '@element-plus/icons-vue'
@@ -343,14 +476,25 @@ import SourceView from './components/promptLab/SourceView.vue'
 
 const router = useRouter()
 const store = usePromptLabStore()
+const savingSource = ref(false)
+const savingManifest = ref(false)
+const selectedSkillId = ref(store.skillId)
+
+const acceptableAgentIdsText = computed({
+  get: () => store.manifest.acceptableAgentIds.join('\n'),
+  set: (value: string) => {
+    store.manifest.acceptableAgentIds = value
+      .split(/\r?\n/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+})
 
 onMounted(() => {
   if (store.currentStep === 0) {
     store.currentStep = 1
   }
-  store.fetchCompileSpec()
-  store.fetchSourceList()
-  store.loadSource(store.skillId)
+  initializePromptLab()
 })
 
 const steps = [
@@ -374,8 +518,47 @@ function goBack() {
   router.push('/admin/skills')
 }
 
+async function maybePersistBeforeLeaveCurrentSkill() {
+  if (!store.sourceDirty && !store.manifestDirty) return true
+  try {
+    await ElMessageBox.confirm(
+      '当前 Skill 有未保存改动。是否先保存再切换？',
+      '未保存改动',
+      {
+        confirmButtonText: '保存并切换',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    await store.persistDrafts(store.skillId)
+    ElMessage.success('已保存当前改动')
+    return true
+  } catch {
+    selectedSkillId.value = store.skillId
+    return false
+  }
+}
+
+function handleSkillChange(nextSkillId: string) {
+  ;(async () => {
+    if (nextSkillId === store.skillId) return
+    const ok = await maybePersistBeforeLeaveCurrentSkill()
+    if (!ok) return
+    await store.loadSource(nextSkillId)
+    selectedSkillId.value = store.skillId
+  })()
+}
+
+async function initializePromptLab() {
+  store.fetchCompileSpec()
+  await store.fetchSourceList()
+  await store.loadSource(store.skillId)
+  selectedSkillId.value = store.skillId
+}
+
 async function handleCompile() {
   try {
+    await store.persistDrafts()
     await store.compile()
     store.currentStep = 3
   } catch {
@@ -396,15 +579,53 @@ function copyPrompt() {
 }
 
 function goPublish() {
-  store.fetchParams(store.skillId)
   store.currentStep = 4
+}
+
+async function handleSaveSource() {
+  if (!store.sourceDocument) return
+  savingSource.value = true
+  try {
+    await store.saveSource(store.skillId, store.sourceContent)
+    ElMessage.success('源文件已保存')
+  } catch (error: any) {
+    ElMessage.error(error?.message || '保存源文件失败')
+  } finally {
+    savingSource.value = false
+  }
+}
+
+async function handleSaveManifest() {
+  savingManifest.value = true
+  try {
+    await store.saveManifest(store.skillId)
+    ElMessage.success('元数据已保存')
+  } catch (error: any) {
+    ElMessage.error(error?.message || '保存元数据失败')
+  } finally {
+    savingManifest.value = false
+  }
+}
+
+async function handleCreateSource() {
+  try {
+    await store.createSourceFile(store.skillId)
+    ElMessage.success('源文件模板已创建')
+  } catch (error: any) {
+    ElMessage.error(error?.message || '创建源文件失败')
+  }
 }
 
 async function handlePublish() {
   try {
     const result = await store.publish()
+    const compileHint = result.compileStatus && result.compileStatus !== 'fresh'
+      ? `\n\n编译状态: ${result.compileStatus}${result.compileError ? `\n编译错误: ${result.compileError}` : ''}`
+      : result.compileWarnings?.length
+        ? `\n\n编译提示: ${result.compileWarnings.join('；')}`
+        : ''
     ElMessageBox.confirm(
-      `发布成功\n\nSkill: ${store.skillId}\n新版本: v${result.version}\n\n生成文件已写回 prompts/ 目录，DB 版本已激活。\n可在 Skill 目录中继续查看版本与配置。`,
+      `发布成功\n\nSkill: ${store.skillId}\n新版本: v${result.version}\n\n生成文件已写回 prompts/ 目录，DB 版本已激活。\n可在 Skill 目录中继续查看版本与配置。${compileHint}`,
       '发布成功',
       { confirmButtonText: '打开 Skill 目录', cancelButtonText: '完成', type: 'success' }
     ).then(() => {
@@ -418,9 +639,7 @@ async function handlePublish() {
 function handleReset() {
   store.reset()
   store.currentStep = 1
-  store.fetchCompileSpec()
-  store.fetchSourceList()
-  store.loadSource(store.skillId)
+  initializePromptLab()
 }
 </script>
 
@@ -686,6 +905,78 @@ function handleReset() {
   flex-shrink: 0;
 }
 
+.manifest-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px;
+  background: var(--admin-bg-surface-alt);
+  border: var(--admin-border-subtle);
+  border-radius: 10px;
+}
+
+.manifest-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.manifest-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--admin-text-primary, #111827);
+}
+
+.manifest-card__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--admin-text-secondary, #6b7280);
+}
+
+.manifest-card__subhead {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--admin-text-muted, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.manifest-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.manifest-grid--runtime {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.manifest-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.manifest-field--full {
+  grid-column: 1 / -1;
+}
+
+.manifest-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--admin-text-muted, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.manifest-field :deep(.el-input-number),
+.manifest-field :deep(.el-select) {
+  width: 100%;
+}
+
 .source-editor {
   flex: 1;
   overflow-y: auto;
@@ -736,6 +1027,8 @@ function handleReset() {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
+  gap: 10px;
   min-height: 120px;
   color: var(--admin-text-muted, #9ca3af);
   font-size: 14px;
@@ -859,6 +1152,19 @@ function handleReset() {
   justify-content: flex-end;
   padding-top: 8px;
   border-top: var(--admin-border-subtle);
+}
+
+@media (max-width: 900px) {
+  .manifest-grid,
+  .manifest-grid--runtime,
+  .params-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .step-actions {
+    flex-wrap: wrap;
+  }
 }
 
 /* ============ Params ============ */

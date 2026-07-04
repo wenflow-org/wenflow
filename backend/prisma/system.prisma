@@ -46,6 +46,12 @@ model agent_prompts {
   name         String
   description  String?
   systemPrompt String
+  compiledSystemPrompt String?
+  compileStatus        String?
+  compileError         String?
+  sourceHash           String?
+  compileContextHash   String?
+  compiledAt           DateTime?
   temperature  Float?
   maxTokens    Int?
   model        String?

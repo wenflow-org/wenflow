@@ -1,292 +1,272 @@
 # Prompt Lab 架构说明
 
-## 核心理念
+## 定位
 
-**蓝图不是提示词，而是基础设施数据**
+Prompt Lab 是 WenFlow 的独立 Prompt authoring / build 子系统。
 
-```
-蓝图层（Blueprint Layer）
-├─ 结构化数据
-├─ 字段级编辑
-├─ 声明式配置
-└─ 不可直接执行
+它的目标不是直接把平台当前 `prompts/` 目录变成可视化编辑器，而是先在 `prompt-lab/` 域内建立一套自洽的作者态真相源、编译产物与导出边界。
 
-         ↓ 编译
+这意味着：
 
-提示词层（Prompt Layer）
-├─ 自然语言
-├─ 详细展开
-├─ 指令式描述
-└─ LLM 可执行
-```
+- Prompt Lab 有自己的 source truth
+- Prompt Lab 有自己的编译语义
+- 平台运行时只消费 Prompt Lab 导出的结果
+- 平台运行时状态不能反向定义 Prompt Lab source
 
----
+## 架构原则
 
-## 类比编程语言
+### 1. Source First
 
-| 编程语言 | Prompt 系统 |
-|---------|------------|
-| TypeScript 源码 | YAML 蓝图 |
-| tsc 编译器 | Skill 编译器 |
-| JavaScript 字节码 | Markdown Prompt |
-| Node.js 运行时 | LLM 执行 |
+Prompt Lab 的唯一真相源在 `prompt-lab/` 内部。
 
----
+- 正文真相源：`sources/*.md`
+- 元数据真相源：`manifests/*.yaml`
 
-## 三层架构
+### 2. Compile Is Explicit
 
-### Layer 1: 基础设施层（Infrastructure）
+source 的保存不等于运行态生效。
 
-**位置**: `prompt-lab/blueprints/`
+- 保存 source：只更新作者态
+- compile：生成 candidate
+- publish / export：推动到平台集成目标
 
-**文件**: `*.yaml`, `*.schema.json`
+### 3. Runtime Is Downstream
 
-**角色**: 源文件，配置数据
+平台 `prompts/*.md`、DB active prompt、cache、runtime compile 都属于下游消费层。
 
-**编辑方式**:
-- 可视化表单编辑器
-- 字段级别修改
-- 版本控制
+它们是重要集成对象，但不是 Prompt Lab source truth。
 
-**示例**:
-```yaml
-# goal-conversation.yaml
-rules:
-  behavior:
-    max_questions_per_turn: 1
-    understanding_stage:
-      reply_structure: "理解总结 + 说明 + 问题"
-      tone: "natural_transition"
-```
+### 4. Structure Before Prose
 
-**特点**:
-- ✅ 结构化、类型化
-- ✅ 无冗余编号
-- ✅ 易于维护和对比
-- ❌ 不能直接运行
+结构、契约、章节映射、字段与状态机应该尽量由确定性编译器拥有；LLM 只负责受约束的 prose 生成。
 
----
+### 5. Prompt Lab And Skill Editor Serve Different Jobs
 
-### Layer 2: 编译层（Compilation）
+- Prompt Lab：作者态建模、编译、审核、发布
+- Skill 编辑器：运行态观察、诊断、参数与有效 prompt 查看
 
-**位置**: `frontend/src/utils/blueprintCompiler.ts`
+## 领域对象模型
 
-**职责**:
-1. 读取 YAML 蓝图
-2. 应用 archetype 模板（conversational/generator/extractor...）
-3. 自动生成编号（RULE-XX, OUT-XX, CON-XX）
-4. 展开详细说明
-5. 生成自然语言指令
-6. 输出 Markdown 提示词
+### Source Body
 
-**编译规则示例**:
-```typescript
-// 输入（YAML）
-behavior: {
-  max_questions_per_turn: 1
-}
+定义：作者态正文文件。
 
-// 输出（Markdown）
-RULE-09: 每次最多问 1 个核心问题，避免连续追问。
-```
+位置：`prompt-lab/sources/<skillId>.md`
 
----
+职责：
 
-### Layer 3: 执行层（Execution）
+- 使用 `DEFINITIONS / EXECUTION` 结构表达 skill 的作者态内容
+- 面向可视化编辑器和结构化编辑器
+- 不直接承担运行态格式要求
 
-**位置**: `wenflow/prompts/skill.*.md`（生产环境）
+### Source Manifest
 
-**文件**: 编译后的 `.md` 文件
+定义：作者态元数据文件。
 
-**角色**: 可执行提示词
+位置：`prompt-lab/manifests/<skillId>.yaml`
 
-**使用方式**:
-- 直接发送给 LLM
-- 不再手动编辑
-- 由编译器生成
+职责：
 
-**示例**:
-```markdown
-## 执行规则
+- 提供 `skillId / agentId / archetype / description / publishable / runtimeDefaults`
+- 作为导出前 frontmatter 与 runtime 参数的来源
+- 避免 Prompt Lab 反向依赖平台当前 `prompts/*.md` metadata
 
-### 行为规则
+注意：
 
-RULE-09: 每次最多问 1 个核心问题，避免连续追问。
-RULE-10: 在 understanding 阶段，reply 默认先用...
-RULE-11: 提问语气不能像问卷或审问...
-```
+- `runtimeDefaults.tier` 属于 runtime route tier
+- `ownership.tier` 属于作者态归属/治理 tier
 
-**特点**:
-- ✅ 自然语言，LLM 友好
-- ✅ 详细展开，明确指示
-- ✅ 带编号，便于引用
-- ⚠️ 只读文件，不手动编辑
+两者不要混用。
 
----
+### PromptLab IR
 
-## 数据流
+定义：Prompt Lab 编译阶段的中间表示。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Prompt Lab（前端界面）                      │
-│                                                               │
-│  [蓝图列表] [编辑] [编译] [预览] [测试] [发布]                │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   基础设施层（blueprints/）                   │
-│                                                               │
-│  goal-conversation.yaml        ← 可编辑的源文件                │
-│  goal-conversation.schema.json                               │
-└─────────────────────────────────────────────────────────────┘
-                            ↓ 编译
-┌─────────────────────────────────────────────────────────────┐
-│                   编译器（blueprintCompiler）                 │
-│                                                               │
-│  • 读取 YAML                                                  │
-│  • 应用 archetype 模板                                        │
-│  • 生成编号                                                   │
-│  • 展开说明                                                   │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   编译产物（prompts/）                        │
-│                                                               │
-│  goal-conversation.md          ← 自动生成，只读                │
-└─────────────────────────────────────────────────────────────┘
-                            ↓ 发布
-┌─────────────────────────────────────────────────────────────┐
-│                   生产环境（wenflow/prompts/）                │
-│                                                               │
-│  skill.goal-conversation.md    ← LLM 执行                     │
-└─────────────────────────────────────────────────────────────┘
+它不必直接落盘，但架构上应存在。
+
+建议包含：
+
+- `manifest`
+- `definitions.identity`
+- `definitions.inputFields`
+- `definitions.outputSchema`
+- `definitions.stages`
+- `execution.format`
+- `execution.contextHandling`
+- `execution.stageLogic`
+- `execution.outputGuidance`
+- `execution.constraints`
+- `execution.qualityControl`
+- `execution.examples`
+
+### Candidate Artifact
+
+定义：source compile 的候选产物。
+
+位置：`prompt-lab/compiled/<skillId>.md`
+
+职责：
+
+- 作为 review target
+- 可供 diff、lint、acceptance test 使用
+- 不承担真相源职责
+
+### Exported Prompt
+
+定义：Prompt Lab 发布到外部平台或其他集成目标的导出产物。
+
+当前平台目标包括：
+
+- `wenflow/prompts/skill.*.md`
+- DB `agent_prompts` ACTIVE 版本
+
+### Effective Runtime Prompt
+
+定义：平台真正喂给 LLM 的 prompt。
+
+它可能进一步经过：
+
+- runtime field routing
+- field ref resolve
+- `compiledSystemPrompt` 生成
+- cache
+
+它不属于 Prompt Lab source domain。
+
+## 生命周期
+
+```text
+Source Body + Source Manifest
+  -> Source Validation
+  -> PromptLab IR
+  -> Source Compile
+  -> Candidate Artifact
+  -> Candidate Review / Acceptance
+  -> Export / Publish
+  -> Platform Published Prompt
+  -> Runtime Compile / Runtime Injection
+  -> Effective Runtime Prompt
 ```
 
----
+## 编译层拆分
 
-## 为什么需要这种架构？
+Prompt Lab 和平台内部同时存在两种“编译”，必须严格区分。
 
-### 问题 1: 提示词难以维护
+### A. Source Compile
 
-**之前（直接编辑 Markdown）**:
-```markdown
-RULE-09: 每次最多问 1 个核心问题
-RULE-10: proposing 只给大致方向
-RULE-11: ready 只做确认
-RULE-12: 不编造信息
-RULE-13: 面向提问者本人
-RULE-14: 在 understanding 阶段...
-RULE-15: 提问语气自然...
-```
+所属：Prompt Lab
 
-**问题**:
-- 编号容易混乱
-- 插入新规则要重新编号
-- 难以做结构化版本对比
-- 大段文本不利于字段级修改
+输入：
 
-**现在（YAML 蓝图）**:
-```yaml
-behavior:
-  max_questions_per_turn: 1
-  proposing_scope: "draft_only"
-  ready_scope: "confirmation_only"
-  fabrication: "forbidden"
-  subject: "questioner_self"
-  understanding_stage:
-    reply_structure: "..."
-    tone: "natural"
-```
+- `sources/*.md`
+- `manifests/*.yaml`
+- `compiler-skill/` 下的编译规则与内部 prompt skills
 
-**优势**:
-- ✅ 无编号，编译器自动生成
-- ✅ 插入规则不影响其他规则
-- ✅ Git diff 清晰可读
-- ✅ 字段级别修改
+输出：
 
----
+- `compiled/*.md`
+- 导出所需的 frontmatter / runtime defaults / metadata
 
-### 问题 2: 运营人员难以编辑
+目标：
 
-**之前**: 
-- 需要理解 Markdown 格式
-- 需要记住编号规则
-- 需要手写大段自然语言
-- 容易出错
+- 生成 canonical publish candidate
 
-**现在**:
-- 表单化编辑界面
-- 修改数值和选项即可
-- 编译器自动生成自然语言
-- 降低出错率
+### B. Runtime Compile
 
----
+所属：平台 runtime
 
-### 问题 3: 版本对比困难
+输入：
 
-**之前（Markdown diff）**:
-```diff
-- RULE-09: 每次最多问 1 个核心问题
-- RULE-10: proposing 只给大致方向
-- RULE-11: ready 只做确认
-+ RULE-09: 每次最多问 2 个核心问题
-+ RULE-10: 新增规则：提问语气自然
-+ RULE-11: proposing 只给大致方向
-+ RULE-12: ready 只做确认
-```
-编号全部变了，难以看出真正的改动
+- published prompt
+- routing / runtime context
 
-**现在（YAML diff）**:
-```diff
-  behavior:
--   max_questions_per_turn: 1
-+   max_questions_per_turn: 2
-+   tone: "natural"
-    proposing_scope: "draft_only"
-```
-清晰可见：改了问题数量，加了语气配置
+输出：
 
----
+- `compiledSystemPrompt`
+- effective runtime prompt
 
-## 编译器模板系统
+目标：
 
-不同的 archetype 使用不同的编译模板：
+- 在不改变作者态真相源的情况下，让运行时拿到适合执行的版本
 
-### conversational（对话型）
-```yaml
-archetype: conversational
-```
-编译为：
-- 状态机章节
-- 阶段转换规则
-- 多轮对话策略
+## 页面边界
 
-### generator（生成型）
-```yaml
-archetype: generator
-```
-编译为：
-- 输入数据说明
-- 生成步骤
-- 输出格式规范
+### Prompt Lab 页面
 
-### extractor（提取型）
-```yaml
-archetype: extractor
-```
-编译为：
-- 提取目标定义
-- 匹配规则
-- 输出结构
+职责：
 
----
+- 选择 skill
+- 编辑 source body
+- 编辑 manifest
+- 编译 candidate
+- 审核 candidate
+- 发布或导出
 
-## 总结
+页面语义应明确表达：
 
-| 层次 | 文件类型 | 用途 | 编辑方式 |
-|------|---------|------|---------|
-| 基础设施层 | `*.yaml` | 源文件，配置数据 | 表单化编辑 |
-| 编译层 | `编译器` | 转换数据为指令 | 自动执行 |
-| 执行层 | `*.md` | LLM 可执行提示词 | 只读预览 |
+- `source 已保存`
+- `candidate 已编译`
+- `当前运行态未变`
+- `发布后才会推动到平台`
 
-**记住：蓝图不是提示词，而是用于生成提示词的基础设施数据！**
+### Skill 编辑器 / Runtime Workbench
+
+职责：
+
+- 查看 effective prompt
+- 查看 runtime compile 状态
+- 查看 drift / cache / model config
+- 必要时跳转到 Prompt Lab
+
+不应承担：
+
+- Prompt Lab 唯一 source 编辑入口
+- Prompt Lab 作者态真相源治理职责
+
+## 数据所有权约束
+
+### Prompt Lab 拥有
+
+- source body
+- source metadata
+- compile contract
+- candidate artifacts
+
+### 平台拥有
+
+- published prompt storage
+- runtime model config
+- runtime compile result
+- execution logs / telemetry / cache
+
+### 严禁的反向依赖
+
+- 不应再从 `prompts/*.md` 回推 Prompt Lab source truth
+- 不应把 runtime effective prompt 当成作者态 source
+- 不应让 Skill 编辑器直接取代 Prompt Lab source 协议
+
+## 当前实现债务
+
+当前仓库里仍有几处实现债务，和正式架构相比存在差距：
+
+1. `compile-source` 仍偏向 LLM 全文生成
+2. publish 结果仍未完全落到平台 runtime compile 字段模型
+3. `sources/` 和 `compiler-skill/` 的资产分类仍需进一步清晰化
+
+这些债务属于接入节奏问题，不改变本文定义的正式架构方向。
+
+## 迁移原则
+
+从当前实现走向正式架构，推荐按以下顺序推进：
+
+1. 文档和术语先定型
+2. Source Protocol v1 落地校验器
+3. Source compile 从全文 LLM 转向 hybrid compile
+4. publish 与 runtime compile 字段模型继续收口
+5. 最后再考虑是否把 Prompt Lab 能力嵌入 Skill 编辑器
+
+## 关联文档
+
+- `SOURCE_PROTOCOL_V1.md`
+- `INTERNAL_PROMPT_SKILLS.md`
+- `COMPILER_GUIDE.md`

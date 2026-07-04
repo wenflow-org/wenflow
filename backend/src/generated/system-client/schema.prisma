@@ -40,24 +40,30 @@ model agent_model_configs {
 }
 
 model agent_prompts {
-  id           String    @id
-  agentId      String
-  version      Int
-  name         String
-  description  String?
-  systemPrompt String
-  temperature  Float?
-  maxTokens    Int?
-  model        String?
-  status       String    @default("draft")
-  createdBy    String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @default(now())
-  metadata     String?
-  useCount     Int       @default(0)
-  avgLatency   Float?
-  successRate  Float?
-  publishedAt  DateTime?
+  id                   String    @id
+  agentId              String
+  version              Int
+  name                 String
+  description          String?
+  systemPrompt         String
+  compiledSystemPrompt String?
+  compileStatus        String?
+  compileError         String?
+  sourceHash           String?
+  compileContextHash   String?
+  compiledAt           DateTime?
+  temperature          Float?
+  maxTokens            Int?
+  model                String?
+  status               String    @default("draft")
+  createdBy            String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now())
+  metadata             String?
+  useCount             Int       @default(0)
+  avgLatency           Float?
+  successRate          Float?
+  publishedAt          DateTime?
 
   @@unique([agentId, version])
   @@index([agentId])

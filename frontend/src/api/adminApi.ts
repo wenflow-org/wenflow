@@ -167,6 +167,22 @@ export const adminUsersApi = {
     return adminAxios.get(`/admin/users/${userId}`);
   },
 
+  getProjectionGrant: async (userId: string) => {
+    return adminAxios.get('/admin/projection-access-grants', {
+      params: {
+        userId,
+        status: 'active'
+      }
+    });
+  },
+
+  createProjectionTokenFromGrant: async (
+    grantId: string,
+    data?: { scope?: 'dashboard' | 'full'; entry?: 'dashboard' | 'goal' | 'path' | 'learn' }
+  ) => {
+    return adminAxios.post(`/admin/projection-access-grants/${grantId}/projection-token`, data || {});
+  },
+
   createUser: async (data: {
     email: string;
     password: string;
@@ -1190,6 +1206,18 @@ export const adminPromptLabApi = {
 
   getSource: async (skillId: string) => {
     return adminAxios.get(`/admin/prompt-lab/source/${encodeURIComponent(skillId)}`);
+  },
+
+  saveSource: async (skillId: string, content: string) => {
+    return adminAxios.put(`/admin/prompt-lab/source/${encodeURIComponent(skillId)}`, { content });
+  },
+
+  getManifest: async (skillId: string) => {
+    return adminAxios.get(`/admin/prompt-lab/manifest/${encodeURIComponent(skillId)}`);
+  },
+
+  saveManifest: async (skillId: string, manifest: any) => {
+    return adminAxios.put(`/admin/prompt-lab/manifest/${encodeURIComponent(skillId)}`, { manifest });
   },
 
   getParams: async (skillId: string) => {

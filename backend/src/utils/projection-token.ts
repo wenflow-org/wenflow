@@ -2,12 +2,17 @@ import jwt from 'jsonwebtoken'
 
 export type ProjectionScope = 'dashboard' | 'full'
 
+export type ProjectionGrantSource = 'virtual-learner' | 'access-grant'
+
 export type ProjectionTokenPayload = {
   targetUserId: string
-  sourceProfileId: string
   issuedByAdminId: string
+  sourceProfileId?: string | null
+  grantSource?: ProjectionGrantSource
+  grantId?: string | null
   storyId?: string | null
   virtualSessionId?: string | null
+  scopeDefinition?: string | null
   scope: ProjectionScope
   type: 'projection'
 }
@@ -28,8 +33,18 @@ export const signProjectionToken = (payload: ProjectionTokenPayload) => {
 
 export const verifyProjectionToken = (token: string): ProjectionTokenPayload => {
   const decoded = jwt.verify(token, JWT_SECRET) as ProjectionTokenPayload
-  if (decoded.type !== 'projection' || !decoded.targetUserId || !decoded.sourceProfileId || !decoded.issuedByAdminId) {
+  if (decoded.type !== 'projection' || !decoded.targetUserId || !decoded.issuedByAdminId) {
     throw new Error('无效的投影 token')
   }
+
+  const grantSource = decoded.grantSource || 'virtual-learner'
+  if (grantSource === 'virtual-learner' && !decoded.sourceProfileId) {
+    throw new Error('无效的投影 token')
+  }
+
+  if (grantSource === 'access-grant' && !decoded.grantId) {
+    throw new Error('无效的投影 token')
+  }
+
   return decoded
 }
