@@ -7,7 +7,7 @@ import { ExecutionContext } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
-import type { AgentDefinition } from '../protocol';
+import type { AgentDefinition } from '../../agents/protocol';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 interface ChatMessage { role: MessageRole; content: string }

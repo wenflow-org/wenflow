@@ -154,7 +154,7 @@ npm run env:setup
 ./start-dev.ps1
 ```
 
-说明：脚本会自动检查并安装依赖、初始化 Prisma（`prisma generate` + `prisma db push`）、必要时引导创建或补全 `backend/.env`，并在启动前自动执行一次 core prompts 同步。
+说明：脚本会自动检查并安装依赖、初始化 Prisma（主库与 system 库都会执行 `prisma generate` + `prisma db push`）、必要时引导创建或补全 `backend/.env`，并在启动前自动执行一次 core prompts 同步。
 如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
 
 ### 局域网开发模式

@@ -153,7 +153,7 @@ When the backend starts, it automatically syncs core agent / skill prompts from 
 ./start-dev.ps1
 ```
 
-Note: The script automatically checks and installs dependencies, initializes Prisma (`prisma generate` + `prisma db push`), guides creation or completion of `backend/.env` if needed, and runs one core prompt sync before startup.  
+Note: The script automatically checks and installs dependencies, initializes Prisma for both the main DB and the system DB (`prisma generate` + `prisma db push` for each), guides creation or completion of `backend/.env` if needed, and runs one core prompt sync before startup.  
 To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`  
 Important: this flag also skips the startup prompt sync, so it should only be used when both the database schema and prompt records are already ready.
 

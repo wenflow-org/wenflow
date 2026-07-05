@@ -83,7 +83,7 @@ export { teachingStrategySelectorDefinition } from './teaching-strategy-selector
 import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
 
 // Prompt 编译器（新增：简化配置编译为完整 Prompt）
-export { promptCompilerRuntimeDefinition } from './prompt-compiler';
+export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
 import { promptCompilerHandler as promptCompilerFn } from './prompt-compiler';
 
 // 虚拟学习者场景设计
@@ -148,7 +148,7 @@ import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
 import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
-import { promptCompilerRuntimeDefinition } from './prompt-compiler';
+import { promptCompilerDefinition } from './prompt-compiler';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   textStructureAnalyzerDefinition,
@@ -174,7 +174,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
   teachingStrategySelectorDefinition,
-  promptCompilerRuntimeDefinition,
+  promptCompilerDefinition,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
     name: 'goal-conversation',

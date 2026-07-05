@@ -4,7 +4,7 @@
  * 定义不同信号对应的调整策略
  */
 
-import { LearningSignal } from '../protocol';
+import { LearningSignal } from '../../agents/protocol';
 import { AdjustmentStrategy, AdjustmentReason, PathAdjustment } from './adjustment';
 import { conceptPriorityStrategy } from '../../strategies/concept-priority';
 

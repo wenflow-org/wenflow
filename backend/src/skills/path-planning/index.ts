@@ -16,7 +16,7 @@ import {
   AgentContext,
   MilestoneOutput,
   SubtaskOutput
-} from '../protocol';
+} from '../../agents/protocol';
 import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';

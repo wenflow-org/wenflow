@@ -10,7 +10,7 @@ import {
   AgentDefinition,
   AgentInput,
   AgentOutput
-} from '../protocol';
+} from '../../agents/protocol';
 import {
   extractStructuredPayload,
   hasValidStructuredPayload,

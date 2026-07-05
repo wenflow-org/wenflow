@@ -23,7 +23,7 @@
 脚本会自动：
 - 检查并补齐 `backend/.env`（必要时触发配置向导）
 - 自动安装依赖（缺少 `node_modules` 时）
-- 自动执行 Prisma 初始化（`prisma generate` + `prisma db push`）
+- 自动执行 Prisma 初始化（主库与 system 库都会执行 `prisma generate` + `prisma db push`）
 - 自动将核心 agent / skill prompts 从当前代码同步到数据库 ACTIVE 版本
 - 清理开发端口占用（3001、5173）
 - 启动后端与前端开发服务
@@ -64,7 +64,9 @@ cd backend
 npm install
 Copy-Item .env.example .env
 npx prisma generate
+npx prisma generate --schema=prisma/system.prisma
 npx prisma db push
+npx prisma db push --schema=prisma/system.prisma
 npm run prompts:sync-core
 npm run dev
 

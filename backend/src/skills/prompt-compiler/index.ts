@@ -1,2 +1,2 @@
-export { promptCompilerRuntimeDefinition } from './definition';
+export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './definition';
 export { promptCompilerHandler } from './handler';

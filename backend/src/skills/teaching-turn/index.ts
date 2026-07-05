@@ -1,7 +1,7 @@
 ﻿import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
-import type { AgentDefinition, AgentOutput } from '../protocol';
+import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
 import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
 import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';

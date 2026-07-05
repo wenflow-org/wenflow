@@ -31,6 +31,7 @@ interface SeedField {
   camelName?: string;
   description: string;
   enumValues?: string[];
+  notes?: string;
   systemLocked?: boolean;
   structureLocked?: boolean;
   bindings?: Record<string, unknown>;
@@ -185,7 +186,7 @@ export async function ensureGoalFieldRoutings(systemPrisma: PrismaClient): Promi
   for (const f of FIELDS) {
     const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
     if (exists) { result.fieldsSkipped++; continue; }
-    await systemPrisma.field_definitions.create({ data: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ?? null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
+    await systemPrisma.field_definitions.create({ data: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
     result.fieldsCreated++;
   }
 

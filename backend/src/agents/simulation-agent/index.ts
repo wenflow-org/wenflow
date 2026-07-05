@@ -16,7 +16,7 @@ export const simulationOrchestratorAgentDefinition: AgentDefinition = {
   id: 'simulation-agent',
   name: '虚拟用户模拟编排器',
   version: '1.0.0',
-  type: 'agent',
+  type: 'custom',
   category: 'simulation',
   description: '编排虚拟用户模拟流程：Goal对话 → Path生成 → Learning阶段。用于测试和验证平台功能。',
   capabilities: [
@@ -90,7 +90,7 @@ export async function simulationOrchestratorAgentHandler(
         metadata: {
           agentId: 'simulation-agent',
           agentName: '虚拟用户模拟编排器',
-          agentType: 'agent',
+          agentType: 'custom',
           confidence: 0,
           generatedAt: new Date().toISOString()
         }
@@ -125,7 +125,7 @@ export async function simulationOrchestratorAgentHandler(
         metadata: {
           agentId: 'simulation-agent',
           agentName: '虚拟用户模拟编排器',
-          agentType: 'agent',
+          agentType: 'custom',
           confidence: 0,
           generatedAt: new Date().toISOString()
         }
@@ -157,7 +157,7 @@ export async function simulationOrchestratorAgentHandler(
       metadata: {
         agentId: 'simulation-agent',
         agentName: '虚拟用户模拟编排器',
-        agentType: 'agent',
+        agentType: 'custom',
         confidence: result?.success ? 0.9 : 0,
         generatedAt: new Date().toISOString()
       }
@@ -177,7 +177,7 @@ export async function simulationOrchestratorAgentHandler(
       metadata: {
         agentId: 'simulation-agent',
         agentName: '虚拟用户模拟编排器',
-        agentType: 'agent',
+        agentType: 'custom',
         confidence: 0,
         generatedAt: new Date().toISOString()
       }

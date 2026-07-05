@@ -3,7 +3,7 @@ import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
-import type { AgentDefinition, AgentOutput } from '../protocol';
+import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { sessionKnowledgeDistillerDefinition } from '../../skills/session-knowledge-distiller';
 import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';
 

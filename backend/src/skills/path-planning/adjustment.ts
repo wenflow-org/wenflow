@@ -1,4 +1,4 @@
-﻿import { AgentContext, MilestoneOutput, SubtaskOutput, LearningSignal } from '../protocol';
+﻿import { AgentContext, MilestoneOutput, SubtaskOutput, LearningSignal } from '../../agents/protocol';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 

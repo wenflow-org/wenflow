@@ -394,7 +394,7 @@ async function initializeGateway() {
   // 注册所有官方 Agent
   // 启动校验：manifest 必须合法（kind=agent 无 prompt，kind=skill 有 prompt 与 modelConfig）
   const manifestCheck = validateManifest();
-  if (!manifestCheck.ok) {
+  if (manifestCheck.ok === false) {
     logger.error('[startup] Agent manifest 校验失败，终止启动:');
     for (const err of manifestCheck.errors) {
       logger.error('  - ' + err);

@@ -286,7 +286,7 @@ export async function compileSkill(input: CompileSkillInput): Promise<CompileSki
   }
 
   const extract = extractJson(rawOutput);
-  if (!extract.ok) {
+  if (extract.ok === false) {
     suggestions.push('Prompt 应明确要求"只输出 JSON，不要 markdown / 注释 / 解释"');
     suggestions.push('在 prompt 末尾追加示例输出 JSON 块，引导格式');
     return {
