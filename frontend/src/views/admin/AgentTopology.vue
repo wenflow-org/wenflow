@@ -457,6 +457,7 @@ onMounted(() => {
 .vf-skill-node {
   width: 100%;
   height: 100%;
+  position: relative;
   background: var(--admin-bg-surface);
   border: 1px solid rgba(52, 120, 246, 0.18);
   border-radius: 14px;
@@ -464,7 +465,7 @@ onMounted(() => {
   box-shadow: 0 8px 24px rgba(46, 86, 148, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   user-select: none;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
@@ -491,6 +492,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .vf-skill-node__kind {
@@ -516,10 +518,13 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 700;
   color: var(--admin-text-primary);
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
+  line-height: 1.5;
+  min-height: calc(13px * 1.5);
+  max-height: calc(13px * 1.5 * 2);
+  padding-top: 2px;
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   overflow: hidden;
 }
 
@@ -527,6 +532,7 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   margin-top: auto;
+  flex-shrink: 0;
 }
 
 .vf-skill-node__stats .mini-stat {
@@ -549,11 +555,16 @@ onMounted(() => {
 }
 
 .vf-skill-node__hint {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
   font-size: 10px;
+  line-height: 1.2;
   color: var(--admin-text-brand);
   font-weight: 600;
   text-align: right;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s;
 }
 
