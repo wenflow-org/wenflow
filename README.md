@@ -62,7 +62,7 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 | ![进入回合式学习](docs/images/round-based-learning.png) | ![学习闭环总览](docs/images/learning-loop-overview.png) |
 
 ### 从问题到路径
-- **问题澄清**：通过 5-8 轮自然对话，补齐场景、基础、时间和限制
+- **问题澄清**：通过多轮自然对话，补齐场景、基础、时间和限制
 - **路径生成**：把模糊目标拆成阶段、任务和今天能开始的第一步
 - **回合式学习**：AI 提问、用户回答、即时反馈，并根据理解情况继续调整
 
@@ -76,30 +76,31 @@ WenFlow 想从另一个地方开始：先帮你说清真正想解决的事。
 | LF | 学习疲劳度 | 短期累计，7天衰减因子 0.70 |
 | LSB | 学习状态平衡 | KTL - LF，预警过度学习 |
 
-### 平台 Agent 架构（简版）
+### 平台 Agent / Skill 编排（简版）
 
 ```mermaid
 flowchart TD
-    U[用户] --> G1[目标对话 Agent\n澄清学习目标]
-    G1 --> P1[路径规划 Agent\n生成阶段与任务]
+    U[用户] --> G1[目标对话 Skill\n澄清学习目标]
+    G1 --> P1[路径规划 Skill\n生成阶段与任务]
     P1 --> T0[AI 教学编排器\n管理整节课流程]
 
-    T0 --> T1[教学回合 Agent\n每轮讲解 提问 诊断]
+    T0 --> T1[教学回合 Skill\n每轮讲解 提问 诊断]
     T1 --> K1[知识状态更新\n知识点进度]
     T1 --> S1[学习状态更新\nLSS KTL LF LSB]
 
     T1 --> D{需要强化?}
-    D -- 是 --> PEER[伴学 Agent\n讨论式强化]
+    D -- 是 --> PEER[伴学补强 Skill\n讨论式强化]
     D -- 否 --> NEXT[继续教学]
 
     NEXT --> END{本节结束?}
     PEER --> END
 
-    END -- 结束 --> W1[课后产出 Agent\n总结与评估]
+    END -- 结束 --> W1[课后产出 Skill\n总结与评估]
     W1 --> R1[重规划建议\n是否调整路径]
     R1 --> P1
 ```
 
+- 当前顶层 Agent 更偏编排器；真正持有 prompt 并直接调用 LLM 的主要是 Skills。
 - 先澄清目标，再把目标拆成可执行学习路径
 - 教学阶段按回合推进，边教边判断理解程度
 - 学生卡住时触发伴学强化，不直接放弃当前任务
@@ -113,9 +114,9 @@ flowchart TD
 |------|------|
 | **前端** | Vue 3 + TypeScript + Vite 5 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite |
+| **数据库（当前）** | SQLite（主库 + system 库） |
 | **AI 接入** | OpenAI 兼容模型网关（默认 DeepSeek） |
-| **Agent 协调** | EduClaw Gateway + Agent 协调层 + Event Bus |
+| **Agent / Skill 编排** | EduClaw Gateway + Agent / Skill 编排层 + Event Bus |
 | **部署** | PowerShell 启动脚本 + 可选 Nginx（测试部署） |
 
 ---
@@ -134,6 +135,7 @@ WenFlow 目前仍处于**原始开发阶段**，是一个验证教学概念的�
 
 ### 环境要求
 - Node.js >= 18
+- 推荐 Windows + PowerShell 5.1+；根目录启动脚本当前未适配 Linux/macOS
 
 ### 推荐顺序（首次使用）
 
@@ -146,7 +148,7 @@ npm run env:setup
 ```
 
 说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
-启动后端时，系统会自动把核心 agent / skill prompts 从当前代码同步到数据库 ACTIVE 版本；这样别人从 GitHub 拉下项目后，默认运行版本会和仓库代码保持一致。
+启动后端时，系统会自动把核心 skill prompts 从仓库 `prompts/*.md`（File-as-Truth）同步到数据库 ACTIVE 版本；这样别人从 GitHub 拉下项目后，默认运行版本会和仓库中的 prompt 真相源保持一致。
 
 ### 本机开发
 
@@ -189,7 +191,7 @@ npm run dev:nginx
 ./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
 ```
 
-说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`，同时会先停止系统 nginx 进程避免端口冲突。
+说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`；启动前会校验 80 端口可用，若系统 nginx 或其他进程已占用 80 端口，需要先手动停止。
 
 ### 环境配置辅助命令
 
@@ -206,7 +208,7 @@ npm run env:edit
 ### Prompt 初始化与维护
 
 ```bash
-# 手动将核心 prompts 从当前代码同步到数据库 ACTIVE 版本
+# 手动将核心 prompts 从仓库 `prompts/*.md` 同步到数据库 ACTIVE 版本
 cd backend
 npm run prompts:sync-core
 
@@ -214,13 +216,17 @@ npm run prompts:sync-core
 npm run prompts:backfill-core
 ```
 
-说明：`prompts:sync-core` 会以当前仓库代码为准，同步核心 prompts 到数据库 ACTIVE 版本；若代码与数据库 ACTIVE 不一致，会自动创建新版本并切换到 ACTIVE。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动执行一次 core prompts 同步。
+说明：`prompts:sync-core` 会以仓库 `prompts/*.md` 为准，同步核心 prompts 到数据库 ACTIVE 版本；若仓库版本与数据库 ACTIVE 不一致，会自动创建新版本并切换到 ACTIVE。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动执行一次 core prompts 同步。
 
 ### 本地 SQLite 路径约定
 
-- 本地 SQLite 开发环境请使用：`DATABASE_URL=file:./dev.db`
-- 不要写成：`DATABASE_URL=file:./prisma/dev.db`
-- 错误写法可能让 Prisma 在 `backend/prisma/prisma/dev.db` 创建误库，导致现有用户数据和 prompt 配置看起来“消失”
+当前仓库默认使用两个 SQLite 库：
+
+- `DATABASE_URL=file:./prisma/dev.db`
+- `SYSTEM_DATABASE_URL=file:./prisma/system.db`
+
+请优先以 `backend/.env` 与启动脚本默认值为准。
+如果手动修改路径，务必避免生成 `backend/prisma/prisma/*.db` 这类嵌套误库，否则会出现用户数据或 prompt 配置看起来“消失”的情况。
 
 ### 前端 API 环境变量
 
@@ -239,7 +245,7 @@ npm run prompts:backfill-core
 - 后端: http://localhost:3001
 - 管理后台: http://localhost:5173/admin
 
-说明：当前管理员登录接口默认仅允许本机访问；局域网设备或普通反向代理环境下即使能打开管理页，也会被后端拒绝登录。
+说明：管理员登录接口默认仅允许本机访问；如需远程访问，可设置 `ADMIN_LOCALHOST_ONLY=false`（不推荐直接暴露公网管理登录）。
 
 ---
 
@@ -256,7 +262,7 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 
 建议：首次登录管理端后立即修改密码；对外部署时请使用强密码。
 
-注意：管理员登录接口当前仅允许 `localhost` / `127.0.0.1` / `::1` 访问，适合本机管理，不适合直接暴露给局域网或公网管理员登录。
+注意：管理员登录接口默认仅允许 `localhost` / `127.0.0.1` / `::1` 访问；如确有远程管理需求，可在 `.env` 中设置 `ADMIN_LOCALHOST_ONLY=false`，并自行承担安全加固责任。
 
 详见 [ADMIN_SETUP.md](ADMIN_SETUP.md)
 
