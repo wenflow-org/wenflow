@@ -23,27 +23,23 @@
           </template>
 
           <div class="help-card">
-            <div class="help-card__title">发布向导用途</div>
+            <div class="help-card__title">发布向导</div>
             <div class="help-card__grid">
               <article class="help-item">
-                <strong>1. 看约定</strong>
-                <span>先确认编译规则和不可改边界。</span>
+                <strong>1. 改源</strong>
+                <span>编辑 source 与元数据。</span>
               </article>
               <article class="help-item">
-                <strong>2. 改源文件</strong>
-                <span>在源文档里调整结构、字段和内容。</span>
+                <strong>2. 编译</strong>
+                <span>生成候选 Prompt。</span>
               </article>
               <article class="help-item">
-                <strong>3. 生成 Prompt</strong>
-                <span>把源文件编译成可发布 Prompt 产物。</span>
+                <strong>3. 审核</strong>
+                <span>确认产物是否可用。</span>
               </article>
               <article class="help-item">
-                <strong>4. 审核结果</strong>
-                <span>检查编译结果，再决定是否打回。</span>
-              </article>
-              <article class="help-item">
-                <strong>5. 发布生效</strong>
-                <span>把产物写回 `prompts/` 并激活版本。</span>
+                <strong>4. 发布</strong>
+                <span>写回平台运行目标。</span>
               </article>
             </div>
           </div>
@@ -72,7 +68,7 @@
 
     <!-- ============ Step 0: 编译定义 ============ -->
     <main class="lab-body" v-if="store.currentStep === 0">
-      <div class="step-content">
+      <div class="step-content step-content--spec">
         <div class="step-header">
           <div class="step-header__main">
             <h2>编译约定</h2>
@@ -90,7 +86,7 @@
 
     <!-- ============ Step 1: 源文件 ============ -->
     <main class="lab-body" v-if="store.currentStep === 1">
-      <div class="step-content">
+      <div class="step-content step-content--edit">
         <div class="step-header">
           <div class="step-header__main">
             <h2>编辑源文件</h2>
@@ -123,14 +119,14 @@
           type="warning"
           :closable="false"
           show-icon
-          title="当前存在未保存改动，编译前将自动保存 source 和 manifest。"
+          title="当前有未保存改动，编译前会自动保存。"
         />
 
         <div class="manifest-card" v-loading="store.loadingManifest">
           <div class="manifest-card__header">
             <div>
               <div class="manifest-card__title">Skill 元数据</div>
-              <div class="manifest-card__hint">这里维护 Prompt Lab 的 manifest truth，会参与编译与发布。</div>
+              <div class="manifest-card__hint">维护编译与发布所用元数据。</div>
             </div>
             <el-button size="small" :loading="savingManifest" @click="handleSaveManifest">
               保存元数据
@@ -259,7 +255,7 @@
 
     <!-- ============ Step 2: LLM 编译 ============ -->
     <main class="lab-body" v-if="store.currentStep === 2">
-      <div class="step-content">
+      <div class="step-content step-content--compile">
         <div class="step-header">
           <div class="step-header__main">
             <h2>生成 Prompt</h2>
@@ -269,7 +265,10 @@
 
         <div v-if="store.compiling" class="compile-progress">
           <el-icon class="is-loading"><Loading /></el-icon>
-          <span>LLM 正在编译 {{ store.skillId }}...</span>
+              <span>
+                {{ store.compilePhase === 'saving' ? '正在保存 source / manifest...' : `正在编译 ${store.skillId}...` }}
+                <template v-if="compileElapsedText">{{ compileElapsedText }}</template>
+              </span>
         </div>
 
         <div v-if="store.compileError" class="compile-error">
@@ -279,7 +278,7 @@
         <div v-if="store.compiledPrompt" class="compile-success">
           <el-alert type="success" title="编译完成" :closable="false" show-icon>
             <template #default>
-              <span>{{ store.compileStats?.lines ?? '-' }} 行 · {{ store.compileStats?.rules ?? '-' }} 条规则 · {{ store.compileStats?.chars ?? '-' }} 字符</span>
+              <span>{{ store.compileStats?.lines ?? '-' }} 行 · {{ store.compileStats?.chars ?? '-' }} 字符<span v-if="compileElapsedText"> · {{ compileElapsedText }}</span></span>
             </template>
           </el-alert>
         </div>
@@ -318,7 +317,7 @@
 
     <!-- ============ Step 3: 审核 ============ -->
     <main class="lab-body" v-if="store.currentStep === 3">
-      <div class="step-content">
+      <div class="step-content step-content--review">
         <div class="step-header">
           <div class="step-header__main">
             <h2>审核结果</h2>
@@ -326,18 +325,20 @@
           </div>
         </div>
 
+        <div class="review-stats">
           <div class="review-stat">
             <span class="review-stat__val">{{ store.compileStats?.lines ?? '-' }}</span>
             <span class="review-stat__label">行数</span>
           </div>
           <div class="review-stat">
-            <span class="review-stat__val">{{ store.compileStats?.rules ?? '-' }}</span>
-            <span class="review-stat__label">规则</span>
-          </div>
-          <div class="review-stat">
             <span class="review-stat__val">{{ store.compileStats?.chars ?? '-' }}</span>
             <span class="review-stat__label">字符</span>
           </div>
+          <div class="review-stat">
+            <span class="review-stat__val">{{ compileElapsedText || '-' }}</span>
+            <span class="review-stat__label">耗时</span>
+          </div>
+        </div>
 
         <div class="prompt-card">
           <div class="prompt-card__header">
@@ -359,7 +360,7 @@
 
     <!-- ============ Step 4: 发布 ============ -->
     <main class="lab-body" v-if="store.currentStep === 4">
-      <div class="step-content">
+      <div class="step-content step-content--publish">
         <div class="step-header">
           <div class="step-header__main">
             <h2>发布生效</h2>
@@ -380,7 +381,7 @@
                 :precision="1"
                 size="small"
                 controls-position="right"
-                @change="store.markManifestDirty()"
+                @change="store.markRuntimeParamsDirty()"
               />
             </div>
             <div class="param-item">
@@ -392,14 +393,14 @@
                 :step="1000"
                 size="small"
                 controls-position="right"
-                @change="store.markManifestDirty()"
+                @change="store.markRuntimeParamsDirty()"
               />
             </div>
           </div>
           <div class="params-row">
             <div class="param-item">
               <span class="param-label">Tier</span>
-              <el-select v-model="store.params.tier" size="small" @change="store.markManifestDirty()">
+              <el-select v-model="store.params.tier" size="small" @change="store.markRuntimeParamsDirty()">
                 <el-option label="chat" value="chat" />
                 <el-option label="reasoning" value="reasoning" />
                 <el-option label="light" value="light" />
@@ -407,7 +408,7 @@
             </div>
             <div class="param-item param-item--wide">
               <span class="param-label">Model</span>
-              <el-select v-model="store.params.model" size="small" clearable placeholder="平台默认" @change="store.markManifestDirty()">
+              <el-select v-model="store.params.model" size="small" clearable placeholder="平台默认" @change="store.markRuntimeParamsDirty()">
                 <el-option label="deepseek-v4-flash" value="deepseek-v4-flash" />
                 <el-option label="deepseek-v4-pro" value="deepseek-v4-pro" />
                 <el-option label="deepseek-r1" value="deepseek-r1" />
@@ -415,7 +416,7 @@
             </div>
             <div class="param-item">
               <span class="param-label">Thinking</span>
-              <el-select v-model="store.params.thinkingMode" size="small" @change="store.markManifestDirty()">
+              <el-select v-model="store.params.thinkingMode" size="small" @change="store.markRuntimeParamsDirty()">
                 <el-option label="default" value="default" />
                 <el-option label="enabled" value="enabled" />
                 <el-option label="disabled" value="disabled" />
@@ -423,7 +424,7 @@
             </div>
             <div class="param-item">
               <span class="param-label">Reasoning Effort</span>
-              <el-select v-model="store.params.reasoningEffort" size="small" @change="store.markManifestDirty()">
+              <el-select v-model="store.params.reasoningEffort" size="small" @change="store.markRuntimeParamsDirty()">
                 <el-option label="default" value="default" />
                 <el-option label="high" value="high" />
                 <el-option label="max" value="max" />
@@ -509,10 +510,18 @@ const promptLabHighlights = computed(() => [
   { label: `当前步骤 ${store.currentStep + 1} / ${steps.length}`, tone: 'info' as const },
   { label: store.skillId ? `Skill ${store.skillId}` : '待选择 Skill', tone: store.skillId ? 'success' as const : 'warning' as const },
   {
-    label: store.compileError ? '编译错误' : store.compiledPrompt ? '已编译' : '未编译',
-    tone: store.compileError ? 'danger' as const : store.compiledPrompt ? 'success' as const : 'neutral' as const
+    label: store.compiling ? (store.compilePhase === 'saving' ? '保存中' : '编译中') : store.compileError ? '编译错误' : store.compiledPrompt ? '已编译' : '未编译',
+    tone: store.compiling ? 'info' as const : store.compileError ? 'danger' as const : store.compiledPrompt ? 'success' as const : 'neutral' as const
   }
 ])
+
+const compileElapsedText = computed(() => {
+  if (!store.compileElapsedMs) return ''
+  if (store.compileElapsedMs < 100) return '<0.1s'
+  if (store.compileElapsedMs < 1000) return `${store.compileElapsedMs}ms`
+  const seconds = store.compileElapsedMs / 1000
+  return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`
+})
 
 function goBack() {
   router.push('/admin/skills')
@@ -558,9 +567,9 @@ async function initializePromptLab() {
 
 async function handleCompile() {
   try {
+    store.beginCompileSavingPhase()
     await store.persistDrafts()
     await store.compile()
-    store.currentStep = 3
   } catch {
     // error already handled in store
   }
@@ -796,11 +805,22 @@ function handleReset() {
 
 .step-content {
   width: 100%;
-  max-width: 840px;
+  max-width: 980px;
   display: flex;
   flex-direction: column;
   gap: 20px;
   padding-top: 8px;
+}
+
+.step-content--edit,
+.step-content--review,
+.step-content--publish {
+  max-width: 1240px;
+}
+
+.step-content--compile,
+.step-content--spec {
+  max-width: 980px;
 }
 
 .step-header {

@@ -23,7 +23,7 @@
         <el-icon class="root-arrow" :class="{ 'root-arrow--open': openRoots.has(root.id) }">
           <ArrowRight />
         </el-icon>
-        <span class="root-title">{{ root.title }}</span>
+        <span class="root-title">{{ displayTitle(root.title) }}</span>
         <span class="root-count">{{ root.children?.length ?? 0 }} 节</span>
         <div class="root-actions" @click.stop>
           <el-button
@@ -60,7 +60,8 @@
             <el-icon class="section-arrow" :class="{ 'section-arrow--open': openSections.has(child.id) }">
               <ArrowRight />
             </el-icon>
-            <span class="section-title">{{ child.title }}</span>
+            <span class="section-title">{{ displayTitle(child.title) }}</span>
+            <span class="section-title-en" v-if="displayTitleSecondary(child.title)">{{ displayTitleSecondary(child.title) }}</span>
             <el-tag size="small" :type="contentTypeTag(child.contentType)" class="section-type">
               {{ contentTypeLabel(child.contentType) }}
             </el-tag>
@@ -125,6 +126,14 @@
               :modelValue="edits[child.id] || child.content"
               @update:modelValue="v => { edits[child.id] = v; onEdit(child) }"
             />
+
+            <ListEditor
+              v-else-if="child.contentType === 'qc'"
+              :content="child.content"
+              :modelValue="edits[child.id] || child.content"
+              placeholder="输入质检检查项..."
+              @update:modelValue="v => { edits[child.id] = v; onEdit(child) }"
+            />
           </div>
         </div>
       </div>
@@ -140,6 +149,23 @@ import TableEditor from './TableEditor.vue'
 import SchemaEditor from './SchemaEditor.vue'
 import StagesEditor from './StagesEditor.vue'
 import ConstraintsEditor from './ConstraintsEditor.vue'
+import ListEditor from './ListEditor.vue'
+
+const TITLE_MAP: Record<string, { primary: string; secondary?: string }> = {
+  DEFINITIONS: { primary: '定义' },
+  EXECUTION: { primary: '执行' },
+  Identity: { primary: '身份', secondary: 'Identity' },
+  Input: { primary: '输入', secondary: 'Input' },
+  'Output Schema': { primary: '输出结构', secondary: 'Output Schema' },
+  Stages: { primary: '阶段', secondary: 'Stages' },
+  Format: { primary: '格式', secondary: 'Format' },
+  'Context Handling': { primary: '上下文处理', secondary: 'Context Handling' },
+  'Stage Logic': { primary: '阶段逻辑', secondary: 'Stage Logic' },
+  'Output Guidance': { primary: '输出指引', secondary: 'Output Guidance' },
+  Constraints: { primary: '约束', secondary: 'Constraints' },
+  'Quality Control': { primary: '质检', secondary: 'Quality Control' },
+  Examples: { primary: '示例', secondary: 'Examples' }
+}
 
 const props = defineProps<{
   sourceDoc: SourceDocument | null
@@ -170,12 +196,27 @@ watch(() => props.sourceDoc, (sourceDoc) => {
     for (const root of sourceDoc.rootSections) {
       openRoots.value.add(root.id)
       for (const child of root.children || []) {
-        openSections.value.add(child.id)
+        if (shouldOpenByDefault(child.title)) {
+          openSections.value.add(child.id)
+        }
         edits.value[child.id] = child.content
       }
     }
   }
 }, { immediate: true })
+
+function displayTitle(title: string) {
+  return TITLE_MAP[title]?.primary || title
+}
+
+function displayTitleSecondary(title: string) {
+  const secondary = TITLE_MAP[title]?.secondary
+  return secondary && secondary !== title ? secondary : ''
+}
+
+function shouldOpenByDefault(title: string) {
+  return ['Input', 'Output Schema'].includes(title)
+}
 
 function toggleRoot(id: string) {
   if (openRoots.value.has(id)) openRoots.value.delete(id)
@@ -224,14 +265,16 @@ function contentTypeTag(type: string): 'success' | 'warning' | 'info' | 'danger'
   if (type === 'schema') return 'warning'
   if (type === 'stages') return 'success'
   if (type === 'constraints') return 'danger'
+  if (type === 'qc') return 'warning'
   return 'info'
 }
 
 function contentTypeLabel(type: string): string {
   if (type === 'table') return '表格'
-  if (type === 'schema') return 'Schema'
+  if (type === 'schema') return '输出结构'
   if (type === 'stages') return '阶段'
   if (type === 'constraints') return '约束'
+  if (type === 'qc') return '质检'
   return '文本'
 }
 </script>
@@ -366,6 +409,12 @@ function contentTypeLabel(type: string): string {
   font-size: 13px;
   font-weight: 600;
   color: var(--admin-text-primary, #111827);
+  flex-shrink: 0;
+}
+
+.section-title-en {
+  font-size: 11px;
+  color: var(--admin-text-muted, #9ca3af);
   flex-shrink: 0;
 }
 

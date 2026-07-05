@@ -18,7 +18,7 @@
  *   ...
  */
 
-export type ContentType = 'text' | 'table' | 'schema' | 'stages' | 'constraints'
+export type ContentType = 'text' | 'table' | 'schema' | 'stages' | 'constraints' | 'qc'
 
 export interface SourceSection {
   id: string
@@ -145,6 +145,7 @@ function detectContentType(title: string, content: string): ContentType {
   if (t.includes('input') || t === '输入') return 'table'
   if (t.includes('output') || t.includes('schema')) return 'schema'
   if (t.includes('stage') || t.includes('阶段')) return 'stages'
+  if (t.includes('quality control') || t === 'qc' || t.includes('质检') || t.includes('质控')) return 'qc'
   if (t.includes('constraint') || t.includes('约束')) return 'constraints'
   if (content.includes('|') && content.includes('---')) return 'table'
   return 'text'

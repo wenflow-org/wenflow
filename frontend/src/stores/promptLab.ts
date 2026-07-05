@@ -17,8 +17,11 @@ export const usePromptLabStore = defineStore('promptLab', () => {
   let loadToken = 0
   const compiledPrompt = ref('')
   const compiling = ref(false)
+  const compilePhase = ref<'idle' | 'saving' | 'compiling' | 'success' | 'error'>('idle')
+  const compileStartedAt = ref<number | null>(null)
+  const compileElapsedMs = ref<number | null>(null)
   const compileError = ref<string | null>(null)
-  const compileStats = ref<{ lines: number; rules: number; chars: number } | null>(null)
+  const compileStats = ref<{ lines: number; chars: number } | null>(null)
   const sourceList = ref<{ id: string; name: string }[]>([])
   const loadingSource = ref(false)
   const compileSpec = ref('')
@@ -125,18 +128,34 @@ export const usePromptLabStore = defineStore('promptLab', () => {
       || ''
   }
 
-  function markSourceDirty() {
-    sourceDirty.value = true
+  function resetCompiledState() {
     compiledPrompt.value = ''
     compileError.value = null
     compileStats.value = null
+    compilePhase.value = 'idle'
+    compileStartedAt.value = null
+    compileElapsedMs.value = null
+  }
+
+  function markSourceDirty() {
+    sourceDirty.value = true
+    resetCompiledState()
   }
 
   function markManifestDirty() {
     manifestDirty.value = true
-    compiledPrompt.value = ''
+    resetCompiledState()
+  }
+
+  function markRuntimeParamsDirty() {
+    manifestDirty.value = true
+  }
+
+  function beginCompileSavingPhase() {
+    compilePhase.value = 'saving'
+    compileStartedAt.value = Date.now()
+    compileElapsedMs.value = null
     compileError.value = null
-    compileStats.value = null
   }
 
   async function fetchCompileSpec() {
@@ -193,9 +212,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     const currentLoadToken = ++loadToken
     skillId.value = id
     loadingSource.value = true
-    compiledPrompt.value = ''
-    compileError.value = null
-    compileStats.value = null
+    resetCompiledState()
     try {
       const token = getPromptLabToken()
       const resp = await fetch(`${API}/source/${id}`, {
@@ -340,6 +357,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     }
 
     compiling.value = true
+    compilePhase.value = 'compiling'
     compileError.value = null
 
     try {
@@ -365,8 +383,12 @@ export const usePromptLabStore = defineStore('promptLab', () => {
 
       compiledPrompt.value = result.prompt
       compileStats.value = result.stats
+      compilePhase.value = 'success'
+      compileElapsedMs.value = compileStartedAt.value ? Date.now() - compileStartedAt.value : null
       ElMessage.success('编译成功')
     } catch (error) {
+      compilePhase.value = 'error'
+      compileElapsedMs.value = compileStartedAt.value ? Date.now() - compileStartedAt.value : null
       compileError.value = (error as Error).message
       ElMessage.error('编译失败: ' + (error as Error).message)
       throw error
@@ -425,9 +447,7 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     manifest.value = defaultManifest(skillId.value)
     sourceDirty.value = false
     manifestDirty.value = false
-    compiledPrompt.value = ''
-    compileError.value = null
-    compileStats.value = null
+    resetCompiledState()
   }
 
   return {
@@ -441,6 +461,9 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     manifestDirty,
     compiledPrompt,
     compiling,
+    compilePhase,
+    compileStartedAt,
+    compileElapsedMs,
     compileError,
     compileStats,
     sourceList,
@@ -458,6 +481,8 @@ export const usePromptLabStore = defineStore('promptLab', () => {
     fetchParams,
     syncSourceFromDocument,
     markManifestDirty,
+    markRuntimeParamsDirty,
+    beginCompileSavingPhase,
     compile,
     publish,
     reset

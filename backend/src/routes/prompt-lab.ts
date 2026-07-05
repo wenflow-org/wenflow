@@ -13,6 +13,7 @@ import { getAPIGateway, CallerInfo, ChatMessage } from '../gateway/api-gateway';
 import { compilePrompt } from '../services/prompt-compiler';
 import { promptCache } from '../services/cache/prompt-cache.service';
 import { getAgentRoutings } from '../services/field-dispatcher';
+import { compilePromptLabSourceDeterministic } from '../services/prompt-lab/compiler';
 
 const router = Router();
 
@@ -404,7 +405,6 @@ router.get('/sources', async (req, res) => {
   try {
     const sourceFiles = await fs.readdir(SOURCES_DIR).catch(() => [] as string[]);
     const manifestFiles = await fs.readdir(MANIFESTS_DIR).catch(() => [] as string[]);
-    const promptFiles = await fs.readdir(PROMPTS_DIR).catch(() => [] as string[]);
 
     const sourceIds = sourceFiles
       .filter((f: string) => f.endsWith('.md'))
@@ -414,11 +414,7 @@ router.get('/sources', async (req, res) => {
       .filter((f: string) => f.endsWith('.yaml') && !f.startsWith('_'))
       .map((f: string) => f.replace(/\.yaml$/, ''));
 
-    const promptIds = promptFiles
-      .filter((f: string) => /^skill\..+\.md$/.test(f))
-      .map((f: string) => f.replace(/^skill\./, '').replace(/\.md$/, ''));
-
-    const mergedIds = Array.from(new Set([...sourceIds, ...manifestIds, ...promptIds]));
+    const mergedIds = Array.from(new Set([...sourceIds, ...manifestIds]));
     const list = sortSkillList(mergedIds.map((id) => ({
       id,
       name: id,
@@ -692,65 +688,14 @@ router.post('/compile-source', async (req, res) => {
 
     const { exists: manifestExists, manifest } = await loadManifest(skillId, sourceContent);
 
-    // 2. 加载编译规则 (compile-spec)
-    const compileSpecPath = path.join(
-      process.cwd(),
-      '../prompt-lab/compiler-skill/compile-spec.md'
-    );
-    const compileSpec = await fs.readFile(compileSpecPath, 'utf-8');
-
-    // 3. 构造 LLM 输入
-    const fullPrompt = `${compileSpec}
-
----
-
-## 当前 Skill 元数据
-
-\`\`\`yaml
-${yaml.dump({
-  skillId: manifest.skillId,
-  agentId: manifest.agentId,
-  name: manifest.name,
-  archetype: manifest.archetype,
-  description: manifest.description
-}, { lineWidth: -1, noRefs: true }).trim()}
-\`\`\`
-
-## 现在请编译以下 Skill 源文件
-
-\`\`\`markdown
-${sourceContent}
-\`\`\`
-
-请严格按照编译映射规则，生成完整的 Skill Prompt（Markdown 格式）。
-
-注意：源文件中以 ## 开头的章节和其下的结构化内容（表格、列表、JSON），
-应被编译为标准 Prompt 的对应章节。措辞可润色，但结构和关键约束必须忠实保留。`;
-
-    // 4. 调用 Gateway
-    const messages: ChatMessage[] = [
-      { role: 'user', content: fullPrompt }
-    ];
-
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'prompt-compiler' };
-
-    const response = await gateway.execute({
-      messages,
-      max_tokens: 8000,
-      temperature: 0.2
-    }, caller, {});
-
-    let compiledPrompt = response.choices[0]?.message?.content || '';
-
-    if (!compiledPrompt) {
-      return res.status(500).json({ error: 'LLM 返回空结果' });
-    }
-
-    // 清理 markdown 代码块包裹
-    compiledPrompt = compiledPrompt
-      .replace(/^```markdown\s*\n?/, '')
-      .replace(/\n?```\s*$/, '');
+    const compileResult = compilePromptLabSourceDeterministic(sourceContent, {
+      skillId: manifest.skillId,
+      agentId: manifest.agentId,
+      name: manifest.name,
+      archetype: manifest.archetype,
+      description: manifest.description
+    });
+    const compiledPrompt = compileResult.prompt;
 
     // 5. 可写回 compiled/（暂不覆盖 prompts/）
     try {
@@ -765,17 +710,15 @@ ${sourceContent}
     }
 
     // 6. 统计
-    const lines = compiledPrompt.split('\n').length;
-    const rules = (compiledPrompt.match(/\*?\*?(RULE|OUT|CON|STATE)-\d{2}\*?\*?:/gm) || []).length;
-    const chars = compiledPrompt.length;
-
     res.json({
       success: true,
       skillId,
       prompt: compiledPrompt,
-      stats: { lines, rules, chars },
+      stats: compileResult.stats,
       manifestExists,
-      manifest
+      manifest,
+      compiler: 'deterministic-skeleton',
+      diagnostics: compileResult.diagnostics
     });
 
   } catch (error) {
