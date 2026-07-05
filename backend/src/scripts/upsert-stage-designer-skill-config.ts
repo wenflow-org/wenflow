@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import systemPrisma from '../../config/system-database';
+import systemPrisma from '../config/system-database';
 
 dotenv.config();
 

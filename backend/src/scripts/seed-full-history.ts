@@ -92,7 +92,7 @@ async function seedFullHistory() {
     console.log('  日期范围:', records[0].calculatedAt.toISOString().split('T')[0], ' 到 ', records[records.length-1].calculatedAt.toISOString().split('T')[0]);
     console.log('\n前5条数据：');
     records.slice(0, 5).forEach((r, idx) => {
-      console.log(`  ${idx+1}. ${r.calculatedAt.toISOString().split('T')[0]} | LSS: ${r.lss.toFixed(2)} | LSB: ${r.lsb.toFixed(2)}`);
+      console.log(`  ${idx+1}. ${r.calculatedAt.toISOString().split('T')[0]} | LSS: ${r.lssCurrent.toFixed(2)} | LSB: ${r.lsbCurrent.toFixed(2)}`);
     });
 
   } catch (error) {

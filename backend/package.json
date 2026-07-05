@@ -11,7 +11,6 @@
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
-    "script:fix-session-duration": "ts-node src/scripts/fix-learning-session-duration.ts",
     "prompts:sync": "ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "prompts:bootstrap": "ts-node src/scripts/ensure-core-agent-prompts.ts --bootstrap",
     "prompts:backfill-core": "ts-node src/scripts/ensure-core-agent-prompts.ts --backfill",
