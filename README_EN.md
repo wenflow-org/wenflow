@@ -13,6 +13,7 @@ English Version | [中文版](README.md)
 🌐 **Demo Site**: https://wenflow.org
 
 > Demo only, not for production use.
+> ⚠️ **Notice**: All accounts and data on the demo site are periodically purged. Do not store important information.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)

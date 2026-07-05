@@ -13,6 +13,7 @@
 🌐 **Demo 站点**: https://wenflow.org
 
 > 仅作 Demo 演示，不提供正式服务。
+> ⚠️ **注意**: Demo 站点会定期清理所有账号和数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
