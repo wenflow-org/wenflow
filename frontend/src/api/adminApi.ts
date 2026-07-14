@@ -995,6 +995,10 @@ draftVirtualLearnerStories: async (id: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/advance-path`);
   },
 
+  reviewVirtualSessionPath: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/review-path`);
+  },
+
   getVirtualSessionPathStatus: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/path-status`);
   },

@@ -149,6 +149,7 @@ const props = defineProps<{
   status: string
   goalReady: boolean
   pathReady: boolean
+  pathReview?: { status?: string; decision?: string } | null
   learningStarted: boolean
   config: CockpitConfig
   loadingStep?: boolean
@@ -161,6 +162,7 @@ const emit = defineEmits<{
   (e: 'auto'): void
   (e: 'stop'): void
   (e: 'advancePath'): void
+  (e: 'reviewPath'): void
   (e: 'startLearning'): void
   (e: 'resetPath'): void
   (e: 'resetLearn'): void
@@ -240,9 +242,11 @@ const bridgeActions = computed(() => {
   }
   if (props.currentStage === 'path' && props.pathReady) {
     list.push({
-      action: 'startLearning',
-      label: '开始 Learn',
-      enabled: !props.learningStarted,
+      action: props.pathReview?.status === 'accepted' ? 'startLearning' : 'reviewPath',
+      label: props.pathReview?.status === 'accepted'
+        ? '开始 Learn'
+        : props.pathReview?.status === 'replanned' ? '重新评审 Path' : '评审 Path',
+      enabled: !props.learningStarted && props.pathReview?.status !== 'replanning',
       type: 'primary'
     })
   }

@@ -633,6 +633,15 @@ class SimulationOrchestrator {
     return normalizeFrictionBudget(stageResults?.simulationConfig?.frictionBudget)
   }
 
+  private getSessionPromptOverrides(session: any): { goalAgent?: string; pathAgent?: string } | undefined {
+    const overrides = this.parseStageResultsPayload(session?.stageResults)?.systemPromptOverrides;
+    if (!overrides || typeof overrides !== 'object') return undefined;
+
+    const goalAgent = typeof overrides.goalAgent === 'string' ? overrides.goalAgent.trim() : '';
+    const pathAgent = typeof overrides.pathAgent === 'string' ? overrides.pathAgent.trim() : '';
+    return goalAgent || pathAgent ? { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined } : undefined;
+  }
+
   private parseStoryContextFromStageResults(stageResults: any): any {
     return stageResults?.story || null;
   }
@@ -688,7 +697,8 @@ class SimulationOrchestrator {
 
         const goalResult = await goalConversationService.startConversation(
           input.userId,
-          openingReply
+          openingReply,
+          { systemPromptOverrides: this.getSessionPromptOverrides(session) }
         );
         
         await this.updateSessionStatus(
@@ -849,7 +859,8 @@ class SimulationOrchestrator {
       const goalResult = await goalConversationService.continueConversation(
         session.goalConversationId,
         virtualReplyResult.output.reply,
-        input.userId
+        input.userId,
+        { systemPromptOverrides: this.getSessionPromptOverrides(session) }
       );
       
       logs.push({
@@ -1026,7 +1037,7 @@ class SimulationOrchestrator {
               sessionId: input.sessionId
             });
             try {
-              await this.startLearningPhase(input.sessionId);
+              await this.resolvePathReview(input.sessionId, { startLearning: true });
             } catch (err: any) {
               logger.warn('[simulation-coordinator] 自动启动 Learn 失败', { error: err.message });
             }
@@ -1090,8 +1101,8 @@ class SimulationOrchestrator {
           { sessionId, userId: session.userId, mode: 'auto-loop' },
           {
             maxRounds,
-            autoAdvanceToPath: true,
-            autoAdvanceToLearning: false
+            autoAdvanceToPath: options.autoAdvanceToPath ?? true,
+            autoAdvanceToLearning: options.autoAdvanceToLearning ?? false
           }
         );
         summary.goalRounds = goalResults.length;
@@ -1110,7 +1121,13 @@ class SimulationOrchestrator {
       // ========== Phase B: Path -> Learn bridge ==========
       if (updatedAfterGoal.learningPathId && updatedAfterGoal.currentStage !== 'learning') {
         try {
-          await this.startLearningPhase(sessionId);
+          const review = await this.resolvePathReview(sessionId, {
+            startLearning: options.autoAdvanceToLearning ?? false
+          });
+          if (!review.success) {
+            summary.error = review.error || 'Path 评审失败';
+            return summary;
+          }
         } catch (err: any) {
           logger.warn('[simulation-coordinator] 启动 Learn 失败', { error: err.message });
           summary.error = err.message || '启动 Learn 失败';
@@ -1196,6 +1213,10 @@ class SimulationOrchestrator {
         collectedData = JSON.parse(conversation.collectedData || '{}');
       } catch {}
       
+      if (session.learningPathId) {
+        return { success: true, learningPathId: session.learningPathId };
+      }
+
       const pathRequest: GoalPathRequest = {
         userId: session.userId,
         sourceConversationId: session.goalConversationId,
@@ -1206,7 +1227,10 @@ class SimulationOrchestrator {
           confirmedProposal: collectedData.confirmedProposal || null,
           collected: collectedData.collected || {},
         }),
-        conversationHistory: collectedData.messages || []
+        conversationHistory: collectedData.messages || [],
+        systemPromptOverrides: this.getSessionPromptOverrides(session)?.pathAgent
+          ? { pathAgent: this.getSessionPromptOverrides(session)?.pathAgent }
+          : undefined
       };
       
       logger.info('[simulation-coordinator] 开始路径生成', {
@@ -1258,6 +1282,7 @@ class SimulationOrchestrator {
   
   async reviewPathProposal(sessionId: string): Promise<{
     success: boolean;
+    decision?: 'accept' | 'modify' | 'reject';
     reaction?: string;
     visibleRequestedChanges?: string[];
     error?: string;
@@ -1316,22 +1341,38 @@ class SimulationOrchestrator {
         throw new Error('虚拟用户 Path 评审结果无效');
       }
       
+      const decision = ['accept', 'modify', 'reject'].includes(reactionOutput.debug?.internalDecision)
+        ? reactionOutput.debug.internalDecision as 'accept' | 'modify' | 'reject'
+        : 'accept';
+      const visibleRequestedChanges = reactionOutput.visibleRequestedChanges || [];
+      const biggestConcern = reactionOutput.debug?.visibleSignal || visibleRequestedChanges[0] || null;
+
       await this.addSessionLog(sessionId, {
         timestamp: new Date().toISOString(),
-        phase: 'stage-transition',
+        phase: 'path-review',
         durationMs: Date.now() - reactionStart,
         details: {
           output: {
             reaction: reactionOutput.reaction,
-            visibleRequestedChanges: reactionOutput.visibleRequestedChanges || []
+            decision,
+            confidence: reactionOutput.debug?.internalConfidence ?? null,
+            visibleRequestedChanges,
+            biggestConcern,
+            learningPathId: session.learningPathId
           }
         }
       });
       
       await this.updateStageResults(sessionId, 'path_review', {
         success: true,
+        status: 'pending',
+        decision,
         reaction: reactionOutput.reaction,
-        visibleRequestedChanges: reactionOutput.visibleRequestedChanges || [],
+        visibleRequestedChanges,
+        biggestConcern,
+        confidence: reactionOutput.debug?.internalConfidence ?? null,
+        reviewedPathId: session.learningPathId,
+        reviewedAt: new Date().toISOString(),
         learnerState: this.mergeLearnerState(profile, stageResults.path_review?.learnerState || stageResults.goal?.learnerState, 'path', this.parseStoryContextFromStageResults(stageResults))
       });
       
@@ -1343,8 +1384,9 @@ class SimulationOrchestrator {
       
       return {
         success: true,
+        decision,
         reaction: reactionOutput.reaction,
-        visibleRequestedChanges: reactionOutput.visibleRequestedChanges || []
+        visibleRequestedChanges
       };
     } catch (error: any) {
       logger.error('[simulation-coordinator] 路径评审失败', {
@@ -1356,6 +1398,80 @@ class SimulationOrchestrator {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  async resolvePathReview(sessionId: string, options: { startLearning?: boolean } = {}): Promise<{
+    success: boolean;
+    decision?: 'accept' | 'modify' | 'reject';
+    currentStage?: string;
+    learningPathId?: string;
+    error?: string;
+  }> {
+    const review = await this.reviewPathProposal(sessionId);
+    if (!review.success || !review.decision) return { success: false, error: review.error || 'Path 评审失败' };
+
+    const session = await this.getVirtualSession(sessionId);
+    const stageResults = this.parseStageResultsPayload(session.stageResults);
+    const pathReview = stageResults.path_review || {};
+
+    if (review.decision === 'accept') {
+      await this.updateStageResults(sessionId, 'path_review', { ...pathReview, status: 'accepted' });
+      if (!options.startLearning) {
+        return { success: true, decision: review.decision, currentStage: 'path', learningPathId: session.learningPathId };
+      }
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: { output: { from: 'path', to: 'learning', reason: 'path-review-accepted', learningPathId: session.learningPathId } }
+      });
+      const learning = await this.startLearningPhase(sessionId);
+      return {
+        success: learning.success,
+        decision: review.decision,
+        currentStage: learning.success ? 'learning' : 'path',
+        learningPathId: session.learningPathId,
+        error: learning.error
+      };
+    }
+
+    if (!session.goalConversationId) return { success: false, decision: review.decision, error: 'Goal 对话不存在，无法重规划' };
+
+    const feedback = [review.reaction, ...(review.visibleRequestedChanges || [])].filter(Boolean).join('\n');
+    await this.updateStageResults(sessionId, 'path_review', {
+      ...pathReview,
+      status: 'replanning',
+      replan: { requestedAt: new Date().toISOString(), sourcePathId: session.learningPathId, reason: feedback }
+    });
+    await this.addSessionLog(sessionId, {
+      timestamp: new Date().toISOString(),
+      phase: 'path-replan',
+      details: { output: { decision: review.decision, learningPathId: session.learningPathId, feedback } }
+    });
+
+    try {
+      const result = await goalConversationService.regeneratePath(
+        session.goalConversationId,
+        session.userId,
+        feedback,
+        this.getSessionPromptOverrides(session)
+      );
+      const learningPathId = result.internal?.core?.learningPath?.id || session.learningPathId;
+      await this.updateSessionStatus(sessionId, 'running', 'path', session.goalConversationId, learningPathId);
+      await this.updateStageResults(sessionId, 'path_review', {
+        ...pathReview,
+        status: 'replanned',
+        replan: { requestedAt: new Date().toISOString(), sourcePathId: session.learningPathId, resultPathId: learningPathId, completedAt: new Date().toISOString(), reason: feedback }
+      });
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: review.decision, learningPathId } }
+      });
+      return { success: true, decision: review.decision, currentStage: 'path', learningPathId };
+    } catch (error: any) {
+      await this.updateStageResults(sessionId, 'path_review', { ...pathReview, status: 'failed', error: error.message || '重规划失败' });
+      return { success: false, decision: review.decision, error: error.message || '重规划失败' };
     }
   }
 
@@ -1372,6 +1488,11 @@ class SimulationOrchestrator {
       
       if (!session.learningPathId) {
         throw new Error('学习路径不存在，请先生成路径');
+      }
+
+      const pathReview = this.parseStageResultsPayload(session.stageResults)?.path_review;
+      if (pathReview?.status !== 'accepted' || pathReview?.decision !== 'accept' || pathReview?.reviewedPathId !== session.learningPathId) {
+        throw new Error('Path 尚未通过虚拟学习者评审，不能启动 Learn');
       }
       
       const learningPath = await prisma.learning_paths.findUnique({

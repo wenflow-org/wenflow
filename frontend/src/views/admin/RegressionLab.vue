@@ -152,8 +152,8 @@
 
           <div v-if="result" class="regression-result">
             <div class="regression-result__summary">
-              <el-tag :type="result.goalConverged ? 'success' : 'warning'">
-                Goal: {{ result.goalRounds }} 轮{{ result.goalConverged ? ' ✓' : '' }}
+              <el-tag :type="result.pathGenerated ? 'success' : 'warning'">
+                Goal: {{ result.goalRounds }} 轮{{ result.pathGenerated ? ' ✓' : '' }}
               </el-tag>
               <el-tag :type="result.pathGenerated ? 'success' : 'danger'">
                 Path: {{ result.pathGenerated ? '已生成' : '失败' }}
@@ -306,8 +306,8 @@ async function runTest() {
       maxGoalRounds: 20,
     });
 
-    if (res?.data?.success || res?.data) {
-      result.value = res.data;
+    if (res?.data?.success) {
+      result.value = res.data.data;
       ElMessage.success('回归测试完成');
     } else {
       ElMessage.error(res?.data?.error || '测试运行失败');

@@ -170,9 +170,19 @@
           <!-- Path review -->
           <details v-if="pathReview" class="stage-panel__detail">
             <summary>Path 接受评估</summary>
+            <p>结论: {{ pathReview.decision === 'accept' ? '接受' : pathReview.decision === 'modify' ? '需要修改' : pathReview.decision === 'reject' ? '拒绝' : '待评审' }}</p>
+            <p>状态: {{ getPathReviewStatusLabel(pathReview.status) }}</p>
             <p>反应: {{ pathReview.reaction }}</p>
             <p v-if="pathReview.biggestConcern">最大顾虑: {{ pathReview.biggestConcern }}</p>
+            <ul v-if="pathReview.visibleRequestedChanges?.length" class="path-review-changes">
+              <li v-for="change in pathReview.visibleRequestedChanges" :key="change">{{ change }}</li>
+            </ul>
           </details>
+          <div v-if="pathReady && currentStage === 'path' && pathReview?.status !== 'accepted'" class="stage-panel__actions">
+            <el-button type="primary" :loading="loadingBridge" @click="handleReviewPath">
+              {{ pathReview?.status === 'replanned' ? '重新评审 Path' : '评审 Path' }}
+            </el-button>
+          </div>
         </div>
 
         <!-- Learn -->
@@ -288,6 +298,7 @@
           :status="status"
           :goal-ready="goalReady"
           :path-ready="pathReady"
+          :path-review="pathReview"
           :learning-started="learningStarted"
           :config="cockpitConfig"
           :loading-step="loadingStep"
@@ -297,6 +308,7 @@
           @auto="handleAuto"
           @stop="handleStop"
           @advance-path="handleAdvancePath"
+          @review-path="handleReviewPath"
           @start-learning="handleStartLearning"
           @reset-path="handleResetPath"
           @reset-learn="handleResetLearn"
@@ -476,6 +488,17 @@ const milestones = computed(() => {
 })
 
 const pathReview = computed(() => session.value?.runtime?.stageStatus?.path?.review || stageResults.value?.path_review || null)
+
+function getPathReviewStatusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    pending: '待处理',
+    accepted: '已接受并进入 Learn',
+    replanning: '重规划中',
+    replanned: '已重规划，等待复评',
+    failed: '评审或重规划失败'
+  }
+  return labels[status || ''] || '待评审'
+}
 
 /* Learn */
 const learningStarted = computed(() => !!bindings.value.currentTaskId || !!bindings.value.teachingSessionId)
@@ -707,8 +730,9 @@ const loadLogs = async () => {
   logsInFlight = true
   try {
     const res = await adminApi.getVirtualSessionLogs(sessionId)
-    if (res.data?.success && Array.isArray(res.data.data)) {
-      logEntries.value = res.data.data.map((l: any) => ({
+    const logs = res.data?.data?.logs
+    if (res.data?.success && Array.isArray(logs)) {
+      logEntries.value = logs.map((l: any) => ({
         id: l.id || l._id,
         timestamp: l.createdAt || l.timestamp,
         phase: l.phase || l.level || 'info',
@@ -825,6 +849,23 @@ const handleAdvancePath = async () => {
     }
   } catch (error: any) {
     ElMessage.error(error.message || '生成 Path 失败')
+  } finally {
+    loadingBridge.value = false
+  }
+}
+
+const handleReviewPath = async () => {
+  loadingBridge.value = true
+  try {
+    const res = await adminApi.reviewVirtualSessionPath(sessionId)
+    if (!res.data?.success) throw new Error(res.data?.error || 'Path 评审失败')
+    const result = res.data.data
+    ElMessage.success(result?.decision === 'accept' ? 'Path 已接受，已进入 Learn' : 'Path 已根据评审反馈重规划，等待再次评审')
+    await loadSession()
+    await loadPathStatus()
+    await loadLogs()
+  } catch (error: any) {
+    ElMessage.error(error.message || 'Path 评审失败')
   } finally {
     loadingBridge.value = false
   }

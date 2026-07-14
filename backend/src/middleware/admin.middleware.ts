@@ -42,7 +42,9 @@ export const adminMiddleware = async (
     const token = authHeader.substring(7);
 
     // 验证 token
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & { isAdmin?: boolean };
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ['HS256']
+    }) as JwtPayload & { isAdmin?: boolean };
 
     // 检查是否为 admin
     if (!decoded.isAdmin) {
@@ -96,7 +98,9 @@ export const optionalAdminMiddleware = async (
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & { isAdmin?: boolean };
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        algorithms: ['HS256']
+      }) as JwtPayload & { isAdmin?: boolean };
       req.user = {
         userId: decoded.userId,
         email: decoded.email,

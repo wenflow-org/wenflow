@@ -7,8 +7,10 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import { adminMiddleware } from '../../middleware/admin.middleware';
 import { logger } from '../../utils/logger';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { getGateway } from '../../gateway';
@@ -20,7 +22,6 @@ import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSe
 import { signProjectionToken, verifyProjectionToken } from '../../utils/projection-token';
 
 const router = express.Router();
-const VIRTUAL_USER_PASSWORD = 'VirtualTest123';
 
 const DEFAULT_SCENARIO_CANDIDATE_DOMAINS = [
   '番茄工作法与时间管理',
@@ -823,7 +824,7 @@ async function buildRecentScenarioHints() {
   return hints;
 }
 
-router.use(authMiddleware);
+router.use(authMiddleware, adminMiddleware);
 
 router.get('/:id/stories', async (req: any, res) => {
   try {
@@ -1603,7 +1604,8 @@ router.post('/', async (req: any, res) => {
       : 'beginner';
     
     const email = `virtual_${uuidv4().substring(0, 8)}@test.local`;
-    const hashedPassword = await bcrypt.hash(VIRTUAL_USER_PASSWORD, 10);
+    // 虚拟学习者仅供系统编排使用，不提供可共享的登录凭据。
+    const hashedPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
     
     const user = await prisma.users.create({
       data: {
@@ -1662,7 +1664,6 @@ router.post('/', async (req: any, res) => {
       data: {
         ...virtualProfile,
         email,
-        password: VIRTUAL_USER_PASSWORD,
         profile: JSON.parse(virtualProfile.profile),
         knownConcepts: virtualProfile.knownConcepts ? JSON.parse(virtualProfile.knownConcepts) : [],
         struggleConcepts: virtualProfile.struggleConcepts ? JSON.parse(virtualProfile.struggleConcepts) : [],
@@ -1724,7 +1725,6 @@ router.get('/', async (req: any, res) => {
       ...p,
       email: p.users.email,
       userName: p.users.name,
-      password: VIRTUAL_USER_PASSWORD,
       profile: JSON.parse(p.profile || '{}'),
       knownConcepts: p.knownConcepts ? JSON.parse(p.knownConcepts) : [],
       struggleConcepts: p.struggleConcepts ? JSON.parse(p.struggleConcepts) : [],
@@ -1795,7 +1795,6 @@ router.get('/:id', async (req: any, res) => {
         ...profile,
         email: profile.users.email,
         userName: profile.users.name,
-        password: VIRTUAL_USER_PASSWORD,
         profile: profileData,
         knownConcepts: profile.knownConcepts ? JSON.parse(profile.knownConcepts) : [],
         struggleConcepts: profile.struggleConcepts ? JSON.parse(profile.struggleConcepts) : [],
@@ -2209,8 +2208,7 @@ router.post('/projection/resolve', async (req: any, res) => {
           id: profile.id,
           userId: profile.userId,
           userName: profile.users.name,
-          email: profile.users.email,
-          password: VIRTUAL_USER_PASSWORD
+          email: profile.users.email
         }
       }
     })
@@ -2411,6 +2409,20 @@ router.post('/sessions/:sessionId/advance-path', async (req: any, res) => {
       success: false,
       error: error.message || '推进路径生成失败'
     });
+  }
+});
+
+/**
+ * 以虚拟学习者视角评审当前 Path，并按结论进入 Learn 或重规划。
+ * POST /api/admin/virtual-learners/sessions/:sessionId/review-path
+ */
+router.post('/sessions/:sessionId/review-path', async (req: any, res) => {
+  try {
+    const result = await simulationCoordinator.resolvePathReview(req.params.sessionId, { startLearning: true });
+    res.json({ success: result.success, data: result, error: result.error });
+  } catch (error: any) {
+    logger.error('Path 评审失败:', error);
+    res.status(500).json({ success: false, error: error.message || 'Path 评审失败' });
   }
 });
 
@@ -2891,7 +2903,7 @@ router.post('/:profileId/regression-run', async (req: any, res) => {
     }
 
     const { profileId } = req.params;
-    const { storyId, storyIndex, maxGoalRounds = 20 } = req.body || {};
+    const { storyId, storyIndex, maxGoalRounds = 20, systemPromptOverrides } = req.body || {};
 
     const profile = await prisma.virtual_learner_profiles.findUnique({
       where: { id: profileId }
@@ -2906,6 +2918,21 @@ router.post('/:profileId/regression-run', async (req: any, res) => {
       return res.status(404).json({ success: false, error: '虚拟用户不存在或故事池为空' });
     }
     const sessionId = session.id;
+    if (systemPromptOverrides && typeof systemPromptOverrides === 'object') {
+      const goalAgent = typeof systemPromptOverrides.goalAgent === 'string' ? systemPromptOverrides.goalAgent.trim() : '';
+      const pathAgent = typeof systemPromptOverrides.pathAgent === 'string' ? systemPromptOverrides.pathAgent.trim() : '';
+      if (goalAgent || pathAgent) {
+        await prisma.virtual_sessions.update({
+          where: { id: sessionId },
+          data: {
+            stageResults: JSON.stringify({
+              ...parseJson(session.stageResults, {}),
+              systemPromptOverrides: { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined }
+            })
+          }
+        });
+      }
+    }
 
     // 2. 执行全自动 (Goal→Path→Learn 一条龙, 受 maxGoalRounds 限制)
     const result = await simulationCoordinator.executeFullSession(sessionId, {

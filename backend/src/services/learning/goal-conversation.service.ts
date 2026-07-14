@@ -7,6 +7,15 @@ import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coord
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 
+interface GoalConversationOptions {
+  contextMode?: 'recent' | 'full';
+  confirmProposal?: boolean;
+  systemPromptOverrides?: {
+    goalAgent?: string;
+    pathAgent?: string;
+  };
+}
+
 interface GoalNormalizedStateV1 {
   version: '1.0';
   learnerIntent: {
@@ -176,7 +185,7 @@ class GoalConversationService {
   /**
    * 开始新的对话会话（新格式：分离 userVisible 和 internal）
    */
-  async startConversation(userId: string, initialGoal: string, options?: { contextMode?: 'recent' | 'full' }) {
+  async startConversation(userId: string, initialGoal: string, options?: GoalConversationOptions) {
     try {
       logger.info('开始问题穿透对话会话', { userId, initialGoal });
 
@@ -258,7 +267,7 @@ async continueConversation(
     conversationId: string,
     userReply: string,
     userId: string,
-    options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }
+    options?: GoalConversationOptions
   ) {
       try {
         // 获取当前对话状态
@@ -342,7 +351,7 @@ async continueConversation(
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
 
             pathOrchestrator.runGoalAsync(
-              this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id),
+              this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
               {
                 onSuccess: () => {
                   logger.info('硬规则触发：异步学习路径生成成功', { conversationId, pathId: placeholderPath.id });
@@ -431,7 +440,7 @@ async continueConversation(
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, responseWithConversationId);
 
             pathOrchestrator.runGoalAsync(
-            this.buildGoalPathRequest(conversation, responseWithConversationId, placeholderPath.id),
+            this.buildGoalPathRequest(conversation, responseWithConversationId, placeholderPath.id, options?.systemPromptOverrides),
             {
               onSuccess: () => {
                 logger.info('异步学习路径生成成功', {
@@ -588,7 +597,7 @@ async continueConversation(
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: { contextMode?: 'recent' | 'full'; confirmProposal?: boolean }
+    options?: GoalConversationOptions
   ) {
     const startTime = Date.now();
 
@@ -619,7 +628,8 @@ async continueConversation(
         previousStage: data.stage || conversation.stage,
         previousState,
         maxFormatRetries: this.MAX_FORMAT_RETRIES,
-        confirmProposal: options?.confirmProposal === true
+        confirmProposal: options?.confirmProposal === true,
+        systemPromptOverride: options?.systemPromptOverrides?.goalAgent
       });
 
         logger.info('AI响应', {
@@ -739,7 +749,8 @@ async continueConversation(
   private buildGoalPathRequest(
     conversation: any,
     aiResponse: any,
-    existingPathId?: string
+    existingPathId?: string,
+    systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
   ): GoalPathRequest {
     const data = JSON.parse(conversation.collectedData);
     const goalExt = this.getGoalExt(aiResponse.internal);
@@ -768,6 +779,9 @@ async continueConversation(
       }),
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
+      systemPromptOverrides: systemPromptOverrides?.pathAgent
+        ? { pathAgent: systemPromptOverrides.pathAgent }
+        : undefined,
     };
   }
 
@@ -796,10 +810,19 @@ async continueConversation(
   /**
    * 生成学习路径 - 基于真问题（新格式：从 internal 读取数据）
    */
-  private async generateLearningPath(conversation: any, aiResponse: any) {
+  private async generateLearningPath(
+    conversation: any,
+    aiResponse: any,
+    systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
+  ) {
     try {
       const learningPath = await pathOrchestrator.generateFromGoal(
-        this.buildGoalPathRequest(conversation, aiResponse, conversation.learningPathId || undefined)
+        this.buildGoalPathRequest(
+          conversation,
+          aiResponse,
+          conversation.learningPathId || undefined,
+          systemPromptOverrides
+        )
       );
 
       const goalExt = this.getGoalExt(aiResponse.internal);
@@ -849,7 +872,12 @@ async continueConversation(
   /**
    * 重新生成学习路径（基于已完成的对话）
    */
-  async regeneratePath(conversationId: string, userId: string, adjustments?: string) {
+  async regeneratePath(
+    conversationId: string,
+    userId: string,
+    adjustments?: string,
+    systemPromptOverrides?: GoalConversationOptions['systemPromptOverrides']
+  ) {
     try {
       logger.info('重新生成学习路径', { conversationId, userId, adjustments });
 
@@ -898,7 +926,7 @@ async continueConversation(
             }
           }
         }
-      });
+      }, systemPromptOverrides);
 
       // 更新状态为完成
       await prisma.goal_conversations.update({
