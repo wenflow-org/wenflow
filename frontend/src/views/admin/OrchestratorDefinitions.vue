@@ -533,6 +533,7 @@ const roleLabelMap: Record<string, string> = {
   'goal-clarification-and-convergence': 'Goal 对话收敛',
   'learning-path-generation': '学习路径生成',
   'path-review-reaction': '路径评估反应',
+  'legacy-assisted-path-review': '辅助调试：路径评估',
   'learn-stage-learner-turn-simulation': 'Learn 阶段学习者模拟',
   'learning-session-execution': '学习会话执行',
   'experiment-referee-evaluation': '实验终局旁路裁判'

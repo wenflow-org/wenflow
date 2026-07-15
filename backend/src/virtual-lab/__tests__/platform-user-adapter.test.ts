@@ -92,6 +92,65 @@ describe('PlatformUserAdapter', () => {
     expect(result.observation.lastActionResult?.visibleMessage).toBe('阶段任务仍在生成')
   })
 
+  it('Path 就绪后只公开进入 Learn，并优先选择当前阶段的 todo task', async () => {
+    const request = jest.fn().mockResolvedValue({
+      data: { success: true, data: {
+        id: 'path-1', title: '测试路径', status: 'active', canStartLearning: true,
+        milestones: [
+          { title: '旧阶段', status: 'completed', subtasks: [{ id: 'old', title: '未正确结算的旧任务', status: 'in_progress' }] },
+          { title: '当前阶段', status: 'active', subtasks: [
+            { id: 'doing', title: '进行中任务', status: 'in_progress' },
+            { id: 'todo', title: '待开始任务', status: 'todo' }
+          ] }
+        ]
+      } }
+    })
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request } as PlatformHttpTransport
+    })
+
+    const result = await adapter.getPath('path-1')
+
+    expect(result.observation.availableActions).toEqual(['start_learning'])
+    expect(result.observation.visibleTask?.id).toBe('todo')
+  })
+
+  it('开始 Learn 与普通用户页面一致，不强制创建新教学会话', async () => {
+    const request = jest.fn().mockResolvedValue({
+      data: { success: true, data: { sessionId: 'teach-1', welcomeMessage: '开始学习', topic: '当前任务' } }
+    })
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request } as PlatformHttpTransport
+    })
+
+    await adapter.startTeaching('task-1')
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST', url: '/ai-teaching/tasks/task-1/session', headers: expect.any(Object)
+    }))
+    expect(request.mock.calls[0][0]).not.toHaveProperty('data')
+  })
+
+  it('Path 生成失败时返回可裁判的 error 终态', async () => {
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request: jest.fn().mockResolvedValue({
+        data: { success: true, data: {
+          id: 'path-1', title: '失败路径', status: 'failed', canStartLearning: false,
+          learningBlockedReason: '阶段任务生成失败', milestones: []
+        } }
+      }) } as PlatformHttpTransport
+    })
+
+    const result = await adapter.getPath('path-1')
+
+    expect(result.observation.stage).toBe('error')
+    expect(result.observation.availableActions).toEqual([])
+    expect(result.observation.lastActionResult).toEqual({ status: 'error', visibleMessage: '阶段任务生成失败' })
+  })
+
   it('Teaching 仅公开可确认结束动作，不公开内部完成判断', async () => {
     const transport: PlatformHttpTransport = {
       request: jest.fn().mockResolvedValue({

@@ -3,16 +3,15 @@
     <AdminPageHeader
       title="虚拟会话控制台"
       :icon="Monitor"
-      :highlights="cockpitHighlights"
     >
       <template #actions>
         <el-button @click="backToStory">
           <el-icon><ArrowLeft /></el-icon>
-          {{ profileName || '返回故事' }}
+          {{ profileName || '返回' }}
         </el-button>
         <el-button @click="loadSession" :loading="loading">
           <el-icon><Refresh /></el-icon>
-          刷新会话
+          刷新
         </el-button>
       </template>
     </AdminPageHeader>
@@ -38,96 +37,21 @@
     </section>
 
     <section v-if="isBlackboxMode" class="blackbox-observation">
-      <div class="blackbox-observation__head">
-        <div>
-          <span>学习者公开视图</span>
-          <strong>{{ latestBlackboxObservation?.stage || currentStage }}</strong>
-        </div>
-        <div class="blackbox-observation__ids">
-          <code>EXP {{ experimentMeta?.experimentId?.slice(0, 12) || '--' }}</code>
-          <code>RUN {{ experimentMeta?.runId?.slice(0, 12) || '--' }}</code>
-        </div>
+      <div class="blackbox-observation__result">
+        <span>公开输出</span>
+        <strong>{{ latestBlackboxObservation?.visibleTask?.title || latestBlackboxObservation?.visiblePath?.title || '—' }}</strong>
+        <p v-if="latestBlackboxObservation?.lastActionResult?.visibleMessage">{{ latestBlackboxObservation.lastActionResult.visibleMessage }}</p>
       </div>
-      <div class="blackbox-observation__body">
-        <article>
-          <span>当前可见对象</span>
-          <strong>{{ latestBlackboxObservation?.visibleTask?.title || latestBlackboxObservation?.visiblePath?.title || '等待平台响应' }}</strong>
-          <p>{{ latestBlackboxObservation?.lastActionResult?.visibleMessage || '尚无公开结果' }}</p>
-        </article>
-        <article>
-          <span>允许动作</span>
-          <div class="blackbox-action-list">
-            <code v-for="action in blackboxAvailableActions" :key="action">{{ action }}</code>
-            <em v-if="!blackboxAvailableActions.length">等待 Observation</em>
-          </div>
-        </article>
-        <article>
-          <span>旁路状态</span>
-          <strong>{{ refereeTraceCount }} 条诊断 · {{ refereeReportCount }} 份报告</strong>
-          <p>诊断不会回流到学习者 Skill。</p>
-        </article>
+      <div class="blackbox-observation__ids">
+        <code>EXP {{ experimentMeta?.experimentId?.slice(0, 10) || '—' }}</code>
+        <code>RUN {{ experimentMeta?.runId?.slice(0, 10) || '—' }}</code>
+        <code>TRACE {{ refereeTraceCount }}</code>
+        <code v-if="refereeReportCount">REPORT {{ refereeReportCount }}</code>
       </div>
     </section>
 
-    <section class="cockpit-overview">
-      <div class="cockpit-overview__main">
-        <div class="cockpit-overview__copy">
-          <h2>{{ activeStageMeta.title }}</h2>
-          <p>{{ activeStageMeta.desc }}</p>
-        </div>
-        <div class="cockpit-overview__facts">
-          <article class="cockpit-glance-card">
-            <span>当前阶段</span>
-            <strong>{{ activeStageMeta.label }}</strong>
-          </article>
-          <article class="cockpit-glance-card">
-            <span>当前任务</span>
-            <strong>{{ currentTaskTitle || '未绑定 Task' }}</strong>
-          </article>
-          <article class="cockpit-glance-card">
-            <span>路径状态</span>
-            <strong>{{ pathStatusText }}</strong>
-          </article>
-          <article class="cockpit-glance-card">
-            <span>日志条数</span>
-            <strong>{{ logEntries.length }}</strong>
-          </article>
-        </div>
-      </div>
-      <div class="cockpit-overview__summary">
-        <article class="cockpit-summary-card">
-          <span class="cockpit-summary-card__label">当前绑定</span>
-          <strong>{{ bindingSummaryLabel }}</strong>
-          <p>{{ bindingSummaryDesc }}</p>
-        </article>
-        <article class="cockpit-summary-card">
-          <span class="cockpit-summary-card__label">下一步建议</span>
-          <strong>{{ nextActionTitle }}</strong>
-          <p>{{ nextActionDesc }}</p>
-        </article>
-      </div>
-    </section>
-
-    <!-- ============ 3-column main ============ -->
+    <!-- ============ Main workspace ============ -->
     <div class="cockpit-main">
-      <!-- Left: Stage nav -->
-      <aside class="cockpit-nav">
-        <div class="cockpit-nav__head">阶段</div>
-        <button
-          v-for="s in stageNavItems"
-          :key="s.key"
-          type="button"
-          class="nav-btn"
-          :class="{ active: activeNav === s.key, disabled: s.disabled }"
-          :disabled="s.disabled"
-          @click="selectStage(s.key)"
-        >
-          <span class="nav-btn__dot" :class="{ done: s.done, active: activeNav === s.key }"></span>
-          <span class="nav-btn__label">{{ s.label }}</span>
-          <span v-if="s.done" class="nav-btn__badge">✓</span>
-        </button>
-      </aside>
-
       <!-- Center: Stage content -->
       <section class="cockpit-stage">
         <!-- Goal -->
@@ -156,11 +80,11 @@
             </article>
           </div>
           <div v-else class="stage-panel__empty">
-            <p>{{ goalConversation.length ? '' : 'Goal 对话尚未开始。点击"单步"启动。' }}</p>
+            <p>尚无 Goal 轮次</p>
           </div>
 
           <!-- Concern pool -->
-          <details v-if="concernPool" class="stage-panel__detail">
+          <details v-if="!isBlackboxMode && concernPool" class="stage-panel__detail">
             <summary>关注点池 ({{ disclosedCount }}/{{ totalConcerns }})</summary>
             <div class="concern-grid">
               <span v-for="(c, i) in concernPool" :key="i" class="concern-chip" :class="{ disclosed: c.disclosed }">{{ c.label }}</span>
@@ -197,11 +121,11 @@
             </div>
           </div>
           <div v-else class="stage-panel__empty">
-            <p>{{ pathReady ? '无法解析路径里程碑' : 'Path 尚未生成。' }}</p>
+            <p>{{ pathReady ? '暂无里程碑' : 'Path 生成中' }}</p>
           </div>
 
           <!-- Path review -->
-          <details v-if="pathReview" class="stage-panel__detail">
+          <details v-if="!isBlackboxMode && pathReview" class="stage-panel__detail">
             <summary>Path 接受评估</summary>
             <p>结论: {{ pathReview.decision === 'accept' ? '接受' : pathReview.decision === 'modify' ? '需要修改' : pathReview.decision === 'reject' ? '拒绝' : '待评审' }}</p>
             <p>状态: {{ getPathReviewStatusLabel(pathReview.status) }}</p>
@@ -211,11 +135,6 @@
               <li v-for="change in pathReview.visibleRequestedChanges" :key="change">{{ change }}</li>
             </ul>
           </details>
-          <div v-if="!isBlackboxMode && pathReady && currentStage === 'path' && pathReview?.status !== 'accepted'" class="stage-panel__actions">
-            <el-button type="primary" :loading="loadingBridge" @click="handleReviewPath">
-              {{ pathReview?.status === 'replanned' ? '重新评审 Path' : '评审 Path' }}
-            </el-button>
-          </div>
         </div>
 
         <!-- Learn -->
@@ -226,15 +145,6 @@
               <span v-if="currentTaskTitle" class="task-badge">当前: {{ currentTaskTitle }}</span>
               <span v-if="currentMilestoneTitle" class="ms-badge">阶段: {{ currentMilestoneTitle }}</span>
             </div>
-          </div>
-
-          <!-- Wrapup summary (if available) -->
-          <div v-if="wrapupSummary" class="wrapup-card">
-            <div class="wrapup-card__head">
-              <el-icon><Finished /></el-icon>
-              <span>学习评估结果</span>
-            </div>
-            <p>{{ typeof wrapupSummary === 'string' ? wrapupSummary : wrapupSummary?.overallAssessment || '' }}</p>
           </div>
 
           <!-- Learn conversation -->
@@ -257,18 +167,18 @@
             </article>
           </div>
           <div v-else class="stage-panel__empty">
-            <p>Learn 对话尚未开始。先在 Path 阶段选一个 task。</p>
+            <p>尚无 Learn 轮次</p>
           </div>
 
           <!-- Knowledge progress -->
-          <details v-if="knowledgeProgress" class="stage-panel__detail">
+          <details v-if="!isBlackboxMode && knowledgeProgress" class="stage-panel__detail">
             <summary>知识进展</summary>
             <pre class="json-block">{{ JSON.stringify(knowledgeProgress, null, 2) }}</pre>
           </details>
         </div>
 
         <!-- Wrapup -->
-        <div v-if="activeNav === 'wrapup'" class="stage-panel">
+        <div v-if="!isBlackboxMode && activeNav === 'wrapup'" class="stage-panel">
           <div class="stage-panel__head">
             <h3>学习总结 · Wrapup</h3>
             <el-button
@@ -319,7 +229,52 @@
             </div>
           </div>
           <div v-else class="stage-panel__empty">
-            <p>{{ learningStarted ? '尚未生成总结。点击"立即生成总结"。' : '需先开始学习。' }}</p>
+            <p>尚无总结</p>
+          </div>
+        </div>
+
+        <!-- Referee -->
+        <div v-if="isBlackboxMode && activeNav === 'referee'" class="stage-panel">
+          <div class="stage-panel__head">
+            <h3>裁判报告 · Referee</h3>
+            <el-button v-if="isTerminal && !latestRefereeReport" type="primary" :loading="loadingReferee" @click="handleGenerateReferee">
+              生成报告
+            </el-button>
+          </div>
+          <div v-if="latestRefereeReport" class="referee-report">
+            <div class="referee-report__hero">
+              <div>
+                <span>Verdict</span>
+                <strong>{{ refereeVerdictLabel }}</strong>
+                <p>{{ formatEventTime(latestRefereeReport.evaluatedAt) }}</p>
+              </div>
+              <div class="referee-score">
+                <strong>{{ latestRefereeReport.report?.scores?.overall ?? '—' }}</strong>
+                <span>overall</span>
+              </div>
+            </div>
+            <div class="referee-score-grid">
+              <div v-for="metric in refereeScoreItems" :key="metric.label">
+                <span>{{ metric.label }}</span>
+                <strong>{{ metric.value ?? '—' }}</strong>
+              </div>
+            </div>
+            <div v-if="latestRefereeReport.report?.findings?.length" class="referee-report__section">
+              <h4>发现</h4>
+              <article v-for="item in latestRefereeReport.report.findings" :key="item.code" class="referee-finding">
+                <el-tag size="small" :type="findingTagType(item.severity)">{{ item.severity }}</el-tag>
+                <div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
+              </article>
+            </div>
+            <div v-if="latestRefereeReport.report?.recommendations?.length" class="referee-report__section">
+              <h4>建议</h4>
+              <article v-for="item in latestRefereeReport.report.recommendations" :key="`${item.priority}-${item.action}`" class="referee-recommendation">
+                <strong>{{ item.priority }}</strong><p>{{ item.action }}</p>
+              </article>
+            </div>
+          </div>
+          <div v-else class="stage-panel__empty">
+            <p>{{ isTerminal ? '尚无裁判报告' : '实验进行中' }}</p>
           </div>
         </div>
       </section>
@@ -327,6 +282,7 @@
       <!-- Right: Control + Log -->
       <aside class="cockpit-side">
         <SessionControlPanel
+          v-if="!isBlackboxMode || !isTerminal"
           :current-stage="currentStage"
           :status="status"
           :goal-ready="goalReady"
@@ -349,18 +305,15 @@
           @delete-session="handleDeleteSession"
           @update:config="handleConfigChange"
         />
-        <SessionLiveLog ref="logRef" :entries="logEntries" @poll="loadLogs" />
+        <SessionLiveLog :entries="logEntries" :polling-disabled="logsPollingDisabled || isTerminal" @poll="loadLogs" />
       </aside>
     </div>
 
-    <section class="cockpit-detail">
-      <div class="cockpit-detail__head">
-        <div>
-          <h3>会话诊断明细</h3>
-          <p>绑定、事件和快照信息</p>
-        </div>
-        <el-tag size="small" type="info">{{ sessionId?.slice(0, 8) ?? '--' }}</el-tag>
-      </div>
+    <details class="cockpit-detail">
+      <summary>
+        <span>调试数据</span>
+        <code>{{ sessionId?.slice(0, 8) ?? '—' }}</code>
+      </summary>
       <div class="detail-tabs">
         <button
           v-for="t in detailTabs"
@@ -382,76 +335,19 @@
         </div>
       </div>
 
-      <!-- Events -->
-      <div v-if="activeDetailTab === 'events'" class="detail-pane">
-        <div v-if="events.length" class="event-list">
-          <div v-for="(ev, i) in events" :key="i" class="event-item">
-            <span class="event-item__time">{{ formatEventTime(ev.createdAt) }}</span>
-            <span class="event-item__type">{{ ev.type }}</span>
-            <span class="event-item__msg">{{ ev.message }}</span>
-          </div>
-        </div>
-        <div v-else class="empty-text">暂无事件记录</div>
-      </div>
-
-      <div v-if="activeDetailTab === 'review'" class="detail-pane">
-        <div v-if="latestRefereeReport" class="referee-report">
-          <div class="referee-report__hero">
-            <div>
-              <span>Referee verdict</span>
-              <strong>{{ refereeVerdictLabel }}</strong>
-              <p>报告 {{ latestRefereeReport.id?.slice(0, 12) }} · {{ formatEventTime(latestRefereeReport.evaluatedAt) }}</p>
-            </div>
-            <div class="referee-score">
-              <strong>{{ latestRefereeReport.report?.scores?.overall ?? '--' }}</strong>
-              <span>overall</span>
-            </div>
-          </div>
-          <div class="referee-score-grid">
-            <div v-for="metric in refereeScoreItems" :key="metric.label">
-              <span>{{ metric.label }}</span>
-              <strong>{{ metric.value ?? '--' }}</strong>
-            </div>
-          </div>
-          <div class="referee-report__section">
-            <h4>主要发现</h4>
-            <article v-for="item in latestRefereeReport.report?.findings || []" :key="item.code" class="referee-finding">
-              <el-tag size="small" :type="findingTagType(item.severity)">{{ item.severity }}</el-tag>
-              <div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
-            </article>
-            <p v-if="!latestRefereeReport.report?.findings?.length" class="empty-text">未发现需要记录的问题。</p>
-          </div>
-          <div class="referee-report__section">
-            <h4>改进建议</h4>
-            <article v-for="item in latestRefereeReport.report?.recommendations || []" :key="`${item.priority}-${item.action}`" class="referee-recommendation">
-              <strong>{{ item.priority }}</strong><p>{{ item.action }}</p>
-            </article>
-          </div>
-        </div>
-        <div v-else class="referee-empty">
-          <div>
-            <strong>{{ isTerminal ? '实验已结束，等待裁判' : '终态后才能生成裁判报告' }}</strong>
-            <p>Referee 只读取公开轨迹、旁路诊断、控制回执和实验摘要。</p>
-          </div>
-          <el-button v-if="isBlackboxMode && isTerminal" type="primary" :loading="loadingReferee" @click="handleGenerateReferee">
-            生成裁判报告
-          </el-button>
-        </div>
-      </div>
-
       <!-- Raw JSON -->
       <div v-if="activeDetailTab === 'json'" class="detail-pane">
-        <pre class="json-block">{{ JSON.stringify(rawSession, null, 2) }}</pre>
+        <pre class="json-block">{{ JSON.stringify(session, null, 2) }}</pre>
       </div>
-    </section>
+    </details>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Refresh, Finished, Monitor } from '@element-plus/icons-vue'
+import { ArrowLeft, Refresh, Monitor } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SessionControlPanel from './components/virtual/SessionControlPanel.vue'
@@ -463,7 +359,6 @@ const sessionId = route.params.sessionId as string
 
 /* ===== Reactive state ===== */
 const session = ref<any>(null)
-const rawSession = ref<any>(null)
 const loading = ref(false)
 const logEntries = ref<LogEntry[]>([])
 const profileName = ref('')
@@ -474,11 +369,10 @@ const loadingBridge = ref(false)
 const loadingWrapup = ref(false)
 const loadingReferee = ref(false)
 const blackboxSnapshot = ref<any>(null)
+const logsPollingDisabled = ref(false)
 
-const activeNav = ref<'goal' | 'path' | 'learning' | 'wrapup'>('goal')
-const activeDetailTab = ref<'bindings' | 'events' | 'review' | 'json'>('bindings')
-
-const logRef = ref<InstanceType<typeof SessionLiveLog> | null>(null)
+const activeNav = ref<'goal' | 'path' | 'learning' | 'wrapup' | 'referee'>('goal')
+const activeDetailTab = ref<'bindings' | 'json'>('bindings')
 
 const cockpitConfig = ref({
   maxRounds: 20,
@@ -508,16 +402,28 @@ const stageResults = computed(() => session.value?.stageResults || {})
 const isBlackboxMode = computed(() => stageResults.value?.experiment?.mode === 'blackbox-api')
 const experimentMeta = computed(() => blackboxSnapshot.value?.experiment || stageResults.value?.experiment || null)
 const latestBlackboxObservation = computed(() => blackboxSnapshot.value?.observation || stageResults.value?.blackbox?.publicTrace?.slice(-1)[0]?.observation || null)
-const blackboxAvailableActions = computed<string[]>(() => latestBlackboxObservation.value?.availableActions || [])
-const latestRefereeReport = computed(() => blackboxSnapshot.value?.latestRefereeReport || null)
+const latestBlackboxPathObservation = computed(() => {
+  const trace = stageResults.value?.blackbox?.publicTrace
+  if (!Array.isArray(trace)) return latestBlackboxObservation.value?.stage === 'path' ? latestBlackboxObservation.value : null
+  return [...trace].reverse().find((entry: any) => entry?.observation?.stage === 'path' && entry?.observation?.visiblePath)?.observation || null
+})
+const latestRefereeReport = computed(() => {
+  if (blackboxSnapshot.value?.latestRefereeReport) return blackboxSnapshot.value.latestRefereeReport
+  const reports = stageResults.value?.blackbox?.refereeReports
+  if (!Array.isArray(reports)) return null
+  const latestId = stageResults.value?.blackbox?.latestRefereeReportId
+  return reports.find((item: any) => item.id === latestId) || reports[reports.length - 1] || null
+})
 const refereeTraceCount = computed(() => blackboxSnapshot.value?.refereeTraceCount || stageResults.value?.blackbox?.refereeTrace?.length || 0)
 const refereeReportCount = computed(() => blackboxSnapshot.value?.refereeReportCount || stageResults.value?.blackbox?.refereeReports?.length || 0)
 const isTerminal = computed(() => ['completed', 'failed', 'abandoned'].includes(status.value))
-const blackboxPublicMessages = computed<any[]>(() => {
+const blackboxMessagesFor = (stage: 'goal' | 'learning') => {
   const trace = stageResults.value?.blackbox?.publicTrace
   if (!Array.isArray(trace)) return []
-  return trace.flatMap((entry: any) => entry?.observation?.visibleMessages || [])
-})
+  return trace
+    .filter((entry: any) => entry?.observation?.stage === stage)
+    .flatMap((entry: any) => entry?.observation?.visibleMessages || [])
+}
 
 /* Goal */
 const goalReady = computed(() => {
@@ -535,7 +441,7 @@ const goalStageLabel = computed(() => {
 
 const goalConversation = computed<any[]>(() => {
   if (isBlackboxMode.value) {
-    return blackboxPublicMessages.value.map((m: any) => ({
+    return blackboxMessagesFor('goal').map((m: any) => ({
       role: m.role === 'learner' ? 'learner' : 'assistant',
       content: m.content || '',
       signals: null
@@ -567,11 +473,19 @@ const disclosedCount = computed(() => concernPool.value?.filter(c => c.disclosed
 
 /* Path */
 const pathReady = computed(() => {
-  return !!bindings.value.learningPathId && ['active', 'ready', 'completed'].includes(pathStatus.value)
+  if (!bindings.value.learningPathId) return false
+  if (!isBlackboxMode.value) return ['active', 'ready', 'completed'].includes(pathStatus.value)
+  return latestBlackboxPathObservation.value?.availableActions?.includes('start_learning') === true || learningStarted.value
 })
 
 const pathStatus = ref<string>('idle')
 const pathStatusText = computed(() => {
+  if (isBlackboxMode.value) {
+    if (latestBlackboxObservation.value?.stage === 'error') return '失败'
+    if (latestBlackboxObservation.value?.stage === 'completed') return '已完成'
+    if (pathReady.value) return '已就绪'
+    return bindings.value.learningPathId ? '生成中' : '未生成'
+  }
   switch (pathStatus.value) {
     case 'generating': return '生成中'
     case 'active': case 'ready': return '已就绪'
@@ -584,7 +498,8 @@ const pathStatusText = computed(() => {
 
 const pathData = ref<any>(null)
 const milestones = computed(() => {
-  return pathData.value?.path?.milestones || pathData.value?.milestones || latestBlackboxObservation.value?.visiblePath?.milestones || []
+  if (isBlackboxMode.value) return latestBlackboxPathObservation.value?.visiblePath?.milestones || []
+  return pathData.value?.path?.milestones || pathData.value?.milestones || []
 })
 
 const pathReview = computed(() => session.value?.runtime?.stageStatus?.path?.review || stageResults.value?.path_review || null)
@@ -601,7 +516,13 @@ function getPathReviewStatusLabel(status?: string) {
 }
 
 /* Learn */
-const learningStarted = computed(() => !!bindings.value.currentTaskId || !!bindings.value.teachingSessionId)
+const learningStarted = computed(() => {
+  if (!isBlackboxMode.value) return !!bindings.value.currentTaskId || !!bindings.value.teachingSessionId
+  const trace = stageResults.value?.blackbox?.publicTrace
+  return !!bindings.value.teachingSessionId
+    || currentStage.value === 'learning'
+    || (Array.isArray(trace) && trace.some((entry: any) => entry?.observation?.stage === 'learning'))
+})
 const currentTaskId = computed(() => bindings.value.currentTaskId)
 const currentTaskTitle = computed(() => {
   return latestBlackboxObservation.value?.visibleTask?.title || stageResults.value?.learning?.currentTaskTitle || stageResults.value?.learning?.taskRuntime?.taskTitle || null
@@ -611,6 +532,13 @@ const currentMilestoneTitle = computed(() => {
 })
 
 const learnConversation = computed<any[]>(() => {
+  if (isBlackboxMode.value) {
+    return blackboxMessagesFor('learning').map((m: any) => ({
+      role: m.role === 'learner' ? 'learner' : 'assistant',
+      content: m.content || '',
+      closureDecision: null
+    }))
+  }
   const conv = session.value?.conversations?.learning?.messages
   if (Array.isArray(conv) && conv.length) return conv
   const raw = stageResults.value?.learning?.conversationHistory
@@ -668,118 +596,44 @@ const statusText = computed(() => {
   }
 })
 
-const stageOrder = ['goal', 'path', 'learning', 'wrapup']
-const stageIndex = computed(() => Math.max(stageOrder.indexOf(currentStage.value), 0))
+const stageOrder = computed(() => isBlackboxMode.value
+  ? ['goal', 'path', 'learning', 'referee'] as const
+  : ['goal', 'path', 'learning', 'wrapup'] as const
+)
+const blackboxReachedStages = computed(() => {
+  const trace = stageResults.value?.blackbox?.publicTrace
+  const stages = new Set<string>()
+  if (Array.isArray(trace)) {
+    for (const entry of trace) stages.add(entry?.observation?.stage)
+  }
+  return stages
+})
+const blackboxCompletedStages = computed(() => {
+  const control = blackboxSnapshot.value?.control || stageResults.value?.blackbox?.control || {}
+  return new Set<string>([
+    ...(control.goalCompleted === true || blackboxReachedStages.value.has('path') || blackboxReachedStages.value.has('learning') || blackboxReachedStages.value.has('completed') ? ['goal'] : []),
+    ...(blackboxReachedStages.value.has('learning') || blackboxReachedStages.value.has('completed') ? ['path'] : []),
+    ...(control.runCompleted === true ? ['learning'] : []),
+    ...(latestRefereeReport.value ? ['referee'] : [])
+  ])
+})
+const liveNav = computed(() => {
+  if (isBlackboxMode.value && isTerminal.value) return 'referee'
+  return stageOrder.value.includes(currentStage.value as any) ? currentStage.value : 'goal'
+})
+const stageIndex = computed(() => Math.max(stageOrder.value.indexOf(liveNav.value as any), 0))
 
 const stageStripItems = computed(() => {
-  return stageOrder.map((key, idx) => ({
+  return stageOrder.value.map((key, idx) => ({
     key,
-    label: key === 'goal' ? 'Goal' : key === 'path' ? 'Path' : key === 'learning' ? 'Learn' : 'Wrapup',
-    done: idx < stageIndex.value || status.value === 'completed',
-    disabled: idx > stageIndex.value && status.value !== 'completed'
+    label: key === 'goal' ? 'Goal' : key === 'path' ? 'Path' : key === 'learning' ? 'Learn' : key === 'referee' ? 'Referee' : 'Wrapup',
+    done: isBlackboxMode.value ? blackboxCompletedStages.value.has(key) : idx < stageIndex.value || status.value === 'completed',
+    disabled: idx > stageIndex.value
   }))
-})
-
-const cockpitHighlights = computed(() => [
-  { label: `状态 ${statusText.value}`, tone: status.value === 'completed' ? 'success' as const : status.value === 'failed' ? 'danger' as const : status.value === 'abandoned' ? 'warning' as const : 'info' as const },
-  { label: `当前阶段 ${currentStage.value}`, tone: 'neutral' as const },
-  { label: bindings.value.currentTaskId ? `Task ${bindings.value.currentTaskId}` : '尚未绑定 Task', tone: bindings.value.currentTaskId ? 'warning' as const : 'neutral' as const },
-  { label: `Session ${sessionId}`, tone: 'neutral' as const }
-])
-
-const activeStageMeta = computed(() => {
-  switch (activeNav.value) {
-    case 'goal':
-      return {
-        key: 'goal',
-        label: 'Goal',
-        title: '目标对齐工作区',
-        desc: goalConversation.value.length
-          ? '对话进行中'
-          : '待推进 Goal 对话'
-      }
-    case 'path':
-      return {
-        key: 'path',
-        label: 'Path',
-        title: '学习路径工作区',
-        desc: pathReady.value
-          ? '路径已就绪'
-          : '待生成路径'
-      }
-    case 'learning':
-      return {
-        key: 'learning',
-        label: 'Learn',
-        title: '教学活动工作区',
-        desc: learningStarted.value
-          ? '教学轮次进行中'
-          : '待推进 Learn 轮次'
-      }
-    default:
-      return {
-        key: 'wrapup',
-        label: 'Wrapup',
-        title: '学习总结工作区',
-        desc: wrapupSummary.value
-          ? '总结已生成'
-          : '待生成总结'
-      }
-  }
-})
-
-const bindingSummaryLabel = computed(() => {
-  if (bindings.value.currentTaskId) return '已绑定当前任务'
-  if (bindings.value.learningPathId) return '已绑定路径'
-  if (bindings.value.goalConversationId) return '已绑定 Goal 对话'
-  return '待绑定'
-})
-
-const bindingSummaryDesc = computed(() => {
-  if (bindings.value.currentTaskId) return `task: ${bindings.value.currentTaskId}`
-  if (bindings.value.learningPathId) return `path: ${bindings.value.learningPathId}`
-  if (bindings.value.goalConversationId) return `goalConversation: ${bindings.value.goalConversationId}`
-  return '等待阶段产出绑定。'
-})
-
-const nextActionTitle = computed(() => {
-  if (status.value === 'failed') return '先看事件和日志'
-  if (activeNav.value === 'goal' && !goalReady.value) return '继续推进 Goal'
-  if (activeNav.value === 'path' && !pathReady.value) return '生成或复核 Path'
-  if (activeNav.value === 'learning' && learningStarted.value) return '继续推进当前 task'
-  if (activeNav.value === 'wrapup' && !wrapupSummary.value) return '生成总结'
-  return '检查当前阶段结果'
-})
-
-const nextActionDesc = computed(() => {
-  if (status.value === 'failed') return '会话已失败，查看事件和日志。'
-  if (activeNav.value === 'goal' && !goalReady.value) return '推进 Goal 对话，收敛后进入 Path。'
-  if (activeNav.value === 'path' && !pathReady.value) return 'Goal 已收敛时可从右侧发起 Path 生成。'
-  if (activeNav.value === 'learning' && learningStarted.value) return currentTaskTitle.value ? `当前任务是 ${currentTaskTitle.value}` : '推进当前学习轮次。'
-  if (activeNav.value === 'wrapup' && !wrapupSummary.value) return '完成 Learn 后可在此触发总结。'
-  return '阶段已有结果。'
-})
-
-const stageNavItems = computed(() => {
-  return stageOrder.map((key, idx) => ({
-    key,
-    label: key === 'goal' ? '目标对齐' : key === 'path' ? '学习路径' : key === 'learning' ? '教学活动' : '学习总结',
-    done: idx < stageIndex.value || status.value === 'completed',
-    disabled: idx > stageIndex.value && status.value !== 'completed'
-  }))
-})
-
-const events = computed(() => {
-  const s = session.value
-  if (!s) return []
-  const logs = s.logs || s.runtime?.logs || []
-  return Array.isArray(logs) ? logs : []
 })
 
 const detailTabs = computed(() => [
   { key: 'bindings', label: '当前绑定' },
-  { key: 'events', label: '事件' },
-  ...(isBlackboxMode.value ? [{ key: 'review', label: latestRefereeReport.value ? '裁判报告' : '裁判评审' }] : []),
   ...(!isBlackboxMode.value || isTerminal.value ? [{ key: 'json', label: '原始数据' }] : [])
 ])
 
@@ -813,7 +667,6 @@ const loadSession = async () => {
     if (!res.data?.success) throw new Error(res.data?.error || '加载失败')
     const data = res.data.data
     session.value = data
-    rawSession.value = data
     
     // profile name
     if (data.profile?.name) {
@@ -826,8 +679,7 @@ const loadSession = async () => {
       cockpitConfig.value.frictionBudget = sessionFriction
     }
 
-    // Load path status
-    if (data.bindings?.learningPathId || data.currentStage === 'path' || data.currentStage === 'learning') {
+    if (data.stageResults?.experiment?.mode !== 'blackbox-api' && (data.bindings?.learningPathId || data.currentStage === 'path' || data.currentStage === 'learning')) {
       await loadPathStatus()
     }
     if (data.stageResults?.experiment?.mode === 'blackbox-api') {
@@ -852,6 +704,7 @@ const loadPathStatus = async () => {
     }
   } catch {
     pathStatus.value = 'idle'
+    pathData.value = null
   }
 }
 
@@ -863,16 +716,18 @@ const loadLogs = async () => {
     const res = await adminApi.getVirtualSessionLogs(sessionId)
     const logs = res.data?.data?.logs
     if (res.data?.success && Array.isArray(logs)) {
+      logsPollingDisabled.value = false
       logEntries.value = logs.map((l: any) => ({
         id: l.id || l._id,
         timestamp: l.createdAt || l.timestamp,
         phase: l.phase || l.level || 'info',
-        message: l.message || l.content || '',
-        details: l
+        message: l.message || l.content || ''
       }))
     }
-  } catch {
-    // silent
+  } catch (error: any) {
+    if ([401, 403].includes(error?.response?.status)) {
+      logsPollingDisabled.value = true
+    }
   } finally {
     logsInFlight = false
   }
@@ -884,16 +739,18 @@ const withSession = async (runner: (sid: string) => Promise<void>) => {
 }
 
 const handleStep = async () => {
+  navManuallyOverridden.value = false
   if (isBlackboxMode.value) {
     loadingStep.value = true
     try {
       const res = await adminApi.blackboxVirtualSessionStep(sessionId)
       if (!res.data?.success) throw new Error(res.data?.error || '黑盒单步失败')
       if (res.data?.data?.waitingForObservation) {
-        ElMessage.info('平台仍在生成 Path，本轮仅刷新公开状态')
+        ElMessage.info('Path 或阶段任务仍在生成，本轮只刷新结果')
+      } else if (res.data?.data?.result?.observation?.stage === 'learning') {
+        ElMessage.success('Path 已就绪，已进入 Learn')
       }
       await loadSession()
-      if (bindings.value.learningPathId) await loadPathStatus()
     } catch (error: any) {
       ElMessage.error(error.response?.data?.error || error.message || '黑盒单步失败')
     } finally {
@@ -928,17 +785,17 @@ const handleStep = async () => {
       loadingStep.value = false
     }
   }
-  logRef.value?.startPolling()
 }
 
 const handleGenerateReferee = async () => {
+  navManuallyOverridden.value = false
   loadingReferee.value = true
   try {
     const res = await adminApi.generateBlackboxRefereeReport(sessionId)
     if (!res.data?.success) throw new Error(res.data?.error || '裁判报告生成失败')
     ElMessage.success(res.data?.data?.reused ? '已复用当前轨迹的裁判报告' : '裁判报告已生成')
     await loadBlackboxSnapshot()
-    activeDetailTab.value = 'review'
+    activeNav.value = 'referee'
   } catch (error: any) {
     ElMessage.error(error.response?.data?.error || error.message || '裁判报告生成失败')
   } finally {
@@ -947,10 +804,6 @@ const handleGenerateReferee = async () => {
 }
 
 const handleAuto = async () => {
-  if (isBlackboxMode.value) {
-    ElMessage.info('黑盒自动循环将在实验调度器阶段开放，当前请使用单步以保留边界可审计性')
-    return
-  }
   if (currentStage.value === 'goal') {
     loadingAuto.value = true
     try {
@@ -997,7 +850,6 @@ const handleAuto = async () => {
       loadingAuto.value = false
     }
   }
-  logRef.value?.startPolling()
 }
 
 const handleAdvancePath = async () => {
@@ -1200,27 +1052,22 @@ onMounted(async () => {
   await loadLogs()
 })
 
-onUnmounted(() => {
-  logRef.value?.stopPolling()
-})
-
 // 标志: 用户主动切换 nav 后, watch 不再强制同步到 currentStage
 const navManuallyOverridden = ref(false)
 
 watch(currentStage, async (stage) => {
-  if (stage === 'path' || stage === 'learning' || stage === 'wrapup') {
+  if (!isBlackboxMode.value && (stage === 'path' || stage === 'learning' || stage === 'wrapup')) {
     await loadPathStatus()
   }
-  // 仅在用户未手动切换时, 同步 nav 到当前阶段
-  if (!navManuallyOverridden.value && stageOrder.includes(stage)) {
+  if (!navManuallyOverridden.value && stageOrder.value.includes(stage as any)) {
     activeNav.value = stage as any
   }
 })
 
-// status=completed 时自动跳到 wrapup (不抢用户已切走的状态)
 watch(status, (newStatus) => {
-  if (newStatus === 'completed' && !navManuallyOverridden.value) {
-    activeNav.value = 'wrapup'
+  if (['completed', 'failed', 'abandoned'].includes(newStatus)) {
+    activeNav.value = isBlackboxMode.value ? 'referee' : 'wrapup'
+    navManuallyOverridden.value = false
   }
 })
 </script>
@@ -1308,51 +1155,52 @@ watch(status, (newStatus) => {
   gap: 8px;
 }
 
-.cockpit-overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
-  gap: 14px;
-  align-items: stretch;
-  padding-bottom: 12px;
-  border-bottom: var(--admin-border-subtle);
-}
-
 .blackbox-observation {
   display: grid;
-  gap: 12px;
-  padding: 16px 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
   border: 1px solid #cddced;
-  border-left: 4px solid #3478f6;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #f7faff;
 }
 
-.blackbox-observation__head,
+.blackbox-observation__result {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.blackbox-observation__result span {
+  color: #697386;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.blackbox-observation__result strong {
+  overflow: hidden;
+  color: #1a2a44;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blackbox-observation__result p {
+  overflow: hidden;
+  margin: 0;
+  color: #667085;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .blackbox-observation__ids {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.blackbox-observation__head > div:first-child {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-}
-
-.blackbox-observation__head span,
-.blackbox-observation__body article > span {
-  color: #697386;
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.blackbox-observation__head strong {
-  color: #1f5dbb;
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 12px;
-  text-transform: uppercase;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .blackbox-observation__ids code,
@@ -1365,204 +1213,17 @@ watch(status, (newStatus) => {
   font-size: 10px;
 }
 
-.blackbox-observation__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr);
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid #dce6f1;
-  border-radius: 8px;
-  background: #dce6f1;
-}
-
-.blackbox-observation__body article {
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  min-height: 92px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.blackbox-observation__body strong {
-  color: #1a2a44;
-  font-size: 13px;
-}
-
-.blackbox-observation__body p {
-  margin: 0;
-  color: #667085;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .blackbox-action-list {
   display: flex;
   gap: 5px;
   flex-wrap: wrap;
 }
 
-.blackbox-action-list em {
-  color: #8a94a6;
-  font-size: 11px;
-  font-style: normal;
-}
-
-.cockpit-overview__main,
-.cockpit-overview__summary {
-  display: grid;
-  gap: 12px;
-}
-
-.cockpit-overview__copy {
-  display: grid;
-  gap: 6px;
-}
-
-.cockpit-overview__kicker,
-.cockpit-detail__kicker {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 24px;
-  padding: 0 10px;
-  align-items: center;
-  border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
-  color: var(--admin-text-brand);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.cockpit-overview__copy h2 {
-  margin: 0;
-  color: var(--admin-text-primary);
-  font-size: 1.18rem;
-  line-height: 1.2;
-}
-
-.cockpit-overview__copy p,
-.cockpit-summary-card p,
-.cockpit-detail__head p {
-  margin: 0;
-  color: var(--admin-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.cockpit-overview__facts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.cockpit-glance-card,
-.cockpit-summary-card {
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
-  background: var(--admin-bg-surface-alt);
-}
-
-.cockpit-glance-card {
-  padding: 12px;
-  display: grid;
-  gap: 5px;
-}
-
-.cockpit-glance-card span,
-.cockpit-summary-card__label {
-  color: #8a94a6;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.cockpit-glance-card strong,
-.cockpit-summary-card strong {
-  color: #1a2a44;
-  font-size: 14px;
-}
-
-.cockpit-summary-card {
-  padding: 14px;
-  display: grid;
-  gap: 6px;
-}
-
-/* 3-column main */
 .cockpit-main {
   display: grid;
-  grid-template-columns: 200px 1fr 340px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
-}
-
-/* Left nav */
-.cockpit-nav {
-  display: grid;
-  gap: 4px;
-  padding: 6px 0 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.cockpit-nav__head {
-  font-size: 11px;
-  letter-spacing: 1px;
-  color: #94a3b8;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 0 0 8px 4px;
-  margin-bottom: 4px;
-  border-bottom: var(--admin-border-subtle);
-}
-
-.nav-btn {
-  display: grid;
-  grid-template-columns: 14px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 10px;
-  background: var(--admin-bg-surface-alt);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  font: inherit;
-  color: #5b6577;
-  text-align: left;
-  transition: all 0.18s;
-}
-
-.nav-btn:hover { background: #f0f5ff; }
-.nav-btn.active {
-  background: var(--admin-bg-surface);
-  color: #1a2a44;
-  font-weight: 700;
-  border-color: rgba(52, 120, 246, 0.18);
-}
-
-.nav-btn.disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.nav-btn__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #e1e8f2;
-}
-
-.nav-btn__dot.done { background: #16a34a; }
-.nav-btn.active .nav-btn__dot { background: #3478f6; }
-
-.nav-btn__label { font-size: 13px; }
-
-.nav-btn__badge {
-  font-size: 11px;
-  color: #16a34a;
 }
 
 /* Center stage panel */
@@ -1922,30 +1583,35 @@ watch(status, (newStatus) => {
 
 /* Bottom detail */
 .cockpit-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 14px;
+  padding-top: 10px;
   border-top: var(--admin-border-subtle);
 }
 
-.cockpit-detail__head {
+.cockpit-detail > summary {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  cursor: pointer;
+  color: #5b6577;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
 }
 
-.cockpit-detail__head h3 {
-  margin: 4px 0 0;
-  color: var(--admin-text-primary);
-  font-size: 1rem;
+.cockpit-detail > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cockpit-detail > summary code {
+  color: #8a94a6;
+  font-size: 10px;
 }
 
 .detail-tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 4px;
+  margin: 12px 0 4px;
   border-bottom: 1px solid #e1e8f2;
 }
 
@@ -1993,33 +1659,6 @@ watch(status, (newStatus) => {
   word-break: break-all;
 }
 
-.event-list {
-  display: grid;
-  gap: 4px;
-}
-
-.event-item {
-  display: grid;
-  grid-template-columns: 64px 90px 1fr;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 12px;
-  border-bottom: 1px solid #f0f2f5;
-}
-
-.event-item__time {
-  color: #94a3b8;
-}
-
-.event-item__type {
-  font-weight: 700;
-  color: #5b6577;
-}
-
-.event-item__msg {
-  color: #1a2a44;
-}
-
 .empty-text {
   color: #94a3b8;
   font-size: 13px;
@@ -2031,8 +1670,7 @@ watch(status, (newStatus) => {
   gap: 18px;
 }
 
-.referee-report__hero,
-.referee-empty {
+.referee-report__hero {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2044,22 +1682,19 @@ watch(status, (newStatus) => {
 }
 
 .referee-report__hero span,
-.referee-report__hero p,
-.referee-empty p {
+.referee-report__hero p {
   color: #7a8597;
   font-size: 11px;
 }
 
 .referee-report__hero p,
-.referee-empty p,
 .referee-finding p,
 .referee-recommendation p {
   margin: 4px 0 0;
   line-height: 1.55;
 }
 
-.referee-report__hero > div:first-child > strong,
-.referee-empty strong {
+.referee-report__hero > div:first-child > strong {
   display: block;
   margin-top: 4px;
   color: #1a2a44;
@@ -2155,52 +1790,25 @@ watch(status, (newStatus) => {
 
 /* ===== Responsive ===== */
 @media (max-width: 1200px) {
-  .cockpit-overview {
-    grid-template-columns: 1fr;
-  }
-
-  .cockpit-overview__facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .cockpit-main {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
 
-  .blackbox-observation__body {
-    grid-template-columns: 1fr;
-  }
-
   .referee-score-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .cockpit-nav {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    order: 1;
-  }
-  .cockpit-nav__head { display: none; }
-  .cockpit-stage { order: 2; }
-  .cockpit-side { order: 3; }
 }
 
 @media (max-width: 760px) {
-  .cockpit-overview__facts {
-    grid-template-columns: 1fr;
-  }
-
-  .cockpit-detail__head {
-    flex-direction: column;
-  }
-
   .cockpit-topbar,
-  .blackbox-observation__head,
-  .referee-report__hero,
-  .referee-empty {
+  .referee-report__hero {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .blackbox-observation {
+    grid-template-columns: 1fr;
   }
 
   .cockpit-topbar__stage-strip,
@@ -2209,8 +1817,7 @@ watch(status, (newStatus) => {
   }
 
   .blackbox-observation__ids {
-    align-items: flex-start;
-    flex-direction: column;
+    justify-content: flex-start;
   }
 
   .referee-score {

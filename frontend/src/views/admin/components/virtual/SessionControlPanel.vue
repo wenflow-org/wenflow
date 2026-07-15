@@ -2,41 +2,27 @@
   <div class="session-control-panel">
     <div class="control-panel__head">
       <span class="control-panel__title">运行控制</span>
-      <el-tag :type="statusTagType" size="small">{{ statusLabel }}</el-tag>
     </div>
 
-    <!-- 失败/完成提示 -->
-    <div v-if="status === 'failed'" class="control-panel__notice control-panel__notice--error">
-      <el-icon><WarningFilled /></el-icon>
-      <span>会话已失败</span>
-    </div>
-    <div v-else-if="status === 'completed'" class="control-panel__notice control-panel__notice--success">
-      <el-icon><CircleCheckFilled /></el-icon>
-      <span>会话已完成</span>
-    </div>
-    <div v-else-if="status === 'abandoned'" class="control-panel__notice control-panel__notice--warning">
-      <el-icon><WarningFilled /></el-icon>
-      <span>学习者已结束本次实验</span>
-    </div>
-
-    <!-- 主动作: 单步 / 全自动 / 停止 -->
-    <div class="control-panel__main-actions">
+    <div v-if="canStep || canAuto || canStop" class="control-panel__main-actions">
       <button
+        v-if="canStep"
         type="button"
         class="action-btn action-btn--primary"
-        :disabled="!canStep || anyLoading"
+        :disabled="anyLoading"
         @click="$emit('step')"
       >
         <el-icon v-if="loadingStep" class="is-loading"><Loading /></el-icon>
         <el-icon v-else><CaretRight /></el-icon>
-        <span>单步</span>
-        <em>{{ stepHint }}</em>
+        <span>{{ stepLabel }}</span>
+        <em v-if="stepHint">{{ stepHint }}</em>
       </button>
 
       <button
+        v-if="canAuto"
         type="button"
         class="action-btn action-btn--auto"
-        :disabled="!canAuto || anyLoading"
+        :disabled="anyLoading"
         @click="$emit('auto')"
       >
         <el-icon v-if="loadingAuto" class="is-loading"><Loading /></el-icon>
@@ -46,9 +32,9 @@
       </button>
 
       <button
+        v-if="canStop"
         type="button"
         class="action-btn action-btn--danger"
-        :disabled="!canStop"
         @click="$emit('stop')"
       >
         <el-icon><VideoPause /></el-icon>
@@ -97,23 +83,23 @@
             <el-option label="压测模式" value="stress_test" />
           </el-select>
         </div>
-        <div class="config-row">
+        <div v-if="!blackboxMode" class="config-row">
           <label>Goal 最大轮数</label>
           <el-input-number v-model="localConfig.maxRounds" :min="1" :max="50" size="small" controls-position="right" @change="emitConfig" />
         </div>
-        <div class="config-row">
+        <div v-if="!blackboxMode" class="config-row">
           <label>Learn 最大里程碑</label>
           <el-input-number v-model="localConfig.maxMilestones" :min="1" :max="30" size="small" controls-position="right" @change="emitConfig" />
         </div>
-        <div class="config-row config-row--switch">
+        <div v-if="!blackboxMode" class="config-row config-row--switch">
           <label>跑完 Goal 自动进 Path</label>
           <el-switch v-model="localConfig.autoAdvanceToPath" @change="emitConfig" />
         </div>
-        <div class="config-row config-row--switch">
+        <div v-if="!blackboxMode" class="config-row config-row--switch">
           <label>Path 生成后自动进 Learn</label>
           <el-switch v-model="localConfig.autoAdvanceToLearning" @change="emitConfig" />
         </div>
-        <div class="config-row config-row--switch">
+        <div v-if="!blackboxMode" class="config-row config-row--switch">
           <label>Task 完成后继续下一个</label>
           <el-switch v-model="localConfig.continueOnTaskComplete" @change="emitConfig" />
         </div>
@@ -127,8 +113,8 @@
         <span>重置操作</span>
       </summary>
       <div class="danger-form">
-        <el-button size="small" :disabled="!canResetPath || anyLoading" @click="$emit('resetPath')">重建 Path</el-button>
-        <el-button size="small" :disabled="!canResetLearn || anyLoading" @click="$emit('resetLearn')">重启 Learn</el-button>
+        <el-button v-if="canResetPath" size="small" :disabled="anyLoading" @click="$emit('resetPath')">重建 Path</el-button>
+        <el-button v-if="canResetLearn" size="small" :disabled="anyLoading" @click="$emit('resetLearn')">重启 Learn</el-button>
         <el-button size="small" type="danger" plain :disabled="anyLoading" @click="$emit('deleteSession')">删除会话</el-button>
       </div>
     </details>
@@ -137,7 +123,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
-import { CaretRight, VideoPlay, VideoPause, Setting, Warning, Loading, WarningFilled, CircleCheckFilled } from '@element-plus/icons-vue'
+import { CaretRight, VideoPlay, VideoPause, Setting, Warning, Loading } from '@element-plus/icons-vue'
 
 interface CockpitConfig {
   maxRounds: number
@@ -185,27 +171,6 @@ const emitConfig = () => emit('update:config', { ...localConfig })
 
 const anyLoading = computed(() => !!(props.loadingStep || props.loadingAuto || props.loadingBridge))
 
-const statusTagType = computed(() => {
-  switch (props.status) {
-    case 'running': return 'primary'
-    case 'completed': return 'success'
-    case 'failed': return 'danger'
-    case 'abandoned': return 'warning'
-    default: return 'info'
-  }
-})
-
-const statusLabel = computed(() => {
-  switch (props.status) {
-    case 'created': return '已创建'
-    case 'running': return '运行中'
-    case 'completed': return '已完成'
-    case 'failed': return '失败'
-    case 'abandoned': return '已放弃'
-    default: return props.status || '未知'
-  }
-})
-
 const canStep = computed(() => {
   if (['completed', 'failed', 'abandoned'].includes(props.status)) return false
   if (props.blackboxMode) return ['goal', 'path', 'learning'].includes(props.currentStage)
@@ -224,10 +189,17 @@ const canAuto = computed(() => {
 const canStop = computed(() => !props.blackboxMode && props.currentStage === 'learning' && props.status === 'running')
 
 const stepHint = computed(() => {
+  if (props.blackboxMode) return ''
   if (props.currentStage === 'goal') return '一轮 Goal 对话'
-  if (props.blackboxMode && props.currentStage === 'path') return '评审或刷新 Path'
   if (props.currentStage === 'learning') return '一轮教学'
   return '当前阶段不可单步'
+})
+
+const stepLabel = computed(() => {
+  if (props.blackboxMode && props.currentStage === 'path') {
+    return props.pathReady ? '进入 Learn' : '刷新结果'
+  }
+  return '单步'
 })
 
 const autoHint = computed(() => {
@@ -236,8 +208,8 @@ const autoHint = computed(() => {
   return '当前阶段不可自动'
 })
 
-const canResetPath = computed(() => props.pathReady || props.status === 'failed')
-const canResetLearn = computed(() => props.learningStarted || props.status === 'failed')
+const canResetPath = computed(() => props.pathReady)
+const canResetLearn = computed(() => props.learningStarted)
 
 const bridgeActions = computed(() => {
   const list: Array<{ action: string; label: string; enabled: boolean; type: string }> = []
@@ -292,28 +264,6 @@ const bridgeActions = computed(() => {
 .control-panel__main-actions {
   display: grid;
   gap: 8px;
-}
-
-.control-panel__notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.control-panel__notice--error {
-  background: #fef2f2;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
-}
-
-.control-panel__notice--success {
-  background: #ecfdf5;
-  color: #15803d;
-  border: 1px solid #bbf7d0;
 }
 
 .action-btn {

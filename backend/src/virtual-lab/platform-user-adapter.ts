@@ -123,7 +123,7 @@ export class PlatformUserAdapter {
           ...(platformText ? [{ role: 'platform' as const, content: platformText }] : [])
         ],
         visibleChoices,
-        availableActions: core.isCompleted ? ['request_path_revision'] : canConfirm ? ['chat', 'confirm_proposal'] : ['chat'],
+        availableActions: core.isCompleted ? [] : canConfirm ? ['chat', 'confirm_proposal'] : ['chat'],
         lastActionResult: { status: 'success', visibleMessage: platformText }
       },
       control: {
@@ -148,12 +148,16 @@ export class PlatformUserAdapter {
     })
     const path = unwrap<any>(response)
     const milestones = Array.isArray(path?.milestones) ? path.milestones : []
-    const firstTask = milestones.flatMap((item: any) => item.subtasks || []).find((item: any) => item.status !== 'completed')
     const tasks = milestones.flatMap((item: any) => item.subtasks || [])
+    const activeTasks = milestones.find((item: any) => item.status === 'active')?.subtasks || tasks
+    const firstTask = activeTasks.find((item: any) => item.status === 'todo')
+      || activeTasks.find((item: any) => item.status === 'in_progress')
+      || tasks.find((item: any) => item.status !== 'completed')
     const runCompleted = tasks.length > 0 && tasks.every((item: any) => item.status === 'completed')
     const ready = path?.canStartLearning === true && !!firstTask
+    const failed = path?.status === 'failed'
     const observation: LearnerObservation = {
-      stage: runCompleted ? 'completed' : 'path',
+      stage: runCompleted ? 'completed' : failed ? 'error' : 'path',
       visibleMessages: [],
       visiblePath: {
         id: pathId,
@@ -166,12 +170,14 @@ export class PlatformUserAdapter {
       availableActions: runCompleted
         ? []
         : ready
-        ? ['request_path_revision', 'start_learning']
-        : path?.status === 'failed' ? ['request_path_revision'] : [],
+        ? ['start_learning']
+        : [],
       lastActionResult: {
-        status: path?.status === 'failed' ? 'error' : 'success',
+        status: failed ? 'error' : 'success',
         visibleMessage: runCompleted
           ? '学习路径中的任务已全部完成'
+          : failed
+            ? path?.learningBlockedReason || '学习路径生成失败'
           : path?.learningBlockedReason || (ready ? '学习路径已就绪' : '学习路径正在生成')
       }
     }
@@ -190,31 +196,10 @@ export class PlatformUserAdapter {
     }
   }
 
-  async requestPathRevision(pathId: string, text: string): Promise<PlatformInteractionResult> {
-    const response = await this.transport.request<any>({
-      method: 'POST',
-      url: `/learning/paths/${encodeURIComponent(pathId)}/replan`,
-      data: { triggerSource: 'api', reason: text, mode: 'overwrite', requireConfirmation: false },
-      headers: await this.headers()
-    })
-    const result = unwrap<any>(response)
-    return {
-      observation: {
-        stage: 'path',
-        visibleMessages: [{ role: 'learner', content: text }],
-        availableActions: ['request_path_revision'],
-        lastActionResult: { status: 'success', visibleMessage: result?.status === 'awaiting-confirmation' ? '平台要求确认路径调整' : '平台已接收路径调整请求' }
-      },
-      control: { learningPathId: pathId, platformStage: result?.status, rawTraceId: traceIdFrom(response.headers) },
-      diagnostic: { replan: result }
-    }
-  }
-
   async startTeaching(taskId: string): Promise<PlatformInteractionResult> {
     const response = await this.transport.request<any>({
       method: 'POST',
       url: `/ai-teaching/tasks/${encodeURIComponent(taskId)}/session`,
-      data: { forceNew: true },
       headers: await this.headers()
     })
     const result = unwrap<any>(response)

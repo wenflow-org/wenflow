@@ -2452,7 +2452,7 @@ function parseBlackboxAction(body: any): LearnerAction {
   const answer = typeof body?.answer === 'string' ? body.answer : '';
   const code = typeof body?.code === 'string' ? body.code : '';
 
-  if (type === 'chat' || type === 'request_hint' || type === 'request_example' || type === 'request_path_revision' || type === 'confirm_proposal') {
+  if (type === 'chat' || type === 'request_hint' || type === 'request_example' || type === 'confirm_proposal') {
     if (!text) throw new Error(`${type} 动作缺少 text`);
     return { type, text } as LearnerAction;
   }

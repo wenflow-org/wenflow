@@ -20,6 +20,7 @@ describe('synthetic projection access', () => {
   it('映射普通用户 API 到最小 capability', () => {
     expect(getRequiredSyntheticCapability('POST', '/api/goal-conversation/abc/reply')).toBe('goal:write')
     expect(getRequiredSyntheticCapability('GET', '/api/learning/paths/path-1')).toBe('path:read')
+    expect(getRequiredSyntheticCapability('POST', '/api/learning/paths/path-1/replan')).toBeNull()
     expect(getRequiredSyntheticCapability('POST', '/api/ai-teaching/sessions/s1/messages')).toBe('teaching:write')
     expect(getRequiredSyntheticCapability('GET', '/api/admin/users')).toBeNull()
   })

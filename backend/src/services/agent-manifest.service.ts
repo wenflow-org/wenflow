@@ -123,7 +123,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
   {
     id: 'simulation-agent',
     name: '虚拟学习者 Agent',
-    description: '编排虚拟学习者：故事→Goal→Path→Learn 完整实验链路',
+    description: '编排虚拟学习者：正式黑盒按故事→Goal→Path 结果→Learn 运行；路径评估器仅用于辅助调试',
     category: 'agent',
     kind: 'agent',
     runtimeEnabled: true,

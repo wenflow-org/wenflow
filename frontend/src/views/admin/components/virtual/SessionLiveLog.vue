@@ -29,11 +29,11 @@ export interface LogEntry {
   timestamp?: string
   phase?: string
   message: string
-  details?: any
 }
 
 const props = defineProps<{
   entries: LogEntry[]
+  pollingDisabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -59,7 +59,7 @@ const handleVisibilityChange = () => {
 
 const startPolling = () => {
   stopPolling()
-  if (document.hidden) return  // 页面不可见时不启动
+  if (document.hidden || props.pollingDisabled) return
   pollTimer = setInterval(() => {
     if (!document.hidden) emit('poll')
   }, 1500)
@@ -78,6 +78,11 @@ watch(() => props.entries.length, () => {
   }
 })
 
+watch(() => props.pollingDisabled, (disabled) => {
+  if (disabled) stopPolling()
+  else startPolling()
+})
+
 onMounted(() => {
   startPolling()
   document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -88,7 +93,6 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
-defineExpose({ startPolling, stopPolling })
 </script>
 
 <style scoped>

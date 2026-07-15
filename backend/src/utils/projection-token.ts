@@ -8,7 +8,6 @@ export const SYNTHETIC_CAPABILITIES = [
   'goal:read',
   'goal:write',
   'path:read',
-  'path:write',
   'teaching:write',
   'task:write',
 ] as const

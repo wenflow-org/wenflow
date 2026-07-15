@@ -4,7 +4,6 @@ export type LearnerAction =
   | { type: 'request_example'; text: string }
   | { type: 'submit_answer'; answer: string }
   | { type: 'submit_code'; code: string }
-  | { type: 'request_path_revision'; text: string }
   | { type: 'confirm_proposal'; text: string }
   | { type: 'start_learning'; taskId?: string }
   | { type: 'confirm_complete' }

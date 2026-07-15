@@ -16,7 +16,6 @@ import {
   executeSkill,
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
-  virtualLearnerPathEvaluatorDefinition,
   virtualLearnerRefereeDefinition
 } from '../skills'
 import { getRequestContext, runWithContext } from '../gateway/api-gateway/context'
@@ -168,9 +167,6 @@ export class BlackboxVirtualLearnerRunner {
       result = await adapter.startGoal(action.text)
     } else if (!control.learningPathId && (action.type === 'chat' || action.type === 'confirm_proposal')) {
       result = await adapter.replyGoal(control.conversationId, action)
-    } else if (action.type === 'request_path_revision') {
-      if (!control.learningPathId) throw new Error('当前没有可调整的 Path')
-      result = await adapter.requestPathRevision(control.learningPathId, action.text)
     } else if (action.type === 'start_learning') {
       const taskId = action.taskId || control.taskId
       if (!taskId) throw new Error('当前没有可启动的学习任务')
@@ -241,22 +237,16 @@ export class BlackboxVirtualLearnerRunner {
       action = { type: shouldConfirm ? 'confirm_proposal' : 'chat', text: output.reply }
       await this.persistPrivateState(session, state, 'goal', output.learnerState)
     } else if (latest.stage === 'path') {
-      if (!latest.visiblePath || (!latest.availableActions.includes('start_learning') && latest.visiblePath.status !== 'failed')) {
-        return { result: await this.observe(sessionId, operatorId), waitingForObservation: true }
+      if (!latest.visiblePath || !latest.availableActions.includes('start_learning')) {
+        const observed = await this.observe(sessionId, operatorId)
+        if (observed.observation.stage === 'error') return { result: observed }
+        if (!observed.observation.availableActions.includes('start_learning')) {
+          return { result: observed, waitingForObservation: true }
+        }
+        action = { type: 'start_learning', taskId: observed.observation.visibleTask?.id }
+        return { action, result: await this.act(sessionId, operatorId, action) }
       }
-      const output = await executeSkill(virtualLearnerPathEvaluatorDefinition, {
-        learner,
-        story,
-        pathProposal: latest.visiblePath,
-        previousReaction: state.blackbox?.learnerPrivateState?.path || null,
-        learnerState: state.blackbox?.learnerPrivateState?.goal || null,
-        frictionBudget: state.simulationConfig?.frictionBudget || 'normal'
-      })
-      const decision = output?.debug?.internalDecision || 'accept'
-      action = decision === 'accept'
-        ? { type: 'start_learning', taskId: latest.visibleTask?.id }
-        : { type: 'request_path_revision', text: output?.reaction || output?.visibleRequestedChanges?.join('；') || '这条路径不太适合我，请调整。' }
-      await this.persistPrivateState(session, state, 'path', output)
+      action = { type: 'start_learning', taskId: latest.visibleTask?.id }
     } else if (latest.stage === 'learning') {
       const history = this.visibleHistory(state).map((item: any) => ({
         role: item.role === 'platform' ? 'teacher' : 'learner',
@@ -349,6 +339,7 @@ export class BlackboxVirtualLearnerRunner {
     }
     const abandoned = result.control.terminalReason === 'abandoned'
     const completed = result.control.runCompleted === true
+    const failed = result.observation.stage === 'error'
     await prisma.virtual_sessions.update({
       where: { id: session.id },
       data: {
@@ -356,8 +347,8 @@ export class BlackboxVirtualLearnerRunner {
         learningPathId: control.learningPathId || fresh.learningPathId,
         currentTaskId: control.taskId === null ? null : control.taskId || fresh.currentTaskId,
         currentStage: abandoned || completed ? 'completed' : result.observation.stage,
-        status: abandoned ? 'abandoned' : completed ? 'completed' : 'running',
-        completedAt: abandoned || completed ? new Date() : null,
+        status: abandoned ? 'abandoned' : completed ? 'completed' : failed ? 'failed' : 'running',
+        completedAt: abandoned || completed || failed ? new Date() : null,
         stageResults: JSON.stringify(nextState),
         updatedAt: new Date()
       }

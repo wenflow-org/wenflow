@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - wenflow_data:/app/data
+    env_file:
+      - backend/.env
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - SYSTEM_DATABASE_URL=file:/app/data/system.db
+      - NODE_ENV=production
+      - TRUST_PROXY=1
+      - CORS_ORIGIN=http://localhost,http://127.0.0.1
+      - FRONTEND_URL=http://localhost
+      - ADMIN_LOCALHOST_ONLY=false
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  wenflow_data:

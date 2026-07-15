@@ -11,7 +11,6 @@ jest.mock('../../skills', () => ({
   executeSkill: jest.fn(),
   virtualLearnerGoalDialogueSimulatorDefinition: {},
   virtualLearnerLearnTurnSimulatorDefinition: {},
-  virtualLearnerPathEvaluatorDefinition: {},
   virtualLearnerRefereeDefinition: { name: 'virtual-learner-referee', version: '1.0.0' }
 }))
 
@@ -21,6 +20,9 @@ jest.mock('../../config/database', () => ({
     virtual_sessions: {
       findUnique: jest.fn(),
       update: jest.fn()
+    },
+    virtual_learner_profiles: {
+      findUnique: jest.fn()
     }
   }
 }))
@@ -132,6 +134,41 @@ describe('BlackboxVirtualLearnerRunner', () => {
     releaseFirst()
     await Promise.all([first, second])
     expect(order).toEqual(['first-start', 'first-end', 'second'])
+  })
+
+  it('Path 作为生成结果就绪后直接进入 Learn，不调用 Path 评审 Skill', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({ conversationId: 'g1', learningPathId: 'p1', taskId: 't1' })
+    const state = JSON.parse(session.stageResults)
+    state.blackbox.publicTrace = [{
+      observation: {
+        stage: 'path', visibleMessages: [], visiblePath: { id: 'p1', title: '路径', milestones: [] },
+        availableActions: [], lastActionResult: { status: 'success', visibleMessage: '路径正在生成' }
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+    runner.context = jest.fn().mockResolvedValue({ session, state })
+    runner.observe = jest.fn().mockResolvedValue({
+      observation: {
+        stage: 'path', visibleMessages: [], visiblePath: { id: 'p1', title: '路径', milestones: [] },
+        visibleTask: { id: 't1', title: '第一个任务' }, availableActions: ['start_learning']
+      },
+      control: { learningPathId: 'p1', taskId: 't1' }
+    })
+    runner.act = jest.fn().mockResolvedValue({
+      observation: { stage: 'learning', visibleMessages: [], visibleTask: { id: 't1', title: '第一个任务' }, availableActions: ['chat'] },
+      control: { learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1' }
+    })
+    ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
+      id: 'vp1', learningGoal: '测试目标', profile: '{}', knownConcepts: '[]', struggleConcepts: '[]', personalityTraits: '{}'
+    })
+
+    const result = await runner.autoStep('vs1', 'admin1')
+
+    expect(runner.observe).toHaveBeenCalledWith('vs1', 'admin1')
+    expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', { type: 'start_learning', taskId: 't1' })
+    expect(result.result.observation.stage).toBe('learning')
+    expect(executeSkill).not.toHaveBeenCalled()
   })
 
   it('裁判只接收四类旁路输入且不污染学习者轨迹', async () => {
