@@ -11,6 +11,8 @@ const requestContextFormat = winston.format((info) => {
   if (context.agentId && !info.agentId) info.agentId = context.agentId;
   if (context.skillId && !info.skillId) info.skillId = context.skillId;
   if (context.action && !info.action) info.action = context.action;
+  if (context.experimentId && !info.experimentId) info.experimentId = context.experimentId;
+  if (context.runId && !info.runId) info.runId = context.runId;
   return info;
 });
 

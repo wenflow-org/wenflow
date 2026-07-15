@@ -43,6 +43,28 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
   };
 }
 
+function syntheticGoalEnvelope(result: any, fallbackConversationId?: string) {
+  const envelope = envelopeGoalConversation(result, fallbackConversationId);
+  const core = envelope.internal.core;
+  return {
+    userVisible: envelope.userVisible,
+    control: {
+      conversationId: core.conversationId,
+      stage: core.stage,
+      isCompleted: core.isCompleted,
+      learningPath: core.learningPath ? { id: core.learningPath.id, status: core.learningPath.status } : null
+    },
+    renderHints: envelope.renderHints,
+    schemaVersion: 'synthetic-user-v1'
+  };
+}
+
+function goalEnvelopeForRequest(req: Request, result: any, fallbackConversationId?: string) {
+  return req.user?.projection?.grantSource === 'synthetic'
+    ? syntheticGoalEnvelope(result, fallbackConversationId)
+    : envelopeGoalConversation(result, fallbackConversationId);
+}
+
 function getInputText(body: any): string {
   return String(body?.input?.text || '').trim();
 }
@@ -73,7 +95,7 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
     });
     return res.json({
       success: true,
-      data: envelopeGoalConversation(result)
+      data: goalEnvelopeForRequest(req, result)
     });
   } catch (error: any) {
     logger.error('开始对话失败:', error);
@@ -81,7 +103,7 @@ router.post('/start', authMiddleware, async (req: Request, res: Response) => {
       return res.status(422).json({
         success: false,
         error: 'STRUCTURED_OUTPUT_INVALID',
-        data: envelopeGoalConversation(error.result)
+        data: goalEnvelopeForRequest(req, error.result)
       });
     }
     return res.status(500).json({ success: false, error: error.message || '开始对话失败' });
@@ -108,7 +130,7 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
     });
     return res.json({
       success: true,
-      data: envelopeGoalConversation(result, conversationId)
+      data: goalEnvelopeForRequest(req, result, conversationId)
     });
   } catch (error: any) {
     logger.error('继续对话失败:', error);
@@ -116,7 +138,7 @@ router.post('/:conversationId/reply', authMiddleware, async (req: Request, res: 
       return res.status(422).json({
         success: false,
         error: 'STRUCTURED_OUTPUT_INVALID',
-        data: envelopeGoalConversation(error.result)
+        data: goalEnvelopeForRequest(req, error.result, req.params.conversationId)
       });
     }
     const status = error.message === '对话会话不存在' ? 404 : 500;
@@ -137,7 +159,7 @@ router.post('/:conversationId/regenerate', authMiddleware, async (req: Request, 
     const result = await requirementOrchestrator.regenerate(conversationId, userId, adjustments?.trim() || undefined);
     return res.json({
       success: true,
-      data: envelopeGoalConversation(result, conversationId)
+      data: goalEnvelopeForRequest(req, result, conversationId)
     });
   } catch (error: any) {
     logger.error('重新生成路径失败:', error);
@@ -174,6 +196,25 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
     }
 
     const conversation = await requirementOrchestrator.getConversation(conversationId, userId);
+    if (req.user?.projection?.grantSource === 'synthetic') {
+      return res.json({
+        success: true,
+        data: {
+          userVisible: '会话详情获取成功',
+          control: {
+            conversationId,
+            stage: conversation.stage,
+            isCompleted: conversation.status === 'completed',
+            learningPath: conversation.learningPath
+              ? { id: conversation.learningPath.id, status: conversation.learningPath.status }
+              : null
+          },
+          visibleMessages: conversation.messages || [],
+          renderHints: {},
+          schemaVersion: 'synthetic-user-v1'
+        }
+      });
+    }
     return res.json({
       success: true,
       data: {
@@ -237,7 +278,7 @@ router.post('/quick-generate', authMiddleware, async (req: Request, res: Respons
 
     return res.json({
       success: true,
-      data: envelopeGoalConversation(result)
+      data: goalEnvelopeForRequest(req, result)
     });
   } catch (error: any) {
     logger.error('快速生成失败:', error);

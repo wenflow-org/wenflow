@@ -61,6 +61,8 @@ export interface ExecutionContext {
   sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
+  experimentId?: string;
+  runId?: string;
   requestPath?: string;
   [key: string]: any;
 }

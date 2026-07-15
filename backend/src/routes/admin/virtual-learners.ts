@@ -19,7 +19,9 @@ import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-l
 import { executeSkill } from '../../skills';
 import learningService from '../../services/learning/learning.service';
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
-import { signProjectionToken, verifyProjectionToken } from '../../utils/projection-token';
+import { signProjectionToken, SYNTHETIC_CAPABILITIES, SyntheticCapability, verifyProjectionToken } from '../../utils/projection-token';
+import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
+import type { LearnerAction } from '../../virtual-lab/contracts';
 
 const router = express.Router();
 
@@ -1833,7 +1835,13 @@ router.put('/:id', async (req: any, res) => {
     
     const updateData: any = {};
     
-    if (req.body.profile) updateData.profile = JSON.stringify(req.body.profile);
+    if (req.body.profile) {
+      const existingProfile = parseJson<any>(profile.profile, {});
+      updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
+    }
+    if (typeof req.body.name === 'string' && req.body.name.trim()) {
+      await prisma.users.update({ where: { id: profile.userId }, data: { name: req.body.name.trim() } });
+    }
     if (req.body.learningGoal) updateData.learningGoal = req.body.learningGoal;
     if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
     if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
@@ -1924,8 +1932,11 @@ router.delete('/:id', async (req: any, res) => {
 router.post('/:id/start-session', async (req: any, res) => {
   try {
     const { id } = req.params;
-    const { storyId, storyIndex } = req.body || {};
-    const session = await createSessionForProfile(id, { storyId, storyIndex });
+    const { storyId, storyIndex, frictionBudget } = req.body || {};
+    if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
+      return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
+    }
+    const session = await createSessionForProfile(id, { storyId, storyIndex, frictionBudget });
     if (!session) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
@@ -1939,9 +1950,12 @@ router.post('/:id/start-session', async (req: any, res) => {
   }
 });
 
+const SIMULATION_FRICTION_BUDGETS = ['none', 'low', 'normal', 'high', 'stress_test'] as const;
+type SimulationFrictionBudget = typeof SIMULATION_FRICTION_BUDGETS[number];
+
 async function createSessionForProfile(
   profileId: string,
-  options: { storyId?: string; storyIndex?: number } = {}
+  options: { storyId?: string; storyIndex?: number; frictionBudget?: SimulationFrictionBudget } = {}
 ): Promise<any | null> {
   const profile = await prisma.virtual_learner_profiles.findUnique({
     where: { id: profileId }
@@ -1969,12 +1983,15 @@ async function createSessionForProfile(
       }
     : null;
 
-  const stageResults = storyContext
-    ? JSON.stringify({
-        story: storyContext,
-        learnerContext: parseJson<any>(profile.profile, {}),
-      })
-    : '{}';
+  const stageResults = JSON.stringify({
+    ...(storyContext ? {
+      story: storyContext,
+      learnerContext: parseJson<any>(profile.profile, {}),
+    } : {}),
+    ...(options.frictionBudget ? {
+      simulationConfig: { frictionBudget: options.frictionBudget }
+    } : {})
+  });
 
   const session = await prisma.virtual_sessions.create({
     data: {
@@ -2412,6 +2429,167 @@ router.post('/sessions/:sessionId/advance-path', async (req: any, res) => {
   }
 });
 
+router.post('/:id/start-blackbox-session', async (req: any, res) => {
+  try {
+    const { storyId, storyIndex, frictionBudget } = req.body || {};
+    if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
+      return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
+    }
+    const session = await createSessionForProfile(req.params.id, { storyId, storyIndex, frictionBudget });
+    if (!session) return res.status(404).json({ success: false, error: '虚拟用户不存在' });
+    const experiment = await blackboxVirtualLearnerRunner.initialize(session.id, req.user.userId);
+    res.json({ success: true, data: { ...session, experiment } });
+  } catch (error: any) {
+    logger.error('启动黑盒模拟会话失败:', error);
+    res.status(500).json({ success: false, error: error.message || '启动黑盒模拟会话失败' });
+  }
+});
+
+function parseBlackboxAction(body: any): LearnerAction {
+  const type = typeof body?.type === 'string' ? body.type : '';
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+  const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+  const answer = typeof body?.answer === 'string' ? body.answer : '';
+  const code = typeof body?.code === 'string' ? body.code : '';
+
+  if (type === 'chat' || type === 'request_hint' || type === 'request_example' || type === 'request_path_revision' || type === 'confirm_proposal') {
+    if (!text) throw new Error(`${type} 动作缺少 text`);
+    return { type, text } as LearnerAction;
+  }
+  if (type === 'submit_answer') {
+    if (!answer.trim()) throw new Error('submit_answer 动作缺少 answer');
+    return { type, answer };
+  }
+  if (type === 'submit_code') {
+    if (!code.trim()) throw new Error('submit_code 动作缺少 code');
+    return { type, code };
+  }
+  if (type === 'abandon' || type === 'skip') {
+    if (!reason) throw new Error(`${type} 动作缺少 reason`);
+    return { type, reason } as LearnerAction;
+  }
+  if (type === 'start_learning') {
+    return { type, taskId: typeof body.taskId === 'string' && body.taskId.trim() ? body.taskId.trim() : undefined };
+  }
+  if (type === 'confirm_complete') return { type };
+  throw new Error('不支持的黑盒学习者动作');
+}
+
+router.post('/sessions/:sessionId/blackbox-action', async (req: any, res) => {
+  try {
+    const action = parseBlackboxAction(req.body);
+    const result = await blackboxVirtualLearnerRunner.runExclusive(
+      req.params.sessionId,
+      () => blackboxVirtualLearnerRunner.act(req.params.sessionId, req.user.userId, action)
+    );
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    const status = error.message?.includes('不存在') ? 404
+      : error.message?.includes('缺少') || error.message?.includes('不支持') ? 400
+      : error.message?.includes('当前') || error.message?.includes('必须') ? 409 : 500;
+    logger.error('执行黑盒学习者动作失败:', error);
+    res.status(status).json({ success: false, error: error.message || '执行黑盒学习者动作失败' });
+  }
+});
+
+router.post('/sessions/:sessionId/blackbox-step', async (req: any, res) => {
+  try {
+    const result = await blackboxVirtualLearnerRunner.runExclusive(
+      req.params.sessionId,
+      () => blackboxVirtualLearnerRunner.autoStep(req.params.sessionId, req.user.userId)
+    );
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('执行黑盒自动步骤失败:', error);
+    res.status(500).json({ success: false, error: error.message || '执行黑盒自动步骤失败' });
+  }
+});
+
+router.post('/sessions/:sessionId/blackbox-observe', async (req: any, res) => {
+  try {
+    const result = await blackboxVirtualLearnerRunner.runExclusive(
+      req.params.sessionId,
+      () => blackboxVirtualLearnerRunner.observe(req.params.sessionId, req.user.userId)
+    );
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('刷新黑盒平台观察失败:', error);
+    res.status(500).json({ success: false, error: error.message || '刷新黑盒平台观察失败' });
+  }
+});
+
+router.get('/sessions/:sessionId/blackbox-snapshot', async (req: any, res) => {
+  try {
+    const result = await blackboxVirtualLearnerRunner.getSnapshot(req.params.sessionId);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('获取黑盒实验快照失败:', error);
+    res.status(500).json({ success: false, error: error.message || '获取黑盒实验快照失败' });
+  }
+});
+
+router.post('/sessions/:sessionId/blackbox-referee', async (req: any, res) => {
+  try {
+    const result = await blackboxVirtualLearnerRunner.runExclusive(
+      req.params.sessionId,
+      () => blackboxVirtualLearnerRunner.referee(req.params.sessionId, req.user.userId)
+    );
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    const status = error.message?.includes('不存在') ? 404
+      : error.message?.includes('不是') || error.message?.includes('尚未结束') ? 409 : 502;
+    logger.error('生成黑盒裁判报告失败:', error);
+    res.status(status).json({ success: false, error: error.message || '生成黑盒裁判报告失败' });
+  }
+});
+
+router.post('/sessions/:sessionId/synthetic-token', async (req: any, res) => {
+  try {
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: req.params.sessionId } });
+    if (!session) return res.status(404).json({ success: false, error: '模拟会话不存在' });
+
+    const stageResults = parseJson<any>(session.stageResults, {});
+    if (stageResults.experiment?.mode !== 'blackbox-api' || !stageResults.experiment?.experimentId || !stageResults.experiment?.runId) {
+      return res.status(400).json({ success: false, error: '当前会话不是 blackbox-api 实验' });
+    }
+
+    const allowed = new Set<string>(SYNTHETIC_CAPABILITIES);
+    const requested = Array.isArray(req.body?.capabilities) ? req.body.capabilities : [...SYNTHETIC_CAPABILITIES];
+    if (!requested.length || requested.some((item: unknown) => typeof item !== 'string' || !allowed.has(item))) {
+      return res.status(400).json({ success: false, error: '请求包含无效 synthetic capability' });
+    }
+    const capabilities = Array.from(new Set(requested)) as SyntheticCapability[];
+    const token = signProjectionToken({
+      targetUserId: session.userId,
+      sourceProfileId: session.virtualProfileId,
+      issuedByAdminId: req.user.userId,
+      grantSource: 'synthetic',
+      virtualSessionId: session.id,
+      scope: 'full',
+      capabilities,
+      experimentId: stageResults.experiment.experimentId,
+      runId: stageResults.experiment.runId,
+      type: 'projection'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        expiresIn: '30m',
+        capabilities,
+        experimentId: stageResults.experiment.experimentId,
+        runId: stageResults.experiment.runId,
+        targetUserId: session.userId,
+        virtualSessionId: session.id
+      }
+    });
+  } catch (error: any) {
+    logger.error('签发合成用户 token 失败:', error);
+    res.status(500).json({ success: false, error: error.message || '签发合成用户 token 失败' });
+  }
+});
+
 /**
  * 以虚拟学习者视角评审当前 Path，并按结论进入 Learn 或重规划。
  * POST /api/admin/virtual-learners/sessions/:sessionId/review-path
@@ -2712,8 +2890,7 @@ router.put('/sessions/:sessionId/simulation-config', async (req: any, res) => {
       return res.status(404).json({ success: false, error: 'session 不存在' });
     }
 
-    const allowedBudgets = ['none', 'low', 'normal', 'high', 'stress_test'];
-    if (frictionBudget && !allowedBudgets.includes(frictionBudget)) {
+    if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
     }
 

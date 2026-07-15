@@ -1403,7 +1403,7 @@ export class AITeachingOrchestrator {
     return baseResult;
   }
 
-  async endSession(sessionId: string): Promise<{
+  async endSession(sessionId: string, endReason = 'manual-end'): Promise<{
     wrapup: SessionWrapupArtifact & {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
@@ -1417,8 +1417,19 @@ export class AITeachingOrchestrator {
       throw new Error('会话不存在或已结束');
     }
 
+    // 结束接口可能因下游任务完成失败而被重试；复用已保存结果，避免重复 Wrapup 和事件副作用。
+    if (session.status === 'completed' && session.wrapup) {
+      return {
+        wrapup: session.wrapup as any,
+        advisory: session.advisory as ReplanAdvisory,
+      };
+    }
+
     const durationMinutes = computeEffectiveDurationMinutes(session);
-    const sessionArtifacts = parseSessionArtifacts(session.teachingState);
+    const sessionArtifacts = {
+      ...parseSessionArtifacts(session.teachingState),
+      endReason,
+    };
     const classroomEventHistory = Array.isArray(session.teachingState?.classroomEventHistory)
       ? session.teachingState?.classroomEventHistory
       : [];
@@ -1468,7 +1479,7 @@ export class AITeachingOrchestrator {
           finalClassroomContext,
           classroomEventHistory,
           stageHistory,
-          endReason: sessionArtifacts.endReason || 'manual-end',
+          endReason: sessionArtifacts.endReason || endReason,
         },
       },
       context: {

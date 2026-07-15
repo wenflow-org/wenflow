@@ -12,6 +12,8 @@ export interface RequestContext {
   traceId?: string;
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
+  experimentId?: string;
+  runId?: string;
 }
 
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();

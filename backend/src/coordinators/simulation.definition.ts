@@ -10,6 +10,7 @@ export const simulationAgentRuntimeDefinition = {
     { step: 4, agentId: 'skill:virtual-learner-path-evaluator', role: 'path-review-reaction', condition: 'when a learning path is available' },
     { step: 5, agentId: 'skill:virtual-learner-learn-turn-simulator', role: 'learn-stage-learner-turn-simulation', condition: 'when learning phase starts', loopOver: 'learning-turns' },
     { step: 6, agentId: 'teaching-agent', role: 'learning-session-execution', condition: 'when learning phase starts', loopOver: 'learning-turns' },
+    { step: 7, agentId: 'skill:virtual-learner-referee', role: 'experiment-referee-evaluation', condition: 'after blackbox experiment reaches terminal state' },
   ],
   variableGraph: {
     virtualLearnerSimulation: ['persona', 'story', 'learnerState', 'knowledgeState', 'reaction'],
@@ -17,6 +18,7 @@ export const simulationAgentRuntimeDefinition = {
     pathGeneration: ['learningPathId', 'pathSummary', 'milestones'],
     pathReview: ['review.decision', 'review.reasons', 'review.biggestConcern'],
     aiTeaching: ['teachingSessionId', 'learningProgress', 'teachingLogs'],
+    refereeEvaluation: ['verdict', 'scores', 'findings', 'recommendations', 'evidence'],
   },
   source: 'code',
   managedByCode: true,

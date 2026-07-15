@@ -8,7 +8,7 @@ import { updateLearningMetrics } from '../metrics/LearningMetricService';
 import learningStateService from './learning-state.service';
 import type { AgentInput } from '../../agents/protocol';
 import { getEventBus, type LearningEvent } from '../../gateway/event-bus';
-import { runWithContext } from '../../gateway/api-gateway/context';
+import { getRequestContext, runWithContext } from '../../gateway/api-gateway/context';
 import { normalizeAgentOutput } from '../../agents/output-normalizer';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
@@ -2002,7 +2002,9 @@ class LearningService {
         };
       }
 
+      const parentContext = getRequestContext();
       const agentResult = await runWithContext({
+        ...parentContext,
         userId: data.userId,
         agentId: 'skill:path-planning',
         action: 'generateLearningPath'
@@ -3254,8 +3256,10 @@ const learningPath = await prisma.learning_paths.findUnique({
         where: { id: data.taskId },
         include: {
           milestones: {
-            select: {
-              learningPathId: true,
+            include: {
+              learning_paths: {
+                select: { userId: true }
+              }
             }
           }
         }
@@ -3265,15 +3269,30 @@ const learningPath = await prisma.learning_paths.findUnique({
         throw new Error('任务不存在');
       }
 
-      // 更新任务状态
-      const updatedSubtask = await prisma.subtasks.update({
-        where: { id: data.taskId },
+      if (subtask.userId !== data.userId || subtask.milestones?.learning_paths?.userId !== data.userId) {
+        throw new Error('无权访问此任务');
+      }
+
+      // 条件更新确保并发重试只有一个请求能触发 XP、指标与事件副作用。
+      const completion = await prisma.subtasks.updateMany({
+        where: {
+          id: data.taskId,
+          userId: data.userId,
+          status: { not: 'completed' }
+        },
         data: {
           status: 'completed',
           completedAt: new Date(),
           rating: data.rating
         }
       });
+
+      if (completion.count === 0) {
+        const completedTask = await prisma.subtasks.findUnique({ where: { id: data.taskId } });
+        return { task: completedTask || subtask, learningReport: undefined, alreadyCompleted: true };
+      }
+
+      const updatedSubtask = await prisma.subtasks.findUnique({ where: { id: data.taskId } });
 
       // 更新学习指标 (LSS/KTL/LF/LSB)
       let learningMetrics: Awaited<ReturnType<typeof updateLearningMetrics>> | null = null;

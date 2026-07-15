@@ -359,7 +359,9 @@ export class APIExecutor {
             requestPath: context.requestPath,
             messageCount: request.messages?.length || 0,
             finishReason: response?.choices?.[0]?.finish_reason,
-            completionId: response?.id
+            completionId: response?.id,
+            experimentId: context.experimentId || null,
+            runId: context.runId || null
           })
         }
       });

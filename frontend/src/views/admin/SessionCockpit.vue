@@ -32,7 +32,40 @@
         </div>
       </div>
       <div class="cockpit-topbar__tags">
+        <el-tag v-if="isBlackboxMode" type="info" size="small" effect="plain">Blackbox API</el-tag>
         <el-tag :type="statusTagType" size="small" effect="dark">{{ statusText }}</el-tag>
+      </div>
+    </section>
+
+    <section v-if="isBlackboxMode" class="blackbox-observation">
+      <div class="blackbox-observation__head">
+        <div>
+          <span>学习者公开视图</span>
+          <strong>{{ latestBlackboxObservation?.stage || currentStage }}</strong>
+        </div>
+        <div class="blackbox-observation__ids">
+          <code>EXP {{ experimentMeta?.experimentId?.slice(0, 12) || '--' }}</code>
+          <code>RUN {{ experimentMeta?.runId?.slice(0, 12) || '--' }}</code>
+        </div>
+      </div>
+      <div class="blackbox-observation__body">
+        <article>
+          <span>当前可见对象</span>
+          <strong>{{ latestBlackboxObservation?.visibleTask?.title || latestBlackboxObservation?.visiblePath?.title || '等待平台响应' }}</strong>
+          <p>{{ latestBlackboxObservation?.lastActionResult?.visibleMessage || '尚无公开结果' }}</p>
+        </article>
+        <article>
+          <span>允许动作</span>
+          <div class="blackbox-action-list">
+            <code v-for="action in blackboxAvailableActions" :key="action">{{ action }}</code>
+            <em v-if="!blackboxAvailableActions.length">等待 Observation</em>
+          </div>
+        </article>
+        <article>
+          <span>旁路状态</span>
+          <strong>{{ refereeTraceCount }} 条诊断 · {{ refereeReportCount }} 份报告</strong>
+          <p>诊断不会回流到学习者 Skill。</p>
+        </article>
       </div>
     </section>
 
@@ -178,7 +211,7 @@
               <li v-for="change in pathReview.visibleRequestedChanges" :key="change">{{ change }}</li>
             </ul>
           </details>
-          <div v-if="pathReady && currentStage === 'path' && pathReview?.status !== 'accepted'" class="stage-panel__actions">
+          <div v-if="!isBlackboxMode && pathReady && currentStage === 'path' && pathReview?.status !== 'accepted'" class="stage-panel__actions">
             <el-button type="primary" :loading="loadingBridge" @click="handleReviewPath">
               {{ pathReview?.status === 'replanned' ? '重新评审 Path' : '评审 Path' }}
             </el-button>
@@ -304,6 +337,7 @@
           :loading-step="loadingStep"
           :loading-auto="loadingAuto"
           :loading-bridge="loadingBridge"
+          :blackbox-mode="isBlackboxMode"
           @step="handleStep"
           @auto="handleAuto"
           @stop="handleStop"
@@ -360,6 +394,51 @@
         <div v-else class="empty-text">暂无事件记录</div>
       </div>
 
+      <div v-if="activeDetailTab === 'review'" class="detail-pane">
+        <div v-if="latestRefereeReport" class="referee-report">
+          <div class="referee-report__hero">
+            <div>
+              <span>Referee verdict</span>
+              <strong>{{ refereeVerdictLabel }}</strong>
+              <p>报告 {{ latestRefereeReport.id?.slice(0, 12) }} · {{ formatEventTime(latestRefereeReport.evaluatedAt) }}</p>
+            </div>
+            <div class="referee-score">
+              <strong>{{ latestRefereeReport.report?.scores?.overall ?? '--' }}</strong>
+              <span>overall</span>
+            </div>
+          </div>
+          <div class="referee-score-grid">
+            <div v-for="metric in refereeScoreItems" :key="metric.label">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.value ?? '--' }}</strong>
+            </div>
+          </div>
+          <div class="referee-report__section">
+            <h4>主要发现</h4>
+            <article v-for="item in latestRefereeReport.report?.findings || []" :key="item.code" class="referee-finding">
+              <el-tag size="small" :type="findingTagType(item.severity)">{{ item.severity }}</el-tag>
+              <div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>
+            </article>
+            <p v-if="!latestRefereeReport.report?.findings?.length" class="empty-text">未发现需要记录的问题。</p>
+          </div>
+          <div class="referee-report__section">
+            <h4>改进建议</h4>
+            <article v-for="item in latestRefereeReport.report?.recommendations || []" :key="`${item.priority}-${item.action}`" class="referee-recommendation">
+              <strong>{{ item.priority }}</strong><p>{{ item.action }}</p>
+            </article>
+          </div>
+        </div>
+        <div v-else class="referee-empty">
+          <div>
+            <strong>{{ isTerminal ? '实验已结束，等待裁判' : '终态后才能生成裁判报告' }}</strong>
+            <p>Referee 只读取公开轨迹、旁路诊断、控制回执和实验摘要。</p>
+          </div>
+          <el-button v-if="isBlackboxMode && isTerminal" type="primary" :loading="loadingReferee" @click="handleGenerateReferee">
+            生成裁判报告
+          </el-button>
+        </div>
+      </div>
+
       <!-- Raw JSON -->
       <div v-if="activeDetailTab === 'json'" class="detail-pane">
         <pre class="json-block">{{ JSON.stringify(rawSession, null, 2) }}</pre>
@@ -393,9 +472,11 @@ const loadingStep = ref(false)
 const loadingAuto = ref(false)
 const loadingBridge = ref(false)
 const loadingWrapup = ref(false)
+const loadingReferee = ref(false)
+const blackboxSnapshot = ref<any>(null)
 
 const activeNav = ref<'goal' | 'path' | 'learning' | 'wrapup'>('goal')
-const activeDetailTab = ref<'bindings' | 'events' | 'json'>('bindings')
+const activeDetailTab = ref<'bindings' | 'events' | 'review' | 'json'>('bindings')
 
 const logRef = ref<InstanceType<typeof SessionLiveLog> | null>(null)
 
@@ -424,6 +505,19 @@ const bindings = computed(() => {
 })
 
 const stageResults = computed(() => session.value?.stageResults || {})
+const isBlackboxMode = computed(() => stageResults.value?.experiment?.mode === 'blackbox-api')
+const experimentMeta = computed(() => blackboxSnapshot.value?.experiment || stageResults.value?.experiment || null)
+const latestBlackboxObservation = computed(() => blackboxSnapshot.value?.observation || stageResults.value?.blackbox?.publicTrace?.slice(-1)[0]?.observation || null)
+const blackboxAvailableActions = computed<string[]>(() => latestBlackboxObservation.value?.availableActions || [])
+const latestRefereeReport = computed(() => blackboxSnapshot.value?.latestRefereeReport || null)
+const refereeTraceCount = computed(() => blackboxSnapshot.value?.refereeTraceCount || stageResults.value?.blackbox?.refereeTrace?.length || 0)
+const refereeReportCount = computed(() => blackboxSnapshot.value?.refereeReportCount || stageResults.value?.blackbox?.refereeReports?.length || 0)
+const isTerminal = computed(() => ['completed', 'failed', 'abandoned'].includes(status.value))
+const blackboxPublicMessages = computed<any[]>(() => {
+  const trace = stageResults.value?.blackbox?.publicTrace
+  if (!Array.isArray(trace)) return []
+  return trace.flatMap((entry: any) => entry?.observation?.visibleMessages || [])
+})
 
 /* Goal */
 const goalReady = computed(() => {
@@ -440,6 +534,13 @@ const goalStageLabel = computed(() => {
 })
 
 const goalConversation = computed<any[]>(() => {
+  if (isBlackboxMode.value) {
+    return blackboxPublicMessages.value.map((m: any) => ({
+      role: m.role === 'learner' ? 'learner' : 'assistant',
+      content: m.content || '',
+      signals: null
+    }))
+  }
   const conv = session.value?.conversations?.goal?.messages
   if (Array.isArray(conv) && conv.length) return conv
   const raw = stageResults.value?.goal?.conversationHistory
@@ -483,8 +584,7 @@ const pathStatusText = computed(() => {
 
 const pathData = ref<any>(null)
 const milestones = computed(() => {
-  if (!pathData.value?.milestones) return []
-  return pathData.value.milestones
+  return pathData.value?.path?.milestones || pathData.value?.milestones || latestBlackboxObservation.value?.visiblePath?.milestones || []
 })
 
 const pathReview = computed(() => session.value?.runtime?.stageStatus?.path?.review || stageResults.value?.path_review || null)
@@ -504,7 +604,7 @@ function getPathReviewStatusLabel(status?: string) {
 const learningStarted = computed(() => !!bindings.value.currentTaskId || !!bindings.value.teachingSessionId)
 const currentTaskId = computed(() => bindings.value.currentTaskId)
 const currentTaskTitle = computed(() => {
-  return stageResults.value?.learning?.currentTaskTitle || stageResults.value?.learning?.taskRuntime?.taskTitle || null
+  return latestBlackboxObservation.value?.visibleTask?.title || stageResults.value?.learning?.currentTaskTitle || stageResults.value?.learning?.taskRuntime?.taskTitle || null
 })
 const currentMilestoneTitle = computed(() => {
   return stageResults.value?.learning?.currentMilestoneTitle || null
@@ -552,6 +652,7 @@ const statusTagType = computed(() => {
     case 'running': return 'primary'
     case 'completed': return 'success'
     case 'failed': return 'danger'
+    case 'abandoned': return 'warning'
     default: return 'info'
   }
 })
@@ -562,6 +663,7 @@ const statusText = computed(() => {
     case 'running': return '运行中'
     case 'completed': return '已完成'
     case 'failed': return '失败'
+    case 'abandoned': return '已放弃'
     default: return status.value
   }
 })
@@ -579,7 +681,7 @@ const stageStripItems = computed(() => {
 })
 
 const cockpitHighlights = computed(() => [
-  { label: `状态 ${statusText.value}`, tone: status.value === 'completed' ? 'success' as const : status.value === 'failed' ? 'danger' as const : 'info' as const },
+  { label: `状态 ${statusText.value}`, tone: status.value === 'completed' ? 'success' as const : status.value === 'failed' ? 'danger' as const : status.value === 'abandoned' ? 'warning' as const : 'info' as const },
   { label: `当前阶段 ${currentStage.value}`, tone: 'neutral' as const },
   { label: bindings.value.currentTaskId ? `Task ${bindings.value.currentTaskId}` : '尚未绑定 Task', tone: bindings.value.currentTaskId ? 'warning' as const : 'neutral' as const },
   { label: `Session ${sessionId}`, tone: 'neutral' as const }
@@ -674,11 +776,34 @@ const events = computed(() => {
   return Array.isArray(logs) ? logs : []
 })
 
-const detailTabs = [
+const detailTabs = computed(() => [
   { key: 'bindings', label: '当前绑定' },
   { key: 'events', label: '事件' },
-  { key: 'json', label: '原始数据' }
-]
+  ...(isBlackboxMode.value ? [{ key: 'review', label: latestRefereeReport.value ? '裁判报告' : '裁判评审' }] : []),
+  ...(!isBlackboxMode.value || isTerminal.value ? [{ key: 'json', label: '原始数据' }] : [])
+])
+
+const refereeVerdictLabel = computed(() => {
+  const verdict = latestRefereeReport.value?.report?.verdict
+  return verdict === 'pass' ? '通过'
+    : verdict === 'pass_with_concerns' ? '有条件通过'
+      : verdict === 'fail' ? '失败' : '证据不足'
+})
+
+const refereeScoreItems = computed(() => {
+  const scores = latestRefereeReport.value?.report?.scores || {}
+  return [
+    { label: 'Goal 体验', value: scores.goalExperience },
+    { label: 'Path 体验', value: scores.pathExperience },
+    { label: 'Teaching 体验', value: scores.teachingExperience },
+    { label: '控制一致性', value: scores.controlConsistency },
+    { label: '边界完整性', value: scores.boundaryIntegrity },
+    { label: '证据充分性', value: scores.evidenceSufficiency }
+  ]
+})
+
+const findingTagType = (severity?: string) => severity === 'critical' ? 'danger'
+  : severity === 'major' ? 'warning' : severity === 'minor' ? 'info' : 'success'
 
 /* ===== Data loading ===== */
 const loadSession = async () => {
@@ -704,6 +829,12 @@ const loadSession = async () => {
     // Load path status
     if (data.bindings?.learningPathId || data.currentStage === 'path' || data.currentStage === 'learning') {
       await loadPathStatus()
+    }
+    if (data.stageResults?.experiment?.mode === 'blackbox-api') {
+      await loadBlackboxSnapshot()
+      if (!isTerminal.value && activeDetailTab.value === 'json') activeDetailTab.value = 'bindings'
+    } else {
+      blackboxSnapshot.value = null
     }
   } catch (error: any) {
     ElMessage.error(error.message || '加载会话失败')
@@ -753,6 +884,23 @@ const withSession = async (runner: (sid: string) => Promise<void>) => {
 }
 
 const handleStep = async () => {
+  if (isBlackboxMode.value) {
+    loadingStep.value = true
+    try {
+      const res = await adminApi.blackboxVirtualSessionStep(sessionId)
+      if (!res.data?.success) throw new Error(res.data?.error || '黑盒单步失败')
+      if (res.data?.data?.waitingForObservation) {
+        ElMessage.info('平台仍在生成 Path，本轮仅刷新公开状态')
+      }
+      await loadSession()
+      if (bindings.value.learningPathId) await loadPathStatus()
+    } catch (error: any) {
+      ElMessage.error(error.response?.data?.error || error.message || '黑盒单步失败')
+    } finally {
+      loadingStep.value = false
+    }
+    return
+  }
   if (currentStage.value === 'goal') {
     loadingStep.value = true
     try {
@@ -783,7 +931,26 @@ const handleStep = async () => {
   logRef.value?.startPolling()
 }
 
+const handleGenerateReferee = async () => {
+  loadingReferee.value = true
+  try {
+    const res = await adminApi.generateBlackboxRefereeReport(sessionId)
+    if (!res.data?.success) throw new Error(res.data?.error || '裁判报告生成失败')
+    ElMessage.success(res.data?.data?.reused ? '已复用当前轨迹的裁判报告' : '裁判报告已生成')
+    await loadBlackboxSnapshot()
+    activeDetailTab.value = 'review'
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || error.message || '裁判报告生成失败')
+  } finally {
+    loadingReferee.value = false
+  }
+}
+
 const handleAuto = async () => {
+  if (isBlackboxMode.value) {
+    ElMessage.info('黑盒自动循环将在实验调度器阶段开放，当前请使用单步以保留边界可审计性')
+    return
+  }
   if (currentStage.value === 'goal') {
     loadingAuto.value = true
     try {
@@ -851,6 +1018,15 @@ const handleAdvancePath = async () => {
     ElMessage.error(error.message || '生成 Path 失败')
   } finally {
     loadingBridge.value = false
+  }
+}
+
+const loadBlackboxSnapshot = async () => {
+  try {
+    const res = await adminApi.getBlackboxVirtualSnapshot(sessionId)
+    if (res.data?.success) blackboxSnapshot.value = res.data.data
+  } catch {
+    blackboxSnapshot.value = null
   }
 }
 
@@ -1139,6 +1315,97 @@ watch(status, (newStatus) => {
   align-items: stretch;
   padding-bottom: 12px;
   border-bottom: var(--admin-border-subtle);
+}
+
+.blackbox-observation {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid #cddced;
+  border-left: 4px solid #3478f6;
+  border-radius: 10px;
+  background: #f7faff;
+}
+
+.blackbox-observation__head,
+.blackbox-observation__ids {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.blackbox-observation__head > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.blackbox-observation__head span,
+.blackbox-observation__body article > span {
+  color: #697386;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.blackbox-observation__head strong {
+  color: #1f5dbb;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.blackbox-observation__ids code,
+.blackbox-action-list code {
+  padding: 3px 7px;
+  border: 1px solid #d6e3f1;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #36516f;
+  font-size: 10px;
+}
+
+.blackbox-observation__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #dce6f1;
+  border-radius: 8px;
+  background: #dce6f1;
+}
+
+.blackbox-observation__body article {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 92px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.blackbox-observation__body strong {
+  color: #1a2a44;
+  font-size: 13px;
+}
+
+.blackbox-observation__body p {
+  margin: 0;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.blackbox-action-list {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.blackbox-action-list em {
+  color: #8a94a6;
+  font-size: 11px;
+  font-style: normal;
 }
 
 .cockpit-overview__main,
@@ -1759,6 +2026,120 @@ watch(status, (newStatus) => {
   padding: 16px 0;
 }
 
+.referee-report {
+  display: grid;
+  gap: 18px;
+}
+
+.referee-report__hero,
+.referee-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid #dbe5f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.referee-report__hero span,
+.referee-report__hero p,
+.referee-empty p {
+  color: #7a8597;
+  font-size: 11px;
+}
+
+.referee-report__hero p,
+.referee-empty p,
+.referee-finding p,
+.referee-recommendation p {
+  margin: 4px 0 0;
+  line-height: 1.55;
+}
+
+.referee-report__hero > div:first-child > strong,
+.referee-empty strong {
+  display: block;
+  margin-top: 4px;
+  color: #1a2a44;
+  font-size: 17px;
+}
+
+.referee-score {
+  display: grid;
+  justify-items: center;
+  min-width: 88px;
+  padding-left: 18px;
+  border-left: 1px solid #dbe5f0;
+}
+
+.referee-score strong {
+  color: #1f5dbb;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 32px;
+}
+
+.referee-score-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: #e1e8f2;
+}
+
+.referee-score-grid > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.referee-score-grid span {
+  color: #8a94a6;
+  font-size: 10px;
+}
+
+.referee-score-grid strong {
+  color: #1a2a44;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 17px;
+}
+
+.referee-report__section {
+  display: grid;
+  gap: 9px;
+}
+
+.referee-report__section h4 {
+  margin: 0;
+  color: #344054;
+  font-size: 13px;
+}
+
+.referee-finding,
+.referee-recommendation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.referee-finding strong,
+.referee-recommendation strong {
+  color: #344054;
+  font-size: 12px;
+}
+
+.referee-finding p,
+.referee-recommendation p {
+  color: #667085;
+  font-size: 12px;
+}
+
 .json-block {
   font-size: 11px;
   font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
@@ -1786,6 +2167,14 @@ watch(status, (newStatus) => {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
+
+  .blackbox-observation__body {
+    grid-template-columns: 1fr;
+  }
+
+  .referee-score-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .cockpit-nav {
     display: flex;
     flex-direction: row;
@@ -1804,6 +2193,35 @@ watch(status, (newStatus) => {
 
   .cockpit-detail__head {
     flex-direction: column;
+  }
+
+  .cockpit-topbar,
+  .blackbox-observation__head,
+  .referee-report__hero,
+  .referee-empty {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cockpit-topbar__stage-strip,
+  .detail-tabs {
+    overflow-x: auto;
+  }
+
+  .blackbox-observation__ids {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .referee-score {
+    justify-items: start;
+    padding: 12px 0 0;
+    border-top: 1px solid #dbe5f0;
+    border-left: 0;
+  }
+
+  .referee-score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

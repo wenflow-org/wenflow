@@ -134,7 +134,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
       'skill:virtual-learner-scenario-designer',
       'skill:virtual-learner-goal-dialogue-simulator',
       'skill:virtual-learner-path-evaluator',
-      'skill:virtual-learner-learn-turn-simulator'
+      'skill:virtual-learner-learn-turn-simulator',
+      'skill:virtual-learner-referee'
     ]
   },
 
@@ -416,6 +417,18 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.8, maxTokens: 1200 }
+  },
+  {
+    id: 'skill:virtual-learner-referee',
+    name: '虚拟学习者实验裁判 Skill',
+    description: '基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告',
+    category: 'simulation',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Simulation',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.2, maxTokens: 2400 }
   },
   // ============ Tool Skills（工具类，无 LLM prompt） ============
   {

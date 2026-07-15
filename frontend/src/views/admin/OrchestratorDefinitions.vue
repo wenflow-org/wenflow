@@ -534,7 +534,8 @@ const roleLabelMap: Record<string, string> = {
   'learning-path-generation': '学习路径生成',
   'path-review-reaction': '路径评估反应',
   'learn-stage-learner-turn-simulation': 'Learn 阶段学习者模拟',
-  'learning-session-execution': '学习会话执行'
+  'learning-session-execution': '学习会话执行',
+  'experiment-referee-evaluation': '实验终局旁路裁判'
 }
 
 const currentPhase = computed(() => PHASES.find((phase) => phase.id === selectedPhaseId.value) || null)

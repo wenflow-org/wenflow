@@ -17,6 +17,44 @@
       </template>
     </AdminPageHeader>
 
+    <section class="experiment-flow" aria-label="虚拟学习者实验流程">
+      <div class="experiment-flow__intro">
+        <div>
+          <span class="experiment-flow__kicker">Blackbox Virtual Lab</span>
+          <h2>从样本准备到裁判结论</h2>
+          <p>画像和 Story 决定测试输入；黑盒会话只走普通用户 API；实验结束后由旁路 Referee 生成独立报告。</p>
+        </div>
+        <el-button type="primary" @click="openCreateDialog">
+          <el-icon><Plus /></el-icon>
+          创建实验样本
+        </el-button>
+      </div>
+      <div class="experiment-flow__steps">
+        <article v-for="item in experimentSteps" :key="item.step" class="flow-step" :class="`flow-step--${item.tone}`">
+          <span class="flow-step__index">{{ item.step }}</span>
+          <div>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.desc }}</p>
+          </div>
+          <span class="flow-step__metric">{{ item.metric }}</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <article v-for="item in summaryCards" :key="item.label" class="summary-card" :class="item.tone">
+        <div class="summary-card__top">
+          <span class="summary-card__icon"><el-icon><component :is="item.icon" /></el-icon></span>
+          <span class="summary-card__label">{{ item.label }}</span>
+        </div>
+        <div class="summary-card__body">
+          <strong class="summary-card__value">{{ item.value }}</strong>
+          <span class="summary-card__helper">{{ item.helper }}</span>
+        </div>
+        <div class="summary-card__bar"><i :style="{ width: `${item.progress}%` }"></i></div>
+      </article>
+    </section>
+
     <div class="toolbar-card">
       <div class="toolbar-card__group">
         <el-input
@@ -213,12 +251,10 @@
                       </div>
                       
                       <div class="story-card__actions">
-                        <el-button type="primary" size="small" @click="openStoryDetail(row, story)">
-                          查看 Story 详情
+                        <el-button type="primary" size="small" @click="openStoryLaunch(row, story)">
+                          开始实验
                         </el-button>
-                        <el-button size="small" @click="startSessionWithStory(row, story)">
-                          快速开局
-                        </el-button>
+                        <el-button size="small" @click="openStoryDetail(row, story)">准备详情</el-button>
                       </div>
                     </article>
                   </div>
@@ -243,7 +279,7 @@
     <el-dialog
       v-model="createDialogVisible"
       :title="editingProfile ? '编辑虚拟学习者' : '新建虚拟学习者'"
-      width="640px"
+      width="min(640px, calc(100vw - 24px))"
       destroy-on-close
     >
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
@@ -321,7 +357,7 @@
     <el-drawer
       v-model="sessionDrawerVisible"
       :title="`${currentSessionProfile?.userName || ''} 的会话记录`"
-      size="620px"
+      size="min(620px, 100vw)"
       direction="rtl"
     >
       <el-table :data="currentSessions" v-loading="sessionsLoading" stripe size="small">
@@ -360,10 +396,14 @@
       </el-table>
     </el-drawer>
 
-    <el-dialog v-model="startSessionDialogVisible" title="选择开局故事" width="560px">
+    <el-dialog v-model="startSessionDialogVisible" title="启动虚拟学习者实验" width="min(640px, calc(100vw - 24px))" class="launch-dialog">
       <div class="start-session-panel">
         <div class="start-session-panel__head">
-          <strong>{{ startSessionTarget?.userName || '虚拟学习者' }}</strong>
+          <div>
+            <strong>{{ startSessionTarget?.userName || '虚拟学习者' }}</strong>
+            <p>选择 Story 和运行模式。正式稳定性测试建议使用黑盒 API。</p>
+          </div>
+          <el-tag type="info" effect="plain">{{ getStoryPool(startSessionTarget).length }} 个 Story</el-tag>
         </div>
         <div v-if="getStoryPool(startSessionTarget).length" class="start-session-story-list">
           <label
@@ -380,10 +420,41 @@
           </label>
         </div>
         <div v-else class="empty-state small">暂无故事，请先到详情页生成。</div>
+
+        <div v-if="getStoryPool(startSessionTarget).length" class="launch-options">
+          <div class="launch-option-group">
+            <span class="launch-option-group__label">运行模式</span>
+            <el-radio-group v-model="launchMode" class="launch-mode-grid">
+              <el-radio-button value="blackbox">
+                <strong>黑盒 API</strong>
+                <span>用户接口 + 旁路裁判</span>
+              </el-radio-button>
+              <el-radio-button value="assisted">
+                <strong>辅助模拟</strong>
+                <span>Legacy 调试链路</span>
+              </el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="launch-option-group">
+            <span class="launch-option-group__label">对抗预算</span>
+            <el-select v-model="launchFrictionBudget" style="width: 100%">
+              <el-option label="完全合作" value="none" />
+              <el-option label="低：轻微顾虑" value="low" />
+              <el-option label="正常：真实阻力" value="normal" />
+              <el-option label="高：压力场景" value="high" />
+              <el-option label="压测：高摩擦" value="stress_test" />
+            </el-select>
+          </div>
+          <div class="launch-contract">
+            <span>实验链路</span>
+            <strong>{{ launchMode === 'blackbox' ? 'Goal → Path → Learn → Referee' : 'Goal → Path Review → Learn → Wrapup' }}</strong>
+            <p>{{ launchMode === 'blackbox' ? '虚拟学习者只接收公开 Observation，内部诊断只供终局裁判读取。' : '用于内部调试和快速定位，不作为正式黑盒稳定性结论。' }}</p>
+          </div>
+        </div>
       </div>
       <template #footer>
         <el-button @click="startSessionDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmStartSession">{{ startSessionPrimaryActionLabel }}</el-button>
+        <el-button type="primary" :loading="launchingSession" @click="confirmStartSession">{{ startSessionPrimaryActionLabel }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -412,7 +483,8 @@ import {
 import { adminApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 
-type ProfileFilter = 'all' | 'ready' | 'needsStory' | 'running' | 'completed'
+type ProfileFilter = 'all' | 'ready' | 'needsStory' | 'running' | 'review'
+type LaunchMode = 'blackbox' | 'assisted'
 
 const PERSONA_PROFILE_TEXT_FIELDS = [
   'occupation',
@@ -484,11 +556,38 @@ const formRef = ref()
 const startSessionDialogVisible = ref(false)
 const startSessionTarget = ref<any | null>(null)
 const startSessionStoryIndex = ref(0)
+const launchMode = ref<LaunchMode>('blackbox')
+const launchFrictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
+const launchingSession = ref(false)
 const focusPanelCollapsed = ref(false)
 const expandedProfileIds = ref<Set<string>>(new Set())
 
 const startSessionPrimaryActionLabel = computed(() => {
-  return getStoryPool(startSessionTarget.value).length ? '创建会话并进入详情' : '进入详情页'
+  if (!getStoryPool(startSessionTarget.value).length) return '进入详情页'
+  return launchMode.value === 'blackbox' ? '创建黑盒实验' : '创建辅助会话'
+})
+
+const getPipelineBucket = (profile: any): Exclude<ProfileFilter, 'all'> => {
+  if (getStoryPool(profile).length === 0) return 'needsStory'
+  const sessions = profile.sessions || []
+  if (sessions.some((session: any) => session.status === 'running' || session.status === 'created')) return 'running'
+  if (sessions.some((session: any) => ['completed', 'failed', 'abandoned'].includes(session.status))) return 'review'
+  return 'ready'
+}
+
+const experimentSteps = computed(() => {
+  const counts = {
+    needsStory: profiles.value.filter(item => getPipelineBucket(item) === 'needsStory').length,
+    ready: profiles.value.filter(item => getPipelineBucket(item) === 'ready').length,
+    running: profiles.value.filter(item => getPipelineBucket(item) === 'running').length,
+    review: profiles.value.filter(item => getPipelineBucket(item) === 'review').length
+  }
+  return [
+    { step: '01', title: '准备样本', desc: '完善稳定画像和至少一个 Story。', metric: `${counts.needsStory} 待准备`, tone: 'slate' },
+    { step: '02', title: '选择 Story', desc: '固定开场、压力点和问题知识。', metric: `${counts.ready} 可运行`, tone: 'blue' },
+    { step: '03', title: '黑盒运行', desc: '通过普通用户 API 推进 Goal、Path、Learn。', metric: `${counts.running} 运行中`, tone: 'green' },
+    { step: '04', title: '裁判评审', desc: '终态后生成证据化 Referee 报告。', metric: `${counts.review} 待评审`, tone: 'amber' }
+  ]
 })
 
 const summarizeStory = (value: string, limit = 72) => {
@@ -504,20 +603,7 @@ const formRules = {
 }
 
 const profileMatchesFilter = (profile: any, filter: ProfileFilter) => {
-  const storyCount = getStoryPool(profile).length
-  const sessions = profile.sessions || []
-  switch (filter) {
-    case 'ready':
-      return storyCount > 0
-    case 'needsStory':
-      return storyCount === 0
-    case 'running':
-      return sessions.some((session: any) => session.status === 'running')
-    case 'completed':
-      return sessions.some((session: any) => session.status === 'completed')
-    default:
-      return true
-  }
+  return filter === 'all' || getPipelineBucket(profile) === filter
 }
 
 const filteredProfiles = computed(() => {
@@ -540,10 +626,10 @@ const profileFilterOptions = computed(() => {
   const getCount = (filter: ProfileFilter) => profiles.value.filter((profile: any) => profileMatchesFilter(profile, filter)).length
   return [
     { label: '全部', value: 'all' as ProfileFilter, count: getCount('all') },
-    { label: '可开局', value: 'ready' as ProfileFilter, count: getCount('ready') },
-    { label: '待补故事', value: 'needsStory' as ProfileFilter, count: getCount('needsStory') },
+    { label: '可运行', value: 'ready' as ProfileFilter, count: getCount('ready') },
+    { label: '待准备', value: 'needsStory' as ProfileFilter, count: getCount('needsStory') },
     { label: '运行中', value: 'running' as ProfileFilter, count: getCount('running') },
-    { label: '已完成', value: 'completed' as ProfileFilter, count: getCount('completed') }
+    { label: '待评审', value: 'review' as ProfileFilter, count: getCount('review') }
   ]
 })
 
@@ -1007,7 +1093,13 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (editingProfile.value) {
-      const res = await adminApi.updateVirtualLearner(editingProfile.value.id, formData.value)
+      const res = await adminApi.updateVirtualLearner(editingProfile.value.id, {
+        ...formData.value,
+        profile: {
+          ...(editingProfile.value.profile || {}),
+          ...formData.value.profile
+        }
+      })
       if (res.data?.success) {
         ElMessage.success('更新成功')
         createDialogVisible.value = false
@@ -1109,20 +1201,14 @@ const openStoryDetail = (profile: any, story: any) => {
   router.push(`/admin/virtual-learners/${profile.id}/stories/${storyId}`)
 }
 
-const startSessionWithStory = async (profile: any, story: any) => {
-  try {
-    const storyIndex = getStoryPool(profile).findIndex((s: any) => 
-      (s.storyId || s.id) === (story.storyId || story.id)
-    )
-    const response = await adminApi.startVirtualSession(profile.id, { storyIndex })
-    const sessionId = response.data?.sessionId || response.data?.id
-    if (sessionId) {
-      ElMessage.success('会话已创建')
-      router.push(`/admin/virtual-session/${sessionId}`)
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '创建会话失败')
-  }
+const openStoryLaunch = (profile: any, story: any) => {
+  startSessionTarget.value = profile
+  startSessionStoryIndex.value = Math.max(0, getStoryPool(profile).findIndex((item: any) =>
+    (item.storyId || item.id) === (story.storyId || story.id)
+  ))
+  launchMode.value = 'blackbox'
+  launchFrictionBudget.value = 'normal'
+  startSessionDialogVisible.value = true
 }
 
 const generateStoryForProfile = async (profile: any) => {
@@ -1171,6 +1257,8 @@ const getSessionStatusType = (status: string) => {
       return 'success'
     case 'completed':
       return 'info'
+    case 'abandoned':
+      return 'warning'
     case 'failed':
       return 'danger'
     default:
@@ -1186,6 +1274,8 @@ const getSessionStatusLabel = (status: string) => {
       return '运行中'
     case 'completed':
       return '已完成'
+    case 'abandoned':
+      return '已放弃'
     case 'failed':
       return '失败'
     default:
@@ -1236,6 +1326,8 @@ const goToSession = (sessionId: string) => {
 const openStartSessionDialog = (profile: any) => {
   startSessionTarget.value = profile
   startSessionStoryIndex.value = 0
+  launchMode.value = 'blackbox'
+  launchFrictionBudget.value = 'normal'
   startSessionDialogVisible.value = true
 }
 
@@ -1250,15 +1342,26 @@ const confirmStartSession = async () => {
     return
   }
 
+  launchingSession.value = true
   try {
-    const res = await adminApi.startVirtualSession(startSessionTarget.value.id, { storyId: story.id, storyIndex: startSessionStoryIndex.value })
-    if (res.data?.success) {
-      ElMessage.success('已创建会话，进入详情页')
-      startSessionDialogVisible.value = false
-      router.push(`/admin/virtual-learners/${startSessionTarget.value.id}?sessionId=${res.data.data?.id}`)
+    const payload = {
+      storyId: story.storyId || story.id,
+      storyIndex: startSessionStoryIndex.value,
+      frictionBudget: launchFrictionBudget.value
     }
+    const res = launchMode.value === 'blackbox'
+      ? await adminApi.startBlackboxVirtualSession(startSessionTarget.value.id, payload)
+      : await adminApi.startVirtualSession(startSessionTarget.value.id, payload)
+    const created = res.data?.data || res.data
+    const sessionId = created?.id || created?.sessionId
+    if (!res.data?.success || !sessionId) throw new Error(res.data?.error || '会话创建成功但未返回 sessionId')
+    ElMessage.success(launchMode.value === 'blackbox' ? '黑盒实验已创建' : '辅助会话已创建')
+    startSessionDialogVisible.value = false
+    router.push(`/admin/virtual-session/${sessionId}`)
   } catch (error: any) {
-    ElMessage.error(error.message || '启动失败')
+    ElMessage.error(error.response?.data?.error || error.message || '启动失败')
+  } finally {
+    launchingSession.value = false
   }
 }
 
@@ -1331,12 +1434,125 @@ watch(filteredProfiles, () => {
 }
 
 .page-header,
+.experiment-flow,
 .summary-grid,
 .toolbar-card,
 .page-shell {
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
+}
+
+.experiment-flow {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #dce5f0;
+  border-radius: 14px;
+  background:
+    linear-gradient(120deg, rgba(28, 65, 110, 0.98), rgba(37, 82, 132, 0.96)),
+    #234f82;
+  color: #f7fbff;
+  box-shadow: 0 18px 40px rgba(31, 65, 108, 0.16);
+}
+
+.experiment-flow__intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.experiment-flow__intro h2,
+.experiment-flow__intro p {
+  margin: 0;
+}
+
+.experiment-flow__intro h2 {
+  margin-top: 5px;
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.experiment-flow__intro p {
+  max-width: 720px;
+  margin-top: 8px;
+  color: rgba(235, 244, 255, 0.76);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.experiment-flow__kicker {
+  color: #8ec8ff;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.experiment-flow__steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(218, 235, 255, 0.18);
+}
+
+.flow-step {
+  --flow-accent: #b7c7d8;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 16px 2px 0;
+}
+
+.flow-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 18px;
+  right: 12px;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid rgba(224, 239, 255, 0.5);
+  border-right: 1px solid rgba(224, 239, 255, 0.5);
+  transform: rotate(45deg);
+}
+
+.flow-step--blue { --flow-accent: #86bdff; }
+.flow-step--green { --flow-accent: #6ed7bf; }
+.flow-step--amber { --flow-accent: #ffc77d; }
+
+.flow-step__index {
+  color: var(--flow-accent);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.flow-step strong {
+  display: block;
+  font-size: 13px;
+}
+
+.flow-step p {
+  margin: 4px 0 0;
+  color: rgba(235, 244, 255, 0.64);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.flow-step__metric {
+  grid-column: 2;
+  width: fit-content;
+  margin-top: 8px;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--flow-accent) 44%, transparent);
+  border-radius: 999px;
+  color: var(--flow-accent);
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .lab-main {
@@ -1882,6 +2098,87 @@ watch(filteredProfiles, () => {
 .story-card__actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.launch-options,
+.launch-option-group {
+  display: grid;
+  gap: 10px;
+}
+
+.launch-options {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid #e6ebf2;
+}
+
+.launch-option-group__label {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.launch-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.launch-mode-grid :deep(.el-radio-button) {
+  width: 100%;
+}
+
+.launch-mode-grid :deep(.el-radio-button__inner) {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 66px;
+  padding: 12px 14px;
+  border: 1px solid #dfe7f1 !important;
+  border-radius: 9px !important;
+  box-shadow: none !important;
+  text-align: left;
+}
+
+.launch-mode-grid :deep(.el-radio-button__inner strong),
+.launch-mode-grid :deep(.el-radio-button__inner span) {
+  display: block;
+}
+
+.launch-mode-grid :deep(.el-radio-button__inner span) {
+  color: #7a8597;
+  font-size: 11px;
+}
+
+.launch-mode-grid :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  border-color: #3478f6 !important;
+  background: #eef5ff;
+  color: #1f5dbb;
+}
+
+.launch-contract {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border-left: 3px solid #3478f6;
+  background: #f7faff;
+}
+
+.launch-contract span,
+.launch-contract p {
+  color: #667085;
+  font-size: 11px;
+}
+
+.launch-contract p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.launch-contract strong {
+  color: #1f2937;
+  font-size: 13px;
 }
 
 .profile-card {
@@ -2556,7 +2853,16 @@ watch(filteredProfiles, () => {
 
 @media (max-width: 1080px) {
   .toolbar-card {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .experiment-flow__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flow-step:nth-child(2)::after {
+    display: none;
   }
 
   .toolbar-card__group,
@@ -2589,6 +2895,40 @@ watch(filteredProfiles, () => {
 
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .experiment-flow {
+    padding: 16px;
+  }
+
+  .experiment-flow__intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .experiment-flow__steps,
+  .launch-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-step::after {
+    display: none;
+  }
+
+  .profile-accordion-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .profile-accordion-header__left {
+    max-width: none;
+    width: 100%;
+  }
+
+  .profile-accordion-header__right {
+    width: 100%;
+    flex-wrap: wrap;
   }
 
   .profile-card {

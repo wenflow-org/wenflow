@@ -106,6 +106,10 @@ import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './
 export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './virtual-learner-learn-turn-simulator';
 
+// 虚拟学习者实验旁路裁判
+export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
+import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-learner-referee';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -144,6 +148,7 @@ import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-perso
 import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
 import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
+import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
 import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
@@ -170,6 +175,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerGoalDialogueSimulatorDefinition,
   virtualLearnerPathEvaluatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
+  virtualLearnerRefereeDefinition,
   structuredOutputParserDefinition,
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
@@ -259,6 +265,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,
   'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
+  'virtual-learner-referee': virtualLearnerRefereeFn,
   'structured-output-parser': structuredOutputParserFn,
   'goal-understanding-composer': goalUnderstandingComposerFn,
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
@@ -427,6 +434,8 @@ async function recordSkillSpan(
           parentSkillId: ctx.skillId || null,
           actorType: 'skill',
           actorId: skillId,
+          experimentId: ctx.experimentId || null,
+          runId: ctx.runId || null,
         }),
       },
     });

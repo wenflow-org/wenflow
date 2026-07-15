@@ -14,6 +14,10 @@
       <el-icon><CircleCheckFilled /></el-icon>
       <span>会话已完成</span>
     </div>
+    <div v-else-if="status === 'abandoned'" class="control-panel__notice control-panel__notice--warning">
+      <el-icon><WarningFilled /></el-icon>
+      <span>学习者已结束本次实验</span>
+    </div>
 
     <!-- 主动作: 单步 / 全自动 / 停止 -->
     <div class="control-panel__main-actions">
@@ -155,6 +159,7 @@ const props = defineProps<{
   loadingStep?: boolean
   loadingAuto?: boolean
   loadingBridge?: boolean
+  blackboxMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -185,6 +190,7 @@ const statusTagType = computed(() => {
     case 'running': return 'primary'
     case 'completed': return 'success'
     case 'failed': return 'danger'
+    case 'abandoned': return 'warning'
     default: return 'info'
   }
 })
@@ -195,28 +201,31 @@ const statusLabel = computed(() => {
     case 'running': return '运行中'
     case 'completed': return '已完成'
     case 'failed': return '失败'
+    case 'abandoned': return '已放弃'
     default: return props.status || '未知'
   }
 })
 
 const canStep = computed(() => {
-  if (props.status === 'completed' || props.status === 'failed') return false
+  if (['completed', 'failed', 'abandoned'].includes(props.status)) return false
+  if (props.blackboxMode) return ['goal', 'path', 'learning'].includes(props.currentStage)
   if (props.currentStage === 'goal') return !props.goalReady
   if (props.currentStage === 'learning') return true
   return false
 })
 
 const canAuto = computed(() => {
-  if (props.status === 'completed' || props.status === 'failed') return false
+  if (props.blackboxMode || ['completed', 'failed', 'abandoned'].includes(props.status)) return false
   if (props.currentStage === 'goal') return !props.goalReady
   if (props.currentStage === 'learning') return true
   return false
 })
 
-const canStop = computed(() => props.currentStage === 'learning' && props.status === 'running')
+const canStop = computed(() => !props.blackboxMode && props.currentStage === 'learning' && props.status === 'running')
 
 const stepHint = computed(() => {
   if (props.currentStage === 'goal') return '一轮 Goal 对话'
+  if (props.blackboxMode && props.currentStage === 'path') return '评审或刷新 Path'
   if (props.currentStage === 'learning') return '一轮教学'
   return '当前阶段不可单步'
 })
@@ -232,6 +241,7 @@ const canResetLearn = computed(() => props.learningStarted || props.status === '
 
 const bridgeActions = computed(() => {
   const list: Array<{ action: string; label: string; enabled: boolean; type: string }> = []
+  if (props.blackboxMode) return list
   if (props.currentStage === 'goal' || (props.currentStage === 'path' && !props.pathReady)) {
     list.push({
       action: 'advancePath',

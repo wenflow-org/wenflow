@@ -955,8 +955,20 @@ draftVirtualLearnerStories: async (id: string) => {
     return adminAxios.delete(`/admin/virtual-learners/${id}`);
   },
 
-  startVirtualSession: async (profileId: string, data?: { storyId?: string; storyIndex?: number }) => {
+  startVirtualSession: async (profileId: string, data?: {
+    storyId?: string;
+    storyIndex?: number;
+    frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+  }) => {
     return adminAxios.post(`/admin/virtual-learners/${profileId}/start-session`, data || {});
+  },
+
+  startBlackboxVirtualSession: async (profileId: string, data?: {
+    storyId?: string;
+    storyIndex?: number;
+    frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
+  }) => {
+    return adminAxios.post(`/admin/virtual-learners/${profileId}/start-blackbox-session`, data || {});
   },
 
   getVirtualSession: async (sessionId: string) => {
@@ -985,6 +997,26 @@ draftVirtualLearnerStories: async (id: string) => {
 
   virtualSessionStep: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/step`);
+  },
+
+  blackboxVirtualSessionStep: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-step`);
+  },
+
+  executeBlackboxVirtualAction: async (sessionId: string, action: any) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-action`, action);
+  },
+
+  observeBlackboxVirtualSession: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-observe`);
+  },
+
+  getBlackboxVirtualSnapshot: async (sessionId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/blackbox-snapshot`);
+  },
+
+  generateBlackboxRefereeReport: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-referee`);
   },
 
   virtualSessionAuto: async (sessionId: string, data?: { maxRounds?: number }) => {

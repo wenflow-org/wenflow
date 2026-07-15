@@ -419,9 +419,39 @@ router.get('/paths/:pathId', async (req, res, next) => {
       });
     }
 
+    const responsePath = req.user?.projection?.grantSource === 'synthetic'
+      ? {
+          id: path.id,
+          title: path.title,
+          name: path.name,
+          summary: path.summary || null,
+          description: path.description,
+          subject: path.subject,
+          difficulty: path.difficulty,
+          estimatedHours: path.estimatedHours,
+          status: path.status,
+          canStartLearning: path.canStartLearning,
+          learningBlockedReason: path.learningBlockedReason || null,
+          milestones: (path.milestones || []).map((milestone: any) => ({
+            id: milestone.id,
+            stageNumber: milestone.stageNumber,
+            title: milestone.title,
+            description: milestone.description,
+            subtasks: (milestone.subtasks || []).map((task: any) => ({
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              order: task.order
+            }))
+          })),
+          schemaVersion: 'synthetic-user-v1'
+        }
+      : path;
+
     res.json({
       success: true,
-      data: path
+      data: responsePath
     });
   } catch (error: any) {
     if (error.message === '学习路径不存在') {
@@ -625,7 +655,14 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: result
+      data: req.user?.projection?.grantSource === 'synthetic'
+        ? {
+            status: result?.status || null,
+            enabled: result?.enabled === true,
+            pathId,
+            schemaVersion: 'synthetic-user-v1'
+          }
+        : result
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -767,13 +804,28 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: task
+      data: req.user?.projection?.grantSource === 'synthetic'
+        ? {
+            id: task.task?.id || taskId,
+            status: task.task?.status || 'completed',
+            completedAt: task.task?.completedAt || null,
+            alreadyCompleted: task.alreadyCompleted === true,
+            schemaVersion: 'synthetic-user-v1'
+          }
+        : task
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
       return res.status(400).json({
         success: false,
         error: { message: '数据验证失败', details: error.errors }
+      });
+    }
+
+    if (error.message === '无权访问此任务') {
+      return res.status(403).json({
+        success: false,
+        error: { message: error.message }
       });
     }
 

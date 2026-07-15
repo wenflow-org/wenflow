@@ -49,6 +49,35 @@ behavior:
     - 约束描述
 ```
 
+以下 JSON 仅作为平台字段映射，实际输入仍使用上面的 YAML：
+
+```json
+{
+  "meta": {
+    "id": "string",
+    "name": "string",
+    "archetype": "conversational|generator|extractor|distiller"
+  },
+  "structure": {
+    "variables": [
+      {
+        "name": "string",
+        "type": "string|number|object|array",
+        "description": "string"
+      }
+    ],
+    "output": {
+      "format": "json|markdown|text",
+      "schema": "object"
+    }
+  },
+  "behavior": {
+    "key_behaviors": ["string"],
+    "constraints": ["string"]
+  }
+}
+```
+
 ## 输出格式
 
 你需要生成一个完整的 Markdown Prompt，包含以下章节：

@@ -6,6 +6,7 @@ export const PLATFORM_CHAIN_SKILLS = [
   'virtual-learner-goal-dialogue-simulator',
   'virtual-learner-path-evaluator',
   'virtual-learner-learn-turn-simulator',
+  'virtual-learner-referee',
   'adaptive-guidance-copy',
   'goal-profile-inference',
   'learning-pattern-distiller',

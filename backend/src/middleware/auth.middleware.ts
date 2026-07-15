@@ -3,7 +3,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
-import { verifyProjectionToken } from '../utils/projection-token';
+import { ProjectionGrantSource, SyntheticCapability, verifyProjectionToken } from '../utils/projection-token';
+import { enforceSyntheticProjectionAccess } from './synthetic-projection.middleware';
 
 interface JwtPayload {
   userId: string;
@@ -23,12 +24,15 @@ declare global {
           targetUserId: string;
           sourceProfileId?: string | null;
           issuedByAdminId: string;
-          grantSource?: 'virtual-learner' | 'access-grant';
+          grantSource?: ProjectionGrantSource;
           grantId?: string | null;
           storyId?: string | null;
           virtualSessionId?: string | null;
           scope?: string;
           scopeDefinition?: string | null;
+          capabilities?: SyntheticCapability[];
+          experimentId?: string | null;
+          runId?: string | null;
         };
       };
     }
@@ -98,9 +102,12 @@ export const authMiddleware = async (
           virtualSessionId: projection.virtualSessionId || null,
           scope: projection.scope,
           scopeDefinition: projection.scopeDefinition || null,
+          capabilities: projection.capabilities || [],
+          experimentId: projection.experimentId || null,
+          runId: projection.runId || null,
         }
       };
-      next();
+      enforceSyntheticProjectionAccess(req, res, next);
       return;
     }
 
@@ -137,7 +144,7 @@ export const authMiddleware = async (
       });
     }
 
-    if (error.name === 'JsonWebTokenError') {
+    if (error.name === 'JsonWebTokenError' || String(error.message || '').includes('token') || String(error.message || '').includes('capability')) {
       return res.status(401).json({
         success: false,
         error: { message: '无效的Token' }

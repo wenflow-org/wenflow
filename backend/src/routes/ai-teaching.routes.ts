@@ -51,8 +51,9 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         topic: session.topic,
         startTime: session.startTime,
         welcomeMessage: session.welcomeMessage,
-        opening: session.opening,
+        opening: req.user?.projection?.grantSource === 'synthetic' ? undefined : session.opening,
         mode: session.mode,
+        ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
       },
     });
   } catch (error: any) {
@@ -146,6 +147,20 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
       message
     );
 
+    if (req.user?.projection?.grantSource === 'synthetic') {
+      return res.json({
+        success: true,
+        data: {
+          aiResponse: result.aiResponse,
+          autoEnded: result.autoEnded === true,
+          shouldConfirmEnd: result.shouldConfirmEnd === true,
+          wrapup: result.autoEnded === true ? result.wrapup || null : null,
+          peerMessage: result.peerTriggered ? result.peerMessage || null : null,
+          schemaVersion: 'synthetic-user-v1'
+        }
+      });
+    }
+
     res.json({
       success: true,
       data: {
@@ -201,7 +216,10 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
     
     await teachingSessionRepository.assertOwnership(sessionId, userId);
     
-    const result = await aiTeachingCoordinator.endSession(sessionId);
+    const endReason = req.body?.reason === 'learner-abandoned'
+      ? 'learner-abandoned'
+      : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end';
+    const result = await aiTeachingCoordinator.endSession(sessionId, endReason);
 
     res.json({
       success: true,

@@ -22,7 +22,7 @@ maxTokens: 1200
   "learner": "学习者稳定画像对象",
   "story": "当前故事触发面对象",
   "visibleContext": "学习者本人能看到的可见对话上下文",
-  "currentPhase": "understanding|proposing|ready",
+  "currentPhase": "opening|understanding|proposal_evaluation",
   "previousLearnerState": "上一轮学习者主观状态对象",
   "friction": "本轮对抗预算对象 (budget/triggerProbability/guidance)",
   "personaAnchorHint": "persona 字段优先级提示对象"

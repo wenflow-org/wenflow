@@ -13,7 +13,7 @@ import { SkillRegistry } from './registries/skill-registry';
 import { SignalRegistry } from './registries/signal-registry';
 import { StrategyRegistry } from './registries/strategy-registry';
 import { getAPIGateway } from './api-gateway';
-import { runWithContext } from './api-gateway/context';
+import { getRequestContext, runWithContext } from './api-gateway/context';
 import { logger } from '../utils/logger';
 import {
   AgentInput,
@@ -211,6 +211,7 @@ export class EduClawGateway {
       
       const rawOutput = await Promise.race([
         runWithContext({
+          ...getRequestContext(),
           userId: request.context.userId,
           agentId: request.agentId,
           action: 'execute',

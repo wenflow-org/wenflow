@@ -37,6 +37,12 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
       traceId: req.headers['x-trace-id'] as string || generateTraceId(),
       callerAgent: req.headers['x-caller-agent'] as string,
       userRole: (req as any).user?.role || 'user',
+      experimentId: req.user?.projection?.grantSource === 'synthetic'
+        ? req.user.projection.experimentId || undefined
+        : undefined,
+      runId: req.user?.projection?.grantSource === 'synthetic'
+        ? req.user.projection.runId || undefined
+        : undefined,
     };
     
     requestContextStorage.run(context, () => {

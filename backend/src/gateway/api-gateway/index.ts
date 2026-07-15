@@ -30,6 +30,8 @@ export class APIGateway {
       sourceEntry: context?.sourceEntry || requestContext.sourceEntry,
       callerAgent: context?.callerAgent || caller.agentId || requestContext.callerAgent,
       userRole: context?.userRole || requestContext.userRole,
+      experimentId: context?.experimentId || requestContext.experimentId,
+      runId: context?.runId || requestContext.runId,
       ...context
     };
     
