@@ -4,6 +4,14 @@
     <!-- 顶部栏 -->
     <header class="admin-header">
       <div class="admin-header__brand">
+        <el-button
+          class="admin-header__menu"
+          text
+          aria-label="打开后台导航"
+          @click="mobileNavOpen = true"
+        >
+          <el-icon><Menu /></el-icon>
+        </el-button>
         <img src="/logo.png" alt="" class="admin-header__logo" />
         <span class="admin-header__title">管理后台</span>
       </div>
@@ -30,15 +38,22 @@
     </header>
 
     <div class="admin-layout">
+      <button
+        v-if="mobileNavOpen"
+        class="admin-sidebar__backdrop"
+        type="button"
+        aria-label="关闭后台导航"
+        @click="mobileNavOpen = false"
+      ></button>
       <!-- 侧边栏 -->
-      <aside class="admin-sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <aside class="admin-sidebar" :class="{ collapsed: sidebarCollapsed, 'mobile-open': mobileNavOpen }">
         <nav class="admin-sidebar__nav">
           <section
             v-for="group in navGroups"
             :key="group.title"
             class="admin-sidebar__group"
           >
-            <div class="admin-sidebar__group-head" v-show="!sidebarCollapsed">
+            <div class="admin-sidebar__group-head">
               <span class="admin-sidebar__group-title">{{ group.title }}</span>
             </div>
 
@@ -49,9 +64,12 @@
               v-bind="item.external ? { href: item.to, target: '_blank' } : { to: item.to }"
               class="admin-sidebar__item admin-sidebar__item--secondary"
               :class="item.external ? null : { active: isActiveRoute(item.to) }"
+              :aria-label="item.label"
+              :title="item.label"
+              @click="mobileNavOpen = false"
             >
               <el-icon><component :is="item.icon" /></el-icon>
-              <span v-show="!sidebarCollapsed">{{ item.external ? `${item.label}（新开）` : item.label }}</span>
+              <span>{{ item.label }}</span>
             </component>
           </section>
         </nav>
@@ -73,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { toast } from '../../utils/toast';
 import {
@@ -90,6 +108,7 @@ import {
   Tickets,
   Document,
   EditPen,
+  Menu,
 } from '@element-plus/icons-vue';
 
 interface NavItem {
@@ -110,6 +129,7 @@ const isTestRoute = computed(() => route.path.startsWith('/admin/test/'));
 
 const currentUser = ref<any>(null);
 const sidebarCollapsed = ref(false);
+const mobileNavOpen = ref(false);
 
 // 侧边栏状态持久化
 onMounted(() => {
@@ -131,6 +151,10 @@ const toggleSidebar = () => {
   localStorage.setItem('admin-sidebar-collapsed', String(sidebarCollapsed.value));
 };
 
+watch(() => route.fullPath, () => {
+  mobileNavOpen.value = false;
+});
+
 const isActiveRoute = (path: string) => {
   if (path === '/admin/dashboard') {
     return route.path === '/admin/dashboard';
@@ -141,7 +165,11 @@ const isActiveRoute = (path: string) => {
   }
 
   if (path === '/admin/virtual-learners') {
-    return route.path === '/admin/virtual-learners' || route.path.startsWith('/admin/virtual-session/');
+    return route.path.startsWith('/admin/virtual-learners') || route.path.startsWith('/admin/virtual-session/');
+  }
+
+  if (path === '/admin/learner-center') {
+    return route.path.startsWith('/admin/learner-center') || route.path.startsWith('/admin/learner-models');
   }
 
   return route.path.startsWith(path);
@@ -167,7 +195,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/admin/skills', label: 'Skill 目录', icon: Grid },
       { to: '/admin/agents/topology', label: 'Agent 拓扑', icon: Connection },
-      { to: '/admin/orchestrator-definitions', label: '编排架构', icon: Connection },
+      { to: '/admin/orchestrator-definitions', label: '编排结构', icon: Connection },
     ],
   },
   {
@@ -189,7 +217,7 @@ const navGroups: NavGroup[] = [
     title: '调试',
     items: [
       { to: '/admin/prompt-lab', label: 'Prompt 发布', icon: EditPen },
-      { to: '/admin/test/dashboard', label: '开发调试站', icon: Tickets, external: true },
+      { to: '/admin/test/dashboard', label: '测试学习台', icon: Tickets, external: true },
     ],
   },
 ];
@@ -236,6 +264,13 @@ const handleLogout = () => {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.admin-header__menu {
+  display: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
 }
 
 .admin-header__logo {
@@ -317,6 +352,11 @@ const handleLogout = () => {
 
 .admin-sidebar.collapsed {
   width: var(--sidebar-collapsed-width, 64px);
+}
+
+.admin-sidebar.collapsed .admin-sidebar__group-head,
+.admin-sidebar.collapsed .admin-sidebar__item span {
+  display: none;
 }
 
 .admin-sidebar__nav {
@@ -427,6 +467,10 @@ const handleLogout = () => {
   font-size: 1.125rem;
 }
 
+.admin-sidebar__backdrop {
+  display: none;
+}
+
 /* ========== 主内容区 ========== */
 .admin-main {
   padding: 24px 28px 28px;
@@ -472,8 +516,68 @@ const handleLogout = () => {
 }
 
 @media (max-width: 768px) {
+  .admin-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .admin-header {
     padding: 0 12px;
+  }
+
+  .admin-header__menu {
+    display: inline-flex;
+  }
+
+  .admin-header__logo {
+    height: 42px;
+  }
+
+  .admin-sidebar,
+  .admin-sidebar.collapsed {
+    position: fixed;
+    z-index: 120;
+    top: 56px;
+    bottom: 0;
+    left: 0;
+    width: min(82vw, 300px);
+    height: calc(100dvh - 56px);
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+    box-shadow: var(--admin-shadow-sticky);
+  }
+
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar .admin-sidebar__group-title,
+  .admin-sidebar .admin-sidebar__item span,
+  .admin-sidebar.collapsed .admin-sidebar__group-head,
+  .admin-sidebar.collapsed .admin-sidebar__item span {
+    display: block;
+  }
+
+  .admin-sidebar__nav {
+    padding: 0 12px;
+  }
+
+  .admin-sidebar__item {
+    min-height: 44px;
+  }
+
+  .admin-sidebar__toggle {
+    display: none;
+  }
+
+  .admin-sidebar__backdrop {
+    display: block;
+    position: fixed;
+    z-index: 119;
+    inset: 56px 0 0;
+    width: 100%;
+    border: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(2px);
   }
 
   .admin-main {

@@ -2,7 +2,7 @@
   <el-drawer
     v-model="localVisible"
     :title="`Skill 概况 · ${skillDisplayName}`"
-    size="min(56%, 760px)"
+    size="min(calc(100vw - 24px), 760px)"
     destroy-on-close
     class="skill-quickview-drawer"
   >
@@ -10,9 +10,7 @@
       <template v-if="meta">
         <header class="quickview-head">
           <div class="quickview-head__copy">
-            <span class="quickview-eyebrow">当前状态</span>
-            <h2>{{ skillDisplayName }}</h2>
-            <p>{{ meta.skill.description || '用于当前编排链路的 Skill 节点。' }}</p>
+            <p v-if="meta.skill.description">{{ meta.skill.description }}</p>
           </div>
           <div class="quickview-head__meta">
             <el-tag size="small" :type="healthTagType">{{ healthLabel }}</el-tag>
@@ -44,7 +42,6 @@
         <section class="quickview-section">
           <div class="quickview-section__head">
             <h3>最终执行值</h3>
-            <span>{{ runtimeSourceLabel }}</span>
           </div>
 
           <dl class="quickview-spec-list">
@@ -75,20 +72,12 @@
           </dl>
         </section>
 
-        <section class="quickview-section">
+        <section v-if="activePrompt?.name || activePrompt?.model || activePrompt?.temperature != null || activePrompt?.maxTokens != null" class="quickview-section">
           <div class="quickview-section__head">
-            <h3>版本摘要</h3>
-            <span>{{ promptVersions.length }} 条</span>
+            <h3>版本参数</h3>
           </div>
 
-          <div v-if="activePrompt" class="quickview-version-list">
-            <div class="quickview-version-row">
-              <span class="quickview-version-row__label">当前生效</span>
-              <strong>{{ activePromptVersion }}</strong>
-              <div class="quickview-version-row__meta">
-                <el-tag size="small" :type="promptStatusTagType(activePrompt.status)">{{ activePromptStatusLabel }}</el-tag>
-              </div>
-            </div>
+          <div class="quickview-version-list">
             <div v-if="activePrompt.name" class="quickview-version-row quickview-version-row--muted">
               <span class="quickview-version-row__label">名称</span>
               <strong>{{ activePrompt.name }}</strong>
@@ -98,7 +87,6 @@
               <strong>{{ versionParamsLabel }}</strong>
             </div>
           </div>
-          <el-empty v-else description="未找到版本信息" :image-size="54" />
         </section>
 
         <section class="quickview-section quickview-section--actions">
@@ -243,14 +231,6 @@ const versionParamsLabel = computed(() => {
   if (activePrompt.value.maxTokens != null) parts.push(`Max=${activePrompt.value.maxTokens}`)
   return parts.join(' | ') || '--'
 })
-
-const promptStatusTagType = (status?: string | null) => {
-  const normalized = (status || '').toUpperCase()
-  if (normalized === 'ACTIVE') return 'success'
-  if (normalized === 'DRAFT') return 'warning'
-  if (normalized === 'ARCHIVED') return 'info'
-  return 'info'
-}
 
 const formatThinkingMode = (value?: string | null) => {
   if (value === 'enabled') return '开启'
@@ -511,6 +491,20 @@ watch(() => props.skillId, (value) => {
   :deep(.quickview-spec-row) {
     padding-left: 0;
     padding-right: 0;
+  }
+
+  :deep(.skill-quickview-drawer .el-drawer__body) {
+    padding: 0 16px 20px;
+  }
+
+  :deep(.quickview-actions) {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  :deep(.quickview-actions .el-button) {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>

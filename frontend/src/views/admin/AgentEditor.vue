@@ -56,11 +56,15 @@
               <span class="k">温度</span>
               <span class="v">{{ workbenchMeta.modelConfig.temperature }}</span>
             </span>
-            <span v-if="currentAgent.drift === 'file-vs-db-mismatch'" class="ed-meta-chip ed-meta-chip--warn">
-              File ↔ DB 漂移
+            <span
+              v-if="currentAgent.drift === 'file-vs-db-mismatch'"
+              class="ed-meta-chip ed-meta-chip--warn"
+              title="源文件与当前运行版本不一致"
+            >
+              版本不一致
             </span>
-            <span v-if="currentAgent.tsFallback" class="ed-meta-chip ed-meta-chip--warn">
-              .ts 兜底
+            <span v-if="currentAgent.tsFallback" class="ed-meta-chip ed-meta-chip--warn" title="未命中 Prompt 时会使用代码中的兜底内容">
+              代码兜底
             </span>
           </div>
         </div>
@@ -109,7 +113,7 @@
         class="drift-warning"
       >
         <template #title>
-          <strong>File / DB Prompt 不一致</strong>
+          <strong>源文件与运行 Prompt 不一致</strong>
         </template>
         <div class="drift-warning__content">
           <code>{{ currentAgent.file?.path || 'prompts/skill.*.md' }}</code>
@@ -143,12 +147,9 @@
       v-model="protocolDrawerVisible"
       title="协议视图（只读）"
       direction="rtl"
-      size="640px"
+      size="min(100vw, 640px)"
     >
       <div v-if="protocolView" class="protocol-drawer">
-        <p class="protocol-drawer__intro">
-          阶段间契约形态（只读）
-        </p>
         <article
           v-for="proto in protocolView.protocols"
           :key="proto.id"
@@ -208,7 +209,7 @@
       v-model="rulesDrawerVisible"
       title="Skill 规则总览"
       direction="rtl"
-      size="720px"
+      size="min(100vw, 720px)"
     >
       <div v-if="rulesOverview" class="rules-overview">
         <div class="rules-overview__summary">
@@ -848,28 +849,11 @@ onMounted(async () => {
 /* ============ Drawer styles (复用列表页) ============ */
 .protocol-drawer {
   padding: 0 8px;
-}
-
-.protocol-drawer__intro {
-  color: #62758f;
-  line-height: 1.7;
-  font-size: 13px;
-  background: #f8fafc;
-  padding: 12px 14px;
-  border-radius: 10px;
-  margin-bottom: 16px;
-}
-
-.protocol-drawer__intro code {
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11.5px;
-  background: rgba(52, 120, 246, 0.08);
-  color: #1d4ed8;
-  padding: 1px 5px;
-  border-radius: 3px;
+  min-width: 0;
 }
 
 .protocol-block {
+  min-width: 0;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 14px 16px;
@@ -925,6 +909,17 @@ onMounted(async () => {
   margin-bottom: 8px;
 }
 
+.protocol-block__details,
+.protocol-block__file,
+.protocol-block__call-sites {
+  min-width: 0;
+}
+
+.protocol-block__file code,
+.protocol-block__call-sites code {
+  overflow-wrap: anywhere;
+}
+
 .protocol-block__file {
   margin: 6px 0;
   font-size: 11px;
@@ -943,6 +938,7 @@ onMounted(async () => {
 
 .protocol-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   margin: 8px 0;
   font-size: 12px;
@@ -965,6 +961,7 @@ onMounted(async () => {
   border-bottom: 1px solid #f1f5f9;
   color: #334155;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .req {
@@ -1012,11 +1009,12 @@ onMounted(async () => {
 /* Rules drawer */
 .rules-overview {
   padding: 0 8px;
+  min-width: 0;
 }
 
 .rules-overview__summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -1110,7 +1108,7 @@ onMounted(async () => {
 
 .rules-row {
   display: grid;
-  grid-template-columns: 86px 1fr auto;
+  grid-template-columns: 86px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
   padding: 6px 8px;
@@ -1135,6 +1133,7 @@ onMounted(async () => {
 
 .rules-row__text {
   color: #334155;
+  min-width: 0;
   word-break: break-word;
 }
 
@@ -1161,11 +1160,88 @@ onMounted(async () => {
 }
 
 @media (max-width: 900px) {
+  .agent-editor-page {
+    padding: 12px;
+  }
+
   .ed-head {
     grid-template-columns: 1fr;
   }
+
+  .ed-head__left {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ed-title-row {
+    flex-wrap: wrap;
+  }
+
+  .ed-title {
+    white-space: normal;
+  }
+
   .ed-head__right {
-    justify-content: flex-end;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ed-pills {
+    width: 100%;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .ed-pill {
+    min-height: 44px;
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .ed-body {
+    padding: 16px;
+  }
+
+  .protocol-drawer,
+  .rules-overview {
+    padding: 0;
+  }
+
+  .protocol-table {
+    display: block;
+  }
+
+  .protocol-table thead {
+    display: none;
+  }
+
+  .protocol-table tbody,
+  .protocol-table tr,
+  .protocol-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .protocol-table tr {
+    padding: 10px 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .protocol-table td {
+    padding: 3px 0;
+    border-bottom: 0;
+  }
+
+  .rules-overview__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rules-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rules-row__jump {
+    min-height: 44px;
   }
 }
 </style>

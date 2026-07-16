@@ -14,32 +14,23 @@
           <el-icon><Refresh /></el-icon>
           刷新数据
         </el-button>
+        <el-popover placement="bottom-end" :width="440" trigger="click">
+          <template #reference>
+            <el-button>实验说明</el-button>
+          </template>
+          <div class="experiment-guide">
+            <strong>实验流程</strong>
+            <p>正式稳定性测试使用黑盒 API；实验结束后由旁路裁判生成独立报告。</p>
+            <ol>
+              <li v-for="item in experimentSteps" :key="item.step">
+                <span>{{ item.title }}</span>
+                <small>{{ item.desc }}</small>
+              </li>
+            </ol>
+          </div>
+        </el-popover>
       </template>
     </AdminPageHeader>
-
-    <section class="experiment-flow" aria-label="虚拟学习者实验流程">
-      <div class="experiment-flow__intro">
-        <div>
-          <span class="experiment-flow__kicker">Blackbox Virtual Lab</span>
-          <h2>从样本准备到裁判结论</h2>
-          <p>画像和 Story 决定测试输入；黑盒会话只走普通用户 API；实验结束后由旁路 Referee 生成独立报告。</p>
-        </div>
-        <el-button type="primary" @click="openCreateDialog">
-          <el-icon><Plus /></el-icon>
-          创建实验样本
-        </el-button>
-      </div>
-      <div class="experiment-flow__steps">
-        <article v-for="item in experimentSteps" :key="item.step" class="flow-step" :class="`flow-step--${item.tone}`">
-          <span class="flow-step__index">{{ item.step }}</span>
-          <div>
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.desc }}</p>
-          </div>
-          <span class="flow-step__metric">{{ item.metric }}</span>
-        </article>
-      </div>
-    </section>
 
     <section class="summary-grid">
       <article v-for="item in summaryCards" :key="item.label" class="summary-card" :class="item.tone">
@@ -123,7 +114,7 @@
           <div v-if="loading" class="empty-state">正在加载虚拟学习者...</div>
           <div v-else-if="filteredProfiles.length === 0" class="empty-state">无匹配虚拟学习者</div>
           <div v-else class="profile-accordion">
-            <template v-for="(group, groupIndex) in pagedProfilesGrouped" :key="group.initial">
+            <template v-for="group in pagedProfilesGrouped" :key="group.initial">
               <div v-if="filteredProfiles.length > 20" class="group-header" :data-letter="group.initial">
                 {{ group.initial }}
               </div>
@@ -170,7 +161,7 @@
                       {{ getProfileStageStatus(row).label }}
                     </span>
                     <el-dropdown trigger="click" @click.stop>
-                      <el-button class="profile-card__more" size="small" aria-label="更多操作">
+                      <el-button class="profile-card__more admin-icon-button" size="small" aria-label="更多操作">
                         <el-icon><MoreFilled /></el-icon>
                       </el-button>
                       <template #dropdown>
@@ -357,7 +348,7 @@
     <el-drawer
       v-model="sessionDrawerVisible"
       :title="`${currentSessionProfile?.userName || ''} 的会话记录`"
-      size="min(620px, 100vw)"
+      size="min(calc(100vw - 24px), 620px)"
       direction="rtl"
     >
       <el-table :data="currentSessions" v-loading="sessionsLoading" stripe size="small">
@@ -431,7 +422,7 @@
               </el-radio-button>
               <el-radio-button value="assisted">
                 <strong>辅助模拟</strong>
-                <span>Legacy 调试链路</span>
+                <span>内部调试链路</span>
               </el-radio-button>
             </el-radio-group>
           </div>
@@ -559,7 +550,6 @@ const startSessionStoryIndex = ref(0)
 const launchMode = ref<LaunchMode>('blackbox')
 const launchFrictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
 const launchingSession = ref(false)
-const focusPanelCollapsed = ref(false)
 const expandedProfileIds = ref<Set<string>>(new Set())
 
 const startSessionPrimaryActionLabel = computed(() => {
@@ -575,20 +565,12 @@ const getPipelineBucket = (profile: any): Exclude<ProfileFilter, 'all'> => {
   return 'ready'
 }
 
-const experimentSteps = computed(() => {
-  const counts = {
-    needsStory: profiles.value.filter(item => getPipelineBucket(item) === 'needsStory').length,
-    ready: profiles.value.filter(item => getPipelineBucket(item) === 'ready').length,
-    running: profiles.value.filter(item => getPipelineBucket(item) === 'running').length,
-    review: profiles.value.filter(item => getPipelineBucket(item) === 'review').length
-  }
-  return [
-    { step: '01', title: '准备样本', desc: '完善稳定画像和至少一个 Story。', metric: `${counts.needsStory} 待准备`, tone: 'slate' },
-    { step: '02', title: '选择 Story', desc: '固定开场、压力点和问题知识。', metric: `${counts.ready} 可运行`, tone: 'blue' },
-    { step: '03', title: '黑盒运行', desc: '通过普通用户 API 推进 Goal、Path、Learn。', metric: `${counts.running} 运行中`, tone: 'green' },
-    { step: '04', title: '裁判评审', desc: '终态后生成证据化 Referee 报告。', metric: `${counts.review} 待评审`, tone: 'amber' }
-  ]
-})
+const experimentSteps = [
+  { step: '01', title: '准备样本', desc: '完善稳定画像和至少一个 Story。' },
+  { step: '02', title: '选择 Story', desc: '固定开场、压力点和问题知识。' },
+  { step: '03', title: '黑盒运行', desc: '通过普通用户 API 推进 Goal、Path、Learn。' },
+  { step: '04', title: '裁判评审', desc: '终态后生成独立报告。' }
+]
 
 const summarizeStory = (value: string, limit = 72) => {
   if (!value) return ''
@@ -616,7 +598,7 @@ const filteredProfiles = computed(() => {
   })
 })
 
-const storyReadyCount = computed(() => profiles.value.filter((item: any) => getStoryPool(item).length > 0).length)
+const runnableProfileCount = computed(() => profiles.value.filter((item: any) => getPipelineBucket(item) === 'ready').length)
 
 const focusedProfile = computed(() => {
   return filteredProfiles.value.find((item: any) => item.id === focusedProfileId.value) || filteredProfiles.value[0] || null
@@ -743,7 +725,7 @@ const summaryCards = computed(() => {
 const virtualLearnerHighlights = computed(() => [
   { label: `${profiles.value.length} 个样本`, tone: 'info' as const },
   { label: `${recentSessions.value.length} 个最近诊断`, tone: 'neutral' as const },
-  { label: `${storyReadyCount.value} 个可直接开局`, tone: 'success' as const },
+  { label: `${runnableProfileCount.value} 个可运行`, tone: 'success' as const },
   { label: activeFilter.value === 'all' ? '当前查看全部样本' : `筛选 ${profileFilterOptions.value.find(item => item.value === activeFilter.value)?.label || activeFilter.value}`, tone: 'warning' as const }
 ])
 
@@ -1434,7 +1416,6 @@ watch(filteredProfiles, () => {
 }
 
 .page-header,
-.experiment-flow,
 .summary-grid,
 .toolbar-card,
 .page-shell {
@@ -1443,116 +1424,40 @@ watch(filteredProfiles, () => {
   width: 100%;
 }
 
-.experiment-flow {
-  display: grid;
-  gap: 16px;
-  padding: 20px;
-  border: 1px solid #dce5f0;
-  border-radius: 14px;
-  background:
-    linear-gradient(120deg, rgba(28, 65, 110, 0.98), rgba(37, 82, 132, 0.96)),
-    #234f82;
-  color: #f7fbff;
-  box-shadow: 0 18px 40px rgba(31, 65, 108, 0.16);
+.experiment-guide > strong {
+  color: var(--admin-text-primary);
+  font-size: 14px;
 }
 
-.experiment-flow__intro {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.experiment-flow__intro h2,
-.experiment-flow__intro p {
-  margin: 0;
-}
-
-.experiment-flow__intro h2 {
-  margin-top: 5px;
-  font-size: 23px;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-}
-
-.experiment-flow__intro p {
-  max-width: 720px;
-  margin-top: 8px;
-  color: rgba(235, 244, 255, 0.76);
-  font-size: 13px;
+.experiment-guide > p {
+  margin: 8px 0 12px;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
   line-height: 1.6;
 }
 
-.experiment-flow__kicker {
-  color: #8ec8ff;
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.experiment-flow__steps {
+.experiment-guide ol {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid rgba(218, 235, 255, 0.18);
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
 }
 
-.flow-step {
-  --flow-accent: #b7c7d8;
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  min-width: 0;
-  padding: 16px 16px 2px 0;
-}
-
-.flow-step:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 18px;
-  right: 12px;
-  width: 7px;
-  height: 7px;
-  border-top: 1px solid rgba(224, 239, 255, 0.5);
-  border-right: 1px solid rgba(224, 239, 255, 0.5);
-  transform: rotate(45deg);
-}
-
-.flow-step--blue { --flow-accent: #86bdff; }
-.flow-step--green { --flow-accent: #6ed7bf; }
-.flow-step--amber { --flow-accent: #ffc77d; }
-
-.flow-step__index {
-  color: var(--flow-accent);
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.flow-step strong {
+.experiment-guide li span,
+.experiment-guide li small {
   display: block;
-  font-size: 13px;
 }
 
-.flow-step p {
-  margin: 4px 0 0;
-  color: rgba(235, 244, 255, 0.64);
-  font-size: 11px;
+.experiment-guide li span {
+  color: var(--admin-text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.experiment-guide li small {
+  margin-top: 2px;
+  color: var(--admin-text-muted);
   line-height: 1.45;
-}
-
-.flow-step__metric {
-  grid-column: 2;
-  width: fit-content;
-  margin-top: 8px;
-  padding: 3px 7px;
-  border: 1px solid color-mix(in srgb, var(--flow-accent) 44%, transparent);
-  border-radius: 999px;
-  color: var(--flow-accent);
-  font-size: 10px;
-  font-weight: 750;
 }
 
 .lab-main {
@@ -2857,14 +2762,6 @@ watch(filteredProfiles, () => {
     align-items: stretch;
   }
 
-  .experiment-flow__steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .flow-step:nth-child(2)::after {
-    display: none;
-  }
-
   .toolbar-card__group,
   .toolbar-card__search {
     width: 100%;
@@ -2897,22 +2794,8 @@ watch(filteredProfiles, () => {
     grid-template-columns: 1fr;
   }
 
-  .experiment-flow {
-    padding: 16px;
-  }
-
-  .experiment-flow__intro {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .experiment-flow__steps,
   .launch-mode-grid {
     grid-template-columns: 1fr;
-  }
-
-  .flow-step::after {
-    display: none;
   }
 
   .profile-accordion-header {

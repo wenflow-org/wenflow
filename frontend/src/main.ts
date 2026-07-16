@@ -9,6 +9,7 @@ import App from './App.vue';
 import router from './router';
 import './styles/main.css';
 import './styles/tremor-theme.css';  // Tremor 风格主题
+import './styles/admin-theme.css';
 
 const app = createApp(App);
 const pinia = createPinia();

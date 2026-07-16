@@ -26,12 +26,6 @@
           <h2>{{ overviewHeadline.title }}</h2>
         </div>
 
-        <div class="section-head section-head--tight section-head--embedded">
-          <div>
-            <h3 class="section-title">当前判断</h3>
-          </div>
-        </div>
-
         <div class="health-list health-list--inline">
           <div class="health-item" :class="healthSummary.successRate.tone">
             <span class="health-item__dot"></span>
@@ -231,7 +225,6 @@ const recentActivities = ref<any[]>([])
 const recentProjectionGrantUses = ref<any[]>([])
 const activeProjectionGrantCount = ref(0)
 const refreshing = ref(false)
-const lastRefreshAt = ref<Date | null>(null)
 
 const recentActivitySummary = computed(() => recentActivities.value.slice(0, 5))
 const recentProjectionGrantSummary = computed(() => recentProjectionGrantUses.value.slice(0, 5).map((grant: any) => ({
@@ -263,7 +256,7 @@ const overviewKpiItems = computed(() => {
 
 const trendPoints = computed(() => {
   const points = stats.value?.agents?.last24h || []
-  return points.slice(-12)
+  return points
 })
 
 const activeTrendPoints = computed(() => {
@@ -322,11 +315,6 @@ const totalIssueCount = computed(() => {
   return timeoutCount + errorCount
 })
 
-const lastRefreshLabel = computed(() => {
-  if (!lastRefreshAt.value) return '尚未刷新'
-  return formatTime(lastRefreshAt.value)
-})
-
 const attentionAgentStatuses = computed(() => {
   const items = agentStatuses.value.map((item: any) => {
     const successRate = Number(item.successRate || 0)
@@ -348,7 +336,7 @@ const attentionAgentStatuses = computed(() => {
 
     if (item.status === 'error') {
       summary = '节点状态异常'
-      detail = '状态 error'
+      detail = '最近一次执行失败'
     } else if (errorCalls > 0 || timeoutCount > 0) {
       summary = `${errorCalls + timeoutCount} 次失败 / 超时`
       detail = `失败 ${errorCalls} 次，超时 ${timeoutCount} 次。`
@@ -483,7 +471,7 @@ const priorityQueue = computed(() => {
       level: '学习侧关注',
       tone: 'warning',
       title: '今日学习活跃为 0',
-      description: '暂未发现活跃学习用户',
+      description: '',
       meta: `完成任务 ${completedTasks} 项`,
       primaryLabel: '处理学习者状态',
       primaryTo: '/admin/learner-center',
@@ -511,22 +499,6 @@ const priorityQueue = computed(() => {
     })
   }
 
-  if (!items.length) {
-    items.push({
-      id: 'stable-overview',
-      level: '今日状态',
-      tone: 'info',
-      title: '暂无高优先级异常',
-      description: `最近刷新 ${lastRefreshLabel.value}`,
-      meta: `今日调用 ${stats.value?.agents?.todayCalls || 0} 次`,
-      primaryLabel: '检查 Skill 目录',
-      primaryTo: '/admin/skills',
-      secondaryLabel: '核对 Prompt 调用',
-      secondaryTo: '/admin/prompt-call-logs',
-      score: 10
-    })
-  }
-
   return items.sort((a, b) => b.score - a.score).slice(0, 5)
 })
 
@@ -534,7 +506,6 @@ const refreshAll = async () => {
   refreshing.value = true
   try {
     await Promise.all([loadOverview(), loadAgentStatus(), loadActivity()])
-    lastRefreshAt.value = new Date()
   } finally {
     refreshing.value = false
   }

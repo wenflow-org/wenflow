@@ -8,42 +8,8 @@
       <template #actions>
         <el-button @click="goBack">
           <el-icon><ArrowLeft /></el-icon>
-          返回运行节点
+          返回 Skill 目录
         </el-button>
-        <el-popover
-          placement="bottom-end"
-          :width="360"
-          trigger="click"
-          popper-class="prompt-lab-help-popover"
-        >
-          <template #reference>
-            <el-button class="assistant-trigger" aria-label="查看发布向导说明">
-              发布助手
-            </el-button>
-          </template>
-
-          <div class="help-card">
-            <div class="help-card__title">发布向导</div>
-            <div class="help-card__grid">
-              <article class="help-item">
-                <strong>1. 改源</strong>
-                <span>编辑 source 与元数据。</span>
-              </article>
-              <article class="help-item">
-                <strong>2. 编译</strong>
-                <span>生成候选 Prompt。</span>
-              </article>
-              <article class="help-item">
-                <strong>3. 审核</strong>
-                <span>确认产物是否可用。</span>
-              </article>
-              <article class="help-item">
-                <strong>4. 发布</strong>
-                <span>写回平台运行目标。</span>
-              </article>
-            </div>
-          </div>
-        </el-popover>
         <el-button @click="handleReset">重置</el-button>
       </template>
     </AdminPageHeader>
@@ -51,15 +17,15 @@
     <!-- ============ Stepper ============ -->
     <div class="stepper-bar">
       <div
-        v-for="(step, idx) in steps"
-        :key="idx"
+        v-for="step in steps"
+        :key="step.value"
         class="step-node"
         :class="{
-          'step-node--done': idx < store.currentStep,
-          'step-node--active': idx === store.currentStep
+          'step-node--done': step.value < store.currentStep,
+          'step-node--active': step.value === store.currentStep
         }"
       >
-        <div class="step-circle">{{ idx < store.currentStep ? '✓' : idx + 1 }}</div>
+        <div class="step-circle">{{ step.value < store.currentStep ? '✓' : step.value }}</div>
         <div class="step-text">
           <div class="step-title">{{ step.title }}</div>
         </div>
@@ -90,7 +56,6 @@
         <div class="step-header">
           <div class="step-header__main">
             <h2>编辑源文件</h2>
-            <span class="step-badge">Lab 目录</span>
           </div>
           <div class="step-header__actions">
             <el-button text @click="store.currentStep = 0">查看编译约定</el-button>
@@ -126,7 +91,6 @@
           <div class="manifest-card__header">
             <div>
               <div class="manifest-card__title">Skill 元数据</div>
-              <div class="manifest-card__hint">维护编译与发布所用元数据。</div>
             </div>
             <el-button size="small" :loading="savingManifest" @click="handleSaveManifest">
               保存元数据
@@ -258,8 +222,7 @@
       <div class="step-content step-content--compile">
         <div class="step-header">
           <div class="step-header__main">
-            <h2>生成 Prompt</h2>
-            <span class="step-badge step-badge--info">AI 编译</span>
+            <h2>编译 Prompt</h2>
           </div>
         </div>
 
@@ -321,7 +284,6 @@
         <div class="step-header">
           <div class="step-header__main">
             <h2>审核结果</h2>
-            <span class="step-badge step-badge--warn">验收检查</span>
           </div>
         </div>
 
@@ -446,7 +408,7 @@
 
         <div class="publish-warning">
           <el-icon><Warning /></el-icon>
-          <span>发布将覆盖 prompts/skill.{{ store.skillId }}.md，旧版本自动备份到 prompt-lab/backups/</span>
+          <span>发布将覆盖当前生产 Prompt，旧版本会自动备份。</span>
         </div>
 
         <div class="step-actions">
@@ -499,15 +461,13 @@ onMounted(() => {
 })
 
 const steps = [
-  { title: '编译约定' },
-  { title: '编辑源文件' },
-  { title: '生成 Prompt' },
-  { title: '审核结果' },
-  { title: '发布生效' }
+  { value: 1, title: '编辑源文件' },
+  { value: 2, title: '编译 Prompt' },
+  { value: 3, title: '审核结果' },
+  { value: 4, title: '发布生效' }
 ]
 
 const promptLabHighlights = computed(() => [
-  { label: `当前步骤 ${store.currentStep + 1} / ${steps.length}`, tone: 'info' as const },
   { label: store.skillId ? `Skill ${store.skillId}` : '待选择 Skill', tone: store.skillId ? 'success' as const : 'warning' as const },
   {
     label: store.compiling ? (store.compilePhase === 'saving' ? '保存中' : '编译中') : store.compileError ? '编译错误' : store.compiledPrompt ? '已编译' : '未编译',
@@ -549,7 +509,7 @@ async function maybePersistBeforeLeaveCurrentSkill() {
 }
 
 function handleSkillChange(nextSkillId: string) {
-  ;(async () => {
+  void (async () => {
     if (nextSkillId === store.skillId) return
     const ok = await maybePersistBeforeLeaveCurrentSkill()
     if (!ok) return
@@ -634,7 +594,7 @@ async function handlePublish() {
         ? `\n\n编译提示: ${result.compileWarnings.join('；')}`
         : ''
     ElMessageBox.confirm(
-      `发布成功\n\nSkill: ${store.skillId}\n新版本: v${result.version}\n\n生成文件已写回 prompts/ 目录，DB 版本已激活。\n可在 Skill 目录中继续查看版本与配置。${compileHint}`,
+      `发布成功\n\nSkill: ${store.skillId}\n新版本: v${result.version}\n\n新版本已设为当前运行版本，上一版本已保留。${compileHint}`,
       '发布成功',
       { confirmButtonText: '打开 Skill 目录', cancelButtonText: '完成', type: 'success' }
     ).then(() => {
@@ -948,13 +908,6 @@ function handleReset() {
   color: var(--admin-text-primary, #111827);
 }
 
-.manifest-card__hint {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--admin-text-secondary, #6b7280);
-}
-
 .manifest-card__subhead {
   font-size: 12px;
   font-weight: 700;
@@ -1184,6 +1137,79 @@ function handleReset() {
 
   .step-actions {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .stepper-bar {
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 10px;
+    scroll-snap-type: x proximity;
+  }
+
+  .step-node {
+    flex: 0 0 auto;
+    min-width: max-content;
+    min-height: 44px;
+    padding: 0 10px;
+    border: var(--admin-border-subtle);
+    border-radius: var(--admin-radius-sm);
+    scroll-snap-align: start;
+  }
+
+  .step-node + .step-node::before {
+    display: none;
+  }
+
+  .step-circle {
+    width: 28px;
+    height: 28px;
+  }
+
+  .step-text {
+    padding-right: 0;
+  }
+
+  .step-title {
+    padding-right: 0;
+    background: transparent;
+    white-space: nowrap;
+  }
+
+  .source-selector,
+  .manifest-card__header,
+  .prompt-card__header,
+  .source-card__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .source-selector .el-select {
+    width: 100%;
+  }
+
+  .manifest-card__header .el-button,
+  .source-card__header .el-button,
+  .prompt-card__header .el-button {
+    width: auto;
+    align-self: flex-start;
+  }
+
+  .review-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .step-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .step-actions .el-button {
+    width: 100%;
+    margin-left: 0;
   }
 }
 

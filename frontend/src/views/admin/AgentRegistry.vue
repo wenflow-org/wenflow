@@ -35,9 +35,6 @@
           </el-select>
           <el-checkbox v-model="onlyAttention">仅看需关注</el-checkbox>
         </div>
-        <div class="admin-list-toolbar__group">
-          <p class="skill-toolbar-note">{{ keyword || health || onlyAttention ? '已启用筛选' : '默认范围' }}</p>
-        </div>
       </div>
     </section>
 
@@ -48,7 +45,6 @@
             <div class="skill-cell">
               <div class="skill-cell__title-row">
                 <strong class="skill-cell__name">{{ row.name }}</strong>
-                <el-tag size="small" type="success">Skill</el-tag>
               </div>
               <span class="skill-cell__id">{{ row.skillId }}</span>
               <span class="skill-cell__meta">{{ row.category }} · v{{ row.version }}</span>
@@ -111,10 +107,37 @@
 
         <el-table-column label="操作" width="108" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button class="table-link-btn" @click="openNode(row.skillId)">快速查看</el-button>
+            <el-button class="table-link-btn" type="primary" text @click="openNode(row.skillId)">快速查看</el-button>
           </template>
         </el-table-column>
       </el-table>
+    </section>
+
+    <section class="admin-mobile-list" v-loading="loading" aria-label="Skill 列表">
+      <article v-for="skill in filteredSkills" :key="skill.skillId" class="admin-mobile-card">
+        <div class="admin-mobile-card__head">
+          <div class="skill-cell">
+            <strong class="skill-cell__name">{{ skill.name }}</strong>
+            <span class="skill-cell__id">{{ skill.skillId }}</span>
+          </div>
+          <el-tag :type="getHealthTagType(skill.status)" size="small">{{ getHealthLabel(skill.status) }}</el-tag>
+        </div>
+        <div class="admin-mobile-card__metrics">
+          <span>{{ skill.callCount }} 调用</span>
+          <strong :class="rateClass(skill.successRate)">{{ skill.successRate }}%</strong>
+          <span>{{ formatDuration(skill.avgDuration) }} 平均</span>
+        </div>
+        <div class="admin-mobile-card__tags">
+          <el-tag size="small" effect="plain" :type="skill.configEnabled ? 'success' : 'info'">
+            {{ skill.configEnabled ? '独立配置' : '继承默认' }}
+          </el-tag>
+          <el-tag v-if="getPromptSummary(skill.skillId)?.statusLabel" size="small" effect="plain" :type="getPromptStatusTagType(getPromptSummary(skill.skillId)?.status)">
+            {{ getPromptSummary(skill.skillId)?.statusLabel }}
+          </el-tag>
+        </div>
+        <el-button class="admin-mobile-card__action" type="primary" plain @click="openNode(skill.skillId)">快速查看</el-button>
+      </article>
+      <el-empty v-if="!loading && filteredSkills.length === 0" description="没有匹配的 Skill" />
     </section>
 
     <SkillNodeWorkbench
@@ -561,10 +584,8 @@ watch(
   font-weight: 600;
 }
 
-.skill-toolbar-note {
-  margin: 0;
-  font-size: 12px;
-  color: var(--admin-text-muted);
+.admin-mobile-list {
+  display: none;
 }
 
 .search {
@@ -578,15 +599,6 @@ watch(
 .table-link-btn {
   min-height: 30px;
   padding: 0 12px;
-  border-radius: 14px;
-  font-weight: 700;
-  color: var(--color-primary-dark, #1f57cc);
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  background: rgba(244, 249, 255, 0.96);
-}
-
-.table-link-btn:hover {
-  transform: translateY(-1px);
 }
 
 .admin-list-card {
@@ -723,6 +735,53 @@ watch(
 
   .admin-list-toolbar__group {
     justify-content: space-between;
+  }
+}
+
+@media (max-width: 768px) {
+  .skill-browser {
+    display: none;
+  }
+
+  .admin-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-mobile-card {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: var(--admin-border-subtle);
+    border-radius: var(--admin-radius-md);
+    background: var(--admin-bg-surface);
+  }
+
+  .admin-mobile-card__head,
+  .admin-mobile-card__metrics,
+  .admin-mobile-card__tags {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .admin-mobile-card__head {
+    justify-content: space-between;
+  }
+
+  .admin-mobile-card__metrics,
+  .admin-mobile-card__tags {
+    flex-wrap: wrap;
+  }
+
+  .admin-mobile-card__metrics {
+    justify-content: space-between;
+    color: var(--admin-text-secondary);
+    font-size: 12px;
+  }
+
+  .admin-mobile-card__action {
+    width: 100%;
   }
 }
 </style>

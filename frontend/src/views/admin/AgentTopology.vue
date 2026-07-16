@@ -14,7 +14,6 @@
   <div class="admin-page topology-page">
     <AdminPageHeader
       title="Agent 拓扑"
-      desc="查看 5 个主编排与下辖 Skill 的运行拓扑，结合时间窗口快速定位空闲和异常节点。"
       :icon="Connection"
       :highlights="topologyHighlights"
     >
@@ -32,11 +31,10 @@
     </AdminPageHeader>
 
     <section class="admin-list-card topology-panel">
-      <div class="admin-section-head topology-panel__head">
-        <div class="admin-section-head__copy">
-          <h3 class="admin-section-head__title">运行拓扑</h3>
-          <p class="admin-section-head__desc">按 5 个主编排纵览下辖 Skill 的分布与健康状态，点击 Skill 可先快速查看。</p>
-        </div>
+        <div class="admin-section-head topology-panel__head">
+          <div class="admin-section-head__copy">
+            <h3 class="admin-section-head__title">运行拓扑</h3>
+          </div>
         <div class="topology-panel__meta">
           <span>{{ rangeLabel }} 视图</span>
           <span v-if="summary">{{ summary.agentCount }} Agent / {{ summary.skillCount }} Skill</span>
@@ -112,11 +110,15 @@
                 'vf-skill-node--idle': !data.stats?.totalCalls,
                 'vf-skill-node--unhealthy': data.stats?.totalCalls > 0 && (data.stats?.successRate ?? 100) < 90
               }"
+              role="button"
+              tabindex="0"
               @click="openSkillWorkbench(data)"
+              @keydown.enter="openSkillWorkbench(data)"
+              @keydown.space.prevent="openSkillWorkbench(data)"
             >
               <div class="vf-skill-node__head">
                 <span class="vf-skill-node__kind">SKILL</span>
-                <span v-if="data.noPromptFile" class="vf-skill-node__chip" title="无独立 prompt 文件，handler-only">handler</span>
+                <span v-if="data.noPromptFile" class="vf-skill-node__chip" title="该节点由代码处理，没有独立 Prompt 文件">代码节点</span>
               </div>
               <div class="vf-skill-node__title">{{ data.label }}</div>
               <div class="vf-skill-node__stats">
@@ -133,7 +135,6 @@
                   <span class="lbl">平均</span>
                 </span>
               </div>
-              <div class="vf-skill-node__hint">点击进入 Skill 编辑</div>
             </div>
           </template>
         </VueFlow>
@@ -552,24 +553,6 @@ onMounted(() => {
   font-size: 9px;
   color: var(--admin-text-muted);
   text-transform: uppercase;
-}
-
-.vf-skill-node__hint {
-  position: absolute;
-  right: 14px;
-  bottom: 10px;
-  font-size: 10px;
-  line-height: 1.2;
-  color: var(--admin-text-brand);
-  font-weight: 600;
-  text-align: right;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
-
-.vf-skill-node:hover .vf-skill-node__hint {
-  opacity: 1;
 }
 
 .topology-panel :deep(.vue-flow__controls) {

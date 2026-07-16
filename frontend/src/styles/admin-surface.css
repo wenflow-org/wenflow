@@ -160,8 +160,10 @@
 .admin-page {
   display: grid;
   gap: var(--admin-gap-page);
-  padding: var(--admin-padding-page);
-  background: var(--admin-bg-page);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
   min-height: 100%;
   max-width: 1600px;
   margin: 0 auto;
@@ -733,86 +735,86 @@
    ========================================== */
 
 /* --- dialog --- */
-.admin-page :deep(.el-dialog) {
+body.admin-route .el-dialog {
   border-radius: var(--admin-radius-lg);
   border: var(--admin-border);
   background: var(--admin-bg-surface);
   box-shadow: var(--admin-shadow-md);
 }
 
-.admin-page :deep(.el-dialog__header) {
+body.admin-route .el-dialog__header {
   padding: 16px 20px 14px;
   border-bottom: var(--admin-border);
   margin-right: 0;
 }
 
-.admin-page :deep(.el-dialog__title) {
+body.admin-route .el-dialog__title {
   font-size: 15px;
   font-weight: 700;
   color: var(--admin-text-primary);
 }
 
-.admin-page :deep(.el-dialog__body) {
+body.admin-route .el-dialog__body {
   padding: 16px 20px;
 }
 
-.admin-page :deep(.el-dialog__footer) {
+body.admin-route .el-dialog__footer {
   padding: 12px 20px 16px;
   border-top: var(--admin-border-subtle);
 }
 
 /* --- drawer --- */
-.admin-page :deep(.el-drawer__header) {
+body.admin-route .el-drawer__header {
   padding: 16px 20px 14px;
   border-bottom: var(--admin-border);
   margin-bottom: 0;
 }
 
-.admin-page :deep(.el-drawer__body) {
+body.admin-route .el-drawer__body {
   padding: 16px 20px;
   background: var(--admin-bg-surface);
 }
 
-.admin-page :deep(.el-drawer__title) {
+body.admin-route .el-drawer__title {
   font-size: 15px;
   font-weight: 700;
   color: var(--admin-text-primary);
 }
 
 /* --- form 基线 --- */
-.admin-page :deep(.el-form-item__label) {
+.admin-page .el-form-item__label {
   font-weight: 600;
   color: var(--admin-text-primary);
   font-size: 13px;
 }
 
-.admin-page :deep(.el-input__wrapper),
-.admin-page :deep(.el-textarea__inner) {
+.admin-page .el-input__wrapper,
+.admin-page .el-textarea__inner {
   border-radius: var(--admin-radius-sm);
 }
 
-.admin-page :deep(.el-select .el-input__wrapper) {
+.admin-page .el-select .el-input__wrapper {
   border-radius: var(--admin-radius-sm);
 }
 
 /* --- 按钮基线 --- */
-.admin-page :deep(.el-button) {
+.admin-page .el-button {
   border-radius: var(--admin-radius-sm);
   font-weight: 600;
 }
 
-.admin-page :deep(.el-button--primary) {
+.admin-page .el-button--primary {
   --el-button-bg-color: var(--admin-text-brand);
   --el-button-border-color: var(--admin-text-brand);
 }
 
 /* --- 表格基线 --- */
-.admin-page :deep(.el-table) {
+.admin-page .el-table {
   --el-table-border-color: var(--admin-border-color);
   border-radius: var(--admin-radius-md);
 }
 
-.admin-page :deep(.el-table th.el-table__cell) {
+.admin-page .el-table th.el-table__cell {
   background: var(--admin-bg-surface-alt);
   font-weight: 700;
   font-size: 12px;
@@ -820,13 +822,13 @@
 }
 
 /* --- tag 基线 --- */
-.admin-page :deep(.el-tag) {
+.admin-page .el-tag {
   border-radius: var(--admin-radius-xs);
   font-weight: 600;
 }
 
 /* --- tabs 基线 --- */
-.admin-page :deep(.el-tabs__item) {
+.admin-page .el-tabs__item {
   font-weight: 600;
   font-size: 14px;
 }
@@ -836,7 +838,7 @@
    ========================================== */
 @media (max-width: 768px) {
   .admin-page {
-    padding: 12px 14px 24px;
+    padding: 0;
   }
 
   .admin-toolbar {

@@ -10,7 +10,7 @@
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
-        <el-button type="primary" plain @click="handleExport">
+        <el-button @click="handleExport">
           <el-icon><Download /></el-icon>
           导出当前页
         </el-button>
@@ -22,10 +22,23 @@
         <div class="admin-section-head__copy">
           <h3 class="admin-section-head__title">筛选</h3>
         </div>
+        <el-button class="filter-toggle" text @click="filterExpanded = !filterExpanded">
+          {{ filterExpanded ? '收起' : `展开${activeFilterCount ? ` · ${activeFilterCount} 项` : ''}` }}
+        </el-button>
       </div>
-      <div class="admin-filter-grid admin-filter-grid--wide">
+      <div v-show="filterExpanded" class="admin-filter-grid admin-filter-grid--wide">
         <div class="admin-filter-field">
-          <label class="admin-filter-field__label">Agent</label>
+          <label class="admin-filter-field__label">时间范围</label>
+          <el-select v-model="filters.timeRange" class="filter-select" @change="filters.timeRangeExact = null">
+            <el-option label="今天" value="today" />
+            <el-option label="昨天" value="yesterday" />
+            <el-option label="最近 7 天" value="week" />
+            <el-option label="最近 30 天" value="month" />
+            <el-option label="全部" value="all" />
+          </el-select>
+        </div>
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">能力类型</label>
           <el-select
             v-model="filters.agentName"
             placeholder="全部 Agent"
@@ -42,7 +55,7 @@
         </div>
 
         <div class="admin-filter-field">
-          <label class="admin-filter-field__label">Agent ID</label>
+          <label class="admin-filter-field__label">节点 ID（精确）</label>
           <el-input
             v-model="filters.agentId"
             placeholder="如 ai-teaching-agent"
@@ -144,6 +157,21 @@
       </div>
     </section>
 
+    <el-alert
+      v-if="loadError"
+      type="error"
+      :closable="false"
+      show-icon
+      title="执行日志加载失败"
+    >
+      <template #default>
+        <div class="admin-error-row">
+          <span>{{ loadError }}</span>
+          <el-button size="small" @click="loadLogs">重试</el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <div class="admin-list-toolbar">
       <div class="admin-list-toolbar__group">
         <el-checkbox v-model="autoRefresh" size="small">
@@ -154,20 +182,19 @@
 
     <!-- 日志列表 -->
     <section class="logs-shell">
-      <div class="admin-section-head logs-shell__head">
-        <div class="admin-section-head__copy">
-          <h3 class="admin-section-head__title">日志</h3>
-        </div>
-      </div>
       <div class="logs-shell__toolbar">
-        <span class="logs-shell__count">{{ logs.length }} 条结果</span>
+        <span class="logs-shell__count">本页 {{ logs.length }} 条，共 {{ pagination.total }} 条</span>
       </div>
       <div class="logs-list" v-loading="loading">
         <div
           v-for="log in logs"
           :key="log.id"
           class="log-card"
+          role="button"
+          tabindex="0"
           @click="showDetail(log)"
+          @keydown.enter="showDetail(log)"
+          @keydown.space.prevent="showDetail(log)"
         >
           <div class="log-card__main">
             <div class="log-card__primary">
@@ -187,9 +214,6 @@
           </div>
           <div class="log-card__aside">
             <span class="log-card__duration">{{ formatDuration(log.durationMs) }}</span>
-            <el-button type="primary" link size="small" class="log-card__action">
-              详情
-            </el-button>
           </div>
         </div>
 
@@ -215,7 +239,7 @@
     <el-drawer
       v-model="drawerVisible"
       title="执行日志详情"
-      size="min(72%, 1080px)"
+      size="min(calc(100vw - 24px), 880px)"
       direction="rtl"
       destroy-on-close
     >
@@ -260,16 +284,16 @@
               <el-descriptions-item label="Session ID" v-if="selectedLog.sessionId">
                 {{ selectedLog.sessionId }}
               </el-descriptions-item>
-              <el-descriptions-item label="Actor Type" v-if="selectedLog.actorType">
+              <el-descriptions-item label="执行主体类型" v-if="selectedLog.actorType">
                 {{ getActorTypeLabel(selectedLog.actorType) }}
               </el-descriptions-item>
-              <el-descriptions-item label="Actor ID" v-if="selectedLog.actorId">
+              <el-descriptions-item label="执行主体 ID" v-if="selectedLog.actorId">
                 {{ selectedLog.actorId }}
               </el-descriptions-item>
-              <el-descriptions-item label="Invoker" v-if="selectedLog.invokerId">
+              <el-descriptions-item label="调用方" v-if="selectedLog.invokerId">
                 {{ getInvokerLabel(selectedLog) }}
               </el-descriptions-item>
-              <el-descriptions-item label="Provider" v-if="selectedLog.providerId">
+              <el-descriptions-item label="提供方" v-if="selectedLog.providerId">
                 {{ selectedLog.providerId }}
               </el-descriptions-item>
               <el-descriptions-item label="状态码" v-if="selectedLog.statusCode">
@@ -322,7 +346,7 @@
                         <el-tag size="small" :type="item.success ? 'success' : 'danger'">
                           {{ item.success ? '成功' : '失败' }}
                         </el-tag>
-                        <el-tag v-if="item.promptDrift" size="small" type="warning">异常</el-tag>
+                        <el-tag v-if="item.promptDrift" size="small" type="warning">Prompt 漂移</el-tag>
                         <span v-if="item.systemPromptVersion" class="prompt-child-card__version">v{{ item.systemPromptVersion }}</span>
                       </div>
                       <span class="prompt-child-card__duration">{{ formatDuration(item.durationMs) }}</span>
@@ -332,7 +356,7 @@
                       <span v-if="item.pipelineRunId">Run {{ item.pipelineRunId }}</span>
                       <span v-if="item.pipelineStepIndex !== null && item.pipelineStepIndex !== undefined">步骤 {{ item.pipelineStepIndex }}</span>
                     </div>
-                    <p class="prompt-child-card__issue">{{ describePromptLogIssue(item) }}</p>
+                    <p v-if="describePromptLogIssue(item)" class="prompt-child-card__issue">{{ describePromptLogIssue(item) }}</p>
                     <div v-if="item.errorMessage" class="prompt-child-card__error">{{ item.errorMessage }}</div>
                   </article>
                 </div>
@@ -477,7 +501,9 @@ interface PromptLog {
 
 // 状态
 const loading = ref(false);
+const loadError = ref('');
 const logs = ref<Log[]>([]);
+const filterExpanded = ref(typeof window === 'undefined' || window.innerWidth > 768);
 const pagination = reactive<Pagination>({
   total: 0,
   page: 1,
@@ -503,6 +529,18 @@ const filters = reactive({
   timeRangeExact: null as [string, string] | null,
   keyword: ''
 });
+
+const activeFilterCount = computed(() => [
+  filters.agentName,
+  filters.agentId,
+  filters.traceId,
+  filters.sessionId,
+  filters.status,
+  filters.sourceEntry,
+  filters.timeRange !== 'today' ? filters.timeRange : '',
+  filters.timeRangeExact,
+  filters.keyword,
+].filter(Boolean).length);
 
 // 时间快捷选项
 const timeShortcuts = [
@@ -553,6 +591,7 @@ const promptLogStats = computed(() => ({
 // 加载日志
 const loadLogs = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const params: any = {
       page: pagination.page,
@@ -597,7 +636,7 @@ if (filters.agentName) params.agentName = filters.agentName;
     }
   } catch (error) {
     console.error('加载日志失败:', error);
-    toast.error('加载日志失败');
+    loadError.value = '无法获取日志数据，请检查服务连接后重试。';
   } finally {
     loading.value = false;
   }
@@ -863,10 +902,10 @@ const highlightJson = (json: string): string => {
 
 const describePromptLogIssue = (log: PromptLog) => {
   if (log.success) {
-    if (log.promptDrift) return '成功，但有异常标记。';
-    return '成功。';
+    if (log.promptDrift) return '执行成功，但运行版本存在漂移。';
+    return '';
   }
-  if (log.errorMessage) return `失败：${log.errorMessage}`;
+  if (log.errorMessage) return '';
   if (log.errorCode) return `失败，错误码 ${log.errorCode}`;
   return '失败。';
 };
@@ -1069,6 +1108,18 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.filter-toggle {
+  display: none;
+}
+
+.admin-error-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
 .logs-shell {
   display: grid;
   gap: 14px;
@@ -1117,6 +1168,11 @@ onUnmounted(() => {
 .log-card:hover {
   transform: translateY(-1px);
   border-color: var(--admin-border-hover);
+}
+
+.log-card:focus-visible {
+  border-color: var(--admin-text-brand);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
 }
 
 .log-card__main {
@@ -1216,6 +1272,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-width: 0;
 }
 
 .drawer-hero {
@@ -1275,6 +1332,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
+  min-width: 0;
   padding-top: 4px;
   border-top: var(--admin-border-subtle);
 }
@@ -1317,6 +1375,7 @@ onUnmounted(() => {
 .prompt-child-card {
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding: 14px;
   border-radius: 12px;
   border: var(--admin-border-subtle);
@@ -1383,18 +1442,16 @@ onUnmounted(() => {
   margin-top: 0;
   padding-top: 4px;
   border-top: var(--admin-border-subtle);
+  min-width: 0;
 }
 
 .drawer-tabs :deep(.el-tabs__header) {
   margin-bottom: 12px;
 }
 
-.drawer-descriptions :deep(.el-descriptions__body) {
-  overflow-x: auto;
-}
-
-.drawer-descriptions :deep(.el-descriptions__table) {
-  min-width: 640px;
+.drawer-descriptions :deep(.el-descriptions__cell) {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .drawer-actions {
@@ -1412,6 +1469,9 @@ onUnmounted(() => {
 }
 
 .drawer-code-block {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   background: var(--admin-bg-surface-alt);
   color: var(--admin-text-primary);
   padding: 16px;
@@ -1423,6 +1483,18 @@ onUnmounted(() => {
   word-break: break-word;
   border-radius: var(--admin-radius-md);
   border: var(--admin-border);
+}
+
+@media (max-width: 920px) {
+  .drawer-descriptions :deep(.el-descriptions__table) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .drawer-descriptions :deep(.el-descriptions__cell) {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
 }
 
 .drawer-code-block--input {
@@ -1490,6 +1562,15 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .filter-toggle {
+    display: inline-flex;
+  }
+
+  .admin-error-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .log-card {
     flex-direction: column;
     align-items: flex-start;

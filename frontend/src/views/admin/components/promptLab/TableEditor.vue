@@ -1,6 +1,7 @@
 <template>
   <div class="table-editor">
-    <el-table :data="rows" border size="small" class="editable-table">
+    <div class="table-editor__scroll" aria-label="变量表格，可横向滚动">
+      <el-table :data="rows" border size="small" class="editable-table">
       <!-- field -->
       <el-table-column prop="field" label="field" min-width="120">
         <template #default="{ row }">
@@ -40,12 +41,14 @@
       <!-- 操作 -->
       <el-table-column label="" width="50" fixed="right">
         <template #default="{ $index }">
-          <el-button text type="danger" size="small" @click="removeRow($index)" :disabled="rows.length <= 1">
+          <el-button class="admin-icon-button" text type="danger" size="small" aria-label="删除变量" @click="removeRow($index)" :disabled="rows.length <= 1">
             <el-icon><Delete /></el-icon>
           </el-button>
         </template>
       </el-table-column>
-    </el-table>
+      </el-table>
+    </div>
+    <span class="table-editor__hint">左右滑动查看并编辑全部字段</span>
     <el-button size="small" text type="primary" @click="addRow" class="add-btn">
       + 添加变量
     </el-button>
@@ -162,9 +165,24 @@ watch(() => props.content, parse)
 }
 
 .editable-table {
+  min-width: 620px;
   --el-table-border-color: rgba(226, 232, 240, 0.9);
   --el-table-header-bg-color: rgba(248, 250, 252, 0.92);
   --el-table-row-hover-bg-color: rgba(239, 246, 255, 0.65);
+}
+
+.table-editor__scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-editor__hint {
+  display: none;
+  color: var(--admin-text-muted);
+  font-size: 12px;
 }
 
 .editable-table :deep(.el-table__inner-wrapper::before) {
@@ -205,5 +223,11 @@ watch(() => props.content, parse)
 .add-btn {
   align-self: flex-start;
   padding-left: 0;
+}
+
+@media (max-width: 768px) {
+  .table-editor__hint {
+    display: block;
+  }
 }
 </style>

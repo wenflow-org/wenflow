@@ -21,7 +21,7 @@
     @update:model-value="$emit('update:visible', $event)"
     title="选择 Agent · Skill · 字段"
     direction="rtl"
-    size="640px"
+    size="min(calc(100vw - 24px), 600px)"
     :destroy-on-close="false"
   >
     <div class="field-picker" v-loading="loading">
@@ -310,6 +310,7 @@ watch(() => props.visible, (v) => {
   flex-direction: column;
   gap: 14px;
   padding: 0 4px;
+  min-width: 0;
 }
 
 .field-picker__search {
@@ -329,9 +330,11 @@ watch(() => props.visible, (v) => {
   gap: 12px;
   max-height: calc(100vh - 280px);
   overflow-y: auto;
+  min-width: 0;
 }
 
 .agent-block {
+  min-width: 0;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: var(--admin-bg-surface);
@@ -346,6 +349,7 @@ watch(() => props.visible, (v) => {
   background: #f8fafc;
   border-radius: 10px 10px 0 0;
   user-select: none;
+  min-width: 0;
 }
 
 .agent-block__head:hover {
@@ -361,6 +365,8 @@ watch(() => props.visible, (v) => {
   font-weight: 700;
   font-size: 13.5px;
   color: #1f2937;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .agent-block__id {
@@ -370,12 +376,15 @@ watch(() => props.visible, (v) => {
   padding: 2px 7px;
   background: #eef2ff;
   border-radius: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .agent-block__meta {
   margin-left: auto;
   font-size: 11.5px;
   color: #94a3b8;
+  flex: 0 0 auto;
 }
 
 .agent-block__body {
@@ -386,6 +395,7 @@ watch(() => props.visible, (v) => {
 }
 
 .skill-block {
+  min-width: 0;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
 }
@@ -402,6 +412,8 @@ watch(() => props.visible, (v) => {
   padding: 8px 12px;
   cursor: pointer;
   user-select: none;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .skill-block__head:hover {
@@ -418,12 +430,15 @@ watch(() => props.visible, (v) => {
   font-size: 12.5px;
   color: #1f2937;
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .skill-block__meta {
   margin-left: auto;
   font-size: 11px;
   color: #94a3b8;
+  flex: 0 0 auto;
 }
 
 .skill-block__body {
@@ -444,6 +459,7 @@ watch(() => props.visible, (v) => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .field-group__label {
@@ -478,6 +494,7 @@ watch(() => props.visible, (v) => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .field-item {
@@ -492,6 +509,8 @@ watch(() => props.visible, (v) => {
   text-align: left;
   transition: all 0.15s ease;
   font-family: inherit;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .field-item:hover {
@@ -505,6 +524,8 @@ watch(() => props.visible, (v) => {
   font-size: 11.5px;
   color: #6366f1;
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .field-item__type {
@@ -514,6 +535,7 @@ watch(() => props.visible, (v) => {
   padding: 1px 6px;
   background: #f1f5f9;
   border-radius: 4px;
+  flex: 0 0 auto;
 }
 
 .field-item__note {
@@ -521,6 +543,7 @@ watch(() => props.visible, (v) => {
   color: #94a3b8;
   margin-left: auto;
   flex: 1;
+  min-width: 0;
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;

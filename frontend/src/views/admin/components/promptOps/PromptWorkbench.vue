@@ -41,7 +41,6 @@
         <span class="workbench-step__index">{{ idx + 1 }}</span>
         <span class="workbench-step__content">
           <span class="workbench-step__label">{{ step.label }}</span>
-          <span class="workbench-step__hint">{{ step.hint }}</span>
         </span>
         <el-icon v-if="stepDone(step.key) && step.key !== 'edit'" class="workbench-step__check">
           <Check />
@@ -140,7 +139,6 @@
             此 Skill 暂无源文件
           </template>
           <template #default>
-            <p>此 Skill 尚未创建源文件（DEFINITIONS / EXECUTION 格式）。</p>
             <el-button type="primary" size="small" @click="createSourceFile" style="margin-top: 8px">
               创建源文件模板
             </el-button>
@@ -265,7 +263,7 @@
                 type="textarea"
                 :autosize="{ minRows: 22, maxRows: 36 }"
                 resize="vertical"
-                placeholder="按 PROMPT_AUTHORING_PROTOCOL v1.2 协议书写: ## 身份定义 / ## 输入说明 / ## 执行规则 / ## 输出规格 ..."
+                placeholder="输入 Prompt 内容"
                 class="workbench-source-editor"
               />
               <div class="workbench-source-stats">
@@ -324,7 +322,6 @@
           <div class="compile-section" v-if="info">
             <div class="compile-section__header">
               <h5>编译状态</h5>
-              <p class="compile-section__hint">快速编译：routing 表字段重写（秒级完成）</p>
             </div>
             <div class="compile-meta-grid">
               <div class="compile-meta-card">
@@ -436,16 +433,13 @@
       <header class="workbench-section__head">
         <div>
           <h4>发布运行</h4>
-          <p class="workbench-section__hint">
-            配置运行时参数（将同步到 skill_model_configs），选择发布方式
-          </p>
           <el-alert
             type="info"
             :closable="false"
             show-icon
             style="margin-top: 12px; font-size: 13px;"
           >
-            这些参数将作为 <strong>Skill 独立配置</strong>生效，优先级高于 Agent 默认和平台默认。发布后可在"模型运行时" Tab 中修改。
+            这些参数将作为 <strong>Skill 独立配置</strong>生效，并覆盖上层默认值。
           </el-alert>
         </div>
       </header>
@@ -511,7 +505,7 @@
         :closable="false"
         show-icon
         class="workbench-alert"
-        title="发布将覆盖 prompts/skill.xxx.md 生产文件，旧版本自动备份到 prompt-lab/backups/"
+        title="发布将覆盖当前生产 Prompt，旧版本会自动备份。"
       />
 
       <div class="publish-actions">
@@ -574,7 +568,7 @@ import {
     Menu,
     Search
   } from '@element-plus/icons-vue'
-  import { adminPromptOpsApi, adminPromptLabApi, adminAgentPromptsApi, adminRuntimeDefinitionsApi, adminAgentTopologyApi } from '@/api/adminApi'
+  import { adminPromptOpsApi, adminPromptLabApi, adminAgentPromptsApi, adminRuntimeDefinitionsApi, adminAgentTopologyApi, adminSkillsApi } from '@/api/adminApi'
 import { parseSource, serializeSource, type SourceDocument } from '@/utils/sourceParser'
 import SkillFieldPicker from './SkillFieldPicker.vue'
 import FieldTableEditor from './FieldTableEditor.vue'
@@ -642,9 +636,9 @@ const agentId = computed(() => props.agentId || '')
 const bareSkillId = computed(() => (props.agentId || '').replace(/^skill:/, ''))
 
 const steps = [
-  { key: 'edit',    label: '修改源', hint: '整理内容' },
-  { key: 'review',  label: '审核产物', hint: '确认运行效果' },
-  { key: 'publish', label: '发布生效', hint: '参数与上线' }
+  { key: 'edit', label: '修改源' },
+  { key: 'review', label: '审核产物' },
+  { key: 'publish', label: '发布生效' }
 ] as const
 
 type StepKey = typeof steps[number]['key']
@@ -1369,13 +1363,6 @@ const checkAndSetParadigm = async () => {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-}
-
-.workbench-step__hint {
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.2;
-  white-space: nowrap;
 }
 
 .workbench-step__check {

@@ -417,6 +417,10 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);
+  const usesAdminSurface = to.path.startsWith('/admin/')
+    && to.path !== '/admin/login'
+    && !to.path.startsWith('/admin/test/');
+  document.body.classList.toggle('admin-route', usesAdminSurface);
   
   setTestMode(to.meta.isTestMode === true);
   setDebugMode(to.meta.isTestMode === true);

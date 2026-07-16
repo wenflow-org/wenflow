@@ -17,8 +17,8 @@
       <div v-for="(c, idx) in hardConditions" :key="'h'+idx" class="condition-row">
         <span class="condition-text">{{ c }}</span>
         <div class="condition-actions">
-          <el-button text size="small" @click="editCondition('hard', idx)"><el-icon><Edit /></el-icon></el-button>
-          <el-button text type="danger" size="small" @click="removeCondition('hard', idx)"><el-icon><Delete /></el-icon></el-button>
+          <el-button class="admin-icon-button" text size="small" aria-label="编辑硬条件" @click="editCondition('hard', idx)"><el-icon><Edit /></el-icon></el-button>
+          <el-button class="admin-icon-button" text type="danger" size="small" aria-label="删除硬条件" @click="removeCondition('hard', idx)"><el-icon><Delete /></el-icon></el-button>
         </div>
       </div>
       <el-button size="small" text type="primary" @click="addCondition('hard')" class="add-cond-btn">
@@ -32,8 +32,8 @@
       <div v-for="(c, idx) in softConditions" :key="'s'+idx" class="condition-row">
         <span class="condition-text">{{ c }}</span>
         <div class="condition-actions">
-          <el-button text size="small" @click="editCondition('soft', idx)"><el-icon><Edit /></el-icon></el-button>
-          <el-button text type="danger" size="small" @click="removeCondition('soft', idx)"><el-icon><Delete /></el-icon></el-button>
+          <el-button class="admin-icon-button" text size="small" aria-label="编辑软信息" @click="editCondition('soft', idx)"><el-icon><Edit /></el-icon></el-button>
+          <el-button class="admin-icon-button" text type="danger" size="small" aria-label="删除软信息" @click="removeCondition('soft', idx)"><el-icon><Delete /></el-icon></el-button>
         </div>
       </div>
       <el-button size="small" text type="primary" @click="addCondition('soft')" class="add-cond-btn">
@@ -313,8 +313,18 @@ watch(() => props.content, parse)
   opacity: 1;
 }
 
+.condition-row:focus-within .condition-actions {
+  opacity: 1;
+}
+
 .add-cond-btn {
   align-self: flex-start;
   margin-top: 4px;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .condition-actions {
+    opacity: 1;
+  }
 }
 </style>

@@ -98,12 +98,32 @@
           <el-table-column label="操作" width="116" fixed="right" align="center">
             <template #default="{ row }">
               <div class="row-actions">
-                <el-button class="users-action-btn" @click="openEditDialog(row)">编辑</el-button>
+                <el-button class="users-action-btn" text @click="openEditDialog(row)">编辑</el-button>
               </div>
             </template>
           </el-table-column>
       </el-table>
     </div>
+
+    <section class="admin-mobile-list" v-loading="loading" aria-label="用户列表">
+      <article v-for="user in users" :key="user.id" class="admin-mobile-card">
+        <div class="admin-mobile-card__head">
+          <div class="user-primary-cell">
+            <strong>{{ user.name || '-' }}</strong>
+            <span>{{ user.email || '-' }}</span>
+          </div>
+          <el-tag :type="user.isAdmin ? 'danger' : 'primary'" size="small">
+            {{ user.isAdmin ? '管理员' : '用户' }}
+          </el-tag>
+        </div>
+        <dl class="admin-mobile-card__meta">
+          <div><dt>登录状态</dt><dd>{{ user.lastLoginAt ? '已登录' : '未登录' }}</dd></div>
+          <div><dt>最后登录</dt><dd>{{ user.lastLoginAt ? formatTime(user.lastLoginAt) : '从未登录' }}</dd></div>
+        </dl>
+        <el-button class="admin-mobile-card__action" @click="openEditDialog(user)">编辑用户</el-button>
+      </article>
+      <el-empty v-if="!loading && users.length === 0" description="暂无用户数据" />
+    </section>
 
     <!-- 分页 -->
     <div class="pagination-container admin-list-pagination">
@@ -122,7 +142,7 @@
     <el-drawer
       v-model="createVisible"
       title="新建用户"
-      size="min(72%, 600px)"
+      size="min(calc(100vw - 24px), 600px)"
       direction="rtl"
       :close-on-click-modal="false"
       :close-on-press-escape="true"
@@ -132,10 +152,10 @@
       <div class="drawer-content">
         <el-form ref="createFormRef" class="drawer-form" :model="createForm" :rules="createRules" label-width="100px">
           <el-form-item label="昵称" prop="name">
-            <el-input v-model="createForm.name" placeholder="昵称" />
+            <el-input v-model="createForm.name" />
           </el-form-item>
           <el-form-item label="邮箱" prop="email">
-            <el-input v-model="createForm.email" placeholder="邮箱" />
+            <el-input v-model="createForm.email" />
           </el-form-item>
           <el-form-item label="密码" prop="password">
             <el-input v-model="createForm.password" type="password" show-password placeholder="设置密码" />
@@ -157,7 +177,7 @@
     <el-drawer
       v-model="editVisible"
       title="编辑用户"
-      size="min(72%, 600px)"
+      size="min(calc(100vw - 24px), 600px)"
       direction="rtl"
       :close-on-click-modal="false"
       :close-on-press-escape="true"
@@ -172,10 +192,10 @@
 
         <el-form ref="editFormRef" class="drawer-form" :model="editForm" :rules="editRules" label-width="100px">
           <el-form-item label="昵称" prop="name">
-            <el-input v-model="editForm.name" placeholder="昵称" />
+            <el-input v-model="editForm.name" />
           </el-form-item>
           <el-form-item label="邮箱" prop="email">
-            <el-input v-model="editForm.email" placeholder="邮箱" />
+            <el-input v-model="editForm.email" />
           </el-form-item>
           <el-form-item label="管理员">
             <el-switch v-model="editForm.isAdmin" />
@@ -238,7 +258,7 @@
             >
               打开开发调试站
             </el-button>
-            <span class="projection-grant-entry-hint">将以新页打开 `/admin/test/dashboard`，并沿用现有 projection token 模式。</span>
+            <span class="projection-grant-entry-hint">将在新页中打开该用户的授权调试视角。</span>
           </div>
         </section>
       </div>
@@ -757,18 +777,7 @@ onMounted(() => {
 .users-action-btn {
   min-height: 30px;
   padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  background: rgba(245, 249, 255, 0.96);
-  color: var(--admin-text-brand);
   font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.users-action-btn:hover {
-  border-color: rgba(52, 120, 246, 0.28);
-  background: rgba(238, 244, 255, 0.98);
-  color: var(--color-primary-dark, #1f57cc);
 }
 
 :deep(.el-table th.el-table__cell) {
@@ -782,6 +791,10 @@ onMounted(() => {
 /* 分页 */
 .pagination-container {
   margin-top: 0.5rem;
+}
+
+.admin-mobile-list {
+  display: none;
 }
 
 /* Drawer 样式 */
@@ -918,6 +931,63 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .users-filter-toolbar {
+    margin-bottom: 0;
+  }
+
+  .table-container {
+    display: none;
+  }
+
+  .admin-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-mobile-card {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: var(--admin-border-subtle);
+    border-radius: var(--admin-radius-md);
+    background: var(--admin-bg-surface);
+  }
+
+  .admin-mobile-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .admin-mobile-card__meta {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .admin-mobile-card__meta > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .admin-mobile-card__meta dt {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+  }
+
+  .admin-mobile-card__meta dd {
+    margin: 0;
+    color: var(--admin-text-primary);
+    font-size: 13px;
+    text-align: right;
+  }
+
+  .admin-mobile-card__action {
+    width: 100%;
+  }
+
   .users-filter-panel__head {
     align-items: flex-start;
   }
@@ -931,6 +1001,15 @@ onMounted(() => {
 
   .projection-grant-grid {
     grid-template-columns: 1fr;
+  }
+
+  .drawer-footer {
+    align-items: stretch;
+  }
+
+  .drawer-footer .el-button {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>

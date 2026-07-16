@@ -10,7 +10,7 @@
           @change="emitUpdate"
           :placeholder="placeholder"
         />
-        <el-button text type="danger" size="small" @click="removeItem(idx)">
+        <el-button class="admin-icon-button" text type="danger" size="small" aria-label="删除条目" @click="removeItem(idx)">
           <el-icon><Delete /></el-icon>
         </el-button>
       </div>

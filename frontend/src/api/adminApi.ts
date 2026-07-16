@@ -678,8 +678,10 @@ export const adminFieldRoutingsApi = {
  * 一次拉回：skill manifest + 隶属 Agent + 模型配置 + prompt 版本 + 字段契约 + 调用统计
  */
 export const adminSkillWorkbenchApi = {
-  getMeta: async (skillId: string) =>
-    adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/workbench-meta`),
+  getMeta: async (skillId: string) => {
+    const canonicalSkillId = skillId.startsWith('skill:') ? skillId : `skill:${skillId}`;
+    return adminAxios.get(`/admin/skills/${encodeURIComponent(canonicalSkillId)}/workbench-meta`);
+  },
 };
 
 /**

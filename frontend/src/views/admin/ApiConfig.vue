@@ -3,7 +3,6 @@
     <AdminPageHeader
       title="模型接入与路由"
       :icon="Setting"
-      :highlights="apiConfigHighlights"
     >
       <template #actions>
         <el-button class="topbar-btn" @click="loadConfig" :loading="loading">刷新配置</el-button>
@@ -19,14 +18,6 @@
       <div class="summary-strip__item">
         <span>密钥</span>
         <strong>{{ keyStateLabel }}</strong>
-      </div>
-      <div class="summary-strip__item">
-        <span>模型目录</span>
-        <strong>{{ form.availableModels.length }} 个模型</strong>
-      </div>
-      <div class="summary-strip__item">
-        <span>默认路由</span>
-        <strong>{{ routeFillCount }}/3 已设置</strong>
       </div>
     </section>
 
@@ -71,16 +62,6 @@
       </div>
 
       <div class="model-directory-panel">
-        <div class="directory-summary">
-          <span>当前收录</span>
-          <strong>{{ form.availableModels.length }} 个模型</strong>
-        </div>
-
-        <div v-if="form.availableModels.length" class="model-chip-list">
-          <span v-for="model in form.availableModels" :key="model" class="model-chip">{{ model }}</span>
-        </div>
-        <el-empty v-else description="暂无模型" :image-size="56" />
-
         <el-form :model="form" label-position="top" class="config-form config-form--tight">
           <el-form-item label="可用模型">
             <el-select
@@ -95,13 +76,6 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="手动补充">
-            <el-input v-model="manualModelInput" placeholder="model-a, model-b">
-              <template #append>
-                <el-button class="api-append-btn" @click="appendManualModels">添加</el-button>
-              </template>
-            </el-input>
-          </el-form-item>
         </el-form>
       </div>
     </section>
@@ -111,7 +85,6 @@
         <div>
           <h2>默认路由</h2>
         </div>
-        <span class="section-meta">{{ routeFillCount }}/3 已设置</span>
       </div>
 
       <el-form :model="form" label-position="top" class="config-form">
@@ -198,25 +171,25 @@
       </el-form>
 
       <div class="terminal-actions">
-        <el-button class="api-btn api-btn--primary" @click="runModelTest" :loading="modelTesting">运行测试</el-button>
+        <el-button type="primary" class="api-btn" @click="runModelTest" :loading="modelTesting">运行测试</el-button>
       </div>
 
-      <div class="result-panel" :class="{ 'is-error': modelTestResult && !modelTestResult.success }">
+      <div v-if="modelTestResult" class="result-panel" :class="{ 'is-error': !modelTestResult.success }">
         <div class="result-meta-grid">
           <div class="result-meta">
             <span>模型</span>
-            <strong>{{ modelTestResult?.model || modelTestForm.model || '--' }}</strong>
+            <strong>{{ modelTestResult.model || modelTestForm.model || '--' }}</strong>
           </div>
           <div class="result-meta">
             <span>耗时</span>
-            <strong>{{ modelTestResult?.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
+            <strong>{{ modelTestResult.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
           </div>
           <div class="result-meta">
             <span>Tokens</span>
-            <strong>{{ modelTestResult ? formatUsage(modelTestResult.usage) : '--' }}</strong>
+            <strong>{{ formatUsage(modelTestResult.usage) }}</strong>
           </div>
         </div>
-        <pre class="result-output">{{ modelTestResult ? (modelTestResult.content || modelTestResult.message) : '--' }}</pre>
+        <pre class="result-output">{{ modelTestResult.content || modelTestResult.message }}</pre>
       </div>
     </section>
   </div>
@@ -232,7 +205,6 @@ import { toast } from '../../utils/toast';
 const loading = ref(false);
 const saving = ref(false);
 const testing = ref(false);
-const manualModelInput = ref('');
 const lastFetchAt = ref('');
 const connectionStatus = ref('unknown');
 const testResult = ref<{ connected: boolean; message: string } | null>(null);
@@ -265,13 +237,6 @@ const modelTestForm = reactive({
   maxTokens: 256
 });
 
-const apiConfigHighlights = computed(() => [
-  { label: connectionStateLabel.value, tone: connectionTone.value },
-  { label: keyStateLabel.value, tone: form.apiKeyConfigured ? 'success' as const : 'danger' as const },
-  { label: `${form.availableModels.length} 个模型`, tone: 'neutral' as const },
-  { label: `${routeFillCount.value}/3 已设置`, tone: routeFillCount.value === 3 ? 'success' as const : 'neutral' as const }
-])
-
 const connectionStateLabel = computed(() => {
   switch (connectionStatus.value) {
     case 'connected':
@@ -281,12 +246,6 @@ const connectionStateLabel = computed(() => {
     default:
       return '未检测'
   }
-})
-
-const connectionTone = computed<'info' | 'success' | 'warning' | 'danger' | 'neutral'>(() => {
-  if (connectionStatus.value === 'connected') return 'success'
-  if (connectionStatus.value === 'failed') return 'danger'
-  return 'neutral'
 })
 
 const modelTestStateLabel = computed(() => {
@@ -301,8 +260,7 @@ const modelTestTone = computed<'info' | 'success' | 'warning' | 'danger' | 'neut
   return modelTestResult.value.success ? 'success' : 'danger'
 })
 
-const compactApiUrl = computed(() => form.apiUrl || '未配置')
-const keyStateLabel = computed(() => form.apiKeyConfigured ? '已配置密钥' : '未配置密钥')
+const keyStateLabel = computed(() => form.apiKeyConfigured ? '已配置' : '未配置')
 const routeFillCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
 const lastFetchLabel = computed(() => lastFetchAt.value || '--')
 
@@ -436,18 +394,6 @@ async function runModelTest() {
   }
 }
 
-function appendManualModels() {
-  const value = manualModelInput.value.trim();
-  if (!value) return;
-  const models = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (models.length === 0) return;
-  mergeModelOptions(models);
-  manualModelInput.value = '';
-}
-
 onMounted(() => {
   loadConfig();
 });
@@ -461,7 +407,7 @@ onMounted(() => {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
   border: 1px solid rgba(223, 231, 243, 0.92);
   border-radius: 20px;
@@ -571,57 +517,16 @@ onMounted(() => {
   gap: 16px;
 }
 
-.directory-summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.directory-summary span {
-  font-size: 12px;
-  color: #7b8ba3;
-  font-weight: 700;
-}
-
-.directory-summary strong {
-  color: #22344d;
-  font-size: 0.98rem;
-  font-weight: 800;
-}
-
-.model-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.model-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(223, 231, 243, 0.92);
-  background: rgba(248, 250, 255, 0.92);
-  color: #294a80;
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .config-form--tight {
   gap: 14px;
 }
 
 .topbar-btn {
-  min-height: 38px;
-  padding: 0 16px;
-  border-radius: 999px;
-  font-weight: 700;
+  min-height: 34px;
 }
 
 .topbar-btn--primary {
-  box-shadow: 0 14px 26px rgba(52, 120, 246, 0.22);
+  box-shadow: none;
 }
 
 .head-badge {
@@ -682,40 +587,12 @@ onMounted(() => {
 }
 
 .api-btn {
-  min-height: 38px;
-  padding: 0 16px;
-  border-radius: 14px;
-  border: 1px solid transparent;
+  min-height: 34px;
   font-size: 13px;
-  font-weight: 800;
-}
-
-.api-btn--primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #3478f6, #3f86ff);
-  box-shadow: 0 12px 24px rgba(52, 120, 246, 0.24);
-}
-
-.api-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 28px rgba(52, 120, 246, 0.28);
-}
-
-.api-btn--ghost {
-  color: #335aa4;
-  border-color: rgba(52, 120, 246, 0.2);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.api-btn--ghost:hover {
-  color: #22478f;
-  border-color: rgba(52, 120, 246, 0.38);
-  background: rgba(238, 245, 255, 0.92);
 }
 
 .api-append-btn {
-  font-weight: 800;
-  color: #335aa4;
+  font-weight: 550;
 }
 
 .test-form {

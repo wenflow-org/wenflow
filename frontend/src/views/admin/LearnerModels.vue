@@ -43,16 +43,6 @@
           清空筛选
         </el-button>
       </div>
-      <div class="empty-state-card__tips">
-        <article class="empty-tip">
-          <strong>为什么会为空</strong>
-          <span>还没有生成学习者快照，或者当前筛选条件把结果收窄到了 0 条。</span>
-        </article>
-        <article class="empty-tip">
-          <strong>建议下一步</strong>
-          <span>先去教学会话或虚拟学习者页跑一次真实流程，再回来查看模型快照。</span>
-        </article>
-      </div>
     </section>
 
     <div v-else class="table-container admin-list-card">
@@ -78,10 +68,10 @@
           <template #default="{ row }">
             <div class="status-cell">
               <el-tag size="small" :type="row.recentTrend === 'improving' ? 'success' : row.recentTrend === 'declining' ? 'danger' : 'info'">
-                {{ trendLabel(row.recentTrend) }}
+                趋势：{{ trendLabel(row.recentTrend) }}
               </el-tag>
               <el-tag size="small" :type="row.fatigueRisk === 'high' ? 'danger' : row.fatigueRisk === 'medium' ? 'warning' : 'success'">
-                {{ riskLabel(row.fatigueRisk) }}
+                疲劳：{{ riskLabel(row.fatigueRisk) }}
               </el-tag>
             </div>
           </template>
@@ -105,13 +95,45 @@
         <el-table-column label="操作" width="128" fixed="right" align="center">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button class="model-action-btn" @click="openDetail(row)">详情</el-button>
-              <el-button class="model-action-btn model-action-btn--ghost" @click="recompute(row)">重算</el-button>
+              <el-button class="model-action-btn" text @click="openDetail(row)">详情</el-button>
+              <el-button class="model-action-btn model-action-btn--ghost" type="primary" text @click="recompute(row)">重算</el-button>
             </div>
           </template>
         </el-table-column>
       </el-table>
     </div>
+
+    <section v-if="!showEmptyState" class="admin-mobile-list" v-loading="loading" aria-label="学习者模型列表">
+      <article v-for="item in items" :key="`${item.userId}-${item.pathId || 'global'}`" class="admin-mobile-card">
+        <div class="admin-mobile-card__head">
+          <div class="user-cell">
+            <strong>{{ item.userName || item.userId || '--' }}</strong>
+            <span>{{ item.email || '--' }}</span>
+          </div>
+          <span class="admin-mobile-card__time">{{ formatRelativeTime(item.generatedAt) }}</span>
+        </div>
+        <div class="admin-mobile-card__tags">
+          <el-tag size="small" :type="item.recentTrend === 'improving' ? 'success' : item.recentTrend === 'declining' ? 'danger' : 'info'">
+            趋势：{{ trendLabel(item.recentTrend) }}
+          </el-tag>
+          <el-tag size="small" :type="item.fatigueRisk === 'high' ? 'danger' : item.fatigueRisk === 'medium' ? 'warning' : 'success'">
+            疲劳：{{ riskLabel(item.fatigueRisk) }}
+          </el-tag>
+        </div>
+        <div class="admin-mobile-card__section">
+          <span>当前进度</span>
+          <strong>{{ truncateText(item.currentTask || item.currentMilestone || item.pathTitle, 56) }}</strong>
+        </div>
+        <div class="admin-mobile-card__section">
+          <span>风险摘要</span>
+          <strong>{{ riskSummary(item) }}</strong>
+        </div>
+        <div class="admin-mobile-card__actions">
+          <el-button @click="openDetail(item)">详情</el-button>
+          <el-button type="primary" plain @click="recompute(item)">重算</el-button>
+        </div>
+      </article>
+    </section>
 
     <div v-if="pagination.total > 0" class="pagination-container admin-list-pagination">
       <el-pagination
@@ -328,6 +350,10 @@ onMounted(loadData);
   margin-top: 16px;
 }
 
+.admin-mobile-list {
+  display: none;
+}
+
 .empty-state-card {
   position: relative;
   z-index: 1;
@@ -382,32 +408,6 @@ onMounted(loadData);
   flex-wrap: wrap;
 }
 
-.empty-state-card__tips {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.empty-tip {
-  display: grid;
-  gap: 6px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.empty-tip strong {
-  color: var(--text-primary);
-  font-size: 0.9rem;
-}
-
-.empty-tip span {
-  color: var(--text-secondary);
-  font-size: 0.88rem;
-  line-height: 1.55;
-}
-
 .learner-btn--ghost {
   color: #335aa4;
   border-color: rgba(52, 120, 246, 0.26);
@@ -430,22 +430,11 @@ onMounted(loadData);
 .model-action-btn {
   min-height: 30px;
   padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  background: rgba(244, 249, 255, 0.96);
-  color: var(--color-primary-dark, #1f57cc);
   font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.model-action-btn:hover {
-  border-color: rgba(52, 120, 246, 0.3);
-  background: rgba(236, 244, 255, 0.98);
-  color: var(--color-primary-dark, #1f57cc);
 }
 
 .model-action-btn--ghost {
-  background: rgba(255, 255, 255, 0.92);
+  color: var(--admin-text-secondary);
 }
 
 .status-cell {
@@ -517,12 +506,60 @@ onMounted(loadData);
 }
 
 @media (max-width: 768px) {
+  .table-container {
+    display: none;
+  }
+
+  .admin-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-mobile-card {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: var(--admin-border-subtle);
+    border-radius: var(--admin-radius-md);
+    background: var(--admin-bg-surface);
+  }
+
+  .admin-mobile-card__head,
+  .admin-mobile-card__actions,
+  .admin-mobile-card__tags {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .admin-mobile-card__head {
+    justify-content: space-between;
+  }
+
+  .admin-mobile-card__time,
+  .admin-mobile-card__section span {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+  }
+
+  .admin-mobile-card__section {
+    display: grid;
+    gap: 4px;
+  }
+
+  .admin-mobile-card__section strong {
+    color: var(--admin-text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .admin-mobile-card__actions > * {
+    flex: 1;
+  }
+
   .empty-state-card {
     padding: 22px 18px;
   }
 
-  .empty-state-card__tips {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

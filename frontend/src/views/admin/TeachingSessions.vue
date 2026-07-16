@@ -40,9 +40,9 @@
       </el-table-column>
       <el-table-column prop="userName" label="用户" min-width="180">
         <template #default="{ row }">
-          <div class="user-cell">
-            <strong>{{ row.userName || row.userId }}</strong>
-            <span>{{ row.email || row.userId }}</span>
+            <div class="user-cell">
+              <strong>{{ row.userName || row.userId }}</strong>
+              <span v-if="row.email">{{ row.email }}</span>
           </div>
         </template>
       </el-table-column>
@@ -55,7 +55,7 @@
         <template #default="{ row }">
           <div class="scale-cell">
             <strong>{{ formatDuration(row.duration) }}</strong>
-            <span>{{ row.messageCount || 0 }} 条消息</span>
+            <span>{{ row.messageCount || 0 }} 条用户消息</span>
           </div>
         </template>
       </el-table-column>
@@ -64,9 +64,9 @@
           <div class="summary-cell">
             <div class="artifact-tags">
               <el-tag size="small" :type="getWrapupStatusTag(row)">会话总结 {{ getWrapupStatusText(row) }}</el-tag>
-              <el-tag size="small" :type="getAdvisoryStatusTag(row)">Advisory {{ getAdvisoryStatusText(row) }}</el-tag>
+              <el-tag size="small" :type="getAdvisoryStatusTag(row)">额外建议 {{ getAdvisoryStatusText(row) }}</el-tag>
             </div>
-            <span class="truncate">{{ getArtifactSummary(row) }}</span>
+            <span v-if="getArtifactSummary(row)" class="truncate">{{ getArtifactSummary(row) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -87,6 +87,28 @@
       </el-table-column>
     </el-table></div>
 
+    <section class="admin-mobile-list" v-loading="loading" aria-label="教学会话列表">
+      <article v-for="session in sessions" :key="session.id" class="admin-mobile-card">
+        <div class="admin-mobile-card__head">
+          <div class="topic-cell">
+            <strong>{{ session.topic }}</strong>
+            <span>{{ session.userName || session.userId }} · {{ session.subject }}</span>
+          </div>
+          <el-tag :type="getStatusType(session.status)" size="small">{{ getStatusLabel(session.status) }}</el-tag>
+        </div>
+        <div class="admin-mobile-card__tags">
+          <el-tag size="small" :type="getAttentionTag(session)">{{ getAttentionLevel(session) }}</el-tag>
+          <el-tag size="small" :type="getWrapupStatusTag(session)">会话总结 {{ getWrapupStatusText(session) }}</el-tag>
+        </div>
+        <p class="admin-mobile-card__summary">{{ getAttentionText(session) }}</p>
+        <div class="admin-mobile-card__footer">
+          <span>{{ formatDuration(session.duration) }} · {{ session.messageCount || 0 }} 条用户消息</span>
+          <el-button type="primary" plain @click="selectSession(session)">查看详情</el-button>
+        </div>
+      </article>
+      <el-empty v-if="!loading && sessions.length === 0" description="暂无教学会话" />
+    </section>
+
     <div class="pager admin-list-pagination">
       <el-pagination
         v-model:current-page="page"
@@ -100,7 +122,7 @@
       />
     </div>
 
-    <el-drawer v-model="detailVisible" size="min(60%, 760px)" :title="selectedSession ? `教学会话 · ${selectedSession.topic}` : '会话详情'" destroy-on-close class="session-detail-drawer">
+    <el-drawer v-model="detailVisible" size="min(calc(100vw - 24px), 760px)" :title="selectedSession ? `教学会话 · ${selectedSession.topic}` : '会话详情'" destroy-on-close class="session-detail-drawer">
       <div v-if="selectedSession" class="detail-grid">
         <div class="detail-banner" :class="`detail-banner--${getAttentionTone(selectedSession)}`">
           <div>
@@ -137,12 +159,12 @@
           </div>
         </el-card>
         <el-card shadow="never" class="detail-card">
-          <template #header>Advisory</template>
+          <template #header>额外建议</template>
           <div v-if="selectedSession.advisory?.shouldSuggest" class="kv-list">
-            <div class="kv-item"><span>优先级</span><strong>{{ selectedSession.advisory.priority || '--' }}</strong></div>
+            <div class="kv-item"><span>优先级</span><strong>{{ getPriorityLabel(selectedSession.advisory.priority) }}</strong></div>
             <div v-if="selectedSession.advisory?.recommendation" class="kv-item kv-item--stack"><span>建议</span><strong>{{ selectedSession.advisory.recommendation }}</strong></div>
-            <div v-if="selectedSession.advisory?.ui?.title" class="kv-item kv-item--stack"><span>UI 标题</span><strong>{{ selectedSession.advisory.ui.title }}</strong></div>
-            <div v-if="selectedSession.advisory?.ui?.body" class="kv-item kv-item--stack"><span>UI 文案</span><strong>{{ selectedSession.advisory.ui.body }}</strong></div>
+            <div v-if="selectedSession.advisory?.ui?.title" class="kv-item kv-item--stack"><span>展示标题</span><strong>{{ selectedSession.advisory.ui.title }}</strong></div>
+            <div v-if="selectedSession.advisory?.ui?.body" class="kv-item kv-item--stack"><span>展示正文</span><strong>{{ selectedSession.advisory.ui.body }}</strong></div>
             <div v-if="selectedSession.advisory?.rationale" class="kv-item kv-item--stack"><span>触发原因</span><strong>{{ selectedSession.advisory.rationale }}</strong></div>
           </div>
           <div v-else class="detail-empty-block">
@@ -275,6 +297,12 @@ const priorityTag = (priority: string) => {
   return 'info';
 };
 
+const getPriorityLabel = (priority?: string) => ({
+  high: '高',
+  medium: '中',
+  low: '低'
+}[priority || ''] || '未设置');
+
 const formatDuration = (duration: number | null | undefined) => {
   if (duration === null || duration === undefined) return '--';
   if (duration < 60) return `${duration}s`;
@@ -310,14 +338,20 @@ const getAdvisoryStatusTag = (row: any) => {
 };
 
 const getWrapupSourceText = (wrapup: any) => {
+  const sourceLabel = (value?: string) => ({
+    model: '模型生成',
+    fallback: '规则回退',
+    'ai-fallback': '备用模型生成',
+    failed: '生成失败'
+  }[value || ''] || value || '--');
   const parts = [];
-  if (wrapup?.sources?.summary) parts.push(`总结 ${wrapup.sources.summary}`);
-  if (wrapup?.sources?.evaluation) parts.push(`评估 ${wrapup.sources.evaluation}`);
+  if (wrapup?.sources?.summary) parts.push(`总结：${sourceLabel(wrapup.sources.summary)}`);
+  if (wrapup?.sources?.evaluation) parts.push(`评估：${sourceLabel(wrapup.sources.evaluation)}`);
   return parts.join(' / ') || '--';
 };
 
 const getArtifactSummary = (row: any) => {
-  if (!row.wrapup && !row.advisory?.shouldSuggest) return '暂无产物';
+  if (!row.wrapup && !row.advisory?.shouldSuggest) return '';
     if (row.wrapup && !row.wrapup.summary?.topicSummary) return '会话总结缺少摘要';
   if (row.advisory?.shouldSuggest) return row.advisory.recommendation || '有建议待处理';
   return row.wrapup?.summary?.topicSummary || '产物正常';
@@ -454,6 +488,10 @@ onMounted(loadSessions);
   box-shadow: none;
 }
 
+.admin-mobile-list {
+  display: none;
+}
+
 .toolbar-item {
   width: 180px;
 }
@@ -474,10 +512,12 @@ onMounted(loadSessions);
 .artifact-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .muted { color: var(--text-muted); }
-.detail-grid { display: grid; gap: 16px; }
-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; }
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+pre { width: 100%; max-width: 100%; box-sizing: border-box; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-size: 12px; line-height: 1.6; }
 .kv-list { display: grid; gap: 10px; }
 .kv-item { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.kv-item > * { min-width: 0; }
+.kv-item strong { text-align: right; overflow-wrap: anywhere; }
 .kv-item--stack {
   display: grid;
   gap: 6px;
@@ -586,6 +626,69 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px;
 
 @media (max-width: 1100px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .kv-item {
+    display: grid;
+  }
+
+  .kv-item strong {
+    text-align: left;
+  }
+}
+
+@media (max-width: 768px) {
+  .table-wrap {
+    display: none;
+  }
+
+  .admin-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-mobile-card {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: var(--admin-border-subtle);
+    border-radius: var(--admin-radius-md);
+    background: var(--admin-bg-surface);
+  }
+
+  .admin-mobile-card__head,
+  .admin-mobile-card__footer,
+  .admin-mobile-card__tags {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .admin-mobile-card__head,
+  .admin-mobile-card__footer {
+    justify-content: space-between;
+  }
+
+  .admin-mobile-card__tags {
+    flex-wrap: wrap;
+  }
+
+  .admin-mobile-card__summary {
+    margin: 0;
+    color: var(--admin-text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .admin-mobile-card__footer {
+    align-items: center;
+    color: var(--admin-text-muted);
+    font-size: 12px;
+  }
+
+  .detail-banner,
+  .kv-item {
+    display: grid;
+  }
 }
 
 </style>

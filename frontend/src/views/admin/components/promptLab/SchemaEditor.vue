@@ -40,12 +40,14 @@
           <span class="field-desc" v-if="field.description">{{ field.description }}</span>
 
           <div class="field-actions">
-            <el-button text size="small" @click.stop="editField(idx)"><el-icon><Edit /></el-icon></el-button>
-            <el-button text type="danger" size="small" @click.stop="removeField(idx)"><el-icon><Delete /></el-icon></el-button>
+            <el-button class="admin-icon-button" text size="small" aria-label="编辑字段" @click.stop="editField(idx)"><el-icon><Edit /></el-icon></el-button>
+            <el-button class="admin-icon-button" text type="danger" size="small" aria-label="删除字段" @click.stop="removeField(idx)"><el-icon><Delete /></el-icon></el-button>
             <el-button
               v-if="isParentType(field.type)"
               text
               size="small"
+              class="admin-icon-button"
+              aria-label="添加子字段"
               @click.stop="addChildField(idx)"
               title="添加子字段"
             >
@@ -75,8 +77,8 @@
               <span v-if="fields[ci]._required" class="field-required">必填</span>
               <span class="field-desc" v-if="fields[ci].description">{{ fields[ci].description }}</span>
               <div class="field-actions">
-                <el-button text size="small" @click.stop="editField(ci)"><el-icon><Edit /></el-icon></el-button>
-                <el-button text type="danger" size="small" @click.stop="removeField(ci)"><el-icon><Delete /></el-icon></el-button>
+                <el-button class="admin-icon-button" text size="small" aria-label="编辑字段" @click.stop="editField(ci)"><el-icon><Edit /></el-icon></el-button>
+                <el-button class="admin-icon-button" text type="danger" size="small" aria-label="删除字段" @click.stop="removeField(ci)"><el-icon><Delete /></el-icon></el-button>
               </div>
             </div>
             <div v-if="fields[ci].goodExample || fields[ci].badExample" class="field-examples">
@@ -503,6 +505,8 @@ watch(() => props.content, parse)
 
 .field-row:hover .field-actions { opacity: 1; }
 
+.field-row:focus-within .field-actions { opacity: 1; }
+
 .field-examples {
   display: flex;
   gap: 8px;
@@ -528,4 +532,20 @@ watch(() => props.content, parse)
 }
 
 .add-btn { align-self: flex-start; }
+
+@media (max-width: 768px), (pointer: coarse) {
+  .field-actions {
+    opacity: 1;
+  }
+
+  .field-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .field-desc {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+}
 </style>

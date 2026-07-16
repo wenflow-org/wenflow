@@ -46,10 +46,7 @@
 
       <div class="result-block">
         <div class="result-block__header">
-          <div>
-            <strong>Sample Output</strong>
-            <div class="result-hint">运行后查看是否符合预期。</div>
-          </div>
+          <strong>Sample Output</strong>
           <div class="card-head__actions">
             <el-button text @click="clear" :disabled="!result && !error">清空</el-button>
             <el-button
@@ -231,8 +228,7 @@ function formatTime(value: string) {
   font-size: 0.92rem;
 }
 
-.editor-block__header span,
-.result-hint {
+.editor-block__header span {
   color: #62758f;
   font-size: 0.82rem;
 }

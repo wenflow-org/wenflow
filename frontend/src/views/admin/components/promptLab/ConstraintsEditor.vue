@@ -10,7 +10,7 @@
           @change="emitUpdate"
           placeholder="输入约束内容..."
         />
-        <el-button text type="danger" size="small" @click="removeItem(idx)" class="constraint-del">
+        <el-button text type="danger" size="small" aria-label="删除约束" @click="removeItem(idx)" class="constraint-del admin-icon-button">
           <el-icon><Delete /></el-icon>
         </el-button>
       </div>
@@ -135,7 +135,17 @@ watch(() => props.content, parse)
   opacity: 1;
 }
 
+.constraint-row:focus-within .constraint-del {
+  opacity: 1;
+}
+
 .add-btn {
   align-self: flex-start;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .constraint-del {
+    opacity: 1;
+  }
 }
 </style>

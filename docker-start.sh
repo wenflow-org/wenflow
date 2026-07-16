@@ -88,6 +88,17 @@ is_placeholder() {
     return 1
 }
 
+port_in_use() {
+    local port="$1"
+    (echo >/dev/tcp/127.0.0.1/$port) 2>/dev/null && return 0
+    case "$(uname -s)" in
+        Linux)                   ss -tlnp 2>/dev/null | grep -q ":$port\b" && return 0 ;;
+        Darwin)                  lsof -iTCP -sTCP:LISTEN -nP 2>/dev/null | grep -q ":$port " && return 0 ;;
+        MINGW*|MSYS*|CYGWIN*)    netstat -ano 2>/dev/null | grep -q ":$port " && return 0 ;;
+    esac
+    return 1
+}
+
 # ==========================================
 # 判断交互模式
 # ==========================================
@@ -157,19 +168,16 @@ fi
 if [ "$NON_INTERACTIVE" != true ]; then
     echo ""
 
-    # AI_API_URL
     CURRENT=$(get_env "AI_API_URL")
     [ -z "$CURRENT" ] && CURRENT="https://api.deepseek.com"
     read -r -p "  AI_API_URL [$CURRENT]: " input
     [ -n "$input" ] && set_env "AI_API_URL" "$input"
 
-    # AI_MODEL
     CURRENT=$(get_env "AI_MODEL")
     [ -z "$CURRENT" ] && CURRENT="deepseek-v4-flash"
     read -r -p "  AI_MODEL [$CURRENT]: " input
     [ -n "$input" ] && set_env "AI_MODEL" "$input"
 
-    # AI_MODEL_REASONING
     CURRENT=$(get_env "AI_MODEL_REASONING")
     [ -z "$CURRENT" ] && CURRENT="deepseek-v4-pro"
     read -r -p "  AI_MODEL_REASONING [$CURRENT]: " input
@@ -177,7 +185,6 @@ if [ "$NON_INTERACTIVE" != true ]; then
 
     echo ""
 
-    # 管理员
     CURRENT=$(get_env "INIT_ADMIN_NAME")
     [ -z "$CURRENT" ] && CURRENT="admin"
     read -r -p "  管理员用户名 [$CURRENT]: " input
@@ -185,6 +192,8 @@ if [ "$NON_INTERACTIVE" != true ]; then
 
     read -r -p "  管理员密码 (回车保持当前): " input
     [ -n "$input" ] && set_env "INIT_ADMIN_PASSWORD" "$input"
+
+    echo ""
 fi
 
 # ==========================================
@@ -222,7 +231,40 @@ if [ ${#JWT_FINAL} -lt 32 ]; then
 fi
 
 # ==========================================
-# 9. 构建并启动
+# 9. 端口检测
+# ==========================================
+
+NGINX_PORT="${NGINX_PORT:-80}"
+
+if [ "$NON_INTERACTIVE" != true ]; then
+    echo ""
+
+    if port_in_use "$NGINX_PORT"; then
+        echo -e "${YELLOW}> 端口 ${NGINX_PORT} 已被占用${NC}"
+        read -r -p "  nginx 端口 (回车 = 8080): " input
+        NGINX_PORT="${input:-8080}"
+        echo ""
+    else
+        echo -e "${GREEN}> 端口 ${NGINX_PORT} 可用${NC}"
+    fi
+
+    if [ "$NGINX_PORT" = "80" ]; then
+        FRONTEND_URL="http://localhost"
+        CORS_ORIGIN="http://localhost,http://127.0.0.1"
+    else
+        FRONTEND_URL="http://localhost:${NGINX_PORT}"
+        CORS_ORIGIN="http://localhost:${NGINX_PORT},http://127.0.0.1"
+    fi
+
+    set_env "FRONTEND_URL" "$FRONTEND_URL"
+    set_env "CORS_ORIGIN" "$CORS_ORIGIN"
+    echo -e "${GREEN}> 已适配：FRONTEND_URL=${FRONTEND_URL}${NC}"
+fi
+
+export NGINX_PORT
+
+# ==========================================
+# 10. 构建并启动
 # ==========================================
 
 echo ""
@@ -231,7 +273,7 @@ echo ""
 docker compose up -d --build
 
 # ==========================================
-# 10. 等待后端就绪
+# 11. 等待后端就绪
 # ==========================================
 
 echo ""
@@ -248,20 +290,27 @@ for i in $(seq 1 30); do
 done
 
 # ==========================================
-# 11. 完成
+# 12. 完成
 # ==========================================
+
+if [ "$NGINX_PORT" = "80" ]; then
+    ACCESS_URL="http://localhost"
+else
+    ACCESS_URL="http://localhost:${NGINX_PORT}"
+fi
 
 echo ""
 echo -e "${GREEN}${BOLD}================================${NC}"
 echo -e "${GREEN}${BOLD}  WenFlow 启动完成              ${NC}"
 echo -e "${GREEN}${BOLD}================================${NC}"
 echo ""
-echo -e "  访问地址   ${CYAN}http://localhost${NC}"
-echo -e "  健康检查   ${CYAN}http://localhost/health${NC}"
-echo -e "  后端 API   ${CYAN}http://localhost:3001/health${NC}"
+echo -e "  访问地址   ${CYAN}${ACCESS_URL}${NC}"
+echo -e "  健康检查   ${CYAN}${ACCESS_URL}/health${NC}"
 echo ""
 echo "管理命令:"
 echo "  docker compose logs -f      # 查看日志"
 echo "  docker compose down         # 停止并清理容器"
 echo "  docker compose restart      # 重启服务"
 echo ""
+
+read -r -p "按回车键退出..."

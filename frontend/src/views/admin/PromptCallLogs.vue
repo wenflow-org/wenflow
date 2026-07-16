@@ -11,23 +11,26 @@
       <div class="admin-section-head__copy">
           <h3 class="admin-section-head__title">调用筛选</h3>
         </div>
+        <el-button class="filter-toggle" text @click="filterExpanded = !filterExpanded">
+          {{ filterExpanded ? '收起' : `展开${activeFilterCount ? ` · ${activeFilterCount} 项` : ''}` }}
+        </el-button>
       </div>
-      <div class="admin-filter-grid admin-filter-grid--wide prompt-filter-grid">
+      <div v-show="filterExpanded" class="admin-filter-grid admin-filter-grid--wide prompt-filter-grid">
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">节点</label>
-          <el-input v-model="filters.agentId" placeholder="节点 ID" clearable class="filter-input" />
+          <el-input v-model="filters.agentId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">Path ID</label>
-          <el-input v-model="filters.pathId" placeholder="pathId" clearable class="filter-input" />
+          <el-input v-model="filters.pathId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">运行批次</label>
-          <el-input v-model="filters.pipelineRunId" placeholder="pipelineRunId" clearable class="filter-input" />
+          <el-input v-model="filters.pipelineRunId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">Trace ID</label>
-          <el-input v-model="filters.traceId" placeholder="traceId" clearable class="filter-input" />
+          <el-input v-model="filters.traceId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">结果状态</label>
@@ -52,6 +55,15 @@
       </div>
     </section>
 
+    <el-alert v-if="loadError" type="error" :closable="false" show-icon title="Prompt 日志加载失败">
+      <template #default>
+        <div class="admin-error-row">
+          <span>{{ loadError }}</span>
+          <el-button size="small" @click="loadLogs">重试</el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <section class="prompt-results-shell">
       <div class="admin-section-head prompt-results-shell__head">
         <div class="admin-section-head__copy">
@@ -60,21 +72,30 @@
       </div>
       <div class="prompt-results-toolbar">
         <span class="prompt-results-toolbar__count">{{ filteredLogs.length }} 条结果</span>
-        <p class="prompt-results-toolbar__note">{{ activePromptFilterLabel }}</p>
       </div>
       <div class="logs-list" v-loading="loading">
       <div v-if="logs.length" class="prompt-log-list">
-        <article v-for="log in filteredLogs" :key="log.id" class="prompt-log-card" :class="{ 'is-error': !log.success, 'is-drift': !!log.promptDrift }">
+        <article
+          v-for="log in filteredLogs"
+          :key="log.id"
+          class="prompt-log-card"
+          :class="{ 'is-error': !log.success, 'is-drift': !!log.promptDrift }"
+          role="button"
+          tabindex="0"
+          @click="openDetail(log)"
+          @keydown.enter="openDetail(log)"
+          @keydown.space.prevent="openDetail(log)"
+        >
           <div class="prompt-log-card__head">
             <div class="prompt-log-card__headline">
               <div class="prompt-log-card__meta">
                 <span class="prompt-log-card__time">{{ formatTime(log.createdAt) }}</span>
                 <strong class="prompt-log-card__agent">{{ log.agentId }}</strong>
                 <el-tag size="small" :type="log.success ? 'success' : 'danger'">{{ log.success ? '成功' : '失败' }}</el-tag>
-                <el-tag v-if="log.promptDrift" size="small" type="warning">异常</el-tag>
+                <el-tag v-if="log.promptDrift" size="small" type="warning">Prompt 漂移</el-tag>
                 <el-tag v-if="log.systemPromptVersion" size="small" effect="plain">v{{ log.systemPromptVersion }}</el-tag>
               </div>
-              <div class="prompt-log-card__summary">
+              <div v-if="describeLogIssue(log)" class="prompt-log-card__summary">
                 <span class="prompt-summary-label">诊断</span>
                 <span class="prompt-summary-text">{{ describeLogIssue(log) }}</span>
               </div>
@@ -82,7 +103,7 @@
 
             <div class="prompt-log-card__rail">
               <div class="prompt-log-card__duration">{{ log.durationMs }}ms</div>
-              <el-button class="prompt-log-card__detail-btn" @click="openDetail(log)">查看详情</el-button>
+              <el-button class="prompt-log-card__detail-btn" @click.stop="openDetail(log)">查看详情</el-button>
             </div>
           </div>
 
@@ -93,8 +114,8 @@
               <span v-if="log.pipelineRunId">运行批次 {{ log.pipelineRunId }}</span>
               <span v-if="log.pipelineStepIndex !== null && log.pipelineStepIndex !== undefined">步骤 {{ log.pipelineStepIndex }}</span>
               <span v-if="log.traceId">Trace {{ log.traceId }}</span>
-              <span>提取 JSON {{ log.extractedJson ? '已提取' : '无结果' }}</span>
-              <span>标准化输出 {{ log.normalizedOutput ? '已生成' : '无结果' }}</span>
+              <span v-if="!log.extractedJson">未提取 JSON</span>
+              <span v-if="!log.normalizedOutput">缺少标准化输出</span>
             </div>
 
             <div class="prompt-log-card__error-row" v-if="log.errorCode || log.errorMessage">
@@ -108,7 +129,7 @@
       </div>
     </section>
 
-    <el-drawer v-model="detailVisible" size="min(72%, 1100px)" destroy-on-close>
+    <el-drawer v-model="detailVisible" size="min(calc(100vw - 24px), 880px)" destroy-on-close>
       <template #header>
         <div class="detail-header">
           <strong>{{ selectedLog?.agentId || 'Prompt Call' }}</strong>
@@ -164,7 +185,7 @@
           class="detail-issue-row"
           :class="selectedLog.promptDrift ? 'detail-issue-row--warning' : 'detail-issue-row--error'"
         >
-          <span class="detail-issue-message">{{ selectedLog.errorMessage || '发现 promptDrift 标记' }}</span>
+          <span class="detail-issue-message">{{ selectedLog.errorMessage || '发现 Prompt 版本漂移' }}</span>
         </div>
 
         <el-tabs class="detail-tabs">
@@ -195,11 +216,12 @@ import { useRoute, useRouter } from 'vue-router';
 import { Document } from '@element-plus/icons-vue';
 import { adminRuntimeDefinitionsApi } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
-import { toast } from '@/utils/toast';
 
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
+const loadError = ref('');
+const filterExpanded = ref(typeof window === 'undefined' || window.innerWidth > 768);
 const detailVisible = ref(false);
 const selectedLog = ref<any | null>(null);
 const logs = ref<any[]>([]);
@@ -212,6 +234,15 @@ const filters = ref({
   status: '',
   limit: 50,
 });
+
+const activeFilterCount = computed(() => [
+  filters.value.agentId,
+  filters.value.pathId,
+  filters.value.pipelineRunId,
+  filters.value.traceId,
+  filters.value.status,
+  filters.value.limit !== 50 ? filters.value.limit : '',
+].filter(Boolean).length);
 
 const successCount = computed(() => logs.value.filter((item) => item.success).length);
 const errorCount = computed(() => logs.value.filter((item) => !item.success).length);
@@ -229,18 +260,6 @@ const filteredLogs = computed(() => logs.value.filter((log) => {
   return true;
 }));
 
-const activePromptFilterLabel = computed(() => {
-  const parts = [
-    filters.value.agentId ? `Agent ${filters.value.agentId}` : '',
-    filters.value.pathId ? `Path ${filters.value.pathId}` : '',
-    filters.value.pipelineRunId ? `Run ${filters.value.pipelineRunId}` : '',
-    filters.value.traceId ? `Trace ${filters.value.traceId}` : '',
-    filters.value.status ? `状态 ${filters.value.status}` : ''
-  ].filter(Boolean)
-
-  return parts.length ? `当前筛选：${parts.join(' / ')}` : '默认范围'
-})
-
 const formatTime = (value: string) => {
   if (!value) return '--';
   return new Date(value).toLocaleString('zh-CN', {
@@ -256,12 +275,11 @@ const formatTime = (value: string) => {
 
 const describeLogIssue = (log: any) => {
   if (log.success) {
-    if (log.promptDrift) return '成功，但有漂移标记。';
     if (!log.normalizedOutput) return '成功，但缺少归一化输出。';
-    return '成功。';
+    return '';
   }
 
-  if (log.errorMessage) return `失败：${log.errorMessage}`;
+  if (log.errorMessage) return '';
   if (log.errorCode) return `失败，错误码 ${log.errorCode}`;
   if (!log.extractedJson) return '失败，未提取 JSON。';
   return '失败。';
@@ -298,6 +316,7 @@ const hydrateFiltersFromRoute = () => {
 
 const loadLogs = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const response = await adminRuntimeDefinitionsApi.getPromptCallLogs({
       limit: filters.value.limit,
@@ -309,7 +328,7 @@ const loadLogs = async () => {
     });
     logs.value = response.data.data || [];
   } catch (error: any) {
-    toast.error(error.response?.data?.error?.message || '加载 Prompt Call Logs 失败');
+    loadError.value = error.response?.data?.error?.message || '无法获取 Prompt 日志，请检查服务连接后重试。';
   } finally {
     loading.value = false;
   }
@@ -423,6 +442,23 @@ watch(filters, () => {
 
 .prompt-log-card.is-drift {
   box-shadow: inset 3px 0 0 var(--admin-color-warning);
+}
+
+.prompt-log-card:focus-visible {
+  border-color: var(--admin-text-brand);
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
+}
+
+.filter-toggle {
+  display: none;
+}
+
+.admin-error-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
 }
 
 .prompt-log-card__head {
@@ -541,8 +577,6 @@ watch(filters, () => {
 }
 
 .prompt-log-card__detail-btn {
-  border-radius: 14px;
-  font-weight: 700;
   min-height: 30px;
   padding: 0 12px;
 }
@@ -555,7 +589,9 @@ watch(filters, () => {
 
 .detail-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
+  min-width: 0;
 }
 
 .detail-overview-grid {
@@ -568,6 +604,7 @@ watch(filters, () => {
   padding: 12px 14px;
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .detail-overview-card__label {
@@ -624,17 +661,10 @@ watch(filters, () => {
   word-break: break-word;
 }
 
-.detail-descriptions :deep(.el-descriptions__body) {
-  overflow-x: auto;
-}
-
-.detail-descriptions :deep(.el-descriptions__table) {
-  min-width: 640px;
-}
-
 .detail-tabs {
   padding-top: 4px;
   border-top: var(--admin-border-subtle);
+  min-width: 0;
 }
 
 .detail-tabs :deep(.el-tabs__header) {
@@ -642,12 +672,18 @@ watch(filters, () => {
 }
 
 .detail-tabs pre {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 0;
   padding: 16px;
   background: #0f172a;
   color: #e2e8f0;
   border-radius: 12px;
   overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -673,6 +709,28 @@ watch(filters, () => {
 
   .filter-actions {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-toggle {
+    display: inline-flex;
+  }
+
+  .prompt-log-card__meta-row span,
+  .prompt-log-card__agent,
+  .detail-header span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .prompt-log-card__detail-btn {
+    min-width: 100%;
+  }
+
+  .admin-error-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

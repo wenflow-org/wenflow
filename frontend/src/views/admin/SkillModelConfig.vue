@@ -13,15 +13,6 @@
       </template>
     </AdminPageHeader>
 
-    <el-alert
-      class="page-notice"
-      type="info"
-      :closable="false"
-      show-icon
-       title="此页只管理外挂能力组件"
-       description="主链 Skill 已移至“Skill 目录”，此处仅管理外挂组件。"
-      />
-
     <div class="filters admin-list-toolbar">
       <div class="admin-list-toolbar__group">
         <el-input v-model="keyword" placeholder="搜索组件 ID / 名称" clearable class="search" />
@@ -73,7 +64,7 @@
         <el-table-column label="配置策略" min-width="240">
           <template #default="{ row }">
             <div class="strategy-cell">
-              <span class="strategy-cell__model">{{ row.model || '平台默认独立配置' }}</span>
+              <span class="strategy-cell__model">{{ row.model || '平台默认模型' }}</span>
               <div class="strategy-cell__tags">
                 <el-tag :type="thinkingTagType(row.thinkingMode)">{{ formatThinkingMode(row.thinkingMode) }}</el-tag>
                 <el-tag :type="effortTagType(row.reasoningEffort)">{{ formatReasoningEffort(row.reasoningEffort) }}</el-tag>
@@ -85,8 +76,8 @@
           <template #default="{ row }">
             <div class="params-cell">
               <div class="params-cell__row">
-                <span>T={{ row.temperature ?? '--' }}</span>
-                <span>Max {{ row.maxTokens ?? '--' }}</span>
+                <span>温度 {{ row.temperature ?? '--' }}</span>
+                <span>最大输出 {{ row.maxTokens ?? '--' }}</span>
               </div>
               <div class="params-cell__row params-cell__row--sub">
                 <el-tag size="small" type="info">{{ formatTimeout(row.requestTimeoutMs) }}</el-tag>
@@ -101,6 +92,34 @@
         </el-table-column>
       </el-table>
     </div>
+
+    <section class="admin-mobile-list" v-loading="loading" aria-label="外挂组件列表">
+      <article v-for="config in filteredConfigs" :key="config.skillId" class="admin-mobile-card">
+        <div class="admin-mobile-card__head">
+          <div class="skill-cell">
+            <strong class="skill-cell__name">{{ getSkillDisplayName(config) }}</strong>
+            <span class="skill-cell__id">{{ config.skillId }}</span>
+          </div>
+          <el-tag v-if="config.status" :type="getStatusTagType(config.status)" size="small">
+            {{ getStatusLabel(config.status) }}
+          </el-tag>
+        </div>
+        <div class="admin-mobile-card__section">
+          <span>配置策略</span>
+          <strong>{{ config.model || '平台默认模型' }}</strong>
+        </div>
+        <div class="admin-mobile-card__tags">
+          <el-tag :type="config.enabled ? 'success' : 'info'" size="small">{{ config.enabled ? '独立配置' : '继承' }}</el-tag>
+          <el-tag size="small" type="info">温度 {{ config.temperature ?? '--' }}</el-tag>
+          <el-tag size="small" type="info">最大输出 {{ config.maxTokens ?? '--' }}</el-tag>
+        </div>
+        <div class="admin-mobile-card__footer">
+          <span>{{ formatLastCalledRelative(config.lastCalledAt) }}</span>
+          <el-button type="primary" plain @click="openSkillWorkbench(config)">快速查看</el-button>
+        </div>
+      </article>
+      <el-empty v-if="!loading && filteredConfigs.length === 0" description="没有匹配的外挂组件" />
+    </section>
 
     <SkillNodeWorkbench v-model:visible="skillWorkbenchVisible" :skill-id="currentSkillId" @changed="fetchConfigs" />
   </div>
@@ -153,15 +172,13 @@ const filteredConfigs = computed(() => {
 });
 
 const componentConfigHighlights = computed(() => [
-  { label: `${filteredConfigs.value.length} 个组件在列表中`, tone: 'info' as const },
   { label: summary.value ? `正常 ${summary.value.working}` : '等待统计', tone: 'success' as const },
-  { label: summary.value ? `简化 ${summary.value.simplified}` : '等待统计', tone: 'warning' as const },
-  { label: onlyEnabled.value ? '仅看独立配置' : '包含继承配置', tone: onlyEnabled.value ? 'neutral' as const : 'info' as const }
+  { label: summary.value ? `简化 ${summary.value.simplified}` : '等待统计', tone: 'warning' as const }
 ]);
 
 const SKILL_HINTS: Record<string, string> = {
-  'path-scene-framing': 'Path 冷启动输入清洗层：统一收敛 Goal 输出为标准主输入（normalizedInput），再交给 path-agent 主生成。',
-  'stage-designer': 'Path 阶段任务设计层：围绕单个 milestone 生成 subtasks，并补轻量任务标签，不直接写 Learn 教案。',
+  'path-scene-framing': '整理路径生成所需的输入。',
+  'stage-designer': '生成阶段任务与任务标签。',
 };
 
 const SKILL_CN_NAMES: Record<string, string> = {
@@ -382,6 +399,10 @@ watch(
   color: var(--admin-text-muted);
 }
 
+.admin-mobile-list {
+  display: none;
+}
+
 .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .bg-orb { position: absolute; border-radius: 50%; filter: blur(110px); opacity: 0.15; }
 .bg-orb--1 { width: 460px; height: 460px; top: -180px; right: -120px; background: radial-gradient(circle, rgba(52, 120, 246, 0.3), transparent 70%); animation: orb-d 26s ease-in-out infinite; }
@@ -396,30 +417,18 @@ watch(
 
 .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
 
-.page-notice {
-  margin-bottom: 16px;
-  position: relative;
-  z-index: 1;
-}
-
 .skill-btn,
 .table-link-btn {
-  border-radius: 14px;
-  font-weight: 700;
+  font-weight: 550;
 }
 
 .skill-btn--ghost {
-  color: #335aa4;
-  border: 1px solid rgba(52, 120, 246, 0.2);
-  background: rgba(255, 255, 255, 0.92);
+  color: var(--admin-text-secondary);
 }
 
 .table-link-btn {
   min-height: 30px;
   padding: 0 12px;
-  color: var(--color-primary-dark, #1f57cc);
-  border: 1px solid rgba(52, 120, 246, 0.16);
-  background: rgba(244, 249, 255, 0.96);
 }
 .summary-card { border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--glass-bg-light); }
 .summary-card .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
@@ -896,11 +905,64 @@ watch(
 }
 
 @media (max-width: 768px) {
-  .skill-model-config {
-    padding: 1rem;
-  }
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .admin-list-toolbar { flex-direction: column; align-items: stretch; }
   .admin-list-toolbar__group { justify-content: space-between; }
+
+  .admin-list-card {
+    display: none;
+  }
+
+  .admin-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-mobile-card {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: var(--admin-border-subtle);
+    border-radius: var(--admin-radius-md);
+    background: var(--admin-bg-surface);
+  }
+
+  .admin-mobile-card__head,
+  .admin-mobile-card__footer,
+  .admin-mobile-card__tags {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .admin-mobile-card__head,
+  .admin-mobile-card__footer {
+    justify-content: space-between;
+  }
+
+  .admin-mobile-card__footer {
+    align-items: center;
+    color: var(--admin-text-muted);
+    font-size: 12px;
+  }
+
+  .admin-mobile-card__tags {
+    flex-wrap: wrap;
+  }
+
+  .admin-mobile-card__section {
+    display: grid;
+    gap: 4px;
+  }
+
+  .admin-mobile-card__section span {
+    color: var(--admin-text-muted);
+    font-size: 12px;
+  }
+
+  .admin-mobile-card__section strong {
+    color: var(--admin-text-primary);
+    font-size: 13px;
+  }
 }
 </style>

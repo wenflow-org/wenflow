@@ -3,7 +3,6 @@
     <AdminPageHeader
       title="编排结构"
       :icon="Connection"
-      :highlights="pageHighlights"
     >
       <template #actions>
         <el-button :icon="Refresh" :loading="loading" @click="loadOrchestrators">刷新</el-button>
@@ -32,15 +31,11 @@
           <span class="blueprint-shell__order">{{ String(currentPhase.order).padStart(2, '0') }}</span>
           <h3 class="blueprint-shell__title">{{ currentPhase.label }}</h3>
           <span class="admin-meta-chip">
-            <span class="admin-meta-chip__key">mode</span>
-            <span class="admin-meta-chip__value">{{ currentOrchestrator ? '主编排' : '成员视图' }}</span>
-          </span>
-          <span class="admin-meta-chip">
-            <span class="admin-meta-chip__key">agent</span>
+            <span class="admin-meta-chip__key">节点 ID</span>
             <span class="admin-meta-chip__value">{{ currentPhase.agentId }}</span>
           </span>
           <span v-if="nextPhase" class="admin-meta-chip">
-            <span class="admin-meta-chip__key">next</span>
+            <span class="admin-meta-chip__key">下一阶段</span>
             <span class="admin-meta-chip__value">{{ nextPhase.shortName }}</span>
           </span>
         </div>
@@ -70,10 +65,9 @@
       </div>
 
       <div class="blueprint-shell__body">
-        <section class="directory-strip">
+        <section v-if="currentOrchestrator" class="directory-strip">
           <div class="blueprint-section-head">
-            <strong>{{ currentOrchestrator ? '索引' : '成员' }}</strong>
-            <span>{{ currentOrchestrator ? `${currentOrchestrator.steps?.length || 0} 步` : `${currentPhaseSkills.length} 个` }}</span>
+            <strong>索引</strong>
           </div>
 
           <div v-if="phaseDirectoryItems.length" class="phase-directory-list">
@@ -84,13 +78,6 @@
                   <span class="phase-directory-item__kind">{{ item.kindLabel }}</span>
                 </div>
                 <strong class="phase-directory-item__title">{{ item.displayName }}</strong>
-                <p class="phase-directory-item__desc">{{ item.description }}</p>
-                <div class="phase-directory-item__meta">
-                  <span>IN {{ item.consumes.length }}</span>
-                  <span>OUT {{ item.produces.length }}</span>
-                  <span v-if="item.loopOver">循环 {{ item.loopOver }}</span>
-                  <span v-else-if="item.condition">条件分支</span>
-                </div>
               </div>
 
               <div class="phase-directory-item__actions">
@@ -187,7 +174,11 @@
                       'has-loop': data.loopOver,
                       'has-condition': data.condition
                     }"
-                    @dblclick="handleFlowNodeOpen(data.agentId)"
+                    role="button"
+                    tabindex="0"
+                    @click="handleFlowNodeOpen(data.agentId)"
+                    @keydown.enter="handleFlowNodeOpen(data.agentId)"
+                    @keydown.space.prevent="handleFlowNodeOpen(data.agentId)"
                   >
                     <div class="vf-node-header">
                       <span class="vf-node-type">SKILL</span>
@@ -227,7 +218,7 @@
                 </template>
 
                 <template #node-agent="{ data }">
-                  <div class="vf-step-node vf-step-node--agent" @dblclick="handleFlowNodeOpen(data.agentId)">
+                  <div class="vf-step-node vf-step-node--agent" role="button" tabindex="0" @click="handleFlowNodeOpen(data.agentId)" @keydown.enter="handleFlowNodeOpen(data.agentId)" @keydown.space.prevent="handleFlowNodeOpen(data.agentId)">
                     <div class="vf-node-header">
                       <span class="vf-node-type">AGENT</span>
                       <span class="vf-node-step">步骤 {{ data.step }}</span>
@@ -239,7 +230,7 @@
                 </template>
 
                 <template #node-service="{ data }">
-                  <div class="vf-step-node vf-step-node--service" @dblclick="handleFlowNodeOpen(data.agentId)">
+                  <div class="vf-step-node vf-step-node--service" role="button" tabindex="0" @click="handleFlowNodeOpen(data.agentId)" @keydown.enter="handleFlowNodeOpen(data.agentId)" @keydown.space.prevent="handleFlowNodeOpen(data.agentId)">
                     <div class="vf-node-header">
                       <span class="vf-node-type">SERVICE</span>
                       <span class="vf-node-step">步骤 {{ data.step }}</span>
@@ -560,20 +551,6 @@ const currentPhaseSkills = computed<TopologyNodeItem[]>(() => {
   return topologyData.value.nodes.filter((node) => node.type === 'skill' && node.parentAgentId === currentPhase.value!.agentId)
 })
 
-const pageHighlights = computed(() => {
-  if (!currentPhase.value) return []
-
-  return [
-    { label: `${currentPhase.value.shortName}`, tone: 'neutral' as const },
-    {
-      label: currentOrchestrator.value ? `${currentOrchestrator.value.steps?.length || 0} 步主编排` : '仅成员视图',
-      tone: 'neutral' as const
-    },
-    { label: `${currentPhaseSkills.value.length} 个 Skills`, tone: 'neutral' as const },
-    { label: `${totalPhaseVariables.value} 个变量接力`, tone: 'neutral' as const }
-  ]
-})
-
 const phaseCards = computed(() => {
   return PHASES.map((phase) => {
     const orchestrator = orchestratorMap.value.get(phase.agentId)
@@ -594,10 +571,6 @@ const currentPhaseMetrics = computed(() => {
   const handoffTarget = nextPhaseConsumers.value.length
 
   return [
-    {
-      label: '模式',
-      value: currentOrchestrator.value ? '主编排' : '成员视图'
-    },
     {
       label: '节点数',
       value: String(currentOrchestrator.value?.steps?.length || currentPhaseSkills.value.length)

@@ -9,18 +9,6 @@
 -->
 <template>
   <div class="eng-pane">
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      class="eng-intro"
-    >
-      <template #title>工程视图</template>
-      <div style="font-size: 12.5px; line-height: 1.7">
-        运行节点元信息，改 prompt 无需访问。
-      </div>
-    </el-alert>
-
     <!-- 基础信息 -->
     <section class="eng-section">
       <h4>基础信息</h4>
@@ -83,7 +71,6 @@
       <h4>.ts 兜底常量</h4>
       <p class="eng-section__desc">
         以下 TypeScript 常量目前作为 <code>callPrompt</code> 的 <code>defaultSystemPrompt</code> 兜底。
-        理论上 File-as-Truth + DB ACTIVE 两层都生效后即可删除——属于 Phase 2 工作。
       </p>
       <table class="kv-table">
         <tbody>
@@ -150,10 +137,6 @@ function formatTime(value: string): string {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
-}
-
-.eng-intro :deep(.el-alert__content) {
-  flex: 1;
 }
 
 .eng-section {

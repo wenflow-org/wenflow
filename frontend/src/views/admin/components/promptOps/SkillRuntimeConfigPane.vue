@@ -10,14 +10,14 @@
 <template>
   <div class="skill-runtime-pane" v-loading="loading">
     <el-alert
-      type="warning"
+      type="info"
       :closable="false"
       show-icon
       class="skill-runtime-pane__notice"
     >
-      <template #title>Skill 节点级运行时参数</template>
+      <template #title>运行参数</template>
       <div style="font-size: 12.5px; line-height: 1.7">
-        节点级参数覆盖 prompt 版本的 temperature/maxTokens，关闭"独立配置"则继承上层 Agent 默认。
+        独立配置会覆盖上层默认值；关闭后恢复继承。
       </div>
     </el-alert>
 
