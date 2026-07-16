@@ -1,4 +1,4 @@
-FROM node:18-slim AS builder
+FROM node:20-slim AS builder
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
@@ -7,7 +7,7 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY backend/package.json backend/package-lock.json ./
-RUN npm ci
+RUN npm install
 
 COPY backend/prisma/ ./prisma/
 RUN npx prisma generate
@@ -22,7 +22,7 @@ RUN cp -r src/generated dist/generated/
 COPY prompts/ ./prompts/
 
 
-FROM node:18-slim AS runtime
+FROM node:20-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
