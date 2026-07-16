@@ -23,6 +23,8 @@ COPY prompts/ ./prompts/
 
 FROM node:18-slim AS runtime
 
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY --from=builder /app/package.json /app/package-lock.json ./
