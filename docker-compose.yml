@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    ports:
+      - "3001:3001"
     volumes:
       - wenflow_data:/app/data
     env_file:
