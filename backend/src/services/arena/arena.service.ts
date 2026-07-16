@@ -15,7 +15,7 @@ import dataMappingAgent from '../../skills/data-mapping-agent';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import { executeSkill } from '../../skills';
 import { PrismaClient } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 const prisma = new PrismaClient();
 

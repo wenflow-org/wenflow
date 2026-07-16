@@ -3,7 +3,7 @@ import express from 'express';
 import prisma from '../config/database';
 import { authMiddleware } from '../middleware/auth.middleware';
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 const router = express.Router();
 

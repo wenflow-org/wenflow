@@ -32,7 +32,6 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "@types/uuid": "^10.0.0",
     "axios": "^1.6.5",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
@@ -45,7 +44,7 @@
     "openai": "^4.26.0",
     "prisma": "^5.22.0",
     "sqlite3": "^6.0.1",
-    "uuid": "^13.0.0",
+    "uuid": "10.0.0",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
   },

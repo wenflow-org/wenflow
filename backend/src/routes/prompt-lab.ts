@@ -7,7 +7,7 @@ import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import systemPrisma from '../config/system-database';
 import { getAPIGateway, CallerInfo, ChatMessage } from '../gateway/api-gateway';
 import { compilePrompt } from '../services/prompt-compiler';

@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import { createHash } from 'crypto'
 import prisma from '../config/database'
 import { signProjectionToken, SYNTHETIC_CAPABILITIES } from '../utils/projection-token'

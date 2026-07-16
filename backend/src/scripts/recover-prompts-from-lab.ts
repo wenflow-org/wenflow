@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID as uuidv4 } from 'crypto'
 import yaml from 'js-yaml'
 import systemPrisma from '../config/system-database'
 

@@ -7,7 +7,7 @@
  * - Learning阶段：调用AITeachingService
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import goalConversationService from '../services/learning/goal-conversation.service';

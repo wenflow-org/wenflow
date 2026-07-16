@@ -2,7 +2,7 @@ import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { getGateway } from '../gateway';
 import { getAPIGateway } from '../gateway/api-gateway';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { isExtraCapabilitySkill } from './skill-component-catalog';
 
 export interface SkillModelConfig {

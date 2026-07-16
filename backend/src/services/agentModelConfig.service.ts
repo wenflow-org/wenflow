@@ -1,7 +1,7 @@
 import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { getDefaultAgentModelConfigs } from './agent-manifest.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { getAPIGateway } from '../gateway/api-gateway';
 
 export interface AgentModelConfig {
