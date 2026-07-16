@@ -17,6 +17,7 @@ RUN npx prisma generate --schema=prisma/system.prisma
 
 COPY backend/tsconfig.json backend/tsconfig.build.json ./
 RUN npx tsc -p tsconfig.build.json
+RUN cp -r src/generated dist/generated/
 
 COPY prompts/ ./prompts/
 
