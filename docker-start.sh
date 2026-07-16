@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# 错误时暂停窗口，防止一闪而过
+trap 'echo ""; echo -e "${RED}启动失败，请检查上方错误信息。${NC}"; read -r -p "按回车键退出..."; exit 1' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/backend/.env"
 ENV_EXAMPLE="$SCRIPT_DIR/backend/.env.example"
