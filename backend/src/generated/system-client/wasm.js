@@ -246,7 +246,11 @@ exports.Prisma.Platform_api_configsScalarFieldEnum = {
   lightEndpoint: 'lightEndpoint',
   chatModels: 'chatModels',
   reasoningModels: 'reasoningModels',
-  lightModels: 'lightModels'
+  lightModels: 'lightModels',
+  adminAccessMode: 'adminAccessMode',
+  adminAllowedIps: 'adminAllowedIps',
+  allowPrivateNetwork: 'allowPrivateNetwork',
+  privateNetworkHosts: 'privateNetworkHosts'
 };
 
 exports.Prisma.Skill_model_configsScalarFieldEnum = {

@@ -17,8 +17,10 @@ import { knowledgeStateService } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { teachingContextCompressionService } from './TeachingContextCompressionService';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
 import learningService from '../learning/learning.service';
 
@@ -29,6 +31,28 @@ export interface KnowledgePointStatus {
   name: string;
   status: 'pending' | 'learning' | 'mastered' | 'review';
   progress: number;
+}
+
+export interface TeachingCheckpoint {
+  id: string;
+  type: 'single_choice' | 'multi_choice' | 'short_answer';
+  title: string;
+  question: string;
+  options?: Array<{ id: string; text: string }>;
+  allowSkip?: boolean;
+  contextHint?: string;
+}
+
+export interface CheckpointSubmitPayload {
+  selectedOptionIds?: string[];
+  answerText?: string;
+}
+
+export interface CheckpointSubmitResult {
+  passed: boolean;
+  feedback: string;
+  hint?: string;
+  nextAction: 'continue' | 'review' | 'retry';
 }
 
 export interface TeachingSessionStartInput {
@@ -76,6 +100,12 @@ function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]): Knowle
 
 function parseSessionArtifacts(teachingState: Record<string, any> | null | undefined) {
   return teachingState?.sessionArtifacts || {};
+}
+
+function getPendingCheckpoint(teachingState: Record<string, any> | null | undefined): TeachingCheckpoint | null {
+  return teachingState?.pendingCheckpoint
+    || parseSessionArtifacts(teachingState).pendingCheckpoint
+    || null;
 }
 
 type LearnStage = 'opening' | 'teaching' | 'intervention' | 'checkpoint' | 'ready_to_close' | 'wrapup';
@@ -658,6 +688,7 @@ function buildTeachingTurnInput(
 
   return {
     messages: compression.messages,
+    learner: context.learnerProjection,
     scenario: {
       subject: context.subject,
       topic: context.topic,
@@ -771,11 +802,37 @@ function extractTeachingPromptDebug(agentOutput: any) {
 export class AITeachingOrchestrator {
   private peerMessages: Map<string, Array<{ role: string; content: string }>> = new Map();
   private idleTimeoutMs = 120 * 60 * 1000;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private idleCheckInFlight: Promise<void> | null = null;
+  private stopping = false;
 
   constructor() {
-    setInterval(() => {
-      void this.checkIdleSessions();
+    this.start();
+  }
+
+  start(): void {
+    if (this.idleTimer) return;
+    this.stopping = false;
+    this.idleTimer = setInterval(() => {
+      if (this.stopping || this.idleCheckInFlight) return;
+      const run = this.checkIdleSessions();
+      this.idleCheckInFlight = run;
+      void run.catch(error => {
+        logger.warn('[AITeaching] idle session scan failed', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }).finally(() => {
+        if (this.idleCheckInFlight === run) this.idleCheckInFlight = null;
+      });
     }, 60 * 1000);
+    this.idleTimer.unref?.();
+  }
+
+  async stop(): Promise<void> {
+    this.stopping = true;
+    if (this.idleTimer) clearInterval(this.idleTimer);
+    this.idleTimer = null;
+    await this.idleCheckInFlight;
   }
 
   async startSession(input: TeachingSessionStartInput): Promise<{
@@ -1084,6 +1141,7 @@ export class AITeachingOrchestrator {
     endReason?: 'completion-candidate' | 'learner-requested-end' | null;
     autoEnded?: boolean;
     recovered?: boolean;
+    checkpoint?: TeachingCheckpoint | null;
     wrapup?: SessionWrapupArtifact & {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
@@ -1398,6 +1456,7 @@ export class AITeachingOrchestrator {
           ? 'completion-candidate' as const
           : null,
       recovered,
+      checkpoint: getPendingCheckpoint(teachingState),
     };
 
     return baseResult;
@@ -1534,26 +1593,12 @@ export class AITeachingOrchestrator {
       evaluationSource: wrapupResult.evaluationSource,
     };
 
-    await teachingSessionRepository.complete(sessionId, {
-      messages: session.messages,
-      knowledgeState: session.knowledgeState,
-      teachingState: finalState ? {
-        ...finalState,
-        sessionArtifacts,
-      } : {
-        sessionArtifacts,
-      },
-      wrapup: persistedWrapup,
-      advisory: null,
-      duration: durationMinutes,
-    });
-
-    const learnerSnapshot = await learnerSnapshotRefreshService.refresh({
+    const learnerSnapshot = await learnerSnapshotService.getSnapshot({
       userId: session.userId,
-      pathId: session.learningPathId || undefined,
+      learningPathId: session.learningPathId || undefined,
       milestoneId: session.milestoneId || undefined,
       taskId: session.taskId,
-      scope: 'teaching',
+      mode: 'teaching',
     });
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
     const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
@@ -1579,39 +1624,41 @@ export class AITeachingOrchestrator {
       },
     };
 
-    await prisma.teaching_sessions.update({
-      where: { id: sessionId },
+    const lessonEvent = createDomainEvent({
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: session.id,
+      userId: session.userId,
+      source: AI_TEACHING_AGENT_ID,
       data: {
-        wrapup: JSON.stringify(finalWrapup),
-        advisory: JSON.stringify(advisory),
-        updatedAt: new Date(),
+        lessonId: session.id,
+        sessionId: session.id,
+        taskId: session.taskId,
+        pathId: session.learningPathId,
+        milestoneId: session.milestoneId,
+        duration: durationMinutes,
+        performance: evaluationResult ? persistedEvaluation : null,
+        knowledgeState: session.knowledgeState,
+        visibleDialogueContext: session.messages.slice(-16).map((message) => ({
+          role: message.role,
+          content: message.content,
+          analysis: message.analysis || null,
+        })),
+        classroomEventHistory,
+        wrapup: finalWrapup,
+        advisory
       }
     });
+    await teachingSessionRepository.completeWithEvent(sessionId, {
+      messages: session.messages,
+      knowledgeState: session.knowledgeState,
+      teachingState: finalState ? { ...finalState, sessionArtifacts } : { sessionArtifacts },
+      wrapup: finalWrapup,
+      advisory,
+      duration: durationMinutes
+    }, lessonEvent);
 
-    void getEventBus().emit({
-      type: 'lesson:completed',
-      source: AI_TEACHING_AGENT_ID,
-      userId: session.userId,
-      sessionId: session.id,
-        data: {
-          lessonId: session.id,
-          sessionId: session.id,
-          taskId: session.taskId,
-          pathId: session.learningPathId,
-          performance: evaluationResult ? persistedEvaluation : null,
-          knowledgeState: session.knowledgeState,
-          visibleDialogueContext: session.messages.slice(-16).map((message) => ({
-            role: message.role,
-            content: message.content,
-            analysis: message.analysis || null,
-          })),
-          classroomEventHistory,
-          wrapup: finalWrapup,
-          advisory,
-        },
-      });
-
-    void dashboardGuidanceSnapshotService.refresh(session.userId, 'lesson-wrapup');
+    dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
 
     return {
       wrapup: finalWrapup,
@@ -1658,6 +1705,7 @@ export class AITeachingOrchestrator {
     knowledgePoints?: any[];
     wrapup?: any | null;
     advisory?: ReplanAdvisory | null;
+    pendingCheckpoint?: TeachingCheckpoint | null;
   } | null> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.userId !== userId) {
@@ -1678,6 +1726,98 @@ export class AITeachingOrchestrator {
       knowledgePoints: session.knowledgeState,
       wrapup: session.wrapup,
       advisory: (session.advisory as ReplanAdvisory | null) || null,
+      pendingCheckpoint: getPendingCheckpoint(session.teachingState),
+    };
+  }
+
+  async submitCheckpoint(
+    sessionId: string,
+    checkpointId: string,
+    payload: CheckpointSubmitPayload,
+  ): Promise<CheckpointSubmitResult> {
+    const session = await teachingSessionRepository.getById(sessionId);
+    if (!session) {
+      throw new Error('会话不存在或已结束');
+    }
+    if (session.status !== 'active' && session.status !== 'timeout') {
+      throw new Error('当前会话无法提交理解检查');
+    }
+
+    const checkpoint = getPendingCheckpoint(session.teachingState);
+    if (!checkpoint || checkpoint.id !== checkpointId) {
+      throw new Error('理解检查不存在或已处理');
+    }
+
+    let answer: string;
+    if (checkpoint.type === 'short_answer') {
+      answer = payload.answerText?.trim() || '';
+      if (!answer) {
+        throw new Error('缺少作答内容');
+      }
+    } else {
+      const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
+      const options = Array.isArray(checkpoint.options) ? checkpoint.options : [];
+      const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
+      if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
+        throw new Error('提交的选项无效');
+      }
+      if (checkpoint.type === 'single_choice' && selectedOptions.length !== 1) {
+        throw new Error('单选题只能提交一个选项');
+      }
+      answer = selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
+    }
+
+    // 复用完整教学回合，由现有认知分析和知识状态更新能力判断本次检核表现。
+    const turn = await this.processStudentMessage(
+      sessionId,
+      `理解检查：${checkpoint.question}\n我的答案：${answer}`,
+    );
+    const understanding = Number(turn.analysis?.understanding ?? 0);
+    const currentPoint = turn.knowledgePoint?.trim().toLowerCase();
+    const passed = turn.isCompletion || !!currentPoint && turn.knowledgePoints.some(
+      (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
+    );
+
+    const updatedSession = await teachingSessionRepository.getById(sessionId);
+    if (updatedSession) {
+      const teachingState = { ...(updatedSession.teachingState || {}) };
+      const sessionArtifacts = { ...parseSessionArtifacts(teachingState) };
+      if (teachingState.pendingCheckpoint?.id === checkpointId) {
+        delete teachingState.pendingCheckpoint;
+      }
+      if (sessionArtifacts.pendingCheckpoint?.id === checkpointId) {
+        delete sessionArtifacts.pendingCheckpoint;
+      }
+
+      const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
+        ? [...teachingState.checkpointHistory]
+        : [];
+      checkpointHistory.push({
+        checkpointId,
+        submittedAt: new Date().toISOString(),
+        passed,
+        understanding,
+      });
+
+      await teachingSessionRepository.updateTurnState(sessionId, {
+        messages: updatedSession.messages,
+        knowledgeState: updatedSession.knowledgeState,
+        teachingState: {
+          ...teachingState,
+          checkpointHistory: checkpointHistory.slice(-20),
+          sessionArtifacts,
+        },
+      });
+    }
+
+    const hint = !passed && turn.analysis?.confusionPoints?.length
+      ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
+      : undefined;
+    return {
+      passed,
+      feedback: turn.aiResponse,
+      ...(hint ? { hint } : {}),
+      nextAction: passed ? 'continue' : 'review',
     };
   }
 

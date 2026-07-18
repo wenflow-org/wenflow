@@ -4,7 +4,7 @@
       <span class="control-panel__title">运行控制</span>
     </div>
 
-    <div v-if="canStep || canAuto || canStop" class="control-panel__main-actions">
+    <div v-if="canStep || canAuto || canStop || canAbandon" class="control-panel__main-actions">
       <button
         v-if="canStep"
         type="button"
@@ -41,6 +41,18 @@
         <span>停止</span>
         <em>当前轮跑完后</em>
       </button>
+
+      <button
+        v-if="canAbandon"
+        type="button"
+        class="action-btn action-btn--danger"
+        :disabled="anyLoading"
+        @click="$emit('abandon')"
+      >
+        <el-icon><VideoPause /></el-icon>
+        <span>放弃实验</span>
+        <em>保留轨迹并进入终态</em>
+      </button>
     </div>
 
     <!-- 阶段控制: 桥接动作 -->
@@ -70,18 +82,22 @@
       <div class="config-form">
         <div class="config-row">
           <label>对抗预算</label>
-          <el-select
-            v-model="localConfig.frictionBudget"
-            size="small"
-            style="width: 130px"
-            @change="emitConfig"
-          >
-            <el-option label="完全合作" value="none" />
-            <el-option label="低 (微顾虑)" value="low" />
-            <el-option label="正常 (默认)" value="normal" />
-            <el-option label="高 (压力大)" value="high" />
-            <el-option label="压测模式" value="stress_test" />
-          </el-select>
+          <div class="config-row__field">
+            <el-select
+              v-model="localConfig.frictionBudget"
+              size="small"
+              style="width: 130px"
+              :disabled="blackboxMode"
+              @change="emitConfig"
+            >
+              <el-option label="完全合作" value="none" />
+              <el-option label="低 (微顾虑)" value="low" />
+              <el-option label="正常 (默认)" value="normal" />
+              <el-option label="高 (压力大)" value="high" />
+              <el-option label="压测模式" value="stress_test" />
+            </el-select>
+            <small v-if="blackboxMode" class="config-row__hint">创建实验时已固化</small>
+          </div>
         </div>
         <div v-if="!blackboxMode" class="config-row">
           <label>Goal 最大轮数</label>
@@ -152,6 +168,7 @@ const emit = defineEmits<{
   (e: 'step'): void
   (e: 'auto'): void
   (e: 'stop'): void
+  (e: 'abandon'): void
   (e: 'advancePath'): void
   (e: 'reviewPath'): void
   (e: 'startLearning'): void
@@ -187,6 +204,7 @@ const canAuto = computed(() => {
 })
 
 const canStop = computed(() => !props.blackboxMode && props.currentStage === 'learning' && props.status === 'running')
+const canAbandon = computed(() => !!props.blackboxMode && !['completed', 'failed', 'abandoned'].includes(props.status))
 
 const stepHint = computed(() => {
   if (props.blackboxMode) return ''
@@ -418,6 +436,17 @@ const bridgeActions = computed(() => {
 .config-row label {
   font-size: 12px;
   color: #5b6577;
+}
+
+.config-row__field {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.config-row__hint {
+  color: #8a94a6;
+  font-size: 10px;
 }
 
 .config-row--switch {

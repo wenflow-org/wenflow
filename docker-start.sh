@@ -82,6 +82,16 @@ generate_secret() {
     fi
 }
 
+generate_encryption_key() {
+    if command -v openssl &>/dev/null; then
+        openssl rand -base64 32 2>/dev/null
+    elif [ -c /dev/urandom ]; then
+        head -c 32 /dev/urandom 2>/dev/null | base64 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
 is_placeholder() {
     local val="$1"
     [ -z "$val" ] && return 0
@@ -135,6 +145,23 @@ if [ ${#JWT} -lt 32 ]; then
     set_env "JWT_SECRET" "$JWT"
 fi
 echo -e "${GREEN}> JWT_SECRET: 已配置${NC}"
+
+ENCRYPTION_KEYS=$(get_env "SECRET_ENCRYPTION_KEYS")
+if [ -z "$ENCRYPTION_KEYS" ]; then
+    if [ -n "${SECRET_ENCRYPTION_KEYS:-}" ]; then
+        set_env "SECRET_ENCRYPTION_CURRENT_KEY_ID" "${SECRET_ENCRYPTION_CURRENT_KEY_ID:-v1}"
+        set_env "SECRET_ENCRYPTION_KEYS" "$SECRET_ENCRYPTION_KEYS"
+    else
+        ENCRYPTION_KEY=$(generate_encryption_key)
+        if [ -z "$ENCRYPTION_KEY" ]; then
+            echo -e "${RED}> 无法生成数据库 Secret 加密密钥${NC}"
+            exit 1
+        fi
+        set_env "SECRET_ENCRYPTION_CURRENT_KEY_ID" "v1"
+        set_env "SECRET_ENCRYPTION_KEYS" "v1:${ENCRYPTION_KEY}"
+        echo -e "${GREEN}> 已生成数据库 Secret 加密密钥${NC}"
+    fi
+fi
 
 # ==========================================
 # 3. AI_API_KEY
@@ -221,6 +248,7 @@ else
 fi
 
 printf "  %-20s %b\n" "JWT_SECRET" "$JWT_STATUS"
+printf "  %-20s %b\n" "Secret 加密 Keyring" "${GREEN}已配置${NC}"
 printf "  %-20s %b\n" "AI_API_KEY" "$AI_STATUS"
 printf "  %-20s %s\n" "AI_API_URL" "$(get_env "AI_API_URL")"
 printf "  %-20s %s\n" "AI_MODEL" "$(get_env "AI_MODEL")"
@@ -283,7 +311,7 @@ echo ""
 printf "> 等待后端启动"
 
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:3001/health >/dev/null 2>&1; then
+    if curl -sf http://localhost:3001/readyz >/dev/null 2>&1; then
         echo ""
         echo -e "${GREEN}> 后端已就绪${NC}"
         break
@@ -308,7 +336,7 @@ echo -e "${GREEN}${BOLD}  WenFlow 启动完成              ${NC}"
 echo -e "${GREEN}${BOLD}================================${NC}"
 echo ""
 echo -e "  访问地址   ${CYAN}${ACCESS_URL}${NC}"
-echo -e "  健康检查   ${CYAN}${ACCESS_URL}/health${NC}"
+echo -e "  就绪检查   ${CYAN}${ACCESS_URL}/readyz${NC}"
 echo ""
 echo "管理命令:"
 echo "  docker compose logs -f      # 查看日志"

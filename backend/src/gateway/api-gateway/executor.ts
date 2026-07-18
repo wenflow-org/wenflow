@@ -3,6 +3,8 @@ import { logger } from '../../utils/logger';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 import { supportsThinkingMode } from '../../config/models.config';
+import { safeHttpRequest, UnsafeUrlError } from '../../utils/safe-http';
+import { isEncryptedSecret } from '../../utils/secret-crypto';
 
 class APIExecutionError extends Error {
   readonly retryable: boolean;
@@ -30,7 +32,7 @@ class APIExecutionError extends Error {
 
 export class APIExecutor {
   private readonly defaultTimeoutMs = getDefaultAIRequestTimeoutMs();
-  private readonly maxRetries = 1;
+  private readonly maxAttempts = 2;
   private readonly retryDelay = 1000;
 
   private isQuotaOrBalanceError(status: number, body: string): boolean {
@@ -60,13 +62,15 @@ export class APIExecutor {
     const startTime = Date.now();
     let lastError: Error | null = null;
     let lastStatusCode: number | undefined;
+    let attemptsMade = 0;
     const traceId = context.traceId || this.generateTraceId();
     const normalizedContext: ExecutionContext = {
       ...context,
       traceId
     };
 
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+      attemptsMade = attempt;
       try {
         const { response, statusCode } = await this.executeRequest(route, request);
         lastStatusCode = statusCode;
@@ -81,7 +85,7 @@ export class APIExecutor {
         logger.warn('[api-gateway] execution attempt failed', {
           traceId,
           attempt,
-          maxRetries: this.maxRetries,
+          maxAttempts: this.maxAttempts,
           source: route.source,
           providerId: route.providerId,
           model: route.model,
@@ -96,20 +100,21 @@ export class APIExecutor {
           break;
         }
         
-        if (attempt < this.maxRetries) {
+        if (attempt < this.maxAttempts) {
           await this.delay(this.retryDelay * attempt);
         }
       }
     }
 
-    await this.logExecution(route, request, undefined, normalizedContext, startTime, this.maxRetries, false, lastError?.message, lastStatusCode);
+    await this.logExecution(route, request, undefined, normalizedContext, startTime, attemptsMade, false, lastError?.message, lastStatusCode);
     throw lastError || new Error('API execution failed after retries');
   }
 
   private async executeRequest(route: ResolvedRoute, request: ChatRequest): Promise<{ response: ChatResponse; statusCode: number }> {
-    const controller = new AbortController();
+    if (isEncryptedSecret(route.apiKey)) {
+      throw new APIExecutionError('API Key 解密边界缺失，已阻止发送数据库密文', { retryable: false });
+    }
     const timeoutMs = route.timeoutMs ?? this.defaultTimeoutMs;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const requestUrl = this.resolveChatCompletionsUrl(route.endpoint);
 
     try {
@@ -132,22 +137,22 @@ export class APIExecutor {
         reasoningEffort: route.reasoningEffort || 'default'
       });
 
-      const response = await fetch(requestUrl, {
+      const response = await safeHttpRequest<string>(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${route.apiKey}`
         },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
+        body: requestBody,
+        timeoutMs,
+        maxResponseBytes: 10 * 1024 * 1024,
+        responseType: 'text'
       });
 
-      clearTimeout(timeoutId);
+      const contentType = response.headers['content-type'] || '';
+      const responseText = response.data;
 
-      const contentType = response.headers.get('content-type') || '';
-      const responseText = await response.text();
-
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         const nonRetryableQuotaOrBalance = this.isQuotaOrBalanceError(response.status, responseText);
         throw new APIExecutionError(
           `API request failed with status ${response.status}: ${this.truncate(responseText, 500)}`,
@@ -194,10 +199,14 @@ export class APIExecutor {
         response: parsedResponse,
         statusCode: response.status
       };
-    } catch (error) {
-      clearTimeout(timeoutId);
-      
-      if ((error as Error).name === 'AbortError') {
+    } catch (error: any) {
+      if (error instanceof UnsafeUrlError) {
+        throw new APIExecutionError(error.message, {
+          retryable: false,
+          requestUrl
+        });
+      }
+      if (error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')) {
         throw new APIExecutionError(`API request timed out after ${timeoutMs}ms`, {
           retryable: true,
           requestUrl
@@ -355,7 +364,7 @@ export class APIExecutor {
             routeSource: route.source,
             statusCode: metrics.statusCode,
             attempts: metrics.attempts,
-            maxRetries: this.maxRetries,
+            maxAttempts: this.maxAttempts,
             requestPath: context.requestPath,
             messageCount: request.messages?.length || 0,
             finishReason: response?.choices?.[0]?.finish_reason,

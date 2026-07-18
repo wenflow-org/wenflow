@@ -1,8 +1,10 @@
 import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
-import { learnerModelAgent } from '../../agents/learner-model-agent';
+import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
+import { learnerProjectionService } from '../learner/LearnerProjectionService';
+import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 
 export interface TeachingScenarioContext {
   userId: string;
@@ -72,6 +74,7 @@ export interface TeachingScenarioContext {
     lf: number;
     lsb: number;
   } | null;
+  learnerProjection: TeachingLearnerProjection;
   pathContext: {
     pathTitle?: string;
     pathSummary?: string | null;
@@ -297,14 +300,14 @@ export async function buildTeachingScenarioContext(
     ? learningStateService.coerceMetrics(previousSession.teachingState)
     : null;
   const learningState = runtimeLearningState || await learningStateService.getCurrentState(userId);
-  const learnerResult = await learnerModelAgent.getSnapshot({
+  const learnerSnapshot = await learnerSnapshotService.getSnapshot({
     userId,
     learningPathId: path.id,
     milestoneId: task.milestoneId,
     taskId: task.id,
     mode: 'teaching',
   });
-  const learnerSnapshot = learnerResult.snapshot;
+  const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot);
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
   const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, resolvedConcept });
@@ -386,6 +389,7 @@ export async function buildTeachingScenarioContext(
       lf: learningState.lf,
       lsb: learningState.lsb,
     } : null,
+    learnerProjection,
     pathContext: {
       pathTitle: path.title || path.name,
       pathSummary: parsePathSummary(path.aiPromptTemplate),

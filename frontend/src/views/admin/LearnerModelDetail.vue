@@ -258,16 +258,90 @@ import { toast } from '../../utils/toast';
 const route = useRoute();
 const router = useRouter();
 
+interface LearnerEvidenceItem {
+  type?: string;
+  signal?: string;
+  conceptKeys?: string[];
+  score?: number;
+  happenedAt?: string;
+  [key: string]: unknown;
+}
+
+interface LearnerModelSnapshot {
+  dynamicState: {
+    metrics: { lss?: number; ktl?: number; lf?: number; lsb?: number; [key: string]: unknown };
+    recentTrend?: string;
+    fatigueRisk?: string;
+    recommendedPacing?: string;
+    recommendedInteraction: { hintTiming?: string; encouragement?: string; challenge?: string; [key: string]: unknown };
+    fragileConcepts?: string[];
+    strugglingConcepts?: string[];
+    [key: string]: unknown;
+  };
+  knowledgeMemory: {
+    currentPath?: {
+      pathTitle?: string;
+      currentPosition: {
+        milestoneTitle?: string;
+        taskTitle?: string;
+        completedTasksInMilestone?: number;
+        totalTasksInMilestone?: number;
+        [key: string]: unknown;
+      };
+      prerequisiteGaps: Array<{ conceptKey?: string; label?: string; [key: string]: unknown }>;
+      conceptStates?: Array<{ label?: string; status?: string; stability?: string; masteryScore?: number; lastSeenAt?: string; [key: string]: unknown }>;
+      [key: string]: unknown;
+    } | null;
+    [key: string]: unknown;
+  };
+  teachingHints: {
+    recommendedApproach?: string;
+    promptEnhancement?: string;
+    emphasize: string[];
+    avoid: string[];
+    [key: string]: unknown;
+  };
+  profile: {
+    cognitive: { thinkingStyle?: string; metacognitionLevel?: string; confusionPattern?: string; priorKnowledgeStructure?: string; [key: string]: unknown };
+    preferences: { preferredStyle?: string; theoryVsPractice?: string; sessionLength?: string; [key: string]: unknown };
+    emotional: { confidenceLevel?: string; [key: string]: unknown };
+    narrativeInsights?: {
+      goalNarrative?: string;
+      backgroundContextNote?: string;
+      motivationNarrative?: string;
+      timeConstraintNote?: string;
+      selfAssessmentNote?: string;
+      contentReceptionPattern?: string;
+      practicePreferenceNote?: string;
+      frictionPatternNote?: string;
+      effectiveTeachingPattern?: string;
+      supportStyleNote?: string;
+      taskGranularityNote?: string;
+      [key: string]: unknown;
+    };
+    curriculumControls?: {
+      taskGranularityLevel?: string;
+      conceptDensityLevel?: string;
+      reviewFrequencyLevel?: string;
+      progressionStrategyNote?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  freshness?: { confidence?: number; generatedAt?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
 const loading = ref(false);
 const recomputing = ref(false);
-const snapshot = ref<any>(null);
-const evidence = ref<any[]>([]);
+const snapshot = ref<LearnerModelSnapshot | null>(null);
+const evidence = ref<LearnerEvidenceItem[]>([]);
 const activeTab = ref('overview');
 
 const userId = route.params.userId as string;
 const pathId = route.query.pathId as string | undefined;
 
-const formatTime = (value: string) => value ? new Date(value).toLocaleString() : '--';
+const formatTime = (value: string | null | undefined) => value ? new Date(value).toLocaleString() : '--';
 
 const stateCards = computed(() => {
   if (!snapshot.value) return [];
@@ -319,12 +393,12 @@ const riskQuickText = computed(() => {
 
 const trendText = computed(() => {
   const map: Record<string, string> = { improving: '上升', declining: '下降', stable: '稳定' };
-  return map[snapshot.value?.dynamicState?.recentTrend] || snapshot.value?.dynamicState?.recentTrend || '--';
+  return map[snapshot.value?.dynamicState?.recentTrend || ''] || snapshot.value?.dynamicState?.recentTrend || '--';
 });
 
 const riskText = computed(() => {
   const map: Record<string, string> = { high: '高', medium: '中', low: '低' };
-  return map[snapshot.value?.dynamicState?.fatigueRisk] || snapshot.value?.dynamicState?.fatigueRisk || '--';
+  return map[snapshot.value?.dynamicState?.fatigueRisk || ''] || snapshot.value?.dynamicState?.fatigueRisk || '--';
 });
 
 const confidenceText = computed(() => {
@@ -347,7 +421,7 @@ const conceptRows = computed(() => snapshot.value?.knowledgeMemory?.currentPath?
 const loadData = async () => {
   loading.value = true;
   try {
-    const [detailRes, evidenceRes]: any = await Promise.all([
+    const [detailRes, evidenceRes] = await Promise.all([
       adminLearnerModelsApi.getDetail(userId, { pathId, mode: pathId ? 'path' : 'global' }),
       adminLearnerModelsApi.getEvidence(userId, { pathId, limit: 20 }),
     ]);

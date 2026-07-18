@@ -14,7 +14,7 @@
  */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { adminApi } from '@/api/adminApi';
+import { adminVirtualLearnersApi } from '@/api/adminApi';
 
 const TTL_MS = 30 * 1000;
 
@@ -37,7 +37,7 @@ export const useVirtualLearnerStore = defineStore('virtualLearner', () => {
     const cached = profilesById.value[profileId];
     if (!force && isFresh(cached)) return cached.data;
     try {
-      const res = await adminApi.getVirtualLearner(profileId);
+      const res = await adminVirtualLearnersApi.getVirtualLearner(profileId);
       const data = res.data?.data || null;
       if (data) {
         profilesById.value[profileId] = { data, fetchedAt: Date.now() };
@@ -53,7 +53,7 @@ export const useVirtualLearnerStore = defineStore('virtualLearner', () => {
     const cached = storiesByProfileId.value[profileId];
     if (!force && isFresh(cached)) return cached.data;
     try {
-      const res = await adminApi.getVirtualLearnerStories(profileId);
+      const res = await adminVirtualLearnersApi.getVirtualLearnerStories(profileId);
       const data = Array.isArray(res.data?.data) ? res.data.data : [];
       storiesByProfileId.value[profileId] = { data, fetchedAt: Date.now() };
       return data;
@@ -67,7 +67,7 @@ export const useVirtualLearnerStore = defineStore('virtualLearner', () => {
     const cached = sessionsBySessionId.value[sessionId];
     if (!force && isFresh(cached)) return cached.data;
     try {
-      const res = await adminApi.getVirtualSession(sessionId);
+      const res = await adminVirtualLearnersApi.getVirtualSession(sessionId);
       const data = res.data?.data || null;
       if (data) {
         sessionsBySessionId.value[sessionId] = { data, fetchedAt: Date.now() };

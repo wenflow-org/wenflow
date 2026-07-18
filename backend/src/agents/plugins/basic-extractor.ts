@@ -10,7 +10,7 @@ import {
   AgentOutput
 } from '../plugin-types';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
-import axios from 'axios';
+import { safeHttpRequest } from '../../utils/safe-http';
 
 /**
  * 基础内容提取插件
@@ -90,7 +90,7 @@ export const basicExtractor: AgentPlugin = {
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
     const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'basic-extractor' };
+    const caller: CallerInfo = { skillId: 'basic-extractor' };
     const startTime = Date.now();
 
     try {
@@ -191,12 +191,13 @@ export const basicExtractor: AgentPlugin = {
    */
   async fetchUrlContent(url: string): Promise<string> {
     try {
-      const response = await axios.get(url, {
-        timeout: 30000,
+      const response = await safeHttpRequest<string>(url, {
+        timeoutMs: 30000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        maxContentLength: 50000
+        maxResponseBytes: 50000,
+        responseType: 'text'
       });
 
       // 简单解析 HTML 为纯文本

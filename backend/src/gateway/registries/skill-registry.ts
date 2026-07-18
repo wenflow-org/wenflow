@@ -210,6 +210,19 @@ export class SkillRegistry {
     }).catch(() => {});
   }
 
+  /** 更新运行时视图；持久化统计由统一 Skill Executor 负责。 */
+  recordExecution(skillName: string, success: boolean, latency: number): void {
+    const registration = this.skills.get(skillName);
+    if (!registration) return;
+
+    const stats = registration.definition.stats;
+    stats.callCount++;
+    const previousSuccesses = stats.successRate * (stats.callCount - 1);
+    stats.successRate = (previousSuccesses + (success ? 1 : 0)) / stats.callCount;
+    stats.avgLatency = (stats.avgLatency * (stats.callCount - 1) + latency) / stats.callCount;
+    registration.lastCalledAt = new Date();
+  }
+
   /**
    * 持久化注册
    */

@@ -4,6 +4,7 @@
  */
 
 import { Router } from 'express';
+import { rejectPromptLabFileMutation } from '../middleware/prompt-file-truth.middleware';
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
@@ -16,6 +17,7 @@ import { getAgentRoutings } from '../services/field-dispatcher';
 import { compilePromptLabSourceDeterministic } from '../services/prompt-lab/compiler';
 
 const router = Router();
+router.use(rejectPromptLabFileMutation);
 
 const PROMPT_LAB_DIR = path.join(process.cwd(), '../prompt-lab');
 const SOURCES_DIR = path.join(PROMPT_LAB_DIR, 'sources');
@@ -697,19 +699,7 @@ router.post('/compile-source', async (req, res) => {
     });
     const compiledPrompt = compileResult.prompt;
 
-    // 5. 可写回 compiled/（暂不覆盖 prompts/）
-    try {
-      await fs.mkdir(COMPILED_DIR, { recursive: true });
-      await fs.writeFile(
-        path.join(COMPILED_DIR, `${skillId}.md`),
-        compiledPrompt,
-        'utf-8'
-      );
-    } catch (saveErr) {
-      console.warn('Failed to save compiled prompt:', saveErr);
-    }
-
-    // 6. 统计
+    // 纯 Dry Run：只返回内存编译结果，不写服务器文件或 DB。
     res.json({
       success: true,
       skillId,

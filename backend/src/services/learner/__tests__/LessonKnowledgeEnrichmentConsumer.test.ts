@@ -1,0 +1,76 @@
+const transaction = jest.fn();
+const inboxFindUnique = jest.fn();
+const executeSkill = jest.fn();
+
+jest.mock('../../../config/database', () => ({
+  __esModule: true,
+  default: {
+    domain_event_inbox: { findUnique: inboxFindUnique },
+    $transaction: transaction
+  }
+}));
+
+jest.mock('../../../skills', () => ({ executeSkill }));
+jest.mock('../../../skills/session-knowledge-distiller', () => ({ sessionKnowledgeDistillerDefinition: { name: 'session-knowledge-distiller' } }));
+jest.mock('../../../skills/dialogue-concept-extractor', () => ({ dialogueConceptExtractorDefinition: { name: 'dialogue-concept-extractor' } }));
+
+import { LessonKnowledgeEnrichmentConsumer } from '../LessonKnowledgeEnrichmentConsumer';
+import { createDomainEvent } from '../../../events/contracts';
+
+describe('LessonKnowledgeEnrichmentConsumer', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('runs both stateless skills and commits evidence with one inbox receipt', async () => {
+    inboxFindUnique.mockResolvedValue(null);
+    executeSkill
+      .mockResolvedValueOnce({ conceptLedger: [{ conceptKey: 'a', label: 'A' }] })
+      .mockResolvedValueOnce({ recurringConfusions: [] });
+    const tx = {
+      domain_event_inbox: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({})
+      },
+      learner_evidence: { createMany: jest.fn().mockResolvedValue({ count: 2 }) }
+    };
+    transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-1',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        sessionId: 'session-1',
+        taskId: 'task-1',
+        pathId: 'path-1',
+        knowledgeState: [{ name: 'A', status: 'mastered', progress: 100 }],
+        visibleDialogueContext: []
+      }
+    }));
+
+    expect(executeSkill).toHaveBeenCalledTimes(2);
+    expect(tx.learner_evidence.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ evidenceType: 'session-knowledge-distilled' }),
+        expect.objectContaining({ evidenceType: 'dialogue-concepts-extracted' })
+      ])
+    });
+    expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the expensive skills when the event was already consumed', async () => {
+    inboxFindUnique.mockResolvedValue({ id: 'receipt' });
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-1',
+      userId: 'user-1',
+      source: 'test',
+      data: {}
+    }));
+    expect(executeSkill).not.toHaveBeenCalled();
+  });
+});

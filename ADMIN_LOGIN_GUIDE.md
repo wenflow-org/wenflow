@@ -1,208 +1,66 @@
-# 管理员登录安全配置说明
+# 管理员登录安全配置
 
-## 📋 功能概述
+WenFlow 不提供默认管理员密码。只有显式配置满足强度要求的 `INIT_ADMIN_PASSWORD` 时，首次启动才会创建管理员。
 
-WenFlow 已配置管理员本地登录限制，确保管理后台的安全性。
+## 初始化管理员
 
-### ✅ 已实现的功能
+在 `backend/.env` 中配置：
 
-1. **默认本地登录限制**
-   - 管理员登录 `/api/admin-auth/login` 默认只允许从本机访问
-   - 允许的地址：`localhost`、`127.0.0.1`、`::1`、`::ffff:127.0.0.1`
-
-2. **可配置的访问控制**
-   - 通过环境变量 `ADMIN_LOCALHOST_ONLY` 控制是否启用限制
-   - 默认值：`true`（启用本地限制）
-
-3. **开箱即用的管理员账户**
-   - 首次启动自动创建管理员账户
-   - 默认用户名：`admin`
-   - 默认密码：`admin123`
-
----
-
-## 🚀 快速开始
-
-### 1. 首次使用（默认配置）
-
-```bash
-# 在 wenflow 目录下运行
-npm run dev
-```
-
-服务启动后，会自动创建管理员账户：
-- **用户名**: `admin`
-- **密码**: `admin123`
-- **邮箱**: `admin@wenflow.local`
-
-访问管理后台：
-```
-http://localhost:5173/admin/login
-```
-
-⚠️ **只能从本机访问**，远程 IP 会被拒绝。
-
----
-
-## ⚙️ 配置说明
-
-### 方式 1：使用 .env 文件（推荐）
-
-编辑 `wenflow/backend/.env` 文件：
-
-```bash
-# ===========================================
-# Admin 访问限制
-# ===========================================
-# 设为 true: 只允许本地访问（默认，推荐）
-# 设为 false: 允许远程访问（不推荐）
-ADMIN_LOCALHOST_ONLY=true
-
-# ===========================================
-# 初始管理员配置
-# ===========================================
-# 自定义管理员账户信息
+```env
 INIT_ADMIN_NAME=admin
 INIT_ADMIN_EMAIL=admin@wenflow.local
-INIT_ADMIN_PASSWORD=admin123
+INIT_ADMIN_PASSWORD=<set-a-unique-strong-password>
 ```
 
-### 方式 2：手动创建管理员
+密码至少 12 位，并包含大写字母、小写字母和数字。不要把填写后的 `.env` 提交到 Git。
 
-如果需要手动创建或重置管理员：
+启动后端：
 
-```bash
-cd wenflow/backend
-node create-admin.js
+```powershell
+./start-dev.ps1
 ```
 
-此脚本会从 `.env` 读取配置创建管理员账户。
+如果数据库中已经存在管理员，初始化会自动跳过。也可以在 `backend/` 下运行 `node create-admin.js`，该脚本同样读取环境变量并执行强度校验，不会输出密码。
 
----
+## Admin 来源策略
 
-## 🔓 允许远程访问（不推荐）
+Admin 来源策略通过“连接与安全”页面持久化到 System DB，并支持热生效。环境变量只作为数据库未配置时的默认值：
 
-如果确实需要远程访问管理后台：
+```env
+# loopback: 仅服务器本机
+# private: 本机和 RFC1918 局域网，默认推荐
+# any: 不限制来源，不建议直接用于公网
+ADMIN_ACCESS_MODE=private
 
-1. 编辑 `wenflow/backend/.env`
-2. 修改配置：
-   ```bash
-   ADMIN_LOCALHOST_ONLY=false
-   ```
-3. 重启后端服务
-
-⚠️ **安全警告**：
-- 允许远程访问会增加安全风险
-- 建议使用强密码
-- 考虑使用 VPN 或 SSH 隧道代替远程访问
-
----
-
-## 🛡️ 安全最佳实践
-
-### 生产环境部署
-
-1. **修改默认密码**
-   ```bash
-   # 在 .env 中设置强密码
-   INIT_ADMIN_PASSWORD=YourStrongPassword2024!@#
-   ```
-
-2. **保持本地登录限制**
-   ```bash
-   ADMIN_LOCALHOST_ONLY=true
-   ```
-
-3. **使用 SSH 隧道远程管理**
-   ```bash
-   # 在本地电脑执行
-   ssh -L 3001:localhost:3001 user@your-server.com
-   
-   # 然后通过 localhost:3001 访问远程服务器的管理后台
-   ```
-
-### 修改管理员密码
-
-1. 方式 1：修改 `.env` 后删除数据库重新初始化
-   ```bash
-   cd wenflow/backend
-   rm dev.db
-   npm run dev  # 会重新创建数据库和管理员
-   ```
-
-2. 方式 2：使用密码重置功能（如果已实现）
-
----
-
-## 🔍 故障排查
-
-### 问题 1：无法登录管理后台
-
-**症状**：访问 `/api/admin-auth/login` 返回 403 错误
-
-**原因**：
-- 从远程 IP 访问，但 `ADMIN_LOCALHOST_ONLY=true`
-
-**解决**：
-1. 确认是从 `localhost` 或 `127.0.0.1` 访问
-2. 或者设置 `ADMIN_LOCALHOST_ONLY=false`（不推荐）
-
-### 问题 2：忘记管理员密码
-
-**解决**：
-```bash
-# 方法 1：查看 .env 中配置的密码
-cat wenflow/backend/.env | grep INIT_ADMIN_PASSWORD
-
-# 方法 2：重置数据库（会丢失所有数据）
-cd wenflow/backend
-rm dev.db
-npm run dev
+# 额外精确允许的客户端 IP，逗号分隔
+ADMIN_ALLOWED_IPS=
 ```
 
-### 问题 3：服务启动时未创建管理员
+生产公网管理建议使用 VPN 或受控反向代理，并保持精确 IP Allowlist。不要通过关闭认证或使用共享弱密码解决远程访问问题。
 
-**原因**：
-- `.env` 中未配置 `INIT_ADMIN_PASSWORD`
+## 登录地址
 
-**解决**：
-```bash
-# 编辑 .env 文件，添加：
-INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=admin123
+- 前端管理端：`http://localhost:5173/admin/login`
+- 登录 API：`POST /api/admin-auth/login`
 
-# 或手动创建
-cd wenflow/backend
-node create-admin.js
+Admin API 同时要求来源网络策略允许、JWT 身份有效、数据库用户仍有管理员权限，并拒绝 Projection 或 Synthetic 身份。
+
+## 忘记密码
+
+不要删除数据库。当前安全恢复流程是：
+
+1. 备份主库和数据库加密 Keyring。
+2. 使用受控维护脚本或数据库管理流程为指定管理员写入新的 bcrypt 哈希。
+3. 撤销现有会话或 Token。
+4. 审计恢复操作和登录记录。
+
+如果尚未创建任何管理员，可设置新的 `INIT_ADMIN_PASSWORD` 后重新启动或运行 `node create-admin.js`。
+
+## 发布检查
+
+```powershell
+npm run security:scan
+npm run check
 ```
 
----
-
-## 📝 配置文件位置
-
-- 后端环境配置：`wenflow/backend/.env`
-- 配置模板：`wenflow/backend/.env.example`
-- 管理员初始化服务：`wenflow/backend/src/services/auth/init-admin.service.ts`
-- 访问控制中间件：`wenflow/backend/src/middleware/admin-access-restrict.middleware.ts`
-- 手动创建脚本：`wenflow/backend/create-admin.js`
-
----
-
-## 🔗 相关链接
-
-- 前端管理页面：`http://localhost:5173/admin/login`
-- 后端 API 文档：`http://localhost:3001/api`
-- 管理员登录端点：`POST /api/admin-auth/login`
-
----
-
-## ⚠️ 重要提示
-
-1. **默认密码**：首次部署后请立即修改默认密码
-2. **本地限制**：生产环境务必保持 `ADMIN_LOCALHOST_ONLY=true`
-3. **环境变量**：确保 `.env` 文件不提交到 Git 仓库
-4. **数据库备份**：删除 `dev.db` 前请备份重要数据
-
----
-
-最后更新：2026-06-16
+更多凭据、数据库备份和泄露响应要求见 [`SECURITY.md`](./SECURITY.md)。

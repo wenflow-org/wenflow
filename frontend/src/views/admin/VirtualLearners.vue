@@ -96,6 +96,7 @@
               <el-checkbox
                 v-if="!loading && pagedProfiles.length > 0"
                 :model-value="isAllSelected"
+                :indeterminate="isSelectionIndeterminate"
                 @change="toggleSelectAll"
               />
               <div>
@@ -137,7 +138,7 @@
                       @click.stop
                     />
                     <el-icon class="expand-icon">
-                      <component :is="isProfileExpanded(row.id) ? 'ArrowDown' : 'ArrowRight'" />
+                      <component :is="isProfileExpanded(row.id) ? ArrowDown : ArrowRight" />
                     </el-icon>
                     <div class="avatar-badge">{{ row.userName?.charAt(0) || '?' }}</div>
                     <div class="profile-accordion-header__identity">
@@ -262,6 +263,10 @@
               layout="total, prev, pager, next"
               @current-change="handlePageChange"
             />
+          </div>
+
+          <div v-if="profilesTruncated" class="truncation-hint" role="status">
+            仅显示最新 {{ profiles.length }} / {{ serverTotal }} 个画像，其余未加载；请通过搜索或筛选缩小范围。
           </div>
         </section>
       </section>
@@ -460,9 +465,7 @@ import {
   ArrowRight,
   Collection,
   DataAnalysis,
-  Expand,
   Finished,
-  Grid,
   MagicStick,
   MoreFilled,
   Plus,
@@ -476,6 +479,78 @@ import AdminPageHeader from './components/AdminPageHeader.vue'
 
 type ProfileFilter = 'all' | 'ready' | 'needsStory' | 'running' | 'review'
 type LaunchMode = 'blackbox' | 'assisted'
+
+interface VirtualStory {
+  storyId?: string
+  id?: string
+  title?: string
+  storyTitle?: string
+  storyOutline?: string
+  storyTriggerEvent?: string
+  visibleOpening?: string
+  sourceType?: string
+  pressurePoints?: string[]
+}
+
+interface VirtualSessionSummary {
+  id: string
+  status?: string
+  currentStage?: string
+  storyId?: string
+  story?: { id?: string }
+  learningPathId?: string
+  roundCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface VirtualLearnerProfileData {
+  age?: number
+  occupation?: string
+  education?: string
+  background?: string
+  corePersonality?: string
+  emotionalBaseline?: string
+  helpSeekingPattern?: string
+  adversarialPattern?: string
+  metacognitiveProfile?: string
+  cognitiveLoadTolerance?: string
+  memoryRepairPattern?: string
+  storyPool?: VirtualStory[]
+}
+
+interface VirtualLearnerProfile {
+  id: string
+  userName?: string
+  learningGoal?: string
+  simulationMode?: string
+  simulationTemperature?: number
+  personalityTraits?: {
+    verbosity?: string
+    enthusiasm?: string
+    confusionStyle?: string
+  }
+  notes?: string
+  profile?: VirtualLearnerProfileData
+  sessions?: VirtualSessionSummary[]
+  sessionCount?: number
+}
+
+interface PersonaSeed {
+  nameHint?: string
+  age?: number
+  personalityTraits?: {
+    verbosity?: string
+    enthusiasm?: string
+    confusionStyle?: string
+  }
+  [key: string]: unknown
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  const message = (error as { message?: unknown } | null)?.message
+  return typeof message === 'string' && message ? message : fallback
+}
 
 const PERSONA_PROFILE_TEXT_FIELDS = [
   'occupation',
@@ -522,13 +597,22 @@ const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const generatingScenario = ref(false)
-const profiles = ref<any[]>([])
+const profiles = ref<VirtualLearnerProfile[]>([])
+// 服务端画像总数（用于检测 limit=100 截断并提示，> profiles.length 时说明有未加载数据）
+const serverTotal = ref(0)
+const profilesTruncated = computed(() => serverTotal.value > profiles.value.length)
 const searchKeyword = ref('')
 const activeFilter = ref<ProfileFilter>('all')
 const selectedIds = ref<Set<string>>(new Set())
 const focusedProfileId = ref('')
 const isAllSelected = computed(() => {
   return pagedProfiles.value.length > 0 && pagedProfiles.value.every(p => selectedIds.value.has(p.id))
+})
+// EP 标准全选模式：当前页部分选中时全选 checkbox 显示半选态
+const isSelectionIndeterminate = computed(() => {
+  if (!pagedProfiles.value.length) return false
+  const selectedCount = pagedProfiles.value.filter(p => selectedIds.value.has(p.id)).length
+  return selectedCount > 0 && selectedCount < pagedProfiles.value.length
 })
 const pagination = ref({
   page: 1,
@@ -539,13 +623,13 @@ const pagination = ref({
 const createDialogVisible = ref(false)
 const sessionDrawerVisible = ref(false)
 const sessionsLoading = ref(false)
-const currentSessionProfile = ref<any>(null)
-const currentSessions = ref<any[]>([])
-const scenarioDraft = ref<any | null>(null)
-const editingProfile = ref<any>(null)
+const currentSessionProfile = ref<VirtualLearnerProfile | null>(null)
+const currentSessions = ref<VirtualSessionSummary[]>([])
+const scenarioDraft = ref<Record<string, unknown> | null>(null)
+const editingProfile = ref<VirtualLearnerProfile | null>(null)
 const formRef = ref()
 const startSessionDialogVisible = ref(false)
-const startSessionTarget = ref<any | null>(null)
+const startSessionTarget = ref<VirtualLearnerProfile | null>(null)
 const startSessionStoryIndex = ref(0)
 const launchMode = ref<LaunchMode>('blackbox')
 const launchFrictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
@@ -557,11 +641,11 @@ const startSessionPrimaryActionLabel = computed(() => {
   return launchMode.value === 'blackbox' ? '创建黑盒实验' : '创建辅助会话'
 })
 
-const getPipelineBucket = (profile: any): Exclude<ProfileFilter, 'all'> => {
+const getPipelineBucket = (profile: VirtualLearnerProfile): Exclude<ProfileFilter, 'all'> => {
   if (getStoryPool(profile).length === 0) return 'needsStory'
   const sessions = profile.sessions || []
-  if (sessions.some((session: any) => session.status === 'running' || session.status === 'created')) return 'running'
-  if (sessions.some((session: any) => ['completed', 'failed', 'abandoned'].includes(session.status))) return 'review'
+  if (sessions.some((session) => session.status === 'running' || session.status === 'created')) return 'running'
+  if (sessions.some((session) => ['completed', 'failed', 'abandoned'].includes(session.status || ''))) return 'review'
   return 'ready'
 }
 
@@ -584,12 +668,12 @@ const formRules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
-const profileMatchesFilter = (profile: any, filter: ProfileFilter) => {
+const profileMatchesFilter = (profile: VirtualLearnerProfile, filter: ProfileFilter) => {
   return filter === 'all' || getPipelineBucket(profile) === filter
 }
 
 const filteredProfiles = computed(() => {
-  return profiles.value.filter((p: any) => {
+  return profiles.value.filter((p) => {
     const searchTarget = `${p.userName || ''} ${p.learningGoal || ''}`.toLowerCase()
     if (searchKeyword.value && !searchTarget.includes(searchKeyword.value.toLowerCase())) {
       return false
@@ -598,14 +682,10 @@ const filteredProfiles = computed(() => {
   })
 })
 
-const runnableProfileCount = computed(() => profiles.value.filter((item: any) => getPipelineBucket(item) === 'ready').length)
-
-const focusedProfile = computed(() => {
-  return filteredProfiles.value.find((item: any) => item.id === focusedProfileId.value) || filteredProfiles.value[0] || null
-})
+const runnableProfileCount = computed(() => profiles.value.filter((item) => getPipelineBucket(item) === 'ready').length)
 
 const profileFilterOptions = computed(() => {
-  const getCount = (filter: ProfileFilter) => profiles.value.filter((profile: any) => profileMatchesFilter(profile, filter)).length
+  const getCount = (filter: ProfileFilter) => profiles.value.filter((profile) => profileMatchesFilter(profile, filter)).length
   return [
     { label: '全部', value: 'all' as ProfileFilter, count: getCount('all') },
     { label: '可运行', value: 'ready' as ProfileFilter, count: getCount('ready') },
@@ -622,9 +702,9 @@ const pagedProfiles = computed(() => {
 })
 
 const groupedByInitial = computed(() => {
-  const grouped = new Map<string, any[]>()
-  
-  pagedProfiles.value.forEach((profile: any) => {
+  const grouped = new Map<string, VirtualLearnerProfile[]>()
+
+  pagedProfiles.value.forEach((profile) => {
     const initial = (profile.userName?.charAt(0) || '?').toUpperCase()
     if (!grouped.has(initial)) {
       grouped.set(initial, [])
@@ -645,8 +725,8 @@ const pagedProfilesGrouped = computed(() => {
 })
 
 const recentSessions = computed(() => {
-  const sessions = profiles.value.flatMap((profile: any) =>
-    (profile.sessions || []).map((session: any) => ({
+  const sessions = profiles.value.flatMap((profile) =>
+    (profile.sessions || []).map((session) => ({
       ...session,
       profileName: profile.userName,
       goal: profile.learningGoal,
@@ -659,22 +739,22 @@ const recentSessions = computed(() => {
   )
 
   return sessions
-    .sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+    .sort((a, b) => new Date((b.updatedAt || b.createdAt)!).getTime() - new Date((a.updatedAt || a.createdAt)!).getTime())
     .slice(0, 8)
 })
 
 const summaryCards = computed(() => {
   const totalProfiles = profiles.value.length
-  const totalSessions = profiles.value.reduce((sum: number, item: any) => sum + (item.sessionCount || 0), 0)
-  const autoProfiles = profiles.value.filter((item: any) => item.simulationMode === 'ai').length
-  const withStories = profiles.value.filter((item: any) => getStoryPool(item).length > 0).length
+  const totalSessions = profiles.value.reduce((sum: number, item) => sum + (item.sessionCount || 0), 0)
+  const autoProfiles = profiles.value.filter((item) => item.simulationMode === 'ai').length
+  const withStories = profiles.value.filter((item) => getStoryPool(item).length > 0).length
 
-  const allSessions = profiles.value.flatMap((item: any) => item.sessions || [])
-  const completedSessions = allSessions.filter((item: any) => item.status === 'completed').length
-  const failedSessions = allSessions.filter((item: any) => item.status === 'failed').length
-  const runningSessions = allSessions.filter((item: any) => item.status === 'running').length
-  const goalReadySessions = allSessions.filter((item: any) => item.currentStage === 'path' || item.currentStage === 'learning' || item.status === 'completed').length
-  const pathReadySessions = allSessions.filter((item: any) => item.learningPathId || item.currentStage === 'learning' || item.status === 'completed').length
+  const allSessions = profiles.value.flatMap((item) => item.sessions || [])
+  const completedSessions = allSessions.filter((item) => item.status === 'completed').length
+  const failedSessions = allSessions.filter((item) => item.status === 'failed').length
+  const runningSessions = allSessions.filter((item) => item.status === 'running').length
+  const goalReadySessions = allSessions.filter((item) => item.currentStage === 'path' || item.currentStage === 'learning' || item.status === 'completed').length
+  const pathReadySessions = allSessions.filter((item) => item.learningPathId || item.currentStage === 'learning' || item.status === 'completed').length
   const learnCompletedSessions = completedSessions
 
   const totalSessionBase = Math.max(allSessions.length, 1)
@@ -729,13 +809,13 @@ const virtualLearnerHighlights = computed(() => [
   { label: activeFilter.value === 'all' ? '当前查看全部样本' : `筛选 ${profileFilterOptions.value.find(item => item.value === activeFilter.value)?.label || activeFilter.value}`, tone: 'warning' as const }
 ])
 
-const formatTime = (time: string | Date | null) => {
+const formatTime = (time: string | Date | null | undefined) => {
   if (!time) return '-'
   const d = new Date(time)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-const formatRelativeTime = (time: string | Date | null) => {
+const formatRelativeTime = (time: string | Date | null | undefined) => {
   if (!time) return '-'
   const now = Date.now()
   const diff = now - new Date(time).getTime()
@@ -759,10 +839,6 @@ const setFilter = (value: ProfileFilter) => {
   selectedIds.value = new Set()
 }
 
-const focusProfile = (profile: any) => {
-  focusedProfileId.value = profile.id
-}
-
 const loadProfiles = async () => {
   loading.value = true
   try {
@@ -772,10 +848,12 @@ const loadProfiles = async () => {
     })
     if (res.data?.success) {
       profiles.value = res.data.data?.profiles || []
+      // 服务端返回全量 total；超过本次 limit 拉取数量时说明列表被截断
+      serverTotal.value = Number(res.data.data?.pagination?.total ?? profiles.value.length)
       pagination.value.total = profiles.value.length
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '加载失败'))
   } finally {
     loading.value = false
   }
@@ -819,22 +897,22 @@ const buildExistingPersonaSeed = () => {
   }
 }
 
-const applyPersonaSeedToForm = (personaSeed: Record<string, any>, options: { preferExisting?: boolean } = {}) => {
+const applyPersonaSeedToForm = (personaSeed: PersonaSeed, options: { preferExisting?: boolean } = {}) => {
   const preferExisting = options.preferExisting ?? false
   const currentForm = formData.value
   const currentProfile = currentForm.profile
   const currentTraits = currentForm.personalityTraits
-  const generatedProfile = personaSeed && typeof personaSeed === 'object' ? { ...personaSeed } : {}
+  const generatedProfile: PersonaSeed = personaSeed && typeof personaSeed === 'object' ? { ...personaSeed } : {}
   delete generatedProfile.personalityTraits
 
-  const pickText = (currentValue: string, generatedValue: any) => {
+  const pickText = (currentValue: string, generatedValue: unknown) => {
     if (preferExisting && normalizeText(currentValue)) {
       return currentValue
     }
     return normalizeText(generatedValue) || currentValue || ''
   }
 
-  const nextProfile: VirtualLearnerProfileDraft & Record<string, any> = {
+  const nextProfile: VirtualLearnerProfileDraft & Record<string, unknown> = {
     ...generatedProfile,
     age: preferExisting && typeof currentProfile.age === 'number'
       ? currentProfile.age
@@ -883,7 +961,7 @@ const openCreateDialog = () => {
   createDialogVisible.value = true
 }
 
-const openEditDialog = (profile: any) => {
+const openEditDialog = (profile: VirtualLearnerProfile) => {
   scenarioDraft.value = null
   editingProfile.value = profile
   formData.value = {
@@ -927,14 +1005,14 @@ const handleGeneratePersona = async () => {
     } else {
       ElMessage.error(res.data?.error || '学习者身份生成失败')
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '学习者身份生成失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '学习者身份生成失败'))
   } finally {
     generatingScenario.value = false
   }
 }
 
-const getStorySourceLabel = (value: string) => {
+const getStorySourceLabel = (value: string | undefined) => {
   switch (value) {
     case 'work':
       return '工作'
@@ -949,18 +1027,18 @@ const getStorySourceLabel = (value: string) => {
   }
 }
 
-const getStoryPool = (profile: any) => {
+const getStoryPool = (profile: VirtualLearnerProfile | null | undefined): VirtualStory[] => {
   if (!profile) return []
   const profileData = profile.profile || {}
-  return Array.isArray(profileData.storyPool) ? profileData.storyPool.filter((story: any) => story && typeof story === 'object') : []
+  return Array.isArray(profileData.storyPool) ? profileData.storyPool.filter((story) => story && typeof story === 'object') : []
 }
 
-const getStorySessionStats = (profile: any, storyId: string) => {
+const getStorySessionStats = (profile: VirtualLearnerProfile | null | undefined, storyId: string | undefined) => {
   const sessions = profile?.sessions || []
-  const storySessions = sessions.filter((s: any) => s.storyId === storyId || s.story?.id === storyId)
+  const storySessions = sessions.filter((s) => s.storyId === storyId || s.story?.id === storyId)
   const total = storySessions.length
-  const completed = storySessions.filter((s: any) => s.status === 'completed').length
-  const running = storySessions.filter((s: any) => s.status === 'running').length
+  const completed = storySessions.filter((s) => s.status === 'completed').length
+  const running = storySessions.filter((s) => s.status === 'running').length
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
   
   const lastSession = storySessions.length > 0 ? storySessions[0] : null
@@ -976,93 +1054,18 @@ const getStorySessionStats = (profile: any, storyId: string) => {
   }
 }
 
-const getLatestSession = (profile: any) => {
+const getLatestSession = (profile: VirtualLearnerProfile) => {
   const sessions = profile?.sessions || []
   return sessions[0] || null
 }
 
-const getStoryStatus = (profile: any) => {
-  const storyCount = getStoryPool(profile).length
-  if (storyCount === 0) {
-    return { label: '待补故事', className: 'status-pill--warning' }
-  }
-  if (storyCount >= 2) {
-    return { label: `${storyCount} 个故事`, className: 'status-pill--success' }
-  }
-  return { label: '1 个故事', className: 'status-pill--ready' }
-}
-
-const getProfileStageStatus = (profile: any) => {
+const getProfileStageStatus = (profile: VirtualLearnerProfile) => {
   const latest = getLatestSession(profile)
   if (!latest) return { label: '未开始', className: 'status-pill--idle' }
   if (latest.status === 'failed') return { label: '失败', className: 'status-pill--danger' }
   if (latest.status === 'completed') return { label: '已完成', className: 'status-pill--success' }
   if (latest.status === 'running') return { label: getSessionStageLabel(latest.currentStage), className: 'status-pill--running' }
   return { label: getSessionStageLabel(latest.currentStage), className: 'status-pill--idle' }
-}
-
-const getProfileStageLabel = (profile: any) => getProfileStageStatus(profile).label
-
-const getProfileStatusLabel = (profile: any) => {
-  const latest = getLatestSession(profile)
-  if (!latest) return '尚未开局'
-  return `${getSessionStatusLabel(latest.status)} · ${formatRelativeTime(latest.updatedAt || latest.createdAt)}`
-}
-
-const getProfileRowClass = (profile: any) => {
-  const latest = getLatestSession(profile)
-  if (getStoryPool(profile).length === 0) return 'profile-card--needs-story'
-  if (latest?.status === 'running') return 'profile-card--running'
-  if (latest?.status === 'completed') return 'profile-card--completed'
-  return ''
-}
-
-const getProfileActionLabel = (profile: any) => {
-  return getStoryPool(profile).length > 0 ? '开局' : '补故事'
-}
-
-const getLatestSessionGoalReady = (profile: any) => {
-  const latest = getLatestSession(profile)
-  if (!latest) return false
-  return latest.currentStage === 'path' || latest.currentStage === 'learning' || latest.status === 'completed'
-}
-
-const getLatestSessionPathReady = (profile: any) => {
-  const latest = getLatestSession(profile)
-  if (!latest) return false
-  return !!latest.learningPathId || latest.currentStage === 'learning' || latest.status === 'completed'
-}
-
-const getLatestSessionLearnStarted = (profile: any) => {
-  const latest = getLatestSession(profile)
-  if (!latest) return false
-  return latest.currentStage === 'learning' || latest.status === 'completed'
-}
-
-const getLatestSessionCompleted = (profile: any) => {
-  const latest = getLatestSession(profile)
-  return latest?.status === 'completed'
-}
-
-const handleProfileSecondaryAction = (profile: any) => {
-  if (getStoryPool(profile).length === 0) {
-    goToProfile(profile)
-    return
-  }
-  openStartSessionDialog(profile)
-}
-
-const getSessionStatusClass = (status: string) => {
-  switch (status) {
-    case 'running':
-      return 'session-status--running'
-    case 'completed':
-      return 'session-status--completed'
-    case 'failed':
-      return 'session-status--failed'
-    default:
-      return 'session-status--created'
-  }
 }
 
 const handleSubmit = async () => {
@@ -1124,14 +1127,14 @@ const handleSubmit = async () => {
         loadProfiles()
       }
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '操作失败'))
   } finally {
     submitting.value = false
   }
 }
 
-const handleDelete = async (profile: any) => {
+const handleDelete = async (profile: VirtualLearnerProfile) => {
   try {
     await ElMessageBox.confirm(`确定删除虚拟学习者 "${profile.userName}"？该用户的学习数据也会被删除。`, '确认删除', { type: 'warning' })
     const res = await adminApi.deleteVirtualLearner(profile.id)
@@ -1139,9 +1142,9 @@ const handleDelete = async (profile: any) => {
       ElMessage.success('删除成功')
       loadProfiles()
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(getErrorMessage(error, '删除失败'))
     }
   }
 }
@@ -1178,14 +1181,14 @@ const isProfileExpanded = (profileId: string) => {
   return expandedProfileIds.value.has(profileId)
 }
 
-const openStoryDetail = (profile: any, story: any) => {
+const openStoryDetail = (profile: VirtualLearnerProfile, story: VirtualStory) => {
   const storyId = story.storyId || story.id || story.title
   router.push(`/admin/virtual-learners/${profile.id}/stories/${storyId}`)
 }
 
-const openStoryLaunch = (profile: any, story: any) => {
+const openStoryLaunch = (profile: VirtualLearnerProfile, story: VirtualStory) => {
   startSessionTarget.value = profile
-  startSessionStoryIndex.value = Math.max(0, getStoryPool(profile).findIndex((item: any) =>
+  startSessionStoryIndex.value = Math.max(0, getStoryPool(profile).findIndex((item) =>
     (item.storyId || item.id) === (story.storyId || story.id)
   ))
   launchMode.value = 'blackbox'
@@ -1193,13 +1196,13 @@ const openStoryLaunch = (profile: any, story: any) => {
   startSessionDialogVisible.value = true
 }
 
-const generateStoryForProfile = async (profile: any) => {
+const generateStoryForProfile = async (profile: VirtualLearnerProfile) => {
   try {
     await adminApi.draftVirtualLearnerStories(profile.id)
     ElMessage.success('故事生成成功')
     loadProfiles()
-  } catch (error: any) {
-    ElMessage.error(error.message || '生成故事失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '生成故事失败'))
   }
 }
 
@@ -1216,7 +1219,7 @@ const handleBatchDelete = async () => {
     const results = await Promise.allSettled(
       ids.map(id => adminApi.deleteVirtualLearner(id))
     )
-    const successCount = results.filter(r => r.status === 'fulfilled' && (r as any).value?.data?.success).length
+    const successCount = results.filter(r => r.status === 'fulfilled' && r.value?.data?.success).length
     const failCount = count - successCount
     if (successCount > 0) {
       ElMessage.success(`成功删除 ${successCount} 个`)
@@ -1226,14 +1229,14 @@ const handleBatchDelete = async () => {
     }
     selectedIds.value = new Set()
     loadProfiles()
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '批量删除失败')
+      ElMessage.error(getErrorMessage(error, '批量删除失败'))
     }
   }
 }
 
-const getSessionStatusType = (status: string) => {
+const getSessionStatusType = (status: string | undefined) => {
   switch (status) {
     case 'running':
       return 'success'
@@ -1248,7 +1251,7 @@ const getSessionStatusType = (status: string) => {
   }
 }
 
-const getSessionStatusLabel = (status: string) => {
+const getSessionStatusLabel = (status: string | undefined) => {
   switch (status) {
     case 'created':
       return '已创建'
@@ -1265,7 +1268,7 @@ const getSessionStatusLabel = (status: string) => {
   }
 }
 
-const getSessionStageLabel = (stage: string) => {
+const getSessionStageLabel = (stage: string | undefined) => {
   switch (stage) {
     case 'goal':
       return 'Goal'
@@ -1278,11 +1281,11 @@ const getSessionStageLabel = (stage: string) => {
   }
 }
 
-const goToProfile = (profile: any) => {
+const goToProfile = (profile: VirtualLearnerProfile) => {
   router.push(`/admin/virtual-learners/${profile.id}`)
 }
 
-const openSessionDrawer = async (profile: any) => {
+const openSessionDrawer = async (profile: VirtualLearnerProfile) => {
   currentSessionProfile.value = profile
   currentSessions.value = profile.sessions || []
   sessionDrawerVisible.value = true
@@ -1303,14 +1306,6 @@ const openSessionDrawer = async (profile: any) => {
 const goToSession = (sessionId: string) => {
   sessionDrawerVisible.value = false
   router.push(`/admin/virtual-session/${sessionId}`)
-}
-
-const openStartSessionDialog = (profile: any) => {
-  startSessionTarget.value = profile
-  startSessionStoryIndex.value = 0
-  launchMode.value = 'blackbox'
-  launchFrictionBudget.value = 'normal'
-  startSessionDialogVisible.value = true
 }
 
 const confirmStartSession = async () => {
@@ -1353,25 +1348,13 @@ const deleteSession = async (sessionId: string) => {
     const res = await adminApi.deleteVirtualSession(sessionId)
     if (res.data?.success) {
       ElMessage.success('会话已删除')
-      currentSessions.value = currentSessions.value.filter((s: any) => s.id !== sessionId)
+      currentSessions.value = currentSessions.value.filter((s) => s.id !== sessionId)
       loadProfiles()
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(getErrorMessage(error, '删除失败'))
     }
-  }
-}
-
-const startSession = async (profile: any, story?: any) => {
-  try {
-    const res = await adminApi.startVirtualSession(profile.id, story ? { storyId: story.id } : undefined)
-    if (res.data?.success) {
-      ElMessage.success('已创建 session，进入人物控制中心')
-      router.push(`/admin/virtual-learners/${profile.id}?sessionId=${res.data.data?.id}`)
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '启动失败')
   }
 }
 
@@ -1390,7 +1373,7 @@ watch(filteredProfiles, () => {
     return
   }
 
-  if (!filteredProfiles.value.some((item: any) => item.id === focusedProfileId.value)) {
+  if (!filteredProfiles.value.some((item) => item.id === focusedProfileId.value)) {
     focusedProfileId.value = filteredProfiles.value[0].id
   }
 })
@@ -2473,6 +2456,17 @@ watch(filteredProfiles, () => {
   justify-content: center;
   padding: 16px 0 0;
   border-top: 1px solid #edf2f7;
+}
+
+.truncation-hint {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #f3d19e;
+  background: #fdf6ec;
+  color: #b88230;
+  font-size: 12.5px;
+  text-align: center;
 }
 
 .session-list--compact {

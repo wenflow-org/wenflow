@@ -111,7 +111,7 @@
     </div>
 
     <!-- 实时趋势图 -->
-    <div v-if="showTrend && trendData.length > 1" class="trend-section">
+    <div v-if="showTrend && trendData && trendData.length > 1" class="trend-section">
       <h4 class="section-title">状态趋势</h4>
       <div ref="chartRef" class="trend-chart"></div>
     </div>
@@ -119,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { Monitor, InfoFilled } from '@element-plus/icons-vue';
 
 // 学习状态指标
@@ -253,7 +253,7 @@ const cognitiveLevelText = computed(() => {
     evaluate: '评估',
     create: '创造',
   };
-  return levels[props.cognitiveAnalysis?.cognitiveLevel] || '未知';
+  return levels[props.cognitiveAnalysis?.cognitiveLevel ?? ''] || '未知';
 });
 
 const cognitiveLevelType = computed(() => {
@@ -289,7 +289,7 @@ const interventionTypeText = computed(() => {
     encouragement: '👍 鼓励',
     redirection: '🔄 转场',
   };
-  return types[props.intervention?.type] || '建议';
+  return types[props.intervention?.type ?? ''] || '建议';
 });
 
 // 方法

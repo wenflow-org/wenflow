@@ -190,6 +190,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
+import { hasUserSession } from '@/utils/api';
 
 const scrolled = ref(false);
 const isLoggedIn = ref(false);
@@ -220,7 +221,7 @@ const capabilities = [
 ];
 
 const syncAuthState = () => {
-  isLoggedIn.value = Boolean(localStorage.getItem('token'));
+  isLoggedIn.value = hasUserSession();
 };
 
 const handleScroll = () => {

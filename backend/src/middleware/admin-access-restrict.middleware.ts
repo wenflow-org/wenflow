@@ -1,50 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { isAlwaysBlockedAddress, isLocalOrPrivateAddress } from '../utils/safe-http';
+import { getRuntimeNetworkPolicy } from '../services/runtime-network-policy.service';
+
+function normalizeClientIp(value: string): string {
+  const trimmed = value.trim().replace(/^\[|\]$/g, '');
+  const mapped = trimmed.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1];
+  return mapped || trimmed;
+}
 
 export const adminAccessRestrictMiddleware = (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  // 读取环境变量配置，默认为 true（仅本地访问）
-  const localhostOnly = process.env.ADMIN_LOCALHOST_ONLY !== 'false';
-  
-  // 如果未启用本地限制，直接放行
-  if (!localhostOnly) {
-    logger.info('[Admin访问控制] 已关闭本地访问限制');
+  const policy = getRuntimeNetworkPolicy();
+  const accessMode = policy.adminAccessMode;
+  if (accessMode === 'any') {
     return next();
   }
-  
-  // 获取客户端 IP
-  // 如果启用了 trust proxy，优先使用 X-Forwarded-For
-  const trustProxy = process.env.TRUST_PROXY === '1';
-  let clientIP: string;
-  
-  if (trustProxy && req.headers['x-forwarded-for']) {
-    // 从 X-Forwarded-For 获取真实 IP（取第一个）
-    clientIP = (req.headers['x-forwarded-for'] as string).split(',')[0].trim();
-  } else {
-    // 使用 Express 的 req.ip
-    clientIP = req.ip || req.connection.remoteAddress || '';
-  }
-  
-  // 本地 IP 白名单
-  const allowedIPs = [
-    '127.0.0.1',
-    '::1',
-    '::ffff:127.0.0.1',
-    'localhost'
-  ];
-  
-  const isAllowed = allowedIPs.includes(clientIP);
+
+  // Express 会根据 app.set('trust proxy') 计算 req.ip；这里不直接信任客户端 Header。
+  const clientIP = normalizeClientIp(req.ip || req.socket?.remoteAddress || req.connection.remoteAddress || '');
+  const explicitlyAllowed = new Set(policy.adminAllowedIps.map(normalizeClientIp)).has(clientIP);
+  const isLoopback = clientIP === '127.0.0.1' || clientIP === '::1';
+  const isPrivate = isLocalOrPrivateAddress(clientIP) && !isAlwaysBlockedAddress(clientIP);
+  const isAllowed = explicitlyAllowed
+    || (accessMode === 'loopback' ? isLoopback : isPrivate);
   
   if (!isAllowed) {
-    logger.warn(`[Admin访问拦截] IP: ${clientIP} 尝试访问管理后台被拒绝 (trust_proxy=${trustProxy})`);
+    logger.warn(`[Admin访问拦截] IP: ${clientIP} 尝试访问管理后台被拒绝 (mode=${accessMode})`);
     return res.status(403).json({
       success: false,
       error: {
-        message: '管理员登录仅限本地访问，如需远程访问请在服务器 .env 文件中设置 ADMIN_LOCALHOST_ONLY=false',
-        code: 'ADMIN_LOCALHOST_ONLY'
+        message: accessMode === 'loopback'
+          ? '管理员接口仅允许本机访问'
+          : '管理员接口仅允许本机或局域网访问',
+        code: 'ADMIN_NETWORK_RESTRICTED'
       }
     });
   }

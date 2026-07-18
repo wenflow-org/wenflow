@@ -1,25 +1,30 @@
 <template>
-  <div id="app">
-    <RouterView v-slot="{ Component, route }">
-      <transition name="route-fade" mode="out-in">
-        <component :is="Component" :key="route.fullPath" />
-      </transition>
-    </RouterView>
-    <ToastHost />
-    <DevOverlay />
-  </div>
+  <el-config-provider :locale="zhCn">
+    <div id="app">
+      <RouterView v-slot="{ Component }">
+        <transition name="route-fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </RouterView>
+      <ToastHost />
+      <DevOverlay v-if="isTestMode" />
+    </div>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { defineAsyncComponent, onMounted } from 'vue';
+import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { useUserStore } from './stores/user';
+import { isTestMode } from '@/utils/debugMode';
 import ToastHost from './components/ui/ToastHost.vue';
-import DevOverlay from './components/dev/DevOverlay.vue';
+
+// 调试浮层仅测试模式加载，普通用户不下载其代码
+const DevOverlay = defineAsyncComponent(() => import('./components/dev/DevOverlay.vue'));
 
 const userStore = useUserStore();
 
 onMounted(() => {
-  document.title = 'AI学习平台';
   userStore.initFromStorage();
 });
 </script>
@@ -35,7 +40,7 @@ onMounted(() => {
 /* 路由切换 fade-in 微动效 */
 .route-fade-enter-active,
 .route-fade-leave-active {
-  transition: opacity 220ms ease, transform 220ms ease;
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .route-fade-enter-from {

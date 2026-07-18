@@ -8,12 +8,28 @@ export interface LearnerSnapshotRefreshInput {
   milestoneId?: string;
   taskId?: string;
   scope?: 'global' | 'path' | 'teaching';
+  lastEventId?: string;
+  lastEventAt?: Date;
 }
 
 export class LearnerSnapshotRefreshService {
   private cache = new Map<string, LearnerSnapshot>();
 
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
+    const key = this.buildKey(input);
+    if (input.lastEventId) {
+      const existing = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
+      if (existing?.lastEventId === input.lastEventId) {
+        try {
+          const snapshot = JSON.parse(existing.payload) as LearnerSnapshot;
+          this.cache.set(key, snapshot);
+          return snapshot;
+        } catch {
+          // Rebuild malformed projections from source facts.
+        }
+      }
+    }
+
     const snapshot = await learnerSnapshotService.getSnapshot({
       userId: input.userId,
       learningPathId: input.pathId,
@@ -22,15 +38,49 @@ export class LearnerSnapshotRefreshService {
       mode: input.scope,
     });
 
-    this.cache.set(this.buildKey(input.userId, input.pathId, input.scope || snapshot.scope.mode), snapshot);
+    await prisma.learner_projections.upsert({
+      where: { projectionKey: key },
+      create: {
+        id: `lsp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        projectionKey: key,
+        userId: input.userId,
+        scope: input.scope || snapshot.scope.mode,
+        pathId: input.pathId || null,
+        milestoneId: input.milestoneId || null,
+        taskId: input.taskId || null,
+        version: 1,
+        payload: JSON.stringify(snapshot),
+        lastEventId: input.lastEventId || null,
+        lastEventAt: input.lastEventAt || null,
+        generatedAt: new Date(snapshot.freshness.generatedAt)
+      },
+      update: {
+        version: { increment: 1 },
+        payload: JSON.stringify(snapshot),
+        lastEventId: input.lastEventId || undefined,
+        lastEventAt: input.lastEventAt || undefined,
+        generatedAt: new Date(snapshot.freshness.generatedAt)
+      }
+    });
+    this.cache.set(key, snapshot);
     return snapshot;
   }
 
   async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
-    const key = this.buildKey(input.userId, input.pathId, input.scope || 'global');
+    const key = this.buildKey(input);
     const cached = this.cache.get(key);
     if (cached) {
       return cached;
+    }
+    const persisted = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
+    if (persisted && Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000) {
+      try {
+        const snapshot = JSON.parse(persisted.payload) as LearnerSnapshot;
+        this.cache.set(key, snapshot);
+        return snapshot;
+      } catch {
+        // Rebuild malformed projections from source facts.
+      }
     }
     return this.refresh(input);
   }
@@ -114,8 +164,15 @@ export class LearnerSnapshotRefreshService {
     };
   }
 
-  private buildKey(userId: string, pathId?: string, scope: string = 'global') {
-    return `${userId}:${pathId || 'global'}:${scope}`;
+  private buildKey(input: LearnerSnapshotRefreshInput) {
+    return [
+      'learner-snapshot-v1',
+      input.userId,
+      input.scope || (input.taskId ? 'teaching' : input.pathId ? 'path' : 'global'),
+      input.pathId || 'global',
+      input.milestoneId || 'none',
+      input.taskId || 'none'
+    ].join(':');
   }
 }
 

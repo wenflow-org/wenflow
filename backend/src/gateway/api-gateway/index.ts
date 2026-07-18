@@ -1,9 +1,10 @@
 import { APIRouter } from './router';
 import { APIExecutor } from './executor';
 import { GatewayCache } from './cache';
-import { CallerInfo, ChatRequest, ChatResponse, ExecutionContext, ResolvedRoute } from './types';
+import { CallerInfo, ChatRequest, ChatResponse, ExecutionContext, ResolvedRoute, RouteExecutionOverride } from './types';
 import { getRequestContext } from './context';
 import { logger } from '../../utils/logger';
+import { createHash } from 'crypto';
 
 export class APIGateway {
   private router: APIRouter;
@@ -57,7 +58,30 @@ export class APIGateway {
       });
     }
 
+    route = this.applyRouteOverride(route, requestContext.promptRuntimeOverride?.routeOverride);
+
     return this.executor.execute(route, request, executionContext);
+  }
+
+  private applyRouteOverride(route: ResolvedRoute, override?: RouteExecutionOverride): ResolvedRoute {
+    if (!override) return route;
+    if (override.expectedProviderId && override.expectedProviderId !== route.providerId) {
+      throw new Error(`API route provider changed: expected ${override.expectedProviderId}, received ${route.providerId}`);
+    }
+    if (override.expectedCredentialFingerprint) {
+      const currentFingerprint = createHash('sha256').update(JSON.stringify(route.apiKey || '')).digest('hex');
+      if (currentFingerprint !== override.expectedCredentialFingerprint) {
+        throw new Error(`API route credentials changed for ${route.providerId}`);
+      }
+    }
+    return {
+      ...route,
+      endpoint: override.endpoint || route.endpoint,
+      model: override.model || route.model,
+      thinkingMode: override.thinkingMode || route.thinkingMode,
+      reasoningEffort: override.reasoningEffort || route.reasoningEffort,
+      timeoutMs: override.timeoutMs ?? route.timeoutMs,
+    };
   }
 
   async resolveRoute(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {
@@ -85,7 +109,7 @@ export function getAPIGateway(): APIGateway {
   return gatewayInstance;
 }
 
-export { CallerInfo, ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext, ExecuteOptions, ChatMessage } from './types';
+export { CallerInfo, ResolvedRoute, RouteExecutionOverride, ChatRequest, ChatResponse, ExecutionContext, ExecuteOptions, ChatMessage } from './types';
 export { APIRouter } from './router';
 export { APIExecutor } from './executor';
 export { GatewayCache } from './cache';

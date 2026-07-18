@@ -3,10 +3,10 @@
     <div class="window-header" @mousedown="startDrag">
       <div class="header-left">
         <el-icon :size="18" color="#67c23a"><ChatDotRound /></el-icon>
-        <span class="header-title">同伴讨论</span>
+        <span class="header-title">AI 学伴讨论</span>
       </div>
       <div class="header-actions">
-        <el-button text size="small" @click="close">
+        <el-button text size="small" aria-label="关闭 AI 学伴讨论" @click="close">
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
@@ -48,7 +48,7 @@
 
         <div v-if="messages.length === 0 && !loading" class="empty-state">
           <el-icon :size="40" color="#c0c4cc"><ChatDotRound /></el-icon>
-          <p>和伙伴聊聊你的想法</p>
+          <p>说说你对这个知识点的理解或疑问</p>
         </div>
       </div>
 
@@ -57,7 +57,7 @@
           v-model="userInput"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="随便说说..."
+          placeholder="输入你的理解或疑问"
           @keydown.ctrl.enter="sendMessage"
           :disabled="loading"
         />
@@ -78,8 +78,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
-import { ChatDotRound, Close, User, Loading } from '@element-plus/icons-vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
+import { ChatDotRound, Close, User } from '@element-plus/icons-vue';
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import TypingIndicator from './TypingIndicator.vue';
 
@@ -103,9 +103,45 @@ const emit = defineEmits<{
 const userInput = ref('');
 const messageListRef = ref<HTMLElement | null>(null);
 
+// 拖拽移动窗口
+const dragOffset = ref({ x: 0, y: 0 });
+let dragState: { startX: number; startY: number; baseX: number; baseY: number } | null = null;
+
+const onDragMove = (e: MouseEvent) => {
+  if (!dragState) return;
+  dragOffset.value = {
+    x: dragState.baseX + (e.clientX - dragState.startX),
+    y: dragState.baseY + (e.clientY - dragState.startY),
+  };
+};
+
+const stopDrag = () => {
+  dragState = null;
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', stopDrag);
+};
+
+const startDrag = (e: MouseEvent) => {
+  // 点击头部按钮（如关闭）时不触发拖拽
+  if ((e.target as HTMLElement).closest('button')) return;
+  dragState = {
+    startX: e.clientX,
+    startY: e.clientY,
+    baseX: dragOffset.value.x,
+    baseY: dragOffset.value.y,
+  };
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', stopDrag);
+};
+
+onBeforeUnmount(() => {
+  stopDrag();
+});
+
 const windowStyle = computed(() => ({
   width: 'min(360px, calc(100vw - 24px))',
   height: 'min(500px, calc(100dvh - 132px))',
+  transform: `translate(${dragOffset.value.x}px, ${dragOffset.value.y}px)`,
 }));
 
 const sendMessage = () => {

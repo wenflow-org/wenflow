@@ -13,12 +13,22 @@
       <el-button type="primary" @click="goBack">返回路径详情</el-button>
     </div>
 
+    <div v-else-if="sessionInitError" class="session-paused session-error-state">
+      <el-icon :size="48" color="#e86450"><WarningFilled /></el-icon>
+      <h2>学习初始化失败</h2>
+      <p>{{ sessionInitError }}</p>
+      <div class="session-error-state__actions">
+        <el-button type="primary" @click="retryInitialization">重试</el-button>
+        <el-button @click="goBack">返回学习路径</el-button>
+      </div>
+    </div>
+
     <div v-else-if="sessionPaused" class="session-paused">
       <el-icon :size="48" color="#e6a23c"><VideoPause /></el-icon>
-      <h2>授课已暂停</h2>
-      <p>点击"恢复授课"按钮继续学习</p>
+        <h2>学习已暂停</h2>
+        <p>你的学习进度已保留，可以继续当前任务。</p>
       <el-button type="success" @click="resumeSessionFromPause">
-        <el-icon><VideoPlay /></el-icon> 恢复授课
+          <el-icon><VideoPlay /></el-icon> 继续学习
       </el-button>
     </div>
 
@@ -31,7 +41,7 @@
             <p v-if="task.learningPath?.name" class="learning-header-card__path">{{ task.learningPath.name }}</p>
           </div>
           <div class="learning-header-card__controls">
-            <span v-if="sessionActive" class="learning-header-card__status">学习执行中</span>
+            <span v-if="sessionActive" class="learning-header-card__status">学习中</span>
             <el-dropdown
               v-if="sessionActive"
               trigger="click"
@@ -49,7 +59,7 @@
                     <el-icon><Refresh /></el-icon> 重新开始
                   </el-dropdown-item>
                   <el-dropdown-item command="end" divided class="danger-item">
-                    <el-icon><WarningFilled /></el-icon> 结束课程
+                    <el-icon><WarningFilled /></el-icon> 结束本次学习
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -106,7 +116,7 @@
                 <span class="learning-msg__role">{{ msg.role === 'user' ? '你' : 'AI' }}</span>
                 <div class="learning-msg__body">
                   <MarkdownRenderer :content="msg.content" />
-                  <div v-if="(msg as any).failed" class="message-error">
+                  <div v-if="msg.failed" class="message-error">
                     <el-icon><WarningFilled /></el-icon>
                     <span>发送失败</span>
                     <el-button text size="small" @click="retryMessage(index)">
@@ -175,7 +185,7 @@
                   v-model="userInput"
                   type="textarea"
                   :autosize="{ minRows: 1, maxRows: 4 }"
-                  placeholder="输入你的想法… (Ctrl+Enter 发送)"
+                  placeholder="输入你的问题或想法"
                   @keydown.ctrl.enter="sendMessage"
                   :disabled="aiLoading"
                 />
@@ -207,6 +217,7 @@
       <PeerChatWindow
         :visible="peerChatWindowVisible"
         :messages="peerChatMessages"
+        :loading="peerSending || peerInitializing"
         @send="handlePeerChatSend"
         @close="peerChatWindowVisible = false"
       />
@@ -224,7 +235,7 @@
 
     <el-dialog
       v-model="showEvaluationDialog"
-      title="授课结束评估"
+      title="本次学习反馈"
       width="600px"
       :close-on-click-modal="false"
     >
@@ -236,6 +247,7 @@
         :message-count="messages.length"
         :wrapup="sessionWrapup"
         :advisory="sessionAdvisory"
+        :busy="completeTaskBusy"
         @action="handleCompletionAction"
         @advisory-action="handleWrapupAdvisoryAction"
       />
@@ -245,7 +257,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
 import {
@@ -255,11 +267,25 @@ import {
   type CheckpointSubmitResult,
   type KnowledgePointStatus,
   type ReplanAdvisory,
+  type SessionDetail,
   type WrapupArtifact
 } from '@/api/aiTeaching';
 import { adminApi } from '@/api/adminApi';
+import type { Task } from '@/api/learning';
 import api from '../utils/api';
 import { API_BASE_URL } from '../utils/api';
+
+// 任务详情接口可能额外返回所属阶段信息
+type LearningTaskRecord = Task & {
+  week?: {
+    weekNumber?: number;
+    learningObjectives?: unknown;
+  };
+};
+
+type VirtualContextRecord = {
+  bindings?: Record<string, unknown>;
+};
 import CheckpointCard from '@/components/learning/CheckpointCard.vue';
 import {
   VideoPlay, VideoPause,
@@ -303,12 +329,13 @@ const learningEvaluationBasePath = computed(() => {
 });
 
 const pageLoading = ref(true);
-const task = ref<any>(null);
-const virtualContext = ref<any>(null);
+const task = ref<LearningTaskRecord | null>(null);
+const virtualContext = ref<VirtualContextRecord | null>(null);
 const effectiveTaskId = computed(() => String(virtualContext.value?.bindings?.currentTaskId || taskId.value || ''));
 
 const sessionInitializing = ref(false);
 const sessionInitMode = ref<'new' | 'resumed'>('new');
+const sessionInitError = ref('');
 const sessionActive = ref(false);
 const sessionPaused = ref(false);
 const sessionInfo = ref({
@@ -335,20 +362,17 @@ interface ChatMessage {
   strategies?: string[];
   knowledgePoint?: string | null;
   knowledgePoints?: KnowledgePointStatus[];
-  promptDebug?: any;
+  promptDebug?: unknown;
   peerTriggered?: boolean;
   peerMessage?: string | null;
-  peerDebug?: any;
+  peerDebug?: unknown;
+  failed?: boolean;
 }
 
 type PeerChatMessage = {
   role: 'user' | 'peer';
   content: string;
   timestamp: string;
-};
-
-type MessageResultWithRecovery = Awaited<ReturnType<typeof aiTeachingAPI.sendMessage>> & {
-  recovered?: boolean;
 };
 
 type CompletionPromptReason = 'completion-candidate' | 'learner-requested-end' | null;
@@ -371,14 +395,16 @@ const peerNotificationVisible = ref(false);
 const peerChatWindowVisible = ref(false);
 const peerChatMessages = ref<PeerChatMessage[]>([]);
 const peerInitializing = ref(false);
+const peerSending = ref(false);
 
-const elapsedTime = ref(0);
-const activeTime = ref(0);
+// 计时器用普通变量而非 ref：每秒递增不触发整页重渲染（仅在结束/完成时读取当前值）
+let activeTime = 0;
 let timerInterval: number | null = null;
-let lastActivityTime = ref(Date.now());
+let lastActivityTime = Date.now();
 
 const showEvaluationDialog = ref(false);
 const endingSession = ref(false);
+const completeTaskBusy = ref(false);
 const sessionWrapup = ref<WrapupArtifact>({
   status: 'summary-only',
   sources: {
@@ -430,16 +456,16 @@ const sessionAdvisory = ref<ReplanAdvisory | null>(null);
 const autoPausing = ref(false);
 
 const sessionInitMessage = computed(() => sessionInitMode.value === 'resumed'
-  ? '正在恢复上次授课进度...'
-  : '正在初始化授课会话...');
+  ? '正在恢复上次学习进度...'
+  : '正在准备本次学习...');
 
 const completionPromptTitle = computed(() => completionPromptReason.value === 'learner-requested-end'
   ? '已收到结束当前任务课堂的请求'
   : '当前任务已达到可收束状态');
 
 const completionPromptDescription = computed(() => completionPromptReason.value === 'learner-requested-end'
-  ? '确认后将结束当前 task 的当次课堂并进入评价页面；这不代表整个 Learn 阶段已经结束。'
-  : '本轮教学判断当前 task 已满足收束条件。你可以继续巩固，也可以确认结束当前 task 的当次课堂并进入评价页面。');
+  ? '结束后会生成本次学习反馈，之后不能继续这段对话，但已有学习记录会保留。'
+  : '这项任务已经完成本次学习目标。你可以继续练习，也可以结束本次学习并查看反馈。');
 
 const kpMasteredCount = computed(() => knowledgePoints.value.filter(kp => kp.status === 'mastered').length);
 const kpProgressPercent = computed(() => {
@@ -521,6 +547,7 @@ const loadTaskData = async () => {
       }
     }
   } catch (error: any) {
+    sessionInitError.value = error.message || '加载任务失败';
     toast.error(error.message || '加载任务失败');
     console.error(error);
   } finally {
@@ -587,8 +614,7 @@ const resetSessionState = () => {
   peerChatMessages.value = [];
   peerNotificationVisible.value = false;
   peerChatWindowVisible.value = false;
-  elapsedTime.value = 0;
-  activeTime.value = 0;
+  activeTime = 0;
   sessionPaused.value = false;
 };
 
@@ -597,20 +623,30 @@ const persistPauseOnPageHide = () => {
     return;
   }
 
-  const token = localStorage.getItem('token');
-  if (!token) {
-    return;
+  const url = `${API_BASE_URL}/ai-teaching/sessions/${sessionInfo.value.sessionId}/pause`;
+  const payload = JSON.stringify({ reason: 'pagehide' });
+
+  // 优先 sendBeacon：页面卸载时可靠投递，且不会触发 CORS 预检（Cookie 同源自动携带）
+  if (typeof navigator.sendBeacon === 'function') {
+    const sent = navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
+    if (sent) return;
   }
 
   autoPausing.value = true;
-  void fetch(`${API_BASE_URL}/ai-teaching/sessions/${sessionInfo.value.sessionId}/pause`, {
+  void fetch(url, {
     method: 'POST',
     keepalive: true,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ reason: 'pagehide' }),
+    body: payload,
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error(`暂停会话失败 (${response.status})`);
+    }
+  }).catch((error) => {
+    console.error('页面离开时暂停会话失败:', error);
   }).finally(() => {
     autoPausing.value = false;
   });
@@ -619,6 +655,7 @@ const persistPauseOnPageHide = () => {
 const startSession = async () => {
   if (!task.value) return;
   
+  sessionInitError.value = '';
   sessionInitMode.value = 'new';
   sessionInitializing.value = true;
   
@@ -658,43 +695,13 @@ const startSession = async () => {
     scrollToBottom();
 
     startTimer();
-    toast.success('授课会话已开始，课程进度将在 48 小时内保留');
+      toast.success('本次学习已开始，进度会暂时保留');
   } catch (error: any) {
     sessionInitializing.value = false;
     toast.error(error.message || '开始会话失败');
-
-    if (!sessionInfo.value.sessionId && task.value?.id && !(error?.message || '').includes('未登录')) {
-      try {
-        const session = await aiTeachingAPI.startSession(task.value.id, { forceNew: true });
-        resetSessionState();
-        sessionInfo.value = {
-          sessionId: session.sessionId,
-          subject: session.subject,
-          topic: session.topic,
-          difficulty: 5
-        };
-        if (session.knowledgePoints && session.knowledgePoints.length > 0) {
-          knowledgePoints.value = session.knowledgePoints;
-        }
-        sessionActive.value = true;
-        sessionInitializing.value = false;
-        messages.value.push({
-          role: 'assistant',
-          content: session.opening?.message
-            ? `${session.opening.message}\n\n${session.opening.question}`
-            : session.welcomeMessage,
-          timestamp: new Date().toISOString(),
-          quickReplies: session.opening?.quickReplies || [],
-          quickRepliesUsed: false,
-        });
-        scrollToBottom();
-        startTimer();
-        toast.success('已跳过旧会话恢复，重新开始本节授课');
-      } catch (retryError: any) {
-        sessionInitializing.value = false;
-        toast.error(retryError.message || '重新初始化授课会话失败');
-      }
-    }
+    sessionPaused.value = !!sessionInfo.value.sessionId;
+    sessionActive.value = false;
+    sessionInitError.value = error.message || '开始会话失败';
   }
 };
 
@@ -705,7 +712,7 @@ const sendMessage = async () => {
   showCompletionPrompt.value = false;
   completionPromptReason.value = null;
   
-  lastActivityTime.value = Date.now();
+  lastActivityTime = Date.now();
   
   messages.value.push({
     role: 'user',
@@ -722,7 +729,7 @@ const sendMessage = async () => {
     const result = await aiTeachingAPI.sendMessage(
       sessionInfo.value.sessionId,
       text
-    ) as MessageResultWithRecovery;
+    );
     
     messages.value.push({
       role: 'assistant',
@@ -751,13 +758,13 @@ const sendMessage = async () => {
       const evaluationDurationMinutes = result.wrapup?.duration;
       completionDurationSeconds.value = typeof evaluationDurationMinutes === 'number'
         ? evaluationDurationMinutes * 60
-        : activeTime.value;
+        : activeTime;
 
       toast.success(result.wrapup?.evaluation ? '本节课已自动结束并生成评估' : '本节课已自动结束并生成总结');
 
         await nextTick();
         const pathId = task.value?.learningPath?.id || '';
-        router.push({
+        router.replace({
           path: `${learningEvaluationBasePath.value}/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
           query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery(),
         });
@@ -771,7 +778,8 @@ const sendMessage = async () => {
     if (result.checkpoint) {
       activeCheckpoint.value = result.checkpoint;
       nextTick(() => {
-        checkpointRef.value?.$el?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        checkpointRef.value?.$el?.scrollIntoView?.({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
       });
     }
     
@@ -781,7 +789,7 @@ const sendMessage = async () => {
       if (completionPromptReason.value === 'learner-requested-end') {
         toast.info('已收到结束本节学习的请求，请确认是否结束并进入评估');
       } else {
-        toast.success('已检测到当前任务达到收束条件，可确认结束并进入评估');
+      toast.success('当前任务已完成本次学习目标，可以结束并查看反馈');
       }
     }
     
@@ -808,7 +816,7 @@ const sendMessage = async () => {
     if (messages.value.length > 0) {
       const lastMsg = messages.value[messages.value.length - 1];
       if (lastMsg.role === 'user') {
-        (lastMsg as any).failed = true;
+        lastMsg.failed = true;
       }
     }
   } finally {
@@ -826,7 +834,7 @@ const retryMessage = async (index: number) => {
 };
 
 const handleKnowledgeAction = async (action: 'mastered' | 'need-more') => {
-  lastActivityTime.value = Date.now();
+  lastActivityTime = Date.now();
   const actionMessages: Record<string, string> = {
     'mastered': '这个知识点我掌握了，继续下一个。',
     'need-more': '这个知识点我没完全理解，能用另一种方式再讲一遍吗？'
@@ -858,7 +866,7 @@ const handleCheckpointSubmit = async (payload: CheckpointSubmitPayload) => {
     checkpointRef.value?.applyResult(result as CheckpointSubmitResult);
 
     if (result.passed) {
-      toast.success('小检核已通过');
+      toast.success('理解检查已通过');
     } else {
       toast.info('已收到检核反馈，可继续优化答案');
     }
@@ -871,7 +879,7 @@ const handleCheckpointSubmit = async (payload: CheckpointSubmitPayload) => {
 
 const handleCheckpointSkip = () => {
   activeCheckpoint.value = null;
-  toast.info('已跳过本次小检核');
+  toast.info('已暂时跳过理解检查');
 };
 
 const handleCheckpointContinue = () => {
@@ -888,8 +896,10 @@ const handleCheckpointRetry = () => {
 };
 
 const handlePeerChatSend = async (text: string) => {
-  if (!sessionInfo.value.sessionId) return;
-  
+  if (!sessionInfo.value.sessionId || peerSending.value || peerInitializing.value) return;
+
+  peerSending.value = true;
+  const messageIndex = peerChatMessages.value.length;
   peerChatMessages.value.push({
     role: 'user',
     content: text,
@@ -907,8 +917,10 @@ const handlePeerChatSend = async (text: string) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    toast.error(error.message || '同伴消息发送失败');
-    peerChatMessages.value.pop();
+    toast.error(error.message || 'AI 学伴消息发送失败');
+    peerChatMessages.value.splice(messageIndex, 1);
+  } finally {
+    peerSending.value = false;
   }
 };
 
@@ -943,10 +955,10 @@ const openPeerChatFromNotification = async () => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      toast.info('同伴暂时没有生成可展示内容');
+      toast.info('AI 学伴暂时没有生成可展示内容');
     }
   } catch (error: any) {
-    toast.error(error.message || '拉取同伴消息失败');
+    toast.error(error.message || '获取 AI 学伴消息失败');
   } finally {
     peerInitializing.value = false;
   }
@@ -960,8 +972,11 @@ const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complet
   }
 
   if (action === 'complete-task') {
+    if (completeTaskBusy.value) return;
+    completeTaskBusy.value = true;
     try {
-      const actualMinutes = Math.ceil(activeTime.value / 60);
+      // 纯阅读等场景不计活跃时长，但至少按 1 分钟提交，避免出现 0 分钟
+      const actualMinutes = Math.max(1, Math.ceil(activeTime / 60));
       await api.post(`/learning/tasks/${effectiveTaskId.value}/complete`, {
         actualMinutes
       });
@@ -969,6 +984,8 @@ const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complet
       closeEvaluationAndReturn();
     } catch (error: any) {
       toast.error(error.message || '标记任务完成失败');
+    } finally {
+      completeTaskBusy.value = false;
     }
     return;
   }
@@ -993,7 +1010,6 @@ const confirmCompletionEnd = async () => {
 const resumeSessionFromPause = async () => {
   if (!task.value) return;
 
-  sessionPaused.value = false;
   await startSession();
 };
 
@@ -1010,7 +1026,7 @@ const endSession = async (options?: {
   try {
     if (!options?.skipConfirm) {
       await ElMessageBox.confirm(
-        '结束后将无法继续当前授课会话，未完成内容不会保留。确定结束吗？',
+        '结束后将生成本次学习反馈，之后不能继续这段对话，但已有学习记录会保留。确定结束吗？',
         '结束课程并离开',
         {
           confirmButtonText: '确定结束',
@@ -1033,7 +1049,7 @@ const endSession = async (options?: {
     
     messages.value.push({
       role: 'assistant',
-      content: '授课会话已结束。感谢你的学习！',
+      content: '本次学习已结束，正在为你整理学习反馈。',
       timestamp: new Date().toISOString()
     });
     
@@ -1043,17 +1059,17 @@ const endSession = async (options?: {
     const evaluationDurationMinutes = result.wrapup?.duration;
     completionDurationSeconds.value = typeof evaluationDurationMinutes === 'number'
       ? evaluationDurationMinutes * 60
-      : activeTime.value;
+      : activeTime;
 
     if (!result.wrapup?.evaluation) {
-      toast.warning('课程总结已生成，但课后评估未通过 AI 校验。');
+      toast.warning('本次学习总结已生成，详细反馈暂时不可用，可稍后再查看。');
     }
 
     if (options?.redirectAfterEnd) {
       closeEvaluationAndReturn();
     } else if (!options?.skipEvaluationDialog) {
       const pathId = task.value?.learningPath?.id || '';
-      router.push({
+      router.replace({
         path: `${learningEvaluationBasePath.value}/${effectiveTaskId.value}/evaluation/${sessionInfo.value.sessionId}`,
         query: pathId ? buildRouteQuery({ pathId }) : buildRouteQuery()
       });
@@ -1061,7 +1077,7 @@ const endSession = async (options?: {
     }
 
     if (!options?.silentSuccess) {
-      toast.success('会话已结束');
+      toast.success('本次学习已结束');
     }
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -1088,11 +1104,27 @@ const closeEvaluationAndReturn = () => {
 };
 
 const handleWrapupAdvisoryAction = async (action: string) => {
-  if (!sessionAdvisory.value?.shouldSuggest) return;
+  const advisory = sessionAdvisory.value;
+  if (!advisory?.shouldSuggest) return;
 
-  if (action === 'keep' || action === 'later' || action === 'preview') {
-    if (action === 'keep') toast.success('已保留当前学习计划');
-    if (action === 'later') toast.info('已保留建议，你可以稍后再决定');
+  if (action === 'keep') {
+    toast.success('已保留当前学习计划');
+    return;
+  }
+  if (action === 'later') {
+    toast.info('已保留建议，你可以稍后再决定');
+    return;
+  }
+  if (action === 'preview') {
+    await ElMessageBox.alert(advisory.ui.body || advisory.rationale, advisory.ui.title || '调整建议', {
+      confirmButtonText: '知道了'
+    });
+    return;
+  }
+
+  const resolvedAction = action === 'confirm' ? advisory.recommendation : action;
+  if (!['reinforce', 'slow_down', 'resequence', 'accelerate'].includes(resolvedAction)) {
+    toast.warning('当前建议不需要调整学习路径');
     return;
   }
 
@@ -1122,10 +1154,10 @@ const handleWrapupAdvisoryAction = async (action: string) => {
     const result = await api.post(`/learning/paths/${task.value.learningPath.id}/replan`, {
       triggerSource: 'ai-teaching',
       mode: 'new_version',
-      reason: reasonMap[action] || '根据课后建议调整下一阶段',
+      reason: reasonMap[resolvedAction],
       evidence: {
-        advisoryAction: action,
-        advisory: sessionAdvisory.value,
+        advisoryAction: resolvedAction,
+        advisory,
         wrapup: sessionWrapup.value,
         taskId: effectiveTaskId.value,
         taskTitle: task.value?.title,
@@ -1163,12 +1195,11 @@ const scrollToBottom = () => {
 };
 
 const startTimer = () => {
-  lastActivityTime.value = Date.now();
+  lastActivityTime = Date.now();
   timerInterval = window.setInterval(() => {
-    elapsedTime.value++;
-    const idleSeconds = Math.floor((Date.now() - lastActivityTime.value) / 1000);
+    const idleSeconds = Math.floor((Date.now() - lastActivityTime) / 1000);
     if (idleSeconds < 30) {
-      activeTime.value++;
+      activeTime++;
     }
   }, 1000);
 };
@@ -1195,9 +1226,10 @@ const pauseAndLeave = async () => {
       sessionPaused.value = true;
       sessionActive.value = false;
       stopTimer();
-      toast.success('课程进度已保留，48 小时内可继续学习');
+      toast.success('学习进度已保留，可以稍后继续');
     } catch (error: any) {
-      toast.warning(error.message || '暂停保存失败，仍可在 48 小时内尝试恢复');
+      toast.error(error.message || '暂停保存失败，已取消离开');
+      return;
     }
   }
   const pathId = task.value?.learningPath?.id;
@@ -1219,7 +1251,7 @@ const resetAndRestart = async () => {
 
   try {
     await ElMessageBox.confirm(
-      '将清空本节课当前进度（对话、知识点推进、小检核状态），并从开头重新开始。此操作不可撤销。',
+      '将清空本次学习的对话、知识点进度和理解检查结果，并从头开始。此操作不可撤销。',
       '重新开始本节课',
       {
         confirmButtonText: '确认重置',
@@ -1243,7 +1275,7 @@ const resetAndRestart = async () => {
   sessionInfo.value = { sessionId: '', subject: '', topic: '', difficulty: 5 };
 
   try {
-    const session = await aiTeachingAPI.startSession(task.value.id, { forceNew: true });
+    const session = await aiTeachingAPI.startSession((task.value as LearningTaskRecord).id, { forceNew: true });
     sessionInfo.value = {
       sessionId: session.sessionId,
       subject: session.subject,
@@ -1261,7 +1293,7 @@ const resetAndRestart = async () => {
       quickRepliesUsed: false,
     });
     startTimer();
-    toast.success('已重新开始本节课，课程进度将在 48 小时内保留');
+    toast.success('已重新开始本次学习，进度会暂时保留');
   } catch (error: any) {
     toast.error(error.message || '重新开始失败');
   }
@@ -1284,14 +1316,17 @@ const resumeSession = async (sessionId: string) => {
       ? await (async () => {
           const response = await adminApi.getVirtualSessionTeachingDetail(virtualSessionId.value);
           if (!response.data?.success) {
-            throw new Error(response.data?.error || '获取虚拟授课会话详情失败');
+             throw new Error(response.data?.error || '获取学习详情失败');
           }
           return response.data.data;
         })()
       : await aiTeachingAPI.getSessionDetail(sessionId);
     if (!detail) {
-      toast.error('获取会话详情失败');
       sessionInitializing.value = false;
+      sessionPaused.value = true;
+      sessionActive.value = false;
+      sessionInitError.value = '获取学习详情失败';
+      toast.error(sessionInitError.value);
       return;
     }
     
@@ -1302,7 +1337,7 @@ const resumeSession = async (sessionId: string) => {
       difficulty: 5
     };
     
-    messages.value = detail.messages.map((m: any) => ({
+    messages.value = detail.messages.map((m: SessionDetail['messages'][number]) => ({
       role: m.role,
       content: m.content,
       timestamp: m.timestamp,
@@ -1314,7 +1349,7 @@ const resumeSession = async (sessionId: string) => {
       peerTriggered: m.peerTriggered,
       peerMessage: m.peerMessage || null,
       peerDebug: m.peerDebug || null,
-    }));
+    })) as ChatMessage[];
 
     knowledgePoints.value = Array.isArray(detail.knowledgePoints) ? detail.knowledgePoints : [];
     activeCheckpoint.value = detail.pendingCheckpoint || null;
@@ -1323,26 +1358,32 @@ const resumeSession = async (sessionId: string) => {
     completionDurationSeconds.value = 0;
     sessionAdvisory.value = null;
     sessionPaused.value = false;
+    sessionInitError.value = '';
     
     sessionActive.value = true;
     sessionInitializing.value = false;
     startTimer();
     scrollToBottom();
     
-    toast.success('已恢复你在 48 小时内未完成的课程进度');
+    toast.success('已恢复上次未完成的学习进度');
   } catch (error: any) {
     sessionInitializing.value = false;
-    toast.error(error.message || '恢复会话失败');
+    sessionPaused.value = true;
+    sessionActive.value = false;
+    sessionInitError.value = error.message || '恢复学习失败';
+    toast.error(sessionInitError.value);
   }
 };
 
-onMounted(async () => {
+const initializeLearning = async () => {
+  sessionInitError.value = '';
   await loadTaskData();
 
-  if (task.value?.status === 'completed') {
+  if (!task.value) return;
+  if (task.value.status === 'completed') {
     toast.info('本任务已完成，请返回学习路径查看评估');
     const pathId = task.value?.learningPath?.id;
-    router.replace(pathId ? { path: `${learningPathDetailBasePath.value}/${pathId}`, query: buildRouteQuery() } : { path: dashboardPath.value, query: buildRouteQuery() });
+    await router.replace(pathId ? { path: `${learningPathDetailBasePath.value}/${pathId}`, query: buildRouteQuery() } : { path: dashboardPath.value, query: buildRouteQuery() });
     return;
   }
 
@@ -1350,21 +1391,44 @@ onMounted(async () => {
     const teachingSessionId = String(virtualContext.value?.bindings?.teachingSessionId || '');
     if (teachingSessionId) {
       await resumeSession(teachingSessionId);
-    } else if (task.value && task.value.learningPath?.canStartLearning !== false) {
+    } else if (task.value.learningPath?.canStartLearning !== false) {
       toast.info('当前虚拟 session 还没有绑定 Learn 会话，可先在控制中心启动 Learn。');
     }
-  } else if (task.value && task.value.learningPath?.canStartLearning !== false) {
+  } else if (task.value.learningPath?.canStartLearning !== false) {
     await startSession();
   }
+};
 
+const retryInitialization = async () => {
+  await initializeLearning();
+};
+
+onBeforeRouteLeave(async () => {
+  if (!sessionInfo.value.sessionId || !sessionActive.value || endingSession.value) {
+    return true;
+  }
+
+  try {
+    await aiTeachingAPI.pauseSession(sessionInfo.value.sessionId, 'manual');
+    sessionActive.value = false;
+    sessionPaused.value = true;
+    stopTimer();
+    return true;
+  } catch (error: any) {
+    toast.error(error.message || '暂停保存失败，已取消离开');
+    return false;
+  }
+});
+
+onMounted(async () => {
+  // 只监听 pagehide（覆盖关闭/导航/刷新场景），避免与 beforeunload 双触发
   window.addEventListener('pagehide', persistPauseOnPageHide);
-  window.addEventListener('beforeunload', persistPauseOnPageHide);
+  await initializeLearning();
 });
 
 onUnmounted(() => {
   stopTimer();
   window.removeEventListener('pagehide', persistPauseOnPageHide);
-  window.removeEventListener('beforeunload', persistPauseOnPageHide);
 });
 </script>
 

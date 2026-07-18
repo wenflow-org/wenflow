@@ -219,15 +219,67 @@ import { Cpu, TrendCharts, DataAnalysis } from '@element-plus/icons-vue'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import { toast } from '../../utils/toast'
 
-const stats = ref<any>({})
-const agentStatuses = ref<any[]>([])
-const recentActivities = ref<any[]>([])
-const recentProjectionGrantUses = ref<any[]>([])
+interface TrendPoint {
+  time?: string
+  label?: string
+  total?: number
+  error?: number
+  timeout?: number
+  [key: string]: unknown
+}
+
+interface AgentStatusItem {
+  name?: string
+  status?: string
+  successRate?: number
+  errorCalls?: number
+  totalCalls?: number
+  avgDuration?: number
+  timeoutCalls?: number
+  timeouts?: number
+  lastActivity?: string
+  [key: string]: unknown
+}
+
+interface ActivityItem {
+  id: string
+  type: string
+  title: string
+  description: string
+  createdAt?: string
+}
+
+interface ProjectionGrantUse {
+  id: string
+  adminUser?: { name?: string; [key: string]: unknown }
+  user?: { name?: string; [key: string]: unknown }
+  scope?: string
+  purpose?: string
+  useCount?: number
+  lastUsedAt?: string
+  createdAt?: string
+  [key: string]: unknown
+}
+
+interface OverviewStats {
+  users?: { total?: number; activeToday?: number; [key: string]: unknown }
+  learning?: { totalPaths?: number; activePaths?: number; totalTasks?: number; completionRate?: number; completedTasks?: number; [key: string]: unknown }
+  conversations?: { total?: number; active?: number; [key: string]: unknown }
+  agents?: { last24h?: TrendPoint[]; todayTimeouts?: number; successRate?: number; todayCalls?: number; [key: string]: unknown }
+  [key: string]: unknown
+}
+
+const stats = ref<OverviewStats>({})
+// 服务端概览统计是否可用；不可用时统计区显示 '--'，避免缺省值（0 / 100%）冒充真实统计
+const statsAvailable = ref(false)
+const agentStatuses = ref<AgentStatusItem[]>([])
+const recentActivities = ref<ActivityItem[]>([])
+const recentProjectionGrantUses = ref<ProjectionGrantUse[]>([])
 const activeProjectionGrantCount = ref(0)
 const refreshing = ref(false)
 
 const recentActivitySummary = computed(() => recentActivities.value.slice(0, 5))
-const recentProjectionGrantSummary = computed(() => recentProjectionGrantUses.value.slice(0, 5).map((grant: any) => ({
+const recentProjectionGrantSummary = computed(() => recentProjectionGrantUses.value.slice(0, 5).map((grant) => ({
   id: grant.id,
   title: `${grant.adminUser?.name || '管理员'} 使用了 ${grant.user?.name || '用户'} 的开发视角`,
   description: [
@@ -238,9 +290,13 @@ const recentProjectionGrantSummary = computed(() => recentProjectionGrantUses.va
   createdAt: grant.lastUsedAt || grant.createdAt
 })))
 const overviewKpiItems = computed(() => {
-  const users = stats.value?.users || {}
-  const learning = stats.value?.learning || {}
-  const conversations = stats.value?.conversations || {}
+  if (!statsAvailable.value) {
+    return ['用户', '今日活跃', 'Goal', '活跃 Goal', '路径', '活跃路径', '任务', '完成率']
+      .map((label) => ({ label, value: '--' }))
+  }
+  const users: NonNullable<OverviewStats['users']> = stats.value?.users || {}
+  const learning: NonNullable<OverviewStats['learning']> = stats.value?.learning || {}
+  const conversations: NonNullable<OverviewStats['conversations']> = stats.value?.conversations || {}
 
   return [
     { label: '用户', value: String(users.total || 0) },
@@ -261,8 +317,8 @@ const trendPoints = computed(() => {
 
 const activeTrendPoints = computed(() => {
   return trendPoints.value
-    .filter((point: any) => (point.total || 0) > 0 || (point.error || 0) + (point.timeout || 0) > 0)
-    .map((point: any) => {
+    .filter((point) => (point.total || 0) > 0 || (point.error || 0) + (point.timeout || 0) > 0)
+    .map((point) => {
       const issueCount = Number(point.error || 0) + Number(point.timeout || 0)
       const total = Number(point.total || 0)
       const issueRate = total > 0 ? issueCount / total : 0
@@ -278,16 +334,16 @@ const activeTrendPoints = computed(() => {
 })
 
 const maxCalls = computed(() => {
-  const max = activeTrendPoints.value.reduce((acc: number, item: any) => Math.max(acc, item.total || 0), 0)
+  const max = activeTrendPoints.value.reduce((acc: number, item) => Math.max(acc, item.total || 0), 0)
   return max > 0 ? max : 1
 })
 
 const totalTrendCalls = computed(() => {
-  return activeTrendPoints.value.reduce((sum: number, item: any) => sum + Number(item.total || 0), 0)
+  return activeTrendPoints.value.reduce((sum: number, item) => sum + Number(item.total || 0), 0)
 })
 
 const totalTrendIssues = computed(() => {
-  return activeTrendPoints.value.reduce((sum: number, item: any) => sum + Number(item.issueCount || 0), 0)
+  return activeTrendPoints.value.reduce((sum: number, item) => sum + Number(item.issueCount || 0), 0)
 })
 
 const overallIssueRate = computed(() => {
@@ -299,7 +355,7 @@ const overallIssueRateLabel = computed(() => formatRate(overallIssueRate.value))
 const peakTrendPoint = computed(() => {
   if (!activeTrendPoints.value.length) return null
 
-  return activeTrendPoints.value.reduce((peak: any, point: any) => {
+  return activeTrendPoints.value.reduce<(typeof activeTrendPoints.value)[number] | null>((peak, point) => {
     if (!peak) return point
     return point.total > peak.total ? point : peak
   }, null)
@@ -316,7 +372,7 @@ const totalIssueCount = computed(() => {
 })
 
 const attentionAgentStatuses = computed(() => {
-  const items = agentStatuses.value.map((item: any) => {
+  const items = agentStatuses.value.map((item) => {
     const successRate = Number(item.successRate || 0)
     const errorCalls = Number(item.errorCalls || 0)
     const totalCalls = Number(item.totalCalls || 0)
@@ -377,6 +433,14 @@ const attentionAgentStatuses = computed(() => {
 })
 
 const healthSummary = computed(() => {
+  if (!statsAvailable.value) {
+    const unavailable = { tone: 'is-neutral', title: '统计不可用', description: '概览统计未返回，请刷新重试' }
+    return {
+      successRate: { ...unavailable },
+      timeout: { ...unavailable },
+      activity: { ...unavailable }
+    }
+  }
   const successRate = Number(stats.value?.agents?.successRate || 100)
   const timeouts = Number(stats.value?.agents?.todayTimeouts || 0)
   const activeUsers = Number(stats.value?.users?.activeToday || 0)
@@ -401,6 +465,11 @@ const healthSummary = computed(() => {
 })
 
 const overviewHeadline = computed(() => {
+  if (!statsAvailable.value) {
+    return {
+      title: '平台统计暂不可用'
+    }
+  }
   const activeUsers = Number(stats.value?.users?.activeToday || 0)
   const successRate = Number(stats.value?.agents?.successRate || 100)
   const issueCount = totalIssueCount.value
@@ -433,7 +502,7 @@ const priorityQueue = computed(() => {
     id: string
     level: string
     tone: 'danger' | 'warning' | 'info' | 'neutral'
-    title: string
+    title: string | undefined
     description: string
     meta: string
     primaryLabel: string
@@ -448,7 +517,7 @@ const priorityQueue = computed(() => {
   const timeoutCount = Number(stats.value?.agents?.todayTimeouts || 0)
   const completedTasks = Number(stats.value?.learning?.completedTasks || 0)
 
-  attentionAgentStatuses.value.forEach((item: any) => {
+  attentionAgentStatuses.value.forEach((item) => {
     const issueTotal = Number(item.errorCalls || 0) + Number(item.timeoutCount || 0)
     items.push({
       id: `agent-${item.name}`,
@@ -465,7 +534,7 @@ const priorityQueue = computed(() => {
     })
   })
 
-  if (activeUsers === 0) {
+  if (statsAvailable.value && activeUsers === 0) {
     items.push({
       id: 'learning-activity',
       level: '学习侧关注',
@@ -481,7 +550,7 @@ const priorityQueue = computed(() => {
     })
   }
 
-  if (timeoutCount > 0 || successRate < 90) {
+  if (statsAvailable.value && (timeoutCount > 0 || successRate < 90)) {
     items.push({
       id: 'runtime-trend',
       level: timeoutCount > 0 ? '风险趋势' : '稳定性关注',
@@ -513,9 +582,13 @@ const refreshAll = async () => {
 
 const loadOverview = async () => {
   try {
-    const response: any = await adminDashboardApi.getStats()
-    stats.value = response.data.data || {}
-  } catch (error: any) {
+    const response = await adminDashboardApi.getStats()
+    const data = response.data.data || {}
+    stats.value = data
+    statsAvailable.value = Object.keys(data).length > 0
+  } catch (error) {
+    stats.value = {}
+    statsAvailable.value = false
     console.error('加载概览数据失败:', error)
     toast.error('加载概览数据失败')
   }
@@ -523,22 +596,22 @@ const loadOverview = async () => {
 
 const loadAgentStatus = async () => {
   try {
-    const response: any = await adminAgentsApi.status()
+    const response = await adminAgentsApi.status()
     agentStatuses.value = response.data.data?.agents || []
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载 Agent 状态失败:', error)
   }
 }
 
 const loadActivity = async () => {
   try {
-    const response: any = await adminDashboardApi.getActivity(20)
+    const response = await adminDashboardApi.getActivity(20)
     const data = response.data.data || {}
 
-    const activities: any[] = []
+    const activities: ActivityItem[] = []
 
     if (data.recentSessions) {
-      data.recentSessions.forEach((session: any) => {
+      data.recentSessions.forEach((session: { id: string; task?: { title?: string }; topic?: string; taskId?: string; user?: { name?: string }; users?: { name?: string }; startTime?: string }) => {
         const taskTitle = session.task?.title || session.topic || session.taskId || '未知任务'
         activities.push({
           id: session.id,
@@ -551,7 +624,7 @@ const loadActivity = async () => {
     }
 
     if (data.recentUsers) {
-      data.recentUsers.forEach((user: any) => {
+      data.recentUsers.forEach((user: { id: string; name?: string; email?: string; createdAt?: string }) => {
         activities.push({
           id: user.id,
           type: 'primary',
@@ -563,7 +636,7 @@ const loadActivity = async () => {
     }
 
     if (data.completedTasks) {
-      data.completedTasks.forEach((task: any) => {
+      data.completedTasks.forEach((task: { id: string; user?: { name?: string }; title?: string; completedAt?: string }) => {
         activities.push({
           id: task.id,
           type: 'warning',
@@ -574,29 +647,16 @@ const loadActivity = async () => {
       })
     }
 
-    activities.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    activities.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
     recentActivities.value = activities.slice(0, 50)
     recentProjectionGrantUses.value = data.recentProjectionGrantUses || []
     activeProjectionGrantCount.value = Number(data.activeProjectionGrantCount || 0)
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载活动日志失败:', error)
   }
 }
 
-const getAgentTagType = (status: string) => {
-  switch (status) {
-    case 'success':
-      return 'success'
-    case 'running':
-      return 'warning'
-    case 'error':
-      return 'danger'
-    default:
-      return 'info'
-  }
-}
-
-const getAgentDisplayName = (name: string) => {
+const getAgentDisplayName = (name: string | undefined) => {
   const map: Record<string, string> = {
     RequirementCollection: '需求收集',
     PathPlanning: '路径规划',
@@ -606,10 +666,10 @@ const getAgentDisplayName = (name: string) => {
     SessionWrapup: '课后产出'
   }
 
-  return map[name] || name
+  return map[name || ''] || name
 }
 
-const formatTime = (time: any) => {
+const formatTime = (time: string | number | Date | null | undefined) => {
   if (!time) return '暂无数据'
   const date = new Date(time)
   const now = new Date()

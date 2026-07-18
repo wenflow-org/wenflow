@@ -1,9 +1,10 @@
 // 认证路由
 import express from 'express';
 import { z } from 'zod';
-import authService from '../services/auth/auth.service';
+import authService, { InvalidCredentialsError } from '../services/auth/auth.service';
 import { getPlatformSettings } from '../services/platform-settings.service';
 import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
+import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
 
 const router = express.Router();
 
@@ -56,6 +57,9 @@ router.post('/register', async (req, res, next) => {
     // 调用服务
     const result = await authService.register(data);
 
+    // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
+    setAuthCookie(res, result.token, 'user');
+
     res.status(201).json({
       success: true,
       data: result
@@ -77,15 +81,21 @@ router.post('/register', async (req, res, next) => {
 
 // 登录
 router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
+  let loginName: string | undefined;
+
   try {
     // 验证请求数据
     const data = loginSchema.parse(req.body) as { name: string; password: string };
+    loginName = data.name;
     const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
 
     // 调用服务
     const result = await authService.login(data);
-    
+
     recordLoginAttempt(data.name, clientIP.toString(), true);
+
+    // 同步写入 HttpOnly Cookie（前端不再需要将 token 存入 localStorage）
+    setAuthCookie(res, result.token, 'user');
 
     res.status(200).json({
       success: true,
@@ -101,12 +111,31 @@ router.post('/login', loginRateLimitMiddleware, async (req, res, next) => {
         }
       });
     }
-    
-    const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-    recordLoginAttempt(req.body.name, clientIP.toString(), false);
+
+    if (error instanceof InvalidCredentialsError && loginName) {
+      const clientIP = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+      recordLoginAttempt(loginName, clientIP.toString(), false);
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: '用户名或密码错误',
+          code: error.code,
+          status: error.status
+        }
+      });
+    }
 
     next(error);
   }
+});
+
+// 登出：清除 HttpOnly 认证 Cookie
+router.post('/logout', (req, res) => {
+  clearAuthCookie(res, 'user');
+  res.status(200).json({
+    success: true,
+    data: { message: '已退出登录' }
+  });
 });
 
 // 验证 Token (protected endpoint)

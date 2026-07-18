@@ -195,21 +195,20 @@ if (!exists) {
         }
       });
 
-      // 完成的学习路径数
-      const completedPaths = await prisma.learning_paths.count({
-        where: {
-          userId,
+      // 完成的学习路径数（所有 milestone 均 completed）
+      const pathsWithAllMilestonesCompleted = await prisma.learning_paths.findMany({
+        where: { userId },
+        select: {
+          id: true,
           milestones: {
-            some: {
-              subtasks: {
-                some: {
-                  status: 'completed'
-                }
-              }
-            }
+            select: { status: true }
           }
         }
       });
+
+      const completedPaths = pathsWithAllMilestonesCompleted.filter(path =>
+        path.milestones.length > 0 && path.milestones.every(m => m.status === 'completed')
+      ).length;
 
       // 总学习路径数
       const totalPaths = await prisma.learning_paths.count({

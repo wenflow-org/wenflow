@@ -188,16 +188,16 @@ class LearningStateService {
         return null;
       }
 
-      const displayMetrics = learningStateService.toDisplayMetrics(metrics);
-      if (!this.hasUsableMetrics(displayMetrics)) {
+      // 返回内部尺度（0-100），供成就系统等使用；前端展示时再转换为 display 尺度
+      if (!this.hasUsableMetrics(metrics)) {
         return null;
       }
 
       return {
-        lss: displayMetrics.lss,
-        ktl: displayMetrics.ktl,
-        lf: displayMetrics.lf,
-        lsb: displayMetrics.lsb,
+        lss: metrics.lss,
+        ktl: metrics.ktl,
+        lf: metrics.lf,
+        lsb: metrics.lsb,
         updatedAt: metrics.timestamp.toISOString(),
       };
     } catch (error) {

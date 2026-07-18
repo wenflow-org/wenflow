@@ -22,13 +22,13 @@
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">规划新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '规划新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -40,7 +40,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
-                  能力中心
+                  个人中心
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">
                   <el-icon><Switch /></el-icon>
@@ -63,11 +63,11 @@
             </div>
 
             <div class="app-page-head__intro">
-              <h1>把学习过程变成看得见的里程碑。</h1>
-              <p>这里记录你已经完成的任务、路径、复盘和持续学习，不用只靠感觉判断自己有没有前进。</p>
+              <h1>查看你的学习里程碑</h1>
+              <p>这里记录已完成的任务、连续学习和路径进度。</p>
             </div>
 
-            <div class="app-page-head__summary achievements-hero__summary">
+            <div v-if="!loading && !loadError" class="app-page-head__summary achievements-hero__summary">
               <article v-for="item in achievementOverviewCards" :key="item.label" class="app-page-head__summary-card achievements-hero__summary-card" :class="`achievements-hero__summary-card--${item.tone}`">
                 <span>{{ item.label }}</span>
                 <strong>{{ item.value }}</strong>
@@ -78,7 +78,13 @@
         </section>
 
         <div v-loading="loading" class="achievements-content">
+          <el-result v-if="loadError" icon="error" title="成就加载失败" :sub-title="loadError">
+            <template #extra>
+              <el-button type="primary" @click="loadAchievements">重新加载</el-button>
+            </template>
+          </el-result>
 
+          <template v-else>
           <section class="achievement-filter-row">
             <div class="achievement-filter-tabs">
               <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'all' }" @click="filterType = 'all'">全部</button>
@@ -127,9 +133,11 @@
 
           <div v-if="filteredAchievements.length === 0" class="empty-state glass-card">
             <div class="empty-icon">🎯</div>
-            <h3 class="empty-title">暂无成就</h3>
-            <p class="empty-desc">继续学习，解锁更多成就！</p>
+            <h3 class="empty-title">{{ filterType === 'all' ? '还没有学习成就' : '当前筛选没有结果' }}</h3>
+            <p class="empty-desc">{{ filterType === 'all' ? '完成学习任务后，成就会显示在这里。' : '可以查看其他类型的成就。' }}</p>
+            <button v-if="filterType !== 'all'" type="button" class="btn btn-primary" @click="filterType = 'all'">查看全部成就</button>
           </div>
+          </template>
         </div>
       </div>
       <AppMiniFooter />
@@ -142,7 +150,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
-import request from '../utils/request';
+import request from '../utils/api';
 import { useUserStore } from '../stores/user';
 import { isProjectionMode } from '../utils/projection';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
@@ -201,6 +209,7 @@ const headerNavItems = computed(() => [
 const scrolled = ref(false);
 const loading = ref(true);
 const achievements = ref<Achievement[]>([]);
+const loadError = ref('');
 const filterType = ref<'all' | 'unlocked' | 'locked'>('all');
 const filterCategory = ref<string>('all');
 
@@ -238,7 +247,7 @@ const completionRate = computed(() => {
 const achievementOverviewCards = computed(() => [
   { label: '已解锁成就', value: String(unlockedCount.value), note: '已完成的里程碑', tone: 'success' },
   { label: '待解锁成就', value: String(totalCount.value - unlockedCount.value), note: '值得继续追的目标', tone: 'primary' },
-  { label: '总 XP 奖励', value: String(totalXP.value), note: '持续投入的回报', tone: 'warning' },
+  { label: '已获得经验值', value: String(totalXP.value), note: '来自已解锁成就', tone: 'warning' },
   { label: '完成率', value: `${completionRate.value}%`, note: '成就完成占比', tone: 'accent' }
 ]);
 
@@ -289,10 +298,13 @@ const formatDate = (date: Date) => {
 
 const loadAchievements = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const response = await request.get('/achievements/all');
-    achievements.value = response.data.data;
+    achievements.value = response.data;
   } catch (error: any) {
+    achievements.value = [];
+    loadError.value = error.response?.data?.error?.message || '无法读取成就数据，请稍后重试。';
     toast.error(error.response?.data?.error?.message || '加载成就失败');
   } finally {
     loading.value = false;

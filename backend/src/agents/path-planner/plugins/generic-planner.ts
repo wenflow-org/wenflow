@@ -80,7 +80,7 @@ export const genericPlanner: AgentPlugin = {
   
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
     const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'generic-planner' };
+    const caller: CallerInfo = { skillId: 'generic-planner' };
     const startTime = Date.now();
     
     try {

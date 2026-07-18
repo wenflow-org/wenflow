@@ -1,7 +1,9 @@
 // API配置管理服务 - 持久化版本
 import { logger } from '../utils/logger';
+import { safeHttpRequest } from '../utils/safe-http';
 import systemPrisma from '../config/system-database';
 import { getAPIGateway } from '../gateway/api-gateway';
+import { decryptSecret, encryptSecret, SecretCryptoError } from '../utils/secret-crypto';
 
 const prisma = systemPrisma;
 
@@ -50,7 +52,7 @@ class APIConfigService {
       if (dbConfig) {
         return {
           apiUrl: dbConfig.apiUrl || defaultConfig.apiUrl,
-          apiKey: dbConfig.apiKey || defaultConfig.apiKey,
+          apiKey: decryptSecret(dbConfig.apiKey, 'system.platform_api_configs.apiKey') || defaultConfig.apiKey,
           availableModels: dbConfig.availableModels 
             ? dbConfig.availableModels.split(',').filter(m => m.trim()) 
             : defaultConfig.availableModels,
@@ -70,6 +72,7 @@ class APIConfigService {
       return defaultConfig;
     } catch (error) {
       logger.error('获取 API 配置失败:', error);
+      if (error instanceof SecretCryptoError) throw error;
       return defaultConfig;
     }
   }
@@ -89,7 +92,7 @@ class APIConfigService {
         where: { id: 'platform' },
         update: {
           apiUrl: mergedConfig.apiUrl,
-          apiKey: mergedConfig.apiKey,
+          apiKey: encryptSecret(mergedConfig.apiKey, 'system.platform_api_configs.apiKey'),
           availableModels: mergedConfig.availableModels.join(',') || null,
           defaultModel: mergedConfig.defaultModel,
           defaultReasoningModel: mergedConfig.defaultReasoningModel,
@@ -106,7 +109,7 @@ class APIConfigService {
         create: {
           id: 'platform',
           apiUrl: mergedConfig.apiUrl,
-          apiKey: mergedConfig.apiKey,
+          apiKey: encryptSecret(mergedConfig.apiKey, 'system.platform_api_configs.apiKey'),
           availableModels: mergedConfig.availableModels.join(',') || null,
           defaultModel: mergedConfig.defaultModel,
           defaultReasoningModel: mergedConfig.defaultReasoningModel,
@@ -192,15 +195,15 @@ class APIConfigService {
         ? `${normalizedBase}/models`
         : `${normalizedBase}/v1/models`;
 
-      const response = await fetch(modelsEndpoint, {
+      const response = await safeHttpRequest<{ data?: Array<{ id: string }> }>(modelsEndpoint, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${key}`,
         },
       });
 
-      if (response.ok) {
-        const data = await response.json() as { data?: Array<{ id: string }> };
+      if (response.status >= 200 && response.status < 300) {
+        const data = response.data;
         const models = data.data?.map(m => m.id) || [];
         
         logger.info('API 连接测试成功', {
@@ -219,7 +222,7 @@ class APIConfigService {
           create: {
             id: 'platform',
             apiUrl: url,
-            apiKey: key,
+            apiKey: encryptSecret(key, 'system.platform_api_configs.apiKey'),
             availableModels: models.join(','),
             connectionStatus: 'connected',
             lastCheckedAt: new Date(),
@@ -244,7 +247,7 @@ class APIConfigService {
           create: {
             id: 'platform',
             apiUrl: url,
-            apiKey: key,
+            apiKey: encryptSecret(key, 'system.platform_api_configs.apiKey'),
             connectionStatus: 'failed',
             lastCheckedAt: new Date(),
           },

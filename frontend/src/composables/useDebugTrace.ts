@@ -1,7 +1,7 @@
 import { ref, watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import {
-  adminApi,
+  adminAgentsApi,
   adminSkillWorkbenchApi,
   adminRuntimeDefinitionsApi,
   adminFieldRoutingsApi,
@@ -87,7 +87,7 @@ function getPrimaryActionTask(path: any) {
     || null;
 }
 
-function buildDashboardDebugData(stats: any, paths: any[], adaptiveGuidance: any, currentState: any, learnerCenter: any) {
+function buildDashboardDebugData(paths: any[], adaptiveGuidance: any, currentState: any, learnerCenter: any) {
   const latestPath = paths.length > 0
     ? [...paths].sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())[0]
     : null;
@@ -347,7 +347,7 @@ export function useDebugTrace() {
       return;
     }
     try {
-      const data: any = unwrap(await adminApi.getLogs({ traceId: debugStore.currentTraceId, limit: 50 }));
+      const data: any = unwrap(await adminAgentsApi.getLogs({ traceId: debugStore.currentTraceId, limit: 50 }));
       traceLogs.value = data?.logs || data || [];
     } catch {
       traceLogs.value = [];
@@ -365,7 +365,7 @@ export function useDebugTrace() {
 
   async function loadManifestDiagnostics() {
     try {
-      manifestDiagnostics.value = unwrap(await adminApi.getManifestDiagnostics());
+      manifestDiagnostics.value = unwrap(await adminAgentsApi.getManifestDiagnostics());
     } catch {
       manifestDiagnostics.value = null;
     }
@@ -403,8 +403,10 @@ export function useDebugTrace() {
         ]);
 
         const stats = statsResp.status === 'fulfilled' ? (statsResp.value?.data || statsResp.value) : null;
-        const paths = pathsResp.status === 'fulfilled'
-          ? ((pathsResp.value?.paths || pathsResp.value?.data?.paths || pathsResp.value?.data || pathsResp.value || []) as any[])
+        // api 为 axios 实例，响应类型为 AxiosResponse；业务字段挂在 data 上，先放宽为 any 再取 paths
+        const pathsRespValue: any = pathsResp.status === 'fulfilled' ? pathsResp.value : null;
+        const paths = pathsRespValue
+          ? ((pathsRespValue?.paths || pathsRespValue?.data?.paths || pathsRespValue?.data || pathsRespValue || []) as any[])
           : [];
         const adaptiveGuidance = adaptiveResp.status === 'fulfilled' ? (adaptiveResp.value?.data || adaptiveResp.value || null) : null;
         const currentState = currentStateResp.status === 'fulfilled' ? (currentStateResp.value?.data || currentStateResp.value || null) : null;
@@ -412,7 +414,7 @@ export function useDebugTrace() {
 
         data.stats = stats;
         data.paths = paths.slice(0, 5);
-        data.dashboardDebug = buildDashboardDebugData(stats, paths, adaptiveGuidance, currentState, learnerCenter);
+        data.dashboardDebug = buildDashboardDebugData(paths, adaptiveGuidance, currentState, learnerCenter);
       }
     } catch {
       // 忽略

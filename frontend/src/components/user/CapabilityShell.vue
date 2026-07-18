@@ -17,13 +17,13 @@
           <router-link to="/learning-paths" class="shell-nav__item">学习路径</router-link>
           <router-link to="/learning-state" class="shell-nav__item">学习状态</router-link>
           <router-link to="/achievements" class="shell-nav__item">成就</router-link>
-          <router-link to="/user/account" class="shell-nav__item shell-nav__item--current">账户</router-link>
+          <router-link to="/user/account" class="shell-nav__item shell-nav__item--current">个人中心</router-link>
         </nav>
 
         <div class="shell-header__actions">
           <ThemeSwitcher />
           <MobileSiteMenu
-            title="账户"
+            title="个人中心"
             :user-name="userStore.user?.name || '用户'"
             :user-initial="userStore.user?.name?.charAt(0) || 'U'"
             :nav-items="shellNavItems"
@@ -37,7 +37,7 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="router.push('/user/account')">账户中心</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/user/account')">个人中心</el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -50,7 +50,7 @@
       <div class="shell-container">
         <section class="shell-hero">
           <div>
-            <span class="shell-hero__eyebrow">账户</span>
+            <span class="shell-hero__eyebrow">个人中心</span>
             <h1 class="shell-hero__title">{{ title }}</h1>
             <p v-if="description" class="shell-hero__description">{{ description }}</p>
           </div>
@@ -58,6 +58,12 @@
             <slot name="actions" />
           </div>
         </section>
+
+        <nav class="capability-nav" aria-label="个人中心导航">
+          <router-link v-for="item in capabilityNavItems" :key="item.to" :to="item.to" class="capability-nav__item">
+            {{ item.label }}
+          </router-link>
+        </nav>
 
         <div class="shell-body">
           <slot />
@@ -87,7 +93,17 @@ const shellNavItems = [
   { label: '学习路径', to: '/learning-paths', matchPrefixes: ['/learning-paths', '/learning-path/'] },
   { label: '学习状态', to: '/learning-state', matchPrefixes: ['/learning-state'] },
   { label: '成就', to: '/achievements', matchPrefixes: ['/achievements'] },
-  { label: '账户', to: '/user/account', matchPrefixes: ['/user'] }
+  { label: '个人中心', to: '/user/account', matchPrefixes: ['/user'] }
+];
+
+const capabilityNavItems = [
+  { label: '账户概览', to: '/user/account' },
+  { label: 'AI 助手', to: '/user/agents' },
+  { label: 'Skill 管理', to: '/user/skills' },
+  { label: '高级模型', to: '/user/agent-model-settings' },
+  { label: 'API 接入', to: '/user/settings' },
+  { label: '调用日志', to: '/user/agent-logs' },
+  { label: '开发者接入', to: '/user/developer' }
 ];
 
 function onScroll() {
@@ -389,6 +405,40 @@ async function handleLogout() {
   min-width: 0;
 }
 
+.capability-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid rgba(52, 120, 246, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(16px);
+  scrollbar-width: thin;
+}
+
+.capability-nav__item {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.capability-nav__item:hover,
+.capability-nav__item.router-link-active {
+  color: var(--color-primary-dark);
+  background: rgba(52, 120, 246, 0.1);
+}
+
+[data-theme='dark'] .capability-nav {
+  background: rgba(15, 23, 42, 0.58);
+  border-color: rgba(96, 165, 250, 0.12);
+}
+
 .shell-body :deep(.glass-card) {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 255, 0.7));
   border: 1px solid rgba(52, 120, 246, 0.08);
@@ -416,6 +466,10 @@ async function handleLogout() {
 
   .shell-hero {
     flex-direction: column;
+  }
+
+  .capability-nav {
+    margin-bottom: 16px;
   }
 
   .shell-hero__actions {

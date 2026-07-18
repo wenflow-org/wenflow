@@ -12,13 +12,13 @@
         <nav class="docs-nav">
           <a href="#quickstart" class="nav-link">快速开始</a>
           <a href="#architecture" class="nav-link">架构</a>
-          <a href="#agent-development" class="nav-link">Agent 开发</a>
+          <a href="#agent-development" class="nav-link">Skill 开发</a>
           <a href="#api-reference" class="nav-link">API 参考</a>
           <a href="#examples" class="nav-link">示例</a>
         </nav>
         <div class="navbar-actions">
-          <router-link to="/login" class="btn btn-secondary">登录</router-link>
-          <router-link to="/register" class="btn btn-primary">注册</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="btn btn-primary">查看源码</a>
+          <router-link to="/" class="btn btn-secondary">返回首页</router-link>
         </div>
       </div>
     </header>
@@ -29,15 +29,14 @@
         <div class="hero-content">
           <h1 class="hero-title">开发者文档</h1>
           <p class="hero-subtitle">
-            构建 AI 驱动的学习体验<br />
-            加入我们，打造下一代个性化学习平台
+            了解本地运行、环境配置、API 调用和 Skill 扩展方式。
           </p>
           <div class="hero-cta">
             <a href="#quickstart" class="btn btn-primary btn-lg">
-              🚀 开始开发
+              本地运行项目
             </a>
-            <a href="https://github.com/your-repo" target="_blank" class="btn btn-outline btn-lg">
-              📦 GitHub
+            <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="btn btn-outline btn-lg">
+              查看源码
             </a>
           </div>
         </div>
@@ -80,15 +79,15 @@
           <h3 class="sidebar-title" v-show="!sidebarCollapsed">核心开发</h3>
           <ul class="sidebar-menu">
             <li>
-              <a href="#agent-development" :class="{ active: activeSection === 'agent-development' }" :title="sidebarCollapsed ? 'Agent 开发' : ''">
+              <a href="#agent-development" :class="{ active: activeSection === 'agent-development' }" :title="sidebarCollapsed ? 'Skill 开发' : ''">
                 <span class="menu-icon">🤖</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">Agent 开发</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">Skill 开发</span>
               </a>
             </li>
             <li>
               <a href="#agent-registration" :class="{ active: activeSection === 'agent-registration' }" :title="sidebarCollapsed ? 'Agent 注册流程' : ''">
                 <span class="menu-icon">📝</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">Agent 注册流程</span>
+                <span class="menu-text" v-show="!sidebarCollapsed">Skill 注册流程</span>
               </a>
             </li>
             <li>
@@ -110,12 +109,6 @@
               </a>
             </li>
             <li>
-              <a href="#arena-system" :class="{ active: activeSection === 'arena-system' }" :title="sidebarCollapsed ? 'Arena 竞技场' : ''">
-                <span class="menu-icon">🏆</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">Arena 竞技场</span>
-              </a>
-            </li>
-            <li>
               <a href="#examples" :class="{ active: activeSection === 'examples' }" :title="sidebarCollapsed ? '示例代码' : ''">
                 <span class="menu-icon">💡</span>
                 <span class="menu-text" v-show="!sidebarCollapsed">示例代码</span>
@@ -127,9 +120,7 @@
         <div class="sidebar-section" v-show="!sidebarCollapsed">
           <h3 class="sidebar-title">外部链接</h3>
           <ul class="sidebar-menu">
-            <li><a href="https://github.com/your-repo/wenflow/blob/main/docs/architecture" target="_blank">架构文档</a></li>
-            <li><a href="https://github.com/your-repo/wenflow/blob/main/docs/theory" target="_blank">教育理论</a></li>
-            <li><a href="https://github.com/your-repo/wenflow/blob/main/API.md" target="_blank">完整 API</a></li>
+            <li><a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">项目源码</a></li>
           </ul>
         </div>
       </aside>
@@ -145,9 +136,8 @@
             <ul>
               <li>了解平台架构和技术栈</li>
               <li>配置开发环境</li>
-              <li>创建和注册自定义 Agent</li>
-              <li>使用 MCP Gateway 进行 AI 调用</li>
-              <li>参与 Arena 竞技场测试</li>
+              <li>编写和注册 Skill</li>
+              <li>了解 Prompt 与运行时配置</li>
             </ul>
           </div>
 
@@ -176,47 +166,27 @@
           </div>
 
           <h3>安装步骤</h3>
-          <div class="code-block">
+          <div id="code-install" class="code-block">
             <div class="code-header">
               <span class="code-title">终端命令</span>
               <button class="copy-btn" @click="copyCode('install')">复制</button>
             </div>
             <pre><code># 克隆项目
-git clone https://github.com/your-repo/wenflow.git
+git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 
-# 安装后端依赖
-cd backend
+# 安装依赖并配置环境变量
 npm install
+npm run env:setup
 
-# 安装前端依赖
-cd ../frontend
-npm install
-
-# 配置环境变量
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-
-# 初始化数据库
-cd backend
-npx prisma generate
-npx prisma db push
-
-# 启动开发服务器
-# 方式一：使用启动脚本（推荐）
-.\start-dev.ps1  # Windows PowerShell
-# 或
-.\start-dev.bat  # Windows 批处理
-
-# 方式二：手动启动
-# 后端：cd backend && npm run dev
-# 前端：cd frontend && npm run dev</code></pre>
+# 生成 Prisma 客户端并启动前后端
+npm run dev</code></pre>
           </div>
 
           <div class="tip-box">
             <span class="tip-icon">💡</span>
             <div class="tip-content">
-              <strong>提示：</strong> 使用启动脚本会自动处理端口占用问题，并依次启动后端和前端服务。
+              <strong>提示：</strong> Windows 环境建议直接使用项目根目录的 <code>npm run dev</code>。
             </div>
           </div>
         </section>
@@ -323,7 +293,7 @@ npx prisma db push
           <h2 class="section-title">⚙️ 环境配置</h2>
           
           <h3>后端环境变量</h3>
-          <div class="code-block">
+          <div id="code-backend-env" class="code-block">
             <div class="code-header">
               <span class="code-title">backend/.env</span>
               <button class="copy-btn" @click="copyCode('backend-env')">复制</button>
@@ -349,7 +319,7 @@ LOG_LEVEL=debug</code></pre>
           </div>
 
           <h3>前端环境变量</h3>
-          <div class="code-block">
+          <div id="code-frontend-env" class="code-block">
             <div class="code-header">
               <span class="code-title">frontend/.env</span>
               <button class="copy-btn" @click="copyCode('frontend-env')">复制</button>
@@ -361,16 +331,16 @@ LOG_LEVEL=debug</code></pre>
           <div class="info-box">
             <p><strong>生产环境模型：</strong> DeepSeek（通过 NewAPI 服务）</p>
             <ul>
-              <li>地址：http://101.43.146.102:30001</li>
+              <li>地址：由部署环境配置，不写入源码</li>
               <li>模型：deepseek-v4-flash / deepseek-v4-pro</li>
               <li>兼容 OpenAI API 格式</li>
             </ul>
           </div>
         </section>
 
-        <!-- Agent 开发 -->
+        <!-- Skill 开发 -->
         <section id="agent-development" class="content-section">
-          <h2 class="section-title">🤖 Agent 开发指南</h2>
+          <h2 class="section-title">Skill 开发指南</h2>
           
           <div class="info-box info-primary">
             <p><strong>Agent 系统</strong> 是平台的核心，支持插件化扩展和多 Agent 协作。</p>
@@ -379,7 +349,7 @@ LOG_LEVEL=debug</code></pre>
           <h3>1. 创建 Agent 文件</h3>
           <p>在 <code>backend/src/agents/standard/</code> 目录下创建新文件：</p>
           
-          <div class="code-block">
+          <div id="code-agent-template" class="code-block">
             <div class="code-header">
               <span class="code-title">MyAgent.ts</span>
               <button class="copy-btn" @click="copyCode('agent-template')">复制</button>
@@ -569,7 +539,7 @@ await loader.loadAll();</code></pre>
           <h3>方式二：手动注册</h3>
           <p>通过 API 手动注册 Agent：</p>
           
-          <div class="code-block">
+          <div id="code-register-agent-api" class="code-block">
             <div class="code-header">
               <span class="code-title">使用 API 注册</span>
               <button class="copy-btn" @click="copyCode('register-agent-api')">复制</button>
@@ -594,7 +564,7 @@ POST /api/agents/register
           </div>
 
           <h3>方式三：通过 Gateway 注册</h3>
-          <div class="code-block">
+          <div id="code-gateway-register" class="code-block">
             <div class="code-header">
               <span class="code-title">使用 MCP Gateway</span>
               <button class="copy-btn" @click="copyCode('gateway-register')">复制</button>
@@ -716,7 +686,7 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
           <div class="tip-box">
             <span class="tip-icon">📖</span>
             <div class="tip-content">
-              <strong>完整 API 文档：</strong> 查看 <a href="https://github.com/your-repo/wenflow/blob/main/API.md" target="_blank">API.md</a> 获取更详细的 API 参考。
+              <strong>API 参考：</strong> 请以当前仓库中的后端路由定义为准。
             </div>
           </div>
         </section>
@@ -730,7 +700,7 @@ console.log(`Agent 已注册：${agentId}`);</code></pre>
           </div>
 
           <h3>使用 MCP Gateway</h3>
-          <div class="code-block">
+          <div id="code-mcp-gateway" class="code-block">
             <div class="code-header">
               <span class="code-title">调用 AI 模型</span>
               <button class="copy-btn" @click="copyCode('mcp-gateway')">复制</button>
@@ -768,7 +738,7 @@ console.log(response.content);</code></pre>
                 </tr>
                 <tr>
                   <td>production</td>
-                  <td>http://101.43.146.102:30001</td>
+                  <td>由部署环境配置</td>
                   <td>deepseek-v4-flash / deepseek-v4-pro</td>
                 </tr>
               </tbody>
@@ -781,7 +751,7 @@ console.log(response.content);</code></pre>
           <h2 class="section-title">💡 示例代码</h2>
           
           <h3>示例 1：简单的问答 Agent</h3>
-          <div class="code-block">
+          <div id="code-qna-agent" class="code-block">
             <div class="code-header">
               <span class="code-title">QnaAgent.ts</span>
               <button class="copy-btn" @click="copyCode('qna-agent')">复制</button>
@@ -810,7 +780,7 @@ export class QnaAgent extends BaseAgent {
           </div>
 
           <h3>示例 2：带验证的 Agent</h3>
-          <div class="code-block">
+          <div id="code-math-agent" class="code-block">
             <div class="code-header">
               <span class="code-title">MathAgent.ts（片段）</span>
               <button class="copy-btn" @click="copyCode('math-agent')">复制</button>
@@ -849,7 +819,7 @@ export class QnaAgent extends BaseAgent {
           </div>
 
           <h3>示例 3：使用 MCP Gateway</h3>
-          <div class="code-block">
+          <div id="code-mcp-example" class="code-block">
             <div class="code-header">
               <span class="code-title">使用 MCP 调用 AI</span>
               <button class="copy-btn" @click="copyCode('mcp-example')">复制</button>
@@ -901,9 +871,7 @@ async function generateContent(prompt: string) {
             <p>© 2026 问流 WenFlow · 开发者文档</p>
             <div class="footer-links">
               <router-link to="/">返回首页</router-link>
-              <a href="https://github.com/your-repo/wenflow/blob/main/docs/architecture" target="_blank">架构文档</a>
-              <a href="https://github.com/your-repo/wenflow/blob/main/API.md" target="_blank">完整 API</a>
-              <a href="https://github.com/your-repo" target="_blank">GitHub</a>
+              <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">项目源码</a>
             </div>
           </div>
         </footer>
@@ -914,20 +882,48 @@ async function generateContent(prompt: string) {
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { toast } from '../utils/toast';
 
 const activeSection = ref('quickstart');
 const sidebarCollapsed = ref(false);
+const isMobile = ref(false);
 
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value;
-  // 保存到 localStorage
-  localStorage.setItem('docs-sidebar-collapsed', String(sidebarCollapsed.value));
+  localStorage.setItem(
+    isMobile.value ? 'docs-sidebar-collapsed-mobile' : 'docs-sidebar-collapsed-desktop',
+    String(sidebarCollapsed.value)
+  );
 };
 
-const copyCode = (codeId: string) => {
-  // TODO: 实现代码复制功能
-  console.log('复制代码:', codeId);
-  alert('代码已复制到剪贴板（功能待实现）');
+const copyCode = async (codeId: string) => {
+  const block = document.getElementById(`code-${codeId}`);
+  const text = block?.querySelector('pre')?.textContent || '';
+
+  if (!text) {
+    toast.error('没有可复制的代码');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('代码已复制');
+  } catch {
+    toast.error('复制失败，请手动选择代码');
+  }
+};
+
+const restoreSidebarState = () => {
+  isMobile.value = window.innerWidth <= 968;
+  const key = isMobile.value ? 'docs-sidebar-collapsed-mobile' : 'docs-sidebar-collapsed-desktop';
+  const saved = localStorage.getItem(key);
+  sidebarCollapsed.value = saved !== null ? saved === 'true' : isMobile.value;
+};
+
+const handleResize = () => {
+  const wasMobile = isMobile.value;
+  const nextMobile = window.innerWidth <= 968;
+  if (wasMobile !== nextMobile) restoreSidebarState();
 };
 
 const handleScroll = () => {
@@ -947,17 +943,14 @@ const handleScroll = () => {
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll);
+  window.addEventListener('resize', handleResize);
   handleScroll(); // 初始化
-  
-  // 恢复侧边栏状态
-  const saved = localStorage.getItem('docs-sidebar-collapsed');
-  if (saved !== null) {
-    sidebarCollapsed.value = saved === 'true';
-  }
+  restoreSidebarState();
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
+  window.removeEventListener('resize', handleResize);
 });
 </script>
 
@@ -1905,12 +1898,19 @@ onUnmounted(() => {
     margin-bottom: 2rem;
   }
   
+  .sidebar-toggle {
+    display: flex;
+  }
+
   .docs-sidebar.collapsed {
     width: 100%;
+    height: 48px;
+    margin-bottom: 0;
+    overflow: hidden;
   }
-  
-  .sidebar-toggle {
-    display: none;
+
+  .docs-sidebar.collapsed .sidebar-toggle {
+    margin-bottom: 0;
   }
   
   .docs-content {

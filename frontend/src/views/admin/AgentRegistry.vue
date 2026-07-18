@@ -6,7 +6,6 @@
       :highlights="registryHighlights"
     >
       <template #actions>
-        <el-button @click="seedCorePrompts">初始化核心 Prompt</el-button>
         <el-button type="primary" @click="loadRegistry" :loading="loading">
           <el-icon><Refresh /></el-icon>
           刷新
@@ -152,7 +151,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Grid, Refresh } from '@element-plus/icons-vue'
-import { adminAgentPromptsApi, adminAxios, adminSkillsApi } from '@/api/adminApi'
+import { adminAxios, adminSkillsApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SkillNodeWorkbench from './components/SkillNodeWorkbench.vue'
 import { toast } from '../../utils/toast'
@@ -321,13 +320,21 @@ const buildSummary = (items: SkillDirectoryRow[]) => {
   }
 }
 
-const normalizePromptRecord = (value: any) => {
+interface PromptRecordInfo {
+  id: string
+  version?: number | string
+  versionLabel?: string
+  status?: string
+}
+
+const normalizePromptRecord = (value: unknown): PromptRecordInfo | null => {
   if (!value || typeof value !== 'object') return null
+  const record = value as { id?: string; promptId?: string; version?: number | string; versionLabel?: string; status?: string }
   return {
-    id: value.id || value.promptId || '',
-    version: value.version,
-    versionLabel: value.versionLabel,
-    status: value.status
+    id: record.id || record.promptId || '',
+    version: record.version,
+    versionLabel: record.versionLabel,
+    status: record.status
   }
 }
 
@@ -371,25 +378,46 @@ const setPromptSummary = (skillId: string, summaryState: PromptSummaryState) => 
 
 const getPromptSummary = (skillId: string) => promptSummaries.value[skillId]
 
+interface SkillPromptSummaryItem {
+  skillId?: string
+  agentId?: string
+  source?: string
+  prompt?: unknown
+}
+
 const loadPromptSummaries = async (directorySkills: SkillDirectoryRow[]) => {
-  await Promise.allSettled(
-    directorySkills.map(async (skill) => {
-      const promptLookupId = `skill:${skill.skillId}`
-      setPromptSummary(skill.skillId, {
-        loading: true,
-        versionLabel: '',
-        status: '',
-        statusLabel: ''
-      })
+  if (!directorySkills.length) return
 
-      try {
-        const versionsResponse: any = await adminAgentPromptsApi.getPromptVersions({ agentId: promptLookupId })
-        const promptList = versionsResponse.data?.data?.list || versionsResponse.data?.data || []
-        const prompts = Array.isArray(promptList)
-          ? promptList.map(normalizePromptRecord).filter(Boolean)
-          : []
-        const activePrompt = prompts.find((item: any) => (item.status || '').toUpperCase() === 'ACTIVE') || prompts[0] || null
+  directorySkills.forEach((skill) => {
+    setPromptSummary(skill.skillId, {
+      loading: true,
+      versionLabel: '',
+      status: '',
+      statusLabel: ''
+    })
+  })
 
+  const resetPromptSummary = (skillId: string) => {
+    setPromptSummary(skillId, {
+      loading: false,
+      versionLabel: '',
+      status: '',
+      statusLabel: ''
+    })
+  }
+
+  // 批量端点一次拉取全部 Skill 的 Prompt 摘要，避免逐 Skill 请求造成 N+1 请求风暴
+  try {
+    const response = await adminAxios.get('/admin/skills/prompt-summaries', {
+      params: { skillIds: directorySkills.map((skill) => skill.skillId).join(',') }
+    })
+    const summaries: Record<string, SkillPromptSummaryItem> = response.data?.data?.summaries || {}
+
+    directorySkills.forEach((skill) => {
+      const summary = summaries[skill.skillId]
+
+      if (summary?.source === 'db') {
+        const activePrompt = normalizePromptRecord(summary.prompt)
         if (activePrompt) {
           setPromptSummary(skill.skillId, {
             loading: false,
@@ -397,54 +425,54 @@ const loadPromptSummaries = async (directorySkills: SkillDirectoryRow[]) => {
             status: activePrompt.status || '',
             statusLabel: getPromptStatusLabel(activePrompt.status)
           })
-          return
+        } else {
+          resetPromptSummary(skill.skillId)
         }
+        return
+      }
 
-        const effectiveSkillResponse: any = await adminSkillsApi.getEffectiveSkillPrompt(skill.skillId)
-        const effectiveSource = effectiveSkillResponse.data?.data?.data?.source || effectiveSkillResponse.data?.data?.source || ''
+      if (summary?.source === 'generated-default') {
+        setPromptSummary(skill.skillId, {
+          loading: false,
+          versionLabel: 'generated',
+          status: 'GENERATED',
+          statusLabel: '默认草案'
+        })
+        return
+      }
 
-        if (effectiveSource === 'generated-default') {
-          setPromptSummary(skill.skillId, {
-            loading: false,
-            versionLabel: 'generated',
-            status: 'GENERATED',
-            statusLabel: '默认草案'
-          })
-          return
-        }
+      if (summary?.source === 'code-fallback') {
+        setPromptSummary(skill.skillId, {
+          loading: false,
+          versionLabel: 'built-in',
+          status: 'FALLBACK',
+          statusLabel: '代码内置'
+        })
+        return
+      }
 
-        if (effectiveSource === 'code-fallback') {
-          setPromptSummary(skill.skillId, {
-            loading: false,
-            versionLabel: 'built-in',
-            status: 'FALLBACK',
-            statusLabel: '代码内置'
-          })
-          return
-        }
-
+      if (summary?.source === 'missing') {
         setPromptSummary(skill.skillId, {
           loading: false,
           versionLabel: '',
           status: 'PROMPT_MISSING',
           statusLabel: '缺少 Prompt'
         })
-      } catch {
-        setPromptSummary(skill.skillId, {
-          loading: false,
-          versionLabel: '',
-          status: '',
-          statusLabel: ''
-        })
+        return
       }
+
+      resetPromptSummary(skill.skillId)
     })
-  )
+  } catch (error) {
+    console.error('批量加载 Prompt 摘要失败:', error)
+    directorySkills.forEach((skill) => resetPromptSummary(skill.skillId))
+  }
 }
 
 const loadRegistry = async () => {
   loading.value = true
   try {
-    const [skillConfigResponse, runtimeSkillResponse]: any = await Promise.all([
+    const [skillConfigResponse, runtimeSkillResponse] = await Promise.all([
       adminSkillsApi.getSkillModelConfigs(),
       adminAxios.get('/admin/skills')
     ])
@@ -473,22 +501,6 @@ const loadRegistry = async () => {
   }
 }
 
-const seedCorePrompts = async () => {
-  try {
-    const response: any = await adminAgentPromptsApi.seedCorePrompts()
-    const created = response.data?.data?.result?.created || []
-    const skipped = response.data?.data?.result?.skipped || []
-    const parts = []
-    if (created.length) parts.push(`已创建 ${created.join('、')}`)
-    if (skipped.length) parts.push(`已跳过 ${skipped.join('、')}`)
-    toast.success(parts.join('；') || '核心 Prompt 已初始化')
-    await loadRegistry()
-  } catch (error) {
-    console.error('初始化核心 Prompt 失败:', error)
-    toast.error('初始化核心 Prompt 失败')
-  }
-}
-
 const openNode = async (skillId: string) => {
   currentSkillNodeId.value = skillId.replace(/^skill:/, '')
   skillWorkbenchVisible.value = true
@@ -504,7 +516,10 @@ const openRequestedSkillFromQuery = async () => {
 
   const normalizedSkillId = rawQueryId.replace(/^skill:/, '')
   if (isExtraCapabilitySkill(normalizedSkillId)) {
-    const nextQuery = { ...route.query, skillId: normalizedSkillId }
+    // 纯展开 route.query 可保留 LocationQuery 的索引签名，从而允许 delete agentId；
+    // 若展开时直接附加 skillId 属性会丢失索引签名导致 TS2339
+    const nextQuery = { ...route.query }
+    nextQuery.skillId = normalizedSkillId
     delete nextQuery.agentId
     await router.replace({ path: '/admin/skill-model-configs', query: nextQuery })
     return

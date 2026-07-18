@@ -1,32 +1,32 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
+import { adminAuthMiddleware } from '../middleware/auth.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
+import { adminLoginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
+import { signSessionToken } from '../utils/session-token';
+import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
+
+const ADMIN_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const router = express.Router();
 
-const getJwtSecret = (): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET 环境变量未配置');
-  }
-  return secret;
-};
-
-const JWT_SECRET = getJwtSecret();
+const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
 
 // 管理员登录验证 Schema
 const loginSchema = z.object({
   name: z.string().min(1, '用户名不能为空'),
   password: z.string().min(6, '密码长度至少 6 位'),
+  remember: z.boolean().optional(),
 });
 
 // 管理员登录
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: Response) => {
   try {
-    const { name, password } = loginSchema.parse(req.body);
+    const { name, password, remember } = loginSchema.parse(req.body);
+    const clientIP = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
 
     // 查找管理员用户（支持用户名或邮箱登录）
     const admin = await prisma.users.findFirst({
@@ -39,42 +39,40 @@ router.post('/login', async (req: Request, res: Response) => {
       },
     });
 
-    if (!admin) {
+    // 未命中时也执行同等成本的密码校验，避免通过响应时序探测管理员账号。
+    const isValidPassword = await bcrypt.compare(
+      password,
+      admin?.password || INVALID_LOGIN_PASSWORD_HASH
+    );
+
+    if (!admin || !isValidPassword) {
+      recordLoginAttempt(name, clientIP, false, 'admin');
       return res.status(401).json({
         success: false,
         error: {
-          message: '管理员账号不存在',
-          status: 401,
-        },
-      });
-    }
-
-    // 验证密码
-    const isValidPassword = await bcrypt.compare(password, admin.password);
-
-    if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          message: '密码错误',
+          message: '用户名或密码错误',
+          code: 'INVALID_CREDENTIALS',
           status: 401,
         },
       });
     }
 
     // 生成 JWT Token（管理员专用）
-    const token = jwt.sign(
+    const token = signSessionToken(
       {
         userId: admin.id,
         email: admin.email,
         name: admin.name,
         isAdmin: true,
       },
-      JWT_SECRET,
-      {
-        expiresIn: '7d',
-      }
+      'admin',
+      '7d'
     );
+
+    recordLoginAttempt(name, clientIP, true, 'admin');
+
+    // 写入 HttpOnly Cookie：勾选"记住登录"给 7 天有效期，否则为会话 Cookie
+    setAuthCookie(res, token, 'admin', remember ? ADMIN_SESSION_MAX_AGE_MS : null);
 
     // 返回用户信息（不包含密码）
     const { password: _, ...userWithoutPassword } = admin;
@@ -109,35 +107,20 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+// 管理员登出：清除 HttpOnly 认证 Cookie
+router.post('/logout', (req: Request, res: Response) => {
+  clearAuthCookie(res, 'admin');
+  res.json({
+    success: true,
+    data: { message: '已退出登录' },
+  });
+});
+
 // 获取当前管理员信息
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', adminAuthMiddleware, adminMiddleware, async (req: Request, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          message: '未提供认证令牌',
-          status: 401,
-        },
-      });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded: any = jwt.verify(token, JWT_SECRET);
-
-    if (!decoded.isAdmin) {
-      return res.status(403).json({
-        success: false,
-        error: {
-          message: '需要管理员权限',
-          status: 403,
-        },
-      });
-    }
-
     const admin = await prisma.users.findUnique({
-      where: { id: decoded.userId },
+      where: { id: req.user!.userId },
       select: {
         id: true,
         email: true,
@@ -150,7 +133,7 @@ router.get('/me', async (req: Request, res: Response) => {
       },
     });
 
-    if (!admin) {
+    if (!admin?.isAdmin) {
       return res.status(404).json({
         success: false,
         error: {
@@ -165,16 +148,6 @@ router.get('/me', async (req: Request, res: Response) => {
       data: admin,
     });
   } catch (error: any) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        success: false,
-        error: {
-          message: '无效的认证令牌',
-          status: 401,
-        },
-      });
-    }
-
     logger.error('获取管理员信息失败:', error);
     res.status(500).json({
       success: false,

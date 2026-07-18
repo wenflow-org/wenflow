@@ -2331,11 +2331,16 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     const userId = (req.query.userId as string) || undefined;
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
+    const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
 
     const where: any = {
       ...(userId ? { userId } : {}),
       ...(status ? { status } : {}),
       ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
+      // wrapup 为 JSON 文本列：缺失 = 无记录或内容中不含 topicSummary
+      ...(onlyMissingWrapup
+        ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
+        : {}),
     };
 
     const [total, sessions] = await Promise.all([

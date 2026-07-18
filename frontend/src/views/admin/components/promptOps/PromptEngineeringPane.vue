@@ -112,7 +112,23 @@ import { useRouter } from 'vue-router';
 const router = useRouter();
 
 interface Props {
-  agent: any;
+  agent: {
+    kind?: string;
+    agentId?: string;
+    file?: { path?: string; hash?: string; [key: string]: unknown } | null;
+    db?: {
+      id?: string;
+      version?: number | string;
+      hash?: string;
+      useCount?: number;
+      model?: string;
+      publishedAt?: string;
+      [key: string]: unknown;
+    } | null;
+    drift?: string | null;
+    tsFallback?: { file?: string; constName?: string; [key: string]: unknown } | null;
+    [key: string]: unknown;
+  };
 }
 
 const props = defineProps<Props>();

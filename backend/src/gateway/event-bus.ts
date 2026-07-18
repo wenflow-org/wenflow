@@ -106,6 +106,10 @@ export class EventBus {
   private eventBuffer: LearningEvent[] = [];
   private eventStore: Map<string, LearningEvent> = new Map();
   private flushInterval: NodeJS.Timeout | null = null;
+  private handlerWrappers = new Map<EventHandler, Map<string, EventHandler[]>>();
+  private inFlightHandlers = new Set<Promise<void>>();
+  private closing = false;
+  private closed = false;
 
   constructor(prisma: PrismaClient, config: Partial<EventBusConfig> = {}) {
     this.prisma = prisma;
@@ -121,6 +125,7 @@ export class EventBus {
    * 发布事件
    */
   async emit(event: LearningEvent): Promise<void> {
+    if (this.closed) throw new Error('EventBus 已关闭，拒绝发布新事件');
     // 添加时间戳
     if (!event.timestamp) {
       event.timestamp = new Date().toISOString();
@@ -150,21 +155,31 @@ export class EventBus {
    * 订阅事件
    */
   on(eventType: LearningEventType | '*', handler: EventHandler): void {
-    this.emitter.on(eventType, handler);
+    this.assertOpenForSubscription();
+    const wrapped = this.wrapHandler(eventType, handler, false);
+    this.rememberWrapper(eventType, handler, wrapped);
+    this.emitter.on(eventType, wrapped);
   }
 
   /**
    * 取消订阅
    */
   off(eventType: LearningEventType | '*', handler: EventHandler): void {
-    this.emitter.off(eventType, handler);
+    const wrappers = this.handlerWrappers.get(handler)?.get(eventType);
+    const wrapped = wrappers?.pop();
+    if (!wrapped) return;
+    this.emitter.off(eventType, wrapped);
+    this.cleanupWrapperMap(eventType, handler, wrappers!);
   }
 
   /**
    * 一次性订阅
    */
   once(eventType: LearningEventType, handler: EventHandler): void {
-    this.emitter.once(eventType, handler);
+    this.assertOpenForSubscription();
+    const wrapped = this.wrapHandler(eventType, handler, true);
+    this.rememberWrapper(eventType, handler, wrapped);
+    this.emitter.once(eventType, wrapped);
   }
 
   /**
@@ -257,6 +272,7 @@ export class EventBus {
     this.flushInterval = setInterval(() => {
       this.cleanupOldEvents();
     }, 60 * 60 * 1000); // 每小时清理一次
+    this.flushInterval.unref?.();
   }
 
   /**
@@ -283,10 +299,96 @@ export class EventBus {
    * 关闭事件总线
    */
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closing = true;
     if (this.flushInterval) {
       clearInterval(this.flushInterval);
     }
+    this.flushInterval = null;
+    while (this.inFlightHandlers.size > 0) {
+      await Promise.allSettled([...this.inFlightHandlers]);
+    }
     this.emitter.removeAllListeners();
+    this.handlerWrappers.clear();
+    this.closed = true;
+    this.closing = false;
+  }
+
+  private assertOpenForSubscription(): void {
+    if (this.closing || this.closed) throw new Error('EventBus 正在关闭，拒绝新增订阅');
+  }
+
+  private wrapHandler(
+    eventType: LearningEventType | '*',
+    handler: EventHandler,
+    once: boolean
+  ): EventHandler {
+    const wrapped: EventHandler = (event) => {
+      if (once) this.removeWrapper(eventType, handler, wrapped);
+      let operation: Promise<void>;
+      try {
+        operation = Promise.resolve(handler(event));
+      } catch (error) {
+        this.logHandlerError(eventType, event, error);
+        return;
+      }
+      const tracked = operation.catch(error => {
+        this.logHandlerError(eventType, event, error);
+      }).finally(() => this.inFlightHandlers.delete(tracked));
+      this.inFlightHandlers.add(tracked);
+    };
+    return wrapped;
+  }
+
+  private rememberWrapper(
+    eventType: LearningEventType | '*',
+    handler: EventHandler,
+    wrapped: EventHandler
+  ): void {
+    let byType = this.handlerWrappers.get(handler);
+    if (!byType) {
+      byType = new Map();
+      this.handlerWrappers.set(handler, byType);
+    }
+    const wrappers = byType.get(eventType) || [];
+    wrappers.push(wrapped);
+    byType.set(eventType, wrappers);
+  }
+
+  private removeWrapper(
+    eventType: LearningEventType | '*',
+    handler: EventHandler,
+    wrapped: EventHandler
+  ): void {
+    const wrappers = this.handlerWrappers.get(handler)?.get(eventType);
+    if (!wrappers) return;
+    const index = wrappers.lastIndexOf(wrapped);
+    if (index >= 0) wrappers.splice(index, 1);
+    this.cleanupWrapperMap(eventType, handler, wrappers);
+  }
+
+  private cleanupWrapperMap(
+    eventType: LearningEventType | '*',
+    handler: EventHandler,
+    wrappers: EventHandler[]
+  ): void {
+    if (wrappers.length > 0) return;
+    const byType = this.handlerWrappers.get(handler);
+    byType?.delete(eventType);
+    if (byType?.size === 0) this.handlerWrappers.delete(handler);
+  }
+
+  private logHandlerError(
+    eventType: LearningEventType | '*',
+    event: LearningEvent,
+    error: unknown
+  ): void {
+    logger.error('[event-bus] event handler failed', {
+      subscribedType: eventType,
+      eventId: event.id,
+      eventType: event.type,
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 }
 

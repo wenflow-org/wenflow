@@ -4,26 +4,26 @@
       <div class="header-left">
         <h3 class="calendar-title">学习节奏日历</h3>
         <div class="month-selector">
-          <button type="button" @click="changeMonth(-1)" class="month-btn">
+          <button type="button" @click="changeMonth(-1)" class="month-btn" aria-label="上个月" title="上个月">
             <span>◀</span>
           </button>
           <span class="current-month">{{ currentMonthLabel }}</span>
-          <button type="button" @click="changeMonth(1)" class="month-btn">
+          <button type="button" @click="changeMonth(1)" class="month-btn" aria-label="下个月" title="下个月">
             <span>▶</span>
           </button>
         </div>
         <div class="zone-legend">
           <span class="zone-item">
             <i class="zone-dot z1"></i>
-            <span>轻度：短时间、低压力</span>
+            <span>轻度：少于 1 小时</span>
           </span>
           <span class="zone-item">
             <i class="zone-dot z2"></i>
-            <span>中度：有投入，但可持续</span>
+            <span>中度：1 到 2 小时</span>
           </span>
           <span class="zone-item">
             <i class="zone-dot z3"></i>
-            <span>高强度：时间较长或连续任务较多</span>
+            <span>高强度：2 小时以上</span>
           </span>
         </div>
       </div>
@@ -38,30 +38,27 @@
             <span class="stat-value">{{ monthStats.studyDays }}天</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">学习会话</span>
+            <span class="stat-label">学习次数</span>
             <span class="stat-value">{{ monthStats.sessionCount }}次</span>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="empty-state" v-if="!loading && weeksList.length === 0">
-      <span class="empty-icon">📅</span>
-      <p>本月暂无学习记录</p>
-      <p class="empty-hint">开始学习后，这里会显示你的学习日历</p>
+    <div class="empty-state" v-if="loading && weeksList.length === 0">
+      <el-icon class="loading-icon"><Loading /></el-icon>
+      <p>正在加载本月学习记录...</p>
     </div>
 
-    <div v-if="weeksList.length > 0 && selectedDay" class="selected-day-bar">
-      <div>
-        <div class="selected-day-label">已选日期</div>
-        <div class="selected-day-value">
-          {{ formatDetailDate(selectedDay.date) }}
-          <span class="selected-day-meta">{{ getDayHeadline(selectedDay) }}</span>
-        </div>
-      </div>
-      <button type="button" class="selected-day-btn" @click="openSelectedDayDetail">
-        查看当天明细
-      </button>
+    <div class="empty-state" v-else-if="!loading && loadError">
+      <p>学习记录加载失败</p>
+      <button type="button" class="selected-day-btn" @click="fetchMonthData">重新加载</button>
+    </div>
+
+    <div class="empty-state" v-else-if="!loading && monthStats?.sessionCount === 0">
+      <span class="empty-icon">📅</span>
+      <p>本月还没有学习记录</p>
+      <p class="empty-hint">完成一次学习后，这里会显示日期和时长。</p>
     </div>
 
     <div v-if="weeksList.length > 0" class="weeks-container-wrap">
@@ -130,7 +127,7 @@
                   </span>
                 </div>
                 <div class="no-data" v-else-if="day.isCurrentMonth && !isFutureDay(day.date)">
-                  <span class="no-data-text">点击查看</span>
+                  <span class="no-data-text">选择日期</span>
                 </div>
               </div>
             </button>
@@ -171,12 +168,12 @@
             <strong class="detail-summary-value">{{ formatDuration(selectedDay.durationMinutes) }}</strong>
           </div>
           <div class="detail-summary-card">
-            <span class="detail-summary-label">学习会话</span>
+            <span class="detail-summary-label">学习次数</span>
             <strong class="detail-summary-value">{{ selectedDay.sessionCount }}次</strong>
           </div>
           <div class="detail-summary-card">
             <span class="detail-summary-label">主要内容</span>
-            <strong class="detail-summary-value detail-summary-text">{{ selectedDay.primaryTaskTitle || '暂无任务标题' }}</strong>
+            <strong class="detail-summary-value detail-summary-text">{{ selectedDay.primaryTaskTitle || '未关联具体任务' }}</strong>
           </div>
           <div class="detail-summary-card">
             <span class="detail-summary-label">学习状态</span>
@@ -191,16 +188,16 @@
 
         <div class="detail-analysis detail-analysis-empty" v-else>
           <h5 class="detail-section-title">当天情况</h5>
-          <p class="detail-analysis-text">这一天还没有学习会话记录。可以把它当作休息日，或者补一次短时学习。</p>
+          <p class="detail-analysis-text">这一天没有学习记录。</p>
         </div>
 
         <div class="detail-sessions">
-          <h5 class="detail-section-title">会话详情</h5>
+          <h5 class="detail-section-title">学习记录</h5>
           <div v-if="selectedDay.sessions.length > 0" class="session-list">
             <div v-for="session in selectedDay.sessions" :key="session.id" class="session-card">
               <div class="session-card-header">
                 <div>
-                  <div class="session-title">{{ session.taskTitle || '学习会话' }}</div>
+                  <div class="session-title">{{ session.taskTitle || '本次学习' }}</div>
                   <div class="session-time">{{ formatSessionTime(session.startTime, session.endTime) }}</div>
                 </div>
                 <div class="session-duration">{{ formatDuration(session.durationMinutes) }}</div>
@@ -211,7 +208,7 @@
               </div>
             </div>
           </div>
-          <div v-else class="detail-empty">暂无详细学习记录</div>
+          <div v-else class="detail-empty">暂无学习明细</div>
         </div>
       </div>
     </el-drawer>
@@ -225,7 +222,7 @@ import api from '../utils/api';
 import dayjs from 'dayjs';
 
 const emit = defineEmits<{
-  (e: 'day-select', day: DayData): void;
+  (e: 'day-select', day: DayData | null): void;
 }>();
 
 interface SessionState {
@@ -271,7 +268,8 @@ const isDisplayableSession = (session: SessionEntry) => {
   return false;
 };
 
-const loading = ref(false);
+const loading = ref(true);
+const loadError = ref('');
 const weeksList = ref<DayData[][]>([]);
 const monthStats = ref<MonthStats | null>(null);
 const currentYear = ref(new Date().getFullYear());
@@ -279,6 +277,7 @@ const currentMonth = ref(new Date().getMonth());
 const selectedDay = ref<DayData | null>(null);
 const dayDetailOpen = ref(false);
 const isMobileDrawer = ref(false);
+let monthRequestId = 0;
 
 const syncDrawerViewport = () => {
   isMobileDrawer.value = window.innerWidth <= 768;
@@ -303,44 +302,52 @@ const currentMonthLabel = computed(() => {
 
 // 获取月份数据
 const fetchMonthData = async () => {
+  const requestId = ++monthRequestId;
+  const requestedYear = currentYear.value;
+  const requestedMonth = currentMonth.value;
   loading.value = true;
+  loadError.value = '';
   
   try {
     // 构建当月的起始和结束日期
-    const startDate = new Date(currentYear.value, currentMonth.value, 1);
-    const endDate = new Date(currentYear.value, currentMonth.value + 1, 0);
+    const startDate = new Date(requestedYear, requestedMonth, 1);
+    const endDate = new Date(requestedYear, requestedMonth + 1, 0);
     
     const startDateStr = dayjs(startDate).format('YYYY-MM-DD');
     const endDateStr = dayjs(endDate).format('YYYY-MM-DD');
     
-    // 调用后端API获取当月学习会话
+    // 调用后端API获取当月学习会话（该接口仅支持 limit，上限取 500；达到上限说明可能仍有数据被截断）
+    const SESSION_FETCH_LIMIT = 500;
     const response = await api.get('/users/me/sessions', {
       params: {
         startDate: startDateStr,
         endDate: endDateStr,
-        limit: 100
+        limit: SESSION_FETCH_LIMIT
       }
     });
-    
+
     const sessions = response?.data || response || [];
+
+    if (Array.isArray(sessions) && sessions.length >= SESSION_FETCH_LIMIT) {
+      console.warn(`[LoadCalendar] 当月会话数达到拉取上限 ${SESSION_FETCH_LIMIT}，超出部分未显示`);
+    }
     
-    buildCalendar(sessions);
+    if (requestId !== monthRequestId) return;
+    buildCalendar(sessions, requestedYear, requestedMonth);
     
   } catch (error) {
+    if (requestId !== monthRequestId) return;
     console.error('获取月份数据失败:', error);
-    // 即使失败也构建空日历
-    buildCalendar([]);
+    loadError.value = '学习记录加载失败';
+    buildCalendar([], requestedYear, requestedMonth);
   } finally {
-    loading.value = false;
+    if (requestId === monthRequestId) loading.value = false;
   }
 };
 
 // 构建日历
-const buildCalendar = (sessions: SessionEntry[]) => {
+const buildCalendar = (sessions: SessionEntry[], year: number, month: number) => {
   const weeks: DayData[][] = [];
-  
-  const year = currentYear.value;
-  const month = currentMonth.value;
   
   // 获取当月第一天和最后一天
   const firstDay = new Date(year, month, 1);
@@ -425,10 +432,6 @@ const openDayDetail = (day: DayData) => {
   if (!day.isCurrentMonth || isFutureDay(day.date)) return;
   selectedDay.value = day;
   emit('day-select', day);
-};
-
-const openSelectedDayDetail = () => {
-  if (!selectedDay.value) return;
   dayDetailOpen.value = true;
 };
 
@@ -444,7 +447,10 @@ const changeMonth = (delta: number) => {
   } else {
     currentMonth.value = newMonth;
   }
-  fetchMonthData();
+  selectedDay.value = null;
+  dayDetailOpen.value = false;
+  emit('day-select', null);
+  void fetchMonthData();
 };
 
 // 判断是否是当前周
@@ -489,9 +495,9 @@ const getWeekStudyDays = (week: DayData[]) => {
 // 获取周成就
 const getWeekAchievement = (week: DayData[]) => {
   const studyDays = getWeekStudyDays(week);
-  if (studyDays >= 7) return '全勤达人';
-  if (studyDays >= 5) return '学习达人';
-  if (studyDays >= 3) return '积极学习';
+  if (studyDays >= 7) return '本周学习 7 天';
+  if (studyDays >= 5) return '本周保持稳定投入';
+  if (studyDays >= 3) return `本周学习 ${studyDays} 天`;
   return null;
 };
 
@@ -506,7 +512,7 @@ const getBgColor = (minutes: number) => {
 const formatDuration = (minutes: number) => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return h > 0 ? `${h}h${m}m` : `${m}m`;
+  return h > 0 ? `${h}小时${m > 0 ? `${m}分钟` : ''}` : `${m}分钟`;
 };
 
 const getLoadZoneClass = (minutes: number) => {
@@ -523,7 +529,11 @@ const getLoadZoneLabel = (minutes: number) => {
   return '休息日';
 };
 
-const formatDetailDate = (dateStr: string) => dayjs(dateStr).format('M月D日 dddd');
+const formatDetailDate = (dateStr: string) => {
+  const date = dayjs(dateStr);
+  const weekday = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][date.day()];
+  return `${date.format('M月D日')} ${weekday}`;
+};
 
 const formatSessionTime = (startTime: string, endTime?: string | null) => {
   const start = dayjs(startTime).format('HH:mm');
@@ -534,8 +544,8 @@ const formatSessionTime = (startTime: string, endTime?: string | null) => {
 const getSessionStatusLabel = (session: SessionEntry) => {
   if (session.taskStatus === 'completed') return '任务已完成';
   if (session.taskStatus === 'in_progress') return '任务进行中';
-  if (session.endTime) return '会话已结束';
-  if (session.status === 'completed') return '会话已结束';
+  if (session.endTime) return '本次学习已结束';
+  if (session.status === 'completed') return '本次学习已结束';
   if (session.status === 'active') return '仍在进行';
   return '已记录';
 };
@@ -619,6 +629,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  monthRequestId += 1;
   window.removeEventListener('resize', syncDrawerViewport);
 });
 </script>

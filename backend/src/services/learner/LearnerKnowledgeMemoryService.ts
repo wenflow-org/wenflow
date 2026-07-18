@@ -116,26 +116,79 @@ export class LearnerKnowledgeMemoryService {
       };
     }
 
-    const sessions = await prisma.teaching_sessions.findMany({
-      where: {
-        userId: input.userId,
-        learningPathId: path.id,
-      },
-      orderBy: { startTime: 'desc' },
-      take: 30,
-      select: {
-        id: true,
-        taskId: true,
-        milestoneId: true,
-        knowledgeState: true,
-        wrapup: true,
-        endTime: true,
-        updatedAt: true,
-      },
-    });
+    const [sessions, persistedEvidence] = await Promise.all([
+      prisma.teaching_sessions.findMany({
+        where: {
+          userId: input.userId,
+          learningPathId: path.id,
+        },
+        orderBy: { startTime: 'desc' },
+        take: 30,
+        select: {
+          id: true,
+          taskId: true,
+          milestoneId: true,
+          knowledgeState: true,
+          wrapup: true,
+          endTime: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.learner_evidence.findMany({
+        where: { userId: input.userId, pathId: path.id },
+        orderBy: { occurredAt: 'desc' },
+        take: 50
+      })
+    ]);
 
     const conceptSignals = new Map<string, ConceptSignal[]>();
     const recentEvidence: LearnerRecentEvidence[] = [];
+    const enrichedLedger: LearnerBackgroundConceptLedgerItem[] = [];
+    const enrichedConfusions: LearnerRecurringConfusion[] = [];
+    const enrichedReusableFoundations: string[] = [];
+    const enrichedBlockedFoundations: string[] = [];
+    const enrichedTransferSignals: LearnerTransferSignal[] = [];
+
+    for (const evidence of persistedEvidence) {
+      const payload = parseJsonSafe<any>(evidence.payload, {});
+      if (evidence.evidenceType === 'session-knowledge-distilled') {
+        if (Array.isArray(payload.conceptLedger)) enrichedLedger.push(...payload.conceptLedger);
+        if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
+        if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
+        if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
+        continue;
+      }
+      if (evidence.evidenceType === 'dialogue-concepts-extracted') {
+        if (Array.isArray(payload.recurringConfusions)) enrichedConfusions.push(...payload.recurringConfusions);
+        if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
+        continue;
+      }
+      if (evidence.evidenceType !== 'task:completed' && evidence.evidenceType !== 'lesson:completed') {
+        continue;
+      }
+      const conceptKeys = dedupe([
+        payload.linkedConceptName,
+        ...(Array.isArray(payload.conceptKeys) ? payload.conceptKeys : []),
+        ...(Array.isArray(payload.knowledgeState) ? payload.knowledgeState.map((item: any) => item?.name) : [])
+      ]);
+      const type: LearnerRecentEvidence['type'] = evidence.evidenceType === 'task:completed'
+        ? 'task-completed'
+        : 'teaching-session';
+      const signal: LearnerRecentEvidence['signal'] = evidence.evidenceType === 'lesson:completed'
+        ? Array.isArray(payload.knowledgeState) && payload.knowledgeState.some((item: any) => item?.status === 'review')
+          ? 'struggle'
+          : 'mastery'
+        : 'mastery';
+      recentEvidence.push({
+        type,
+        taskId: evidence.taskId || undefined,
+        sessionId: evidence.sessionId || undefined,
+        conceptKeys,
+        signal,
+        score: evidence.confidence,
+        happenedAt: evidence.occurredAt.toISOString()
+      });
+    }
 
     const allTasks = path.milestones.flatMap((milestone) =>
       (milestone.subtasks || []).map((task) => ({ milestone, task }))
@@ -458,10 +511,14 @@ export class LearnerKnowledgeMemoryService {
       taskMastery,
       conceptStates,
       prerequisiteGaps,
-      recentEvidence: recentEvidence.sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime()).slice(0, 20),
+      recentEvidence: Array.from(new Map(
+        recentEvidence
+          .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
+          .map((item) => [`${item.type}:${item.sessionId || item.taskId || item.happenedAt}`, item])
+      ).values()).slice(0, 20),
     };
 
-    const conceptLedger: LearnerBackgroundConceptLedgerItem[] = conceptStates
+    const deterministicConceptLedger: LearnerBackgroundConceptLedgerItem[] = conceptStates
       .map((concept) => {
         const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.status === 'mastered'
           ? 'stable'
@@ -496,7 +553,7 @@ export class LearnerKnowledgeMemoryService {
       })
       .slice(0, 40);
 
-    const recurringConfusions: LearnerRecurringConfusion[] = fragileConcepts.slice(0, 12).map((label) => ({
+    const deterministicConfusions: LearnerRecurringConfusion[] = fragileConcepts.slice(0, 12).map((label) => ({
       conceptKey: label,
       label,
       pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
@@ -505,7 +562,7 @@ export class LearnerKnowledgeMemoryService {
       lastSeenAt: conceptStates.find((concept) => concept.label === label)?.lastSeenAt,
     }));
 
-    const transferSignals: LearnerTransferSignal[] = conceptLedger
+    const deterministicTransferSignals: LearnerTransferSignal[] = deterministicConceptLedger
       .filter((concept) => concept.transferReadiness !== 'low')
       .slice(0, 20)
       .map((concept) => ({
@@ -516,11 +573,59 @@ export class LearnerKnowledgeMemoryService {
         lastSeenAt: concept.lastSeenAt,
       }));
 
+    const ledgerMap = new Map<string, LearnerBackgroundConceptLedgerItem>();
+    for (const item of [...deterministicConceptLedger, ...enrichedLedger]) {
+      if (!item?.conceptKey) continue;
+      const existing = ledgerMap.get(item.conceptKey);
+      ledgerMap.set(item.conceptKey, existing
+        ? {
+            ...existing,
+            ...item,
+            sourcePaths: dedupe([...(existing.sourcePaths || []), ...(item.sourcePaths || [])]),
+            sourceTasks: dedupe([...(existing.sourceTasks || []), ...(item.sourceTasks || [])]),
+            evidenceCount: Math.max(existing.evidenceCount || 0, item.evidenceCount || 0)
+          }
+        : item);
+    }
+    const conceptLedger = Array.from(ledgerMap.values()).slice(0, 60);
+
+    const confusionMap = new Map<string, LearnerRecurringConfusion>();
+    for (const item of [...deterministicConfusions, ...enrichedConfusions]) {
+      if (!item?.conceptKey) continue;
+      const existing = confusionMap.get(item.conceptKey);
+      confusionMap.set(item.conceptKey, existing
+        ? {
+            ...existing,
+            ...item,
+            confidence: Math.max(existing.confidence || 0, item.confidence || 0),
+            count: Math.max(existing.count || 0, item.count || 0)
+          }
+        : item);
+    }
+    const recurringConfusions = Array.from(confusionMap.values()).slice(0, 20);
+
+    const readinessRank = { low: 0, medium: 1, high: 2 } as const;
+    const transferMap = new Map<string, LearnerTransferSignal>();
+    for (const item of [...deterministicTransferSignals, ...enrichedTransferSignals]) {
+      if (!item?.conceptKey) continue;
+      const existing = transferMap.get(item.conceptKey);
+      if (!existing || (item.confidence || 0) > existing.confidence || readinessRank[item.readiness] > readinessRank[existing.readiness]) {
+        transferMap.set(item.conceptKey, item);
+      }
+    }
+    const transferSignals = Array.from(transferMap.values()).slice(0, 30);
+
     const globalBackground: LearnerGlobalBackgroundKnowledge = {
       conceptLedger,
       recurringConfusions,
-      reusableFoundations: conceptLedger.filter((concept) => concept.transferReadiness === 'high').map((concept) => concept.label).slice(0, 12),
-      blockedFoundations: conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label).slice(0, 12),
+      reusableFoundations: dedupe([
+        ...conceptLedger.filter((concept) => concept.transferReadiness === 'high').map((concept) => concept.label),
+        ...enrichedReusableFoundations
+      ]).slice(0, 20),
+      blockedFoundations: dedupe([
+        ...conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label),
+        ...enrichedBlockedFoundations
+      ]).slice(0, 20),
       transferSignals,
     };
 

@@ -71,8 +71,8 @@
                 <span v-if="item.parentAgent" class="dev-skill-agent">← {{ item.parentAgent }}</span>
                 <div class="dev-skill-stats" v-if="item.callCount !== undefined">
                   <span>调用 {{ item.callCount }}</span>
-                  <span :class="{ 'dev-drift': item.successRate < 0.8 }">
-                    成功率 {{ (item.successRate * 100).toFixed(0) }}%
+                  <span :class="{ 'dev-drift': item.successRate! < 0.8 }">
+                    成功率 {{ (item.successRate! * 100).toFixed(0) }}%
                   </span>
                   <span v-if="item.promptDrift" class="dev-drift-warn">⚠ Prompt 漂移</span>
                 </div>
@@ -314,7 +314,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Monitor } from '@element-plus/icons-vue';
 import { isTestMode } from '@/utils/debugMode';
@@ -326,7 +326,7 @@ import {
   setProjectionToken,
   clearProjectionToken,
 } from '@/utils/projection';
-import { adminApi } from '@/api/adminApi';
+import { adminVirtualLearnersApi } from '@/api/adminApi';
 
 const route = useRoute();
 const router = useRouter();
@@ -369,7 +369,7 @@ function goToExecutionLogs() {
   router.push({ path: '/admin/execution-logs', query: { traceId: debugStore.currentTraceId } });
 }
 
-function goToRoute(target: any) {
+function goToRoute(target: RouteLocationRaw) {
   if (!target) return;
   router.push(target);
 }
@@ -418,7 +418,15 @@ watch(() => route.fullPath, refreshProjectionState);
 const vlPickerVisible = ref(false);
 const vlPickerLoading = ref(false);
 const vlPickerKeyword = ref('');
-const vlList = ref<any[]>([]);
+
+interface VirtualLearnerItem {
+  id: string;
+  userName?: string;
+  email?: string;
+  userId?: string;
+}
+
+const vlList = ref<VirtualLearnerItem[]>([]);
 
 const vlListFiltered = computed(() => {
   const kw = vlPickerKeyword.value.trim().toLowerCase();
@@ -433,10 +441,17 @@ async function openVlPicker() {
   if (vlList.value.length > 0) return;
   vlPickerLoading.value = true;
   try {
-    const resp: any = await adminApi.getVirtualLearners({ limit: 100 });
+    const resp = await adminVirtualLearnersApi.getVirtualLearners({ limit: 100 });
     const body = resp?.data?.data || resp?.data || resp;
     const list = body?.items || body?.profiles || body?.list || (Array.isArray(body) ? body : []);
-    vlList.value = list.map((item: any) => ({
+    vlList.value = list.map((item: {
+      id: string;
+      users?: { name?: string; email?: string; id?: string };
+      userName?: string;
+      email?: string;
+      userId?: string;
+      profile?: { name?: string };
+    }) => ({
       id: item.id,
       userName: item.users?.name || item.userName || item.profile?.name,
       email: item.users?.email || item.email,
@@ -449,9 +464,9 @@ async function openVlPicker() {
   }
 }
 
-async function confirmProjection(vl: any) {
+async function confirmProjection(vl: VirtualLearnerItem) {
   try {
-    const resp: any = await adminApi.createProjectionToken(vl.id, { scope: 'full' });
+    const resp = await adminVirtualLearnersApi.createProjectionToken(vl.id, { scope: 'full' });
     const body = resp?.data || resp;
     if (!body?.success) {
       throw new Error(body?.error || '创建投影 token 失败');

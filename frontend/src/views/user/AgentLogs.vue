@@ -1,18 +1,18 @@
 ﻿<template>
-  <CapabilityShell title="我的学习活动" description="按时间线回看 AI 真正为你做了什么——每次回答、规划、纠错和模型调用。如需排查问题，可打开「显示底层调用」查看完整调用链。">
+  <CapabilityShell title="调用日志" description="查看模型调用状态、错误信息和诊断数据，用于问题排查。">
     <template #actions>
       <div class="actions">
-        <button type="button" class="btn btn--ghost btn--sm" @click="exportLogs('json')">
+        <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('json')">
           <el-icon><Download /></el-icon>
-          导出 JSON
+          {{ exportingFormat === 'json' ? '导出中...' : '导出 JSON' }}
         </button>
-        <button type="button" class="btn btn--ghost btn--sm" @click="exportLogs('csv')">
+        <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('csv')">
           <el-icon><Download /></el-icon>
-          导出 CSV
+          {{ exportingFormat === 'csv' ? '导出中...' : '导出 CSV' }}
         </button>
         <button type="button" class="btn btn--primary btn--sm" @click="copyDiagnosticsSummary">
           <el-icon><DocumentCopy /></el-icon>
-          复制诊断摘要
+          复制排查信息
         </button>
       </div>
     </template>
@@ -64,7 +64,7 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadLogs">查询</el-button>
+          <el-button type="primary" :loading="loading" @click="queryLogs">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
       </el-form>
@@ -72,14 +72,14 @@
 
     <el-alert
       title="报错反馈建议"
-      description="遇到异常时，先点详情确认输入/错误信息，再使用“复制诊断摘要”或单条日志里的“复制反馈包”发给开发者。"
+      description="遇到问题？打开失败记录并复制排查信息，发送给技术支持。"
       type="info"
       show-icon
       class="feedback-alert"
     />
 
     <!-- 统计信息 -->
-    <div class="stats">
+    <div v-if="!loadError" class="stats">
       <el-row :gutter="20">
         <el-col :span="6">
           <el-card shadow="hover">
@@ -92,7 +92,7 @@
         <el-col :span="6">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">成功率</div>
+              <div class="label">当前页成功率</div>
               <div class="value">{{ successRate }}%</div>
             </div>
           </el-card>
@@ -100,7 +100,7 @@
         <el-col :span="6">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">平均耗时</div>
+              <div class="label">当前页平均耗时</div>
               <div class="value">{{ avgDuration }}ms</div>
             </div>
           </el-card>
@@ -108,7 +108,7 @@
         <el-col :span="6">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">总 Token</div>
+              <div class="label">当前页 Token</div>
               <div class="value">{{ totalTokens }}</div>
             </div>
           </el-card>
@@ -118,6 +118,13 @@
 
     <!-- 日志列表 -->
     <div class="logs-list">
+      <el-result v-if="loadError" icon="error" title="日志加载失败" :sub-title="loadError">
+        <template #extra>
+          <el-button type="primary" @click="loadLogs">重新加载</el-button>
+        </template>
+      </el-result>
+
+      <template v-else>
       <div class="logs-table-panel">
         <div class="logs-table-panel__header">
           <div>
@@ -202,13 +209,14 @@
           @current-change="loadLogs"
         />
       </div>
+      </template>
     </div>
 
     <!-- 详情对话框 -->
     <el-dialog
       v-model="detailVisible"
       title="日志详情与诊断"
-      width="880px"
+      width="min(880px, calc(100vw - 32px))"
       :fullscreen="isMobileDetail"
     >
       <el-alert
@@ -293,14 +301,47 @@ import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
 import dayjs from 'dayjs';
 
+interface AgentLogItem {
+  id: string;
+  agentId?: string;
+  success?: boolean;
+  durationMs?: number;
+  tokensUsed?: number;
+  error?: string | null;
+  errorCode?: string | null;
+  calledAt?: string;
+  traceId?: string | null;
+  sourceEntry?: string | null;
+  callerAgent?: string | null;
+  logSource?: string;
+  input?: unknown;
+  output?: unknown;
+  metadata?: unknown;
+}
+
+interface AgentLogQueryParams {
+  page?: number;
+  limit?: number;
+  agentId?: string;
+  capabilityType?: string;
+  success?: boolean;
+  includeSystem?: boolean;
+  startDate?: string;
+  endDate?: string;
+  format?: 'json' | 'csv';
+}
+
 const loading = ref(false);
-const logs = ref<any[]>([]);
+const logs = ref<AgentLogItem[]>([]);
 const detailVisible = ref(false);
-const currentLog = ref<any>(null);
+const currentLog = ref<AgentLogItem | null>(null);
 const isMobileDetail = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
 const detailSections = ref<string[]>(['basic', 'context']);
+const loadError = ref('');
+const exportingFormat = ref<'' | 'json' | 'csv'>('');
+const exporting = computed(() => exportingFormat.value !== '');
 
 const filters = reactive({
   agentId: '',
@@ -359,26 +400,38 @@ const syncDetailViewport = () => {
 
 const loadLogs = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
-    const params: any = {
+    const params: AgentLogQueryParams = {
       page: pagination.page,
       limit: pagination.limit
     };
     
     if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.success !== undefined) params.success = filters.success;
+    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+    // el-select clearable 清空时会置为 ''，仅布尔值才下发筛选
+    if (typeof filters.success === 'boolean') params.success = filters.success;
     params.includeSystem = filters.includeSystem;
     if (filters.startDate) params.startDate = filters.startDate;
     if (filters.endDate) params.endDate = filters.endDate;
 
     const res = await getAgentLogs(params);
-    logs.value = res.data.logs;
-    pagination.total = res.data.pagination.total;
-  } catch (error) {
+    logs.value = res.data?.logs || [];
+    pagination.total = res.data?.pagination?.total || 0;
+  } catch (error: any) {
+    logs.value = [];
+    pagination.total = 0;
+    loadError.value = error?.response?.data?.error?.message || '无法读取调用日志，请稍后重试。';
+    toast.error('日志加载失败');
     console.error('加载日志失败:', error);
   } finally {
     loading.value = false;
   }
+};
+
+const queryLogs = () => {
+  pagination.page = 1;
+  loadLogs();
 };
 
 const onDateRangeChange = (dates: [Date, Date] | null) => {
@@ -403,7 +456,7 @@ const resetFilters = () => {
   loadLogs();
 };
 
-const viewDetail = async (log: any) => {
+const viewDetail = async (log: AgentLogItem) => {
   currentLog.value = log;
   detailError.value = '';
   detailVisible.value = true;
@@ -428,18 +481,28 @@ const viewDetail = async (log: any) => {
 };
 
 const exportLogs = async (format: 'json' | 'csv') => {
+  if (exporting.value) return;
+  exportingFormat.value = format;
   try {
-    const params: any = { format };
+    const params: AgentLogQueryParams = { format };
+    if (filters.agentId) params.agentId = filters.agentId;
+    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+    if (typeof filters.success === 'boolean') params.success = filters.success;
+    params.includeSystem = filters.includeSystem;
     if (filters.startDate) params.startDate = filters.startDate;
     if (filters.endDate) params.endDate = filters.endDate;
 
     const data = await exportAgentLogs(params);
     const blob = format === 'csv'
-      ? data
-      : new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      ? (data as Blob)
+      : new Blob([JSON.stringify((data as { data?: unknown })?.data ?? data, null, 2)], { type: 'application/json' });
     downloadBlob(blob, `agent-logs-${dayjs().format('YYYYMMDD')}.${format}`);
+    toast.success('日志导出完成');
   } catch (error) {
+    toast.error('日志导出失败');
     console.error('导出失败:', error);
+  } finally {
+    exportingFormat.value = '';
   }
 };
 
@@ -466,7 +529,7 @@ const copyDiagnosticsSummary = async () => {
   await copyText(JSON.stringify(payload, null, 2), '诊断摘要已复制');
 };
 
-const copyLogFeedback = async (log: any) => {
+const copyLogFeedback = async (log: AgentLogItem | null) => {
   if (!log) return;
 
   const payload = buildFeedbackPayload(log);
@@ -474,7 +537,7 @@ const copyLogFeedback = async (log: any) => {
   await copyText(JSON.stringify(payload, null, 2), '反馈包已复制，可直接发给开发同学');
 };
 
-const buildFeedbackPayload = (log: any) => {
+const buildFeedbackPayload = (log: AgentLogItem) => {
   const metadata = parseMetadata(log?.metadata);
   return {
     copiedAt: new Date().toISOString(),
@@ -510,11 +573,11 @@ const buildFeedbackPayload = (log: any) => {
   };
 };
 
-const formatDate = (date: string) => {
+const formatDate = (date?: string) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
 };
 
-const formatAgentId = (logOrAgentId: any) => {
+const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) => {
   const agentId = typeof logOrAgentId === 'string' ? logOrAgentId : logOrAgentId?.agentId;
   const metadata = typeof logOrAgentId === 'string' ? {} : parseMetadata(logOrAgentId?.metadata);
 
@@ -540,7 +603,7 @@ const formatAgentId = (logOrAgentId: any) => {
   return agentNames[agentId] || agentId;
 };
 
-const getLogSourceLabel = (log: any) => {
+const getLogSourceLabel = (log: AgentLogItem) => {
   if (log.logSource === 'business') {
     return '业务层';
   }
@@ -564,11 +627,11 @@ const getLogSourceLabel = (log: any) => {
   return '业务层';
 };
 
-const getLogSourceType = (log: any) => {
+const getLogSourceType = (log: AgentLogItem) => {
   return getLogSourceLabel(log) === '平台底层' ? 'info' : 'success';
 };
 
-const getCapabilityType = (agentId: string) => {
+const getCapabilityType = (agentId?: string) => {
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
     'skill:path-planning': 'path',
@@ -579,10 +642,10 @@ const getCapabilityType = (agentId: string) => {
     'system-call': 'system'
   };
 
-  return mapping[agentId] || 'system';
+  return mapping[agentId ?? ''] || 'system';
 };
 
-const getCapabilityTypeLabel = (agentId: string) => {
+const getCapabilityTypeLabel = (agentId?: string) => {
   const labels: Record<string, string> = {
     goal: '需求收集',
     path: '路径规划',
@@ -596,7 +659,7 @@ const getCapabilityTypeLabel = (agentId: string) => {
   return labels[getCapabilityType(agentId)] || '系统调用';
 };
 
-const formatJson = (json: any) => {
+const formatJson = (json: unknown) => {
   if (!json) return '';
   try {
     return JSON.stringify(typeof json === 'string' ? JSON.parse(json) : json, null, 2);
@@ -605,7 +668,7 @@ const formatJson = (json: any) => {
   }
 };
 
-const formatTextBlock = (value: any) => {
+const formatTextBlock = (value: unknown) => {
   if (!value) {
     return '暂无';
   }
@@ -630,7 +693,7 @@ const formatTextBlock = (value: any) => {
   }
 };
 
-const parseMetadata = (metadata: any) => {
+const parseMetadata = (metadata: unknown): Record<string, unknown> => {
   if (!metadata) return {};
   if (typeof metadata === 'string') {
     try {
@@ -639,10 +702,10 @@ const parseMetadata = (metadata: any) => {
       return {};
     }
   }
-  return metadata;
+  return metadata as Record<string, unknown>;
 };
 
-const getModelSourceInfo = (log: any) => {
+const getModelSourceInfo = (log: AgentLogItem | null) => {
   const metadata = parseMetadata(log?.metadata);
   const usesUserProvider = !!metadata.usesUserProvider;
 
@@ -655,7 +718,7 @@ const getModelSourceInfo = (log: any) => {
   };
 };
 
-const toDiagnosticLog = (log: any) => ({
+const toDiagnosticLog = (log: AgentLogItem) => ({
   id: log.id,
   agentId: log.agentId,
   agentLabel: formatAgentId(log.agentId),

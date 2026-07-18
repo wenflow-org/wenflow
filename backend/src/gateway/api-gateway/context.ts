@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import type { RouteExecutionOverride } from './types';
 
 export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
 
@@ -14,6 +15,14 @@ export interface RequestContext {
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
   experimentId?: string;
   runId?: string;
+  promptRuntimeOverride?: {
+    systemPromptOverride?: string;
+    routingUserIdOverride?: string;
+    modelOverride?: string;
+    temperatureOverride?: number;
+    maxTokensOverride?: number;
+    routeOverride?: RouteExecutionOverride;
+  };
 }
 
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();

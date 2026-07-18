@@ -8290,6 +8290,10 @@ export namespace Prisma {
     chatModels: string | null
     reasoningModels: string | null
     lightModels: string | null
+    adminAccessMode: string | null
+    adminAllowedIps: string | null
+    allowPrivateNetwork: boolean | null
+    privateNetworkHosts: string | null
   }
 
   export type Platform_api_configsMaxAggregateOutputType = {
@@ -8311,6 +8315,10 @@ export namespace Prisma {
     chatModels: string | null
     reasoningModels: string | null
     lightModels: string | null
+    adminAccessMode: string | null
+    adminAllowedIps: string | null
+    allowPrivateNetwork: boolean | null
+    privateNetworkHosts: string | null
   }
 
   export type Platform_api_configsCountAggregateOutputType = {
@@ -8332,6 +8340,10 @@ export namespace Prisma {
     chatModels: number
     reasoningModels: number
     lightModels: number
+    adminAccessMode: number
+    adminAllowedIps: number
+    allowPrivateNetwork: number
+    privateNetworkHosts: number
     _all: number
   }
 
@@ -8365,6 +8377,10 @@ export namespace Prisma {
     chatModels?: true
     reasoningModels?: true
     lightModels?: true
+    adminAccessMode?: true
+    adminAllowedIps?: true
+    allowPrivateNetwork?: true
+    privateNetworkHosts?: true
   }
 
   export type Platform_api_configsMaxAggregateInputType = {
@@ -8386,6 +8402,10 @@ export namespace Prisma {
     chatModels?: true
     reasoningModels?: true
     lightModels?: true
+    adminAccessMode?: true
+    adminAllowedIps?: true
+    allowPrivateNetwork?: true
+    privateNetworkHosts?: true
   }
 
   export type Platform_api_configsCountAggregateInputType = {
@@ -8407,6 +8427,10 @@ export namespace Prisma {
     chatModels?: true
     reasoningModels?: true
     lightModels?: true
+    adminAccessMode?: true
+    adminAllowedIps?: true
+    allowPrivateNetwork?: true
+    privateNetworkHosts?: true
     _all?: true
   }
 
@@ -8515,6 +8539,10 @@ export namespace Prisma {
     chatModels: string | null
     reasoningModels: string | null
     lightModels: string | null
+    adminAccessMode: string | null
+    adminAllowedIps: string | null
+    allowPrivateNetwork: boolean | null
+    privateNetworkHosts: string | null
     _count: Platform_api_configsCountAggregateOutputType | null
     _avg: Platform_api_configsAvgAggregateOutputType | null
     _sum: Platform_api_configsSumAggregateOutputType | null
@@ -8555,6 +8583,10 @@ export namespace Prisma {
     chatModels?: boolean
     reasoningModels?: boolean
     lightModels?: boolean
+    adminAccessMode?: boolean
+    adminAllowedIps?: boolean
+    allowPrivateNetwork?: boolean
+    privateNetworkHosts?: boolean
   }, ExtArgs["result"]["platform_api_configs"]>
 
   export type platform_api_configsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -8576,6 +8608,10 @@ export namespace Prisma {
     chatModels?: boolean
     reasoningModels?: boolean
     lightModels?: boolean
+    adminAccessMode?: boolean
+    adminAllowedIps?: boolean
+    allowPrivateNetwork?: boolean
+    privateNetworkHosts?: boolean
   }, ExtArgs["result"]["platform_api_configs"]>
 
   export type platform_api_configsSelectScalar = {
@@ -8597,6 +8633,10 @@ export namespace Prisma {
     chatModels?: boolean
     reasoningModels?: boolean
     lightModels?: boolean
+    adminAccessMode?: boolean
+    adminAllowedIps?: boolean
+    allowPrivateNetwork?: boolean
+    privateNetworkHosts?: boolean
   }
 
 
@@ -8622,6 +8662,10 @@ export namespace Prisma {
       chatModels: string | null
       reasoningModels: string | null
       lightModels: string | null
+      adminAccessMode: string | null
+      adminAllowedIps: string | null
+      allowPrivateNetwork: boolean | null
+      privateNetworkHosts: string | null
     }, ExtArgs["result"]["platform_api_configs"]>
     composites: {}
   }
@@ -9033,6 +9077,10 @@ export namespace Prisma {
     readonly chatModels: FieldRef<"platform_api_configs", 'String'>
     readonly reasoningModels: FieldRef<"platform_api_configs", 'String'>
     readonly lightModels: FieldRef<"platform_api_configs", 'String'>
+    readonly adminAccessMode: FieldRef<"platform_api_configs", 'String'>
+    readonly adminAllowedIps: FieldRef<"platform_api_configs", 'String'>
+    readonly allowPrivateNetwork: FieldRef<"platform_api_configs", 'Boolean'>
+    readonly privateNetworkHosts: FieldRef<"platform_api_configs", 'String'>
   }
     
 
@@ -17459,7 +17507,11 @@ export namespace Prisma {
     lightEndpoint: 'lightEndpoint',
     chatModels: 'chatModels',
     reasoningModels: 'reasoningModels',
-    lightModels: 'lightModels'
+    lightModels: 'lightModels',
+    adminAccessMode: 'adminAccessMode',
+    adminAllowedIps: 'adminAllowedIps',
+    allowPrivateNetwork: 'allowPrivateNetwork',
+    privateNetworkHosts: 'privateNetworkHosts'
   };
 
   export type Platform_api_configsScalarFieldEnum = (typeof Platform_api_configsScalarFieldEnum)[keyof typeof Platform_api_configsScalarFieldEnum]
@@ -18330,6 +18382,10 @@ export namespace Prisma {
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningModels?: StringNullableFilter<"platform_api_configs"> | string | null
     lightModels?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAccessMode?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAllowedIps?: StringNullableFilter<"platform_api_configs"> | string | null
+    allowPrivateNetwork?: BoolNullableFilter<"platform_api_configs"> | boolean | null
+    privateNetworkHosts?: StringNullableFilter<"platform_api_configs"> | string | null
   }
 
   export type platform_api_configsOrderByWithRelationInput = {
@@ -18351,6 +18407,10 @@ export namespace Prisma {
     chatModels?: SortOrderInput | SortOrder
     reasoningModels?: SortOrderInput | SortOrder
     lightModels?: SortOrderInput | SortOrder
+    adminAccessMode?: SortOrderInput | SortOrder
+    adminAllowedIps?: SortOrderInput | SortOrder
+    allowPrivateNetwork?: SortOrderInput | SortOrder
+    privateNetworkHosts?: SortOrderInput | SortOrder
   }
 
   export type platform_api_configsWhereUniqueInput = Prisma.AtLeast<{
@@ -18375,6 +18435,10 @@ export namespace Prisma {
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningModels?: StringNullableFilter<"platform_api_configs"> | string | null
     lightModels?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAccessMode?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAllowedIps?: StringNullableFilter<"platform_api_configs"> | string | null
+    allowPrivateNetwork?: BoolNullableFilter<"platform_api_configs"> | boolean | null
+    privateNetworkHosts?: StringNullableFilter<"platform_api_configs"> | string | null
   }, "id">
 
   export type platform_api_configsOrderByWithAggregationInput = {
@@ -18396,6 +18460,10 @@ export namespace Prisma {
     chatModels?: SortOrderInput | SortOrder
     reasoningModels?: SortOrderInput | SortOrder
     lightModels?: SortOrderInput | SortOrder
+    adminAccessMode?: SortOrderInput | SortOrder
+    adminAllowedIps?: SortOrderInput | SortOrder
+    allowPrivateNetwork?: SortOrderInput | SortOrder
+    privateNetworkHosts?: SortOrderInput | SortOrder
     _count?: platform_api_configsCountOrderByAggregateInput
     _avg?: platform_api_configsAvgOrderByAggregateInput
     _max?: platform_api_configsMaxOrderByAggregateInput
@@ -18425,6 +18493,10 @@ export namespace Prisma {
     chatModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     reasoningModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     lightModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    adminAccessMode?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    adminAllowedIps?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    allowPrivateNetwork?: BoolNullableWithAggregatesFilter<"platform_api_configs"> | boolean | null
+    privateNetworkHosts?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
   }
 
   export type skill_model_configsWhereInput = {
@@ -19975,6 +20047,10 @@ export namespace Prisma {
     chatModels?: string | null
     reasoningModels?: string | null
     lightModels?: string | null
+    adminAccessMode?: string | null
+    adminAllowedIps?: string | null
+    allowPrivateNetwork?: boolean | null
+    privateNetworkHosts?: string | null
   }
 
   export type platform_api_configsUncheckedCreateInput = {
@@ -19996,6 +20072,10 @@ export namespace Prisma {
     chatModels?: string | null
     reasoningModels?: string | null
     lightModels?: string | null
+    adminAccessMode?: string | null
+    adminAllowedIps?: string | null
+    allowPrivateNetwork?: boolean | null
+    privateNetworkHosts?: string | null
   }
 
   export type platform_api_configsUpdateInput = {
@@ -20017,6 +20097,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type platform_api_configsUncheckedUpdateInput = {
@@ -20038,6 +20122,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type platform_api_configsCreateManyInput = {
@@ -20059,6 +20147,10 @@ export namespace Prisma {
     chatModels?: string | null
     reasoningModels?: string | null
     lightModels?: string | null
+    adminAccessMode?: string | null
+    adminAllowedIps?: string | null
+    allowPrivateNetwork?: boolean | null
+    privateNetworkHosts?: string | null
   }
 
   export type platform_api_configsUpdateManyMutationInput = {
@@ -20080,6 +20172,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type platform_api_configsUncheckedUpdateManyInput = {
@@ -20101,6 +20197,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type skill_model_configsCreateInput = {
@@ -21659,6 +21759,11 @@ export namespace Prisma {
     successRate?: SortOrder
   }
 
+  export type BoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
   export type platform_api_configsCountOrderByAggregateInput = {
     id?: SortOrder
     apiUrl?: SortOrder
@@ -21678,6 +21783,10 @@ export namespace Prisma {
     chatModels?: SortOrder
     reasoningModels?: SortOrder
     lightModels?: SortOrder
+    adminAccessMode?: SortOrder
+    adminAllowedIps?: SortOrder
+    allowPrivateNetwork?: SortOrder
+    privateNetworkHosts?: SortOrder
   }
 
   export type platform_api_configsAvgOrderByAggregateInput = {
@@ -21704,6 +21813,10 @@ export namespace Prisma {
     chatModels?: SortOrder
     reasoningModels?: SortOrder
     lightModels?: SortOrder
+    adminAccessMode?: SortOrder
+    adminAllowedIps?: SortOrder
+    allowPrivateNetwork?: SortOrder
+    privateNetworkHosts?: SortOrder
   }
 
   export type platform_api_configsMinOrderByAggregateInput = {
@@ -21725,11 +21838,23 @@ export namespace Prisma {
     chatModels?: SortOrder
     reasoningModels?: SortOrder
     lightModels?: SortOrder
+    adminAccessMode?: SortOrder
+    adminAllowedIps?: SortOrder
+    allowPrivateNetwork?: SortOrder
+    privateNetworkHosts?: SortOrder
   }
 
   export type platform_api_configsSumOrderByAggregateInput = {
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+  }
+
+  export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
   export type skill_model_configsCountOrderByAggregateInput = {
@@ -22234,6 +22359,10 @@ export namespace Prisma {
     set?: Date | string | null
   }
 
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
+  }
+
   export type NestedStringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[]
@@ -22465,6 +22594,19 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type NestedBoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
 

@@ -12,9 +12,9 @@ export const dialogueConceptExtractorDefinition: SkillDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
-      visibleDialogueContext: { type: 'object', description: '可见课堂对话', required: true },
-      classroomEventHistory: { type: 'object', description: '课堂事件历史' },
-      currentKnowledgeState: { type: 'object', description: '当前知识状态' }
+      visibleDialogueContext: { type: 'array', description: '可见课堂对话', required: true },
+      classroomEventHistory: { type: 'array', description: '课堂事件历史' },
+      currentKnowledgeState: { type: 'array', description: '当前知识状态' }
     }
   },
   outputSchema: {

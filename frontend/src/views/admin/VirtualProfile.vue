@@ -392,29 +392,142 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
 
+interface ProfileStory {
+  storyId?: string
+  id?: string
+  key?: string
+  index: number
+  title?: string
+  storyTitle?: string
+  storyOutline?: string
+  storyTriggerEvent?: string
+  visibleOpening?: string
+  sourceType?: string
+  pressurePoints?: string[]
+  stats?: { goalCount?: number; pathCount?: number; learnCount?: number; [key: string]: unknown }
+  [key: string]: unknown
+}
+
+interface SessionStoryContext {
+  storyId?: string
+  title?: string
+  storyTitle?: string
+  triggerEvent?: string
+  [key: string]: unknown
+}
+
+interface ProfileSessionBindings {
+  goalConversationId?: string
+  learningPathId?: string
+  teachingSessionId?: string
+  currentTaskId?: string
+  [key: string]: unknown
+}
+
+interface ProfileSessionRuntime {
+  bindings?: ProfileSessionBindings
+  story?: SessionStoryContext
+  stageStatus?: {
+    goal?: { stage?: string; learnerState?: unknown; [key: string]: unknown }
+    learning?: { currentTaskTitle?: string; currentMilestoneTitle?: string; [key: string]: unknown }
+    [key: string]: unknown
+  }
+  learnerState?: { goal?: unknown; [key: string]: unknown }
+  [key: string]: unknown
+}
+
+interface ProfileSession {
+  id: string
+  status?: string
+  currentStage?: string
+  roundCount?: number
+  updatedAt?: string
+  createdAt?: string
+  bindings?: ProfileSessionBindings
+  storyContext?: SessionStoryContext | null
+  runtime?: ProfileSessionRuntime
+  goalStage?: string | null
+  learnerState?: unknown
+  currentTaskTitle?: string | null
+  currentMilestoneTitle?: string | null
+  stageResults?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+interface VirtualLearnerDetail {
+  id: string
+  userName?: string
+  email?: string
+  simulationMode?: string
+  simulationTemperature?: number
+  personalityTraits?: { verbosity?: string; enthusiasm?: string; confusionStyle?: string; [key: string]: unknown }
+  notes?: string
+  profile?: {
+    age?: number
+    occupation?: string
+    education?: string
+    background?: string
+    corePersonality?: string
+    emotionalBaseline?: string
+    helpSeekingPattern?: string
+    adversarialPattern?: string
+    metacognitiveProfile?: string
+    cognitiveLoadTolerance?: string
+    memoryRepairPattern?: string
+    behavioralProfileSummary?: string
+    availableTime?: string
+    selfAwarenessPattern?: string
+    planningFollowThrough?: string
+    selfRegulationStyle?: string
+    overloadReaction?: string
+    storyPool?: ProfileStory[]
+    [key: string]: unknown
+  }
+  sessions?: ProfileSession[]
+  [key: string]: unknown
+}
+
+type ProjectionEntryKey = 'dashboard' | 'goal' | 'path' | 'learn'
+
+interface TestProjection {
+  recommendedEntry: ProjectionEntryKey
+  recommendedReason?: string
+  activeStory?: { storyId?: string; title?: string; [key: string]: unknown } | null
+  latestSession?: { id?: string; updatedAt?: string; [key: string]: unknown } | null
+  entries?: {
+    formal?: Partial<Record<ProjectionEntryKey, string>>
+    test?: Partial<Record<'goal' | 'path' | 'learn', string>>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  const message = (error as { message?: unknown } | null)?.message
+  return typeof message === 'string' && message ? message : fallback
+}
+
 const router = useRouter()
 const route = useRoute()
 const profileId = route.params.profileId as string
 const routeStoryId = computed(() => String(route.params.storyId || ''))
 const routeSessionId = computed(() => typeof route.query.sessionId === 'string' ? route.query.sessionId : '')
-const profileData = ref<any>(null)
-const sessions = ref<any[]>([])
-const storySummaries = ref<any[]>([])
+const profileData = ref<VirtualLearnerDetail | null>(null)
+const sessions = ref<ProfileSession[]>([])
+const storySummaries = ref<ProfileStory[]>([])
 const loading = ref(false)
 const editDialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 const storyFormRef = ref<FormInstance>()
 const selectedStoryKey = ref<string | null>(null)
-const draftProfileLoading = ref(false)
 const draftStoriesLoading = ref(false)
-const draftProfile = ref<any | null>(null)
 const storyEditDialogVisible = ref(false)
 const storySubmitting = ref(false)
 const editingStoryIndex = ref<number | null>(null)
 const projectionDialogVisible = ref(false)
 const projectionLoading = ref(false)
-const testProjection = ref<any | null>(null)
+const testProjection = ref<TestProjection | null>(null)
 const activeTab = ref('overview')
 
 const projectionEntryLabelMap: Record<string, string> = {
@@ -495,17 +608,12 @@ const storyPool = computed(() => {
   return Array.isArray(pool) ? pool : []
 })
 
-const selectedStorySummary = computed(() => {
-  if (!selectedStoryKey.value) return storySummaries.value[0] || null
-  return storySummaries.value.find((story: any, index: number) => getStoryKey(story, index) === selectedStoryKey.value) || storySummaries.value[0] || null
-})
-
 const highlightedSessionId = computed(() => routeSessionId.value)
 
 const stageProjection = computed(() => ({
-  goal: sessions.value.filter((item: any) => item.bindings?.goalConversationId).length,
-  path: sessions.value.filter((item: any) => item.bindings?.learningPathId).length,
-  learning: sessions.value.filter((item: any) => item.bindings?.teachingSessionId || item.bindings?.currentTaskId).length,
+  goal: sessions.value.filter((item) => item.bindings?.goalConversationId).length,
+  path: sessions.value.filter((item) => item.bindings?.learningPathId).length,
+  learning: sessions.value.filter((item) => item.bindings?.teachingSessionId || item.bindings?.currentTaskId).length,
 }))
 
 const latestProjectionSession = computed(() => sessions.value[0] || null)
@@ -564,7 +672,7 @@ const personaFactCards = computed(() => [
 ])
 
 const traitSummaryCards = computed(() => {
-  const p = profileData.value?.profile || {}
+  const p: NonNullable<VirtualLearnerDetail['profile']> = profileData.value?.profile || {}
   return [
     {
       label: '核心人格',
@@ -610,11 +718,6 @@ const profileRawJson = computed(() => {
   const profile = profileData.value?.profile
   if (!profile) return '{}'
   return JSON.stringify(profile, null, 2)
-})
-
-const projectionSessionLabel = computed(() => {
-  if (!testProjection.value?.latestSession) return '未运行'
-  return `${getSessionStatusLabel(testProjection.value.latestSession.status)} · ${getSessionStageLabel(testProjection.value.latestSession.currentStage)}`
 })
 
 const projectionSessionMeta = computed(() => {
@@ -667,7 +770,7 @@ const formatRelativeTime = (time: string | null | undefined) => {
   return formatTime(time)
 }
 
-const getSessionStatusType = (status: string) => {
+const getSessionStatusType = (status: string | undefined) => {
   switch (status) {
     case 'running': return 'success'
     case 'completed': return 'info'
@@ -676,7 +779,7 @@ const getSessionStatusType = (status: string) => {
   }
 }
 
-const getSessionStatusLabel = (status: string) => {
+const getSessionStatusLabel = (status: string | undefined) => {
   switch (status) {
     case 'created': return '已创建'
     case 'running': return '运行中'
@@ -686,7 +789,7 @@ const getSessionStatusLabel = (status: string) => {
   }
 }
 
-const getSessionStageLabel = (stage: string) => {
+const getSessionStageLabel = (stage: string | undefined) => {
   switch (stage) {
     case 'goal': return 'Goal'
     case 'path': return 'Path'
@@ -695,28 +798,30 @@ const getSessionStageLabel = (stage: string) => {
   }
 }
 
+// 与后端数据模型对齐：story.sourceType 由 virtual-learner-scenario-designer 写入，
+// 实际存储枚举为 work / life / study / self_management（见 backend/src/skills/virtual-learner-scenario-designer/index.ts）
 const getStorySourceLabel = (sourceType?: string) => {
   switch (sourceType) {
-    case 'generated':
-      return 'AI 生成'
-    case 'manual':
-      return '手动创建'
-    case 'imported':
-      return '外部导入'
+    case 'work':
+      return '工作'
+    case 'life':
+      return '生活'
+    case 'study':
+      return '学习'
+    case 'self_management':
+      return '自我管理'
     default:
       return sourceType || '未知来源'
   }
 }
 
-const shortId = (value?: string | null) => value ? value.slice(0, 8) : '--'
+const getStoryKey = (story: ProfileStory | null | undefined, index: number) => story?.id || `story-${index}`
 
-const getStoryKey = (story: any, index: number) => story?.id || `story-${index}`
-
-const selectStory = (story: any, index: number) => {
+const selectStory = (story: ProfileStory, index: number) => {
   selectedStoryKey.value = getStoryKey(story, index)
 }
 
-const openStoryOverview = (story: any) => {
+const openStoryOverview = (story: ProfileStory) => {
   const targetId = String(story?.storyId || story?.id || story?.key || '')
   if (!targetId) {
     ElMessage.warning('这个故事暂时没有可用标识')
@@ -733,25 +838,6 @@ const openStoryOverviewById = (storyId: string) => {
   router.push(`/admin/virtual-learners/${profileId}/stories/${storyId}`)
 }
 
-const openStoryEditDialog = (story: any, index: number) => {
-  editingStoryIndex.value = index
-  storyFormData.value = {
-    title: story?.storyTitle || story?.title || '',
-    storyOutline: story?.storyOutline || '',
-    storyTriggerEvent: story?.storyTriggerEvent || story?.triggerEvent || '',
-    visibleOpening: story?.visibleOpening || '',
-    pressurePointsText: Array.isArray(story?.pressurePoints) ? story.pressurePoints.join('\n') : '',
-    problemKnowledge: {
-      domainFamiliarity: story?.problemKnowledge?.domainFamiliarity || 'low',
-      knownConceptsText: Array.isArray(story?.problemKnowledge?.knownConcepts) ? story.problemKnowledge.knownConcepts.join('\n') : '',
-      struggleConceptsText: Array.isArray(story?.problemKnowledge?.struggleConcepts) ? story.problemKnowledge.struggleConcepts.join('\n') : '',
-      selfAssessment: story?.problemKnowledge?.selfAssessment || '',
-      hiddenGapsText: Array.isArray(story?.problemKnowledge?.hiddenGaps) ? story.problemKnowledge.hiddenGaps.join('\n') : ''
-    }
-  }
-  storyEditDialogVisible.value = true
-}
-
 const parsePressurePoints = (value: string) => {
   return value
     .split(/\r?\n|[;,，；]/)
@@ -759,12 +845,12 @@ const parsePressurePoints = (value: string) => {
     .filter((item, index, list) => !!item && list.indexOf(item) === index)
 }
 
-const normalizeSession = (session: any) => {
-  const runtime = session?.runtime || {}
-  const bindings = runtime.bindings || session?.bindings || {}
-  const goalRuntime = runtime.stageStatus?.goal || {}
-  const learningRuntime = runtime.stageStatus?.learning || {}
-  const learnerStateRuntime = runtime.learnerState || {}
+const normalizeSession = (session: ProfileSession): ProfileSession => {
+  const runtime: ProfileSessionRuntime = session?.runtime || {}
+  const bindings: ProfileSessionBindings = runtime.bindings || session?.bindings || {}
+  const goalRuntime: { stage?: string; learnerState?: unknown; [key: string]: unknown } = runtime.stageStatus?.goal || {}
+  const learningRuntime: { currentTaskTitle?: string; currentMilestoneTitle?: string; [key: string]: unknown } = runtime.stageStatus?.learning || {}
+  const learnerStateRuntime: { goal?: unknown; [key: string]: unknown } = runtime.learnerState || {}
 
   return {
     ...session,
@@ -779,7 +865,7 @@ const normalizeSession = (session: any) => {
   }
 }
 
-const normalizeSessions = (items: any[]) => {
+const normalizeSessions = (items: ProfileSession[]) => {
   return Array.isArray(items) ? items.map(normalizeSession) : []
 }
 
@@ -796,7 +882,7 @@ const syncSelectedStoryFromRoute = () => {
     return
   }
 
-  const matched = storySummaries.value.find((story: any, index: number) => {
+  const matched = storySummaries.value.find((story, index: number) => {
     const candidateId = String(story?.storyId || story?.id || story?.key || '')
     return candidateId === routeStoryId.value || getStoryKey(story, index) === routeStoryId.value
   })
@@ -824,27 +910,10 @@ const loadProfile = async () => {
     } else {
       ElMessage.error(profileRes.data?.error || '加载失败')
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '加载失败'))
   } finally {
     loading.value = false
-  }
-}
-
-const generateProfileDraft = async () => {
-  draftProfileLoading.value = true
-  try {
-    const res = await adminApi.draftVirtualLearnerProfile(profileId)
-    if (res.data?.success) {
-      draftProfile.value = res.data.data?.generatedProfile || null
-      ElMessage.success('画像草稿已生成')
-    } else {
-      ElMessage.error(res.data?.error || '画像草稿生成失败')
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '画像草稿生成失败')
-  } finally {
-    draftProfileLoading.value = false
   }
 }
 
@@ -856,7 +925,7 @@ const generateStoryDraft = async () => {
       ElMessage.success('故事已生成并自动保存')
       await loadProfile()
       const lastStory = [...storyPool.value]
-        .map((story: any, index: number) => ({ story, index }))
+        .map((story, index: number) => ({ story, index }))
         .at(-1)
 
       if (lastStory) {
@@ -865,8 +934,8 @@ const generateStoryDraft = async () => {
     } else {
       ElMessage.error(res.data?.error || '故事生成失败')
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '故事生成失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '故事生成失败'))
   } finally {
     draftStoriesLoading.value = false
   }
@@ -879,7 +948,9 @@ const saveStoryEdits = async () => {
 
   storySubmitting.value = true
   try {
-    const res = await adminApi.updateStoryStatus(profileId, editingStoryIndex.value, {
+    // problemKnowledge 未声明在 updateStoryStatus 的 payload 类型中，但后端接口支持该字段；
+    // 经中间变量传入以避免对象字面量的超额属性检查（不改变提交内容）
+    const payload = {
       title: storyFormData.value.title,
       storyOutline: storyFormData.value.storyOutline,
       storyTriggerEvent: storyFormData.value.storyTriggerEvent,
@@ -892,7 +963,8 @@ const saveStoryEdits = async () => {
         selfAssessment: storyFormData.value.problemKnowledge.selfAssessment.trim(),
         hiddenGaps: parsePressurePoints(storyFormData.value.problemKnowledge.hiddenGapsText)
       }
-    })
+    }
+    const res = await adminApi.updateStoryStatus(profileId, editingStoryIndex.value, payload)
 
     if (!res.data?.success) {
       throw new Error(res.data?.error || '保存失败')
@@ -901,14 +973,14 @@ const saveStoryEdits = async () => {
     ElMessage.success('故事已更新')
     storyEditDialogVisible.value = false
     await loadProfile()
-  } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '保存失败'))
   } finally {
     storySubmitting.value = false
   }
 }
 
-const deleteStory = async (story: any, index: number) => {
+const deleteStory = async (_story: ProfileStory, index: number) => {
   try {
     await ElMessageBox.confirm('确定删除此故事？', '确认删除', { type: 'warning' })
     const res = await adminApi.deleteStory(profileId, index)
@@ -918,45 +990,14 @@ const deleteStory = async (story: any, index: number) => {
     } else {
       ElMessage.error(res.data?.error || '删除失败')
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(getErrorMessage(error, '删除失败'))
     }
   }
 }
 
-const applyProfileDraft = async () => {
-  if (!draftProfile.value || !profileData.value) return
-  submitting.value = true
-  try {
-    const payload = {
-      learningGoal: profileData.value.learningGoal,
-      profile: {
-        ...(profileData.value.profile || {}),
-        ...draftProfile.value,
-        storyPool: profileData.value.profile?.storyPool || []
-      },
-      personalityTraits: {
-        ...(profileData.value.personalityTraits || {}),
-        ...(draftProfile.value.personalityTraits || {})
-      }
-    }
-    const res = await adminApi.updateVirtualLearner(profileId, payload)
-    if (res.data?.success) {
-      draftProfile.value = null
-      ElMessage.success('画像草稿已应用')
-      await loadProfile()
-    } else {
-      ElMessage.error(res.data?.error || '应用画像草稿失败')
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '应用画像草稿失败')
-  } finally {
-    submitting.value = false
-  }
-}
-
-const handleStartSession = async (story?: any, storyIndex?: number) => {
+const handleStartSession = async (story?: ProfileStory, storyIndex?: number) => {
   try {
     const payload = story ? { storyId: story.id, storyIndex } : undefined
     const res = await adminApi.startVirtualSession(profileId, payload)
@@ -964,8 +1005,8 @@ const handleStartSession = async (story?: any, storyIndex?: number) => {
       ElMessage.success('会话已创建，进入诊断控制台')
       router.push(`/admin/virtual-session/${res.data.data?.id}`)
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '创建会话失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '创建会话失败'))
   }
 }
 
@@ -973,7 +1014,7 @@ const openSessionInspector = (sessionId: string) => {
   router.push(`/admin/virtual-session/${sessionId}`)
 }
 
-const setActiveSession = (session: any) => {
+const setActiveSession = (session: ProfileSession) => {
   if (!session?.id) return
   openSessionInspector(session.id)
 }
@@ -1001,8 +1042,8 @@ const openProjectionDialog = async () => {
 
     testProjection.value = res.data.data || null
     projectionDialogVisible.value = true
-  } catch (error: any) {
-    ElMessage.error(error.message || '获取投影入口失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '获取投影入口失败'))
   } finally {
     projectionLoading.value = false
   }
@@ -1040,7 +1081,7 @@ const ensureProjectionToken = async () => {
   })
 }
 
-const openProjectionEntry = async (entry: 'dashboard' | 'goal' | 'path' | 'learn') => {
+const openProjectionEntry = async (entry: ProjectionEntryKey) => {
   const target = testProjection.value?.entries?.formal?.[entry]
   if (!target) {
     ElMessage.info(`当前没有可打开的 ${projectionEntryLabelMap[entry]} 入口`)
@@ -1050,8 +1091,8 @@ const openProjectionEntry = async (entry: 'dashboard' | 'goal' | 'path' | 'learn
   try {
     await ensureProjectionToken()
     window.open(target, '_blank')
-  } catch (error: any) {
-    ElMessage.error(error.message || '打开投影入口失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '打开投影入口失败'))
   }
 }
 
@@ -1065,34 +1106,9 @@ const openTestDebugEntry = (entry: 'goal' | 'path' | 'learn') => {
   window.open(target, '_blank')
 }
 
-const openDebugGoal = (session?: any | null) => {
+const openDebugGoal = (session?: ProfileSession | null) => {
   if (!session?.bindings?.goalConversationId) return
   router.push(`/admin/test/goal-full/${session.bindings.goalConversationId}?virtualSessionId=${session.id}&viewMode=debug`)
-}
-
-const openDebugPathFor = (session?: any | null) => {
-  if (!session?.bindings?.learningPathId) return
-  router.push(`/admin/test/learning-path/${session.bindings.learningPathId}?virtualSessionId=${session.id}&viewMode=debug`)
-}
-
-const openDebugLearnFor = (session?: any | null) => {
-  if (!session?.bindings?.currentTaskId) return
-  router.push(`/admin/test/learn/${session.bindings.currentTaskId}?virtualSessionId=${session.id}&viewMode=debug`)
-}
-
-const openFormalGoalFor = (session?: any | null) => {
-  if (!session?.bindings?.goalConversationId) return
-  window.open(`/goal-conversation/${session.bindings.goalConversationId}?virtualSessionId=${session.id}&viewMode=formal`, '_blank')
-}
-
-const openFormalPathFor = (session?: any | null) => {
-  if (!session?.bindings?.learningPathId) return
-  window.open(`/learning-path/${session.bindings.learningPathId}?virtualSessionId=${session.id}&viewMode=formal`, '_blank')
-}
-
-const openFormalLearnFor = (session?: any | null) => {
-  if (!session?.bindings?.currentTaskId) return
-  window.open(`/learn/${session.bindings.currentTaskId}?virtualSessionId=${session.id}&viewMode=formal`, '_blank')
 }
 
 const deleteSession = async (sessionId: string) => {
@@ -1101,11 +1117,11 @@ const deleteSession = async (sessionId: string) => {
     const res = await adminApi.deleteVirtualSession(sessionId)
     if (res.data?.success) {
       ElMessage.success('会话已删除')
-      sessions.value = sessions.value.filter((s: any) => s.id !== sessionId)
+      sessions.value = sessions.value.filter((s) => s.id !== sessionId)
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(getErrorMessage(error, '删除失败'))
     }
   }
 }
@@ -1154,8 +1170,8 @@ const handleUpdateProfile = async () => {
       editDialogVisible.value = false
       loadProfile()
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '更新失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '更新失败'))
   } finally {
     submitting.value = false
   }

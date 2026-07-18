@@ -1,12 +1,12 @@
 <template>
   <div class="admin-page api-config-page">
     <AdminPageHeader
-      title="模型接入与路由"
+      title="连接与安全"
       :icon="Setting"
     >
       <template #actions>
         <el-button class="topbar-btn" @click="loadConfig" :loading="loading">刷新配置</el-button>
-        <el-button type="primary" class="topbar-btn topbar-btn--primary" @click="saveConfig" :loading="saving">保存变更</el-button>
+        <el-button type="primary" class="topbar-btn topbar-btn--primary" @click="saveAll" :loading="saving">保存变更</el-button>
       </template>
     </AdminPageHeader>
 
@@ -18,6 +18,101 @@
       <div class="summary-strip__item">
         <span>密钥</span>
         <strong>{{ keyStateLabel }}</strong>
+      </div>
+      <div class="summary-strip__item">
+        <span>Admin 范围</span>
+        <strong>{{ adminAccessModeLabel }}</strong>
+      </div>
+      <div class="summary-strip__item">
+        <span>私有网络</span>
+        <strong>{{ networkPolicy.allowPrivateNetwork ? '允许' : '精确放行' }}</strong>
+      </div>
+    </section>
+
+    <section class="flow-section security-section">
+      <div class="flow-section__head flow-section__head--split">
+        <div>
+          <h2>网络边界</h2>
+          <p>控制后台访问来源，以及模型、MCP 和内容提取是否可以连接本机或局域网服务。</p>
+        </div>
+        <span class="head-badge head-badge--info">{{ policySourceLabel }}</span>
+      </div>
+
+      <div class="policy-grid">
+        <article class="policy-panel">
+          <div class="policy-panel__head">
+            <div>
+              <h3>Admin 访问范围</h3>
+              <p>默认允许服务器本机和同一局域网，公网来源会被拒绝。</p>
+            </div>
+          </div>
+
+          <el-radio-group v-model="networkPolicy.adminAccessMode" class="mode-grid">
+            <el-radio-button value="loopback">
+              <span class="mode-option"><strong>仅本机</strong><small>127.0.0.1 / ::1</small></span>
+            </el-radio-button>
+            <el-radio-button value="private">
+              <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐用于开发和内网部署</small></span>
+            </el-radio-button>
+            <el-radio-button value="any">
+              <span class="mode-option"><strong>不限制来源</strong><small>仅配合 VPN、网关或防火墙</small></span>
+            </el-radio-button>
+          </el-radio-group>
+
+          <el-form label-position="top" class="config-form config-form--tight">
+            <el-form-item label="额外允许的客户端 IP">
+              <el-select
+                v-model="networkPolicy.adminAllowedIps"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                placeholder="例如 203.0.113.10"
+              />
+              <span class="field-help">适合 VPN 出口或固定运维终端，填写精确 IP，不填写网段。</span>
+            </el-form-item>
+          </el-form>
+        </article>
+
+        <article class="policy-panel policy-panel--network">
+          <div class="policy-panel__head policy-panel__head--switch">
+            <div>
+              <h3>允许私有网络服务</h3>
+              <p>用于 Ollama、本地模型、局域网 MCP 或内部内容服务。</p>
+            </div>
+            <el-switch
+              v-model="networkPolicy.allowPrivateNetwork"
+              inline-prompt
+              active-text="开启"
+              inactive-text="关闭"
+              size="large"
+            />
+          </div>
+
+          <div class="policy-state" :class="networkPolicy.allowPrivateNetwork ? 'policy-state--open' : 'policy-state--guarded'">
+            <strong>{{ networkPolicy.allowPrivateNetwork ? '开发模式：允许本机与局域网目标' : '受控模式：仅允许下方白名单' }}</strong>
+            <span>Link-local、云元数据、组播和保留地址始终禁止。</span>
+          </div>
+
+          <el-form label-position="top" class="config-form config-form--tight">
+            <el-form-item label="私有服务 Host / IP 白名单">
+              <el-select
+                v-model="networkPolicy.privateNetworkHosts"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                :disabled="networkPolicy.allowPrivateNetwork"
+                placeholder="例如 192.168.31.26 或 ollama.local"
+              />
+              <span class="field-help">关闭总开关时，仅这些精确 Host 或 IP 可以作为模型与 MCP 地址。</span>
+            </el-form-item>
+          </el-form>
+        </article>
+      </div>
+
+      <div v-if="networkPolicy.adminAccessMode === 'any'" class="issue-row issue-row--danger">
+        Admin 已允许公网来源。请确认前方存在 VPN、访问网关或防火墙白名单。
       </div>
     </section>
 
@@ -198,6 +293,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Setting } from '@element-plus/icons-vue';
+import { ElMessageBox } from 'element-plus';
 import { adminApiConfigApi } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
@@ -221,13 +317,20 @@ const modelTestResult = ref<{
 
 const form = reactive({
   apiUrl: '',
-  apiKey: '',
   apiKeyInput: '',
   apiKeyConfigured: false,
   availableModels: [] as string[],
   defaultModel: '',
   defaultReasoningModel: '',
   defaultEvaluationModel: ''
+});
+
+const networkPolicy = reactive({
+  adminAccessMode: 'private' as 'loopback' | 'private' | 'any',
+  adminAllowedIps: [] as string[],
+  allowPrivateNetwork: true,
+  privateNetworkHosts: [] as string[],
+  source: 'environment' as 'database' | 'environment'
 });
 
 const modelTestForm = reactive({
@@ -261,16 +364,21 @@ const modelTestTone = computed<'info' | 'success' | 'warning' | 'danger' | 'neut
 })
 
 const keyStateLabel = computed(() => form.apiKeyConfigured ? '已配置' : '未配置')
-const routeFillCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
 const lastFetchLabel = computed(() => lastFetchAt.value || '--')
+const adminAccessModeLabel = computed(() => ({
+  loopback: '仅本机',
+  private: '本机 + 局域网',
+  any: '不限制来源'
+}[networkPolicy.adminAccessMode]))
+const policySourceLabel = computed(() => networkPolicy.source === 'database' ? '平台策略 · 热生效' : '环境默认值')
 
 async function loadConfig() {
   loading.value = true;
   try {
-    const response: any = await adminApiConfigApi.getConfig();
+    const response = await adminApiConfigApi.getConfig();
     const data = response.data.data;
     form.apiUrl = data.apiUrl || '';
-    form.apiKey = data.apiKey || '';
+    // 完整密钥不再写入内存（发送只用 apiKeyInput），避免敏感数据无谓滞留
     form.apiKeyConfigured = !!data.apiKeyConfigured;
     form.apiKeyInput = '';
     form.availableModels = data.availableModels || [];
@@ -281,28 +389,79 @@ async function loadConfig() {
     lastFetchAt.value = data.lastCheckedAt ? new Date(data.lastCheckedAt).toLocaleString() : '';
     modelTestForm.model = data.defaultModel || modelTestForm.model || '';
     modelOptions.value = Array.from(new Set(form.availableModels.filter(Boolean)));
-  } catch (error: any) {
-    toast.error(error.message || '加载 API 配置失败');
+    const policy = data.networkPolicy || {};
+    networkPolicy.adminAccessMode = policy.adminAccessMode || 'private';
+    networkPolicy.adminAllowedIps = Array.isArray(policy.adminAllowedIps) ? policy.adminAllowedIps : [];
+    networkPolicy.allowPrivateNetwork = policy.allowPrivateNetwork !== false;
+    networkPolicy.privateNetworkHosts = Array.isArray(policy.privateNetworkHosts) ? policy.privateNetworkHosts : [];
+    networkPolicy.source = policy.source === 'database' ? 'database' : 'environment';
+  } catch (error) {
+    const message = (error as { message?: unknown } | null)?.message;
+    toast.error(typeof message === 'string' && message ? message : '加载 API 配置失败');
   } finally {
     loading.value = false;
   }
 }
 
-async function saveConfig() {
-  saving.value = true;
-  try {
-    await adminApiConfigApi.updateConfig({
+async function saveConnectionConfig() {
+  await adminApiConfigApi.updateConfig({
       apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput,
       availableModels: form.availableModels,
       defaultModel: form.defaultModel,
       defaultReasoningModel: form.defaultReasoningModel,
       defaultEvaluationModel: form.defaultEvaluationModel
-    });
-    toast.success('API 配置已保存');
+  });
+}
+
+async function saveNetworkPolicy() {
+  await adminApiConfigApi.updateNetworkPolicy({
+    adminAccessMode: networkPolicy.adminAccessMode,
+    adminAllowedIps: networkPolicy.adminAllowedIps,
+    allowPrivateNetwork: networkPolicy.allowPrivateNetwork,
+    privateNetworkHosts: networkPolicy.privateNetworkHosts
+  });
+}
+
+function isLanBrowserHost() {
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+}
+
+async function saveAll() {
+  // 高风险确认：开放公网访问比"仅本机"风险更高，必须二次确认
+  if (networkPolicy.adminAccessMode === 'any') {
+    try {
+      await ElMessageBox.confirm(
+        '你正在将 Admin 后台开放到公网/任意来源访问。任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
+        '高风险操作确认',
+        { confirmButtonText: '确认开放公网访问', cancelButtonText: '返回修改', type: 'error' }
+      );
+    } catch {
+      return;
+    }
+  }
+
+  if (networkPolicy.adminAccessMode === 'loopback' && isLanBrowserHost()) {
+    try {
+      await ElMessageBox.confirm(
+        '当前通过局域网地址访问。保存“仅本机”后，这个浏览器将无法继续进入后台。',
+        '确认收紧 Admin 范围',
+        { confirmButtonText: '仍然保存', cancelButtonText: '返回修改', type: 'warning' }
+      );
+    } catch {
+      return;
+    }
+  }
+
+  saving.value = true;
+  try {
+    await saveConnectionConfig();
+    await saveNetworkPolicy();
+    toast.success('连接与安全配置已保存');
     await loadConfig();
   } catch (error: any) {
-    toast.error(error.message || '保存 API 配置失败');
+    toast.error(error.response?.data?.error || error.message || '保存配置失败');
   } finally {
     saving.value = false;
   }
@@ -323,14 +482,14 @@ async function fetchModels() {
   testing.value = true;
   testResult.value = null;
   try {
-    const response: any = await adminApiConfigApi.testConnection({
+    const response = await adminApiConfigApi.testConnection({
       apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput
     });
 
     const models = response.data?.data?.models || response.data?.data?.availableModels || [];
     if (Array.isArray(models) && models.length > 0) {
-      mergeModelOptions(models.map((m: any) => String(m)));
+      mergeModelOptions(models.map((m: unknown) => String(m)));
     }
 
     lastFetchAt.value = new Date().toLocaleString();
@@ -364,7 +523,7 @@ async function runModelTest() {
   modelTestResult.value = null;
 
   try {
-    const response: any = await adminApiConfigApi.testModel({
+    const response = await adminApiConfigApi.testModel({
       apiUrl: form.apiUrl,
       apiKey: form.apiKeyInput,
       model: modelTestForm.model.trim(),
@@ -407,7 +566,7 @@ onMounted(() => {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   border: 1px solid rgba(223, 231, 243, 0.92);
   border-radius: 20px;
@@ -523,6 +682,109 @@ onMounted(() => {
 
 .topbar-btn {
   min-height: 34px;
+}
+
+.security-section {
+  padding-top: 22px;
+}
+
+.policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.policy-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(211, 221, 237, 0.94);
+  border-radius: 18px;
+  background: rgba(250, 252, 255, 0.92);
+}
+
+.policy-panel--network {
+  background: linear-gradient(145deg, rgba(246, 250, 255, 0.96), rgba(250, 255, 252, 0.92));
+}
+
+.policy-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.policy-panel__head h3 {
+  margin: 0;
+  color: #22344d;
+  font-size: 0.98rem;
+}
+
+.policy-panel__head p {
+  margin: 6px 0 0;
+  color: #7085a6;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
+.mode-option {
+  display: grid;
+  gap: 4px;
+  padding: 6px 0;
+  white-space: normal;
+}
+
+.mode-option strong {
+  font-size: 12px;
+}
+
+.mode-option small,
+.field-help {
+  color: #7b8ba3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.field-help {
+  display: block;
+  margin-top: 7px;
+}
+
+.policy-state {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+}
+
+.policy-state span {
+  opacity: 0.78;
+}
+
+.policy-state--open {
+  color: #206b47;
+  background: rgba(228, 249, 237, 0.84);
+  border: 1px solid rgba(67, 193, 120, 0.2);
+}
+
+.policy-state--guarded {
+  color: #5d6880;
+  background: rgba(239, 244, 252, 0.86);
+  border: 1px solid rgba(120, 145, 183, 0.18);
+}
+
+:deep(.mode-grid .el-radio-button__inner) {
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px;
 }
 
 .topbar-btn--primary {
@@ -720,6 +982,10 @@ onMounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .policy-grid {
+    grid-template-columns: 1fr;
+  }
+
   .terminal-meta-grid {
     grid-template-columns: 1fr;
   }
@@ -736,6 +1002,10 @@ onMounted(() => {
   }
 
   .field-grid--two {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-grid {
     grid-template-columns: 1fr;
   }
 }

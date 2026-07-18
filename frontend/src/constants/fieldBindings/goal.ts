@@ -679,7 +679,7 @@ export const GOAL_FIELD_ROUTINGS: FieldRouting[] = [
     notes: 'requirement 视角依然 hidden；但作为 visibleSummary.scenario 兜底交给 path',
   },
   {
-    orchestratorId: 'requirement',
+    agentId: 'requirement',
     fieldId: 'understanding.learning_signal',
     render: 'hidden',
     handoff: ['path'],
@@ -688,7 +688,7 @@ export const GOAL_FIELD_ROUTINGS: FieldRouting[] = [
     visibilityPreset: 'agent-internal',
   },
   {
-    orchestratorId: 'requirement',
+    agentId: 'requirement',
     fieldId: 'understanding.real_problem',
     render: 'visible',
     handoff: ['path'],
@@ -697,7 +697,7 @@ export const GOAL_FIELD_ROUTINGS: FieldRouting[] = [
     notes: 'path description 的最终兜底',
   },
   {
-    orchestratorId: 'requirement',
+    agentId: 'requirement',
     fieldId: 'confirmedProposal.key_stages',
     render: 'visible',
     handoff: ['path'],

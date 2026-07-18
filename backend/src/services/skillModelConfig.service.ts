@@ -4,6 +4,9 @@ import { getGateway } from '../gateway';
 import { getAPIGateway } from '../gateway/api-gateway';
 import { randomUUID as uuidv4 } from 'crypto';
 import { isExtraCapabilitySkill } from './skill-component-catalog';
+import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
+
+const SECRET_CONTEXT = 'system.skill_model_configs.apiKey';
 
 export interface SkillModelConfig {
   skillId: string;
@@ -75,6 +78,7 @@ class SkillModelConfigService {
 
     return {
       ...persisted,
+      apiKey: decryptSecret(persisted.apiKey, SECRET_CONTEXT),
       displayName: defaultConfig.displayName,
       status: defaultConfig.status,
       lastCalledAt: defaultConfig.lastCalledAt,
@@ -102,6 +106,7 @@ class SkillModelConfigService {
 
         return {
           ...persisted,
+          apiKey: decryptSecret(persisted.apiKey, SECRET_CONTEXT),
           displayName,
           status,
           lastCalledAt: skill.lastCalledAt || null,
@@ -118,6 +123,7 @@ class SkillModelConfigService {
         ...mergedConfigs,
         ...missingConfigs.map((config) => ({
           ...config,
+          apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT),
           lastCalledAt: null,
           thinkingMode: config.thinkingMode || 'default',
           reasoningEffort: config.reasoningEffort || 'default',
@@ -140,6 +146,7 @@ class SkillModelConfigService {
       }
       return {
         ...config,
+        apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT),
         thinkingMode: config.thinkingMode || 'default',
         reasoningEffort: config.reasoningEffort || 'default',
       };
@@ -151,13 +158,16 @@ class SkillModelConfigService {
 
   async upsert(skillId: string, config: Partial<SkillModelConfig>): Promise<SkillModelConfig> {
     try {
+      const data = config.apiKey === undefined
+        ? config
+        : { ...config, apiKey: encryptSecret(config.apiKey, SECRET_CONTEXT) };
       const result = await systemPrisma.skill_model_configs.upsert({
         where: { skillId },
-        update: { ...config, updatedAt: new Date() },
-        create: { id: uuidv4(), skillId, ...config, updatedAt: new Date() },
+        update: { ...data, updatedAt: new Date() },
+        create: { id: uuidv4(), skillId, ...data, updatedAt: new Date() },
       });
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
-      return result;
+      return { ...result, apiKey: decryptSecret(result.apiKey, SECRET_CONTEXT) };
     } catch (error) {
       logger.error(`Failed to upsert skill config: ${skillId}`, error);
       throw error;

@@ -5,6 +5,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { safeHttpRequest } from '../../utils/safe-http';
+import { readFileWithinRoots } from '../../utils/secure-file-reader';
 
 export interface IMcpServerConfig {
   id: string;
@@ -99,7 +101,7 @@ export class McpGateway {
       throw new Error(`MCP 配置文件不存在: ${filePath}`);
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = fs.readFileSync(filePath, 'utf-8').replace(/^\uFEFF/, '');
     const config: IMcpConfig = JSON.parse(content);
 
     // 环境变量替换
@@ -165,25 +167,26 @@ export class McpGateway {
     const url = `${server.endpoint}/chat/completions`;
 
     try {
-      const response = await fetch(url, {
+      const response = await safeHttpRequest<IChatCompletionResponse>(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${server.apiKey}`,
         },
-        body: JSON.stringify({
+        body: {
           model: request.model || server.defaultModel,
           messages: request.messages,
           temperature: request.temperature ?? server.config.temperature,
           max_tokens: request.max_tokens ?? server.config.maxTokens,
-        }),
+        },
+        timeoutMs: server.config.timeout,
       });
 
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         throw new Error(`MCP 服务器错误: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json() as IChatCompletionResponse;
+      const data = response.data;
       
       // 验证响应格式
       if (!data.choices || !Array.isArray(data.choices)) {
@@ -222,20 +225,21 @@ export class McpGateway {
     }
 
     // 远程工具调用
-    const response = await fetch(tool.endpoint, {
+    const response = await safeHttpRequest<any>(tool.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(tool.apiKey && { 'Authorization': `Bearer ${tool.apiKey}` }),
       },
-      body: JSON.stringify(params),
+      body: params,
+      timeoutMs: tool.config?.timeout,
     });
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       throw new Error(`工具调用失败: ${response.status}`);
     }
 
-    return response.json();
+    return response.data;
   }
 
   /**
@@ -259,15 +263,12 @@ export class McpGateway {
    */
   private async executeFileTool(tool: IMcpToolConfig, params: any): Promise<any> {
     const allowedPaths = tool.config?.allowedPaths || [];
-    const filePath = params.path;
-
-    // 安全检查
-    const isAllowed = allowedPaths.some((p: string) => filePath.startsWith(p));
-    if (!isAllowed) {
-      throw new Error('文件路径不在允许范围内');
-    }
-
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const filePath = params?.path;
+    const content = await readFileWithinRoots({
+      filePath,
+      allowedRoots: allowedPaths,
+      maxFileSize: tool.config?.maxFileSize
+    });
     return { content, path: filePath };
   }
 
@@ -284,10 +285,11 @@ export class McpGateway {
         if (!server.enabled) continue;
 
         try {
-          const response = await fetch(`${server.endpoint}/models`, {
+          const response = await safeHttpRequest(`${server.endpoint}/models`, {
             headers: { 'Authorization': `Bearer ${server.apiKey}` },
+            timeoutMs: server.config.timeout,
           });
-          this.serverStatus.set(server.id, response.ok);
+          this.serverStatus.set(server.id, response.status >= 200 && response.status < 300);
         } catch {
           this.serverStatus.set(server.id, false);
         }

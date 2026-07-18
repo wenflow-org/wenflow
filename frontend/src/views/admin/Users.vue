@@ -274,7 +274,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
 import { adminUsersApi } from '@/api/adminApi';
 import { User, Search } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
@@ -288,12 +288,33 @@ import { setProjectionToken } from '@/utils/projection';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
+interface AdminUserRecord {
+  id: string
+  name?: string
+  email?: string
+  isAdmin?: boolean
+  lastLoginAt?: string | null
+  createdAt?: string
+  currentLevel?: string
+  learningGoal?: string
+  _count?: {
+    learning_paths?: number
+    teaching_sessions?: number
+    learningPaths?: number
+    tasks?: number
+    [key: string]: unknown
+  }
+  level?: number
+  skillLevel?: string
+  [key: string]: unknown
+}
+
 const createFormRef = ref<FormInstance>();
 const editFormRef = ref<FormInstance>();
 
 const loading = ref(false);
-const users = ref<any[]>([]);
-const tableRef = ref<any>(null);
+const users = ref<AdminUserRecord[]>([]);
+const tableRef = ref<{ clearSelection?: () => void } | null>(null);
 const createVisible = ref(false);
 const creating = ref(false);
 const editVisible = ref(false);
@@ -385,7 +406,7 @@ const projectionGrantNoteLabel = computed(() => projectionGrant.value?.note?.tri
 const loadUsers = async () => {
   loading.value = true;
   try {
-    const response: any = await adminUsersApi.getUsers({
+    const response = await adminUsersApi.getUsers({
       page: pagination.page,
       limit: pagination.limit,
       search: filterForm.search,
@@ -393,7 +414,7 @@ const loadUsers = async () => {
     });
 
     if (response.data.success) {
-      users.value = (response.data.data.users || []).map((user: any) => {
+      users.value = (response.data.data.users || []).map((user: AdminUserRecord) => {
         const currentLevel = typeof user.currentLevel === 'string' ? user.currentLevel : 'beginner';
         const levelMap: Record<string, number> = {
           beginner: 1,
@@ -415,7 +436,7 @@ const loadUsers = async () => {
       selectedUserIds.value = [];
       tableRef.value?.clearSelection?.();
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载用户列表失败:', error);
     toast.error('加载用户列表失败');
   } finally {
@@ -424,6 +445,14 @@ const loadUsers = async () => {
 };
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 卸载时清理防抖定时器，避免组件销毁后仍触发请求
+onUnmounted(() => {
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+});
 
 const handleSearch = () => {
   if (searchTimer) clearTimeout(searchTimer);
@@ -494,7 +523,7 @@ const loadProjectionGrantForEdit = async () => {
   projectionGrantLoading.value = true;
   projectionGrantMessage.value = '';
   try {
-    const response: any = await adminUsersApi.getProjectionGrant(editForm.id);
+    const response = await adminUsersApi.getProjectionGrant(editForm.id);
     projectionGrant.value = normalizeProjectionGrant(response?.data || response);
     if (!projectionGrant.value) {
       projectionGrantMessage.value = '该用户当前没有生效中的开发视角许可。';
@@ -537,7 +566,7 @@ const handleCreateUser = async () => {
   }
 };
 
-const handleDeleteUser = async (row: any) => {
+const handleDeleteUser = async (row: AdminUserRecord) => {
   try {
     await ElMessageBox.confirm(`确认删除用户 ${row.name || row.email} 吗？`, '删除用户', {
       type: 'warning'
@@ -569,7 +598,7 @@ const handleDeleteFromEdit = async () => {
   }
 };
 
-const handleSelectionChange = (rows: any[]) => {
+const handleSelectionChange = (rows: AdminUserRecord[]) => {
   selectedUserIds.value = rows.map(row => row.id);
 };
 
@@ -583,7 +612,7 @@ const handleBatchDelete = async () => {
       '批量删除用户',
       { type: 'warning' }
     );
-    const response: any = await adminUsersApi.batchDeleteUsers(selectedUserIds.value);
+    const response = await adminUsersApi.batchDeleteUsers(selectedUserIds.value);
     toast.success(`批量删除成功，已删除 ${response.data?.data?.deletedCount ?? selectedUserIds.value.length} 个用户`);
     loadUsers();
   } catch (error: any) {
@@ -595,7 +624,7 @@ const handleBatchDelete = async () => {
   }
 };
 
-const openEditDialog = (row: any) => {
+const openEditDialog = (row: AdminUserRecord) => {
   if (!row || !row.id) {
     toast.warning('用户数据无效');
     return;
@@ -640,7 +669,7 @@ const openProjectionDebugStation = async () => {
       throw new Error('当前许可缺少 grantId，无法打开开发调试站');
     }
 
-    const response: any = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
+    const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
       scope: projectionGrant.value?.scope === 'full' ? 'full' : 'dashboard',
       entry: 'dashboard'
     });
@@ -664,7 +693,7 @@ const openProjectionDebugStation = async () => {
 
     window.open('/admin/test/dashboard', '_blank');
     toast.success('已在新页打开开发调试站');
-  } catch (error: any) {
+  } catch (error) {
     toast.error(getErrorMessage(error, '打开开发调试站失败'));
   } finally {
     projectionOpening.value = false;

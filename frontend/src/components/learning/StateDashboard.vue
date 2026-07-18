@@ -95,7 +95,6 @@
         :type="aiInsight.type"
         :description="aiInsight.description"
         show-icon
-        closable
         :closable="!state.anomaly"
       />
     </div>

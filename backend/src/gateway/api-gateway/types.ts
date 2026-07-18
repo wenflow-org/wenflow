@@ -33,6 +33,16 @@ export interface ResolvedRoute {
   source: RouteSource;
 }
 
+export interface RouteExecutionOverride {
+  expectedProviderId?: string;
+  expectedCredentialFingerprint?: string;
+  endpoint?: string;
+  model?: string;
+  thinkingMode?: ResolvedRoute['thinkingMode'];
+  reasoningEffort?: ResolvedRoute['reasoningEffort'];
+  timeoutMs?: number;
+}
+
 export interface ChatRequest {
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   model?: string;

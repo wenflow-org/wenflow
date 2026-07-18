@@ -2,7 +2,7 @@
 # Backend Health Check Script
 # Run this periodically to check if backend is alive
 
-$url = "http://localhost:3001/health"
+$url = "http://localhost:3001/readyz"
 $retryCount = 3
 $retryDelay = 2
 
@@ -14,9 +14,9 @@ for ($i = 1; $i -le $retryCount; $i++) {
 
         if ($response.StatusCode -eq 200) {
             $data = $response.Content | ConvertFrom-Json
-            Write-Host "✅ Backend is healthy!" -ForegroundColor Green
+            Write-Host "✅ Backend is ready!" -ForegroundColor Green
             Write-Host "   Status: $($data.status)" -ForegroundColor White
-            Write-Host "   Uptime: $([math]::Round($data.uptime, 2))s" -ForegroundColor White
+            Write-Host "   Checks: $($data.checks | ConvertTo-Json -Compress)" -ForegroundColor White
             Write-Host "   Timestamp: $($data.timestamp)" -ForegroundColor White
             exit 0
         }

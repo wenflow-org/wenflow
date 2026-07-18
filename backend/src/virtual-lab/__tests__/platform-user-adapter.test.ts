@@ -88,7 +88,7 @@ describe('PlatformUserAdapter', () => {
 
     const result = await adapter.getPath('path-1')
 
-    expect(result.observation.availableActions).toEqual([])
+    expect(result.observation.availableActions).toEqual(['abandon'])
     expect(result.observation.lastActionResult?.visibleMessage).toBe('阶段任务仍在生成')
   })
 
@@ -112,7 +112,7 @@ describe('PlatformUserAdapter', () => {
 
     const result = await adapter.getPath('path-1')
 
-    expect(result.observation.availableActions).toEqual(['start_learning'])
+    expect(result.observation.availableActions).toEqual(['start_learning', 'abandon'])
     expect(result.observation.visibleTask?.id).toBe('todo')
   })
 
@@ -175,5 +175,25 @@ describe('PlatformUserAdapter', () => {
     expect(result.observation.availableActions).toContain('confirm_complete')
     expect(JSON.stringify(result.observation)).not.toContain('hiddenScore')
     expect(JSON.stringify(result.observation)).not.toContain('isCompletion')
+  })
+
+  it('Goal 和 Path 的非终态 Observation 都公开放弃动作', async () => {
+    const requests = jest.fn()
+      .mockResolvedValueOnce({
+        data: { success: true, data: { userVisible: '请继续说明', control: { conversationId: 'goal-1', stage: 'understanding', isCompleted: false } } }
+      })
+      .mockResolvedValueOnce({
+        data: { success: true, data: { id: 'path-1', title: '路径', status: 'generating', canStartLearning: false, milestones: [] } }
+      })
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request: requests } as PlatformHttpTransport
+    })
+
+    const goal = await adapter.startGoal('开始')
+    const path = await adapter.getPath('path-1')
+
+    expect(goal.observation.availableActions).toContain('abandon')
+    expect(path.observation.availableActions).toContain('abandon')
   })
 })

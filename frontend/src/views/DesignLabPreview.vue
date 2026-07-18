@@ -682,7 +682,7 @@
 
               <div class="learning-layout learning-layout--native">
                 <aside class="surface-card knowledge-pane">
-                  <KnowledgePointList :knowledge-points="learningKnowledgePoints" />
+                  <KnowledgePointList :knowledge-points="previewKnowledgePoints" />
                 </aside>
 
                 <main class="surface-card lesson-main lesson-main--native">
@@ -769,7 +769,7 @@
                     :total-count="3"
                     duration="18 分钟"
                     :message-count="14"
-                    :wrapup="evaluationWrapup"
+                    :wrapup="previewWrapup"
                   />
                 </article>
               </div>
@@ -789,6 +789,7 @@ import EinsteinQuote from '@/components/home/EinsteinQuote.vue';
 import MindVsTool from '@/components/home/MindVsTool.vue';
 import ProblemCreator from '@/components/home/ProblemCreator.vue';
 import CompletionCard from '@/components/CompletionCard.vue';
+import type { KnowledgePointStatus, WrapupArtifact } from '@/api/aiTeaching';
 import type { DeviceId, LabScene, LabTheme } from './design-lab.data';
 import {
   appNavItems,
@@ -812,6 +813,11 @@ import {
   plannerSignals,
   plannerSummaryChips
 } from './design-lab.data';
+
+// 设计预览的静态 mock 只覆盖子组件渲染所需字段，与线上接口类型不完全一致；
+// 这里仅做类型层面的适配（as unknown as 无法避免：mock 与组件契约结构差异较大），运行时数据不变
+const previewKnowledgePoints = learningKnowledgePoints as unknown as KnowledgePointStatus[];
+const previewWrapup = evaluationWrapup as unknown as WrapupArtifact;
 
 defineProps<{
   theme: LabTheme;

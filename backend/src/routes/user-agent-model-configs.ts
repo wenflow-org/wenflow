@@ -1,15 +1,14 @@
 import { Router } from 'express';
 import userAgentModelConfigService from '../services/userAgentModelConfig.service';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { preserveConfiguredSecret, toSecretSafeResponse } from '../utils/secret-redaction';
 
 const router = Router();
-router.use(authMiddleware);
 
 router.get('/', async (req, res) => {
   try {
     const userId = req.user!.userId;
     const configs = await userAgentModelConfigService.getAllByUser(userId);
-    res.json({ success: true, data: configs });
+    res.json({ success: true, data: toSecretSafeResponse(configs) });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -19,7 +18,7 @@ router.get('/:agentId', async (req, res) => {
   try {
     const userId = req.user!.userId;
     const config = await userAgentModelConfigService.get(userId, req.params.agentId);
-    res.json({ success: true, data: config || { enabled: false } });
+    res.json({ success: true, data: toSecretSafeResponse(config || { enabled: false }) });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -28,8 +27,10 @@ router.get('/:agentId', async (req, res) => {
 router.put('/:agentId', async (req, res) => {
   try {
     const userId = req.user!.userId;
-    const config = await userAgentModelConfigService.upsert(userId, req.params.agentId, req.body);
-    res.json({ success: true, data: config, message: '配置已更新' });
+    const existing = await userAgentModelConfigService.get(userId, req.params.agentId);
+    const input = preserveConfiguredSecret(req.body || {}, existing as any);
+    const config = await userAgentModelConfigService.upsert(userId, req.params.agentId, input);
+    res.json({ success: true, data: toSecretSafeResponse(config), message: '配置已更新' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

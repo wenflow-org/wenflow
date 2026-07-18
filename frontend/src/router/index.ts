@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
-import { setTestMode } from '../utils/api';
+import { setTestMode, hasUserSession } from '../utils/api';
+import { hasAdminSession } from '../api/adminApi';
 import { setDebugMode } from '../utils/debugMode';
 import { getProjectionToken } from '../utils/projection';
 
@@ -51,7 +52,7 @@ const routes: RouteRecordRaw[] = [
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
-    meta: { title: '控制台', requiresAuth: true }
+    meta: { title: '学习台', requiresAuth: true }
   },
   {
     path: '/learning-paths',
@@ -75,7 +76,7 @@ const routes: RouteRecordRaw[] = [
     path: '/achievements',
     name: 'Achievements',
     component: () => import('@/views/Achievements.vue'),
-    meta: { title: '成就系统', requiresAuth: true }
+    meta: { title: '成就', requiresAuth: true }
   },
   {
     path: '/learning-path/:id',
@@ -104,7 +105,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/user',
     redirect: '/user/account',
-    meta: { title: '能力中心', requiresAuth: true }
+    meta: { title: '个人中心', requiresAuth: true }
   },
   {
     path: '/user/account',
@@ -114,40 +115,44 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/user/skills',
-    redirect: '/user/agent-logs',
-    meta: { title: 'Skills 管理', requiresAuth: true }
+    name: 'UserSkills',
+    component: () => import('@/views/user/Skills.vue'),
+    meta: { title: 'Skill 管理', requiresAuth: true }
   },
   {
     path: '/user/agent-logs',
     name: 'UserAgentLogs',
     component: () => import('@/views/user/AgentLogs.vue'),
-    meta: { title: '执行日志', requiresAuth: true }
+    meta: { title: '调用日志', requiresAuth: true }
   },
   {
     path: '/user/code-repo',
-    redirect: '/user/agent-logs',
-    meta: { title: '代码仓库', requiresAuth: true }
+    redirect: '/user/developer',
+    meta: { title: '开发者接入', requiresAuth: true }
   },
   {
     path: '/user/agents',
-    redirect: '/user/agent-logs',
-    meta: { title: '托管 Agent 选择', requiresAuth: true }
+    name: 'UserAgents',
+    component: () => import('@/views/user/AgentCustomization.vue'),
+    meta: { title: 'AI 助手', requiresAuth: true }
   },
   {
     path: '/user/settings',
-    redirect: '/user/agent-logs',
-    meta: { title: '能力接入', requiresAuth: true }
+    name: 'UserSettings',
+    component: () => import('@/views/user/Settings.vue'),
+    meta: { title: 'API 接入', requiresAuth: true }
   },
   {
     path: '/user/developer',
-    redirect: '/user/agent-logs',
+    name: 'UserDeveloperAccess',
+    component: () => import('@/views/user/DeveloperAccess.vue'),
     meta: { title: '开发者接入', requiresAuth: true }
   },
   {
     path: '/user/agent-model-settings',
     name: 'UserAgentModelSettings',
     component: () => import('@/views/user/AgentModelSettings.vue'),
-    meta: { title: '模型偏好设置', requiresAuth: true }
+    meta: { title: '高级模型', requiresAuth: true }
   },
   {
     path: '/goal-conversation/:conversationId?',
@@ -235,7 +240,7 @@ const routes: RouteRecordRaw[] = [
         path: 'api-config',
         name: 'AdminApiConfig',
         component: () => import('@/views/admin/ApiConfig.vue'),
-        meta: { title: 'API 管理', requiresAdminAuth: true, adminGroup: 'system' }
+        meta: { title: '连接与安全', requiresAdminAuth: true, adminGroup: 'system' }
       },
       {
         path: 'skills',
@@ -398,23 +403,35 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'prompt-lab',
         name: 'AdminPromptLab',
-        component: () => import('@/views/admin/PromptLab.vue'),
-        meta: { title: 'Prompt 实验台', requiresAdminAuth: true, adminGroup: 'ai' }
+        component: () => import('@/views/admin/PromptInspector.vue'),
+        meta: { title: 'Prompt 检视与 Dry Run', requiresAdminAuth: true, adminGroup: 'ai' }
       },
       {
         path: 'skill-manager',
         redirect: '/admin/skills',
       },
     ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/NotFound.vue'),
+    meta: { title: '页面不存在' }
   }
 ];
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.path === from.path && to.hash === from.hash) return false;
+    if (to.hash) return { el: to.hash };
+    return { left: 0, top: 0 };
+  }
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);
   const usesAdminSurface = to.path.startsWith('/admin/')
@@ -431,34 +448,34 @@ router.beforeEach((to, from, next) => {
     });
   }
   
-  const token = localStorage.getItem('token');
+  const hasSession = hasUserSession();
   const projectionToken = getProjectionToken();
-  const adminToken = localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
-  
+  const adminSession = hasAdminSession();
+
   // 管理平台路由检查
   if (to.meta.requiresAdminAuth) {
-    if (!adminToken) {
-      next('/admin/login');
+    if (!adminSession) {
+      next({ path: '/admin/login', query: { redirect: to.fullPath } });
       return;
     }
     next();
     return;
   }
-  
+
   // 普通用户路由检查
-  if (to.meta.requiresAuth && !token && !projectionToken) {
-    next('/login');
+  if (to.meta.requiresAuth && !hasSession && !projectionToken) {
+    next({ path: '/login', query: { redirect: to.fullPath } });
     return;
   }
-  
+
   // 已登录用户访问登录/注册页
-  if ((to.name === 'Login' || to.name === 'Register') && (token || projectionToken)) {
+  if ((to.name === 'Login' || to.name === 'Register') && (hasSession || projectionToken)) {
     next('/dashboard');
     return;
   }
-  
+
   // 已登录管理员访问管理登录页
-  if (to.name === 'AdminLogin' && adminToken) {
+  if (to.name === 'AdminLogin' && adminSession) {
     next('/admin/dashboard');
     return;
   }

@@ -7,13 +7,13 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
-import { 
+import {
   agentPluginRegistry, 
   agentPluginConfig,
   registerAllPlugins,
   getAllPlugins
 } from '../agents';
-import { AgentContext } from '../agents/protocol';
+import { getGateway } from '../gateway';
 import { getRequestContext } from '../gateway/api-gateway/context';
 
 const router = Router();
@@ -124,17 +124,17 @@ router.post('/execute/:pluginId', authMiddleware, async (req: Request, res: Resp
       });
     }
     
-    const agentContext: AgentContext = {
-      userId,
-      sessionId: context?.sessionId,
-      sourceEntry,
-      metadata: {
-        ...context?.metadata,
-        taskId: context?.taskId
-      }
-    };
-    
-    const result = await agentPluginRegistry.execute(pluginId, input, agentContext);
+    const execution = await getGateway().executeSkill(pluginId, {
+      pluginInput: input,
+      pluginContext: {
+        userId,
+        sessionId: context?.sessionId,
+        taskId: context?.taskId,
+        metadata: context?.metadata,
+        sourceEntry,
+      },
+    });
+    const result = execution.output;
 
     res.json({
       success: result.success,
@@ -183,17 +183,17 @@ router.post('/execute-by-type/:type', authMiddleware, async (req: Request, res: 
     
     const pluginId = agentPluginConfig.getPluginId(type as any);
     
-    const agentContext: AgentContext = {
-      userId,
-      sessionId: context?.sessionId,
-      sourceEntry,
-      metadata: {
-        ...context?.metadata,
-        taskId: context?.taskId
-      }
-    };
-    
-    const result = await agentPluginRegistry.execute(pluginId, input, agentContext);
+    const execution = await getGateway().executeSkill(pluginId, {
+      pluginInput: input,
+      pluginContext: {
+        userId,
+        sessionId: context?.sessionId,
+        taskId: context?.taskId,
+        metadata: context?.metadata,
+        sourceEntry,
+      },
+    });
+    const result = execution.output;
 
     res.json({
       success: result.success,

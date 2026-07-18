@@ -1,11 +1,5 @@
 <template>
-  <CapabilityShell title="Skills 管理" description="安装、启用和测试可组合的底层能力模块，决定 Agent 在执行时能调用哪些工具。">
-    <template #actions>
-      <el-button type="primary" @click="showCreateDialog">
-        <el-icon><Plus /></el-icon>
-        添加 Skill
-      </el-button>
-    </template>
+  <CapabilityShell title="Skill 管理" description="查看平台已配置的能力模块，并控制是否启用。Skill 内容由平台统一维护。">
     <div class="user-skills-page">
 
     <div class="stats">
@@ -13,7 +7,7 @@
         <el-col :span="8">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">已安装 Skills</div>
+              <div class="label">可用 Skill</div>
               <div class="value">{{ skills.length }}</div>
             </div>
           </el-card>
@@ -29,8 +23,8 @@
         <el-col :span="8">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">自定义来源</div>
-              <div class="value">{{ customCount }}</div>
+              <div class="label">已禁用</div>
+              <div class="value">{{ skills.length - enabledCount }}</div>
             </div>
           </el-card>
         </el-col>
@@ -49,8 +43,13 @@
     </div>
 
     <div class="skills-list">
-      <el-empty v-if="!loading && skills.length === 0" description="还没有安装任何 Skill">
-        <el-button type="primary" @click="showCreateDialog">添加第一个 Skill</el-button>
+      <el-result v-if="!loading && loadError" icon="error" title="Skill 加载失败" :sub-title="loadError">
+        <template #extra>
+          <el-button type="primary" @click="loadSkills">重新加载</el-button>
+        </template>
+      </el-result>
+
+      <el-empty v-else-if="!loading && skills.length === 0" description="当前没有可用的 Skill">
       </el-empty>
 
       <template v-else>
@@ -64,15 +63,15 @@
                     {{ skill.sourceType === 'CUSTOM' ? '自定义' : '平台' }}
                   </el-tag>
                 </div>
-                <p>{{ skill.endpoint || '未配置远端 endpoint，可直接使用仓库或内联代码。' }}</p>
+               <p>{{ skill.endpoint || '未配置调用地址，可直接使用当前配置。' }}</p>
               </div>
-              <el-switch v-model="skill.enabled" @change="toggleSkill(skill)" />
+              <el-switch v-model="skill.enabled" :loading="togglingSkills.has(skill.skillName)" :disabled="togglingSkills.has(skill.skillName)" @change="toggleSkill(skill)" />
             </div>
 
             <div class="skill-card__meta">
               <div class="skill-card__meta-item">
-                <span>来源类型</span>
-                <strong>{{ skill.sourceType === 'CUSTOM' ? '用户安装能力' : '平台能力模块' }}</strong>
+               <span>来源</span>
+               <strong>{{ skill.sourceType === 'CUSTOM' ? '自定义 Skill' : '平台 Skill' }}</strong>
               </div>
               <div class="skill-card__meta-item">
                 <span>最后更新</span>
@@ -81,9 +80,7 @@
             </div>
 
             <div class="skill-card__actions">
-              <el-button link type="primary" @click="editSkill(skill)">编辑</el-button>
-              <el-button link type="primary" @click="testSkill(skill)">测试</el-button>
-              <el-button link type="danger" @click="removeSkill(skill)">删除</el-button>
+              <el-button link type="primary" @click="viewSkill(skill)">查看详情</el-button>
             </div>
           </el-card>
         </div>
@@ -92,7 +89,7 @@
           <div class="skills-table-panel__header">
             <div>
               <h3>详细配置</h3>
-              <p>保留表格视图，方便查看 endpoint、更新时间和批量操作。</p>
+         <p>查看调用地址、更新时间和操作状态。</p>
             </div>
           </div>
 
@@ -107,10 +104,10 @@
         </el-table-column>
         <el-table-column prop="enabled" label="状态" width="110">
           <template #default="{ row }">
-            <el-switch v-model="row.enabled" @change="toggleSkill(row)" />
+            <el-switch v-model="row.enabled" :loading="togglingSkills.has(row.skillName)" :disabled="togglingSkills.has(row.skillName)" @change="toggleSkill(row)" />
           </template>
         </el-table-column>
-        <el-table-column prop="endpoint" label="Endpoint" min-width="220" show-overflow-tooltip>
+         <el-table-column prop="endpoint" label="调用地址（Endpoint）" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.endpoint || '-' }}
           </template>
@@ -120,11 +117,9 @@
             {{ formatDate(row.updatedAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="editSkill(row)">编辑</el-button>
-            <el-button link type="primary" @click="testSkill(row)">测试</el-button>
-            <el-button link type="danger" @click="removeSkill(row)">删除</el-button>
+            <el-button link type="primary" @click="viewSkill(row)">查看详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -132,60 +127,19 @@
       </template>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑 Skill' : '新增 Skill'" width="840px" @close="resetForm">
-      <el-form :model="formData" label-width="120px">
-        <el-form-item label="Skill 名称" required>
-          <el-input v-model="formData.skillName" :disabled="isEdit" placeholder="retrieval-helper" />
-        </el-form-item>
-        <el-form-item label="来源类型" required>
-          <el-select v-model="formData.sourceType">
-            <el-option label="平台 Skill" value="PLATFORM" />
-            <el-option label="自定义 Skill" value="CUSTOM" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="远端 Endpoint">
-          <el-input v-model="formData.endpoint" placeholder="https://example.com/skill" />
-        </el-form-item>
-        <el-form-item label="参数配置">
-          <el-input
-            v-model="formData.parameters"
-            type="textarea"
-            :rows="6"
-            placeholder='{"timeout": 3000}'
-            style="font-family: 'Courier New', monospace;"
-          />
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="detailVisible" title="Skill 详情" width="min(720px, calc(100vw - 32px))">
+      <el-descriptions v-if="currentSkill" :column="1" border>
+        <el-descriptions-item label="名称">{{ currentSkill.skillName }}</el-descriptions-item>
+        <el-descriptions-item label="来源">{{ currentSkill.sourceType === 'CUSTOM' ? '自定义 Skill' : '平台 Skill' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ currentSkill.enabled ? '已启用' : '已禁用' }}</el-descriptions-item>
+        <el-descriptions-item label="调用地址">{{ currentSkill.endpoint || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="参数配置">
+          <pre class="skill-parameters">{{ formatParameters(currentSkill.parameters) }}</pre>
+        </el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{ formatDate(currentSkill.updatedAt) }}</el-descriptions-item>
+      </el-descriptions>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitForm">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="testVisible" title="测试 Skill" width="800px">
-      <el-form label-width="100px">
-        <el-form-item label="测试输入">
-          <el-input
-            v-model="testInput"
-            type="textarea"
-            :rows="5"
-            placeholder='{"query": "学习路径"}'
-            style="font-family: 'Courier New', monospace;"
-          />
-        </el-form-item>
-        <el-form-item label="执行结果">
-          <el-input
-            v-model="testResult"
-            type="textarea"
-            :rows="10"
-            readonly
-            style="font-family: 'Courier New', monospace;"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="testVisible = false">关闭</el-button>
-        <el-button type="primary" :loading="testing" @click="runTest">运行测试</el-button>
+        <el-button @click="detailVisible = false">关闭</el-button>
       </template>
     </el-dialog>
     </div>
@@ -193,43 +147,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { Plus } from '@element-plus/icons-vue';
-import { ElMessageBox } from 'element-plus';
+import { computed, onMounted, ref } from 'vue';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { toast } from '../../utils/toast';
 import dayjs from 'dayjs';
-import {
-  deleteUserSkill,
-  getUserSkill,
-  getUserSkills,
-  saveUserSkill,
-  testUserSkill,
-  toggleUserSkill,
-  updateUserSkill
-} from '@/api/userCustom';
+import { getUserSkill, getUserSkills, toggleUserSkill } from '@/api/userCustom';
+
+interface UserSkillItem {
+  skillName: string;
+  sourceType?: string;
+  endpoint?: string | null;
+  enabled: boolean;
+  updatedAt?: string;
+  parameters?: unknown;
+}
 
 const loading = ref(false);
-const submitting = ref(false);
-const testing = ref(false);
-const dialogVisible = ref(false);
-const testVisible = ref(false);
-const isEdit = ref(false);
-const skills = ref<any[]>([]);
-const currentSkill = ref<any>(null);
+const detailVisible = ref(false);
+const loadError = ref('');
+const skills = ref<UserSkillItem[]>([]);
+const currentSkill = ref<UserSkillItem | null>(null);
 const filterEnabled = ref<boolean | undefined>(undefined);
-const testInput = ref('');
-const testResult = ref('');
-
-const formData = reactive({
-  skillName: '',
-  sourceType: 'CUSTOM' as 'PLATFORM' | 'CUSTOM',
-  endpoint: '',
-  parameters: ''
-});
+const togglingSkills = ref(new Set<string>());
 
 const enabledCount = computed(() => skills.value.filter((item) => item.enabled).length);
-const customCount = computed(() => skills.value.filter((item) => item.sourceType === 'CUSTOM').length);
 const featuredSkills = computed(() => {
   const enabled = skills.value.filter((item) => item.enabled);
   const disabled = skills.value.filter((item) => !item.enabled);
@@ -242,133 +183,59 @@ onMounted(async () => {
 
 async function loadSkills() {
   loading.value = true;
+  loadError.value = '';
   try {
     const params: { enabled?: boolean } = {};
-    if (filterEnabled.value !== undefined) {
+    // el-select clearable 清空时会置为 ''，仅布尔值才下发筛选
+    if (typeof filterEnabled.value === 'boolean') {
       params.enabled = filterEnabled.value;
     }
     const res = await getUserSkills(params);
     skills.value = res.data || [];
   } catch (error) {
-    toast.error('加载 Skills 失败');
+    skills.value = [];
+    loadError.value = '无法读取 Skill 配置，请稍后重试。';
+    toast.error('加载 Skill 失败');
   } finally {
     loading.value = false;
   }
 }
 
-function showCreateDialog() {
-  isEdit.value = false;
-  dialogVisible.value = true;
-}
-
-async function editSkill(skill: any) {
+async function viewSkill(skill: UserSkillItem) {
   try {
     const res = await getUserSkill(skill.skillName);
-    const detail = res.data;
-
-    isEdit.value = true;
-    currentSkill.value = detail;
-    formData.skillName = detail.skillName;
-    formData.sourceType = detail.sourceType || 'CUSTOM';
-    formData.endpoint = detail.endpoint || '';
-    formData.parameters = detail.parameters ? JSON.stringify(detail.parameters, null, 2) : '';
-    dialogVisible.value = true;
+    currentSkill.value = res.data;
+    detailVisible.value = true;
   } catch {
     toast.error('加载 Skill 详情失败');
   }
 }
 
-async function submitForm() {
-  if (!formData.skillName) {
-    toast.warning('请填写 Skill 名称');
-    return;
-  }
-
-  const payload = {
-    skillName: formData.skillName,
-    sourceType: formData.sourceType,
-    endpoint: formData.endpoint || undefined,
-    parameters: formData.parameters ? JSON.parse(formData.parameters) : undefined
-  };
-
-  submitting.value = true;
-  try {
-    if (isEdit.value && currentSkill.value) {
-      await updateUserSkill(formData.skillName, payload);
-    } else {
-      await saveUserSkill(payload);
-    }
-    toast.success('保存成功');
-    dialogVisible.value = false;
-    resetForm();
-    await loadSkills();
-  } catch (error: any) {
-    toast.error(error.message || '保存失败');
-  } finally {
-    submitting.value = false;
-  }
-}
-
-async function toggleSkill(skill: any) {
+async function toggleSkill(skill: UserSkillItem) {
+  if (togglingSkills.value.has(skill.skillName)) return;
+  togglingSkills.value.add(skill.skillName);
   try {
     await toggleUserSkill(skill.skillName, skill.enabled);
     toast.success(skill.enabled ? '已启用' : '已禁用');
   } catch {
     skill.enabled = !skill.enabled;
     toast.error('操作失败');
-  }
-}
-
-function testSkill(skill: any) {
-  currentSkill.value = skill;
-  testInput.value = '';
-  testResult.value = '';
-  testVisible.value = true;
-}
-
-async function runTest() {
-  if (!currentSkill.value) return;
-
-  testing.value = true;
-  try {
-    let input: any;
-    try {
-      input = JSON.parse(testInput.value || '{}');
-    } catch {
-      input = { text: testInput.value };
-    }
-
-    const res = await testUserSkill(currentSkill.value.skillName, input);
-    testResult.value = JSON.stringify(res.data, null, 2);
-  } catch (error: any) {
-    testResult.value = `执行失败：${error.message}`;
   } finally {
-    testing.value = false;
+    togglingSkills.value.delete(skill.skillName);
   }
 }
 
-async function removeSkill(skill: any) {
+function formatParameters(parameters: unknown) {
+  if (!parameters) return '未配置';
+  if (typeof parameters !== 'string') return JSON.stringify(parameters, null, 2);
   try {
-    await ElMessageBox.confirm(`确定删除 Skill "${skill.skillName}" 吗？`, '确认删除', { type: 'warning' });
-    await deleteUserSkill(skill.skillName);
-    toast.success('删除成功');
-    await loadSkills();
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      toast.error('删除失败');
-    }
+    return JSON.stringify(JSON.parse(parameters), null, 2);
+  } catch {
+    return parameters;
   }
 }
 
-function resetForm() {
-  formData.skillName = '';
-  formData.sourceType = 'CUSTOM';
-  formData.endpoint = '';
-  formData.parameters = '';
-  currentSkill.value = null;
-}
-
-function formatDate(date: string) {
+function formatDate(date?: string) {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
 }
 </script>
@@ -499,6 +366,13 @@ function formatDate(date: string) {
       font-weight: bold;
       color: var(--text-primary);
     }
+  }
+
+  .skill-parameters {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'Courier New', monospace;
   }
 
   :deep(.stats .el-card) {

@@ -5,11 +5,11 @@
  * 借鉴 Qwen3.5-9B-ToolHub 的 web_extractor 工具
  */
 
-import axios from 'axios';
 import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
+import { safeHttpRequest } from '../../utils/safe-http';
 
 // 输入类型定义
 export interface WebExtractorInput {
@@ -232,8 +232,8 @@ function isValidUrl(url: string): boolean {
  */
 async function fetchWebPage(url: string, timeout: number): Promise<string> {
   try {
-    const response = await axios.get(url, {
-      timeout,
+    const response = await safeHttpRequest<string>(url, {
+      timeoutMs: timeout,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -242,18 +242,12 @@ async function fetchWebPage(url: string, timeout: number): Promise<string> {
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1'
       },
-      maxContentLength: 10 * 1024 * 1024, // 10MB
+      maxResponseBytes: 10 * 1024 * 1024,
       responseType: 'text'
     });
 
     return response.data;
   } catch (error: any) {
-    if (error.code === 'ECONNABORTED') {
-      throw new Error(`Request timeout after ${timeout}ms`);
-    }
-    if (error.response) {
-      throw new Error(`HTTP ${error.response.status}: ${error.response.statusText}`);
-    }
     throw new Error(`Failed to fetch page: ${error.message}`);
   }
 }

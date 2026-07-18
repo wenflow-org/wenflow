@@ -6,6 +6,7 @@ import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-e
 import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
 import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';
 import { labelGeneratorDefinition } from '../../skills/label-generator';
+import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -17,6 +18,7 @@ const ALLOWED_KNOWLEDGE_STATUSES = ['pending', 'learning', 'mastered', 'review']
 
 export interface TeachingTurnInput {
   messages: Array<{ role: MessageRole; content: string }>;
+  learner: TeachingLearnerProjection;
   scenario: {
     subject: string;
     topic: string;
@@ -337,6 +339,7 @@ function buildPromptInput(input: TeachingTurnInput) {
   return {
     latestLearnerMessage: [...input.messages].reverse().find((message) => message.role === 'user')?.content || '',
     scenario: input.scenario,
+    learner: input.learner,
     classroomContext: input.classroomContext,
     classroomEventContext: input.classroomEventContext,
     knowledge: input.knowledge,
@@ -426,7 +429,8 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
   caller: {
-    agentId: AGENT_ID,
+    agentId: 'teaching-agent',
+    skillId: 'teaching-turn',
   },
   buildUserPayload: (input) => buildPromptInput(input),
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
@@ -443,9 +447,7 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
 
 export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promise<AgentOutput> {
   try {
-    const result = await callPrompt(teachingTurnPromptSpec, input, {
-      userId: 'system',
-    });
+    const result = await callPrompt(teachingTurnPromptSpec, input);
 
     if (!result.success || !result.output) {
       throw new Error(result.error?.message || 'TEACHING_TURN_OUTPUT_INVALID');

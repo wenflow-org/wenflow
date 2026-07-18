@@ -1,5 +1,6 @@
 // 用户API
 import api from '../utils/api';
+import type { ReplanSignalLike } from '@/utils/replanSignal';
 
 export interface UserProfile {
   id: string;
@@ -24,15 +25,41 @@ export interface UpdateProfileData {
   learningGoal?: string;
 }
 
+export interface LearnerCenterProfile {
+  narrativeInsights?: {
+    contentReceptionPattern?: string;
+    practicePreferenceNote?: string;
+    supportStyleNote?: string;
+  } | null;
+  [key: string]: unknown;
+}
+
+export interface LearnerCenterKnowledgeMemory {
+  currentPath?: {
+    learningPathId?: string;
+    pathTitle?: string;
+    [key: string]: unknown;
+  } | null;
+  globalBackground?: {
+    reusableFoundations?: string[];
+    blockedFoundations?: string[];
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
 export interface LearnerCenterSnapshot {
   snapshotVersion: string;
-  profile: any;
-  dynamicState: any;
-  learningControlState: any;
-  replanSignal: any;
-  knowledgeMemory: any;
-  teachingHints: any;
-  freshness: any;
+  profile: LearnerCenterProfile | null;
+  dynamicState: Record<string, unknown> | null;
+  learningControlState: {
+    paceMode?: string;
+    [key: string]: unknown;
+  } | null;
+  replanSignal: ReplanSignalLike | null;
+  knowledgeMemory: LearnerCenterKnowledgeMemory | null;
+  teachingHints: Record<string, unknown> | null;
+  freshness: Record<string, unknown> | null;
 }
 
 export const userAPI = {
@@ -49,13 +76,13 @@ export const userAPI = {
   },
 
   // 获取用户成就
-  async getAchievements(): Promise<any> {
+  async getAchievements(): Promise<unknown> {
     const response = await api.get('/users/me/achievements');
     return response.data;
   },
 
   // 获取学习会话
-  async getSessions(limit?: number): Promise<any> {
+  async getSessions(limit?: number): Promise<unknown> {
     const response = await api.get('/users/me/sessions', {
       params: { limit }
     });

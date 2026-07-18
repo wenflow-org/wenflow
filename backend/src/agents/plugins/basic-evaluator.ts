@@ -100,7 +100,7 @@ export const basicEvaluator: AgentPlugin = {
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
     const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'basic-evaluator' };
+    const caller: CallerInfo = { skillId: 'basic-evaluator' };
     const startTime = Date.now();
 
     try {

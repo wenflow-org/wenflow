@@ -178,7 +178,7 @@ router.delete('/:conversationId', authMiddleware, async (req: Request, res: Resp
     }
 
     await requirementOrchestrator.reset(conversationId, userId);
-    return res.json({ success: true, message: '对话已重置' });
+    return res.json({ success: true, message: '目标对话已删除，已生成的学习路径会保留' });
   } catch (error: any) {
     logger.error('重置对话失败:', error);
     const status = error.message === '对话会话不存在' ? 404 : 500;

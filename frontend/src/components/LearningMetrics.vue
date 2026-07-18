@@ -305,7 +305,7 @@ const analysisText = computed(() => {
   }
 
   if (!displayState.value) return '';
-  const { lsb } = displayState.value;
+  const lsb = displayState.value.lsb ?? 0;
   
   if (lsb > 4) {
     return '当前学习状态极佳！知识掌握度良好，疲劳度低，建议继续保持这种高效的学习节奏。';
@@ -331,17 +331,6 @@ const getLsbClass = (score: number | null | undefined) => {
   if (score >= 0) return 'score-good';
   if (score >= -3) return 'score-warning';
   return 'score-danger';
-};
-
-const getProgressWidth = (score: number | null | undefined) => {
-  if (score === undefined || score === null) return '0%';
-  return `${Math.min(100, Math.max(0, score))}%`;
-};
-
-const getLsbProgressWidth = (score: number | null | undefined) => {
-  if (!score) return '50%';
-  const normalized = ((score + 10) / 20) * 100;
-  return `${Math.min(100, Math.max(0, normalized))}%`;
 };
 
 const getLssLabel = (score: number | null | undefined) => {

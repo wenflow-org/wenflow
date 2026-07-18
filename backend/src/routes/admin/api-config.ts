@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import apiConfigService from '../../services/apiConfig.service';
 import { getAPIGateway } from '../../gateway/api-gateway';
+import { safeHttpRequest } from '../../utils/safe-http';
+import { z } from 'zod';
+import { isIP } from 'net';
+import {
+  AdminAccessMode,
+  getRuntimeNetworkPolicy,
+  updateRuntimeNetworkPolicy
+} from '../../services/runtime-network-policy.service';
 
 const router = Router();
 
@@ -27,13 +35,59 @@ router.get('/', async (req, res) => {
         reasoningModels: config.reasoningModels || [],
         lightModels: config.lightModels || [],
         connectionStatus: platformDefault.connectionStatus,
-        lastCheckedAt: platformDefault.lastCheckedAt
+        lastCheckedAt: platformDefault.lastCheckedAt,
+        networkPolicy: getRuntimeNetworkPolicy()
       }
     });
   } catch (error: any) {
     res.status(500).json({
       success: false,
       error: error.message || '获取配置失败'
+    });
+  }
+});
+
+const networkPolicySchema = z.object({
+  adminAccessMode: z.enum(['loopback', 'private', 'any']),
+  adminAllowedIps: z.array(
+    z.string().trim().refine(value => isIP(value.replace(/^::ffff:/i, '')) !== 0, '客户端 IP 格式无效')
+  ).max(100),
+  allowPrivateNetwork: z.boolean(),
+  privateNetworkHosts: z.array(
+    z.string().trim().min(1).max(255).refine(value => !value.includes('://') && !/[/?#]/.test(value), '请填写 Host 或 IP，不要填写 URL')
+  ).max(100)
+}).strict();
+
+router.put('/network-policy', async (req, res) => {
+  try {
+    const parsed = networkPolicySchema.parse(req.body);
+    const input: {
+      adminAccessMode: AdminAccessMode;
+      adminAllowedIps: string[];
+      allowPrivateNetwork: boolean;
+      privateNetworkHosts: string[];
+    } = {
+      adminAccessMode: parsed.adminAccessMode,
+      adminAllowedIps: parsed.adminAllowedIps,
+      allowPrivateNetwork: parsed.allowPrivateNetwork,
+      privateNetworkHosts: parsed.privateNetworkHosts
+    };
+    const policy = await updateRuntimeNetworkPolicy(input);
+    res.json({
+      success: true,
+      data: policy,
+      message: '连接与安全策略已保存并热生效'
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: error.errors[0]?.message || '网络策略格式无效'
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error.message || '保存网络策略失败'
     });
   }
 });
@@ -172,13 +226,13 @@ router.post('/test-model', async (req, res) => {
       : `${normalizedBase}/v1/chat/completions`;
 
     const startedAt = Date.now();
-    const response = await fetch(endpoint, {
+    const response = await safeHttpRequest<any>(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${resolvedKey}`,
       },
-      body: JSON.stringify({
+      body: {
         model: resolvedModel,
         temperature: typeof temperature === 'number' ? temperature : currentConfig.defaultTemperature ?? 0.2,
         max_tokens: typeof maxTokens === 'number' ? maxTokens : currentConfig.defaultMaxTokens ?? 256,
@@ -186,13 +240,14 @@ router.post('/test-model', async (req, res) => {
           { role: 'system', content: '你是 API 模型连通性测试助手。请简洁返回。' },
           { role: 'user', content: resolvedPrompt }
         ]
-      })
+      },
+      timeoutMs: 30_000
     });
 
     const durationMs = Date.now() - startedAt;
-    const payload: any = await response.json().catch(() => null);
+    const payload: any = response.data;
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       return res.status(400).json({
         success: false,
         error: payload?.error?.message || `HTTP ${response.status}: ${response.statusText}`,

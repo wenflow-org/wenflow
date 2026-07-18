@@ -1,15 +1,15 @@
 // 用户 API 配置路由
 import express from 'express';
 import prisma from '../config/database';
-import { authMiddleware } from '../middleware/auth.middleware';
-import axios from 'axios';
 import { randomUUID as uuidv4 } from 'crypto';
 import { getAPIGateway } from '../gateway/api-gateway';
 import apiConfigService from '../services/apiConfig.service';
+import { safeHttpRequest } from '../utils/safe-http';
+import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
+
+const SECRET_CONTEXT = 'main.user_api_configs.apiKey';
 
 const router = express.Router();
-
-router.use(authMiddleware);
 
 // 获取平台默认配置
 router.get('/platform-default', async (req, res) => {
@@ -67,25 +67,25 @@ router.put('/', async (req, res, next) => {
     const userId = req.user.userId;
     const { endpoint, apiKey, chatModel, reasoningModel, enabled } = req.body;
     
-    // 验证必填字段（如果启用）
-    if (enabled && (!endpoint || !apiKey || !chatModel)) {
+    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const finalApiKey = typeof apiKey === 'string' && apiKey.trim()
+      ? apiKey.trim()
+      : decryptSecret(existing?.apiKey, SECRET_CONTEXT) || null;
+
+    // 空 apiKey 表示保留已保存密钥。
+    if (enabled && (!endpoint || !finalApiKey || !chatModel)) {
       return res.status(400).json({
         success: false,
         error: { message: '启用时必须提供 endpoint、apiKey 和 chatModel' }
       });
     }
     
-    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
-    
-    // 如果 apiKey 为空字符串，保留原有的 apiKey
-    const finalApiKey = apiKey || existing?.apiKey || null;
-    
     if (existing) {
       await prisma.user_api_configs.update({
         where: { userId },
         data: {
           endpoint,
-          apiKey: finalApiKey,
+          apiKey: encryptSecret(finalApiKey, SECRET_CONTEXT),
           chatModel,
           reasoningModel: reasoningModel || chatModel,  // 默认推理模型同对话模型
           enabled,
@@ -98,7 +98,7 @@ router.put('/', async (req, res, next) => {
           id: uuidv4(),
           userId,
           endpoint,
-          apiKey: finalApiKey,
+          apiKey: encryptSecret(finalApiKey, SECRET_CONTEXT),
           chatModel,
           reasoningModel: reasoningModel || chatModel,
           enabled,
@@ -150,8 +150,13 @@ router.delete('/', async (req, res, next) => {
 router.post('/test', async (req, res, next) => {
   try {
     const { endpoint, apiKey, model } = req.body;
-    
-    if (!endpoint || !apiKey) {
+    const userId = req.user.userId;
+    const existing = await prisma.user_api_configs.findUnique({ where: { userId } });
+    const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim()
+      ? apiKey.trim()
+      : decryptSecret(existing?.apiKey, SECRET_CONTEXT);
+
+    if (!endpoint || !resolvedApiKey) {
       return res.status(400).json({
         success: false,
         error: { message: '需要提供 endpoint 和 apiKey' }
@@ -169,33 +174,35 @@ router.post('/test', async (req, res, next) => {
         });
       }
 
-      const response = await axios.post(
-        `${normalizedEndpoint}/v1/chat/completions`,
-        {
+      const response = await safeHttpRequest<any>(`${normalizedEndpoint}/v1/chat/completions`, {
+        method: 'POST',
+        body: {
           model: resolvedModel,
           messages: [{ role: 'user', content: 'Hello' }],
           max_tokens: 10
         },
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        }
-      );
+        headers: {
+          'Authorization': `Bearer ${resolvedApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeoutMs: 10000
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       
       res.json({ 
         success: true, 
         message: '连接成功', 
-        data: { model: response.data.model } 
+        data: { model: response.data.model }
       });
     } catch (error: any) {
       res.status(400).json({
         success: false,
         error: { 
           message: '连接失败', 
-          details: error.response?.data?.error?.message || error.message 
+          details: error.message
         }
       });
     }

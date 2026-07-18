@@ -16,16 +16,16 @@
 
     <div class="admin-list-toolbar">
       <div class="admin-list-toolbar__group">
-        <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="loadSessions" />
-        <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item">
+        <el-input v-model="filters.userId" placeholder="按用户 ID 过滤" clearable class="toolbar-item" @keyup.enter="applyFilters" @clear="applyFilters" />
+        <el-select v-model="filters.status" placeholder="状态" clearable class="toolbar-item" @change="applyFilters">
           <el-option label="进行中" value="active" />
           <el-option label="已完成" value="completed" />
           <el-option label="超时" value="timeout" />
           <el-option label="错误" value="error" />
         </el-select>
-        <el-checkbox v-model="filters.onlyWithAdvisory">仅看有建议</el-checkbox>
-        <el-checkbox v-model="filters.onlyAttention">仅看待关注</el-checkbox>
-        <el-checkbox v-model="filters.onlyMissingWrapup">仅看缺少会话总结</el-checkbox>
+        <el-checkbox v-model="filters.onlyWithAdvisory" @change="applyFilters">仅看有建议</el-checkbox>
+        <el-checkbox v-model="filters.onlyAttention" @change="applyFilters">仅看待关注</el-checkbox>
+        <el-checkbox v-model="filters.onlyMissingWrapup" @change="applyFilters">仅看缺少会话总结</el-checkbox>
       </div>
     </div>
 
@@ -198,13 +198,53 @@ withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
 });
 
+interface TeachingSessionRow {
+  id: string;
+  status: string;
+  topic?: string;
+  subject?: string;
+  taskType?: string;
+  userId?: string;
+  userName?: string;
+  email?: string;
+  duration?: number | null;
+  messageCount?: number;
+  startTime?: string;
+  endTime?: string;
+  knowledgePointCount?: number;
+  learningPathId?: string;
+  milestoneId?: string;
+  taskId?: string;
+  wrapup?: {
+    status?: string;
+    summary?: {
+      topicSummary?: string;
+      knowledgeSummary?: string;
+      practiceAdvice?: string;
+      learningEvaluation?: string;
+      [key: string]: unknown;
+    };
+    sources?: { summary?: string; evaluation?: string; [key: string]: unknown };
+    [key: string]: unknown;
+  } | null;
+  advisory?: {
+    shouldSuggest?: boolean;
+    priority?: string;
+    recommendation?: string;
+    rationale?: string;
+    ui?: { title?: string; body?: string; [key: string]: unknown };
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
 const loading = ref(false);
-const sessions = ref<any[]>([]);
+const sessions = ref<TeachingSessionRow[]>([]);
 const total = ref(0);
 const page = ref(1);
 const limit = ref(20);
 const detailVisible = ref(false);
-const selectedSession = ref<any | null>(null);
+const selectedSession = ref<TeachingSessionRow | null>(null);
 const filters = ref({
   userId: '',
   status: '',
@@ -233,7 +273,7 @@ const sessionHighlights = computed(() => [
   { label: `${advisoryCount.value} 有建议`, tone: advisoryCount.value > 0 ? 'warning' as const : 'neutral' as const },
 ]);
 
-const getTaskTypeLabel = (type: string) => ({
+const getTaskTypeLabel = (type: string | undefined) => ({
   reading: '阅读',
   practice: '练习',
   project: '项目',
@@ -245,25 +285,24 @@ const getTaskTypeLabel = (type: string) => ({
   diagnose: '诊断',
   refine: '优化',
   consolidate: '巩固'
-}[type] || type || '任务');
+}[type || ''] || type || '任务');
 
 const loadSessions = async () => {
   loading.value = true;
   try {
-    const response: any = await adminTeachingSessionsApi.list({
+    const response = await adminTeachingSessionsApi.list({
       page: page.value,
       limit: limit.value,
       userId: filters.value.userId || undefined,
       status: filters.value.status || undefined,
       onlyWithAdvisory: filters.value.onlyWithAdvisory || undefined,
+      onlyMissingWrapup: filters.value.onlyMissingWrapup || undefined,
     });
     const data = response.data?.data || response.data || {};
-    let items = data.items || [];
-    if (filters.value.onlyMissingWrapup) {
-      items = items.filter((item: any) => !item.wrapup || !item.wrapup.summary?.topicSummary);
-    }
+    let items: TeachingSessionRow[] = data.items || [];
+    // 关注等级依赖前端综合计算，暂为当前页内过滤
     if (filters.value.onlyAttention) {
-      items = items.filter((item: any) => getAttentionLevel(item) !== '低关注');
+      items = items.filter((item) => getAttentionLevel(item) !== '低关注');
     }
     sessions.value = items;
     total.value = data.total || 0;
@@ -274,7 +313,12 @@ const loadSessions = async () => {
   }
 };
 
-const selectSession = (row: any) => {
+const applyFilters = () => {
+  page.value = 1;
+  loadSessions();
+};
+
+const selectSession = (row: TeachingSessionRow) => {
   selectedSession.value = row;
   detailVisible.value = true;
 };
@@ -290,7 +334,7 @@ const handlePageChange = (next: number) => {
   loadSessions();
 };
 
-const priorityTag = (priority: string) => {
+const priorityTag = (priority?: string) => {
   if (priority === 'high') return 'danger';
   if (priority === 'medium') return 'warning';
   if (priority === 'low') return 'success';
@@ -316,28 +360,28 @@ const formatTime = (value: string | null | undefined) => {
   return new Date(value).toLocaleString('zh-CN');
 };
 
-const getWrapupStatusText = (row: any) => {
+const getWrapupStatusText = (row: TeachingSessionRow) => {
   if (!row.wrapup) return '缺失';
   if (row.wrapup.status === 'complete') return '完成';
   return row.wrapup.status || '处理中';
 };
 
-const getWrapupStatusTag = (row: any) => {
+const getWrapupStatusTag = (row: TeachingSessionRow) => {
   if (!row.wrapup) return 'danger';
   if (row.wrapup.status === 'complete') return 'success';
   return 'warning';
 };
 
-const getAdvisoryStatusText = (row: any) => {
+const getAdvisoryStatusText = (row: TeachingSessionRow) => {
   return row.advisory?.shouldSuggest ? row.advisory?.priority || '触发' : '未触发';
 };
 
-const getAdvisoryStatusTag = (row: any) => {
+const getAdvisoryStatusTag = (row: TeachingSessionRow) => {
   if (!row.advisory?.shouldSuggest) return 'info';
   return priorityTag(row.advisory.priority);
 };
 
-const getWrapupSourceText = (wrapup: any) => {
+const getWrapupSourceText = (wrapup: TeachingSessionRow['wrapup']) => {
   const sourceLabel = (value?: string) => ({
     model: '模型生成',
     fallback: '规则回退',
@@ -350,14 +394,14 @@ const getWrapupSourceText = (wrapup: any) => {
   return parts.join(' / ') || '--';
 };
 
-const getArtifactSummary = (row: any) => {
+const getArtifactSummary = (row: TeachingSessionRow) => {
   if (!row.wrapup && !row.advisory?.shouldSuggest) return '';
     if (row.wrapup && !row.wrapup.summary?.topicSummary) return '会话总结缺少摘要';
   if (row.advisory?.shouldSuggest) return row.advisory.recommendation || '有建议待处理';
   return row.wrapup?.summary?.topicSummary || '产物正常';
 };
 
-const getAttentionLevel = (row: any) => {
+const getAttentionLevel = (row: TeachingSessionRow) => {
   if (row.status === 'timeout' || row.status === 'error') return '高关注';
   if (row.status === 'completed' && !row.wrapup) return '高关注';
   if (row.advisory?.priority === 'high') return '高关注';
@@ -366,14 +410,14 @@ const getAttentionLevel = (row: any) => {
   return '低关注';
 };
 
-const getAttentionTag = (row: any) => {
+const getAttentionTag = (row: TeachingSessionRow) => {
   const level = getAttentionLevel(row);
   if (level === '高关注') return 'danger';
   if (level === '中关注') return 'warning';
   return 'success';
 };
 
-const getAttentionText = (row: any) => {
+const getAttentionText = (row: TeachingSessionRow) => {
   if (row.status === 'timeout') return '会话超时';
   if (row.status === 'error') return '会话错误';
   if (row.status === 'completed' && !row.wrapup) return '已完成但无会话总结';
@@ -383,14 +427,14 @@ const getAttentionText = (row: any) => {
   return '状态稳定';
 };
 
-const getAttentionTone = (row: any) => {
+const getAttentionTone = (row: TeachingSessionRow) => {
   const level = getAttentionLevel(row);
   if (level === '高关注') return 'danger';
   if (level === '中关注') return 'warning';
   return 'safe';
 };
 
-const getDetailHeadline = (row: any) => {
+const getDetailHeadline = (row: TeachingSessionRow) => {
   if (row.status === 'timeout') return '会话超时，请核查执行链路。';
   if (row.status === 'error') return '会话出错，请查看日志。';
   if (row.status === 'completed' && !row.wrapup) return '已完成但未产出总结。';
@@ -406,7 +450,7 @@ const getStatusType = (status: string) => {
     timeout: 'danger',
     error: 'danger',
   };
-  return (map[status] || 'info') as any;
+  return (map[status] || 'info') as 'primary' | 'success' | 'info' | 'warning' | 'danger';
 };
 
 const getStatusLabel = (status: string) => {
@@ -419,7 +463,7 @@ const getStatusLabel = (status: string) => {
   return map[status] || status;
 };
 
-const formatJson = (value: any) => JSON.stringify(value || {}, null, 2);
+const formatJson = (value: unknown) => JSON.stringify(value || {}, null, 2);
 
 watch(() => [
   filters.value.status,

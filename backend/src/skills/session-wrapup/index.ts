@@ -444,7 +444,8 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
   caller: {
-    agentId: AGENT_ID,
+    agentId: 'teaching-agent',
+    skillId: 'session-wrapup',
   },
   buildUserPayload: (input) => buildWrapupUserPrompt(input, 'primary'),
   normalizeOutput: (parsed) => (parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null),
@@ -480,10 +481,8 @@ export class SessionWrapupAgent {
 
     try {
       const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: AGENT_ID };
-      const promptResult = await callPrompt(sessionWrapupPromptSpec, input, {
-        userId: 'system',
-      });
+      const caller: CallerInfo = { agentId: 'teaching-agent', skillId: 'session-wrapup' };
+      const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
 
       const parsed = promptResult.output;
       const parsedSummary = parsed?.summary;
@@ -550,7 +549,7 @@ export class SessionWrapupAgent {
             content: buildWrapupUserPrompt(input, 'evaluation-fallback')
           }
         ]
-      }, caller, { userId: 'system' });
+      }, caller);
 
       const content = response.choices[0]?.message.content || '{}';
       const parsed = parseContent(content);

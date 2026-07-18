@@ -1,24 +1,23 @@
 <template>
-  <CapabilityShell title="模型偏好设置" description="按 Agent 单独覆盖模型、温度和 token 上限。移动端保留表格视图，支持横向滑动查看完整字段。">
+  <CapabilityShell title="高级模型" description="为特定 AI 能力选择模型并调整生成参数。不了解参数时，建议保留系统默认值。">
     <div class="agent-model-settings">
       <section class="agent-model-settings__intro glass-card">
-        <h2>我的模型偏好</h2>
+        <h2>AI 能力参数</h2>
         <el-alert type="info" :closable="false">
-          您可以自定义特定 Agent 的模型参数，覆盖系统默认配置。
+          自定义设置只会影响对应的 AI 能力，不会改变已完成的学习记录。
         </el-alert>
       </section>
 
       <section class="agent-model-settings__panel glass-card">
         <div class="agent-model-settings__header">
           <div>
-            <h3>Agent 覆盖列表</h3>
-            <p>表格在小屏下保持完整字段，左右滑动即可查看。</p>
+            <h3>模型配置</h3>
           </div>
         </div>
 
         <div class="agent-model-settings__table mobile-table-scroll">
           <el-table :data="configs" v-loading="loading">
-            <el-table-column label="Agent" width="240">
+            <el-table-column label="AI 能力" width="240">
               <template #default="{ row }">
                 <div class="agent-cell">
                   <strong>{{ row.displayName || row.agentId }}</strong>
@@ -26,26 +25,26 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="model" label="我的模型" width="150">
+            <el-table-column prop="model" label="使用模型" width="150">
               <template #default="{ row }">
                 {{ row.model || '使用系统默认' }}
               </template>
             </el-table-column>
-            <el-table-column prop="temperature" label="我的温度" width="100">
+            <el-table-column prop="temperature" label="生成随机性" width="120">
               <template #default="{ row }">
                 {{ row.temperature ?? '系统默认' }}
               </template>
             </el-table-column>
-            <el-table-column prop="enabled" label="启用覆盖" width="100">
+            <el-table-column prop="enabled" label="使用自定义设置" width="130">
               <template #default="{ row }">
-                <el-switch v-model="row.enabled" @change="toggleOverride(row)" />
+                <el-switch v-model="row.enabled" :loading="busyAgentId === row.agentId" :disabled="isBusy" @change="toggleOverride(row)" />
               </template>
             </el-table-column>
             <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <div class="table-actions">
-                  <el-button size="small" @click="editOverride(row)">设置</el-button>
-                  <el-button size="small" type="danger" @click="resetOverride(row)">重置</el-button>
+                    <el-button size="small" :disabled="isBusy" @click="editOverride(row)">编辑参数</el-button>
+                    <el-button size="small" type="danger" :loading="busyAgentId === row.agentId && busyAction === 'reset'" :disabled="isBusy" @click="resetOverride(row)">恢复系统默认</el-button>
                 </div>
               </template>
             </el-table-column>
@@ -53,25 +52,25 @@
         </div>
       </section>
 
-      <el-dialog v-model="editDialogVisible" title="自定义配置" width="560px" :fullscreen="isMobileDialog">
+      <el-dialog v-model="editDialogVisible" title="自定义配置" width="min(560px, calc(100vw - 32px))" :close-on-click-modal="!isBusy" :close-on-press-escape="!isBusy" :show-close="!isBusy">
         <el-form :model="editForm" label-position="top">
-          <el-form-item label="Agent">
+          <el-form-item label="AI 能力">
             <el-input v-model="editForm.agentId" disabled />
           </el-form-item>
-          <el-form-item label="温度">
-            <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input />
+          <el-form-item label="生成随机性（Temperature）">
+            <el-slider v-model="editForm.temperature" :min="0" :max="2" :step="0.1" show-input />
           </el-form-item>
-          <el-form-item label="Max Tokens">
+          <el-form-item label="最大输出长度（Token）">
             <el-input-number v-model="editForm.maxTokens" :min="100" :max="8000" />
           </el-form-item>
-          <el-form-item label="自定义模型">
+          <el-form-item label="模型名称">
             <el-input v-model="editForm.model" placeholder="留空使用系统配置" />
           </el-form-item>
         </el-form>
         <template #footer>
           <div class="dialog-actions">
-            <el-button @click="editDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="saveOverride">保存</el-button>
+            <el-button :disabled="isBusy" @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="busyAction === 'save'" :disabled="isBusy && busyAction !== 'save'" @click="saveOverride">保存</el-button>
           </div>
         </template>
       </el-dialog>
@@ -80,7 +79,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
+import { ElMessageBox } from 'element-plus';
 import api from '@/utils/api';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
@@ -103,7 +103,9 @@ interface AgentDefinition {
 const configs = ref<UserAgentConfig[]>([]);
 const loading = ref(false);
 const editDialogVisible = ref(false);
-const isMobileDialog = ref(false);
+const busyAgentId = ref('');
+const busyAction = ref<'' | 'toggle' | 'save' | 'reset'>('');
+const isBusy = computed(() => busyAction.value !== '');
 const editForm = ref<UserAgentConfig>({
   agentId: '',
   enabled: false
@@ -111,7 +113,7 @@ const editForm = ref<UserAgentConfig>({
 
 const buildConfigRows = (agents: AgentDefinition[], overrides: UserAgentConfig[]) => {
   const overrideMap = new Map(overrides.map((item) => [item.agentId, item]));
-  const rows = agents.map((agent) => {
+  const rows: UserAgentConfig[] = agents.map((agent) => {
     const override = overrideMap.get(agent.id);
     return {
       agentId: agent.id,
@@ -144,10 +146,6 @@ const toConfigPayload = (config: UserAgentConfig) => ({
   maxTokens: config.maxTokens
 });
 
-const syncViewport = () => {
-  isMobileDialog.value = window.innerWidth <= 768;
-};
-
 const fetchConfigs = async () => {
   loading.value = true;
   try {
@@ -167,17 +165,22 @@ const fetchConfigs = async () => {
 };
 
 const toggleOverride = async (row: UserAgentConfig) => {
+  if (isBusy.value) return;
   const previousEnabled = !row.enabled;
+  busyAgentId.value = row.agentId;
+  busyAction.value = 'toggle';
   try {
     await api.put(`/user/agent-model-configs/${encodeURIComponent(row.agentId)}`, {
       ...toConfigPayload(row)
     });
     toast.success(row.enabled ? '已启用覆盖' : '已禁用覆盖');
-    await fetchConfigs();
   } catch (error) {
     row.enabled = previousEnabled;
     toast.error('操作失败');
+  } finally {
     await fetchConfigs();
+    busyAgentId.value = '';
+    busyAction.value = '';
   }
 };
 
@@ -187,6 +190,9 @@ const editOverride = (row: UserAgentConfig) => {
 };
 
 const saveOverride = async () => {
+  if (isBusy.value) return;
+  busyAgentId.value = editForm.value.agentId;
+  busyAction.value = 'save';
   try {
     await api.put(`/user/agent-model-configs/${encodeURIComponent(editForm.value.agentId)}`, toConfigPayload(editForm.value));
     toast.success('配置已保存');
@@ -194,10 +200,30 @@ const saveOverride = async () => {
     await fetchConfigs();
   } catch (error) {
     toast.error('保存失败');
+  } finally {
+    busyAgentId.value = '';
+    busyAction.value = '';
   }
 };
 
 const resetOverride = async (row: UserAgentConfig) => {
+  if (isBusy.value) return;
+  try {
+    await ElMessageBox.confirm(
+      `确认清除“${row.displayName || row.agentId}”的自定义模型参数并恢复系统默认吗？`,
+      '恢复系统默认',
+      {
+        type: 'warning',
+        confirmButtonText: '确认恢复',
+        cancelButtonText: '取消'
+      }
+    );
+  } catch {
+    return;
+  }
+
+  busyAgentId.value = row.agentId;
+  busyAction.value = 'reset';
   try {
     if (row.hasOverride) {
       await api.delete(`/user/agent-model-configs/${encodeURIComponent(row.agentId)}`);
@@ -206,17 +232,14 @@ const resetOverride = async (row: UserAgentConfig) => {
     await fetchConfigs();
   } catch (error) {
     toast.error('重置失败');
+  } finally {
+    busyAgentId.value = '';
+    busyAction.value = '';
   }
 };
 
 onMounted(() => {
-  syncViewport();
-  window.addEventListener('resize', syncViewport);
   fetchConfigs();
-});
-
-onUnmounted(() => {
-  window.removeEventListener('resize', syncViewport);
 });
 </script>
 

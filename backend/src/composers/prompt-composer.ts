@@ -4,6 +4,7 @@ import { getRequestContext } from '../gateway/api-gateway/context';
 import { agentConfigService } from '../services/agentConfig.service';
 import { detectPromptDrift } from './drift-detector';
 import { extractJsonObject } from './json-extractor';
+import { createHash } from 'crypto';
 import {
   PromptCallContext,
   PromptCallResult,
@@ -24,6 +25,10 @@ function normalizeTokenUsage(usage: any) {
   };
 }
 
+function hashPrompt(prompt: string): string {
+  return createHash('sha256').update(prompt || '').digest('hex');
+}
+
 function resolveMaxTokens(promptMaxTokens?: number | null, defaultMaxTokens?: number, minMaxTokens?: number): number | undefined {
   const configured = Number(promptMaxTokens || defaultMaxTokens || 0);
   const minimum = Number(minMaxTokens || 0);
@@ -37,8 +42,10 @@ export async function callPrompt<TInput, TOutput>(
   context: PromptCallContext = {}
 ): Promise<PromptCallResult<TOutput>> {
   const requestContext = getRequestContext();
+  const runtimeOverride = requestContext.promptRuntimeOverride || {};
+  const systemPromptOverride = runtimeOverride.systemPromptOverride || context.systemPromptOverride;
   const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
-  if (spec.requireActivePrompt && !promptConfig?.systemPrompt?.trim()) {
+  if (spec.requireActivePrompt && !systemPromptOverride?.trim() && !promptConfig?.systemPrompt?.trim()) {
     return {
       success: false,
       error: {
@@ -60,11 +67,12 @@ export async function callPrompt<TInput, TOutput>(
       },
     };
   }
-  const systemPrompt = context.systemPromptOverride
+  const systemPrompt = systemPromptOverride
     || promptConfig?.systemPrompt
     || spec.defaultSystemPrompt;
   const userPayload = stringifyPayload(spec.buildUserPayload(input));
   const promptDrift = detectPromptDrift(spec.defaultSystemPrompt, promptConfig?.systemPrompt || null);
+  const systemPromptHash = hashPrompt(systemPrompt);
   const attempts: PromptAttemptTrace[] = [];
   const gateway = getAPIGateway();
   const maxAttempts = Math.max(1, spec.retryStrategy?.maxAttempts || 1);
@@ -92,9 +100,15 @@ export async function callPrompt<TInput, TOutput>(
 
     const response = await gateway.execute({
       messages,
-      max_tokens: resolveMaxTokens(promptConfig?.maxTokens, spec.modelDefaults?.maxTokens, spec.modelDefaults?.minMaxTokens),
-      temperature: promptConfig?.temperature ?? spec.modelDefaults?.temperature,
-    }, spec.caller, { userId: context.userId });
+      model: runtimeOverride.modelOverride,
+      max_tokens: runtimeOverride.maxTokensOverride
+        ?? resolveMaxTokens(promptConfig?.maxTokens, spec.modelDefaults?.maxTokens, spec.modelDefaults?.minMaxTokens),
+      temperature: runtimeOverride.temperatureOverride
+        ?? promptConfig?.temperature
+        ?? spec.modelDefaults?.temperature,
+    }, spec.caller, {
+      userId: runtimeOverride.routingUserIdOverride || context.userId,
+    });
 
     const rawModelOutput = response.choices[0]?.message.content || '';
     const extracted = extractJsonObject(rawModelOutput);
@@ -125,8 +139,8 @@ export async function callPrompt<TInput, TOutput>(
       data: {
         id: `pcl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         agentId: spec.agentId,
-        systemPromptVersion: promptConfig?.version || null,
-        systemPromptHash: promptDrift?.dbHash || promptDrift?.codeHash || '',
+        systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+        systemPromptHash,
         userPayload,
         rawModelOutput,
         extractedJson: extracted.extractedJson,
@@ -151,7 +165,7 @@ export async function callPrompt<TInput, TOutput>(
       debug: {
         agentId: spec.agentId,
         systemPrompt,
-        systemPromptVersion: promptConfig?.version || null,
+        systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
         userPayload,
         rawModelOutput,
         extractedJson: extracted.extractedJson,
@@ -169,8 +183,8 @@ export async function callPrompt<TInput, TOutput>(
     data: {
       id: `pcl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       agentId: spec.agentId,
-      systemPromptVersion: promptConfig?.version || null,
-      systemPromptHash: promptDrift?.dbHash || promptDrift?.codeHash || '',
+      systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+      systemPromptHash,
       userPayload,
       rawModelOutput: lastRaw || null,
       extractedJson: lastExtractedJson,
@@ -199,7 +213,7 @@ export async function callPrompt<TInput, TOutput>(
     debug: {
       agentId: spec.agentId,
       systemPrompt,
-      systemPromptVersion: promptConfig?.version || null,
+      systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
       userPayload,
       rawModelOutput: lastRaw,
       extractedJson: lastExtractedJson,

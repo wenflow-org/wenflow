@@ -22,14 +22,14 @@ interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; h
 
 const STAGE = 'path';
 
-const CONTRACTS: SeedContract[] = [
+export const PATH_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
   { agentId: 'skill:path-scene-framing', displayName: '路径场景定帧 Skill', description: 'Goal 输出 → normalizedInput 标准化输入与 planningHints' },
   { agentId: 'skill:path-planning', displayName: '路径规划 Skill', description: '认知图景 + 学习路径的 milestone 骨架' },
   { agentId: 'skill:stage-designer', displayName: '阶段设计 Skill', description: 'milestone → subtasks 的任务展开' },
   { agentId: 'path-agent', displayName: '路径 Agent', description: '路径阶段聚合编排，handoff 到 execution 阶段' },
 ];
 
-const FIELDS: SeedField[] = [
+export const PATH_FIELD_ROUTING_FIELDS: SeedField[] = [
   // === skill:path-scene-framing 产出 normalizedInput.* ===
   { fieldId: 'normalizedInput.learnerProfile.backgroundExperience', promptRole: 'soft-info', valueType: 'string', description: '学习者背景经验（清洗）' },
   { fieldId: 'normalizedInput.learnerProfile.constraintsAndBoundaries', promptRole: 'soft-info', valueType: 'string', description: '学习者约束与边界（清洗）' },
@@ -72,7 +72,7 @@ const FIELDS: SeedField[] = [
   { fieldId: 'subtasks.transferable', promptRole: 'soft-info', valueType: 'boolean', description: '是否可迁移' },
 ];
 
-const ROUTINGS: SeedRouting[] = [
+export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
   // path-scene-framing → path-planning
   ...['normalizedInput.learnerProfile.backgroundExperience', 'normalizedInput.learnerProfile.constraintsAndBoundaries',
       'normalizedInput.problemSpace.realProblem', 'normalizedInput.problemSpace.scenario', 'normalizedInput.problemSpace.currentPainPoint',
@@ -128,25 +128,22 @@ export interface FieldRoutingBootstrapResult {
 export async function ensurePathFieldRoutings(systemPrisma: PrismaClient): Promise<FieldRoutingBootstrapResult> {
   const result: FieldRoutingBootstrapResult = { fieldsCreated: 0, fieldsSkipped: 0, contractsCreated: 0, contractsSkipped: 0, routingsCreated: 0, routingsSkipped: 0 };
 
-  for (const c of CONTRACTS) {
+  for (const c of PATH_FIELD_ROUTING_CONTRACTS) {
     const exists = await systemPrisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
-    if (exists) { result.contractsSkipped++; continue; }
-    await systemPrisma.agent_contracts.create({ data: { id: randomUUID(), agentId: c.agentId, stage: STAGE, displayName: c.displayName, description: c.description, schemaVersion: 'v3', source: 'code', managedByCode: true } });
-    result.contractsCreated++;
+    await systemPrisma.agent_contracts.upsert({ where: { agentId: c.agentId }, update: {}, create: { id: randomUUID(), agentId: c.agentId, stage: STAGE, displayName: c.displayName, description: c.description, schemaVersion: 'v3', source: 'code', managedByCode: true } });
+    exists ? result.contractsSkipped++ : result.contractsCreated++;
   }
 
-  for (const f of FIELDS) {
+  for (const f of PATH_FIELD_ROUTING_FIELDS) {
     const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
-    if (exists) { result.fieldsSkipped++; continue; }
-    await systemPrisma.field_definitions.create({ data: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
-    result.fieldsCreated++;
+    await systemPrisma.field_definitions.upsert({ where: { fieldId: f.fieldId }, update: {}, create: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
+    exists ? result.fieldsSkipped++ : result.fieldsCreated++;
   }
 
-  for (const r of ROUTINGS) {
+  for (const r of PATH_FIELD_ROUTINGS) {
     const exists = await systemPrisma.agent_field_routings.findUnique({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } } });
-    if (exists) { result.routingsSkipped++; continue; }
-    await systemPrisma.agent_field_routings.create({ data: { id: randomUUID(), agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: (r.handoff && r.handoff.length) ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, notes: r.notes ?? null, source: 'code', managedByCode: true } });
-    result.routingsCreated++;
+    await systemPrisma.agent_field_routings.upsert({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } }, update: {}, create: { id: randomUUID(), agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: (r.handoff && r.handoff.length) ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, notes: r.notes ?? null, source: 'code', managedByCode: true } });
+    exists ? result.routingsSkipped++ : result.routingsCreated++;
   }
 
   return result;

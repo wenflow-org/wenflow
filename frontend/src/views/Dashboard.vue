@@ -21,13 +21,13 @@
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">规划新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '规划新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -39,7 +39,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
-                  能力中心
+                  个人中心
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">
                   <el-icon><Switch /></el-icon>
@@ -61,13 +61,27 @@
           <h1>{{ dashboardTitle }}</h1>
           <p>{{ dashboardSubtitle }}</p>
 
+          <div v-if="dashboardError" class="dashboard-error" role="alert">
+            <span>{{ dashboardError }}</span>
+            <button type="button" @click="fetchDashboardData">重新加载</button>
+          </div>
+
           <div class="dashboard-list-section">
             <div class="dashboard-list-section__head">
               <span class="section-kicker">今天建议</span>
-              <strong>先完成一件最重要的小事</strong>
+              <strong>今天可以从这里开始</strong>
             </div>
 
-            <div class="dashboard-list">
+            <div v-if="loading" class="dashboard-list">
+              <div class="dashboard-list__item dashboard-list__item--muted">
+                <span class="dashboard-list__dot dashboard-list__dot--dim"></span>
+                <div>
+                  <strong>正在整理今天的建议</strong>
+                  <p>路径和任务加载完成后会显示可执行的下一步。</p>
+                </div>
+              </div>
+            </div>
+            <div v-else class="dashboard-list">
               <router-link v-for="item in todayActionItems" :key="item.id" :to="item.to" class="dashboard-list__item" :class="`dashboard-list__item--${item.tone}`">
                 <span class="dashboard-list__dot" :class="`dashboard-list__dot--${item.dot}`"></span>
                 <div>
@@ -83,16 +97,20 @@
         <aside class="focus-card">
           <div class="focus-card__head">
             <span class="section-kicker">当前路径</span>
-            <span class="focus-card__badge">{{ hasLearningPath ? '进行中' : '待开始' }}</span>
+            <span class="focus-card__badge">{{ primaryPathBadge }}</span>
           </div>
 
-          <div class="focus-card__summary">
+          <div v-if="loading" class="focus-card__summary">
+            <h2>正在加载学习路径</h2>
+            <p>请稍候，正在同步当前路径、任务和进度。</p>
+          </div>
+          <div v-else class="focus-card__summary">
             <h2>{{ primaryPathTitle }}</h2>
             <p>{{ primaryPathDesc }}</p>
           </div>
 
 
-          <div class="focus-card__stats">
+          <div v-if="!loading" class="focus-card__stats">
             <article>
               <span>路径数量</span>
               <strong>{{ pathCount }}</strong>
@@ -100,7 +118,7 @@
             </article>
             <article>
               <span>{{ hasLearningPath ? '当前进度' : '准备状态' }}</span>
-              <strong>{{ hasLearningPath ? `${completedTaskCount}/${totalTaskCount}` : '未开始' }}</strong>
+              <strong>{{ hasLearningPath ? taskProgressText : '未开始' }}</strong>
               <p>{{ currentPathHint }}</p>
             </article>
             <article>
@@ -110,8 +128,8 @@
             </article>
           </div>
 
-          <router-link :to="hasLearningPath ? continueLearningTarget : goalConversationPath" class="btn btn--primary btn--full">
-            {{ hasLearningPath ? '继续上次学习' : '创建第一个目标' }}
+          <router-link v-if="!loading" :to="primaryActionTarget" class="btn btn--primary btn--full">
+            {{ primaryActionLabel }}
           </router-link>
         </aside>
       </section>
@@ -140,12 +158,12 @@
                   <strong>{{ calendarDayFormatDuration(selectedCalendarDay.durationMinutes) }}</strong>
                 </article>
                 <article class="dashboard-calendar-status__card">
-                  <span>学习会话</span>
+                  <span>学习次数</span>
                   <strong>{{ selectedCalendarDay.sessionCount }}次</strong>
                 </article>
                 <article class="dashboard-calendar-status__card">
                   <span>主要内容</span>
-                  <strong class="dashboard-calendar-status__text">{{ selectedCalendarDay.primaryTaskTitle || '暂无任务' }}</strong>
+                  <strong class="dashboard-calendar-status__text">{{ selectedCalendarDay.primaryTaskTitle || '未关联具体任务' }}</strong>
                 </article>
                 <article class="dashboard-calendar-status__card">
                   <span>学习强度</span>
@@ -244,9 +262,18 @@ const stats = ref<LearningStats | null>(null);
 type DashboardPath = LearningPath & { status?: string };
 
 const paths = ref<DashboardPath[]>([]);
-const loading = ref(false);
+const loading = ref(true);
+const dashboardError = ref('');
 const scrolled = ref(false);
-const selectedCalendarDay = ref<any>(null);
+// LoadCalendar 的 day-select 事件载荷（仅本页用到的字段）
+type CalendarDayData = {
+  date: string;
+  durationMinutes: number;
+  sessionCount: number;
+  primaryTaskTitle: string;
+};
+
+const selectedCalendarDay = ref<CalendarDayData | null>(null);
 const adaptiveGuidance = ref<AdaptiveGuidancePayload | null>(null);
 const adaptiveCopy = computed(() => adaptiveGuidance.value?.copy || null);
 
@@ -260,11 +287,12 @@ const headerNavItems = computed(() => [
   { label: '成就', to: achievementsPath.value, matchPrefixes: ['/achievements'] }
 ]);
 
-const pathCount = computed(() => stats.value?.paths?.total || 0);
+const pathCount = computed(() => Math.max(stats.value?.paths?.total || 0, paths.value.length));
 const hasLearningPath = computed(() => pathCount.value > 0);
 const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.value?.subtasks?.completed || 0);
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);
-const totalTaskCount = computed(() => completedTaskCount.value + inProgressTaskCount.value || 1);
+const totalTaskCount = computed(() => stats.value?.tasks.total || stats.value?.subtasks?.total || 0);
+const taskProgressText = computed(() => totalTaskCount.value > 0 ? `${completedTaskCount.value}/${totalTaskCount.value}` : '尚未生成任务');
 
 const getEnrichmentStatus = (path: DashboardPath | null | undefined) => path?.generationStatus?.stageDesign || null;
 
@@ -272,6 +300,7 @@ const getPathDisplayState = (path: DashboardPath | null | undefined) => {
   if (!path) return 'attention';
   if (path.status === 'failed') return 'attention';
   if (path.status === 'generating') return 'generating';
+  if (path.status === 'completed') return 'completed';
   if (getEnrichmentStatus(path) === 'failed') return 'attention';
   if (getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending') return 'generating';
   return 'active';
@@ -293,14 +322,22 @@ const getActiveStage = (path: DashboardPath | null | undefined) => {
 
 const getPrimaryActionTask = (path: DashboardPath | null | undefined) => {
   const tasks = normalizeTaskList(getActiveStage(path));
-  return tasks.find((task) => task.status === 'todo')
-    || tasks.find((task) => task.status === 'in_progress')
+  return tasks.find((task) => task.status === 'in_progress')
+    || tasks.find((task) => task.status === 'todo')
     || null;
 };
 
 const primaryPath = computed(() => {
   const activePaths = paths.value.filter((path) => getPathDisplayState(path) === 'active');
-  return activePaths.find((path) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
+  const generatingPath = paths.value.find((path) => getPathDisplayState(path) === 'generating');
+  const attentionPath = paths.value.find((path) => getPathDisplayState(path) === 'attention');
+  const completedPath = paths.value.find((path) => getPathDisplayState(path) === 'completed');
+  return activePaths.find((path) => Boolean(getPrimaryActionTask(path)))
+    || activePaths[0]
+    || generatingPath
+    || attentionPath
+    || completedPath
+    || null;
 });
 
 const primaryActionTask = computed(() => getPrimaryActionTask(primaryPath.value));
@@ -319,28 +356,64 @@ const continueLearningTarget = computed(() => {
 });
 
 const dashboardTitle = computed(() => {
-  if (adaptiveCopy.value?.headline) return adaptiveCopy.value.headline;
+  if (loading.value) return '正在加载你的学习进度';
+  if (dashboardError.value) return '暂时无法加载学习台';
   if (!hasLearningPath.value) return `你好，${userStore.user?.name || '同学'}，先从一个具体目标开始。`;
+  if (adaptiveCopy.value?.headline) return adaptiveCopy.value.headline;
   return `欢迎回来，${userStore.user?.name || '同学'}。`;
 });
 
 const dashboardSubtitle = computed(() => {
-  if (adaptiveCopy.value?.subtitle) return adaptiveCopy.value.subtitle;
+  if (loading.value) return '请稍候，正在整理你的路径和任务。';
+  if (dashboardError.value) return '你的数据没有丢失，可以重新加载。';
   if (!hasLearningPath.value) return '描述一件你最近想解决的事，把它缩小到可以开始的一步。';
+  if (adaptiveCopy.value?.subtitle) return adaptiveCopy.value.subtitle;
   return '从上次停下的位置继续，把学习接上。';
 });
 
-const primaryPathTitle = computed(() => (hasLearningPath.value ? '当前学习路径' : '还没有学习路径'));
+const primaryPathTitle = computed(() => primaryPath.value?.name || primaryPath.value?.title || (hasLearningPath.value ? '学习路径' : '还没有学习路径'));
+
+const primaryPathState = computed(() => getPathDisplayState(primaryPath.value));
+const primaryPathBadge = computed(() => {
+  if (loading.value) return '加载中';
+  if (!hasLearningPath.value) return '待开始';
+  return ({
+    active: primaryActionTask.value?.status === 'in_progress' ? '学习中' : '待开始',
+    generating: '路径生成中',
+    attention: '需要处理',
+    completed: '已完成'
+  }[primaryPathState.value] || '待开始');
+});
 
 const primaryPathDesc = computed(() => (
-  adaptiveCopy.value?.pathHint
+  !hasLearningPath.value
+    ? '说说你最近想解决什么，问流会帮你整理出第一步。'
+    : primaryPathState.value === 'generating'
+      ? '学习路径还在准备，完成后即可开始。'
+      : primaryPathState.value === 'attention'
+        ? '这条路径暂时没有准备好，可以进入路径页查看问题。'
+        : primaryPathState.value === 'completed'
+          ? '这条路径已经完成，可以回顾任务和学习反馈。'
+          : adaptiveCopy.value?.pathHint
     ? adaptiveCopy.value.pathHint
-    : (
-      hasLearningPath.value
-        ? '从上次停下的位置继续。'
-        : '从一个具体目标开始，系统会根据你的情况生成第一版学习路径。'
-    )
+    : '查看当前阶段和下一项任务。'
 ));
+
+const primaryActionTarget = computed(() => {
+  if (!hasLearningPath.value) return goalConversationPath.value;
+  if (primaryPath.value?.id && primaryPathState.value !== 'active') {
+    return `${learningPathDetailBasePath.value}/${primaryPath.value.id}`;
+  }
+  return continueLearningTarget.value;
+});
+
+const primaryActionLabel = computed(() => {
+  if (!hasLearningPath.value) return '规划第一个目标';
+  if (primaryPathState.value === 'generating') return '查看生成进度';
+  if (primaryPathState.value === 'attention') return '查看问题';
+  if (primaryPathState.value === 'completed') return '查看学习成果';
+  return primaryActionTask.value?.status === 'in_progress' ? '继续当前任务' : '开始下一项任务';
+});
 
 const currentPathHint = computed(() => {
   if (adaptiveCopy.value?.warningCopy && adaptiveCopy.value.warningCopy !== '当前没有明显风险。') {
@@ -352,7 +425,7 @@ const currentPathHint = computed(() => {
 });
 
 const nextStepLabel = computed(() => {
-  if (!hasLearningPath.value) return '创建第一个目标';
+  if (!hasLearningPath.value) return '规划第一个目标';
   return primaryActionTask.value?.title || '查看学习路径';
 });
 
@@ -381,27 +454,13 @@ const todayActionItems = computed(() => {
   };
 
   if (!hasLearningPath.value) {
-    if (adaptiveCopy.value?.todayActions?.length) {
-      return adaptiveCopy.value.todayActions.map((item: any, index: number) => ({
-        id: `adaptive-empty-${index}`,
-        tone: index === 0 ? 'primary' : 'muted',
-        dot: index === 0 ? 'active' : 'dim',
-        title: item.title,
-        desc: item.desc,
-        action: item.action,
-        to: resolveAdaptiveTarget(item.to) || goalConversationPath.value
-      }));
-    }
-
     return [
-      { id: 'goal', tone: 'primary', dot: 'active', title: '先规划一个目标', desc: '描述你想解决的事，系统会生成学习路径。', action: '规划目标', to: goalConversationPath.value },
-      { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '完成一次学习后，系统会根据你的节奏给出建议。', action: '前往查看', to: learningStatePath.value },
-      { id: 'record', tone: 'muted', dot: 'dim', title: '查看学习记录', desc: '开始学习后会自动记录学习时间。', action: '前往查看', to: achievementsPath.value }
+      { id: 'goal', tone: 'primary', dot: 'active', title: '规划第一个目标', desc: '描述你想解决的事，问流会帮你整理出第一步。', action: '开始规划', to: goalConversationPath.value }
     ];
   }
 
   if (adaptiveCopy.value?.todayActions?.length) {
-    return adaptiveCopy.value.todayActions.map((item: any, index: number) => ({
+    return adaptiveCopy.value.todayActions.map((item, index) => ({
       id: `adaptive-${index}`,
       tone: index === 0 ? 'primary' : index === 1 ? 'accent' : 'muted',
       dot: index === 0 ? 'active' : index === 1 ? 'active' : 'dim',
@@ -429,27 +488,27 @@ const todayActionItems = computed(() => {
     id: 'record',
     tone: 'muted',
     dot: 'dim',
-    title: '查看学习记录',
-    desc: '回顾最近的学习内容和复盘。',
-    action: '前往查看',
+    title: '查看学习成就',
+    desc: '查看已解锁的里程碑和完成进度。',
+    action: '查看成就',
     to: achievementsPath.value
   };
 
   let suggest;
   if (typeof lsb === 'number' && suggestion) {
     const tone = lsb >= 0 ? 'accent' : 'warn';
-    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '前往查看', to: learningStatePath.value };
+    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '查看状态', to: learningStatePath.value };
   } else if (typeof lsb === 'number') {
     const tone = lsb >= 0 ? 'accent' : 'warn';
-    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '前往查看', to: learningStatePath.value };
+    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '查看状态', to: learningStatePath.value };
   } else {
-    suggest = { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '前往查看', to: learningStatePath.value };
+    suggest = { id: 'state', tone: 'muted', dot: 'dim', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '查看状态', to: learningStatePath.value };
   }
 
   return [task, suggest, record];
 });
 
-const handleCalendarDaySelect = (day: any) => {
+const handleCalendarDaySelect = (day: CalendarDayData | null) => {
   selectedCalendarDay.value = day;
 };
 
@@ -467,16 +526,16 @@ const calendarDayZone = (minutes: number) => {
 };
 
 const calendarDayFormatDuration = (minutes: number) => {
-  if (!minutes) return '0m';
+  if (!minutes) return '0 分钟';
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return h > 0 ? `${h}h${m}m` : `${m}m`;
+  return h > 0 ? `${h} 小时${m > 0 ? ` ${m} 分钟` : ''}` : `${m} 分钟`;
 };
 
 const calendarDayAnalysis = computed(() => {
   const day = selectedCalendarDay.value;
   if (!day) return '';
-  if (day.durationMinutes === 0) return '今天还没有学习记录。可以休息，也可以补一次短时学习。';
+  if (day.durationMinutes === 0) return '当天没有学习记录。';
   if (day.durationMinutes >= 120) return `高强度学习日，累计 ${calendarDayFormatDuration(day.durationMinutes)}。建议之后适当安排恢复。`;
   if (day.durationMinutes >= 60) return `学习投入比较扎实，累计 ${calendarDayFormatDuration(day.durationMinutes)}。保持这个节奏就好。`;
   return `轻量学习日，累计 ${calendarDayFormatDuration(day.durationMinutes)}，适合保持节奏或复习。`;
@@ -484,6 +543,7 @@ const calendarDayAnalysis = computed(() => {
 
 async function fetchDashboardData() {
   loading.value = true;
+  dashboardError.value = '';
   try {
     const [statsResult, pathsResult] = await Promise.allSettled([
       learningAPI.getStats(),
@@ -502,6 +562,10 @@ async function fetchDashboardData() {
       console.error('获取学习路径失败:', pathsResult.reason);
     }
 
+    if (statsResult.status === 'rejected' && pathsResult.status === 'rejected') {
+      dashboardError.value = '学习数据加载失败，请重试。';
+    }
+
     try {
       adaptiveGuidance.value = await learningAPI.getAdaptiveGuidance();
     } catch (error) {
@@ -515,6 +579,14 @@ async function fetchDashboardData() {
     loading.value = false;
   }
 }
+
+const hasGeneratingPath = () => paths.value.some((path) => getPathDisplayState(path) === 'generating');
+
+const handleWindowFocus = () => {
+  if (!loading.value && hasGeneratingPath()) {
+    void fetchDashboardData();
+  }
+};
 
 const handleScroll = () => {
   scrolled.value = window.scrollY > 24;
@@ -546,11 +618,13 @@ onMounted(async () => {
 
   await fetchDashboardData();
   window.addEventListener('scroll', handleScroll, { passive: true });
+  window.addEventListener('focus', handleWindowFocus);
   handleScroll();
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
+  window.removeEventListener('focus', handleWindowFocus);
 });
 </script>
 

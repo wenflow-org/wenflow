@@ -4,8 +4,9 @@ import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import stateTrackingService from '../learning/state-tracking.service';
 import { logger } from '../../utils/logger';
+import { runBackgroundTask } from '../background-task-tracker.service';
 
-type DashboardGuidanceTrigger =
+export type DashboardGuidanceTrigger =
   | 'path-created'
   | 'task-completed'
   | 'lesson-wrapup'
@@ -169,13 +170,25 @@ class DashboardGuidanceSnapshotService {
 
     this.refreshQueues.set(userId, next);
 
-    next.finally(() => {
+    void next.then(() => {
+      if (this.refreshQueues.get(userId) === next) {
+        this.refreshQueues.delete(userId);
+      }
+    }, () => {
       if (this.refreshQueues.get(userId) === next) {
         this.refreshQueues.delete(userId);
       }
     });
 
     return next;
+  }
+
+  refreshInBackground(userId: string, trigger: DashboardGuidanceTrigger): void {
+    runBackgroundTask(
+      'dashboard-guidance.refresh',
+      () => this.refresh(userId, trigger),
+      { userId, trigger }
+    );
   }
 
   private async performRefresh(

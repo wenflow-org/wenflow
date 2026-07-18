@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/system-client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("SYSTEM_DATABASE_URL")
+}
+
+model agent_lab_configs {
+  id           String   @id
+  agentName    String   @unique
+  model        String?
+  temperature  Float?
+  maxTokens    Int?
+  baseURL      String?
+  apiKey       String?
+  systemPrompt String?
+  extraConfig  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+model agent_model_configs {
+  id              String   @id
+  agentId         String   @unique
+  tier            String   @default("chat")
+  model           String?
+  endpoint        String?
+  apiKey          String?
+  temperature     Float    @default(0.7)
+  maxTokens       Int      @default(2000)
+  priority        Int      @default(0)
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  reasoningEffort String?
+  thinkingMode    String?
+}
+
+model agent_prompts {
+  id           String    @id
+  agentId      String
+  version      Int
+  name         String
+  description  String?
+  systemPrompt String
+  compiledSystemPrompt String?
+  compileStatus        String?
+  compileError         String?
+  sourceHash           String?
+  compileContextHash   String?
+  compiledAt           DateTime?
+  temperature  Float?
+  maxTokens    Int?
+  model        String?
+  status       String    @default("draft")
+  createdBy    String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now())
+  metadata     String?
+  useCount     Int       @default(0)
+  avgLatency   Float?
+  successRate  Float?
+  publishedAt  DateTime?
+
+  @@unique([agentId, version])
+  @@index([agentId])
+  @@index([status])
+}
+
+model agent_definitions {
+  id                 String   @id
+  displayName        String
+  description        String?
+  category           String
+  inputSchema        String?
+  outputSchema       String?
+  variableBindings   String?
+  capabilities       String?
+  defaultMaxTokens   Int?
+  defaultTemperature Float?
+  schemaVersion      Int      @default(1)
+  source             String   @default("code")
+  managedByCode      Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([category])
+  @@index([managedByCode])
+}
+
+model orchestrator_definitions {
+  id            String   @id
+  displayName   String
+  description   String?
+  category      String   @default("agent")
+  steps         String
+  variableGraph String?
+  source        String   @default("code")
+  managedByCode Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model agent_registrations {
+  id           String   @id
+  name         String   @unique
+  type         String
+  category     String?
+  description  String?
+  version      String   @default("1.0.0")
+  config       String?
+  inputSchema  String?
+  outputSchema String?
+  capabilities String?
+  subscribes   String?
+  publishes    String?
+  callCount    Int      @default(0)
+  successRate  Float    @default(1.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+  endpoint     String?
+}
+
+model platform_api_configs {
+  id                     String    @id @default("platform")
+  apiUrl                 String?
+  apiKey                 String?
+  availableModels        String?
+  defaultModel           String?
+  defaultReasoningModel  String?
+  defaultEvaluationModel String?
+  connectionStatus       String    @default("unknown")
+  lastCheckedAt          DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now())
+  defaultTemperature     Float     @default(0.7)
+  defaultMaxTokens       Int       @default(2000)
+  reasoningEndpoint      String?
+  lightEndpoint          String?
+  chatModels             String?
+  reasoningModels        String?
+  lightModels            String?
+  adminAccessMode        String?
+  adminAllowedIps        String?
+  allowPrivateNetwork    Boolean?
+  privateNetworkHosts    String?
+}
+
+model skill_model_configs {
+  id               String   @id
+  skillId          String   @unique
+  tier             String   @default("chat")
+  model            String?
+  thinkingMode     String?
+  reasoningEffort  String?
+  endpoint         String?
+  apiKey           String?
+  temperature      Float    @default(0.7)
+  maxTokens        Int      @default(2000)
+  requestTimeoutMs Int?
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+}
+
+model skill_registrations {
+  id           String   @id
+  name         String   @unique
+  version      String   @default("1.0.0")
+  category     String?
+  description  String?
+  inputSchema  String?
+  outputSchema String?
+  endpoint     String?
+  callCount    Int      @default(0)
+  successRate  Float    @default(1.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+}
+
+// ============================================================
+// V3 字段路由模型（AGENT_IO_DESIGN_V3.md §3）
+// 4 张新表：field_definitions / agent_contracts /
+//          agent_field_routings / node_config_changes
+// ============================================================
+
+model field_definitions {
+  id              String   @id
+  fieldId         String   @unique
+  stage           String
+  promptRole      String
+  valueType       String   @default("string")
+  snakeName       String?
+  camelName       String?
+  description     String?
+  enumValues      String?
+  schemaVersion   String   @default("v3")
+  source          String   @default("code")
+  managedByCode   Boolean  @default(true)
+  systemLocked    Boolean  @default(false)
+  structureLocked Boolean  @default(false)
+  bindings        String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+
+  @@index([stage])
+  @@index([promptRole])
+}
+
+model agent_contracts {
+  id            String   @id
+  agentId       String   @unique
+  stage         String
+  displayName   String
+  description   String?
+  schemaVersion String   @default("v3")
+  source        String   @default("code")
+  managedByCode Boolean  @default(true)
+  metadata      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now())
+
+  @@index([stage])
+}
+
+model agent_field_routings {
+  id               String   @id
+  agentId          String
+  fieldId          String
+  render           String   @default("visible")
+  handoff          String?
+  internalFlag     Boolean  @default(false)
+  accumulate       Boolean  @default(false)
+  visibilityPreset String?
+  ordering         Int      @default(0)
+  notes            String?
+  source           String   @default("code")
+  managedByCode    Boolean  @default(true)
+  systemLocked     Boolean  @default(false)
+  structureLocked  Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+
+  @@unique([agentId, fieldId])
+  @@index([agentId])
+  @@index([fieldId])
+}
+
+model node_config_changes {
+  id          String   @id
+  changeType  String
+  targetTable String
+  targetId    String
+  agentId     String?
+  fieldId     String?
+  before      String?
+  after       String?
+  actorId     String?
+  actorRole   String?
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  @@index([targetTable, targetId])
+  @@index([agentId])
+  @@index([fieldId])
+  @@index([createdAt])
+}
+
+// ============================================================
+// V3.6 · Prompt Ops 评估集 / 评估运行记录
+// 用于「Prompt 运营开发与评估中心」(/admin/agent-registry)
+// ============================================================
+
+model prompt_eval_cases {
+  id                String   @id
+  agentId           String
+  caseId            String
+  name              String
+  description       String?
+  // JSON-stringified messages: [{role:'user'|'assistant', content:string}]
+  messagesJson      String
+  // JSON-stringified previous state (optional)
+  previousStateJson String?
+  // 期望: {mustIncludeFields?: string[], mustNotInclude?: string[], expectedStage?: string, notes?: string}
+  expectationsJson  String?
+  enabled           Boolean  @default(true)
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now())
+
+  @@unique([agentId, caseId])
+  @@index([agentId])
+}
+
+model prompt_eval_runs {
+  id              String   @id
+  agentId         String
+  promptVersionId String?
+  promptVersion   Int?
+  promptSource    String // 'active' | 'version' | 'custom' | 'draft'
+  mode            String // 'single' | 'stability' | 'eval-set'
+  caseCount       Int      @default(0)
+  totalRuns       Int      @default(0)
+  // 概要 JSON: structuredSuccessRate / proposingRate / checkerPassRate / avgAttemptCount / failureCount / parseModeDistribution / failureTypeDistribution / passedCases / failedCases
+  summaryJson     String
+  // 详细 results 数组 JSON
+  resultsJson     String?
+  durationMs      Int      @default(0)
+  triggeredBy     String?
+  createdAt       DateTime @default(now())
+
+  @@index([agentId])
+  @@index([createdAt])
+}

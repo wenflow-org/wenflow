@@ -71,12 +71,12 @@
         </div>
       </div>
       <div class="prompt-results-toolbar">
-        <span class="prompt-results-toolbar__count">{{ filteredLogs.length }} 条结果</span>
+        <span class="prompt-results-toolbar__count">{{ logs.length }} 条结果</span>
       </div>
       <div class="logs-list" v-loading="loading">
       <div v-if="logs.length" class="prompt-log-list">
         <article
-          v-for="log in filteredLogs"
+          v-for="log in logs"
           :key="log.id"
           class="prompt-log-card"
           :class="{ 'is-error': !log.success, 'is-drift': !!log.promptDrift }"
@@ -222,9 +222,32 @@ const router = useRouter();
 const loading = ref(false);
 const loadError = ref('');
 const filterExpanded = ref(typeof window === 'undefined' || window.innerWidth > 768);
+interface PromptCallLogItem {
+  id: string;
+  success?: boolean;
+  promptDrift?: boolean;
+  createdAt?: string;
+  agentId?: string;
+  systemPromptVersion?: string | number;
+  durationMs?: number;
+  pathId?: string;
+  conversationId?: string;
+  pipelineRunId?: string;
+  pipelineStepIndex?: number;
+  traceId?: string;
+  extractedJson?: unknown;
+  normalizedOutput?: unknown;
+  errorCode?: string;
+  errorMessage?: string;
+  userPayload?: unknown;
+  rawModelOutput?: unknown;
+  tokenUsage?: unknown;
+  [key: string]: unknown;
+}
+
 const detailVisible = ref(false);
-const selectedLog = ref<any | null>(null);
-const logs = ref<any[]>([]);
+const selectedLog = ref<PromptCallLogItem | null>(null);
+const logs = ref<PromptCallLogItem[]>([]);
 const filters = ref({
   agentId: '',
   pathId: '',
@@ -253,14 +276,7 @@ const promptLogHighlights = computed(() => [
   { label: `失败 ${errorCount.value}`, tone: errorCount.value > 0 ? 'danger' as const : 'neutral' as const },
   { label: `漂移 ${driftCount.value}`, tone: driftCount.value > 0 ? 'warning' as const : 'neutral' as const }
 ]);
-const filteredLogs = computed(() => logs.value.filter((log) => {
-  if (filters.value.status === 'success' && !log.success) return false;
-  if (filters.value.status === 'error' && log.success) return false;
-  if (filters.value.status === 'drift' && !log.promptDrift) return false;
-  return true;
-}));
-
-const formatTime = (value: string) => {
+const formatTime = (value: string | undefined) => {
   if (!value) return '--';
   return new Date(value).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -273,7 +289,7 @@ const formatTime = (value: string) => {
   });
 };
 
-const describeLogIssue = (log: any) => {
+const describeLogIssue = (log: PromptCallLogItem) => {
   if (log.success) {
     if (!log.normalizedOutput) return '成功，但缺少归一化输出。';
     return '';
@@ -285,7 +301,7 @@ const describeLogIssue = (log: any) => {
   return '失败。';
 };
 
-const openDetail = (log: any) => {
+const openDetail = (log: PromptCallLogItem) => {
   selectedLog.value = log;
   detailVisible.value = true;
 };
@@ -325,6 +341,8 @@ const loadLogs = async () => {
       pipelineRunId: filters.value.pipelineRunId || undefined,
       traceId: filters.value.traceId || undefined,
       parentExecutionId: filters.value.parentExecutionId || undefined,
+      // 状态过滤下沉到服务端，避免只过滤当前页造成的"全量"误解
+      status: (filters.value.status as 'success' | 'error' | 'drift') || undefined,
     });
     logs.value = response.data.data || [];
   } catch (error: any) {

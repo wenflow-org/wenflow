@@ -28,7 +28,7 @@ interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; h
 
 const STAGE = 'learner';
 
-const CONTRACTS: SeedContract[] = [
+export const LEARNER_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
   { agentId: 'skill:goal-profile-inference', displayName: '目标画像推断 Skill', description: '从 Goal 输出推断长期学习者画像叙述' },
   { agentId: 'skill:learning-pattern-distiller', displayName: '学习模式蒸馏 Skill', description: '从历史学习行为蒸馏稳定模式叙述' },
   { agentId: 'skill:session-knowledge-distiller', displayName: '会话知识蒸馏 Skill', description: '从单次教学会话蒸馏 conceptLedger / 基础概念' },
@@ -37,7 +37,7 @@ const CONTRACTS: SeedContract[] = [
   { agentId: 'learner-agent', displayName: '学习者 Agent', description: '学习者画像编排，聚合所有 distiller 输出并刷新 snapshot / projection' },
 ];
 
-const FIELDS: SeedField[] = [
+export const LEARNER_FIELD_ROUTING_FIELDS: SeedField[] = [
   // === skill:goal-profile-inference 产出 ===
   { fieldId: 'goalNarrative', promptRole: 'hidden-inference', valueType: 'string', description: '学习目标叙述（长期画像）' },
   { fieldId: 'backgroundNarrative', promptRole: 'hidden-inference', valueType: 'string', description: '学习背景叙述（长期画像）' },
@@ -69,7 +69,7 @@ const FIELDS: SeedField[] = [
   { fieldId: 'labelColor', promptRole: 'derived-presentation', valueType: 'string', description: '标签颜色', snakeName: 'color', camelName: 'color' },
 ];
 
-const ROUTINGS: SeedRouting[] = [
+export const LEARNER_FIELD_ROUTINGS: SeedRouting[] = [
   // goal-profile-inference → learner-agent
   ...['goalNarrative', 'backgroundNarrative', 'motivationNarrative',
       'baselineNarrative', 'learningContextNarrative'].map(fieldId => ({
@@ -131,25 +131,22 @@ export interface FieldRoutingBootstrapResult {
 export async function ensureLearnerFieldRoutings(systemPrisma: PrismaClient): Promise<FieldRoutingBootstrapResult> {
   const result: FieldRoutingBootstrapResult = { fieldsCreated: 0, fieldsSkipped: 0, contractsCreated: 0, contractsSkipped: 0, routingsCreated: 0, routingsSkipped: 0 };
 
-  for (const c of CONTRACTS) {
+  for (const c of LEARNER_FIELD_ROUTING_CONTRACTS) {
     const exists = await systemPrisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
-    if (exists) { result.contractsSkipped++; continue; }
-    await systemPrisma.agent_contracts.create({ data: { id: randomUUID(), agentId: c.agentId, stage: STAGE, displayName: c.displayName, description: c.description, schemaVersion: 'v3', source: 'code', managedByCode: true } });
-    result.contractsCreated++;
+    await systemPrisma.agent_contracts.upsert({ where: { agentId: c.agentId }, update: {}, create: { id: randomUUID(), agentId: c.agentId, stage: STAGE, displayName: c.displayName, description: c.description, schemaVersion: 'v3', source: 'code', managedByCode: true } });
+    exists ? result.contractsSkipped++ : result.contractsCreated++;
   }
 
-  for (const f of FIELDS) {
+  for (const f of LEARNER_FIELD_ROUTING_FIELDS) {
     const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
-    if (exists) { result.fieldsSkipped++; continue; }
-    await systemPrisma.field_definitions.create({ data: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
-    result.fieldsCreated++;
+    await systemPrisma.field_definitions.upsert({ where: { fieldId: f.fieldId }, update: {}, create: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
+    exists ? result.fieldsSkipped++ : result.fieldsCreated++;
   }
 
-  for (const r of ROUTINGS) {
+  for (const r of LEARNER_FIELD_ROUTINGS) {
     const exists = await systemPrisma.agent_field_routings.findUnique({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } } });
-    if (exists) { result.routingsSkipped++; continue; }
-    await systemPrisma.agent_field_routings.create({ data: { id: randomUUID(), agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: (r.handoff && r.handoff.length) ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, notes: r.notes ?? null, source: 'code', managedByCode: true } });
-    result.routingsCreated++;
+    await systemPrisma.agent_field_routings.upsert({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } }, update: {}, create: { id: randomUUID(), agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: (r.handoff && r.handoff.length) ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, notes: r.notes ?? null, source: 'code', managedByCode: true } });
+    exists ? result.routingsSkipped++ : result.routingsCreated++;
   }
 
   return result;

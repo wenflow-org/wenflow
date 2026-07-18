@@ -1,23 +1,25 @@
 <template>
   <CapabilityShell
     title="API 接入"
-    description="当前版本仅开放 AI 模型 API 接入。配置自己的 API 后，将替代平台默认模型进行调用。"
+    description="配置自己的模型服务后，问流会使用它进行后续调用。"
   >
     <div class="user-settings-page">
       <el-card class="settings-card" shadow="never">
         <template #header>
           <div class="card-header">
             <h3>AI 模型配置</h3>
-            <p>配置自己的 API 后，将替代平台默认模型进行调用。</p>
+            <p>保存后，后续 AI 调用会优先使用这组配置。</p>
           </div>
         </template>
 
-        <el-form label-width="140px" class="api-form">
+        <el-form v-loading="loading" label-width="140px" class="api-form">
           <el-form-item label="启用自定义 API">
             <el-switch
               v-model="apiConfig.enabled"
               active-text="启用"
               inactive-text="禁用"
+              :disabled="busy"
+              @change="handleEnabledChange"
             />
             <div class="field-hint">
               启用后将使用你配置的 API，禁用则使用平台默认
@@ -28,7 +30,7 @@
             <el-input
               v-model="apiConfig.endpoint"
               placeholder="https://api.openai.com/v1"
-              :disabled="!apiConfig.enabled"
+              :disabled="!apiConfig.enabled || busy"
             />
             <div class="field-hint">
               例如：https://api.openai.com/v1 或 https://api.deepseek.com
@@ -39,12 +41,12 @@
             <el-input
               v-model="apiConfig.apiKey"
               type="password"
-              placeholder="sk-..."
+              :placeholder="hasSavedApiKey ? '已保存密钥，留空表示继续使用' : 'sk-...'"
               show-password
-              :disabled="!apiConfig.enabled"
+              :disabled="!apiConfig.enabled || busy"
             />
             <div class="field-hint">
-              你的 API 密钥，仅用于身份验证
+              {{ hasSavedApiKey ? '密钥已安全保存。仅在需要替换时输入新值。' : '你的 API 密钥，仅用于身份验证。' }}
             </div>
           </el-form-item>
 
@@ -52,7 +54,7 @@
             <el-input
               v-model="apiConfig.chatModel"
               placeholder="deepseek-v4-flash"
-              :disabled="!apiConfig.enabled"
+              :disabled="!apiConfig.enabled || busy"
             />
             <div class="field-hint">
               用于常规对话和任务生成的模型
@@ -63,7 +65,7 @@
             <el-input
               v-model="apiConfig.reasoningModel"
               placeholder="deepseek-v4-pro"
-              :disabled="!apiConfig.enabled"
+              :disabled="!apiConfig.enabled || busy"
             />
             <div class="field-hint">
               用于复杂推理任务的模型（可选，默认同对话模型）
@@ -73,10 +75,10 @@
           <el-form-item>
             <div class="action-buttons">
               <el-button
-                type="primary"
+                type="default"
                 :loading="testing"
                 @click="testConnection"
-                :disabled="!apiConfig.enabled"
+                :disabled="!apiConfig.enabled || busy"
               >
                 测试连接
               </el-button>
@@ -84,7 +86,7 @@
                 type="primary"
                 :loading="saving"
                 @click="saveApiConfig"
-                :disabled="!apiConfig.enabled"
+                :disabled="!apiConfig.enabled || busy"
               >
                 保存配置
               </el-button>
@@ -92,9 +94,11 @@
                 v-if="apiConfig.enabled"
                 type="danger"
                 plain
+                :loading="disabling"
+                :disabled="busy"
                 @click="disableConfig"
               >
-                禁用
+                禁用自定义 API
               </el-button>
             </div>
           </el-form-item>
@@ -105,15 +109,18 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
-import { Plus } from '@element-plus/icons-vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessageBox } from 'element-plus';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { toast } from '../../utils/toast';
-import { getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
+import { disableUserApiConfig, getUserApiConfig, testApiConnection, updateUserApiConfig } from '@/api/userCustom';
 
 const saving = ref(false);
 const testing = ref(false);
 const loading = ref(false);
+const disabling = ref(false);
+const hasSavedApiKey = ref(false);
+const busy = computed(() => loading.value || saving.value || testing.value || disabling.value);
 
 // 单配置模式
 const apiConfig = reactive({
@@ -135,10 +142,8 @@ const loadApiConfig = async () => {
     const data = res.data;
     apiConfig.enabled = data.enabled || false;
     apiConfig.endpoint = data.endpoint || '';
-    // 后端不返回实际 apiKey，只保留用户已输入的
-    if (data.apiKey) {
-      apiConfig.apiKey = data.apiKey;
-    }
+    apiConfig.apiKey = '';
+    hasSavedApiKey.value = !!data.hasApiKey;
     apiConfig.chatModel = data.chatModel || 'deepseek-v4-flash';
     apiConfig.reasoningModel = data.reasoningModel || 'deepseek-v4-pro';
   } catch {
@@ -148,13 +153,28 @@ const loadApiConfig = async () => {
   }
 };
 
+const isValidEndpoint = (endpoint: string) => {
+  if (!endpoint) return false;
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const testConnection = async () => {
   if (!apiConfig.endpoint) {
     toast.warning('请先填写模型端点');
     return;
   }
 
-  if (!apiConfig.apiKey) {
+  if (!isValidEndpoint(apiConfig.endpoint)) {
+    toast.warning('模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL');
+    return;
+  }
+
+  if (!apiConfig.apiKey && !hasSavedApiKey.value) {
     toast.warning('请先填写 API Key');
     return;
   }
@@ -163,7 +183,7 @@ const testConnection = async () => {
   try {
     await testApiConnection({
       endpoint: apiConfig.endpoint,
-      apiKey: apiConfig.apiKey,
+      apiKey: apiConfig.apiKey || undefined,
       model: apiConfig.chatModel,
     });
     toast.success('连接测试成功');
@@ -180,7 +200,12 @@ const saveApiConfig = async () => {
     return;
   }
 
-  if (apiConfig.enabled && !apiConfig.apiKey) {
+  if (!isValidEndpoint(apiConfig.endpoint)) {
+    toast.warning('模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL');
+    return;
+  }
+
+  if (apiConfig.enabled && !apiConfig.apiKey && !hasSavedApiKey.value) {
     toast.warning('启用时必须填写 API Key');
     return;
   }
@@ -190,13 +215,16 @@ const saveApiConfig = async () => {
     await updateUserApiConfig({
       enabled: apiConfig.enabled,
       endpoint: apiConfig.endpoint,
-      apiKey: apiConfig.apiKey,
+      apiKey: apiConfig.apiKey || undefined,
       chatModel: apiConfig.chatModel,
       reasoningModel: apiConfig.reasoningModel,
     });
 
     toast.success('配置已保存');
-    // 不重新加载配置，保留用户输入的 apiKey
+    if (apiConfig.apiKey) {
+      hasSavedApiKey.value = true;
+      apiConfig.apiKey = '';
+    }
   } catch (error: any) {
     toast.error(`保存失败：${error.message}`);
   } finally {
@@ -206,18 +234,42 @@ const saveApiConfig = async () => {
 
 const disableConfig = async () => {
   try {
-    await updateUserApiConfig({
-      enabled: false,
-      endpoint: apiConfig.endpoint,
-      apiKey: apiConfig.apiKey,
-      chatModel: apiConfig.chatModel,
-      reasoningModel: apiConfig.reasoningModel,
-    });
-    toast.success('已禁用自定义 API，将使用平台默认配置');
+    await ElMessageBox.confirm(
+      '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
+      '禁用自定义 API',
+      {
+        type: 'warning',
+        confirmButtonText: '确认禁用',
+        cancelButtonText: '取消'
+      }
+    );
+  } catch {
+    apiConfig.enabled = true;
+    return;
+  }
+
+  disabling.value = true;
+  try {
+    await disableUserApiConfig();
     apiConfig.enabled = false;
-    // 不重新加载配置，保留用户输入的 apiKey
+    toast.success('已禁用自定义 API，将使用平台默认配置');
   } catch (error: any) {
+    apiConfig.enabled = true;
     toast.error(`操作失败：${error.message}`);
+  } finally {
+    disabling.value = false;
+  }
+};
+
+const handleEnabledChange = async (enabled: boolean) => {
+  if (!enabled) {
+    await disableConfig();
+    return;
+  }
+
+  if (!apiConfig.endpoint || !isValidEndpoint(apiConfig.endpoint) || (!hasSavedApiKey.value && !apiConfig.apiKey)) {
+    apiConfig.enabled = false;
+    toast.info('请补全配置并保存后启用');
   }
 };
 </script>

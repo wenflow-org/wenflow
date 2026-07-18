@@ -44,8 +44,12 @@ export type PlatformControlReceipt = {
   platformStage?: string
   goalCompleted?: boolean
   taskCompleted?: boolean
+  completedTasks?: number
+  totalTasks?: number
   runCompleted?: boolean
-  terminalReason?: 'completed' | 'abandoned'
+  terminalReason?: 'completed' | 'abandoned' | 'failed'
+  terminalCode?: string
+  terminalDetail?: string
   rawTraceId?: string
 }
 
@@ -81,7 +85,7 @@ export type BlackboxExperimentSummary = {
   mode: 'blackbox-api'
   status: string
   currentStage: string
-  terminalReason: 'completed' | 'abandoned' | null
+  terminalReason: 'completed' | 'abandoned' | 'failed' | null
   startedAt: string | null
   completedAt: string | null
   durationMs: number | null
@@ -139,6 +143,68 @@ export type VirtualLearnerRefereeOutput = {
     path: string
     timestamp: string | null
     traceId: string | null
+    excerpt: string
+    interpretation: string
+  }>
+}
+
+export type ActorAuditEvidenceSource =
+  | 'actorProfile'
+  | 'story'
+  | 'learnerPrivateState'
+  | 'publicTrace'
+  | 'experimentSummary'
+
+export type VirtualLearnerActorAuditInput = {
+  actorProfile: {
+    profile: Record<string, unknown>
+    learningGoal: string
+    knownConcepts: unknown[]
+    struggleConcepts: unknown[]
+    personalityTraits: Record<string, unknown>
+  }
+  story: Record<string, unknown> | null
+  frictionBudget: 'none' | 'low' | 'normal' | 'high' | 'stress_test'
+  learnerPrivateState: Record<string, unknown>
+  publicTrace: Array<{
+    timestamp: string
+    observation: LearnerObservation
+  }>
+  experimentSummary: BlackboxExperimentSummary
+}
+
+export type VirtualLearnerActorAuditOutput = {
+  verdict: 'credible' | 'credible_with_concerns' | 'invalid' | 'inconclusive'
+  scores: {
+    overall: number
+    personaConsistency: number
+    storyConsistency: number | null
+    disclosureDiscipline: number | null
+    frictionCalibration: number
+    stateContinuity: number
+    behaviorPlausibility: number
+    evidenceSufficiency: number
+  }
+  findings: Array<{
+    code: string
+    severity: 'critical' | 'major' | 'minor' | 'info'
+    category: 'persona' | 'story' | 'disclosure' | 'friction' | 'state' | 'behavior' | 'trace'
+    title: string
+    detail: string
+    evidenceIds: string[]
+  }>
+  recommendations: Array<{
+    priority: 'P0' | 'P1' | 'P2' | 'P3'
+    action: string
+    rationale: string
+    findingCodes: string[]
+  }>
+  evidence: Array<{
+    id: string
+    source: ActorAuditEvidenceSource
+    index: number | null
+    path: string
+    timestamp: string | null
     excerpt: string
     interpretation: string
   }>

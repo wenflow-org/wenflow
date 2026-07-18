@@ -153,7 +153,8 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
   caller: {
-    agentId: AGENT_ID,
+    agentId: 'teaching-agent',
+    skillId: 'peer-reinforcement',
   },
   buildUserPayload: (input) => buildPeerUserPayload(input),
   validateParsedOutput: (parsed) => validatePeerParsedOutput(parsed),
@@ -189,9 +190,7 @@ export class PeerAgent {
     let result: PeerDiscussionOutput | null = null;
 
     try {
-      const promptResult = await callPrompt(peerPromptSpec, input, {
-        userId: 'system',
-      });
+      const promptResult = await callPrompt(peerPromptSpec, input);
 
       if (!promptResult.success) {
         throw new Error(promptResult.error?.message || 'PEER_PROMPT_FAILED');

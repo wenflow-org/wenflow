@@ -1,10 +1,8 @@
 services:
-  backend:
+  migrate:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    ports:
-      - "3001:3001"
     volumes:
       - wenflow_data:/app/data
     env_file:
@@ -13,9 +11,43 @@ services:
       - DATABASE_URL=file:/app/data/dev.db
       - SYSTEM_DATABASE_URL=file:/app/data/system.db
       - NODE_ENV=production
-      - TRUST_PROXY=1
-      - ADMIN_LOCALHOST_ONLY=false
+      - LOG_DIR=/app/data/logs
+    user: "0:0"
+    entrypoint: ["sh", "-c", "umask 077 && npm run prisma:migrate:deploy:all && chown -R 10001:10001 /app/data"]
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    expose:
+      - "3001"
+    volumes:
+      - wenflow_data:/app/data
+    env_file:
+      - backend/.env
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - SYSTEM_DATABASE_URL=file:/app/data/system.db
+      - NODE_ENV=production
+      - TRUST_PROXY=${WENFLOW_NGINX_PROXY_IP:-172.29.0.10}
+      - ADMIN_ACCESS_MODE=private
+      - LOG_DIR=/app/data/logs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/readyz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
     restart: unless-stopped
+    stop_grace_period: 35s
+    networks:
+      default:
+      proxy:
+        ipv4_address: ${WENFLOW_BACKEND_PROXY_IP:-172.29.0.20}
 
   nginx:
     build:
@@ -24,8 +56,18 @@ services:
     ports:
       - "${NGINX_PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      proxy:
+        ipv4_address: ${WENFLOW_NGINX_PROXY_IP:-172.29.0.10}
 
 volumes:
   wenflow_data:
+
+networks:
+  proxy:
+    ipam:
+      config:
+        - subnet: ${WENFLOW_PROXY_SUBNET:-172.29.0.0/24}

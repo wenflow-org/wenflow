@@ -1,4 +1,4 @@
-import request from './request';
+import request from '@/utils/api';
 
 /**
  * 模型定义接口
@@ -32,7 +32,7 @@ export interface AvailableModelsResponse {
  */
 export async function getAvailableModels() {
   return request<AvailableModelsResponse>({
-    url: '/api/config/available-models',
+    url: '/config/available-models',
     method: 'get'
   });
 }
@@ -42,7 +42,7 @@ export async function getAvailableModels() {
  */
 export async function getModelIds() {
   return request<string[]>({
-    url: '/api/config/model-ids',
+    url: '/config/model-ids',
     method: 'get'
   });
 }

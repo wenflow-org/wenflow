@@ -21,13 +21,13 @@
 
         <div class="header-right planning-header__actions">
           <span v-if="!isTestMode && virtualDebugSummary" class="session-badge stage-info">{{ virtualDebugSummary }}</span>
-          <router-link :to="newConversationPath" class="header-cta">创建新目标</router-link>
+          <router-link :to="newConversationPath" class="header-cta">规划新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: '创建新目标', to: newConversationPath }"
+            :primary-action="{ label: '规划新目标', to: newConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -39,7 +39,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
-                  能力中心
+                  个人中心
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">
                   <el-icon><Switch /></el-icon>
@@ -63,7 +63,7 @@
           </div>
 
           <div class="planning-understand__meter">
-            <span>方向清晰度</span>
+            <span>当前进度</span>
             <div class="planning-meter-bar">
               <div class="planning-meter-bar__fill" :style="{ width: `${planningConfidencePercent}%` }"></div>
             </div>
@@ -94,7 +94,7 @@
         <section class="planning-chat-card glass-card">
 <div class="planning-chat-card__head planning-chat-card__head--workbench">
             <div class="planning-chat-card__copy">
-              <h2 v-if="!hasConversationStarted">说一件你最近卡住的事。</h2>
+              <h2 v-if="!hasConversationStarted">你最近想解决什么？</h2>
               <p v-if="!hasConversationStarted" class="planning-chat-card__intro">想到哪说到哪，先不用整理。</p>
               <p v-if="!isTestMode && virtualDebugSummary && !hasConversationStarted" class="planning-chat-card__intro planning-chat-card__intro--virtual">{{ virtualDebugSummary }}</p>
             </div>
@@ -102,7 +102,7 @@
             <div class="planning-chat-card__meta" :class="{ 'planning-chat-card__meta--compact': hasConversationStarted }">
               <router-link v-if="!hasConversationStarted" :to="navDashboardPath" class="planning-secondary-btn">回到学习台</router-link>
               <div v-if="hasConversationStarted && !isVirtualFormalView" class="planning-chat-card__head-actions">
-                <button type="button" class="planning-secondary-btn" @click="resetConversation">重置本次目标</button>
+                <button type="button" class="planning-secondary-btn" @click="resetConversation">清空本次对话</button>
               </div>
             </div>
           </div>
@@ -112,7 +112,7 @@
             <p v-if="realProblemText">我目前理解的重点是：{{ realProblemText }}</p>
             <div class="planning-completion-card__actions">
               <button class="proposal-btn proposal-btn-primary" @click="navigateToLearningPath">
-                <span>查看学习路径</span>
+                <span>生成学习路径</span>
                 <el-icon><ArrowRight /></el-icon>
               </button>
               <button v-if="!isTestMode && !isVirtualFormalView" class="proposal-btn proposal-btn-secondary" @click="showRegenerateDialog = true">重新规划</button>
@@ -122,8 +122,8 @@
           <div v-else class="planning-chat-flow">
             <div v-if="!hasConversationStarted && !loading" class="planning-start-card">
               <div class="planning-start-card__copy">
-                <span class="planning-start-card__role">AI 规划师</span>
-                <strong>先告诉我，你现在最想解决的是什么问题。</strong>
+                <span class="planning-start-card__role">问流</span>
+                <strong>可以说目标、卡点，或者你想完成的结果。</strong>
                 <p>不需要一开始就说得很准确。可以先描述你眼前最真实的麻烦、想达成的结果，或者你现在卡住的地方。</p>
               </div>
               <div class="planning-start-card__examples">
@@ -145,7 +145,8 @@
                   <span class="planning-msg__role">{{ msg.role === 'ai' ? '问流' : '你' }}</span>
                   <small>{{ formatTime(msg.time) }}</small>
                 </div>
-                <p v-html="msg.role === 'ai' ? formatMessage(msg.content) : msg.content"></p>
+                <p v-if="msg.role === 'user'">{{ msg.content }}</p>
+                <p v-else v-html="formatMessage(msg.content)"></p>
 
                 <div v-if="msg.role === 'ai' && msg.quickReplies && msg.quickReplies.length > 0 && !msg.quickRepliesUsed && currentStage !== 'proposing'" class="planning-replies">
                   <span
@@ -163,7 +164,7 @@
                   </span>
                 </div>
 
-                <div v-if="msg.role === 'ai' && isFailedMessage(msg.content)" class="planning-msg__retry">
+                <div v-if="msg.role === 'ai' && msg.failed" class="planning-msg__retry">
                   <button class="planning-retry-btn" @click="retryLastMessage" :disabled="loading">
                     <el-icon><RefreshRight /></el-icon>
                     <span>重试</span>
@@ -182,7 +183,7 @@
 <div class="planning-composer" :class="{ 'planning-composer--entry': !hasConversationStarted }">
               <transition name="slide-up">
                 <div v-if="showProposalActionPanel && !loading" class="planning-proposal" :class="{ 'planning-proposal--pending': !supplementMode, 'planning-proposal--supplement': supplementMode }">
-                  <span class="planning-proposal__eyebrow">{{ supplementMode ? '补充信息，重新整理方向' : '确认并生成路径' }}</span>
+                  <span class="planning-proposal__eyebrow">{{ supplementMode ? '补充信息，重新整理方向' : '路径预览' }}</span>
 
                   <div v-if="!supplementMode" class="planning-proposal__list">
                     <div v-if="proposalProblemText" class="planning-proposal__item">
@@ -214,8 +215,9 @@
                       <textarea
                         ref="inputField"
                         v-model="userInput"
-                        @keydown.enter.exact.prevent="sendMessage"
-                        @keydown.enter.shift.exact="inputNewLine"
+                        @keydown="handleComposerKeydown"
+                        @compositionstart="isComposing = true"
+                        @compositionend="isComposing = false"
                         placeholder="补充背景、限制或偏好..."
                         :disabled="loading"
                         rows="1"
@@ -234,7 +236,7 @@
                         <el-icon v-if="loading"><Loading /></el-icon>
                         <span>确认并生成路径</span>
                       </button>
-                      <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">还想补充</button>
+                      <button class="proposal-btn proposal-btn-secondary" @click="handleContinueSupplement">补充信息</button>
                     </template>
                     <template v-else>
                       <button class="proposal-btn proposal-btn-secondary" @click="handleCancelSupplement">取消</button>
@@ -260,8 +262,9 @@
                   <textarea
                     ref="inputField"
                     v-model="userInput"
-                    @keydown.enter.exact.prevent="sendMessage"
-                    @keydown.enter.shift.exact="inputNewLine"
+                    @keydown="handleComposerKeydown"
+                    @compositionstart="isComposing = true"
+                    @compositionend="isComposing = false"
                     :placeholder="hasConversationStarted ? '回答上面的问题，或补充你的基础、时间和限制…' : '先说说你最近想解决什么，或现在卡在哪里...'"
                     :disabled="loading"
                     rows="1"
@@ -296,6 +299,9 @@
         v-model="showRegenerateDialog"
         title="重新规划学习路径"
         width="500px"
+        :close-on-click-modal="!goalDialogBusy"
+        :close-on-press-escape="!goalDialogBusy"
+        :show-close="!goalDialogBusy"
         class="regenerate-dialog"
       >
         <div class="regenerate-content">
@@ -323,7 +329,7 @@
             <el-button
               type="primary"
               :loading="regenerating"
-              :disabled="!regenerateAdjustments.trim()"
+              :disabled="goalDialogBusy || !regenerateAdjustments.trim()"
               @click="regeneratePath"
               class="regenerate-btn"
             >
@@ -333,11 +339,11 @@
           
           <div class="fresh-start-section">
             <el-divider>或者</el-divider>
-            <el-button type="danger" plain @click="startFresh()">
+            <el-button type="danger" plain :loading="deletingConversation" :disabled="goalDialogBusy" @click="startFresh()">
               <el-icon><Delete /></el-icon>
-              完全重新开始
+              删除本次目标对话
             </el-button>
-            <p class="fresh-start-hint">删除当前对话，重新描述学习目标</p>
+            <p class="fresh-start-hint">只删除本次目标对话；已经生成的学习路径会保留</p>
           </div>
         </div>
       </el-dialog>
@@ -357,6 +363,7 @@ import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import { useUserStore } from '../stores/user';
 import { useDebugStore } from '@/stores/debug';
 import MarkdownIt from 'markdown-it';
+import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import type { GoalConversationEnvelope } from '@/api/goalConversation';
 import {
   deleteGoalConversation,
@@ -379,6 +386,11 @@ const md = new MarkdownIt({
   linkify: true,
   breaks: true
 });
+
+const MARKDOWN_SANITIZE_CONFIG: DOMPurifyConfig = {
+  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base', 'svg'],
+  ALLOW_DATA_ATTR: false
+};
 
 const ACTIVE_GOAL_CONVERSATION_KEY = 'active_goal_conversation_id';
 const ACTIVE_TEST_GOAL_CONVERSATION_KEY = 'active_test_goal_conversation_id';
@@ -447,9 +459,9 @@ const handleLogout = async () => {
 const chatContent = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLElement | null>(null);
 const inputField = ref<HTMLTextAreaElement | null>(null);
-const fileInputRef = ref<HTMLInputElement | null>(null);
 const userInput = ref('');
 const loading = ref(false);
+let componentActive = true;
 const conversationId = ref('');
 const currentStage = ref('understanding');
 const isCompleted = ref(false);
@@ -458,26 +470,17 @@ const generatedPathStatus = ref<string | null>(null);
 const showRegenerateDialog = ref(false);
 const regenerateAdjustments = ref('');
 const regenerating = ref(false);
+const deletingConversation = ref(false);
+const isComposing = ref(false);
+const goalDialogBusy = computed(() => regenerating.value || deletingConversation.value);
 const showUploadPanel = ref(false);
 const confidence = ref(0);
 const lastUserMessage = ref('');
+const lastFailedAction = ref<'message' | 'confirm'>('message');
 
 const MAX_QUICK_REPLY_SELECTION = 4;
 const selectedQuickReplies = ref<string[]>([]);
 const selectedFromMessageId = ref<string | null>(null);
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
-const acceptedMimeTypes = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-  'text/markdown',
-  'text/csv',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'image/png',
-  'image/jpeg'
-];
-const acceptedExtensions = ['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx', 'png', 'jpg', 'jpeg'];
-const isDraggingFile = ref(false);
 
 type PlanningUploadStatus = 'ready' | 'error';
 
@@ -533,142 +536,10 @@ const clearQuickReplySelection = () => {
   selectedFromMessageId.value = null;
 };
 
-const createUploadId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-const getFileExtension = (file: File) => {
-  const ext = file.name.split('.').pop();
-  return ext ? ext.toLowerCase() : '';
-};
-
-const validateFile = (file: File) => {
-  const extension = getFileExtension(file);
-  const isMimeAccepted = acceptedMimeTypes.includes(file.type);
-  const isExtAccepted = acceptedExtensions.includes(extension);
-
-  if (!isMimeAccepted && !isExtAccepted) {
-    return '暂不支持该文件类型';
-  }
-
-  if (file.size > MAX_UPLOAD_SIZE) {
-    return '文件不能超过 10MB';
-  }
-
-  return null;
-};
-
-const createPreviewUrl = (file: File) => {
-  if (file.type.startsWith('image/')) {
-    return URL.createObjectURL(file);
-  }
-  return undefined;
-};
-
-const addFiles = (files: File[]) => {
-  files.forEach((file) => {
-    const error = validateFile(file);
-    const uploadFile: PlanningUploadFile = {
-      id: createUploadId(),
-      file,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      progress: error ? 0 : 100,
-      status: error ? 'error' : 'ready',
-      error: error || undefined,
-      previewUrl: createPreviewUrl(file)
-    };
-
-    uploadedFiles.value.push(uploadFile);
-
-    if (error) {
-      toast.warning(`${file.name}：${error}`);
-    }
-  });
-};
-
-const openFilePicker = () => {
-  fileInputRef.value?.click();
-};
-
-const handleFileInputChange = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const files = Array.from(target.files || []);
-  if (files.length > 0) {
-    addFiles(files);
-  }
-  target.value = '';
-};
-
-const handleFileDragEnter = () => {
-  isDraggingFile.value = true;
-};
-
-const handleFileDragOver = () => {
-  isDraggingFile.value = true;
-};
-
-const handleFileDragLeave = (event: DragEvent) => {
-  const currentTarget = event.currentTarget as HTMLElement | null;
-  const relatedTarget = event.relatedTarget as Node | null;
-  if (!currentTarget || !relatedTarget || !currentTarget.contains(relatedTarget)) {
-    isDraggingFile.value = false;
-  }
-};
-
-const handleFileDrop = (event: DragEvent) => {
-  isDraggingFile.value = false;
-  const files = Array.from(event.dataTransfer?.files || []);
-  if (files.length > 0) {
-    addFiles(files);
-  }
-};
-
 const revokePreviewUrl = (previewUrl?: string) => {
   if (previewUrl) {
     URL.revokeObjectURL(previewUrl);
   }
-};
-
-const removeUploadedFile = (id: string) => {
-  const target = uploadedFiles.value.find((item) => item.id === id);
-  if (target) {
-    revokePreviewUrl(target.previewUrl);
-  }
-  uploadedFiles.value = uploadedFiles.value.filter((item) => item.id !== id);
-};
-
-const retryUploadedFile = (id: string) => {
-  const target = uploadedFiles.value.find((item) => item.id === id);
-  if (!target) return;
-
-  const error = validateFile(target.file);
-  target.error = error || undefined;
-  target.status = error ? 'error' : 'ready';
-  target.progress = error ? 0 : 100;
-
-  if (error) {
-    toast.warning(`${target.name}：${error}`);
-  }
-};
-
-const formatFileSize = (size: number) => {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const getUploadStatusLabel = (status: PlanningUploadStatus) => {
-  if (status === 'ready') return '待解析';
-  return '校验失败';
-};
-
-const getFileIcon = (file: PlanningUploadFile) => {
-  if (file.type.startsWith('image/')) return '🖼';
-  const extension = getFileExtension(file.file);
-  if (extension === 'pdf') return '📕';
-  if (extension === 'docx') return '📘';
-  if (extension === 'csv' || extension === 'xlsx') return '📊';
-  return '📄';
 };
 
 const composeQuickReplyPayload = () => {
@@ -694,6 +565,21 @@ const understanding = ref<{
     strengths?: string[];
   };
   pain_points?: string;
+  current_baseline?: {
+    level?: string;
+    evidence?: string;
+  };
+  available_resources?: {
+    time_budget?: string;
+    time_horizon?: string;
+    time_per_session?: string;
+  };
+  success_criteria?: {
+    observable_result?: string;
+    acceptance_check?: string;
+    time_window?: string;
+  };
+  constraints_and_boundaries?: string[];
 }>({});
 
 interface QuickReply {
@@ -708,6 +594,8 @@ interface Message {
   time: Date;
   quickReplies?: QuickReply[];
   quickRepliesUsed?: boolean;
+  /** 显式失败标记：仅由 appendRetryableFailureMessage 设置，不再靠关键词猜测 */
+  failed?: boolean;
 }
 
 interface WorkbenchInfoItem {
@@ -716,20 +604,43 @@ interface WorkbenchInfoItem {
   note?: string;
 }
 
-interface WorkbenchPendingItem {
-  title: string;
-  desc: string;
-  emphasis?: 'question' | 'missing';
-}
+// 历史消息在接口/本地存储中的松散结构
+type StoredConversationMessage = {
+  role?: string;
+  content?: unknown;
+  time?: string;
+  timestamp?: string;
+};
+
+// 结构化输出失败时后端返回的错误结构
+type ApiErrorLike = {
+  status?: number;
+  message?: string;
+  response?: {
+    status?: number;
+    data?: {
+      error?: string;
+      data?: GoalConversationEnvelope;
+    };
+  };
+};
+
+type VirtualContextRecord = {
+  profile?: { userName?: string };
+  storyContext?: { title?: string };
+  virtualSession?: { currentStage?: string };
+  bindings?: Record<string, unknown>;
+  goalConversation?: unknown;
+};
 
 const aiMessages = ref<Message[]>([]);
 const userMessages = ref<Message[]>([]);
 const nextQuestions = ref<string[]>([]);
-const collectedData = ref<Record<string, any>>({});
-const structuredData = ref<Record<string, any> | null>(null);
-const confirmedProposal = ref<Record<string, any> | null>(null);
-const confidenceScores = ref<Record<string, any> | null>(null);
-const virtualContext = ref<any>(null);
+const collectedData = ref<Record<string, unknown>>({});
+const structuredData = ref<Record<string, unknown> | null>(null);
+const confirmedProposal = ref<Record<string, unknown> | null>(null);
+const confidenceScores = ref<Record<string, unknown> | null>(null);
+const virtualContext = ref<VirtualContextRecord | null>(null);
 
 const sortedMessages = computed(() => {
   const allMessages = [...aiMessages.value, ...userMessages.value];
@@ -755,7 +666,7 @@ const showPlanningSidePanels = computed(() => hasConversationStarted.value);
 const entryPromptExamples = computed(() => suggestions.slice(0, 3).map((item) => item.text));
 
 // 过滤无效值的辅助函数
-const isValidValue = (value: any): boolean => {
+const isValidValue = (value: unknown): boolean => {
   if (!value) return false;
   if (typeof value === 'string') {
     const text = value.trim();
@@ -785,7 +696,7 @@ const clipText = (text: string, maxLength = 120) => {
   return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
 };
 
-const getValidText = (...values: any[]): string => {
+const getValidText = (...values: unknown[]): string => {
   for (const value of values) {
     if (typeof value === 'string' && isValidValue(value)) {
       return value.trim();
@@ -799,7 +710,7 @@ const getValidText = (...values: any[]): string => {
   return '';
 };
 
-const toTextArray = (value: any): string[] => {
+const toTextArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
       .flatMap((item) => {
@@ -883,12 +794,6 @@ const firstDeliverableText = computed(() => getValidText(
   confirmedProposal.value?.learning_direction
 ));
 
-const constraintChips = computed(() => uniqueTextList([
-  ...toTextArray(understanding.value.constraints_and_boundaries),
-  ...toTextArray(understanding.value.background?.constraints),
-  ...toTextArray(collectedData.value.background?.constraints)
-]).slice(0, 6));
-
 const successCriteriaTexts = computed(() => uniqueTextList([
   ...toTextArray(understanding.value.success_criteria?.observable_result),
   ...toTextArray(understanding.value.success_criteria?.acceptance_check),
@@ -938,8 +843,8 @@ const pitfallExperienceText = computed(() => getValidText(
 
 const understandingSummaryCards = computed<WorkbenchInfoItem[]>(() => {
   const items: WorkbenchInfoItem[] = [
-    { label: '真实问题', value: realProblemText.value || surfaceGoalText.value },
-    { label: '核心痛点', value: painPointText.value },
+    { label: '想解决的问题', value: realProblemText.value || surfaceGoalText.value },
+    { label: '当前困难', value: painPointText.value },
     { label: '学习动机', value: motivationText.value },
     { label: '当前水平', value: currentBaselineText.value },
     { label: '过往卡点', value: pitfallExperienceText.value },
@@ -961,80 +866,6 @@ const virtualDebugSummary = computed(() => {
     story.title ? `故事：${story.title}` : '',
     session.currentStage ? `阶段：${session.currentStage}` : ''
   ].filter(Boolean).join(' · ');
-});
-
-const pendingClarificationItems = computed<WorkbenchPendingItem[]>(() => {
-  const items: WorkbenchPendingItem[] = [];
-
-  nextQuestions.value.slice(0, 2).forEach((question, index) => {
-    items.push({
-      title: index === 0 ? '当前关键问题' : `后续待确认 ${index + 1}`,
-      desc: question,
-      emphasis: 'question'
-    });
-  });
-
-  if (!surfaceGoalText.value) {
-    items.push({
-      title: '表面目标还不够明确',
-      desc: '先用一句话说清你现在最想学什么，或想解决什么。',
-      emphasis: 'missing'
-    });
-  }
-
-  if (!realProblemText.value || realProblemText.value === surfaceGoalText.value) {
-    items.push({
-      title: '真实问题还没落到场景',
-      desc: '需要把“想学什么”进一步落到真实场景、阻碍和影响上。',
-      emphasis: 'missing'
-    });
-  }
-
-  if (!currentBaselineText.value) {
-    items.push({
-      title: '当前基础还没校准',
-      desc: '确认你现在会到什么程度，才能判断第一版应该先补概念还是先做最小实践。',
-      emphasis: 'missing'
-    });
-  }
-
-  if (!availableTimeText.value) {
-    items.push({
-      title: '可投入资源还不够清楚',
-      desc: '每天或每周能投入多少时间，会直接决定路径颗粒度。',
-      emphasis: 'missing'
-    });
-  }
-
-  if (!constraintChips.value.length) {
-    items.push({
-      title: '边界条件还没收齐',
-      desc: '哪些不能接受、哪些暂不处理，会直接影响第一版路径的范围。',
-      emphasis: 'missing'
-    });
-  }
-
-  if (!firstDeliverableText.value) {
-    items.push({
-      title: '第一版交付目标还没明确',
-      desc: '先确认第一次最小结果是什么，避免一开始就把目标做大。',
-      emphasis: 'missing'
-    });
-  }
-
-  const deduped = items.filter((item, index, array) => {
-    return array.findIndex((candidate) => candidate.title === item.title && candidate.desc === item.desc) === index;
-  });
-
-  if (deduped.length === 0) {
-    return [{
-      title: '已具备生成条件',
-      desc: '核心问题、基础、时间和边界已经足够清楚，可以先确认方向后生成第一版路径。',
-      emphasis: 'question'
-    }];
-  }
-
-  return deduped;
 });
 
 const currentAiPlainText = computed(() => currentAiMessage.value ? toPlainText(currentAiMessage.value.content) : '');
@@ -1123,7 +954,7 @@ const syncConversationRoute = (id: string) => {
     : `${conversationBasePath.value}${suffix ? `?${suffix}` : ''}`);
 };
 
-const mapStoredMessage = (message: any, index: number): Message | null => {
+const mapStoredMessage = (message: StoredConversationMessage, index: number): Message | null => {
   if (!message || (message.role !== 'user' && message.role !== 'ai')) {
     return null;
   }
@@ -1278,7 +1109,7 @@ const loadVirtualDebugGoalConversation = async (sessionId: string) => {
         observationMode: debugMeta.observationMode === true
       },
       messages: Array.isArray(data?.messages)
-        ? data.messages.map((message: any) => ({
+        ? data.messages.map((message: StoredConversationMessage) => ({
             role: message.role === 'assistant' ? 'ai' : 'user',
             content: String(message.content || ''),
             time: String(message.timestamp || message.time || data?.createdAt || new Date().toISOString())
@@ -1288,7 +1119,7 @@ const loadVirtualDebugGoalConversation = async (sessionId: string) => {
   } as GoalConversationEnvelope;
 };
 
-const syncConversationHistory = (messages: any[] = []) => {
+const syncConversationHistory = (messages: StoredConversationMessage[] = []) => {
   const mappedMessages = messages
     .map((message, index) => mapStoredMessage(message, index))
     .filter((message): message is Message => Boolean(message));
@@ -1297,7 +1128,7 @@ const syncConversationHistory = (messages: any[] = []) => {
   userMessages.value = mappedMessages.filter((message) => message.role === 'user');
 };
 
-const hydrateConversation = (response: GoalConversationEnvelope, options?: { messages?: any[] }) => {
+const hydrateConversation = (response: GoalConversationEnvelope, options?: { messages?: StoredConversationMessage[] }) => {
   syncConversationState(response);
 
   if (options?.messages) {
@@ -1363,16 +1194,25 @@ const resetLocalConversationState = () => {
   }
 };
 
-const formatMessage = (text: string) => md.render(text);
+const formatMessage = (text: string) => DOMPurify.sanitize(md.render(text), MARKDOWN_SANITIZE_CONFIG);
 const formatTime = (date: Date | string) => {
   if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-const isFailedMessage = (content: string) => {
-  const failKeywords = ['走神了', '抱歉', '出错了', '失败了', '请稍后', '网络错误'];
-  return failKeywords.some(keyword => content.includes(keyword));
+const appendRetryableFailureMessage = (message: string, action: 'message' | 'confirm' = 'message') => {
+  lastFailedAction.value = action;
+  aiMessages.value.push({
+    id: `failed-${Date.now()}`,
+    role: 'ai',
+    content: `${message} 请点击下方“重试”继续。`,
+    time: new Date(),
+    quickReplies: [],
+    quickRepliesUsed: true,
+    failed: true
+  });
+  scrollToBottom();
 };
 
 // 导航到学习路径
@@ -1395,7 +1235,7 @@ const navigateToLearningPath = () => {
   // 重新生成学习路径
   const regeneratePath = async () => {
     if (isTestMode.value) return;
-    if (!conversationId.value || regenerating.value) return;
+    if (!conversationId.value || goalDialogBusy.value) return;
 
     regenerating.value = true;
     try {
@@ -1415,12 +1255,13 @@ const navigateToLearningPath = () => {
     }
   };
 
-  // 完全重新开始（删除当前对话）
+  // 删除当前对话，已经生成的学习路径由用户在路径页单独管理。
   const startFresh = async () => {
+    if (goalDialogBusy.value) return;
     try {
       await ElMessageBox.confirm(
-        '确定要完全重新开始吗？当前对话和学习路径将被删除。',
-        '重新开始',
+         '确定删除本次目标对话吗？对话内容将无法恢复，但已经生成的学习路径会保留。',
+          '删除本次目标对话',
         {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
@@ -1428,6 +1269,7 @@ const navigateToLearningPath = () => {
         }
       );
 
+      deletingConversation.value = true;
       if (conversationId.value) {
         if (isTestMode.value) {
           await deleteTestGoalConversation(conversationId.value);
@@ -1439,23 +1281,37 @@ const navigateToLearningPath = () => {
       resetLocalConversationState();
       showRegenerateDialog.value = false;
 
-      toast.success('已重置，请重新描述你的学习目标');
-    } catch {
-      // 用户取消
+       toast.success('目标对话已删除，已生成的学习路径仍会保留');
+    } catch (error: any) {
+      if (error !== 'cancel' && error !== 'close') {
+        toast.error(error?.message || '删除目标对话失败，请重试');
+      }
+    } finally {
+      deletingConversation.value = false;
     }
   };
 
 const retryLastMessage = async () => {
     if (!lastUserMessage.value || loading.value) return;
-    if (aiMessages.value.length > 0) {
-      aiMessages.value.pop();
+    // 按失败标记定位删除，避免误删失败消息之后插入的正常 AI 消息
+    const failedIndex = aiMessages.value.findIndex(msg => msg.failed);
+    if (failedIndex >= 0) {
+      aiMessages.value.splice(failedIndex, 1);
     }
-    await sendMessageInternal(lastUserMessage.value);
+    if (lastFailedAction.value === 'confirm') {
+      const lastUser = userMessages.value[userMessages.value.length - 1];
+      if (lastUser?.content === lastUserMessage.value) userMessages.value.pop();
+      await confirmProposal(lastUserMessage.value);
+    } else if (conversationId.value) {
+      await sendMessageInternal(lastUserMessage.value);
+    } else {
+      await startConversation(lastUserMessage.value);
+    }
   };
 
   const resetConversation = async () => {
     try {
-      await ElMessageBox.confirm('确定要重置本次目标吗？当前对话将被清空。', '重置本次目标', {
+       await ElMessageBox.confirm('确定清空本次对话吗？', '清空本次对话', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
@@ -1471,7 +1327,7 @@ const retryLastMessage = async () => {
 
       resetLocalConversationState();
       
-      toast.info('已清空，请重新描述你的学习目标');
+       toast.info('已清空，请重新描述你的学习目标');
     } catch {
       // 用户取消
     }
@@ -1493,9 +1349,11 @@ const autoResize = () => {
   }
 };
 
-const inputNewLine = () => {
-  userInput.value += '\n';
-  nextTick(() => autoResize());
+const handleComposerKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Enter' || event.shiftKey) return;
+  if (event.isComposing || isComposing.value) return;
+  event.preventDefault();
+  void sendMessage();
 };
 
 const keepComposerVisible = () => {
@@ -1514,11 +1372,11 @@ const scrollToBottom = async () => {
   requestAnimationFrame(() => keepComposerVisible());
 };
 
-const isStructuredOutputInvalidError = (error: any) => {
+const isStructuredOutputInvalidError = (error: ApiErrorLike) => {
   return error?.response?.status === 422 && error?.response?.data?.error === 'STRUCTURED_OUTPUT_INVALID';
 };
 
-const getStructuredFailureEnvelope = (error: any): GoalConversationEnvelope | null => {
+const getStructuredFailureEnvelope = (error: ApiErrorLike): GoalConversationEnvelope | null => {
   if (!isStructuredOutputInvalidError(error)) return null;
   return error?.response?.data?.data || null;
 };
@@ -1536,6 +1394,7 @@ const startConversation = async (goal: string) => {
       : await startGoalConversation(goal, {
           contextMode: contextMode.value
         });
+    if (!componentActive) return;
     syncConversationState(response);
 
     if (isObservationFailureResponse(response)) {
@@ -1554,14 +1413,16 @@ const startConversation = async (goal: string) => {
     });
     scrollToBottom();
   } catch (error: any) {
+    if (!componentActive) return;
     console.error('开始对话失败:', error);
     const failureEnvelope = getStructuredFailureEnvelope(error);
     if (failureEnvelope) {
       syncConversationState(failureEnvelope);
-      toast.warning('本轮结构化输出连续失败，状态未更新。可点击重试再试一次。');
+      toast.warning('这次没有成功整理你的回答，请重试。');
     } else {
       toast.error(error.message || '开始对话失败，请稍后重试');
     }
+    appendRetryableFailureMessage('这次没有成功开始对话。');
   } finally {
     loading.value = false;
   }
@@ -1571,14 +1432,16 @@ const startConversation = async (goal: string) => {
 const hideLastAiQuickReplies = () => {
   // 找到最后一条有 quickReplies 的 AI 消息
   for (let i = aiMessages.value.length - 1; i >= 0; i--) {
-    if (aiMessages.value[i].quickReplies && aiMessages.value[i].quickReplies.length > 0) {
-      aiMessages.value[i].quickRepliesUsed = true;
+    const message = aiMessages.value[i];
+    if (message && message.quickReplies && message.quickReplies.length > 0) {
+      message.quickRepliesUsed = true;
       break;
     }
   }
 };
 
 const sendMessage = async () => {
+  if (isComposing.value) return;
   const trimmedInput = userInput.value.trim();
   const hasSelections = selectedQuickReplies.value.length > 0;
   
@@ -1616,6 +1479,7 @@ const sendMessage = async () => {
 // 确认方案 - 生成学习路径
 const confirmProposal = async (confirmText = '确认方案，生成学习路径') => {
   if (loading.value) return;
+  lastUserMessage.value = confirmText;
 
   hideLastAiQuickReplies();
 
@@ -1640,6 +1504,7 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
             contextMode: contextMode.value,
             confirmProposal: true
           });
+    if (!componentActive) return;
     syncConversationState(response);
 
     if (isObservationFailureResponse(response)) {
@@ -1671,6 +1536,7 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
     }
     router.push(`${targetBase}?${query.toString()}`);
   } catch (error: any) {
+    if (!componentActive) return;
     console.error('确认方案失败:', error);
     if (isTestMode.value && error?.status === 404) {
       toast.error(error.message || '当前对话已失效，请重新开始');
@@ -1683,10 +1549,11 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
       if (!isTestMode.value && userMessages.value.length > 0) {
         userMessages.value.pop();
       }
-      toast.warning('本轮结构化输出连续失败，状态未更新。请重试确认。');
+      toast.warning('这次没有成功整理你的回答，请重试确认。');
     } else {
       toast.error(error.message || '确认失败，请重试');
     }
+    appendRetryableFailureMessage('这次没有成功确认并生成路径。', 'confirm');
   } finally {
     loading.value = false;
   }
@@ -1700,6 +1567,7 @@ const sendMessageInternal = async (content: string) => {
       : await replyGoalConversation(conversationId.value, content, {
           contextMode: contextMode.value
         });
+    if (!componentActive) return;
     syncConversationState(response);
 
     if (isObservationFailureResponse(response)) {
@@ -1718,11 +1586,12 @@ const sendMessageInternal = async (content: string) => {
     });
 
     if (response.internal.core.isCompleted) {
-      toast.success('问题理解完成！');
+      toast.success('信息已经足够，可以生成学习路径了。');
     }
 
     scrollToBottom();
   } catch (error: any) {
+    if (!componentActive) return;
     console.error('回复失败:', error);
     if (isTestMode.value && error?.status === 404) {
       toast.error(error.message || '当前对话已失效，请重新开始');
@@ -1735,10 +1604,11 @@ const sendMessageInternal = async (content: string) => {
       if (!isTestMode.value && userMessages.value.length > 0) {
         userMessages.value.pop();
       }
-      toast.warning('本轮结构化输出连续失败，状态未更新。请点击重试再试一次。');
+      toast.warning('这次没有成功整理你的回答，请点击重试。');
     } else {
       toast.error(error.message || '回复失败，请稍后重试');
     }
+    appendRetryableFailureMessage('这次没有成功处理你的回答。');
   } finally {
     loading.value = false;
   }
@@ -1784,6 +1654,7 @@ watch(
 );
 
 onUnmounted(() => {
+  componentActive = false;
   window.removeEventListener('scroll', handleScroll);
   uploadedFiles.value.forEach((file) => revokePreviewUrl(file.previewUrl));
 });

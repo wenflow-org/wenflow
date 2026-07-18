@@ -1,27 +1,13 @@
 // Admin 认证中间件
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import prisma from '../config/database';
 import { logger } from '../utils/logger';
 
-interface JwtPayload {
-  userId: string;
-  email: string;
-}
-
-// 注意：Request.user类型已在auth.middleware.ts中定义
-
-const getJwtSecret = (): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET 环境变量未配置');
-  }
-  return secret;
-};
-
-const JWT_SECRET = getJwtSecret();
-
 /**
- * Admin 认证中间件 - 验证 JWT Token 并检查 admin 权限
+ * Admin 授权中间件。
+ *
+ * 必须放在 authMiddleware 之后：认证层负责解析身份，这里只接受普通 JWT，
+ * 并以数据库中的当前权限为准，避免降权后的旧 Token 继续访问后台。
  */
 export const adminMiddleware = async (
   req: Request,
@@ -29,36 +15,44 @@ export const adminMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    // 从 header 获取 token
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!req.user) {
       return res.status(401).json({
         success: false,
         error: { message: '未提供认证 Token' }
       });
     }
 
-    const token = authHeader.substring(7);
+    if (req.user.projection?.active) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '投影视角不允许访问管理员接口' }
+      });
+    }
 
-    // 验证 token
-    const decoded = jwt.verify(token, JWT_SECRET, {
-      algorithms: ['HS256']
-    }) as JwtPayload & { isAdmin?: boolean };
-
-    // 检查是否为 admin
-    if (!decoded.isAdmin) {
+    if (!req.user.isAdmin || req.user.sessionType !== 'admin') {
       return res.status(403).json({
         success: false,
         error: { message: '需要管理员权限' }
       });
     }
 
-    // 将用户信息附加到 request
+    const admin = await prisma.users.findUnique({
+      where: { id: req.user.userId },
+      select: { id: true, email: true, isAdmin: true }
+    });
+
+    if (!admin?.isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: { message: '管理员权限已失效' }
+      });
+    }
+
     req.user = {
-      userId: decoded.userId,
-      email: decoded.email,
-      isAdmin: true
+      userId: admin.id,
+      email: admin.email,
+      isAdmin: true,
+      sessionType: 'admin'
     };
 
     next();
@@ -82,37 +76,5 @@ export const adminMiddleware = async (
       success: false,
       error: { message: '认证失败' }
     });
-  }
-};
-
-/**
- * 可选 Admin 中间件 - 不强制要求 admin 权限
- */
-export const optionalAdminMiddleware = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const authHeader = req.headers.authorization;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, JWT_SECRET, {
-        algorithms: ['HS256']
-      }) as JwtPayload & { isAdmin?: boolean };
-      req.user = {
-        userId: decoded.userId,
-        email: decoded.email,
-        isAdmin: decoded.isAdmin || false
-      };
-    } else {
-      req.user = undefined;
-    }
-
-    next();
-  } catch (error) {
-    // 忽略错误，继续处理请求
-    next();
   }
 };

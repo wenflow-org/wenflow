@@ -4,7 +4,7 @@
       <span class="live-log__title">实时日志</span>
       <span class="live-log__count">{{ entries.length }}</span>
     </div>
-    <div class="live-log__list" ref="listRef">
+    <div class="live-log__list" ref="listRef" @scroll="handleScroll">
       <div v-if="entries.length === 0" class="live-log__empty">暂无日志</div>
       <div
         v-for="(entry, idx) in entries"
@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 export interface LogEntry {
   id?: string
@@ -43,6 +43,20 @@ const emit = defineEmits<{
 const listRef = ref<HTMLElement | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+// 仅当用户停留在底部附近时才自动跟随滚动，避免打断用户回看历史日志
+const BOTTOM_FOLLOW_THRESHOLD_PX = 48
+let stickToBottom = true
+
+const isNearBottom = () => {
+  const el = listRef.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_FOLLOW_THRESHOLD_PX
+}
+
+const handleScroll = () => {
+  stickToBottom = isNearBottom()
+}
+
 const formatTime = (time?: string) => {
   if (!time) return '--:--'
   const d = new Date(time)
@@ -62,7 +76,7 @@ const startPolling = () => {
   if (document.hidden || props.pollingDisabled) return
   pollTimer = setInterval(() => {
     if (!document.hidden) emit('poll')
-  }, 1500)
+  }, 3000)
 }
 
 const stopPolling = () => {
@@ -72,9 +86,13 @@ const stopPolling = () => {
   }
 }
 
-watch(() => props.entries.length, () => {
-  if (listRef.value) {
-    listRef.value.scrollTop = listRef.value.scrollHeight
+watch(() => props.entries.length, async () => {
+  if (!stickToBottom) return
+  // 等 DOM 更新后再滚到真正的底部
+  await nextTick()
+  const el = listRef.value
+  if (el) {
+    el.scrollTop = el.scrollHeight
   }
 })
 

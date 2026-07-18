@@ -154,6 +154,8 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
           aiResponse: result.aiResponse,
           autoEnded: result.autoEnded === true,
           shouldConfirmEnd: result.shouldConfirmEnd === true,
+          endReason: result.endReason || null,
+          recovered: result.recovered === true,
           wrapup: result.autoEnded === true ? result.wrapup || null : null,
           peerMessage: result.peerTriggered ? result.peerMessage || null : null,
           schemaVersion: 'synthetic-user-v1'
@@ -183,11 +185,15 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
         knowledgePoint: result.knowledgePoint,
         knowledgePoints: result.knowledgePoints,
         isCompletion: result.isCompletion,
+        shouldConfirmEnd: result.shouldConfirmEnd === true,
+        endReason: result.endReason || null,
+        recovered: result.recovered === true,
         autoEnded: result.autoEnded === true,
         wrapup: result.wrapup || null,
         advisory: result.advisory || null,
         peerTriggered: result.peerTriggered,
         peerMessage: result.peerMessage,
+        checkpoint: result.checkpoint || null,
         promptDebug: result.promptDebug || null,
         peerDebug: result.peerDebug || null,
       },
@@ -197,6 +203,43 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     res.status(500).json({
       success: false,
       error: error.message || '处理消息失败',
+    });
+  }
+});
+
+/**
+ * 提交理解检查
+ * POST /api/ai-teaching/sessions/:sessionId/checkpoints/:checkpointId/submit
+ */
+router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: '未登录' });
+    }
+
+    const { sessionId, checkpointId } = req.params;
+    const selectedOptionIds = Array.isArray(req.body?.selectedOptionIds)
+      ? req.body.selectedOptionIds.filter((value: unknown) => typeof value === 'string' && value.trim())
+      : undefined;
+    const answerText = typeof req.body?.answerText === 'string' ? req.body.answerText.trim() : undefined;
+
+    if ((!selectedOptionIds || selectedOptionIds.length === 0) && !answerText) {
+      return res.status(400).json({ success: false, error: '缺少作答内容' });
+    }
+
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+    const result = await aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, {
+      selectedOptionIds,
+      answerText,
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('提交理解检查失败:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || '提交理解检查失败',
     });
   }
 });

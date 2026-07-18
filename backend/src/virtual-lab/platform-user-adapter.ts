@@ -123,7 +123,7 @@ export class PlatformUserAdapter {
           ...(platformText ? [{ role: 'platform' as const, content: platformText }] : [])
         ],
         visibleChoices,
-        availableActions: core.isCompleted ? [] : canConfirm ? ['chat', 'confirm_proposal'] : ['chat'],
+        availableActions: core.isCompleted ? ['abandon'] : canConfirm ? ['chat', 'confirm_proposal', 'abandon'] : ['chat', 'abandon'],
         lastActionResult: { status: 'success', visibleMessage: platformText }
       },
       control: {
@@ -154,6 +154,7 @@ export class PlatformUserAdapter {
       || activeTasks.find((item: any) => item.status === 'in_progress')
       || tasks.find((item: any) => item.status !== 'completed')
     const runCompleted = tasks.length > 0 && tasks.every((item: any) => item.status === 'completed')
+    const completedTasks = tasks.filter((item: any) => item.status === 'completed').length
     const ready = path?.canStartLearning === true && !!firstTask
     const failed = path?.status === 'failed'
     const observation: LearnerObservation = {
@@ -170,8 +171,8 @@ export class PlatformUserAdapter {
       availableActions: runCompleted
         ? []
         : ready
-        ? ['start_learning']
-        : [],
+        ? ['start_learning', 'abandon']
+        : failed ? [] : ['abandon'],
       lastActionResult: {
         status: failed ? 'error' : 'success',
         visibleMessage: runCompleted
@@ -189,6 +190,8 @@ export class PlatformUserAdapter {
         teachingSessionId: null,
         platformStage: path?.status,
         runCompleted,
+        completedTasks,
+        totalTasks: tasks.length,
         terminalReason: runCompleted ? 'completed' : undefined,
         rawTraceId: traceIdFrom(response.headers)
       },
@@ -285,6 +288,19 @@ export class PlatformUserAdapter {
       },
       control: { teachingSessionId: sessionId, platformStage: 'completed', terminalReason, rawTraceId: traceIdFrom(response.headers) },
       diagnostic: { endResult: unwrap(response) }
+    }
+  }
+
+  abandonExperiment(stage: LearnerObservation['stage'], learnerReason: string): PlatformInteractionResult {
+    return {
+      observation: {
+        stage: 'completed',
+        visibleMessages: [{ role: 'learner', content: learnerReason }],
+        availableActions: [],
+        lastActionResult: { status: 'success', visibleMessage: '学习者已结束本次实验' }
+      },
+      control: { platformStage: stage, terminalReason: 'abandoned' },
+      diagnostic: { abandonedAtStage: stage }
     }
   }
 

@@ -424,16 +424,9 @@ import { computed, ref, reactive, onMounted, onUnmounted, watch } from 'vue';
 import {
   Search,
   Refresh,
-  View,
   DocumentCopy,
   Download,
-  Timer,
-  Cpu,
-  SuccessFilled,
-  CircleCloseFilled,
-  Link,
-  WarningFilled,
-  Service
+  Cpu
 } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { adminAxios, adminRuntimeDefinitionsApi } from '@/api/adminApi';
@@ -516,6 +509,8 @@ const stats = reactive({
   timeout: 0,
   bySource: { user: 0, test: 0, admin: 0, platform: 0 }
 });
+// 服务端是否返回了全量统计；未返回时高亮区显示 '--'，不用当前页数据冒充全量
+const statsAvailable = ref(false);
 
 // 筛选器
 const filters = reactive({
@@ -564,13 +559,27 @@ const agentOptions = ref<Array<{ label: string; value: string }>>([
 const autoRefresh = ref(false);
 const refreshInterval = ref(5);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+// 请求 in-flight 标志：自动刷新 tick 遇到上一次请求未结束时跳过，避免慢请求重叠乱序写 logs
+let loadInFlight = false;
+// 请求序号：仅最新一次请求允许写回结果，丢弃乱序到达的过期响应
+let loadSeq = 0;
 
-const executionHighlights = computed(() => [
-  { label: `${formatNumber(stats.total)} 条日志`, tone: 'info' as const },
-  { label: `成功 ${calculatePercent(stats.success, stats.total)}%`, tone: 'success' as const },
-  { label: `失败 ${formatNumber(stats.error)} 条`, tone: stats.error > 0 ? 'danger' as const : 'neutral' as const },
-  { label: `超时 ${formatNumber(stats.timeout)} 条`, tone: stats.timeout > 0 ? 'warning' as const : 'neutral' as const }
-]);
+const executionHighlights = computed(() => {
+  if (!statsAvailable.value) {
+    return [
+      { label: '-- 条日志', tone: 'info' as const },
+      { label: '成功 --%', tone: 'neutral' as const },
+      { label: '失败 -- 条', tone: 'neutral' as const },
+      { label: '超时 -- 条', tone: 'neutral' as const }
+    ];
+  }
+  return [
+    { label: `${formatNumber(stats.total)} 条日志`, tone: 'info' as const },
+    { label: `成功 ${calculatePercent(stats.success, stats.total)}%`, tone: 'success' as const },
+    { label: `失败 ${formatNumber(stats.error)} 条`, tone: stats.error > 0 ? 'danger' as const : 'neutral' as const },
+    { label: `超时 ${formatNumber(stats.timeout)} 条`, tone: stats.timeout > 0 ? 'warning' as const : 'neutral' as const }
+  ];
+});
 
 // 详情抽屉
 const drawerVisible = ref(false);
@@ -589,11 +598,14 @@ const promptLogStats = computed(() => ({
 }));
 
 // 加载日志
-const loadLogs = async () => {
+const loadLogs = async (options?: { skipIfInFlight?: boolean }) => {
+  if (options?.skipIfInFlight && loadInFlight) return;
+  loadInFlight = true;
+  const seq = ++loadSeq;
   loading.value = true;
   loadError.value = '';
   try {
-    const params: any = {
+    const params: Record<string, string | number> = {
       page: pagination.page,
       limit: pagination.limit
     };
@@ -612,7 +624,10 @@ if (filters.agentName) params.agentName = filters.agentName;
     }
     if (filters.keyword) params.keyword = filters.keyword;
 
-    const response: any = await adminAxios.get('/admin/agents/logs', { params });
+    const response = await adminAxios.get('/admin/agents/logs', { params });
+
+    // 已有更新的请求发出，当前响应已过期，直接丢弃避免乱序覆盖
+    if (seq !== loadSeq) return;
 
     if (response.data.success) {
       logs.value = response.data.data.logs;
@@ -620,6 +635,7 @@ if (filters.agentName) params.agentName = filters.agentName;
 
       const serverStats = response.data.data.stats;
       if (serverStats) {
+        statsAvailable.value = true;
         stats.total = serverStats.total || 0;
         stats.success = serverStats.success || 0;
         stats.error = serverStats.error || 0;
@@ -628,17 +644,25 @@ if (filters.agentName) params.agentName = filters.agentName;
           stats.bySource = serverStats.bySource;
         }
       } else {
-        stats.total = pagination.total;
-        stats.success = logs.value.filter(l => l.status === 'success').length;
-        stats.error = logs.value.filter(l => l.status === 'error').length;
-        stats.timeout = logs.value.filter(l => l.status === 'timeout').length;
+        // 服务端未返回全量统计：不回退用当前页数据冒充，高亮区显示 '--'
+        statsAvailable.value = false;
+        stats.total = 0;
+        stats.success = 0;
+        stats.error = 0;
+        stats.timeout = 0;
       }
     }
   } catch (error) {
     console.error('加载日志失败:', error);
-    loadError.value = '无法获取日志数据，请检查服务连接后重试。';
+    if (seq === loadSeq) {
+      loadError.value = '无法获取日志数据，请检查服务连接后重试。';
+    }
   } finally {
-    loading.value = false;
+    // 仅最新一次请求负责复位状态位，过期请求直接退出，避免提前放行新的 tick
+    if (seq === loadSeq) {
+      loading.value = false;
+      loadInFlight = false;
+    }
   }
 };
 
@@ -665,18 +689,6 @@ const getAgentDisplayName = (name: string) => {
     'ai-teaching': '教学编排'
   };
   return map[name] || name;
-};
-
-// 设置筛选
-const setFilter = (key: string, value: string) => {
-  (filters as any)[key] = value;
-  handleSearch();
-};
-
-// 通过 Trace ID 筛选
-const filterByTraceId = (traceId: string) => {
-  filters.traceId = traceId;
-  handleSearch();
 };
 
 // 搜索
@@ -764,12 +776,6 @@ const loadPromptLogs = async (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'trac
   } finally {
     promptLogsLoading.value = false;
   }
-};
-
-// 复制日志
-const copyLog = (log: Log) => {
-  const text = JSON.stringify(log, null, 2);
-  copyToClipboard(text);
 };
 
 // 复制到剪贴板
@@ -864,25 +870,6 @@ const formatDuration = (ms: number) => {
   return `${(ms / 1000).toFixed(1)}s`;
 };
 
-const truncateJson = (json: string, maxLength: number) => {
-  try {
-    const obj = JSON.parse(json);
-    const str = JSON.stringify(obj, null, 2);
-    if (str.length <= maxLength) return str;
-    const lines = str.split('\n');
-    let result = '';
-    let currentLength = 0;
-    for (const line of lines) {
-      if (currentLength + line.length + 1 > maxLength) break;
-      result += line + '\n';
-      currentLength += line.length + 1;
-    }
-    return result.trim() + '...';
-  } catch {
-    return json.substring(0, maxLength) + '...';
-  }
-};
-
 const formatJson = (json: string) => {
   try {
     return JSON.stringify(JSON.parse(json), null, 2);
@@ -893,7 +880,12 @@ const formatJson = (json: string) => {
 
 const highlightJson = (json: string): string => {
   if (!json) return '';
-  return json
+  // 先做 HTML 转义，防止日志内容（含用户输入）注入标签造成存储型 XSS
+  const escaped = json
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped
     .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
     .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
     .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
@@ -910,16 +902,6 @@ const describePromptLogIssue = (log: PromptLog) => {
   return '失败。';
 };
 
-// 日志状态样式
-const getLogStatusType = (status: string) => {
-  const map: Record<string, any> = {
-    success: 'success',
-    error: 'danger',
-    timeout: 'warning'
-  };
-  return map[status] || 'info';
-};
-
 const getLogStatusText = (status: string) => {
   const map: Record<string, string> = {
     success: '成功',
@@ -927,34 +909,6 @@ const getLogStatusText = (status: string) => {
     timeout: '超时'
   };
   return map[status] || status;
-};
-
-const getAgentTagType = (agentName: string) => {
-  const map: Record<string, any> = {
-    RequirementCollection: 'success',
-    PathPlanning: 'primary',
-    'path-orchestrator': 'warning',
-    'path-scene-framing': 'success',
-    'stage-designer': 'success',
-    Teaching: 'warning',
-    TeachingOrchestration: 'warning',
-    'ai-teaching': 'warning',
-    'ai-teaching-agent': 'warning',
-    LearningCompanion: 'info',
-    SessionEvaluation: 'primary',
-    Summary: 'success'
-  };
-  return map[agentName] || 'info';
-};
-
-const getSourceTagType = (source?: string) => {
-  const map: Record<string, any> = {
-    user: 'primary',
-    test: '',
-    admin: 'warning',
-    platform: 'info'
-  };
-  return map[source || ''] || 'info';
 };
 
 const getSourceLabel = (source?: string) => {
@@ -981,18 +935,6 @@ const getExecutionLayerLabel = (layer?: string | null) => {
   return map[layer || ''] || (layer || '未知层');
 };
 
-const getExecutionLayerTagType = (layer?: string | null) => {
-  const map: Record<string, any> = {
-    orchestrator: 'warning',
-    agent: 'primary',
-    skill: 'success',
-    'api-gateway': 'info',
-    service: '',
-    system: 'info'
-  };
-  return map[layer || ''] || 'info';
-};
-
 const getActorTypeLabel = (actorType?: string | null) => {
   const map: Record<string, string> = {
     agent: 'Agent',
@@ -1001,16 +943,6 @@ const getActorTypeLabel = (actorType?: string | null) => {
     system: '系统'
   };
   return map[actorType || ''] || (actorType || '未知主体');
-};
-
-const getActorTypeTagType = (actorType?: string | null) => {
-  const map: Record<string, any> = {
-    agent: 'primary',
-    skill: 'success',
-    orchestrator: 'warning',
-    system: 'info'
-  };
-  return map[actorType || ''] || 'info';
 };
 
 const getInvokerLabel = (log: Pick<Log, 'invokerType' | 'invokerId'>) => {
@@ -1025,25 +957,38 @@ const getInvokerLabel = (log: Pick<Log, 'invokerType' | 'invokerId'>) => {
   return `${prefix}: ${log.invokerId}`;
 };
 
-const getActionClass = (action: string, status?: string) => {
-  if (status === 'error') return 'log-action--error';
-  if (status === 'timeout') return 'log-action--timeout';
-  if (action === 'invoke' || action.includes('invoke')) return 'log-action--invoke';
-  if (action.includes('plan') || action.includes('generate')) return 'log-action--create';
-  return '';
+// 自动刷新
+const stopAutoRefreshTimer = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
 };
 
-// 自动刷新
+const startAutoRefreshTimer = () => {
+  stopAutoRefreshTimer();
+  if (document.hidden) return;
+  refreshTimer = setInterval(() => {
+    if (document.hidden) return;
+    loadLogs({ skipIfInFlight: true });
+  }, refreshInterval.value * 1000);
+};
+
+// 页面隐藏时暂停轮询，回到前台时恢复并立即补一次刷新
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    stopAutoRefreshTimer();
+  } else if (autoRefresh.value) {
+    startAutoRefreshTimer();
+    loadLogs({ skipIfInFlight: true });
+  }
+};
+
 watch(autoRefresh, (value) => {
   if (value) {
-    refreshTimer = setInterval(() => {
-      loadLogs();
-    }, refreshInterval.value * 1000);
+    startAutoRefreshTimer();
   } else {
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
+    stopAutoRefreshTimer();
   }
 });
 
@@ -1056,13 +1001,13 @@ onMounted(() => {
   if (queryAgentId) {
     filters.agentId = queryAgentId;
   }
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   loadLogs();
 });
 
 onUnmounted(() => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-  }
+  stopAutoRefreshTimer();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 

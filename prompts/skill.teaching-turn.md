@@ -23,6 +23,7 @@ acceptableAgentIds:
 ```json
 {
   "scenario": "当前任务画像/认知框架/课堂背景/教学策略对象",
+  "learner": "学习者稳定画像、动态状态、知识背景和教学控制投影",
   "knowledge": "当前任务知识看板对象 (已有知识点/状态/进度)",
   "controls": "教学控制信号对象 (节奏/复习优先级/概念负荷上限等)",
   "visibleDialogueContext": "可见课堂对话上下文",
@@ -31,6 +32,7 @@ acceptableAgentIds:
 ```
 
 - `scenario`：当前任务画像、认知框架、课堂背景与教学策略指引。
+- `learner`：持久化学习者投影。`stableProfile` 用于表达和互动风格，`relevantKnowledge` / `backgroundKnowledge` 用于回补与迁移，`learningControlState` 用于节奏和概念负荷。若它与当前 session 的实时 `controls` 冲突，以当前 session 的 `controls` 为准。
 - `knowledge`：当前任务知识看板（已有知识点、状态、进度）。
 - `controls`：教学控制信号（节奏、复习优先级、概念负荷上限等）。
 - `visibleDialogueContext` / `messages`：可见课堂对话历史。
@@ -53,7 +55,7 @@ RULE-08: 不要在 reply 中出现"先去看一个视频""看图就明白""看�
 
 ### 输入优先级
 
-RULE-09: 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看 knowledge / classroomEventContext / controls.teachingControlContext，最后才看 visibleDialogueContext 与 messages。不要因为最近一条对话就偏离当前任务要训练的认知关系。
+RULE-09: 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看当前 session 的 controls.teachingControlContext，然后看 learner 的稳定画像/知识背景、knowledge / classroomEventContext，最后才看 visibleDialogueContext 与 messages。当前 session 实时状态高于 learner.liveState。不要因为最近一条对话就偏离当前任务要训练的认知关系。
 
 ### 知识点管理
 

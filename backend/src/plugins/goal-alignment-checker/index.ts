@@ -112,11 +112,16 @@ export const goalAlignmentChecker: AgentPlugin = {
         });
 
         if (event.data?.path && event.data?.goal) {
-          const result = await this.checkAlignment(
-            event.data.path,
-            event.data.goal,
-            event.data.userContext || {}
-          );
+          const { getGateway } = await import('../../gateway');
+          const execution = await getGateway().executeSkill(this.id, {
+            pluginInput: {
+              path: event.data.path,
+              goal: event.data.goal,
+              userContext: event.data.userContext || {},
+            },
+            pluginContext: { userId: event.userId },
+          });
+          const result = execution.output?.internal as AlignmentCheckResult;
 
           if (result.score < THRESHOLD_SCORE) {
             await eventBus.emit({
@@ -214,7 +219,7 @@ export const goalAlignmentChecker: AgentPlugin = {
     userContext: Record<string, any>
   ): Promise<AlignmentCheckResult> {
     const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'goal-alignment-checker' };
+    const caller: CallerInfo = { skillId: 'goal-alignment-checker' };
 
     const pathSummary = this.summarizePath(path);
 

@@ -1,7 +1,7 @@
 <template>
   <div class="checkpoint-card" :class="[`checkpoint-card--${status}`]">
     <div class="checkpoint-card__header">
-      <span class="checkpoint-card__kicker">小检核</span>
+      <span class="checkpoint-card__kicker">理解检查</span>
       <span v-if="status === 'passed'" class="checkpoint-card__status checkpoint-card__status--passed">通过</span>
       <span v-else-if="status === 'failed'" class="checkpoint-card__status checkpoint-card__status--failed">待加强</span>
     </div>
@@ -26,7 +26,7 @@
       >
         <input
           type="radio"
-          name="checkpoint-single"
+          :name="radioGroupName"
           :value="opt.id"
           :checked="selectedIds.has(opt.id)"
           :disabled="status !== 'pending'"
@@ -86,7 +86,7 @@
         :disabled="submitting"
         @click="handleSkip"
       >
-        跳过
+        暂时跳过
       </button>
     </div>
 
@@ -124,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, useId } from 'vue'
 import type { Checkpoint, CheckpointSubmitResult } from '@/api/aiTeaching'
 
 const props = defineProps<{
@@ -144,6 +144,9 @@ const selectedIds = ref<Set<string>>(new Set())
 const answerText = ref('')
 const status = ref<'pending' | 'passed' | 'failed'>('pending')
 const result = ref<CheckpointSubmitResult | null>(null)
+
+// 实例级唯一 radio 组名，避免多卡片并存时单选组串扰
+const radioGroupName = `checkpoint-single-${useId()}`
 
 const canSubmit = computed(() => {
   if (props.checkpoint.type === 'short_answer') {

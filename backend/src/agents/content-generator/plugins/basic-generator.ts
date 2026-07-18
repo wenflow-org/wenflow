@@ -75,7 +75,7 @@ export const basicGenerator: AgentPlugin = {
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
     const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'basic-generator' };
+    const caller: CallerInfo = { skillId: 'basic-generator' };
     const startTime = Date.now();
 
     try {

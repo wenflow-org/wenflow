@@ -61,7 +61,7 @@
               v-for="item in group.items"
               :key="item.to"
               :is="item.external ? 'a' : 'router-link'"
-              v-bind="item.external ? { href: item.to, target: '_blank' } : { to: item.to }"
+              v-bind="item.external ? { href: item.to, target: '_blank', rel: 'noopener noreferrer' } : { to: item.to }"
               class="admin-sidebar__item admin-sidebar__item--secondary"
               :class="item.external ? null : { active: isActiveRoute(item.to) }"
               :aria-label="item.label"
@@ -91,8 +91,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, type Component } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { adminAuthApi, hasAdminSession } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
 import {
   DataAnalysis,
@@ -114,7 +115,7 @@ import {
 interface NavItem {
   to: string;
   label: string;
-  icon: any;
+  icon: Component;
   external?: boolean;
 }
 
@@ -127,7 +128,7 @@ const router = useRouter();
 const route = useRoute();
 const isTestRoute = computed(() => route.path.startsWith('/admin/test/'));
 
-const currentUser = ref<any>(null);
+const currentUser = ref<{ name?: string; avatarUrl?: string; [key: string]: unknown } | null>(null);
 const sidebarCollapsed = ref(false);
 const mobileNavOpen = ref(false);
 
@@ -140,8 +141,13 @@ onMounted(() => {
 
   const userStr = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user');
   if (userStr) {
-    currentUser.value = JSON.parse(userStr);
-  } else {
+    try {
+      currentUser.value = JSON.parse(userStr);
+    } catch {
+      currentUser.value = null;
+    }
+  }
+  if (!hasAdminSession()) {
     router.push('/admin/login');
   }
 });
@@ -209,24 +215,21 @@ const navGroups: NavGroup[] = [
   {
     title: '配置',
     items: [
-      { to: '/admin/api-config', label: 'API 配置', icon: Setting },
+      { to: '/admin/api-config', label: '连接与安全', icon: Setting },
       { to: '/admin/skill-model-configs', label: '外挂组件', icon: Operation },
     ],
   },
   {
     title: '调试',
     items: [
-      { to: '/admin/prompt-lab', label: 'Prompt 发布', icon: EditPen },
+      { to: '/admin/prompt-lab', label: 'Prompt Dry Run', icon: EditPen },
       { to: '/admin/test/dashboard', label: '测试学习台', icon: Tickets, external: true },
     ],
   },
 ];
 
 const handleLogout = () => {
-  localStorage.removeItem('admin_token');
-  localStorage.removeItem('admin_user');
-  sessionStorage.removeItem('admin_token');
-  sessionStorage.removeItem('admin_user');
+  adminAuthApi.logout();
   toast.success('已退出登录');
   router.push('/admin/login');
 };

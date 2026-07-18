@@ -1,4 +1,9 @@
 ﻿import { logger } from '../utils/logger';
+import {
+  BackgroundTaskRejectedError,
+  backgroundTaskTracker,
+  runBackgroundTask
+} from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
 import {
   getPathAgentInputConfig,
@@ -18,6 +23,7 @@ export interface PathGenerationInput {
   deadlineText?: string;
   sourceConversationId?: string;
   existingPathId?: string;
+  generationRunId?: string;
   userProfile?: any;
   systemPromptOverrides?: {
     pathAgent?: string;
@@ -77,6 +83,7 @@ export interface GoalPathRequest {
   userId: string;
   sourceConversationId?: string;
   existingPathId?: string;
+  generationRunId?: string;
   source?: 'goal';
   mode?: 'generate';
   rawGoal: string;
@@ -271,6 +278,7 @@ class PathCoordinator {
       userId: input.userId,
       sourceConversationId: input.sourceConversationId,
       existingPathId: input.existingPathId,
+      generationRunId: input.generationRunId,
       description,
       subject: typeof subject === 'string' && subject.trim() ? subject.trim() : undefined,
       deadline,
@@ -344,28 +352,46 @@ class PathCoordinator {
       onError?: (error: unknown) => Promise<void> | void;
     }
   ): void {
-    this.generate(input)
-      .then(() => {
+    if (!backgroundTaskTracker.isAccepting()) {
+      const error = new BackgroundTaskRejectedError('learning.path.async-generation');
+      void Promise.resolve(hooks?.onError?.(error)).catch(hookError => {
+        logger.error('[path-coordinator] async rejection hook failed', {
+          userId: input.userId,
+          existingPathId: input.existingPathId,
+          error: hookError instanceof Error ? hookError.message : String(hookError)
+        });
+      });
+      return;
+    }
+    runBackgroundTask('learning.path.async-generation', async () => {
+      try {
+        await this.generate(input);
         logger.info('[path-coordinator] async complete', {
           agentId: this.id,
           userId: input.userId,
           existingPathId: input.existingPathId
         });
-        if (hooks?.onSuccess) {
-          return hooks.onSuccess();
-        }
-      })
-      .catch((error) => {
+        await hooks?.onSuccess?.();
+      } catch (error) {
         logger.error('[path-coordinator] async failed', {
           agentId: this.id,
           userId: input.userId,
           existingPathId: input.existingPathId,
           error: error instanceof Error ? error.message : String(error)
         });
-        if (hooks?.onError) {
-          return hooks.onError(error);
+        try {
+          await hooks?.onError?.(error);
+        } catch (hookError) {
+          logger.error('[path-coordinator] async error hook failed', {
+            agentId: this.id,
+            userId: input.userId,
+            existingPathId: input.existingPathId,
+            error: hookError instanceof Error ? hookError.message : String(hookError)
+          });
         }
-      });
+        throw error;
+      }
+    }, { userId: input.userId, existingPathId: input.existingPathId });
   }
 
   runGoalAsync(
@@ -375,21 +401,42 @@ class PathCoordinator {
       onError?: (error: unknown) => Promise<void> | void;
     }
   ): void {
-    this.normalizeGoalRequest(input)
-      .then((normalizedInput) => {
-        this.runAsync(normalizedInput, hooks);
-      })
-      .catch((error) => {
+    if (!backgroundTaskTracker.isAccepting()) {
+      const error = new BackgroundTaskRejectedError('learning.path.goal-generation');
+      void Promise.resolve(hooks?.onError?.(error)).catch(hookError => {
+        logger.error('[path-coordinator] goal rejection hook failed', {
+          userId: input.userId,
+          existingPathId: input.existingPathId,
+          error: hookError instanceof Error ? hookError.message : String(hookError)
+        });
+      });
+      return;
+    }
+    runBackgroundTask('learning.path.goal-generation', async () => {
+      try {
+        const normalizedInput = await this.normalizeGoalRequest(input);
+        await this.generate(normalizedInput);
+        await hooks?.onSuccess?.();
+      } catch (error) {
         logger.error('[path-coordinator] normalize goal request failed', {
           agentId: this.id,
           userId: input.userId,
           existingPathId: input.existingPathId,
           error: error instanceof Error ? error.message : String(error)
         });
-        if (hooks?.onError) {
-          void hooks.onError(error);
+        try {
+          await hooks?.onError?.(error);
+        } catch (hookError) {
+          logger.error('[path-coordinator] goal error hook failed', {
+            agentId: this.id,
+            userId: input.userId,
+            existingPathId: input.existingPathId,
+            error: hookError instanceof Error ? hookError.message : String(hookError)
+          });
         }
-      });
+        throw error;
+      }
+    }, { userId: input.userId, existingPathId: input.existingPathId });
   }
 }
 

@@ -7,8 +7,11 @@ import { Router } from 'express';
 import aiService from '../../services/ai/ai.service';
 import { ARENA_AGENT_CONFIGS } from '../../services/arena/agent-configs';
 import apiConfigService from '../../services/apiConfig.service';
+import { rejectPromptMutation } from '../../middleware/prompt-file-truth.middleware';
+import { safeHttpRequest } from '../../utils/safe-http';
 import { agentPluginRegistry, agentPluginConfig } from '../../agents';
 import { registerAllPlugins } from '../../agents/plugins';
+import { getGateway } from '../../gateway';
 import {
   getAgentLifecycleStatus,
   listOfficialAgentCatalog,
@@ -325,15 +328,16 @@ router.post('/agents/:name/test', async (req, res) => {
 
   if (agentPluginRegistry.has(name)) {
     try {
-      const result = await agentPluginRegistry.execute(
-        name,
-        input,
-        {
-          userId: context?.userId || 'test-user',
-          sourceEntry: 'admin',
-          metadata: context?.metadata || {}
-        }
-      );
+      const execution = await getGateway().executeSkill(name, {
+        pluginInput: input,
+        pluginContext: {
+          userId: (req as any).user?.userId,
+          taskId: context?.taskId,
+          sessionId: context?.sessionId,
+          metadata: context?.metadata || {},
+        },
+      });
+      const result = execution.output;
 
       return res.json({
         success: result.success,
@@ -374,7 +378,7 @@ router.get('/api-config', async (req, res) => {
     data: {
       apiUrl: config.apiUrl,
       apiKey: config.apiKey ? '***已配置***' : '未配置',
-      apiKeyRaw: config.apiKey,
+      apiKeyConfigured: Boolean(config.apiKey),
       availableModels: config.availableModels,
       defaultModel: config.defaultModel,
       defaultReasoningModel: config.defaultReasoningModel,
@@ -453,10 +457,14 @@ router.put('/plugin-config', (req, res) => {
  */
 router.put('/api-config', async (req, res) => {
   const { apiUrl, apiKey, availableModels, defaultModel, defaultReasoningModel, defaultEvaluationModel } = req.body;
+  const currentConfig = await apiConfigService.getConfig();
+  const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim()
+    ? apiKey.trim()
+    : currentConfig.apiKey;
   
   const updatedConfig = await apiConfigService.updateConfig({
     apiUrl,
-    apiKey,
+    apiKey: resolvedApiKey,
     availableModels: availableModels ? availableModels.split(',').map((m: string) => m.trim()) : undefined,
     defaultModel,
     defaultReasoningModel,
@@ -485,15 +493,15 @@ router.post('/api-config/test', async (req, res) => {
   
   try {
     // 临时使用传入的配置测试
-    const response = await fetch(`${baseURL}/v1/models`, {
+    const response = await safeHttpRequest<{ data?: any[] }>(`${baseURL}/v1/models`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
     });
 
-    if (response.ok) {
-      const data = await response.json() as { data?: any[] };
+    if (response.status >= 200 && response.status < 300) {
+      const data = response.data;
       res.json({
         success: true,
         data: {
@@ -520,7 +528,7 @@ router.post('/api-config/test', async (req, res) => {
  * PUT /api/admin/agent-lab/agents/:name/prompt
  * 更新 Agent 的 System Prompt
  */
-router.put('/agents/:name/prompt', async (req, res) => {
+router.put('/agents/:name/prompt', rejectPromptMutation, async (req, res) => {
   const { name } = req.params;
   const { prompt } = req.body;
 

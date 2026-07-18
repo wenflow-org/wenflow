@@ -145,11 +145,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { hasUserSession } from '@/utils/api';
 
 const isLoggedIn = ref(false);
 
 const syncAuthState = () => {
-  isLoggedIn.value = Boolean(localStorage.getItem('token'));
+  isLoggedIn.value = hasUserSession();
 };
 
 const ctaPath = computed(() => (isLoggedIn.value ? '/goal-conversation' : '/register'));

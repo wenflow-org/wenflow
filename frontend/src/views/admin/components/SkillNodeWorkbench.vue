@@ -95,7 +95,7 @@
           </div>
 
           <div class="quickview-actions">
-            <el-button type="primary" @click="openSkillEditor">进入版本与发布</el-button>
+            <el-button type="primary" @click="openSkillEditor">进入 Prompt 检视</el-button>
             <el-button @click="openSkillEditor('runtime')">进入运行策略</el-button>
             <el-button @click="openPromptLogs">查看 Prompt 日志</el-button>
             <el-button @click="openExecutionLogs">查看执行日志</el-button>
@@ -261,9 +261,11 @@ const formatNumber = (value?: number | null) => {
 
 const loadMeta = async () => {
   if (!props.visible || !props.skillId) return
+  // 切换 skillId 重载前先清空，避免短暂展示上一个 Skill 的旧数据
+  meta.value = null
   loading.value = true
   try {
-    const response: any = await adminSkillWorkbenchApi.getMeta(props.skillId)
+    const response = await adminSkillWorkbenchApi.getMeta(props.skillId)
     meta.value = response.data?.data || null
   } catch (error: any) {
     meta.value = null

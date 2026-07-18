@@ -32,7 +32,7 @@
             <p>登录后管理后台。</p>
           </div>
 
-          <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="auth-form" @keyup.enter="handleLogin">
+          <el-form ref="formRef" :model="loginForm" :rules="rules" label-position="top" size="large" class="auth-form" @submit.prevent="handleLogin">
             <el-form-item label="管理员账号" prop="name">
               <el-input v-model="loginForm.name" type="text" placeholder="管理员账号" prefix-icon="User" clearable autocomplete="username" />
             </el-form-item>
@@ -45,7 +45,7 @@
               <el-checkbox v-model="loginForm.remember">记住本机登录状态</el-checkbox>
             </div>
 
-            <el-button type="primary" :loading="loading" class="auth-submit" @click="handleLogin">
+            <el-button type="primary" native-type="submit" :loading="loading" :disabled="loading" class="auth-submit">
               {{ loading ? '登录中...' : '登录后台' }}
             </el-button>
 
@@ -61,13 +61,15 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { onMounted, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { type FormInstance, type FormRules } from 'element-plus';
-import { adminAuthApi } from '@/api/adminApi';
+import { adminAuthApi, markAdminSession } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
+import { consumeAuthFlashMessage } from '../../utils/authFlash';
 
 const router = useRouter();
+const route = useRoute();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 
@@ -88,25 +90,40 @@ const rules: FormRules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 };
 
+const safeRedirect = () => {
+  const value = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect;
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/admin/dashboard';
+  try {
+    const target = new URL(value, window.location.origin);
+    if (target.origin !== window.location.origin || !target.pathname.startsWith('/admin/')) {
+      return '/admin/dashboard';
+    }
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return '/admin/dashboard';
+  }
+};
+
 const handleLogin = async () => {
-  if (!formRef.value) return;
+  if (!formRef.value || loading.value) return;
 
   const valid = await formRef.value.validate().catch(() => false);
   if (!valid) return;
 
   loading.value = true;
   try {
-    const response: any = await adminAuthApi.login(loginForm);
+    const response = await adminAuthApi.login(loginForm);
 
     if (response.data.success) {
-      const { token, user } = response.data.data;
+      const { user } = response.data.data;
 
+      // token 经 HttpOnly Cookie 下发，JS 侧仅记录会话标记与用户信息
+      markAdminSession(loginForm.remember);
       const storage = loginForm.remember ? localStorage : sessionStorage;
-      storage.setItem('admin_token', token);
       storage.setItem('admin_user', JSON.stringify(user));
 
       toast.success('登录成功');
-      router.push('/admin/dashboard');
+      await router.replace(safeRedirect());
     } else {
       toast.error(response.data.message || '登录失败，请检查账号密码');
     }
@@ -117,6 +134,11 @@ const handleLogin = async () => {
     loading.value = false;
   }
 };
+
+onMounted(() => {
+  const message = consumeAuthFlashMessage();
+  if (message) toast.error(message);
+});
 </script>
 
 <style scoped>

@@ -8,15 +8,15 @@
       <span class="kp-card__label">当前知识点</span>
     </div>
     <div class="kp-card__title">{{ knowledgePoint }}</div>
-    <div class="kp-card__hint">理解后请告诉我，方便我调整后续节奏</div>
+    <div class="kp-card__hint">学完后告诉我是否需要换一种方式解释</div>
     <div class="kp-card__actions">
       <button type="button" class="kp-btn kp-btn--primary" @click="handleAction('mastered')">
         <el-icon><Check /></el-icon>
-        <span>已掌握，继续</span>
+        <span>我懂了，继续</span>
       </button>
       <button type="button" class="kp-btn kp-btn--ghost" @click="handleAction('need-more')">
         <el-icon><QuestionFilled /></el-icon>
-        <span>没懂，再讲一遍</span>
+        <span>换种方式讲讲</span>
       </button>
     </div>
   </div>

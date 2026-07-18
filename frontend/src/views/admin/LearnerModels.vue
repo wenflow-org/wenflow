@@ -150,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Reading, Refresh, RefreshLeft } from '@element-plus/icons-vue';
 import { adminLearnerModelsApi } from '@/api/adminApi';
@@ -161,9 +161,26 @@ withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
 });
 
+// 与后端 LearnerSnapshotRefreshService.listForAdmin 返回结构对齐
+interface LearnerModelRow {
+  userId: string;
+  userName?: string;
+  email?: string;
+  pathId?: string;
+  pathTitle?: string;
+  currentMilestone?: string;
+  currentTask?: string;
+  recentTrend?: string;
+  fatigueRisk?: string;
+  fragileConcepts?: string[];
+  strugglingConcepts?: string[];
+  generatedAt?: string;
+  [key: string]: unknown;
+}
+
 const router = useRouter();
 const loading = ref(false);
-const items = ref<any[]>([]);
+const items = ref<LearnerModelRow[]>([]);
 
 const filters = reactive({
   userId: '',
@@ -184,11 +201,12 @@ const hasFiltersApplied = computed(() => {
   return Boolean(filters.userId || filters.pathId || filters.riskOnly || filters.staleOnly);
 });
 
-const riskCount = computed(() => items.value.filter((item) => item.riskLevel === 'high' || item.riskLevel === 'medium').length);
+const riskCount = computed(() => items.value.filter((item) => item.fatigueRisk === 'high' || item.fatigueRisk === 'medium').length);
 const staleCount = computed(() => items.value.filter((item) => {
-  if (!item.lastUpdatedAt) return false;
-  const diffMs = Date.now() - new Date(item.lastUpdatedAt).getTime();
-  return diffMs > 7 * 86400000; // 7天
+  if (!item.generatedAt) return false;
+  const diffMs = Date.now() - new Date(item.generatedAt).getTime();
+  // 与后端 listForAdmin 的 staleOnly 口径一致：快照生成超过 10 分钟视为过期
+  return diffMs > 10 * 60 * 1000;
 }).length);
 
 const modelHighlights = computed(() => [
@@ -210,6 +228,14 @@ const emptyStateDescription = computed(() => {
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
+// 卸载时清理防抖定时器，避免组件销毁后仍触发请求
+onUnmounted(() => {
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+});
+
 const handleSearch = () => {
   if (searchTimer) clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
@@ -226,7 +252,7 @@ const truncateText = (text: string | undefined, maxLen: number) => {
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
 };
 
-const formatRelativeTime = (value: string) => {
+const formatRelativeTime = (value: string | undefined) => {
   if (!value) return '--';
   const now = new Date();
   const date = new Date(value);
@@ -242,7 +268,7 @@ const formatRelativeTime = (value: string) => {
   return date.toLocaleDateString('zh-CN');
 };
 
-const riskSummary = (row: any) => {
+const riskSummary = (row: LearnerModelRow) => {
   const fragile = row.fragileConcepts || [];
   const struggling = row.strugglingConcepts || [];
   const merged = [...fragile, ...struggling];
@@ -259,7 +285,7 @@ const handleSizeChange = () => {
 const loadData = async () => {
   loading.value = true;
   try {
-    const res: any = await adminLearnerModelsApi.list({
+    const res = await adminLearnerModelsApi.list({
       ...filters,
       page: pagination.page,
       limit: pagination.limit,
@@ -284,7 +310,7 @@ const resetFilters = () => {
   loadData();
 };
 
-const openDetail = (row: any) => {
+const openDetail = (row: LearnerModelRow) => {
   router.push({
     name: 'AdminLearnerModelDetail',
     params: { userId: row.userId },
@@ -292,7 +318,7 @@ const openDetail = (row: any) => {
   });
 };
 
-const recompute = async (row: any) => {
+const recompute = async (row: LearnerModelRow) => {
   try {
     await adminLearnerModelsApi.recompute(row.userId, {
       pathId: row.pathId || undefined,

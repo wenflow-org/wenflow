@@ -1,9 +1,23 @@
 <template>
   <CapabilityShell
-    title="账户设置"
-    description="查看你的账户信息、当前学习节奏与最近的学习入口。学习者画像和更细的诊断信息已统一收口到学习状态页。"
+    title="账户概览"
+    description="查看账户信息和当前学习进度。更详细的学习分析可前往“学习状态”。"
   >
     <div class="profile-page">
+      <el-result v-if="!profileLoading && profileLoadError" icon="error" title="账户信息加载失败" :sub-title="profileLoadError">
+        <template #extra>
+          <el-button type="primary" @click="loadUserProfile">重新加载</el-button>
+        </template>
+      </el-result>
+
+      <el-alert v-if="learnerCenterLoadError" type="error" :closable="false" show-icon title="学习概览加载失败">
+        <template #default>
+          <span>{{ learnerCenterLoadError }}</span>
+          <el-button link type="primary" @click="loadLearnerCenter">重新加载</el-button>
+        </template>
+      </el-alert>
+
+      <template v-if="!profileLoading && !profileLoadError">
       <section class="profile-grid">
         <article class="glass-card profile-card profile-card--hero">
           <div class="profile-card__head">
@@ -22,12 +36,12 @@
 
           <div class="profile-stats">
             <article class="stat-card">
-              <span>XP</span>
+              <span>经验值（XP）</span>
               <strong>{{ user.xp || 0 }}</strong>
             </article>
             <article class="stat-card">
               <span>等级</span>
-              <strong>Lv. {{ user.level || 1 }}</strong>
+              <strong>{{ user.level || 1 }} 级</strong>
             </article>
             <article class="stat-card">
               <span>当前节奏</span>
@@ -36,7 +50,7 @@
           </div>
         </article>
 
-        <article class="glass-card profile-card">
+        <article v-if="!learnerCenterLoadError" class="glass-card profile-card">
           <div class="profile-card__head profile-card__head--spread">
             <div>
               <span class="section-kicker">当前学习</span>
@@ -59,18 +73,18 @@
           </div>
 
           <div class="action-row">
-            <el-button type="primary" @click="goCurrentPath">查看当前路径</el-button>
-            <el-button @click="router.push('/learning-state')">前往学习状态</el-button>
+            <el-button type="primary" @click="goCurrentPath">{{ currentPathId ? '继续当前路径' : '查看学习路径' }}</el-button>
+            <el-button @click="router.push('/learning-state')">查看学习状态</el-button>
           </div>
         </article>
       </section>
 
-      <section class="profile-grid profile-grid--bottom">
+      <section v-if="!learnerCenterLoadError" class="profile-grid profile-grid--bottom">
         <article class="glass-card profile-card">
           <div class="profile-card__head">
             <div>
               <span class="section-kicker">快捷入口</span>
-              <h3>继续当前学习闭环</h3>
+              <h3>常用入口</h3>
             </div>
           </div>
 
@@ -78,17 +92,17 @@
             <button type="button" class="shortcut-card" @click="router.push('/learning-state')">
               <span>学习状态</span>
               <strong>查看节奏、掌握度与建议</strong>
-              <p>统一查看学习者画像、状态趋势和重调建议。</p>
+              <p>查看近期学习状态和下一步建议。</p>
             </button>
             <button type="button" class="shortcut-card" @click="goCurrentPath">
               <span>当前路径</span>
               <strong>回到正在推进的学习路径</strong>
-              <p>如果还没有激活路径，会跳转到学习路径总览。</p>
+              <p>没有进行中的路径时，会打开学习路径总览。</p>
             </button>
             <button type="button" class="shortcut-card" @click="router.push('/goal-conversation')">
               <span>新目标</span>
-              <strong>从一个新问题重新开始规划</strong>
-              <p>切换主题或重新整理方向时，从这里发起新的目标规划。</p>
+              <strong>规划新的学习目标</strong>
+              <p>从一个新的问题开始整理学习方向。</p>
             </button>
           </div>
         </article>
@@ -97,7 +111,7 @@
           <div class="profile-card__head">
             <div>
               <span class="section-kicker">状态摘要</span>
-              <h3>学习快照</h3>
+          <h3>当前状态</h3>
             </div>
           </div>
 
@@ -122,26 +136,26 @@
         <article v-loading="projectionGrantLoading" class="glass-card profile-card grant-card">
           <div class="profile-card__head profile-card__head--spread">
             <div>
-              <span class="section-kicker">授权协助</span>
-              <h3>开发视角许可</h3>
+              <span class="section-kicker">问题协助</span>
+              <h3>授权工作人员协助排查问题</h3>
             </div>
             <div class="grant-card__head-actions">
               <el-tag :type="projectionGrantStatusTagType" effect="plain">{{ projectionGrantStatusLabel }}</el-tag>
-              <el-button size="small" @click="loadProjectionGrant">刷新</el-button>
+              <el-button size="small" @click="loadProjectionGrant">刷新授权状态</el-button>
             </div>
           </div>
 
           <p class="card-copy">
-            你可以明确授权平台管理员在开发调试站中临时使用你的学习视角协助排查问题。许可只用于开发视角与问题定位，不涉及任何登录口令。
+            授权后，平台工作人员可在限定时间内查看你选择的页面，用于排查你反馈的问题。授权不包含你的登录密码。
           </p>
 
           <div v-if="projectionGrantMessage" class="grant-card__notice">
             {{ projectionGrantMessage }}
           </div>
 
-          <div class="snapshot-list grant-card__summary">
+          <div v-if="!projectionGrantLoadError" class="snapshot-list grant-card__summary">
             <div class="snapshot-item">
-              <span>当前许可</span>
+              <span>当前状态</span>
               <strong>{{ projectionGrantStatusLabel }}</strong>
             </div>
             <div class="snapshot-item">
@@ -158,27 +172,27 @@
             </div>
           </div>
 
-          <div class="grant-card__note">
+          <div v-if="!projectionGrantLoadError" class="grant-card__note">
             <span>协助说明</span>
             <strong>{{ projectionGrantNoteLabel }}</strong>
           </div>
 
-          <div class="grant-form-grid">
+          <div v-if="!projectionGrantLoadError" class="grant-form-grid">
             <label class="grant-form-field">
               <span>开放范围</span>
               <el-select v-model="projectionGrantForm.scope">
-                <el-option label="学习台视角" value="dashboard" />
-                <el-option label="完整开发视角" value="full" />
+                <el-option label="仅查看学习台" value="dashboard" />
+                <el-option label="查看全部学习页面" value="full" />
               </el-select>
             </label>
 
             <label class="grant-form-field">
-              <span>有效时长</span>
+              <span>有效时长（小时）</span>
               <el-input-number v-model="projectionGrantForm.expiresInHours" :min="1" :max="168" />
             </label>
           </div>
 
-          <label class="grant-form-field grant-form-field--full">
+          <label v-if="!projectionGrantLoadError" class="grant-form-field grant-form-field--full">
             <span>协助说明</span>
             <el-input
               v-model="projectionGrantForm.note"
@@ -186,20 +200,21 @@
               :rows="3"
               maxlength="200"
               show-word-limit
-              placeholder="例如：同意管理员在 24 小时内进入开发视角，协助定位学习台异常。"
+              placeholder="例如：同意工作人员在 24 小时内查看学习台，协助定位我反馈的问题。"
             />
           </label>
 
-          <div class="action-row">
+          <div v-if="!projectionGrantLoadError" class="action-row">
             <el-button type="primary" :loading="projectionGrantSubmitting" @click="handleCreateProjectionGrant">
               {{ projectionGrantActionLabel }}
             </el-button>
-            <el-button :disabled="projectionGrantStatus === 'inactive'" :loading="projectionGrantRevoking" @click="handleRevokeProjectionGrant">
-              撤销许可
+            <el-button :disabled="projectionGrantStatus !== 'active' || projectionGrantSubmitting" :loading="projectionGrantRevoking" @click="handleRevokeProjectionGrant">
+              立即撤销授权
             </el-button>
           </div>
         </article>
       </section>
+      </template>
     </div>
   </CapabilityShell>
 </template>
@@ -233,11 +248,15 @@ const user = ref({
   role: 'user'
 })
 const learnerCenter = ref<LearnerCenterSnapshot | null>(null)
+const profileLoading = ref(true)
+const profileLoadError = ref('')
+const learnerCenterLoadError = ref('')
 const projectionGrant = ref<ProjectionGrant | null>(null)
 const projectionGrantLoading = ref(false)
 const projectionGrantSubmitting = ref(false)
 const projectionGrantRevoking = ref(false)
 const projectionGrantMessage = ref('')
+const projectionGrantLoadError = ref(false)
 const projectionGrantForm = reactive({
   scope: 'dashboard' as ProjectionGrantScope,
   expiresInHours: 24,
@@ -252,20 +271,21 @@ const paceLabel = computed(() => {
 })
 
 const currentPathId = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId || '')
-const currentPathTitle = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.pathTitle || '还没有激活中的学习路径')
+const currentPathTitle = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.pathTitle || '还没有进行中的学习路径')
 const currentPathDescription = computed(() => {
   if (currentPathId.value) {
     return '从这里快速回到当前路径，继续推进最近正在学的任务和阶段。'
   }
-  return '你还没有激活中的路径，可以先去目标规划或学习路径总览创建新的学习路线。'
+  return '你还没有进行中的路径，可以先规划目标或查看学习路径总览。'
 })
-const currentPathMeta = computed(() => (currentPathId.value ? '进行中的学习路径' : '暂无进行中路径'))
-const nextActionLabel = computed(() => (currentPathId.value ? '回到当前路径继续学习' : '先创建或选择一条路径'))
+const currentPathMeta = computed(() => (currentPathId.value ? '进行中的学习路径' : '暂无进行中的路径'))
+const nextActionLabel = computed(() => (currentPathId.value ? '继续当前路径' : '规划或选择一条路径'))
 const projectionGrantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
 const projectionGrantStatusLabel = computed(() => {
-  if (projectionGrantStatus.value === 'active') return '已授权协助'
-  if (projectionGrantStatus.value === 'expired') return '许可已过期'
-  if (projectionGrantStatus.value === 'revoked') return '许可已撤销'
+  if (projectionGrantLoadError.value) return '读取失败'
+  if (projectionGrantStatus.value === 'active') return '已授权'
+  if (projectionGrantStatus.value === 'expired') return '授权已过期'
+  if (projectionGrantStatus.value === 'revoked') return '授权已撤销'
   return '未授权'
 })
 const projectionGrantStatusTagType = computed(() => {
@@ -276,12 +296,12 @@ const projectionGrantStatusTagType = computed(() => {
 })
 const projectionGrantScopeLabel = computed(() => {
   const scope = projectionGrant.value?.scope || projectionGrantForm.scope
-  return scope === 'full' ? '完整开发视角' : '学习台视角'
+  return scope === 'full' ? '查看全部学习页面' : '仅查看学习台'
 })
 const projectionGrantGrantedAtLabel = computed(() => formatDateTime(projectionGrant.value?.grantedAt))
 const projectionGrantExpiresAtLabel = computed(() => formatDateTime(projectionGrant.value?.expiresAt))
 const projectionGrantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '未填写协助说明')
-const projectionGrantActionLabel = computed(() => (projectionGrantStatus.value === 'active' ? '更新许可' : '创建许可'))
+const projectionGrantActionLabel = computed(() => (projectionGrantStatus.value === 'active' ? '更新授权范围' : `授权 ${projectionGrantForm.expiresInHours} 小时`))
 
 const goCurrentPath = () => {
   if (currentPathId.value) {
@@ -313,8 +333,11 @@ function hydrateProjectionGrantForm(grant: ProjectionGrant | null) {
 }
 
 async function loadUserProfile() {
-  await userStore.fetchProfile()
-  if (userStore.user) {
+  profileLoading.value = true
+  profileLoadError.value = ''
+  try {
+    await userStore.fetchProfile()
+    if (!userStore.user) throw new Error('未返回账户信息')
     user.value = {
       name: userStore.user.name,
       email: userStore.user.email,
@@ -322,38 +345,52 @@ async function loadUserProfile() {
       level: userStore.user.level,
       role: (userStore.user as any).role || 'user'
     }
+  } catch (error: any) {
+    profileLoadError.value = getErrorMessage(error, '无法读取账户信息，请稍后重试。')
+  } finally {
+    profileLoading.value = false
   }
 }
 
 async function loadLearnerCenter() {
-  learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' })
+  learnerCenterLoadError.value = ''
+  try {
+    learnerCenter.value = await userAPI.getLearnerCenter({ scope: 'global' })
+  } catch (error: any) {
+    learnerCenter.value = null
+    learnerCenterLoadError.value = getErrorMessage(error, '无法读取学习概览，请稍后重试。')
+  }
 }
 
 async function loadProjectionGrant() {
   projectionGrantLoading.value = true
   projectionGrantMessage.value = ''
+  projectionGrantLoadError.value = false
   try {
     const res = await getUserProjectionGrant()
     projectionGrant.value = normalizeProjectionGrant(res)
     hydrateProjectionGrantForm(projectionGrant.value)
 
     if (!projectionGrant.value) {
-      projectionGrantMessage.value = '当前还没有生效中的开发视角许可。'
+      projectionGrantMessage.value = '当前还没有生效中的协助授权。'
     }
   } catch (error: any) {
     projectionGrant.value = null
     if (error?.response?.status === 404) {
-      projectionGrantMessage.value = '当前还没有生效中的开发视角许可。'
+      projectionGrantMessage.value = '当前还没有生效中的协助授权。'
       return
     }
-    projectionGrantMessage.value = '开发视角许可读取失败，请稍后重试。'
-    console.error('读取开发视角许可失败:', error)
+    projectionGrantMessage.value = '协助授权读取失败，请稍后重试。'
+    projectionGrantLoadError.value = true
+    console.error('读取协助授权失败:', error)
   } finally {
     projectionGrantLoading.value = false
   }
 }
 
 async function handleCreateProjectionGrant() {
+  if (projectionGrantRevoking.value) return
+  const wasActive = projectionGrantStatus.value === 'active'
   projectionGrantSubmitting.value = true
   try {
     const res = await createUserProjectionGrant({
@@ -369,24 +406,25 @@ async function handleCreateProjectionGrant() {
       hydrateProjectionGrantForm(projectionGrant.value)
       projectionGrantMessage.value = ''
     }
-    toast.success('开发视角许可已更新')
+    toast.success(wasActive ? '授权已更新' : '授权已创建')
   } catch (error: any) {
-    toast.error(getErrorMessage(error, '开发视角许可创建失败'))
+    toast.error(getErrorMessage(error, wasActive ? '更新授权失败' : '创建授权失败'))
   } finally {
     projectionGrantSubmitting.value = false
   }
 }
 
 async function handleRevokeProjectionGrant() {
-  if (projectionGrantStatus.value === 'inactive') {
-    toast.info('当前没有可撤销的开发视角许可')
+  if (projectionGrantSubmitting.value) return
+  if (projectionGrantStatus.value !== 'active') {
+    toast.info('当前没有可撤销的协助授权')
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      '撤销后，管理员将不能再基于这份许可打开你的开发视角，确认继续吗？',
-      '撤销开发视角许可',
+      '撤销后，工作人员将不能再凭这份授权查看你的页面，确认继续吗？',
+      '撤销协助授权',
       { type: 'warning' }
     )
   } catch {
@@ -398,12 +436,12 @@ async function handleRevokeProjectionGrant() {
     const res = await revokeUserProjectionGrant(projectionGrant.value?.id)
     projectionGrant.value = normalizeProjectionGrant(res)
     if (!projectionGrant.value) {
-      projectionGrantMessage.value = '开发视角许可已撤销。'
+      projectionGrantMessage.value = '协助授权已撤销。'
     }
-    toast.success('开发视角许可已撤销')
+    toast.success('协助授权已撤销')
     await loadProjectionGrant()
   } catch (error: any) {
-    toast.error(getErrorMessage(error, '撤销开发视角许可失败'))
+    toast.error(getErrorMessage(error, '撤销协助授权失败'))
   } finally {
     projectionGrantRevoking.value = false
   }

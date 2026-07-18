@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { learnerModelAgent } from '../../agents/learner-model-agent';
+import { learnerProfileService } from './LearnerProfileService';
 import { personalizationEngine } from '../../agents/learner-model-agent/personalization';
 import learningStateService from '../learning/learning-state.service';
 import type {
@@ -162,18 +162,18 @@ function deriveReplanSignal(input: {
 
 export class LearnerSnapshotService {
   async getSnapshot(input: LearnerSnapshotScopeInput): Promise<LearnerSnapshot> {
-    const [{ profile, confidence }, knowledgeMemory, latestGoalConversation, latestMetricAt, latestSession, latestCompletedTask] = await Promise.all([
-      learnerModelAgent.getProfile(input.userId),
+    const [{ profile, confidence }, knowledgeMemory, latestGoalEvidence, latestMetricAt, latestSession, latestCompletedTask] = await Promise.all([
+      learnerProfileService.getProfile(input.userId),
       learnerKnowledgeMemoryService.build({
         userId: input.userId,
         learningPathId: input.learningPathId,
         milestoneId: input.milestoneId,
         taskId: input.taskId,
       }),
-      prisma.goal_conversations.findFirst({
-        where: { userId: input.userId },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
+      prisma.learner_evidence.findFirst({
+        where: { userId: input.userId, evidenceType: 'goal:understanding:updated' },
+        orderBy: { occurredAt: 'desc' },
+        select: { occurredAt: true },
       }),
       learningStateService.getLatestCommittedStateAt(input.userId),
       prisma.teaching_sessions.findFirst({
@@ -256,7 +256,7 @@ export class LearnerSnapshotService {
         generatedAt: new Date().toISOString(),
         confidence,
         basedOn: {
-          latestGoalConversationAt: latestGoalConversation?.createdAt?.toISOString(),
+          latestGoalConversationAt: latestGoalEvidence?.occurredAt?.toISOString(),
           latestMetricAt: latestMetricAt?.toISOString?.(),
           latestTeachingSessionAt: latestSession?.updatedAt?.toISOString(),
           latestTaskCompletionAt: latestCompletedTask?.completedAt?.toISOString(),
@@ -282,17 +282,17 @@ export class LearnerSnapshotService {
     generatedAt?: Date;
   }): Promise<LearnerSnapshot> {
     const [{ profile, confidence }, knowledgeMemory, latestConversation, latestSession, latestCompletedTask] = await Promise.all([
-      learnerModelAgent.getProfile(input.userId),
+      learnerProfileService.getProfile(input.userId),
       learnerKnowledgeMemoryService.build({
         userId: input.userId,
         learningPathId: input.learningPathId,
         milestoneId: input.milestoneId,
         taskId: input.taskId,
       }),
-      prisma.goal_conversations.findFirst({
-        where: { userId: input.userId },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
+      prisma.learner_evidence.findFirst({
+        where: { userId: input.userId, evidenceType: 'goal:understanding:updated' },
+        orderBy: { occurredAt: 'desc' },
+        select: { occurredAt: true },
       }),
       prisma.teaching_sessions.findFirst({
         where: { userId: input.userId },
@@ -374,7 +374,7 @@ export class LearnerSnapshotService {
         generatedAt: generatedAt.toISOString(),
         confidence,
         basedOn: {
-          latestGoalConversationAt: latestConversation?.createdAt?.toISOString(),
+          latestGoalConversationAt: latestConversation?.occurredAt?.toISOString(),
           latestMetricAt: generatedAt.toISOString(),
           latestTeachingSessionAt: latestSession?.updatedAt?.toISOString(),
           latestTaskCompletionAt: latestCompletedTask?.completedAt?.toISOString(),

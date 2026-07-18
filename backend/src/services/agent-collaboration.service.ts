@@ -5,7 +5,7 @@
  * 事件驱动架构
  */
 
-import { EventBus, getEventBus, LearningEvent } from '../gateway/event-bus';
+import { EventBus, EventHandler, getEventBus, LearningEvent, LearningEventType } from '../gateway/event-bus';
 import { 
   LearningSignal, 
   AgentContext,
@@ -38,37 +38,49 @@ export class AgentCollaborationService {
   private config: AgentCollaborationConfig;
   private lastAdjustmentTime: Map<string, number> = new Map();
   private pendingSignals: Map<string, LearningSignal[]> = new Map();
+  private started = false;
+  private stopping = false;
+  private inFlight = new Set<Promise<void>>();
+  private readonly handlers: Array<[LearningEventType, EventHandler]> = [
+    ['lesson:completed', event => this.track(() => this.handleLessonCompleted(event))],
+    ['learning:signal:detected', event => this.track(() => this.handleSignalDetected(event))],
+    ['profile:updated', event => this.track(() => this.handleProfileUpdated(event))],
+    ['personalization:request', event => this.track(() => this.handlePersonalizationRequest(event))]
+  ];
   
-  constructor(config: Partial<AgentCollaborationConfig> = {}) {
+  constructor(config: Partial<AgentCollaborationConfig> = {}, eventBus: EventBus = getEventBus()) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.eventBus = getEventBus();
+    this.eventBus = eventBus;
   }
   
   start(): void {
-    this.setupEventListeners();
+    if (this.started) return;
+    this.stopping = false;
+    this.handlers.forEach(([type, handler]) => this.eventBus.on(type, handler));
+    this.started = true;
     logger.info('[agent-collaboration] service started');
   }
   
-  stop(): void {
+  async stop(): Promise<void> {
+    if (!this.started) return;
+    this.stopping = true;
+    this.handlers.forEach(([type, handler]) => this.eventBus.off(type, handler));
+    await Promise.allSettled([...this.inFlight]);
+    this.pendingSignals.clear();
+    this.lastAdjustmentTime.clear();
+    this.started = false;
     logger.info('[agent-collaboration] service stopped');
   }
-  
-  private setupEventListeners(): void {
-    this.eventBus.on('lesson:completed', async (event) => {
-      await this.handleLessonCompleted(event);
-    });
-    
-    this.eventBus.on('learning:signal:detected', async (event) => {
-      await this.handleSignalDetected(event);
-    });
-    
-    this.eventBus.on('profile:updated', async (event) => {
-      await this.handleProfileUpdated(event);
-    });
-    
-    this.eventBus.on('personalization:request', async (event) => {
-      await this.handlePersonalizationRequest(event);
-    });
+
+  private track(operation: () => Promise<void>): Promise<void> {
+    if (this.stopping) return Promise.resolve();
+    const promise = operation().catch(error => {
+      logger.error('[agent-collaboration] event handler failed', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }).finally(() => this.inFlight.delete(promise));
+    this.inFlight.add(promise);
+    return promise;
   }
   
   /**

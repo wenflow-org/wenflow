@@ -12,7 +12,7 @@ export const sessionKnowledgeDistillerDefinition: SkillDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
-      knowledgeState: { type: 'object', description: '当前课堂知识状态', required: true },
+      knowledgeState: { type: 'array', description: '当前课堂知识状态', required: true },
       knowledgeDelta: { type: 'object', description: '课堂知识变化量' },
       wrapup: { type: 'object', description: '课堂总结与评估' },
       taskContext: { type: 'object', description: '任务与路径上下文' },

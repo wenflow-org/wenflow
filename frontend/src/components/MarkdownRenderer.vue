@@ -8,8 +8,72 @@ import MarkdownIt from 'markdown-it';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
 import markdownItKatex from 'markdown-it-katex';
-import hljs from 'highlight.js';
-import mermaid from 'mermaid';
+// 按需注册常用语言，避免 highlight.js 全量语言包（约 1MB）
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import python from 'highlight.js/lib/languages/python';
+import java from 'highlight.js/lib/languages/java';
+import c from 'highlight.js/lib/languages/c';
+import cpp from 'highlight.js/lib/languages/cpp';
+import csharp from 'highlight.js/lib/languages/csharp';
+import go from 'highlight.js/lib/languages/go';
+import rust from 'highlight.js/lib/languages/rust';
+import sql from 'highlight.js/lib/languages/sql';
+import bash from 'highlight.js/lib/languages/bash';
+import shell from 'highlight.js/lib/languages/shell';
+import powershell from 'highlight.js/lib/languages/powershell';
+import json from 'highlight.js/lib/languages/json';
+import yaml from 'highlight.js/lib/languages/yaml';
+import xml from 'highlight.js/lib/languages/xml';
+import css from 'highlight.js/lib/languages/css';
+import markdown from 'highlight.js/lib/languages/markdown';
+import php from 'highlight.js/lib/languages/php';
+import ruby from 'highlight.js/lib/languages/ruby';
+import swift from 'highlight.js/lib/languages/swift';
+import kotlin from 'highlight.js/lib/languages/kotlin';
+import dockerfile from 'highlight.js/lib/languages/dockerfile';
+import ini from 'highlight.js/lib/languages/ini';
+import plaintext from 'highlight.js/lib/languages/plaintext';
+
+const HLJS_LANGUAGES: Record<string, Parameters<typeof hljs.registerLanguage>[1]> = {
+  javascript, typescript, python, java, c, cpp, csharp, go, rust, sql,
+  bash, shell, powershell, json, yaml, xml, css, markdown,
+  php, ruby, swift, kotlin, dockerfile, ini, plaintext,
+};
+for (const [name, lang] of Object.entries(HLJS_LANGUAGES)) {
+  hljs.registerLanguage(name, lang);
+}
+// 常用别名
+hljs.registerAliases(['js', 'jsx', 'mjs', 'node'], { languageName: 'javascript' });
+hljs.registerAliases(['ts', 'tsx'], { languageName: 'typescript' });
+hljs.registerAliases(['py'], { languageName: 'python' });
+hljs.registerAliases(['sh', 'zsh'], { languageName: 'bash' });
+hljs.registerAliases(['ps1', 'pwsh'], { languageName: 'powershell' });
+hljs.registerAliases(['html', 'xhtml', 'vue', 'svg'], { languageName: 'xml' });
+hljs.registerAliases(['yml'], { languageName: 'yaml' });
+hljs.registerAliases(['md'], { languageName: 'markdown' });
+hljs.registerAliases(['c#', 'cs'], { languageName: 'csharp' });
+hljs.registerAliases(['c++'], { languageName: 'cpp' });
+hljs.registerAliases(['txt', 'text'], { languageName: 'plaintext' });
+import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
+
+// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例，initialize 只执行一次）
+let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+function loadMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((mod) => {
+      const mermaid = mod.default;
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'strict',
+      });
+      return mermaid;
+    });
+  }
+  return mermaidPromise;
+}
 
 const props = defineProps<{
   content: string;
@@ -17,13 +81,20 @@ const props = defineProps<{
 
 const rendererRef = ref<HTMLElement | null>(null);
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-});
+// 允许 KaTeX / 代码高亮 / Mermaid 占位所需的标签与属性，但禁止任何脚本、事件处理器和危险协议。
+const SANITIZE_CONFIG: DOMPurifyConfig = {
+  ADD_TAGS: ['svg', 'path', 'g', 'line', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'text', 'tspan', 'defs', 'marker', 'foreignObject', 'semantics', 'annotation', 'math', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'mfrac', 'msqrt'],
+  ADD_ATTR: ['class', 'style', 'viewBox', 'd', 'x', 'y', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'points', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'transform', 'text-anchor', 'font-size', 'aria-hidden'],
+  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base'],
+  ALLOW_DATA_ATTR: false,
+};
 
-const md = new MarkdownIt({
+function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, SANITIZE_CONFIG) as unknown as string;
+}
+
+// 显式标注类型：highlight 回调中引用了 md 自身，需打破循环类型推断
+const md: MarkdownIt = new MarkdownIt({
   html: true,
   breaks: true,
   linkify: true,
@@ -46,21 +117,31 @@ function postProcessMermaid(html: string): string {
     .replace(/<pre class="mermaid-code">([\s\S]*?)<\/pre>/g, '<div class="mermaid">$1</div>');
 }
 
+// 串行化渲染，避免内容快速变化时并发 mermaid.run 操作同批节点
+let mermaidRunQueue: Promise<void> = Promise.resolve();
+
 async function renderMermaidDiagrams() {
-  if (!rendererRef.value) return;
-  const mermaidElements = rendererRef.value.querySelectorAll('.mermaid');
+  const host = rendererRef.value;
+  if (!host) return;
+  const mermaidElements = host.querySelectorAll('.mermaid');
   if (mermaidElements.length === 0) return;
 
-  try {
-    await mermaid.run({ nodes: Array.from(mermaidElements) as HTMLElement[] });
-  } catch (e) {
-    console.warn('Mermaid render failed:', e);
-  }
+  mermaidRunQueue = mermaidRunQueue.then(async () => {
+    if (!rendererRef.value) return; // 组件已卸载
+    try {
+      const mermaid = await loadMermaid();
+      if (!rendererRef.value) return;
+      await mermaid.run({ nodes: Array.from(mermaidElements) as HTMLElement[] });
+    } catch (e) {
+      console.warn('Mermaid render failed:', e);
+    }
+  });
+  return mermaidRunQueue;
 }
 
 const renderedHtml = computed(() => {
-  const raw = md.render(props.content);
-  return postProcessMermaid(raw);
+  const raw = md.render(props.content ?? '');
+  return sanitizeHtml(postProcessMermaid(raw));
 });
 
 watch(renderedHtml, async () => {

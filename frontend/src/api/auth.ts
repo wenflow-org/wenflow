@@ -19,10 +19,16 @@ export interface AuthResponse {
   token: string;
 }
 
-const unwrapAuthPayload = <T>(response: any): T => {
-  const payload = response?.data ?? response;
-  if (payload?.data !== undefined && payload?.success !== undefined) {
-    return payload.data as T;
+interface AuthPayloadEnvelope {
+  data?: unknown;
+  success?: unknown;
+}
+
+const unwrapAuthPayload = <T>(response: unknown): T => {
+  const payload = (response as AuthPayloadEnvelope | null | undefined)?.data ?? response;
+  const envelope = payload as AuthPayloadEnvelope | null | undefined;
+  if (envelope?.data !== undefined && envelope?.success !== undefined) {
+    return envelope.data as T;
   }
   return payload as T;
 };
@@ -53,7 +59,7 @@ export const authAPI = {
 
   // 娉ㄥ唽鐘舵€?
   async getRegistrationStatus(): Promise<{ registrationEnabled: boolean }> {
-    const response: any = await api.get('/auth/registration-status');
+    const response = await api.get('/auth/registration-status');
     return unwrapAuthPayload<{ registrationEnabled: boolean }>(response) || { registrationEnabled: true };
   },
 
@@ -61,11 +67,11 @@ export const authAPI = {
 
   // 楠岃瘉 token
 
-  async verifyToken(token: string): Promise<any> {
+  async verifyToken(token: string): Promise<unknown> {
 
     const response = await api.post('/auth/verify', { token });
 
-    return unwrapAuthPayload<any>(response);
+    return unwrapAuthPayload<unknown>(response);
 
   }
 

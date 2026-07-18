@@ -29,7 +29,7 @@ interface Props {
   /** 当前 Agent 视角，用于查 routing */
   agentId?: string
   /** 字段值字典：fieldId → value（dot-path 风格） */
-  values: Record<string, any>
+  values: Record<string, unknown>
   /** 是否处于 debug 模式（hidden 字段也展示） */
   debug?: boolean
   /** 是否只读 */
@@ -47,8 +47,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  (e: 'update:values', next: Record<string, any>): void
-  (e: 'fieldChange', fieldId: string, next: any): void
+  (e: 'update:values', next: Record<string, unknown>): void
+  (e: 'fieldChange', fieldId: string, next: unknown): void
 }>()
 
 const ROLE_LABELS: Record<string, string> = {
@@ -103,13 +103,13 @@ const orderedFields = computed(() => {
     })
 })
 
-const setValue = (fieldId: string, next: any) => {
+const setValue = (fieldId: string, next: unknown) => {
   const updated = { ...props.values, [fieldId]: next }
   emit('update:values', updated)
   emit('fieldChange', fieldId, next)
 }
 
-const getValue = (f: FieldDefinition): any => {
+const getValue = (f: FieldDefinition): unknown => {
   return props.values[f.fieldId]
 }
 
@@ -121,7 +121,7 @@ const isReadOnlyField = (f: FieldDefinition): boolean => {
   return false
 }
 
-const formatStringArrayDisplay = (v: any): string => {
+const formatStringArrayDisplay = (v: unknown): string => {
   if (Array.isArray(v)) return v.join('、')
   return String(v ?? '')
 }
@@ -134,7 +134,7 @@ const handleStringArrayInput = (fieldId: string, raw: string) => {
   setValue(fieldId, arr)
 }
 
-const formatObjectDisplay = (v: any): string => {
+const formatObjectDisplay = (v: unknown): string => {
   if (v === null || v === undefined) return ''
   if (typeof v === 'string') return v
   try {
@@ -195,7 +195,7 @@ const handleObjectInput = (fieldId: string, raw: string) => {
       <!-- enum -->
       <template v-else-if="field.valueType === 'enum'">
         <el-radio-group
-          :model-value="getValue(field)"
+          :model-value="getValue(field) as string"
           :disabled="isReadOnlyField(field)"
           @update:model-value="(v: any) => setValue(field.fieldId, v)"
         >
@@ -222,7 +222,7 @@ const handleObjectInput = (fieldId: string, raw: string) => {
       <!-- number -->
       <template v-else-if="field.valueType === 'number'">
         <el-input-number
-          :model-value="getValue(field)"
+          :model-value="getValue(field) as number"
           :disabled="isReadOnlyField(field)"
           @update:model-value="(v: any) => setValue(field.fieldId, v)"
         />
@@ -252,7 +252,7 @@ const handleObjectInput = (fieldId: string, raw: string) => {
       <!-- string (default) -->
       <template v-else>
         <el-input
-          :model-value="getValue(field) ?? ''"
+          :model-value="(getValue(field) ?? '') as string"
           :disabled="isReadOnlyField(field)"
           :placeholder="field.description || ''"
           @update:model-value="(v: any) => setValue(field.fieldId, v)"

@@ -3,7 +3,7 @@
  * 支持亮色/暗色模式切换，自动保存用户偏好
  */
 
-import { ref, watch, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 
 export type Theme = 'light' | 'dark' | 'system'
 
@@ -48,6 +48,20 @@ function parseStoredTheme(value: string | null): Theme {
     return value
   }
   return 'system'
+}
+
+// 系统主题监听器提升到模块级，只注册一次（避免每个组件挂载都累加监听）
+let systemThemeListenerRegistered = false;
+
+function registerSystemThemeListenerOnce() {
+  if (systemThemeListenerRegistered || typeof window === 'undefined') return;
+  systemThemeListenerRegistered = true;
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  mediaQuery.addEventListener('change', (e: MediaQueryListEvent) => {
+    if (currentTheme.value === 'system') {
+      applyTheme(e.matches);
+    }
+  });
 }
 
 /**
@@ -104,18 +118,8 @@ export function useTheme() {
       applyTheme(theme === 'dark')
     }
     
-    // 监听系统主题变化
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      
-      const handleChange = (e: MediaQueryListEvent) => {
-        if (currentTheme.value === 'system') {
-          applyTheme(e.matches)
-        }
-      }
-      
-      mediaQuery.addEventListener('change', handleChange)
-    }
+    // 监听系统主题变化（模块级只注册一次）
+    registerSystemThemeListenerOnce();
   }
   
   // 组件挂载时初始化

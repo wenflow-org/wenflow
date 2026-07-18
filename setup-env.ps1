@@ -26,12 +26,14 @@ function Get-DefaultEnvEntries {
         PORT = '3001'
         CORS_ORIGIN = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
         TRUST_PROXY = ''
-        DATABASE_URL = 'file:./prisma/dev.db'
-        SYSTEM_DATABASE_URL = 'file:./prisma/system.db'
+        DATABASE_URL = 'file:./dev.db'
+        SYSTEM_DATABASE_URL = 'file:../system.db'
         JWT_SECRET = ''
-        ADMIN_LOCALHOST_ONLY = 'true'
+        SECRET_ENCRYPTION_CURRENT_KEY_ID = 'v1'
+        SECRET_ENCRYPTION_KEYS = ''
+        ADMIN_ACCESS_MODE = 'private'
         LOGIN_MAX_ATTEMPTS = '5'
-        LOGIN_LOCK_DURATION = '900000'
+        LOGIN_LOCK_DURATION_SECONDS = '900'
         JWT_EXPIRES_IN = '7d'
         AI_API_URL = 'https://api.deepseek.com'
         AI_API_KEY = ''
@@ -40,7 +42,7 @@ function Get-DefaultEnvEntries {
         FRONTEND_URL = 'http://localhost:5173'
         INIT_ADMIN_NAME = 'admin'
         INIT_ADMIN_EMAIL = 'admin@wenflow.local'
-        INIT_ADMIN_PASSWORD = 'admin123'
+        INIT_ADMIN_PASSWORD = ''
     }
 
     return $defaults
@@ -276,6 +278,18 @@ function New-RandomSecret {
     return [Convert]::ToBase64String($bytes)
 }
 
+function New-EncryptionKey {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+
+    return [Convert]::ToBase64String($bytes)
+}
+
 function Test-AIConfigValue {
     param(
         [AllowEmptyString()]
@@ -335,6 +349,14 @@ if ([string]::IsNullOrWhiteSpace($currentJwtSecret) -or $currentJwtSecret.Length
         $currentJwtSecret = $jwtInput
     }
     Set-EnvValue -Path $envPath -Key 'JWT_SECRET' -Value $currentJwtSecret
+}
+
+$encryptionKeys = Get-EnvValue -Path $envPath -Key 'SECRET_ENCRYPTION_KEYS'
+if ([string]::IsNullOrWhiteSpace($encryptionKeys)) {
+    $encryptionKeys = "v1:$(New-EncryptionKey)"
+    Set-EnvValue -Path $envPath -Key 'SECRET_ENCRYPTION_CURRENT_KEY_ID' -Value 'v1'
+    Set-EnvValue -Path $envPath -Key 'SECRET_ENCRYPTION_KEYS' -Value $encryptionKeys
+    Write-Host 'Generated a database Secret encryption key.' -ForegroundColor Green
 }
 
 $defaultLocalFrontendUrl = 'http://localhost:5173'
@@ -418,6 +440,7 @@ if (-not [string]::IsNullOrWhiteSpace($adminPasswordInput)) {
 
 $jwtMasked = (Get-EnvValue -Path $envPath -Key 'JWT_SECRET')
 $apiKeyMasked = (Get-EnvValue -Path $envPath -Key 'AI_API_KEY')
+$encryptionKeyMasked = (Get-EnvValue -Path $envPath -Key 'SECRET_ENCRYPTION_KEYS')
 $aiKeyConfigured = Test-AIConfigValue -Value $apiKeyMasked -InvalidValues @('sk-your-api-key', 'your-api-key')
 
 Write-Host ''
@@ -425,6 +448,7 @@ Write-Host 'Environment ready.' -ForegroundColor Green
 Write-Host "  File: $envPath" -ForegroundColor DarkGray
 Write-Host "  JWT_SECRET: $(if ($jwtMasked) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
 Write-Host "  AI_API_KEY: $(if ($aiKeyConfigured) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
+Write-Host "  SECRET_ENCRYPTION_KEYS: $(if ($encryptionKeyMasked) { 'configured' } else { 'missing' })" -ForegroundColor DarkGray
 Write-Host "  FRONTEND_URL: $frontendUrlCurrent" -ForegroundColor DarkGray
 Write-Host "  CORS_ORIGIN: $corsOriginCurrent" -ForegroundColor DarkGray
 Write-Host 'You can run ./start-dev.ps1 to start services.' -ForegroundColor Cyan

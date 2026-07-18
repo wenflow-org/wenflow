@@ -228,6 +228,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { hasUserSession } from '@/utils/api';
 
 const scrolled = ref(false);
 const mobileNavOpen = ref(false);
@@ -267,7 +268,7 @@ const secondaryCtaLabel = computed(() => (isLoggedIn.value ? '回到学习台' :
 const footerCtaLabel = '从一个问题开始';
 
 const syncAuthState = () => {
-  isLoggedIn.value = Boolean(localStorage.getItem('token'));
+  isLoggedIn.value = hasUserSession();
 };
 
 const handleScroll = () => {

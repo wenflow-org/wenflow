@@ -1,8 +1,8 @@
 // 认证服务
 import bcrypt from 'bcrypt';
-import jwt, { SignOptions } from 'jsonwebtoken';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { signSessionToken, verifySessionToken } from '../../utils/session-token';
 
 interface RegisterData {
   name: string;
@@ -19,12 +19,23 @@ interface JWTPayload {
   name: string;
 }
 
+const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
+
+export class InvalidCredentialsError extends Error {
+  readonly status = 401;
+  readonly code = 'INVALID_CREDENTIALS';
+
+  constructor() {
+    super('用户名或密码错误');
+    this.name = 'InvalidCredentialsError';
+  }
+}
+
 class AuthService {
-  private JWT_SECRET = process.env.JWT_SECRET;
   private JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
   constructor() {
-    if (!this.JWT_SECRET) {
+    if (!process.env.JWT_SECRET) {
       throw new Error('JWT_SECRET 未配置，请检查环境变量');
     }
   }
@@ -83,19 +94,19 @@ class AuthService {
           OR: [
             { name: data.name },
             { email: data.name }
-          ]
+          ],
+          isAdmin: false
         }
       });
 
-      if (!user) {
-        throw new Error('用户名或密码错误');
-      }
+      // 未命中时也执行同等成本的密码校验，避免通过响应时序探测账号。
+      const isValidPassword = await bcrypt.compare(
+        data.password,
+        user?.password || INVALID_LOGIN_PASSWORD_HASH
+      );
 
-      // 验证密码
-      const isValidPassword = await bcrypt.compare(data.password, user.password);
-
-      if (!isValidPassword) {
-        throw new Error('用户名或密码错误');
+      if (!user || !isValidPassword) {
+        throw new InvalidCredentialsError();
       }
 
       // 更新最后登录时间
@@ -127,9 +138,7 @@ class AuthService {
   async verifyToken(token: string) {
     try {
       // 显式指定允许的算法，防止算法混淆攻击
-      const decoded = jwt.verify(token, this.JWT_SECRET, {
-        algorithms: ['HS256']
-      }) as JWTPayload;
+      const decoded = verifySessionToken(token, 'user') as JWTPayload;
 
       // 查找用户
       const user = await prisma.users.findUnique({
@@ -153,11 +162,7 @@ class AuthService {
 
   // 生成 JWT
   private generateToken(payload: JWTPayload): string {
-    const options: SignOptions = {
-      expiresIn: this.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
-      algorithm: 'HS256' // 显式指定算法，防止算法混淆攻击
-    };
-    return jwt.sign(payload, this.JWT_SECRET, options);
+    return signSessionToken(payload, 'user', this.JWT_EXPIRES_IN as any);
   }
 }
 

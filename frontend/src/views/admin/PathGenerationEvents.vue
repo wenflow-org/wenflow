@@ -175,7 +175,7 @@ interface PathGenerationEvent {
   input?: string | null
   output?: string | null
   createdAt: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 const route = useRoute()

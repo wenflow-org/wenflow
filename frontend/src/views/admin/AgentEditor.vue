@@ -81,10 +81,10 @@
           type="warning" 
           plain
           @click="openPromptLab"
-          title="使用发布向导推进变更"
+          title="查看 Source 并执行只读 Dry Run"
         >
           <el-icon><MagicStick /></el-icon>
-          发布向导
+          Dry Run
         </el-button>
       </div>
     </header>
@@ -118,11 +118,11 @@
         <div class="drift-warning__content">
           <code>{{ currentAgent.file?.path || 'prompts/skill.*.md' }}</code>
           <span>DB ACTIVE v{{ currentAgent.db?.version || '?' }}</span>
-          <span v-if="activeTab !== 'edit'">切到「Prompt 编辑」处理</span>
+          <span>请修改文件并通过部署同步处理</span>
         </div>
       </el-alert>
 
-      <PromptWorkbench
+      <PromptReadOnlyPane
         v-show="activeTab === 'edit'"
         :agent-id="currentAgent.agentId"
       />
@@ -258,13 +258,13 @@
         >
           <header class="rules-group__head">
             <span class="rules-group__prefix">R-{{ prefix }}-NN</span>
-            <span class="rules-group__count">{{ (rules as any[]).length }} 条</span>
+            <span class="rules-group__count">{{ rules.length }} 条</span>
             <span class="rules-group__owner">
-              {{ groupOwner(rules as any[]) }}
+              {{ groupOwner(rules) }}
             </span>
           </header>
           <ul class="rules-group__list">
-            <li v-for="r in (rules as any[])" :key="r.ruleId + r.agentId" class="rules-row">
+            <li v-for="r in rules" :key="r.ruleId + r.agentId" class="rules-row">
               <code class="rules-row__id">{{ r.ruleId }}</code>
               <span class="rules-row__text">{{ r.text }}</span>
               <button
@@ -284,17 +284,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, Refresh, Edit, VideoPlay, Setting, SetUp, MagicStick } from '@element-plus/icons-vue';
-import { ElMessageBox } from 'element-plus';
 import {
   adminPromptOpsApi,
   adminAgentPromptsApi,
   adminSkillWorkbenchApi
 } from '@/api/adminApi';
 import SkillRuntimeConfigPane from './components/promptOps/SkillRuntimeConfigPane.vue';
-import PromptWorkbench from './components/promptOps/PromptWorkbench.vue';
+import PromptReadOnlyPane from './components/promptOps/PromptReadOnlyPane.vue';
 import PromptPreviewPane from './components/promptOps/PromptPreviewPane.vue';
 import PromptEngineeringPane from './components/promptOps/PromptEngineeringPane.vue';
 import { toast } from '../../utils/toast';
@@ -306,11 +305,66 @@ interface AgentOverviewItem {
   description: string | null;
   sources: { file: boolean; db: boolean; tsFallback: boolean };
   health: 'good' | 'warn' | 'risk';
-  file: any;
-  db: any;
-  tsFallback: any;
+  file: { path?: string; hash?: string; [key: string]: unknown } | null;
+  db: {
+    id?: string;
+    version?: number | string;
+    hash?: string;
+    useCount?: number;
+    model?: string;
+    publishedAt?: string;
+    [key: string]: unknown;
+  } | null;
+  tsFallback: { file?: string; constName?: string; [key: string]: unknown } | null;
   drift: 'in-sync' | 'file-vs-db-mismatch' | null;
-  schemaLint?: any;
+  schemaLint?: unknown;
+}
+
+interface PromptVersionItem {
+  id: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface ProtocolViewData {
+  protocols: Array<{
+    id?: string | number;
+    title?: string;
+    status?: string;
+    statusLabel?: string;
+    summary?: string;
+    schema: {
+      interface?: string;
+      file?: string;
+      fields?: Array<{ name?: string; type?: string; required?: boolean; description?: string; [key: string]: unknown }>;
+      [key: string]: unknown;
+    };
+    callSites?: string[];
+    [key: string]: unknown;
+  }>;
+  notes: string[];
+  [key: string]: unknown;
+}
+
+interface SkillRuleItem {
+  ruleId?: string;
+  agentId: string;
+  agentDisplayName?: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface SkillRulesOverview {
+  summary: {
+    totalRules: number;
+    totalPrefixes: number;
+    totalAgentsWithRules: number;
+    conflictPrefixCount: number;
+    [key: string]: unknown;
+  };
+  conflictPrefixes: Array<{ prefix?: string; agentIds: string[]; [key: string]: unknown }>;
+  byPrefix: Record<string, SkillRuleItem[]>;
+  [key: string]: unknown;
 }
 
 const route = useRoute();
@@ -321,8 +375,8 @@ const currentAgent = ref<AgentOverviewItem | null>(null);
 const activeTab = ref<'edit' | 'preview' | 'runtime' | 'engineering'>('edit');
 
 const tabs = computed(() => {
-  const base: { key: 'edit' | 'preview' | 'runtime' | 'engineering'; label: string; icon: any }[] = [
-    { key: 'edit', label: '编辑', icon: Edit },
+  const base: { key: 'edit' | 'preview' | 'runtime' | 'engineering'; label: string; icon: Component }[] = [
+    { key: 'edit', label: 'Prompt 检视', icon: Edit },
     { key: 'preview', label: '预览', icon: VideoPlay }
   ];
   if (currentAgent.value?.kind === 'skill') {
@@ -332,25 +386,25 @@ const tabs = computed(() => {
   return base;
 });
 
-const promptVersions = ref<any[]>([]);
-const activePrompt = ref<any>(null);
+const promptVersions = ref<PromptVersionItem[]>([]);
+const activePrompt = ref<Record<string, unknown> | null>(null);
 const activePromptLoading = ref(false);
 
 // Skill 工作台综合元数据（隶属 Agent / 模型配置 / 调用统计 / 字段契约）
 const workbenchMeta = ref<{
   skill?: { id: string; name: string; description: string; category: string; aliases: string[]; ioContractVersion: string; noPromptFile: boolean };
   parentAgent?: { id: string; name: string; monitoringGroup: string } | null;
-  modelConfig?: any;
-  contract?: any;
+  modelConfig?: { temperature?: number; [key: string]: unknown } | null;
+  contract?: unknown;
   stats?: { totalCalls: number; successCalls: number; successRate: number | null; avgDuration: number; lastCalledAt: string | null };
 } | null>(null);
 
 const protocolDrawerVisible = ref(false);
-const protocolView = ref<any>(null);
+const protocolView = ref<ProtocolViewData | null>(null);
 
 const rulesDrawerVisible = ref(false);
 const rulesOverviewLoading = ref(false);
-const rulesOverview = ref<any>(null);
+const rulesOverview = ref<SkillRulesOverview | null>(null);
 
 // 注：旧的 SkillNodeWorkbench 抽屉已被「模型运行时」一级 tab 取代
 
@@ -385,6 +439,8 @@ async function loadAll() {
   loading.value = true;
   try {
     const r = await adminPromptOpsApi.getAgentOverview();
+    // TODO(perf): 当前为全量拉取再 find 定位当前 skill；adminApi 与后端 /admin/prompt-ops
+    // 均无按 id 查询 agent-overview 单点的端点，待后端补充后改为单点查询。
     const items = (r.data?.data?.items || []) as AgentOverviewItem[];
     const skillId = agentIdParam.value.replace(/^skill:/, '');
     const found = items.find((x) => x.agentId === `skill:${skillId}` || x.agentId === skillId) || null;
@@ -410,7 +466,7 @@ async function loadPromptDetailForAgent(agentId: string) {
   try {
     const versionsRes = await adminAgentPromptsApi.getPromptVersions({ agentId });
     const nextVersions = versionsRes.data?.data?.list || [];
-    const active = nextVersions.find((v: any) => v.status === 'ACTIVE');
+    const active = nextVersions.find((v: PromptVersionItem) => v.status === 'ACTIVE');
     let nextActive = null;
     if (active) {
       const detailRes = await adminAgentPromptsApi.getPromptDetail(active.id);
@@ -429,9 +485,9 @@ async function loadPromptDetailForAgent(agentId: string) {
 
 async function loadWorkbenchMeta(agentId: string) {
   try {
-    const r: any = await adminSkillWorkbenchApi.getMeta(agentId);
+    const r = await adminSkillWorkbenchApi.getMeta(agentId);
     workbenchMeta.value = r.data?.data || null;
-  } catch (err: any) {
+  } catch (err) {
     workbenchMeta.value = null;
     // 不打 toast，仅作为辅助信息；缺失时不影响 Prompt 编辑流程
     console.warn('[skill-workbench-meta] 加载失败', err);
@@ -464,7 +520,7 @@ async function openRulesOverview() {
   }
 }
 
-function groupOwner(rules: any[]): string {
+function groupOwner(rules: Array<{ agentDisplayName?: string }>): string | undefined {
   const owners = new Set(rules.map((r) => r.agentDisplayName));
   if (owners.size === 1) {
     return Array.from(owners)[0];
@@ -475,72 +531,6 @@ function groupOwner(rules: any[]): string {
 function jumpToAgent(agentId: string) {
   rulesDrawerVisible.value = false;
   void router.push({ name: 'AdminAgentEditor', params: { agentId: agentId.replace(/^skill:/, '') } });
-}
-
-async function publishPrompt(id: string) {
-  try {
-    await ElMessageBox.confirm('确认发布？这会归档当前 ACTIVE 版本。', '发布确认', {
-      type: 'warning'
-    });
-    await adminAgentPromptsApi.publishPrompt(id);
-    toast.success('发布成功');
-    await loadAll();
-  } catch (err: any) {
-    if (err === 'cancel') return;
-    toast.error(err?.response?.data?.error?.message || '发布失败');
-  }
-}
-
-async function saveDraft(payload: {
-  id?: string;
-  agentId: string;
-  systemPrompt: string;
-  name: string;
-  description?: string;
-  temperature?: number;
-  maxTokens?: number;
-}) {
-  try {
-    if (payload.id) {
-      await adminAgentPromptsApi.updatePrompt(payload.id, {
-        name: payload.name,
-        description: payload.description,
-        systemPrompt: payload.systemPrompt,
-        temperature: payload.temperature,
-        maxTokens: payload.maxTokens
-      });
-      toast.success('草稿已更新');
-    } else {
-      await adminAgentPromptsApi.createPrompt({
-        agentId: payload.agentId,
-        name: payload.name,
-        description: payload.description,
-        systemPrompt: payload.systemPrompt,
-        temperature: payload.temperature,
-        maxTokens: payload.maxTokens
-      });
-      toast.success('草稿已创建');
-    }
-    await loadPromptDetailForAgent(payload.agentId);
-  } catch (err: any) {
-    toast.error(err?.response?.data?.error?.message || '保存失败');
-  }
-}
-
-async function deletePromptVersion(id: string) {
-  try {
-    await ElMessageBox.confirm('确认删除该草稿？', '删除确认', {
-      type: 'warning'
-    });
-    await adminAgentPromptsApi.deletePrompt(id);
-    toast.success('已删除');
-    if (currentAgent.value) {
-      await loadPromptDetailForAgent(currentAgent.value.agentId);
-    }
-  } catch (err: any) {
-    if (err === 'cancel') return;
-    toast.error(err?.response?.data?.error?.message || '删除失败');
-  }
 }
 
 function onSkillRuntimeChanged() {

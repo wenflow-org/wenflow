@@ -1,11 +1,33 @@
 <template>
   <div class="mobile-site-menu">
-    <button type="button" class="mobile-site-menu__trigger" :aria-label="drawerOpen ? '关闭导航菜单' : '打开导航菜单'" @click="drawerOpen = true">
+    <button
+      ref="triggerRef"
+      type="button"
+      class="mobile-site-menu__trigger"
+      :aria-label="drawerOpen ? '关闭导航菜单' : '打开导航菜单'"
+      aria-haspopup="dialog"
+      :aria-expanded="drawerOpen"
+      aria-controls="mobile-site-menu-panel"
+      @click="openDrawer"
+    >
       <el-icon><Menu /></el-icon>
     </button>
 
-    <el-drawer v-model="drawerOpen" direction="rtl" :with-header="false" append-to-body size="min(92vw, 420px)" class="mobile-site-menu__drawer">
-      <div class="mobile-site-menu__panel">
+    <el-drawer
+      v-model="drawerOpen"
+      title="移动端导航菜单"
+      direction="rtl"
+      :with-header="false"
+      :close-on-press-escape="true"
+      :lock-scroll="false"
+      append-to-body
+      size="min(92vw, 420px)"
+      class="mobile-site-menu__drawer"
+      modal-class="mobile-site-menu__overlay"
+      @opened="focusCloseButton"
+      @closed="restoreTriggerFocus"
+    >
+      <div id="mobile-site-menu-panel" class="mobile-site-menu__panel" aria-label="移动端导航菜单">
         <div class="mobile-site-menu__panel-head">
           <div class="mobile-site-menu__identity">
             <span class="mobile-site-menu__avatar">{{ userInitial }}</span>
@@ -15,53 +37,54 @@
             </div>
           </div>
 
-          <button type="button" class="mobile-site-menu__close" aria-label="关闭导航菜单" @click="drawerOpen = false">
+          <button ref="closeRef" type="button" class="mobile-site-menu__close" aria-label="关闭导航菜单" @click="drawerOpen = false">
             <el-icon><Close /></el-icon>
           </button>
         </div>
 
         <nav class="mobile-site-menu__nav" aria-label="移动端导航菜单">
-          <router-link
+          <a
             v-for="item in navItems"
             :key="item.label"
-            :to="item.to"
+            :href="router.resolve(item.to).href"
             class="mobile-site-menu__link"
             :class="{ 'mobile-site-menu__link--active': isActive(item) }"
-            @click="drawerOpen = false"
+            :aria-current="isActive(item) ? 'page' : undefined"
+            @click="handleNavigation($event, item.to)"
           >
             <span>{{ item.label }}</span>
             <el-icon><ArrowRight /></el-icon>
-          </router-link>
+          </a>
         </nav>
 
         <div v-if="primaryAction || secondaryAction" class="mobile-site-menu__actions">
-          <router-link
+          <a
             v-if="primaryAction"
-            :to="primaryAction.to"
+            :href="router.resolve(primaryAction.to).href"
             class="mobile-site-menu__action mobile-site-menu__action--primary"
-            @click="drawerOpen = false"
+            @click="handleNavigation($event, primaryAction.to)"
           >
             {{ primaryAction.label }}
-          </router-link>
-          <router-link
+          </a>
+          <a
             v-if="secondaryAction"
-            :to="secondaryAction.to"
+            :href="router.resolve(secondaryAction.to).href"
             class="mobile-site-menu__action mobile-site-menu__action--secondary"
-            @click="drawerOpen = false"
+            @click="handleNavigation($event, secondaryAction.to)"
           >
             {{ secondaryAction.label }}
-          </router-link>
+          </a>
         </div>
 
         <div class="mobile-site-menu__footer">
-          <router-link
+          <a
             v-if="showAccountLink"
-            :to="accountPath"
+            :href="router.resolve(accountPath).href"
             class="mobile-site-menu__footer-link"
-            @click="drawerOpen = false"
+            @click="handleNavigation($event, accountPath)"
           >
             {{ accountLabel }}
-          </router-link>
+          </a>
           <button type="button" class="mobile-site-menu__footer-link mobile-site-menu__footer-link--danger" @click="emitLogout">
             退出登录
           </button>
@@ -72,8 +95,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Close, Menu } from '@element-plus/icons-vue'
 
 interface NavItem {
@@ -87,7 +110,7 @@ interface ActionItem {
   to: string
 }
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   title?: string
   userName: string
   userInitial: string
@@ -98,10 +121,10 @@ const props = withDefaults(defineProps<{
   accountPath?: string
   showAccountLink?: boolean
 }>(), {
-  title: '学习主站',
+  title: '问流学习台',
   primaryAction: null,
   secondaryAction: null,
-  accountLabel: '能力中心',
+  accountLabel: '个人中心',
   accountPath: '/user',
   showAccountLink: true
 })
@@ -111,22 +134,142 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const router = useRouter()
 const drawerOpen = ref(false)
+const triggerRef = ref<HTMLButtonElement>()
+const closeRef = ref<HTMLButtonElement>()
+const historyMarker = `mobile-site-menu-${Math.random().toString(36).slice(2)}`
+let historyEntryActive = false
+let historyBackPending = false
+let bodyLocked = false
+let previousBodyOverflow = ''
+let previousBodyPaddingRight = ''
+let resolveHistoryClose: (() => void) | null = null
 
 const currentPath = computed(() => route.path)
 
 const isActive = (item: NavItem) => {
   const prefixes = item.matchPrefixes?.length ? item.matchPrefixes : [item.to]
-  return prefixes.some((prefix) => currentPath.value === prefix || currentPath.value.startsWith(prefix))
+  return prefixes.some((prefix) => currentPath.value === prefix || currentPath.value.startsWith(prefix + '/'))
 }
 
-const emitLogout = () => {
+const lockBodyScroll = () => {
+  if (bodyLocked) return
+
+  previousBodyOverflow = document.body.style.overflow
+  previousBodyPaddingRight = document.body.style.paddingRight
+  const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+  document.body.style.overflow = 'hidden'
+  if (scrollbarWidth > 0 && !previousBodyPaddingRight) {
+    document.body.style.paddingRight = `${scrollbarWidth}px`
+  }
+  bodyLocked = true
+}
+
+const unlockBodyScroll = () => {
+  if (!bodyLocked) return
+  document.body.style.overflow = previousBodyOverflow
+  document.body.style.paddingRight = previousBodyPaddingRight
+  bodyLocked = false
+}
+
+const openDrawer = () => {
+  if (drawerOpen.value) return
+  const state = history.state && typeof history.state === 'object' ? history.state : {}
+  window.history.pushState({ ...state, __wenflowMobileMenu: historyMarker }, '', window.location.href)
+  historyEntryActive = true
+  drawerOpen.value = true
+}
+
+const closeDrawerAndWait = () => {
+  if (!drawerOpen.value && !historyEntryActive) return Promise.resolve()
+
+  drawerOpen.value = false
+  if (historyEntryActive && history.state?.__wenflowMobileMenu === historyMarker) {
+    historyBackPending = true
+    return new Promise<void>((resolve) => {
+      resolveHistoryClose = resolve
+      window.history.back()
+    })
+  }
+
+  historyEntryActive = false
+  return Promise.resolve()
+}
+
+const handleNavigation = async (event: MouseEvent, path: string) => {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  await closeDrawerAndWait()
+  await router.push(path)
+}
+
+const emitLogout = async () => {
+  await closeDrawerAndWait()
   drawerOpen.value = false
   emit('logout')
 }
 
+const focusCloseButton = () => {
+  nextTick(() => closeRef.value?.focus())
+}
+
+const restoreTriggerFocus = () => {
+  triggerRef.value?.focus()
+}
+
+const handlePopState = () => {
+  if (!historyEntryActive) return
+  historyEntryActive = false
+  historyBackPending = false
+  drawerOpen.value = false
+  resolveHistoryClose?.()
+  resolveHistoryClose = null
+}
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !drawerOpen.value) return
+  event.preventDefault()
+  drawerOpen.value = false
+}
+
 watch(() => route.fullPath, () => {
   drawerOpen.value = false
+  unlockBodyScroll()
+})
+
+watch(drawerOpen, (open, wasOpen) => {
+  if (open) {
+    lockBodyScroll()
+    return
+  }
+
+  unlockBodyScroll()
+  if (wasOpen && historyEntryActive && !historyBackPending && history.state?.__wenflowMobileMenu === historyMarker) {
+    historyBackPending = true
+    window.history.back()
+  }
+})
+
+onBeforeRouteLeave(() => {
+  drawerOpen.value = false
+  historyEntryActive = false
+  unlockBodyScroll()
+})
+
+onMounted(() => {
+  window.addEventListener('popstate', handlePopState)
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('popstate', handlePopState)
+  window.removeEventListener('keydown', handleKeydown)
+  drawerOpen.value = false
+  historyEntryActive = false
+  resolveHistoryClose?.()
+  resolveHistoryClose = null
+  unlockBodyScroll()
 })
 </script>
 
@@ -150,13 +293,22 @@ watch(() => route.fullPath, () => {
   cursor: pointer;
 }
 
+.mobile-site-menu__trigger:focus-visible,
+.mobile-site-menu__close:focus-visible,
+.mobile-site-menu__link:focus-visible,
+.mobile-site-menu__action:focus-visible,
+.mobile-site-menu__footer-link:focus-visible {
+  outline: 3px solid rgba(52, 120, 246, 0.28);
+  outline-offset: 3px;
+}
+
 .mobile-site-menu__panel {
   display: grid;
   grid-template-rows: auto auto auto 1fr;
   gap: 18px;
   min-height: 100%;
   height: 100%;
-  padding: 20px;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   background:
     radial-gradient(circle at top right, rgba(67, 176, 216, 0.14), transparent 28%),
@@ -209,6 +361,12 @@ watch(() => route.fullPath, () => {
 .mobile-site-menu__footer {
   display: grid;
   gap: 10px;
+}
+
+.mobile-site-menu__footer {
+  align-self: end;
+  align-content: end;
+  width: 100%;
 }
 
 .mobile-site-menu__link,
@@ -283,7 +441,7 @@ watch(() => route.fullPath, () => {
 
 @media (max-width: 420px) {
   .mobile-site-menu__panel {
-    padding: 16px;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-site-menu__panel-head {
@@ -312,6 +470,20 @@ watch(() => route.fullPath, () => {
   .mobile-site-menu__footer-link,
   .mobile-site-menu__action {
     border-radius: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-site-menu__trigger,
+  .mobile-site-menu__close,
+  .mobile-site-menu__link,
+  .mobile-site-menu__action,
+  .mobile-site-menu__footer-link,
+  :global(.mobile-site-menu__overlay),
+  :global(.mobile-site-menu__overlay .el-drawer) {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }
 

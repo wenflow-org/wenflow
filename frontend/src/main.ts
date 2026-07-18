@@ -1,9 +1,7 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import ElementPlus from 'element-plus';
+import { ElLoading } from 'element-plus';
 import 'element-plus/dist/index.css';
-import zhCn from 'element-plus/es/locale/lang/zh-cn';
-import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 
 import App from './App.vue';
 import router from './router';
@@ -14,15 +12,10 @@ import './styles/admin-theme.css';
 const app = createApp(App);
 const pinia = createPinia();
 
-// 注册所有图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component);
-}
-
 app.use(pinia);
 app.use(router);
-app.use(ElementPlus, {
-  locale: zhCn,
-});
+// Element Plus 组件由 unplugin-vue-components 按需自动引入；
+// 此处仅注册全局指令与语言包（locale 通过 App.vue 的 el-config-provider 下发）
+app.use(ElLoading);
 
 app.mount('#app');

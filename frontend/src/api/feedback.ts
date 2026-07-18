@@ -1,4 +1,4 @@
-import request from '@/utils/request';
+import request from '@/utils/api';
 
 export interface SubmitFeedbackParams {
   sessionId: string;
@@ -56,7 +56,7 @@ export interface FeedbackTrendItem {
  */
 export async function submitFeedback(params: SubmitFeedbackParams) {
   return request({
-    url: '/api/feedback/submit',
+    url: '/feedback/submit',
     method: 'post',
     data: params
   });
@@ -67,7 +67,7 @@ export async function submitFeedback(params: SubmitFeedbackParams) {
  */
 export async function getMyFeedback(limit: number = 50, page: number = 1) {
   return request({
-    url: '/api/feedback/my-feedback',
+    url: '/feedback/my-feedback',
     method: 'get',
     params: { limit, page }
   });
@@ -78,7 +78,7 @@ export async function getMyFeedback(limit: number = 50, page: number = 1) {
  */
 export async function getTaskFeedbackStats(taskId: string) {
   return request({
-    url: `/api/feedback/task/${taskId}/stats`,
+    url: `/feedback/task/${taskId}/stats`,
     method: 'get'
   });
 }
@@ -88,7 +88,7 @@ export async function getTaskFeedbackStats(taskId: string) {
  */
 export async function getStrategyFeedbackStats() {
   return request({
-    url: '/api/feedback/strategy/stats',
+    url: '/feedback/strategy/stats',
     method: 'get'
   });
 }
@@ -98,7 +98,7 @@ export async function getStrategyFeedbackStats() {
  */
 export async function getUITypeFeedbackStats() {
   return request({
-    url: '/api/feedback/uitype/stats',
+    url: '/feedback/uitype/stats',
     method: 'get'
   });
 }
@@ -108,7 +108,7 @@ export async function getUITypeFeedbackStats() {
  */
 export async function getLowRatingFeedback(threshold: number = 3, limit: number = 100) {
   return request({
-    url: '/api/feedback/low-ratings',
+    url: '/feedback/low-ratings',
     method: 'get',
     params: { threshold, limit }
   });
@@ -119,7 +119,7 @@ export async function getLowRatingFeedback(threshold: number = 3, limit: number 
  */
 export async function getFeedbackTrend(days: number = 30) {
   return request({
-    url: '/api/feedback/trend',
+    url: '/feedback/trend',
     method: 'get',
     params: { days }
   });
@@ -130,7 +130,7 @@ export async function getFeedbackTrend(days: number = 30) {
  */
 export async function getTimeRangeFeedbackStats(startDate: string, endDate: string) {
   return request({
-    url: '/api/feedback/time-range/stats',
+    url: '/feedback/time-range/stats',
     method: 'get',
     params: { startDate, endDate }
   });

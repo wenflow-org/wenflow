@@ -1,11 +1,19 @@
 <template>
   <transition name="slide-fade">
-    <div v-if="visible" class="peer-notification" @click="handleClick">
+    <div
+      v-if="visible"
+      class="peer-notification"
+      role="button"
+      tabindex="0"
+      @click="handleClick"
+      @keydown.enter="handleClick"
+      @keydown.space.prevent="handleClick"
+    >
       <div class="notification-content">
         <el-icon :size="20" color="#67c23a"><ChatDotRound /></el-icon>
-        <span class="notification-text">💬 同伴想和你讨论一下这个知识点</span>
+        <span class="notification-text">AI 学伴有个不同角度，想和你讨论</span>
       </div>
-      <el-button text size="small" class="close-btn" @click.stop="close">
+      <el-button text size="small" class="close-btn" aria-label="关闭 AI 学伴通知" @click.stop="close">
         <el-icon><Close /></el-icon>
       </el-button>
     </div>
@@ -15,7 +23,7 @@
 <script setup lang="ts">
 import { ChatDotRound, Close } from '@element-plus/icons-vue';
 
-const props = defineProps<{
+defineProps<{
   visible: boolean;
 }>();
 

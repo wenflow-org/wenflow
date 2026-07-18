@@ -10,6 +10,7 @@ import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
 import { getAPIGateway } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
+import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { SESSION_KNOWLEDGE_DISTILLER_PROMPT } from '../../skills/session-knowledge-distiller';
@@ -24,6 +25,7 @@ import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/vir
 import { VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT } from '../../skills/virtual-learner-path-evaluator';
 import { VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT } from '../../skills/virtual-learner-learn-turn-simulator';
 import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-referee';
+import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
 import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-parser';
@@ -45,6 +47,7 @@ const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
   'virtual-learner-path-evaluator': VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
   'virtual-learner-learn-turn-simulator': VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
   'virtual-learner-referee': VIRTUAL_LEARNER_REFEREE_PROMPT,
+  'virtual-learner-actor-auditor': VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
   'goal-understanding-composer': GOAL_UNDERSTANDING_COMPOSER_PROMPT,
   'acceptance-evidence-evaluator': ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT,
   'structured-output-parser': STRUCTURED_OUTPUT_PARSER_PROMPT,
@@ -353,6 +356,112 @@ router.get('/agent-relations', async (_req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: relations });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * 批量获取 Skill Prompt 摘要
+ *
+ * 供 Skill 目录页使用：一次请求返回每个 Skill 的 Prompt 状态摘要，
+ * 避免前端对每个 Skill 分别请求版本列表和 effective-prompt（N+1 请求风暴）。
+ * 单点语义与 GET /api/admin/agent-prompts?agentId=skill:x + GET /:name/effective-prompt 对齐：
+ * 有任意版本时取 ACTIVE（无 ACTIVE 取最新版本），否则依次判定 code-fallback / generated-default / missing。
+ *
+ * 注意：此路由必须在 /:name 通配路由之前注册，避免 Express 把 "prompt-summaries" 当作 skill name 匹配。
+ */
+router.get('/prompt-summaries', async (req: Request, res: Response) => {
+  try {
+    const rawSkillIds = String(req.query.skillIds || '');
+    const skillIds = Array.from(new Set(
+      rawSkillIds
+        .split(',')
+        .map((item) => item.trim().replace(/^skill:/, ''))
+        .filter((item) => !!item)
+    )).slice(0, 100);
+
+    if (!skillIds.length) {
+      return res.json({ success: true, data: { summaries: {} } });
+    }
+
+    // 汇总所有候选 agentId（skill: 前缀 id + 规范 id + manifest 别名），一次查询代替逐 Skill 查询
+    const candidateIdsBySkill = new Map<string, string[]>();
+    const allCandidateIds = new Set<string>();
+    for (const skillId of skillIds) {
+      const lookupId = `skill:${skillId}`;
+      const manifest = getAgentManifest(lookupId);
+      const candidates = new Set<string>([lookupId, getCanonicalAgentId(lookupId)]);
+      for (const alias of manifest?.aliases || []) {
+        candidates.add(alias);
+      }
+      const ids = Array.from(candidates);
+      candidateIdsBySkill.set(skillId, ids);
+      ids.forEach((id) => allCandidateIds.add(id));
+    }
+
+    const prompts = await systemPrisma.agent_prompts.findMany({
+      where: { agentId: { in: Array.from(allCandidateIds) } },
+      orderBy: [
+        { agentId: 'asc' },
+        { version: 'desc' },
+      ],
+      select: {
+        id: true,
+        agentId: true,
+        version: true,
+        name: true,
+        description: true,
+        status: true,
+        model: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const promptsByAgentId = new Map<string, typeof prompts>();
+    for (const prompt of prompts) {
+      const list = promptsByAgentId.get(prompt.agentId) || [];
+      list.push(prompt);
+      promptsByAgentId.set(prompt.agentId, list);
+    }
+
+    const gateway = getGateway();
+    const summaries: Record<string, {
+      skillId: string;
+      agentId: string;
+      source: 'db' | 'code-fallback' | 'generated-default' | 'missing';
+      prompt: unknown;
+    }> = {};
+
+    for (const skillId of skillIds) {
+      const agentId = `skill:${skillId}`;
+      const candidateIds = candidateIdsBySkill.get(skillId) || [agentId];
+      const versions = candidateIds.flatMap((id) => promptsByAgentId.get(id) || []);
+      const selected = versions.find((item) => (item.status || '').toUpperCase() === 'ACTIVE') || versions[0] || null;
+
+      if (selected) {
+        summaries[skillId] = { skillId, agentId, source: 'db', prompt: selected };
+        continue;
+      }
+
+      if (SKILL_FALLBACK_PROMPTS[skillId]) {
+        summaries[skillId] = { skillId, agentId, source: 'code-fallback', prompt: null };
+        continue;
+      }
+
+      if (gateway.getSkill(skillId)) {
+        summaries[skillId] = { skillId, agentId, source: 'generated-default', prompt: null };
+        continue;
+      }
+
+      summaries[skillId] = { skillId, agentId, source: 'missing', prompt: null };
+    }
+
+    res.json({ success: true, data: { summaries } });
   } catch (error) {
     res.status(500).json({
       success: false,

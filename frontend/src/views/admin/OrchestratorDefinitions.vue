@@ -933,7 +933,7 @@ const syncPhaseFromRoute = () => {
 const loadOrchestrators = async () => {
   loading.value = true
   try {
-    const [orchestratorResponse, definitionResponse, topologyResponse]: any[] = await Promise.all([
+    const [orchestratorResponse, definitionResponse, topologyResponse] = await Promise.all([
       adminRuntimeDefinitionsApi.getOrchestratorDefinitions(),
       adminRuntimeDefinitionsApi.getAgentDefinitions(),
       adminAgentTopologyApi.getTopology('7d')

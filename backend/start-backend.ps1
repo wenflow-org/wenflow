@@ -17,6 +17,13 @@ if ($portInfo) {
     Start-Sleep -Seconds 2
 }
 
+Write-Host "Preparing Prisma clients and database schemas..." -ForegroundColor Yellow
+npm run prisma:prepare
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Prisma database preparation failed" -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
 Write-Host "🧩 Syncing core prompts from code..." -ForegroundColor Yellow
 npm run prompts:sync-core
 if ($LASTEXITCODE -ne 0) {
@@ -26,4 +33,4 @@ if ($LASTEXITCODE -ne 0) {
 
 # 启动后端服务
 Write-Host "📡 Starting backend server on port $port..." -ForegroundColor Cyan
-npm run dev
+npm run dev:server

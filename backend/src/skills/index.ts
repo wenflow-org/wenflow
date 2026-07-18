@@ -7,9 +7,6 @@
 // 协议
 export * from './protocol';
 
-import systemPrisma from '../config/system-database';
-import prisma from '../config/database';
-
 // 文本结构分析
 export { textStructureAnalyzerDefinition } from './text-structure-analyzer';
 import { textStructureAnalyzer as textStructureAnalyzerFn } from './text-structure-analyzer';
@@ -110,6 +107,10 @@ import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn 
 export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
 import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-learner-referee';
 
+// 虚拟学习者角色保真审计
+export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './virtual-learner-actor-auditor';
+import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './virtual-learner-actor-auditor';
+
 // 安德森标注缓存 (PathAgent v3.1)
 export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult } from './anderson-labeler/cache';
 
@@ -149,6 +150,7 @@ import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner
 import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
 import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
 import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
+import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
 import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
@@ -176,6 +178,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   virtualLearnerPathEvaluatorDefinition,
   virtualLearnerLearnTurnSimulatorDefinition,
   virtualLearnerRefereeDefinition,
+  virtualLearnerActorAuditorDefinition,
   structuredOutputParserDefinition,
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
@@ -266,6 +269,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
   'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
   'virtual-learner-referee': virtualLearnerRefereeFn,
+  'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
   'structured-output-parser': structuredOutputParserFn,
   'goal-understanding-composer': goalUnderstandingComposerFn,
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
@@ -279,28 +283,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };
 
-import { getRequestContext, runWithContext } from '../gateway/api-gateway/context';
-import { logger } from '../utils/logger';
-
-function summarizeSkillPayload(value: any, depth = 0): any {
-  if (depth > 2) return '[max-depth]';
-  if (value == null) return value;
-  if (typeof value === 'string') {
-    return value.length > 160 ? `${value.slice(0, 160)}...` : value;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value)) {
-    return {
-      count: value.length,
-      sample: value.slice(0, 2).map((item) => summarizeSkillPayload(item, depth + 1)),
-    };
-  }
-  if (typeof value === 'object') {
-    const entries = Object.entries(value).slice(0, 10).map(([key, item]) => [key, summarizeSkillPayload(item, depth + 1)]);
-    return Object.fromEntries(entries);
-  }
-  return String(value);
-}
+import { executeSkillHandler } from './executor';
 
 /**
  * 执行 Skill
@@ -320,126 +303,8 @@ export async function executeSkill(
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);
   }
-
-  const startedAt = Date.now();
-  const parentContext = getRequestContext();
-  const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-
-  return runWithContext({
-    ...parentContext,
-    skillId,
-    executionLogId,
-  }, async () => {
-    logger.info('[skill-executor] 开始执行', {
-      skillId,
-      inputSummary: summarizeSkillPayload(input),
-    });
-
-    try {
-      const result = await handler(input);
-
-      if (result && result.success === false) {
-        const errorMsg = result.error?.message || `Skill ${skillId} execution failed`;
-        throw new Error(errorMsg);
-      }
-
-      const durationMs = Date.now() - startedAt;
-      const output = result?.output || result;
-      await recordDirectSkillStats(skillId, true, durationMs);
-      void recordSkillSpan(executionLogId, skillId, parentContext, input, output, durationMs, true);
-
-      logger.info('[skill-executor] 执行完成', {
-        skillId,
-        durationMs,
-        outputSummary: summarizeSkillPayload(output),
-      });
-
-      return output;
-    } catch (error: any) {
-      const durationMs = Date.now() - startedAt;
-      await recordDirectSkillStats(skillId, false, durationMs);
-      void recordSkillSpan(executionLogId, skillId, parentContext, input, null, durationMs, false, error?.message || String(error));
-      logger.error('[skill-executor] 执行失败', {
-        skillId,
-        durationMs,
-        error: error?.message || String(error),
-      });
-      throw error;
-    }
-  });
+  const result = await executeSkillHandler(definition, input, handler);
+  return result.output;
 }
 
-async function recordDirectSkillStats(skillId: string, success: boolean, durationMs: number): Promise<void> {
-  try {
-    const current = await systemPrisma.skill_registrations.findUnique({
-      where: { name: skillId },
-      select: { callCount: true, successRate: true }
-    });
-
-    if (!current) return;
-
-    const nextCallCount = current.callCount + 1;
-    const previousSuccesses = current.successRate * current.callCount;
-    const nextSuccessRate = (previousSuccesses + (success ? 1 : 0)) / nextCallCount;
-
-    await systemPrisma.skill_registrations.update({
-      where: { name: skillId },
-      data: {
-        callCount: nextCallCount,
-        successRate: nextSuccessRate,
-        updatedAt: new Date()
-      }
-    });
-  } catch (error: any) {
-    logger.warn('[skill-executor] 更新 Skill 统计失败', {
-      skillId,
-      success,
-      durationMs,
-      error: error?.message || String(error)
-    });
-  }
-}
-
-async function recordSkillSpan(
-  executionLogId: string,
-  skillId: string,
-  ctx: ReturnType<typeof getRequestContext>,
-  input: any,
-  output: any,
-  durationMs: number,
-  success: boolean,
-  errorMessage?: string
-): Promise<void> {
-  try {
-    const inputStr = JSON.stringify(summarizeSkillPayload(input)).slice(0, 1000);
-    const outputStr = output ? JSON.stringify(summarizeSkillPayload(output)).slice(0, 1000) : null;
-    await prisma.agent_call_logs.create({
-      data: {
-        id: executionLogId,
-        agentId: `skill:${skillId}`,
-        userId: ctx.userId || 'system',
-        sourceEntry: ctx.sourceEntry || 'platform',
-        traceId: ctx.traceId || null,
-        callerAgent: ctx.callerAgent || null,
-        userRole: ctx.userRole || 'user',
-        input: inputStr,
-        output: outputStr,
-        success,
-        durationMs,
-        error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
-        errorCode: success ? null : 'SKILL_EXECUTION_FAILED',
-        metadata: JSON.stringify({
-          layer: 'skill-executor',
-          skillId,
-          parentSkillId: ctx.skillId || null,
-          actorType: 'skill',
-          actorId: skillId,
-          experimentId: ctx.experimentId || null,
-          runId: ctx.runId || null,
-        }),
-      },
-    });
-  } catch {
-    // 静默失败：调试日志不应影响主流程
-  }
-}
+export { executeSkillHandler } from './executor';

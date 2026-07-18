@@ -201,8 +201,6 @@ const SKILL_CN_NAMES: Record<string, string> = {
   'peer-reinforcement': '同伴强化',
 };
 
-const toSkillPromptAgentId = (skillId: string) => `skill:${skillId}`;
-
 const getSkillHint = (skillId?: string) => {
   if (!skillId) return '';
   return SKILL_HINTS[skillId] || '';
@@ -293,45 +291,6 @@ const getStatusLabel = (status?: 'working' | 'placeholder' | 'simplified' | 'moc
   if (status === 'simplified') return '简化';
   if (status === 'mock') return '模拟';
   return '';
-};
-
-const getPromptStatusLabel = (status?: string | null) => {
-  if (!status) return '未知';
-  const normalized = status.toUpperCase();
-  if (normalized === 'ACTIVE') return '已生效';
-  if (normalized === 'BUILT_IN' || normalized === 'FALLBACK') return '代码内置';
-  if (normalized === 'GENERATED') return '默认草案';
-  if (normalized === 'ARCHIVED') return '已归档';
-  if (normalized === 'DRAFT') return '草稿';
-  if (normalized === 'PUBLISHED') return '已发布';
-  if (normalized === 'STAGING') return '预发布';
-  return '未知';
-};
-
-const getPromptStatusTagType = (status?: string | null) => {
-  if (!status) return 'info';
-  const normalized = status.toUpperCase();
-  if (normalized === 'ACTIVE' || normalized === 'PUBLISHED') return 'success';
-  if (normalized === 'BUILT_IN' || normalized === 'FALLBACK') return 'info';
-  if (normalized === 'GENERATED') return 'warning';
-  if (normalized === 'STAGING') return 'warning';
-  if (normalized === 'ARCHIVED') return 'info';
-  if (normalized === 'DRAFT') return 'info';
-  return 'info';
-};
-
-const promptSourceLabel = (source: 'db-active' | 'code-fallback' | 'generated-default' | '') => {
-  if (source === 'db-active') return 'DB Active';
-  if (source === 'code-fallback') return 'Code Fallback';
-  if (source === 'generated-default') return 'Generated Default';
-  return 'Unknown';
-};
-
-const promptSourceTagType = (source: 'db-active' | 'code-fallback' | 'generated-default' | '') => {
-  if (source === 'db-active') return 'success';
-  if (source === 'generated-default') return 'warning';
-  if (source === 'code-fallback') return 'info';
-  return 'info';
 };
 
 const formatDateTime = (value: string | null | undefined) => {

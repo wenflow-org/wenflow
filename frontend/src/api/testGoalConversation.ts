@@ -1,4 +1,4 @@
-import api from '@/utils/api';
+import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import type { GoalConversationEnvelope } from '@/api/goalConversation';
 
 interface TestGoalConversationApiResponse {
@@ -9,7 +9,7 @@ interface TestGoalConversationApiResponse {
 export async function startTestGoalConversation(text: string): Promise<GoalConversationEnvelope> {
   const response = await api.post('/test/goal-conversation/start', {
     input: { text }
-  }) as TestGoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as TestGoalConversationApiResponse;
 
   return response.data;
 }
@@ -18,7 +18,7 @@ export async function replyTestGoalConversation(sessionId: string, text: string,
   const response = await api.post(`/test/goal-conversation/${sessionId}/reply`, {
     input: { text },
     confirmProposal: options?.confirmProposal === true
-  }) as TestGoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as TestGoalConversationApiResponse;
 
   return response.data;
 }

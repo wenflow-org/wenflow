@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import { SESSION_TOKEN_ISSUER } from './session-token'
 
 export type ProjectionScope = 'dashboard' | 'full'
 
@@ -39,13 +40,30 @@ const getJwtSecret = (): string => {
 }
 
 const JWT_SECRET = getJwtSecret()
+const PROJECTION_TOKEN_AUDIENCE = 'wenflow:projection'
 
 export const signProjectionToken = (payload: ProjectionTokenPayload) => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '30m', algorithm: 'HS256' })
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: '30m',
+    algorithm: 'HS256',
+    issuer: SESSION_TOKEN_ISSUER,
+    audience: PROJECTION_TOKEN_AUDIENCE
+  })
 }
 
 export const verifyProjectionToken = (token: string): ProjectionTokenPayload => {
-  const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as ProjectionTokenPayload
+  let decoded: ProjectionTokenPayload
+  try {
+    decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ['HS256'],
+      issuer: SESSION_TOKEN_ISSUER,
+      audience: PROJECTION_TOKEN_AUDIENCE
+    }) as ProjectionTokenPayload
+  } catch (strictError) {
+    decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as ProjectionTokenPayload
+    const claims = decoded as ProjectionTokenPayload & jwt.JwtPayload
+    if (claims.iss !== undefined || claims.aud !== undefined) throw strictError
+  }
   if (decoded.type !== 'projection' || !decoded.targetUserId || !decoded.issuedByAdminId) {
     throw new Error('无效的投影 token')
   }

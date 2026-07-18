@@ -161,9 +161,31 @@ import { toast } from '@/utils/toast';
 
 const router = useRouter();
 
+interface TopologySummary {
+  agentCount?: number;
+  skillCount?: number;
+  totalCalls?: number;
+  unhealthyCount: number;
+  [key: string]: unknown;
+}
+
+interface TopologyNode {
+  id: string;
+  type?: string;
+  parentAgentId?: string;
+  [key: string]: unknown;
+}
+
+interface TopologyEdge {
+  id: string;
+  source: string;
+  target: string;
+  [key: string]: unknown;
+}
+
 const range = ref<'24h' | '7d' | '30d'>('7d');
 const loading = ref(false);
-const summary = ref<any>(null);
+const summary = ref<TopologySummary | null>(null);
 const elements = ref<Array<Node | Edge>>([]);
 
 const rangeLabel = computed(() => {
@@ -175,14 +197,14 @@ const rangeLabel = computed(() => {
 const topologyHighlights = computed(() => {
   if (!summary.value) return [];
   return [
-    { label: `${summary.value.agentCount} 个 Agent`, tone: 'info' },
-    { label: `${summary.value.skillCount} 个 Skill`, tone: 'neutral' },
-    { label: `${summary.value.totalCalls} 次调用 (${rangeLabel.value})`, tone: 'neutral' },
-    { 
-      label: summary.value.unhealthyCount > 0 
-        ? `${summary.value.unhealthyCount} 个异常` 
+    { label: `${summary.value.agentCount} 个 Agent`, tone: 'info' as const },
+    { label: `${summary.value.skillCount} 个 Skill`, tone: 'neutral' as const },
+    { label: `${summary.value.totalCalls} 次调用 (${rangeLabel.value})`, tone: 'neutral' as const },
+    {
+      label: summary.value.unhealthyCount > 0
+        ? `${summary.value.unhealthyCount} 个异常`
         : '全部健康',
-      tone: summary.value.unhealthyCount > 0 ? 'danger' : 'success'
+      tone: summary.value.unhealthyCount > 0 ? 'danger' as const : 'success' as const
     }
   ];
 });
@@ -199,7 +221,7 @@ const SKILL_TOP_OFFSET = 250;
 async function loadAll() {
   loading.value = true;
   try {
-    const r: any = await adminAgentTopologyApi.getTopology(range.value);
+    const r = await adminAgentTopologyApi.getTopology(range.value);
     const { nodes, edges, summary: s } = r.data?.data || {};
     summary.value = s;
     elements.value = buildElements(nodes || [], edges || []);
@@ -210,7 +232,7 @@ async function loadAll() {
   }
 }
 
-function buildElements(rawNodes: any[], rawEdges: any[]): Array<Node | Edge> {
+function buildElements(rawNodes: TopologyNode[], rawEdges: TopologyEdge[]): Array<Node | Edge> {
   const result: Array<Node | Edge> = [];
 
   const agents = rawNodes.filter(n => n.type === 'agent');
@@ -234,10 +256,10 @@ function buildElements(rawNodes: any[], rawEdges: any[]): Array<Node | Edge> {
   const skillCountPerAgent = new Map<string, number>();
 
   skills.forEach((skill) => {
-    const parentIdx = agentIndex.get(skill.parentAgentId);
+    const parentIdx = agentIndex.get(skill.parentAgentId || '');
     if (parentIdx == null) return;
-    const localIdx = skillCountPerAgent.get(skill.parentAgentId) || 0;
-    skillCountPerAgent.set(skill.parentAgentId, localIdx + 1);
+    const localIdx = skillCountPerAgent.get(skill.parentAgentId || '') || 0;
+    skillCountPerAgent.set(skill.parentAgentId || '', localIdx + 1);
 
     // Agent 中心 x = parentIdx * AGENT_GAP_X + AGENT_WIDTH/2
     // Skill 中心 x = Agent 中心 x（垂直对齐）
@@ -270,7 +292,7 @@ function buildElements(rawNodes: any[], rawEdges: any[]): Array<Node | Edge> {
   return result;
 }
 
-function openSkillWorkbench(data: any) {
+function openSkillWorkbench(data: { id?: string }) {
   router.push({ name: 'AdminAgentEditor', params: { agentId: (data.id || '').replace(/^skill:/, '') } });
 }
 

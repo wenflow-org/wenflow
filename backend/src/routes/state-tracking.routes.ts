@@ -36,6 +36,7 @@ router.get('/current', async (req: any, res) => {
 
     const suggestion = stateTrackingService.generateSuggestion(currentState);
 
+    // currentState 已经是展示尺度 (0-100)
     res.json({
       success: true,
       data: {

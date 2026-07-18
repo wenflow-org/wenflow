@@ -12,6 +12,29 @@ import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visi
 
 const router = express.Router();
 
+const stripPathGenerationInternals = (path: any) => {
+  if (!path || typeof path !== 'object') return path;
+  const {
+    aiPromptTemplate: _aiPromptTemplate,
+    processDetail: _processDetail,
+    activeGenerationRun: _activeGenerationRun,
+    activeGenerationRunId: _activeGenerationRunId,
+    generationRun: _generationRun,
+    ...safePath
+  } = path;
+  if (safePath.generationStatus && typeof safePath.generationStatus === 'object') {
+    const {
+      error: _error,
+      errorCode: _errorCode,
+      errorMessage: _errorMessage,
+      lastError: _lastError,
+      ...safeGenerationStatus
+    } = safePath.generationStatus;
+    safePath.generationStatus = safeGenerationStatus;
+  }
+  return safePath;
+};
+
 const extractStoredSourceConversationId = (aiPromptTemplate?: string | null): string | undefined => {
   if (!aiPromptTemplate) return undefined;
 
@@ -146,7 +169,7 @@ router.get('/paths', learningPathsPollingLimiter, async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const paths = await learningService.getUserLearningPaths(userId);
+    const paths = (await learningService.getUserLearningPaths(userId)).map(stripPathGenerationInternals);
 
     res.json({
       success: true,
@@ -309,6 +332,7 @@ router.post('/paths/create', async (req, res, next) => {
         updatedAt: new Date()
       }
     });
+    const runId = await learningService.claimPathCoreGeneration(placeholderPath.id);
 
 // 2. 后台异步生成路径（不等待）
     // 解析时间表达式
@@ -339,6 +363,7 @@ router.post('/paths/create', async (req, res, next) => {
       deadline,
       deadlineText: data.deadlineText,
       existingPathId: placeholderPath.id,
+      generationRunId: runId,
       userProfile: data.userProfile
     }, {
       onSuccess: () => {
@@ -346,13 +371,7 @@ router.post('/paths/create', async (req, res, next) => {
       },
       onError: async (error) => {
         logger.error(`学习路径生成失败: ${placeholderPath.id}`, error);
-        await prisma.learning_paths.update({
-          where: { id: placeholderPath.id },
-          data: {
-            status: 'failed',
-            updatedAt: new Date()
-          }
-        });
+        await learningService.markActiveGenerationFailed(placeholderPath.id, error, runId);
       }
     });
 
@@ -447,7 +466,7 @@ router.get('/paths/:pathId', async (req, res, next) => {
           })),
           schemaVersion: 'synthetic-user-v1'
         }
-      : path;
+      : stripPathGenerationInternals(path);
 
     res.json({
       success: true,
@@ -461,6 +480,22 @@ router.get('/paths/:pathId', async (req, res, next) => {
       });
     }
 
+    next(error);
+  }
+});
+
+// 轮询路径生成状态，仅返回渲染状态所需的轻量数据。
+router.get('/paths/:pathId/generation-status', learningPathsPollingLimiter, async (req, res, next) => {
+  try {
+    const data = await learningService.getPathGenerationLifecycle(req.params.pathId, req.user.userId);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    if (error.message === '学习路径不存在') {
+      return res.status(404).json({ success: false, error: { message: error.message } });
+    }
+    if (error.message === '无权访问此学习路径') {
+      return res.status(403).json({ success: false, error: { message: error.message } });
+    }
     next(error);
   }
 });
@@ -490,30 +525,33 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       });
     }
 
-    if (path.status !== 'failed' && path.status !== 'generating') {
+    const retry = await learningService.getPathGenerationRetry(pathId, userId);
+    if (!retry.allowed || !retry.retryType) {
       return res.status(400).json({
         success: false,
-        error: { message: '只有失败或生成中的路径才能重试' }
+        error: { message: retry.reason === 'completed' ? '路径已经生成完成，无需重试' : '当前生成任务未失败或未过期，不能重试' }
       });
     }
 
-    // 更新状态为 generating，重置创建时间（避免前端判定超时）
-    await prisma.learning_paths.update({
-      where: { id: pathId },
-      data: {
-        status: 'generating',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    });
+    if (retry.retryType === 'stageDesign') {
+      const result = await learningService.retryPathEnrichment(pathId, userId);
+      return res.json({
+        success: true,
+        data: result,
+        message: '正在继续生成阶段任务'
+      });
+    }
+
+    const runId = await learningService.claimPathCoreGeneration(pathId);
 
     const storedGoalRequest = buildStoredGoalPathRequest(path)
       || await buildGoalPathRequestFromConversation(path);
 
     if (storedGoalRequest) {
-      pathOrchestrator.runGoalAsync(storedGoalRequest, {
-        onError: (error) => {
+      pathOrchestrator.runGoalAsync({ ...storedGoalRequest, generationRunId: runId }, {
+        onError: async (error) => {
           logger.error(`重试生成路径失败：${pathId}`, error);
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     } else {
@@ -527,16 +565,19 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
         deadlineText: path.deadlineText || undefined,
         sourceConversationId,
         existingPathId: pathId,
+        generationRunId: runId,
         userProfile: {}
       }, {
-        onError: (error) => {
+        onError: async (error) => {
           logger.error(`重试生成路径失败：${pathId}`, error);
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     }
 
     res.json({
       success: true,
+      data: { retryType: 'core', runId },
       message: '正在重新生成学习路径'
     });
   } catch (error: any) {
@@ -568,33 +609,16 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       });
     }
 
-    await prisma.learning_paths.update({
-      where: { id: pathId },
-      data: {
-        status: 'generating',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    });
+    const runId = await learningService.claimPathCoreGeneration(pathId);
 
     const storedGoalRequest = buildStoredGoalPathRequest(path)
       || await buildGoalPathRequestFromConversation(path);
 
     if (storedGoalRequest) {
-      pathOrchestrator.runGoalAsync(storedGoalRequest, {
+      pathOrchestrator.runGoalAsync({ ...storedGoalRequest, generationRunId: runId }, {
         onError: async (error) => {
           logger.error(`重新生成学习路径失败：${pathId}`, error);
-          try {
-            await prisma.learning_paths.update({
-              where: { id: pathId },
-              data: {
-                status: 'failed',
-                updatedAt: new Date()
-              }
-            });
-          } catch (updateError) {
-            logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
-          }
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     } else {
@@ -607,27 +631,19 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
         deadlineText: path.deadlineText || undefined,
         sourceConversationId,
         existingPathId: pathId,
+        generationRunId: runId,
         userProfile: {}
       }, {
         onError: async (error) => {
           logger.error(`重新生成学习路径失败：${pathId}`, error);
-          try {
-            await prisma.learning_paths.update({
-              where: { id: pathId },
-              data: {
-                status: 'failed',
-                updatedAt: new Date()
-              }
-            });
-          } catch (updateError) {
-            logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
-          }
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     }
 
     res.json({
       success: true,
+      data: { runId },
       message: '正在重新生成学习路径'
     });
   } catch (error: any) {
@@ -703,8 +719,15 @@ router.delete('/paths/:pathId', async (req, res, next) => {
       message: '学习路径已删除'
     });
   } catch (error: any) {
-    if (error.message === '学习路径不存在或无权删除') {
+    if (error.message === '学习路径不存在') {
       return res.status(404).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (error.message === '无权删除此学习路径') {
+      return res.status(403).json({
         success: false,
         error: { message: error.message }
       });

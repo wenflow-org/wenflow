@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { computed } from 'vue';
 import { Loading, InfoFilled, Opportunity, Warning } from '@element-plus/icons-vue';
 
 interface LearningReport {
@@ -129,27 +129,31 @@ const formatLSB = (lsb: number) => {
   return `${sign}${lsb.toFixed(1)}`;
 };
 
-const getLSSClass = (lss: number) => {
-  if (lss > 70) return 'high';
-  if (lss > 50) return 'medium';
+const getLSSClass = (lss: number | undefined) => {
+  const value = lss ?? 0;
+  if (value > 70) return 'high';
+  if (value > 50) return 'medium';
   return 'low';
 };
 
-const getLSSColor = (lss: number) => {
-  if (lss > 70) return '#f56c6c';
-  if (lss > 50) return '#e6a23c';
+const getLSSColor = (lss: number | undefined) => {
+  const value = lss ?? 0;
+  if (value > 70) return '#f56c6c';
+  if (value > 50) return '#e6a23c';
   return '#67c23a';
 };
 
-const getLFClass = (lf: number) => {
-  if (lf > 70) return 'high';
-  if (lf > 40) return 'medium';
+const getLFClass = (lf: number | undefined) => {
+  const value = lf ?? 0;
+  if (value > 70) return 'high';
+  if (value > 40) return 'medium';
   return 'low';
 };
 
-const getLFColor = (lf: number) => {
-  if (lf > 70) return '#f56c6c';
-  if (lf > 40) return '#e6a23c';
+const getLFColor = (lf: number | undefined) => {
+  const value = lf ?? 0;
+  if (value > 70) return '#f56c6c';
+  if (value > 40) return '#e6a23c';
   return '#67c23a';
 };
 

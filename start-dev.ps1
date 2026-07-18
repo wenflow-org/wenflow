@@ -33,12 +33,14 @@ function Get-DefaultEnvEntries {
         PORT = '3001'
         CORS_ORIGIN = 'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
         TRUST_PROXY = ''
-        DATABASE_URL = 'file:./prisma/dev.db'
-        SYSTEM_DATABASE_URL = 'file:./prisma/system.db'
+        DATABASE_URL = 'file:./dev.db'
+        SYSTEM_DATABASE_URL = 'file:../system.db'
         JWT_SECRET = ''
-        ADMIN_LOCALHOST_ONLY = 'true'
+        SECRET_ENCRYPTION_CURRENT_KEY_ID = 'v1'
+        SECRET_ENCRYPTION_KEYS = ''
+        ADMIN_ACCESS_MODE = 'private'
         LOGIN_MAX_ATTEMPTS = '5'
-        LOGIN_LOCK_DURATION = '900000'
+        LOGIN_LOCK_DURATION_SECONDS = '900'
         JWT_EXPIRES_IN = '7d'
         AI_API_URL = 'https://api.deepseek.com'
         AI_API_KEY = ''
@@ -47,7 +49,7 @@ function Get-DefaultEnvEntries {
         FRONTEND_URL = 'http://localhost:5173'
         INIT_ADMIN_NAME = 'admin'
         INIT_ADMIN_EMAIL = 'admin@wenflow.local'
-        INIT_ADMIN_PASSWORD = 'admin123'
+        INIT_ADMIN_PASSWORD = ''
     }
 
     return $defaults
@@ -340,11 +342,17 @@ function Assert-SafeSqliteDatabaseUrl {
         return
     }
 
-    # 检查是否使用了嵌套的 prisma/prisma/ 路径（不安全）
-    if ($trimmed -match '^file:\./prisma/prisma/') {
+    if ($trimmed -match '^file:\./prisma/') {
         Write-Host "DATABASE_URL=$trimmed is not a safe local SQLite path for WenFlow." -ForegroundColor Red
-        Write-Host 'Use DATABASE_URL=file:./dev.db or file:./prisma/dev.db for the local development database.' -ForegroundColor Yellow
-        Write-Host 'Values under file:./prisma/prisma/... can create nested database files and split your data.' -ForegroundColor Yellow
+        Write-Host 'Use DATABASE_URL=file:./dev.db for the local development database.' -ForegroundColor Yellow
+        Write-Host 'Because the main schema is already under backend/prisma, file:./prisma/... creates a nested database.' -ForegroundColor Yellow
+        exit 1
+    }
+
+    $systemDatabaseUrl = Get-EnvValue -Path $EnvPath -Key 'SYSTEM_DATABASE_URL'
+    if ($systemDatabaseUrl.Trim() -match '^file:\./(prisma/)?system\.db$') {
+        Write-Host "SYSTEM_DATABASE_URL=$systemDatabaseUrl is ambiguous after the System schema directory split." -ForegroundColor Red
+        Write-Host 'Use SYSTEM_DATABASE_URL=file:../system.db to target backend/prisma/system.db.' -ForegroundColor Yellow
         exit 1
     }
 }
@@ -381,30 +389,13 @@ function Ensure-PrismaReady {
         [string]$BackendPath
     )
 
-    Write-Host "Preparing database schema (Prisma)..." -ForegroundColor Yellow
+    Write-Host "Generating Prisma clients and deploying migrations..." -ForegroundColor Yellow
     Push-Location $BackendPath
     try {
-        npx prisma generate
+        npm run prisma:prepare
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "prisma generate failed" -ForegroundColor Red
-            exit $LASTEXITCODE
-        }
-
-        npx prisma generate --schema=prisma/system.prisma
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "prisma generate (system) failed" -ForegroundColor Red
-            exit $LASTEXITCODE
-        }
-
-        npx prisma db push
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "prisma db push failed" -ForegroundColor Red
-            exit $LASTEXITCODE
-        }
-
-        npx prisma db push --schema=prisma/system.prisma
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "prisma db push (system) failed" -ForegroundColor Red
+            Write-Host "Prisma migration deployment failed. Existing databases may require baseline audit or a side-by-side rebuild." -ForegroundColor Red
+            Write-Host "Run: npm run prisma:baseline:audit" -ForegroundColor Yellow
             exit $LASTEXITCODE
         }
     } finally {
@@ -649,12 +640,12 @@ function Ensure-BackendEnvForNginx {
 
     Set-EnvValue -Path $EnvPath -Key 'FRONTEND_URL' -Value $frontendUrl
     Set-EnvValue -Path $EnvPath -Key 'CORS_ORIGIN' -Value $corsOrigin
-    Set-EnvValue -Path $EnvPath -Key 'TRUST_PROXY' -Value '1'
+    Set-EnvValue -Path $EnvPath -Key 'TRUST_PROXY' -Value '127.0.0.1'
 
     Write-Host "Updated backend env for Nginx mode:" -ForegroundColor DarkGray
     Write-Host "  FRONTEND_URL=$frontendUrl" -ForegroundColor DarkGray
     Write-Host "  CORS_ORIGIN=$corsOrigin" -ForegroundColor DarkGray
-    Write-Host "  TRUST_PROXY=1" -ForegroundColor DarkGray
+    Write-Host "  TRUST_PROXY=127.0.0.1" -ForegroundColor DarkGray
 }
 
 function Ensure-NginxReady {
@@ -731,15 +722,17 @@ http {
             proxy_set_header Connection 'upgrade';
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-For $remote_addr;
             proxy_cache_bypass $http_upgrade;
             proxy_read_timeout 300s;
         }
 
-        location /health {
+        location ~ ^/(health|livez|readyz)$ {
             access_log off;
-            return 200 "healthy\n";
-            add_header Content-Type text/plain;
+            proxy_pass http://127.0.0.1:__BACKEND_PORT__;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
         }
 
         gzip on;
@@ -857,7 +850,9 @@ if ($Setup) {
 }
 
 $jwtSecret = Get-EnvValue -Path $backendEnvPath -Key 'JWT_SECRET'
-$needsEnvSetup = (-not (Test-Path $backendEnvPath)) -or [string]::IsNullOrWhiteSpace($jwtSecret) -or $jwtSecret.Length -lt 32
+$encryptionKeys = Get-EnvValue -Path $backendEnvPath -Key 'SECRET_ENCRYPTION_KEYS'
+$encryptionKeyId = Get-EnvValue -Path $backendEnvPath -Key 'SECRET_ENCRYPTION_CURRENT_KEY_ID'
+$needsEnvSetup = (-not (Test-Path $backendEnvPath)) -or [string]::IsNullOrWhiteSpace($jwtSecret) -or $jwtSecret.Length -lt 32 -or [string]::IsNullOrWhiteSpace($encryptionKeys) -or [string]::IsNullOrWhiteSpace($encryptionKeyId)
 if ($needsEnvSetup) {
     if (-not (Test-Path $setupScriptPath)) {
         Write-Host "Missing backend/.env and setup helper not found: $setupScriptPath" -ForegroundColor Red
@@ -929,10 +924,10 @@ if (-not $UseNginx) {
 }
 
 Write-Host "Starting backend on port 3001..." -ForegroundColor Green
-Start-Process -FilePath 'powershell' -ArgumentList '-NoExit', '-Command', 'npm run dev' -WorkingDirectory $backendPath | Out-Null
+Start-Process -FilePath 'powershell' -ArgumentList '-NoExit', '-Command', 'npm run dev:server' -WorkingDirectory $backendPath | Out-Null
 
 Write-Host "Waiting for backend health check..." -ForegroundColor Yellow
-$backendReady = Test-ServiceReady -Url 'http://localhost:3001/health'
+$backendReady = Test-ServiceReady -Url 'http://localhost:3001/readyz'
 if ($backendReady) {
     Write-Host "Backend is ready." -ForegroundColor Green
 } else {
@@ -959,7 +954,7 @@ if ($UseNginx) {
     Ensure-NginxReady -NginxExecutable $nginxExecutable -RuntimeDir $nginxRuntimeDir -ConfigFileName $nginxConfigFile -ServerName $serverName -FrontendDistPath $frontendDistPath -BackendPort 3001
 
     Write-Host "Waiting for Nginx health check..." -ForegroundColor Yellow
-    $nginxReady = Test-ServiceReady -Url 'http://127.0.0.1/health'
+    $nginxReady = Test-ServiceReady -Url 'http://127.0.0.1/readyz'
     if ($nginxReady) {
         Write-Host "Nginx gateway is ready." -ForegroundColor Green
     } else {

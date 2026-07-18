@@ -21,13 +21,13 @@
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">规划新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '规划新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -39,7 +39,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
-                  能力中心
+                  个人中心
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">
                   <el-icon><Switch /></el-icon>
@@ -96,19 +96,19 @@
             <p>{{ pathsHeroSubtitle }}</p>
           </div>
           <div class="paths-hero__actions">
-            <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">继续学习</button>
-            <router-link :to="goalConversationPath" class="btn btn-ghost">创建新目标</router-link>
+            <button v-if="primaryPath" type="button" class="btn btn-primary" @click="continuePath(primaryPath)">{{ getPathPrimaryActionLabel(primaryPath) }}</button>
+            <router-link :to="goalConversationPath" class="btn btn-ghost">规划新目标</router-link>
           </div>
         </section>
 
-        <section class="paths-filter-row">
+        <section class="paths-filter-row" aria-label="学习路径筛选">
           <button
             v-for="item in pathFilterChips"
             :key="item.key"
             type="button"
             class="paths-filter-chip"
             :class="{ 'paths-filter-chip--active': activePathFilter === item.key }"
-            @click="activePathFilter = item.key"
+            @click="setPathFilter(item.key)"
           >
             <span>{{ item.label }}</span>
             <strong>{{ item.count }}</strong>
@@ -116,12 +116,28 @@
         </section>
 
         <section class="paths-section">
-          <div v-loading="loading" class="paths-content">
-            <div v-if="visiblePaths.length > 0" class="paths-grid paths-grid--upgraded">
+          <div class="paths-content" :aria-busy="loading || pollingInFlight">
+            <p class="sr-only" aria-live="polite">{{ pathsLiveMessage }}</p>
+            <div v-if="loading && paths.length === 0" class="paths-grid paths-grid--upgraded" aria-label="正在加载学习路径">
+              <article v-for="index in 3" :key="`path-skeleton-${index}`" class="path-overview-card path-overview-card--skeleton glass-card" aria-hidden="true">
+                <span class="path-skeleton path-skeleton--pill"></span>
+                <span class="path-skeleton path-skeleton--title"></span>
+                <span class="path-skeleton path-skeleton--copy"></span>
+                <span class="path-skeleton path-skeleton--copy path-skeleton--copy-short"></span>
+                <div class="path-skeleton-stage-row">
+                  <span v-for="stageIndex in 3" :key="stageIndex" class="path-skeleton path-skeleton--stage"></span>
+                </div>
+                <span class="path-skeleton path-skeleton--button"></span>
+              </article>
+            </div>
+
+            <div v-else-if="visiblePaths.length > 0" class="paths-grid paths-grid--upgraded">
               <article
                 v-for="path in visiblePaths"
                 :key="path.id"
                 class="path-overview-card glass-card"
+                :aria-busy="isLifecycleBusy(path)"
+                :aria-label="`${getPathTitle(path)}，${getLifecycleLabel(path)}`"
                 :class="[
                   `path-overview-card--${getPathDisplayState(path)}`,
                   {
@@ -130,88 +146,109 @@
                   }
                 ]"
               >
-                <template v-if="getPathDisplayState(path) === 'generating'">
-                  <div class="path-overview-card__status-row">
-                    <span class="path-state-pill path-state-pill--generating">生成中</span>
-                  </div>
-                  <strong>{{ getPathTitle(path) }}</strong>
-                  <p>{{ getPathSummary(path) || '这条学习路径正在生成。' }}</p>
-                  <div class="path-overview-card__progress-bar">
-                    <div class="path-overview-card__progress-fill path-overview-card__progress-fill--loading"></div>
-                  </div>
-                  <div class="path-overview-card__actions-row">
-                    <button type="button" class="btn btn-ghost" @click="loadPaths">刷新状态</button>
-                  </div>
-                </template>
+                <div class="path-overview-card__status-row">
+                  <span class="path-state-pill" :class="getLifecyclePillClass(path)">{{ getLifecycleLabel(path) }}</span>
+                  <span v-if="getLifecycle(path).phase === 'stage_design'" class="path-state-pill path-state-pill--soft">主结构已完成</span>
+                </div>
 
-                <template v-else-if="getPathDisplayState(path) === 'attention'">
-                  <div class="path-overview-card__status-row">
-                    <span class="path-state-pill path-state-pill--failed">待重试</span>
-                  </div>
+                <div class="path-overview-card__head">
                   <strong>{{ getPathTitle(path) }}</strong>
-                  <p>{{ getFailureCopy(path) }}</p>
-                  <div class="path-overview-card__actions-row">
-                    <button type="button" class="btn btn-ghost" :disabled="retryingPathId === path.id" @click="retryPathGeneration(path)">重试</button>
-                    <button type="button" class="btn btn-ghost" @click="confirmDelete(path)">删除</button>
-                  </div>
-                </template>
+                  <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, path)">
+                    <button type="button" class="more-btn" aria-label="路径更多操作" @click.stop>
+                      <el-icon><More /></el-icon>
+                    </button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="regenerate">
+                          <el-icon><Refresh /></el-icon>
+                          <span>重新生成路径</span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="delete" class="delete-item">
+                          <el-icon><Delete /></el-icon>
+                          <span>删除路径</span>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
 
-                <template v-else>
-                  <div class="path-overview-card__status-row">
-                    <span class="path-state-pill path-state-pill--active">进行中</span>
-                    <span v-if="getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending'" class="path-state-pill path-state-pill--soft">准备中</span>
-                  </div>
-                  <div class="path-overview-card__head">
-                    <strong>{{ getPathTitle(path) }}</strong>
-                    <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, path)">
-                      <button type="button" class="more-btn" @click.stop>
-                        <el-icon><More /></el-icon>
-                      </button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item command="regenerate">
-                            <el-icon><Refresh /></el-icon>
-                            <span>重新生成路径</span>
-                          </el-dropdown-item>
-                          <el-dropdown-item command="delete" class="delete-item">
-                            <el-icon><Delete /></el-icon>
-                            <span>删除路径</span>
-                          </el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </div>
-                  <p>{{ getPathSummary(path) }}</p>
-                  <div class="path-overview-card__next-task">
-                    <span>当前任务</span>
-                    <strong>{{ getPathNextTaskLabel(path) }}</strong>
-                  </div>
-                  <div class="path-overview-card__stats">
-                    <span>当前阶段：{{ getPathCurrentStage(path) }} / {{ getPathStageCount(path) }}</span>
-                    <span>预计投入：{{ getPathEstimatedHours(path) }} 小时</span>
-                  </div>
-                  <div class="path-overview-card__progress-block">
-                    <div class="path-overview-card__progress-top">
-                      <strong>{{ getPathProgress(path) }}%</strong>
-                      <span>进度</span>
+                <p class="path-overview-card__summary">{{ getCardSummary(path) }}</p>
+
+                <div class="path-overview-card__phase" :class="`path-overview-card__phase--${getLifecycle(path).phase}`">
+                  <template v-if="getLifecycle(path).phase === 'core'">
+                    <div class="path-overview-card__phase-copy">
+                      <span>路径主结构</span>
+                      <strong>{{ getCoreStepLabel(path) }}</strong>
                     </div>
-                    <div class="path-overview-card__progress-bar">
-                      <div class="path-overview-card__progress-fill" :style="{ width: `${getPathProgress(path)}%` }"></div>
+                    <span v-if="isLifecycleBusy(path)" class="path-activity-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  </template>
+                  <template v-else-if="getLifecycle(path).phase === 'stage_design'">
+                    <div class="path-overview-card__phase-copy">
+                      <span>阶段任务准备</span>
+                      <strong>{{ getStageDesignProgressText(path) }}</strong>
                     </div>
+                    <div class="path-stage-skeleton" aria-label="路径阶段骨架">
+                      <span
+                        v-for="stage in getStageSkeleton(path)"
+                        :key="stage.key"
+                        class="path-stage-skeleton__item"
+                        :class="{ 'path-stage-skeleton__item--done': stage.done, 'path-stage-skeleton__item--current': stage.current }"
+                        :title="stage.title"
+                      >{{ stage.number }}</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="path-overview-card__next-task">
+                      <span>当前任务</span>
+                      <strong>{{ getPathNextTaskLabel(path) }}</strong>
+                    </div>
+                  </template>
+                </div>
+
+                <div class="path-overview-card__stats">
+                  <span>阶段：{{ getPathCurrentStage(path) }} / {{ getPathStageCount(path) }}</span>
+                  <span>预计投入：{{ getPathEstimatedHours(path) }} 小时</span>
+                </div>
+
+                <div class="path-overview-card__progress-block" :class="{ 'path-overview-card__progress-block--muted': getLifecycle(path).lifecycle !== 'ready' }">
+                  <div class="path-overview-card__progress-top">
+                    <strong>{{ getLifecycle(path).lifecycle === 'ready' ? `${getPathProgress(path)}%` : getGenerationProgressLabel(path) }}</strong>
+                    <span>{{ getLifecycle(path).lifecycle === 'ready' ? '学习进度' : '生成状态' }}</span>
                   </div>
-                  <div class="path-overview-card__actions-row">
-                    <button type="button" class="btn btn-primary" @click="continuePath(path)">继续学习</button>
-                    <button type="button" class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
+                  <div v-if="getLifecycle(path).lifecycle === 'ready'" class="path-overview-card__progress-bar" aria-hidden="true">
+                    <div class="path-overview-card__progress-fill" :style="{ width: `${getPathProgress(path)}%` }"></div>
                   </div>
-                </template>
+                  <div v-else class="path-overview-card__status-line" aria-hidden="true">
+                    <span :class="{ 'path-overview-card__status-line-marker--busy': isLifecycleBusy(path) }"></span>
+                  </div>
+                </div>
+
+                <div class="path-overview-card__actions-row">
+                  <button
+                    v-if="canRetryPath(path)"
+                    type="button"
+                    class="btn btn-primary"
+                    :disabled="retryingPathId === path.id"
+                    @click="retryPathGeneration(path)"
+                  >{{ getRetryButtonLabel(path) }}</button>
+                  <button
+                    v-else-if="getLifecycle(path).lifecycle === 'ready' && getLifecycle(path).canStartLearning"
+                    type="button"
+                    class="btn btn-primary"
+                    @click="continuePath(path)"
+                  >{{ getPathPrimaryActionLabel(path) }}</button>
+                  <button v-else type="button" class="btn btn-ghost" @click="refreshPathStatus(path)">刷新状态</button>
+                  <button type="button" class="btn btn-ghost" @click="goToPathDetail(path.id)">查看详情</button>
+                </div>
               </article>
             </div>
 
             <section v-else-if="!loading" class="paths-empty-state glass-card">
-              <span class="pill">还没有学习路径</span>
-              <h2>还没有学习路径。</h2>
-              <p>先创建一个目标，生成第一条学习路径。</p>
-              <router-link :to="goalConversationPath" class="btn btn-primary">创建新目标</router-link>
+              <span class="pill">{{ activePathFilter === 'all' ? '开始第一条路径' : '当前筛选无结果' }}</span>
+              <h2>{{ emptyStateTitle }}</h2>
+              <p>{{ emptyStateDescription }}</p>
+              <button v-if="activePathFilter !== 'all'" type="button" class="btn btn-primary" @click="activePathFilter = 'all'">查看全部路径</button>
+              <router-link v-else :to="goalConversationPath" class="btn btn-primary">规划第一个目标</router-link>
             </section>
           </div>
         </section>
@@ -225,6 +262,8 @@
       title="确认删除"
       width="400px"
       :close-on-click-modal="false"
+      :close-on-press-escape="!deleting"
+      :show-close="!deleting"
       class="delete-dialog"
     >
       <el-alert
@@ -238,11 +277,11 @@
       </el-alert>
 
       <p class="delete-confirm-text">
-        您确定要删除学习路径 <strong class="delete-path-name">{{ pathToDelete?.name }}</strong> 吗？
+        确定删除学习路径 <strong class="delete-path-name">{{ pathToDelete?.name }}</strong> 吗？
       </p>
 
       <template #footer>
-        <el-button @click="showDeleteDialog = false">取消</el-button>
+        <el-button :disabled="deleting" @click="showDeleteDialog = false">取消</el-button>
         <el-button type="danger" @click="deletePath" :loading="deleting">
           确认删除
         </el-button>
@@ -254,6 +293,8 @@
       title="重新生成学习路径"
       width="460px"
       :close-on-click-modal="false"
+      :close-on-press-escape="!regenerating"
+      :show-close="!regenerating"
       class="delete-dialog"
     >
       <el-alert
@@ -263,15 +304,15 @@
         show-icon
         class="delete-alert"
       >
-        将基于当前目标重新生成该学习路径。已完成任务和学习记录不会被删除，但路径结构可能变化。
+        将删除当前路径结构及其任务，并生成一套新的阶段与任务。当前任务进度会被新任务替换，请确认后再继续。
       </el-alert>
 
       <p class="delete-confirm-text">
-        您确定要重新生成学习路径 <strong class="delete-path-name">{{ pathToRegenerate?.name || pathToRegenerate?.title }}</strong> 吗？
+        确定重新生成学习路径 <strong class="delete-path-name">{{ pathToRegenerate?.name || pathToRegenerate?.title }}</strong> 吗？
       </p>
 
       <template #footer>
-        <el-button @click="showRegenerateDialog = false">取消</el-button>
+        <el-button :disabled="regenerating" @click="showRegenerateDialog = false">取消</el-button>
         <el-button type="primary" @click="regeneratePath" :loading="regenerating">
           确认重新生成
         </el-button>
@@ -293,12 +334,42 @@ import {
   Switch,
   Refresh
 } from '@element-plus/icons-vue';
-import request from '../utils/request';
+import request from '../utils/api';
 import { useUserStore } from '../stores/user';
-import { learningAPI } from '../api/learning';
+import {
+  learningAPI,
+  mergeGenerationLifecycle,
+  normalizeGenerationLifecycle,
+  type GenerationLifecycleDTO,
+  type LearningPath,
+  type Task
+} from '../api/learning';
 import MobileSiteMenu from '../components/MobileSiteMenu.vue';
 import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import AppMiniFooter from '../components/AppMiniFooter.vue';
+
+// 后端列表/详情接口可能额外返回、但 LearningPath 未声明的字段
+type LearningPathRecord = LearningPath & {
+  totalMilestones?: number;
+  currentStage?: number;
+  currentMilestoneIndex?: number;
+  currentMilestoneOrder?: number;
+  totalEstimatedHours?: number;
+  hours?: number;
+  progress?: number;
+  progressPercentage?: number;
+  completionRate?: number;
+};
+
+// 路径的阶段可能以 milestones/stages/weeks 任一形式返回
+type PathStageLike = {
+  id?: string;
+  stageNumber?: number;
+  weekNumber?: number;
+  title?: string;
+  subtasks?: Task[];
+  tasks?: Task[];
+};
 
 const router = useRouter();
 const route = useRoute();
@@ -351,77 +422,60 @@ const headerNavItems = computed(() => [
 ])
 const scrolled = ref(false);
 const loading = ref(true);
-const paths = ref<any[]>([]);
+const paths = ref<LearningPathRecord[]>([]);
 const deleting = ref(false);
 const showDeleteDialog = ref(false);
-const pathToDelete = ref<any>(null);
+const pathToDelete = ref<LearningPathRecord | null>(null);
 const regenerating = ref(false);
 const showRegenerateDialog = ref(false);
-const pathToRegenerate = ref<any>(null);
+const pathToRegenerate = ref<LearningPathRecord | null>(null);
 const retryingPathId = ref<string | null>(null);
 const showGeneratingAlert = ref(false);
-const activePathFilter = ref<'all' | 'active' | 'generating' | 'attention'>('all');
+const activePathFilter = ref<'all' | 'active' | 'completed' | 'generating' | 'attention'>('all');
+const pathOrder = ref<string[]>([]);
+const pathsLiveMessage = ref('');
+const announcedLifecycle = new Map<string, string>();
 
-// 前端提示超时阈值：4 分钟
-const GENERATION_TIMEOUT_SECONDS = 240;
+const getLifecycle = (path: LearningPathRecord): GenerationLifecycleDTO => normalizeGenerationLifecycle(path);
 
-// 已提示超时的路径 ID（避免重复提示）
-const notifiedTimeoutIds = new Set<string>();
-
-// 检查路径是否超时
-const isPathTimeout = (path: any) => {
-  if (!path.createdAt) return false;
-  const createdTime = new Date(path.createdAt).getTime();
-  const now = Date.now();
-  const elapsedSeconds = (now - createdTime) / 1000;
-  return elapsedSeconds > GENERATION_TIMEOUT_SECONDS;
+const isLifecycleBusy = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path).lifecycle;
+  return lifecycle === 'core_queued'
+    || lifecycle === 'core_processing'
+    || lifecycle === 'stage_design_queued'
+    || lifecycle === 'stage_design_processing';
 };
 
-// 正在生成的路径（从后端获取）
-const generatingPaths = computed(() => 
-  paths.value.filter((p: any) => p.status === 'generating')
-);
+const generatingPaths = computed(() => paths.value.filter((path) => isLifecycleBusy(path)));
 
-const enrichingPaths = computed(() =>
-  paths.value.filter((p: any) => {
-    const enrichmentStatus = p?.generationStatus?.stageDesign;
-    return p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing');
-  })
-);
+const getPathTitle = (path: LearningPathRecord) => path.name || path.title || '未命名路径';
 
-// 超时的路径（前端判定，不影响数据库）
-const timeoutPaths = computed(() =>
-  generatingPaths.value.filter((p: any) => isPathTimeout(p))
-);
-
-const getPathTitle = (path: any) => path.name || path.title || '未命名路径';
-
-const getPathSummary = (path: any) => {
-  return path.summary || path.description || '这里会显示这条学习路径的简要说明。';
+const getPathSummary = (path: LearningPathRecord) => {
+  return path.summary || path.description || '暂未生成路径说明。';
 };
 
-const getPathStages = (path: any) => path?.milestones || path?.weeks || [];
+const getPathStages = (path: LearningPathRecord): PathStageLike[] => path?.milestones || path?.weeks || [];
 
-const normalizeTaskList = (stage: any) => stage?.subtasks || stage?.tasks || [];
+const normalizeTaskList = (stage?: PathStageLike | null): Task[] => stage?.subtasks || stage?.tasks || [];
 
-const getActiveStage = (path: any) => {
+const getActiveStage = (path: LearningPathRecord) => {
   const stages = getPathStages(path);
   if (!stages.length) return null;
 
-  return stages.find((stage: any) => {
+  return stages.find((stage) => {
     const tasks = normalizeTaskList(stage);
-    return tasks.some((task: any) => task.status !== 'completed');
+    return tasks.some((task) => task.status !== 'completed');
   }) || stages[0] || null;
 };
 
-const getPrimaryActionTask = (path: any) => {
+const getPrimaryActionTask = (path: LearningPathRecord) => {
   const tasks = normalizeTaskList(getActiveStage(path));
-  return tasks.find((task: any) => task.status === 'todo')
-    || tasks.find((task: any) => task.status === 'in_progress')
+  return tasks.find((task) => task.status === 'in_progress')
+    || tasks.find((task) => task.status === 'todo')
     || null;
 };
 
-const getPathContinueTarget = (path: any) => {
+const getPathContinueTarget = (path: LearningPathRecord) => {
   const nextTask = getPrimaryActionTask(path);
   if (nextTask?.id) {
     if (isTestMode.value) {
@@ -435,13 +489,20 @@ const getPathContinueTarget = (path: any) => {
   return `/learning-path/${path.id}`;
 };
 
-const getPathNextTaskLabel = (path: any) => {
+const getPathNextTaskLabel = (path: LearningPathRecord) => {
   return getPrimaryActionTask(path)?.title || '进入路径查看安排';
 };
 
-const getPathStageCount = (path: any) => path.totalMilestones || path.milestones?.length || path.weeks?.length || 0;
+const getPathStageCount = (path: LearningPathRecord) => getLifecycle(path).totalStages
+  || path.totalMilestones
+  || path.totalStages
+  || path.milestones?.length
+  || path.weeks?.length
+  || 0;
 
-const getPathCurrentStage = (path: any) => {
+const getPathCurrentStage = (path: LearningPathRecord) => {
+  const currentStageNumber = getLifecycle(path).currentStageNumber;
+  if (currentStageNumber) return currentStageNumber;
   if (typeof path.currentStage === 'number') return path.currentStage;
   if (typeof path.currentMilestoneIndex === 'number') return path.currentMilestoneIndex + 1;
   if (typeof path.currentMilestoneOrder === 'number') return path.currentMilestoneOrder;
@@ -454,7 +515,7 @@ const getPathCurrentStage = (path: any) => {
     }
 
     const stages = getPathStages(path);
-    const activeIndex = stages.findIndex((stage: any) => stage === activeStage);
+    const activeIndex = stages.findIndex((stage) => stage === activeStage);
     if (activeIndex >= 0) {
       return activeIndex + 1;
     }
@@ -463,20 +524,20 @@ const getPathCurrentStage = (path: any) => {
   return getPathStageCount(path) > 0 ? 1 : 0;
 };
 
-const getPathEstimatedHours = (path: any) => {
+const getPathEstimatedHours = (path: LearningPathRecord) => {
   const value = path.estimatedHours || path.totalEstimatedHours || path.hours || 0;
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 };
 
-const getPathProgress = (path: any) => {
+const getPathProgress = (path: LearningPathRecord) => {
   if (typeof path.progress === 'number') return Math.max(0, Math.min(100, Math.round(path.progress)));
   if (typeof path.progressPercentage === 'number') return Math.max(0, Math.min(100, Math.round(path.progressPercentage)));
   if (typeof path.completionRate === 'number') return Math.max(0, Math.min(100, Math.round(path.completionRate * 100)));
 
   const stages = getPathStages(path);
-  const tasks = stages.flatMap((stage: any) => normalizeTaskList(stage));
+  const tasks = stages.flatMap((stage) => normalizeTaskList(stage));
   if (tasks.length > 0) {
-    const completed = tasks.filter((task: any) => task.status === 'completed').length;
+    const completed = tasks.filter((task) => task.status === 'completed').length;
     return Math.max(0, Math.min(100, Math.round((completed / tasks.length) * 100)));
   }
 
@@ -488,115 +549,317 @@ const getPathProgress = (path: any) => {
   return 0;
 };
 
-const getPathDisplayState = (path: any) => {
-  if (path.status === 'failed') return 'attention';
-  if (path.status === 'generating') return isPathTimeout(path) ? 'attention' : 'generating';
-  if (getEnrichmentStatus(path) === 'failed') return 'attention';
-  if (getEnrichmentStatus(path) === 'processing' || getEnrichmentStatus(path) === 'pending') return 'generating';
+const getPathDisplayState = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.status === 'failed' || lifecycle.status === 'stale') return 'attention';
+  if (isLifecycleBusy(path)) return 'generating';
+  if (path.status === 'completed' || getPathProgress(path) >= 100) return 'completed';
   return 'active';
 };
 
-const getFailureCopy = (path: any) => {
-  if (path.status === 'generating' && isPathTimeout(path)) {
-    return path.description || '这条路径生成时间较长，可以稍后刷新，或直接重试。';
+const getPathStateLabel = (path: LearningPathRecord) => getPathDisplayState(path) === 'completed' ? '已完成' : '进行中';
+
+const getPathPrimaryActionLabel = (path: LearningPathRecord) => {
+  if (getPathDisplayState(path) === 'completed') return '查看学习成果';
+  return getPrimaryActionTask(path)?.status === 'in_progress' ? '继续当前任务' : '开始下一项任务';
+};
+
+const getFailureCopy = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.errorMessage) return lifecycle.errorMessage;
+  if (lifecycle.lifecycle === 'core_stale') return '路径主结构长时间没有更新，可以重新生成主结构。';
+  if (lifecycle.lifecycle === 'core_failed') return '路径主结构生成失败，可以重新生成。';
+  if (lifecycle.lifecycle === 'stage_design_stale') return '阶段任务准备长时间没有更新，可以仅重新准备阶段任务。';
+  if (lifecycle.lifecycle === 'stage_design_failed') return '阶段任务准备失败，路径主结构已保留，可以重新准备阶段任务。';
+  return '生成状态暂不可用，请稍后刷新。';
+};
+
+const getLifecycleLabel = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path).lifecycle;
+  const labels: Record<string, string> = {
+    core_queued: '主结构排队中',
+    core_processing: '主结构生成中',
+    core_stale: '主结构停滞',
+    core_failed: '主结构失败',
+    stage_design_queued: '阶段任务排队中',
+    stage_design_processing: '阶段任务准备中',
+    stage_design_stale: '阶段任务停滞',
+    stage_design_failed: '阶段任务失败',
+    ready: getPathStateLabel(path)
+  };
+  return labels[lifecycle] || '状态更新中';
+};
+
+const getLifecyclePillClass = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.status === 'failed' || lifecycle.status === 'stale') return 'path-state-pill--failed';
+  if (lifecycle.lifecycle === 'ready') return 'path-state-pill--active';
+  return 'path-state-pill--generating';
+};
+
+const getCardSummary = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.status === 'failed' || lifecycle.status === 'stale') return getFailureCopy(path);
+  if (lifecycle.phase === 'core') return path.description || '正在根据学习目标生成路径标题、阶段与重点。';
+  return getPathSummary(path);
+};
+
+const getStageDesignProgressText = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.totalStages <= 0) return '正在准备各阶段任务';
+  const currentStage = getPathStages(path).find((stage, index) => {
+    const stageNumber = Number(stage?.stageNumber || stage?.weekNumber || index + 1);
+    return stageNumber === lifecycle.currentStageNumber;
+  });
+  const currentStageText = currentStage?.title ? `，当前「${currentStage.title}」` : '';
+  return `已完成 ${lifecycle.completedStages} / ${lifecycle.totalStages} 个阶段${currentStageText}`;
+};
+
+const getStageSkeleton = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  const stages = getPathStages(path);
+  const count = Math.max(lifecycle.totalStages, stages.length, 1);
+  return Array.from({ length: count }, (_, index) => {
+    const stage = stages[index];
+    const number = Number(stage?.stageNumber || stage?.weekNumber || index + 1);
+    return {
+      key: stage?.id || `${path.id}-stage-${index + 1}`,
+      number,
+      title: stage?.title || `第 ${number} 阶段`,
+      done: index < lifecycle.completedStages,
+      current: lifecycle.currentStageNumber === number
+        || (!lifecycle.currentStageNumber && index === lifecycle.completedStages && lifecycle.completedStages < count)
+    };
+  });
+};
+
+const getGenerationProgressLabel = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.phase === 'stage_design' && lifecycle.totalStages > 0) {
+    return `${lifecycle.completedStages}/${lifecycle.totalStages}`;
   }
-  return path.description || path.summary || '这条路径暂时没有生成成功，可以直接重试。';
+  if (lifecycle.status === 'failed') return '失败';
+  if (lifecycle.status === 'stale') return '停滞';
+  return lifecycle.status === 'queued' ? '排队' : '进行中';
+};
+
+const canRetryPath = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  return lifecycle.retryAllowed && Boolean(lifecycle.retryType);
+};
+
+const getRetryButtonLabel = (path: LearningPathRecord) => (
+  getLifecycle(path).retryType === 'stage_design' ? '重新准备阶段任务' : '重新生成主结构'
+);
+
+const updatePaths = (nextPaths: LearningPathRecord[]) => {
+  const currentIds = new Set(pathOrder.value);
+  const newIds = nextPaths
+    .filter((path) => !currentIds.has(path.id))
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+    .map((path) => path.id);
+
+  if (pathOrder.value.length === 0) {
+    pathOrder.value = [...nextPaths]
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+      .map((path) => path.id);
+  } else if (newIds.length > 0) {
+    pathOrder.value = [...newIds, ...pathOrder.value];
+  }
+
+  const nextIds = new Set(nextPaths.map((path) => path.id));
+  pathOrder.value = pathOrder.value.filter(id => nextIds.has(id));
+  paths.value = nextPaths;
+};
+
+const announceLifecycleChange = (path: LearningPathRecord, previous: string, next: string) => {
+  const announcementKey = `${previous}:${next}`;
+  if (previous === next || announcedLifecycle.get(path.id) === announcementKey) return;
+  announcedLifecycle.set(path.id, announcementKey);
+  pathsLiveMessage.value = `「${getPathTitle(path)}」${getLifecycleLabel(path)}`;
+  if (next === 'ready') toast.success(`「${getPathTitle(path)}」已准备完成`);
+  if (next === 'core_failed') toast.error(`「${getPathTitle(path)}」主结构生成失败，可以重新生成`);
+  if (next === 'stage_design_failed') toast.error(`「${getPathTitle(path)}」阶段任务准备失败，可以单独重试`);
+  if (next === 'core_stale') toast.warning(`「${getPathTitle(path)}」主结构生成已停滞`);
+  if (next === 'stage_design_stale') toast.warning(`「${getPathTitle(path)}」阶段任务准备已停滞`);
 };
 
 const sortedPaths = computed(() => {
-  const priority = { active: 0, generating: 1, attention: 2 } as const;
+  const orderIndex = new Map(pathOrder.value.map((id, index) => [id, index]));
   return [...paths.value].sort((a, b) => {
-    const stateDiff = priority[getPathDisplayState(a)] - priority[getPathDisplayState(b)];
-    if (stateDiff !== 0) return stateDiff;
-    const updatedA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-    const updatedB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-    return updatedB - updatedA;
+    const indexA = orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const indexB = orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    return indexA - indexB;
   });
 });
 
 const primaryPath = computed(() => {
-  const activePaths = sortedPaths.value.filter((path: any) => getPathDisplayState(path) === 'active');
-  return activePaths.find((path: any) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
+  const activePaths = sortedPaths.value.filter((path) => getPathDisplayState(path) === 'active');
+  return activePaths.find((path) => Boolean(getPrimaryActionTask(path))) || activePaths[0] || null;
 });
 
-const pathsHeroTitle = '查看所有路径进度。';
-const pathsHeroSubtitle = '在这里查看你创建过的学习路径、当前阶段和学习进度。';
+const pathsHeroTitle = '继续你的学习计划';
+const pathsHeroSubtitle = '查看当前任务、路径进度和需要处理的问题。';
 
 const pathFilterChips = computed(() => {
   const list = sortedPaths.value;
   return [
     { key: 'all', label: '全部', count: list.length },
-    { key: 'active', label: '进行中', count: list.filter((path: any) => getPathDisplayState(path) === 'active').length },
-    { key: 'generating', label: '生成中', count: list.filter((path: any) => getPathDisplayState(path) === 'generating').length },
-    { key: 'attention', label: '待重试', count: list.filter((path: any) => getPathDisplayState(path) === 'attention').length }
+    { key: 'active', label: '进行中', count: list.filter((path) => getPathDisplayState(path) === 'active').length },
+    { key: 'completed', label: '已完成', count: list.filter((path) => getPathDisplayState(path) === 'completed').length },
+    { key: 'generating', label: '生成中', count: list.filter((path) => getPathDisplayState(path) === 'generating').length },
+    { key: 'attention', label: '待重试', count: list.filter((path) => getPathDisplayState(path) === 'attention').length }
   ];
 });
 
 const visiblePaths = computed(() => {
   const list = sortedPaths.value;
   if (activePathFilter.value === 'all') return list;
-  return list.filter((path: any) => getPathDisplayState(path) === activePathFilter.value);
+  return list.filter((path) => getPathDisplayState(path) === activePathFilter.value);
 });
+
+const setPathFilter = (key: string) => {
+  if (key === 'all' || key === 'active' || key === 'completed' || key === 'generating' || key === 'attention') {
+    activePathFilter.value = key;
+  }
+};
+
+const emptyStateTitle = computed(() => {
+  if (activePathFilter.value === 'all') return '还没有学习路径';
+  if (activePathFilter.value === 'active') return '没有进行中的路径';
+  if (activePathFilter.value === 'completed') return '还没有完成的路径';
+  if (activePathFilter.value === 'generating') return '没有正在生成的路径';
+  return '没有需要重试的路径';
+});
+
+const emptyStateDescription = computed(() => activePathFilter.value === 'all'
+  ? '先规划一个目标，生成第一条学习路径。'
+  : '可以查看其他状态的学习路径。');
 
 // 检查是否有正在生成的路径
 const checkGeneratingPath = () => {
-  return generatingPaths.value.length > 0 || enrichingPaths.value.length > 0;
+  return generatingPaths.value.length > 0;
 };
 
-// 轮询更新生成中的路径
+const POLLING_INTERVAL_MS = 5000;
+const POLLING_MAX_BACKOFF_MS = 60000;
 let pollingTimer: number | null = null;
-const startPolling = () => {
-  if (pollingTimer) return;
-  pollingTimer = window.setInterval(async () => {
-    if (generatingPaths.value.length > 0 || enrichingPaths.value.length > 0) {
-      // 检查超时（只提示一次）
-        timeoutPaths.value.forEach((timeoutPath: any) => {
-          if (!notifiedTimeoutIds.has(timeoutPath.id)) {
-          toast.warning('学习路径生成时间较长，可以稍后刷新或直接重试');
-          notifiedTimeoutIds.add(timeoutPath.id);
-          }
-        });
-      
-      try {
-        const response = await request.get('/learning/paths');
-        const newPaths = response.data.data;
-        
-        // 检查是否有路径从 generating 变成 active
-        generatingPaths.value.forEach((genPath: any) => {
-          const updatedPath = newPaths.find((p: any) => p.id === genPath.id);
-          if (updatedPath && updatedPath.status !== 'generating') {
-            if (updatedPath.status === 'active') {
-              toast.success('学习路径生成完成！');
-              notifiedTimeoutIds.delete(genPath.id);
-            } else if (updatedPath.status === 'failed') {
-              toast.error('学习路径生成失败，请返回目标对话重试。');
-              notifiedTimeoutIds.delete(genPath.id);
-            }
-          }
-        });
-        
-        paths.value = newPaths;
-        
-        // 如果没有生成中的路径或准备中的路径了，停止轮询
-        if (!newPaths.some((p: any) => {
-          const enrichmentStatus = p?.generationStatus?.stageDesign;
-          return p.status === 'generating'
-            || (p.status === 'active' && (enrichmentStatus === 'pending' || enrichmentStatus === 'processing'));
-        })) {
-          stopPolling();
-        }
-      } catch (error) {
-        console.error('轮询更新失败:', error);
-      }
+const pollingInFlight = ref(false);
+let pollingFailureCount = 0;
+let pathsRequestInFlight: Promise<LearningPathRecord[]> | null = null;
+
+const hasPollingTargets = (pathList: LearningPathRecord[]) => pathList.some((path) => {
+  return isLifecycleBusy(path);
+}) || (
+  route.query.from === 'goal'
+  && route.query.auto === '1'
+  && Boolean(goalSourceConversationId.value)
+  && !pathList.some((path) => path?.generationStatus?.sourceConversationId === goalSourceConversationId.value)
+);
+
+const fetchPathsSingleFlight = () => {
+  if (pathsRequestInFlight) return pathsRequestInFlight;
+  pathsRequestInFlight = request.get('/learning/paths')
+    .then((body) => (body.data || []) as LearningPathRecord[])
+    .then((pathList) => pathList.map((path) => ({
+      ...path,
+      generationLifecycle: normalizeGenerationLifecycle(path)
+    })))
+    .finally(() => {
+      pathsRequestInFlight = null;
+    });
+  return pathsRequestInFlight;
+};
+
+const schedulePolling = (delayMs = POLLING_INTERVAL_MS) => {
+  if (document.hidden || !hasPollingTargets(paths.value)) return;
+  if (pollingTimer) window.clearTimeout(pollingTimer);
+  pollingTimer = window.setTimeout(() => {
+    pollingTimer = null;
+    void pollPaths();
+  }, delayMs);
+};
+
+const pollPaths = async () => {
+  if (pollingInFlight.value || document.hidden || !hasPollingTargets(paths.value)) return;
+
+  pollingInFlight.value = true;
+  try {
+    const targetPaths = paths.value.filter((path) => isLifecycleBusy(path));
+    if (targetPaths.length === 0) {
+      updatePaths(await fetchPathsSingleFlight());
+      pollingFailureCount = 0;
+      schedulePolling();
+      return;
     }
-  }, 3000); // 每3秒轮询一次
+    const results = await Promise.allSettled(
+      targetPaths.map(async (path) => ({
+        id: path.id,
+        lifecycle: await learningAPI.getPathGenerationStatus(path.id)
+      }))
+    );
+    const failedRequests = results.filter(result => result.status === 'rejected').length;
+    if (failedRequests === results.length) {
+      throw new Error('generation status polling failed');
+    }
+    const readyTransitions: Array<{ id: string; previous: string }> = [];
+
+    results.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      const index = paths.value.findIndex((path) => path.id === result.value.id);
+      if (index < 0) return;
+      const previousLifecycle = getLifecycle(paths.value[index]).lifecycle;
+      const nextLifecycle = result.value.lifecycle.lifecycle;
+      if (previousLifecycle !== nextLifecycle && nextLifecycle === 'ready') {
+        readyTransitions.push({ id: result.value.id, previous: previousLifecycle });
+        return;
+      }
+      paths.value[index] = mergeGenerationLifecycle(paths.value[index], result.value.lifecycle);
+      announceLifecycleChange(paths.value[index], previousLifecycle, nextLifecycle);
+    });
+
+    if (readyTransitions.length > 0) {
+      const refreshedPaths = await fetchPathsSingleFlight();
+      updatePaths(refreshedPaths);
+      readyTransitions.forEach(({ id, previous }) => {
+        const refreshedPath = paths.value.find((path) => path.id === id);
+        if (refreshedPath) announceLifecycleChange(refreshedPath, previous, getLifecycle(refreshedPath).lifecycle);
+      });
+    }
+    if (failedRequests > 0) {
+      pollingFailureCount += 1;
+      schedulePolling(Math.min(POLLING_INTERVAL_MS * (2 ** pollingFailureCount), POLLING_MAX_BACKOFF_MS));
+    } else {
+      pollingFailureCount = 0;
+      schedulePolling();
+    }
+  } catch {
+    pollingFailureCount += 1;
+    const delay = Math.min(POLLING_INTERVAL_MS * (2 ** pollingFailureCount), POLLING_MAX_BACKOFF_MS);
+    schedulePolling(delay);
+  } finally {
+    pollingInFlight.value = false;
+  }
+};
+
+const startPolling = () => {
+  if (pollingTimer || pollingInFlight.value || document.hidden || !hasPollingTargets(paths.value)) return;
+  schedulePolling();
 };
 
 const stopPolling = () => {
   if (pollingTimer) {
-    clearInterval(pollingTimer);
+    clearTimeout(pollingTimer);
     pollingTimer = null;
   }
+};
+
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    stopPolling();
+    return;
+  }
+  if (hasPollingTargets(paths.value)) schedulePolling(0);
 };
 
 const handleScroll = () => {
@@ -619,10 +882,12 @@ const handleLogout = async () => {
 };
 
 const loadPaths = async () => {
-  loading.value = true;
+  if (paths.value.length === 0) loading.value = true;
   try {
-    const response = await request.get('/learning/paths');
-    paths.value = response.data.data;
+    updatePaths(await fetchPathsSingleFlight());
+    pollingFailureCount = 0;
+    if (hasPollingTargets(paths.value)) startPolling();
+    else stopPolling();
   } catch (error: any) {
     console.error('加载学习路径失败:', error);
     toast.error(error.response?.data?.error?.message || '加载学习路径失败');
@@ -631,7 +896,7 @@ const loadPaths = async () => {
   }
 };
 
-const handleCommand = (command: string, path: any) => {
+const handleCommand = (command: string, path: LearningPathRecord) => {
   if (command === 'regenerate') {
     confirmRegenerate(path);
   } else if (command === 'delete') {
@@ -639,17 +904,25 @@ const handleCommand = (command: string, path: any) => {
   }
 };
 
-const getEnrichmentStatus = (path: any) => path?.generationStatus?.stageDesign || null;
 const goalSourceConversationId = computed(() => {
   const raw = route.query.conversationId;
   return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
 });
-const showGoalSceneBanner = computed(() => route.query.from === 'goal' && Boolean(goalScenePath.value));
-const getCoreStepLabel = (path: any) => {
+const showGoalSceneBanner = computed(() => (
+  route.query.from === 'goal'
+  && route.query.auto === '1'
+  && Boolean(goalSourceConversationId.value)
+));
+const getCoreStepLabel = (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  if (lifecycle.lifecycle === 'core_queued') return '等待开始生成路径主结构';
+  if (lifecycle.lifecycle === 'core_stale') return '路径主结构生成已停滞';
+  if (lifecycle.lifecycle === 'core_failed') return '路径主结构生成失败';
+  if (lifecycle.phase !== 'core') return '路径主结构已完成';
   const step = path?.generationStatus?.coreStep;
   if (step === 'framing') return '正在确认路径重点';
   if (step === 'planning') return '正在拆解完整任务路径';
-  if (step === 'persist') return '正在整理并落库';
+  if (step === 'persist') return '正在保存学习路径';
   if (step === 'completed') return '路径主结构已完成';
   return '正在生成路径';
 };
@@ -663,16 +936,10 @@ const goalSceneCandidates = computed(() => {
   const list = sortedPaths.value;
 
   if (exactConversationId) {
-    const matched = list.filter((path: any) => path?.generationStatus?.sourceConversationId === exactConversationId);
-    if (matched.length > 0) {
-      return matched;
-    }
+    return list.filter((path) => path?.generationStatus?.sourceConversationId === exactConversationId);
   }
 
-  return list.filter((path: any) => {
-    const source = path?.generationStatus?.sourceConversationId;
-    return Boolean(source || path.status === 'generating');
-  });
+  return [];
 });
 
 const goalScenePath = computed(() => goalSceneCandidates.value[0] || null);
@@ -682,9 +949,7 @@ const goalSceneState = computed<'processing' | 'ready' | 'attention'>(() => {
   if (!path) return 'processing';
   const displayState = getPathDisplayState(path);
   if (displayState === 'attention') return 'attention';
-  if (displayState === 'active' && getEnrichmentStatus(path) === 'succeeded') return 'ready';
-  if (displayState === 'active' && !path.canStartLearning) return 'processing';
-  if (displayState === 'active') return 'ready';
+  if (getLifecycle(path).lifecycle === 'ready') return 'ready';
   return 'processing';
 });
 
@@ -697,13 +962,16 @@ const goalSceneTitle = computed(() => {
   if (goalSceneState.value === 'ready') {
     return '这版学习路径已经准备好了';
   }
+  if (getLifecycle(path).phase === 'stage_design') {
+    return '路径主结构已完成，正在准备阶段任务';
+  }
   return getCoreStepLabel(path);
 });
 
 const goalSceneDescription = computed(() => {
   const path = goalScenePath.value;
   if (!path) {
-    return '系统正在根据刚确认的目标生成第一版学习路径。';
+    return '问流正在根据刚确认的目标生成第一版学习路径。';
   }
   if (goalSceneState.value === 'attention') {
     return path.learningBlockedReason || path.summary || '当前生成遇到问题，可以先刷新状态或直接重试。';
@@ -711,17 +979,17 @@ const goalSceneDescription = computed(() => {
   if (goalSceneState.value === 'ready') {
     return path.summary || '你现在可以直接查看路径结构，并按阶段开始推进。';
   }
-  const scene = path.sceneSummary || path.generationStatus?.scene || {};
-  const firstDeliverable = scene.firstDeliverable ? `先拿到「${scene.firstDeliverable}」` : '先收敛第一版可交付结果';
-  return `${firstDeliverable}，期间会按你的时间投入拆成完整任务级路径。`;
+  const scene: { firstDeliverable?: string } = path.sceneSummary || path.generationStatus?.scene || {};
+  const firstDeliverable = scene.firstDeliverable ? `先完成「${scene.firstDeliverable}」` : '先明确第一个可以完成的成果';
+  return `${firstDeliverable}，再按你的可用时间拆成具体任务。`;
 });
 
-const confirmRegenerate = (path: any) => {
+const confirmRegenerate = (path: LearningPathRecord) => {
   pathToRegenerate.value = path;
   showRegenerateDialog.value = true;
 };
 
-const confirmDelete = (path: any) => {
+const confirmDelete = (path: LearningPathRecord) => {
   pathToDelete.value = path;
   showDeleteDialog.value = true;
 };
@@ -745,35 +1013,35 @@ const deletePath = async () => {
 };
 
 const regeneratePath = async () => {
-  if (!pathToRegenerate.value) return;
+  const targetPath = pathToRegenerate.value;
+  if (!targetPath) return;
 
   regenerating.value = true;
   try {
-    await learningAPI.regeneratePath(pathToRegenerate.value.id);
+    await learningAPI.regeneratePath(targetPath.id);
 
-    const index = paths.value.findIndex(p => p.id === pathToRegenerate.value.id);
+    const index = paths.value.findIndex(p => p.id === targetPath.id);
     if (index !== -1) {
-      paths.value[index] = {
-        ...paths.value[index],
-        status: 'generating',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      paths.value[index] = mergeGenerationLifecycle(paths.value[index], {
+        lifecycle: 'core_queued',
+        retryAllowed: false,
+        canStartLearning: false
+      });
     }
 
-    notifiedTimeoutIds.delete(pathToRegenerate.value.id);
     showRegenerateDialog.value = false;
+    pathToRegenerate.value = null;
     toast.success('已开始重新生成学习路径');
 
     if (!pollingTimer) {
       startPolling();
     }
+    schedulePolling(1500);
   } catch (error: any) {
     console.error('重新生成学习路径失败:', error);
     toast.error(error.response?.data?.error?.message || '重新生成学习路径失败');
   } finally {
     regenerating.value = false;
-    pathToRegenerate.value = null;
   }
 };
 
@@ -785,37 +1053,70 @@ const goToPathDetail = (id: string) => {
   router.push(`/learning-path/${id}`);
 };
 
-const continuePath = (path: any) => {
+const continuePath = (path: LearningPathRecord | null) => {
   if (!path?.id) return;
   router.push(getPathContinueTarget(path));
 };
 
+const refreshPathStatus = async (path: LearningPathRecord) => {
+  if (!path?.id || pollingInFlight.value) return;
+  pollingInFlight.value = true;
+  try {
+    const previousLifecycle = getLifecycle(path).lifecycle;
+    const lifecycle = await learningAPI.getPathGenerationStatus(path.id);
+    const index = paths.value.findIndex((item) => item.id === path.id);
+    if (index >= 0) {
+      if (lifecycle.lifecycle === 'ready') {
+        updatePaths(await fetchPathsSingleFlight());
+      } else {
+        paths.value[index] = mergeGenerationLifecycle(paths.value[index], lifecycle);
+      }
+      const refreshedPath = paths.value.find((item) => item.id === path.id);
+      if (refreshedPath) announceLifecycleChange(refreshedPath, previousLifecycle, getLifecycle(refreshedPath).lifecycle);
+    }
+    pollingFailureCount = 0;
+    if (hasPollingTargets(paths.value)) schedulePolling();
+  } catch (error: any) {
+    toast.error(error.message || '刷新生成状态失败');
+  } finally {
+    pollingInFlight.value = false;
+  }
+};
+
 // 重试生成失败的路径
-const retryPathGeneration = async (path: any) => {
-  if (!path.description) {
+const retryPathGeneration = async (path: LearningPathRecord) => {
+  const lifecycle = getLifecycle(path);
+  const shouldRetryStageDesign = lifecycle.retryType === 'stage_design';
+  if (!shouldRetryStageDesign && !path.description) {
     toast.error('路径描述缺失，请通过目标对话重新创建');
     return;
   }
 
   retryingPathId.value = path.id;
   try {
-    await request.patch(`/learning/paths/${path.id}/retry`);
+    if (shouldRetryStageDesign) {
+      await learningAPI.retryPathEnrichment(path.id);
+    } else {
+      await learningAPI.retryPathGeneration(path.id);
+    }
     
     const index = paths.value.findIndex(p => p.id === path.id);
     if (index !== -1) {
-      paths.value[index] = {
-        ...paths.value[index],
-        status: 'generating',
-        createdAt: new Date().toISOString()
-      };
+      paths.value[index] = mergeGenerationLifecycle(paths.value[index], {
+        lifecycle: shouldRetryStageDesign ? 'stage_design_queued' : 'core_queued',
+        retryAllowed: false,
+        canStartLearning: false,
+        completedStages: shouldRetryStageDesign ? lifecycle.completedStages : 0,
+        totalStages: lifecycle.totalStages
+      });
     }
-    notifiedTimeoutIds.delete(path.id);
     
-    toast.success('已开始重新生成学习路径');
+    toast.success(shouldRetryStageDesign ? '已在后台重新准备阶段任务' : '已开始重新生成学习路径');
     
     if (!pollingTimer) {
       startPolling();
     }
+    schedulePolling(1500);
   } catch (error: any) {
     console.error('重试生成失败:', error);
     toast.error(error.response?.data?.error?.message || '重试生成失败，请稍后重试');
@@ -839,17 +1140,19 @@ onMounted(() => {
 
   loadPaths().then(() => {
     // 如果有正在生成或准备中的路径，启动轮询
-    if (generatingPaths.value.length > 0 || enrichingPaths.value.length > 0) {
+    if (generatingPaths.value.length > 0) {
       startPolling();
     }
   });
 
   window.addEventListener('scroll', handleScroll);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
   stopPolling();
   window.removeEventListener('scroll', handleScroll);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 
@@ -863,6 +1166,18 @@ onUnmounted(() => {
   overflow-x: hidden;
   width: 100%;
   max-width: 100vw;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .paths-scene-banner {
@@ -1729,7 +2044,6 @@ onUnmounted(() => {
   height: 100%;
   background: var(--gradient-primary);
   border-radius: 3px;
-  animation: progress-loading 2s ease-in-out infinite;
 }
 
 .failed-card {
@@ -1819,12 +2133,6 @@ onUnmounted(() => {
 @keyframes pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.05); opacity: 0.8; }
-}
-
-@keyframes progress-loading {
-  0% { width: 0%; transform: translateX(-100%); }
-  50% { width: 100%; transform: translateX(0); }
-  100% { width: 100%; transform: translateX(100%); }
 }
 
 /* ========== Paths Upgrade ========== */
@@ -1983,8 +2291,9 @@ onUnmounted(() => {
 
 .path-overview-card {
   display: grid;
+  grid-template-rows: auto auto minmax(48px, auto) minmax(92px, auto) auto auto auto;
   gap: 14px;
-  min-height: 280px;
+  min-height: 480px;
   padding: 22px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.78);
@@ -2028,6 +2337,110 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   font-size: 22px;
+}
+
+.path-overview-card__summary {
+  min-height: 48px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.path-overview-card__phase {
+  min-height: 92px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 32, 51, 0.05);
+  background: rgba(243, 246, 251, 0.72);
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+
+.path-overview-card__phase--core {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.path-overview-card__phase-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.path-overview-card__phase-copy span {
+  color: #66758d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.path-overview-card__phase-copy strong {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.path-activity-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.path-activity-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3478f6;
+  animation: path-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.path-activity-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.path-activity-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes path-dot-pulse {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+
+.path-stage-skeleton {
+  display: flex;
+  gap: 7px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.path-stage-skeleton__item {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  flex: 0 0 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(23, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  color: #7a8599;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.path-stage-skeleton__item--done {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.1);
+  color: #0f8a63;
+}
+
+.path-stage-skeleton__item--current {
+  border-color: rgba(52, 120, 246, 0.26);
+  background: rgba(52, 120, 246, 0.1);
+  color: #1f57cc;
 }
 
 .path-overview-card__chips {
@@ -2130,14 +2543,63 @@ onUnmounted(() => {
   background: linear-gradient(90deg, #3478f6, #1f57cc);
 }
 
-.path-overview-card__progress-fill--loading {
-  width: 42%;
-  animation: progress-pulse 2s ease-in-out infinite;
+.path-overview-card__status-line {
+  height: 8px;
+  padding: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(52, 120, 246, 0.08);
 }
 
-@keyframes progress-pulse {
-  0%, 100% { width: 24%; opacity: 0.72; }
-  50% { width: 68%; opacity: 1; }
+.path-overview-card__status-line > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(52, 120, 246, 0.32);
+}
+
+.path-overview-card__status-line-marker--busy {
+  animation: path-status-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes path-status-breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.path-overview-card--skeleton {
+  pointer-events: none;
+}
+
+.path-skeleton {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(100deg, rgba(226, 232, 240, 0.72) 20%, rgba(248, 250, 252, 0.96) 45%, rgba(226, 232, 240, 0.72) 70%);
+  background-size: 200% 100%;
+  animation: path-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.path-skeleton--pill { width: 96px; height: 30px; border-radius: 999px; }
+.path-skeleton--title { width: 72%; height: 28px; }
+.path-skeleton--copy { width: 100%; height: 14px; }
+.path-skeleton--copy-short { width: 78%; }
+.path-skeleton--stage { width: 28px; height: 28px; }
+.path-skeleton--button { width: 100%; height: 46px; margin-top: auto; }
+
+.path-skeleton-stage-row {
+  display: flex;
+  gap: 8px;
+  min-height: 92px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(243, 246, 251, 0.72);
+}
+
+@keyframes path-skeleton-shimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -20% 0; }
 }
 
 .path-state-pill {
@@ -2211,7 +2673,9 @@ onUnmounted(() => {
 }
 
 [data-theme="dark"] .path-overview-card__brief-item,
-[data-theme="dark"] .path-overview-card__next-task {
+[data-theme="dark"] .path-overview-card__next-task,
+[data-theme="dark"] .path-overview-card__phase,
+[data-theme="dark"] .path-skeleton-stage-row {
   background: rgba(15, 23, 42, 0.46);
   border-color: rgba(255, 255, 255, 0.06);
 }
@@ -2293,6 +2757,27 @@ onUnmounted(() => {
 
   .paths-filter-row {
     gap: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    margin-inline: -1rem;
+    padding: 0 1rem 6px;
+  }
+
+  .paths-filter-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .paths-filter-chip {
+    flex: 0 0 auto;
+  }
+
+  .paths-scene-banner__actions,
+  .paths-scene-banner__actions--single {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .paths-grid--upgraded {
@@ -2383,7 +2868,6 @@ onUnmounted(() => {
     flex-direction: column;
   }
 
-  .paths-filter-row,
   .paths-hero__actions,
   .paths-scene-banner__actions,
   .paths-scene-banner__actions--single,
@@ -2392,15 +2876,41 @@ onUnmounted(() => {
     align-items: stretch;
   }
 
+  .paths-filter-row {
+    margin-inline: -0.75rem;
+    padding: 0 0.75rem 6px;
+  }
+
   .paths-filter-chip {
-    width: 100%;
-    justify-content: space-between;
-    min-height: 46px;
-    padding: 12px 14px;
+    width: auto;
+    flex: 0 0 auto;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 14px;
   }
 
   .path-overview-card__brief {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paths-bg-orb,
+  .path-activity-dots i,
+  .path-overview-card__status-line-marker--busy,
+  .path-skeleton {
+    animation: none !important;
+  }
+
+  .path-overview-card,
+  .btn,
+  .paths-filter-chip {
+    transition: none !important;
+  }
+
+  .path-overview-card:hover,
+  .btn-primary:hover {
+    transform: none;
   }
 }
 

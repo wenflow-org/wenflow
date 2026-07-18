@@ -139,7 +139,7 @@ export const dataMappingAgent: AgentPlugin = {
       const mappingPrompt = this.buildMappingPromptInternal(sourceData, targetSchema);
 
       const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: 'data-mapping' };
+      const caller: CallerInfo = { skillId: 'data-mapping' };
 
       const messages = [
         { role: 'system' as const, content: this.config!.systemPrompt! },

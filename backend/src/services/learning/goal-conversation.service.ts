@@ -4,8 +4,10 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { runGoalConversationAgent } from '../../skills/goal-conversation';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
-import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import learningService from './learning.service';
+import { createDomainEvent } from '../../events/contracts';
+import { enqueueDomainEvent } from '../../events/outbox.repository';
 
 interface GoalConversationOptions {
   contextMode?: 'recent' | 'full';
@@ -349,23 +351,20 @@ async continueConversation(
             };
 
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
+            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id);
 
             pathOrchestrator.runGoalAsync(
-              this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
+              {
+                ...this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
+                generationRunId: runId
+              },
               {
                 onSuccess: () => {
                   logger.info('硬规则触发：异步学习路径生成成功', { conversationId, pathId: placeholderPath.id });
                 },
                 onError: async (pathError) => {
                   logger.error('硬规则触发：异步学习路径生成失败', { conversationId, pathId: placeholderPath.id, error: String(pathError) });
-                  try {
-                    await prisma.learning_paths.update({
-                      where: { id: placeholderPath.id },
-                      data: { status: 'failed', updatedAt: new Date() }
-                    });
-                  } catch (e) {
-                    logger.error('更新失败状态出错', e);
-                  }
+                  await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
                 }
               }
             );
@@ -427,10 +426,6 @@ async continueConversation(
 
       // 更新收集的数据
       await this.updateCollectedData(conversation.id, aiResponse);
-      void learnerSnapshotRefreshService.refresh({
-        userId,
-        scope: 'global'
-      });
       const core = this.getCore(responseWithConversationId.internal);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
@@ -438,9 +433,13 @@ async continueConversation(
       if (core.stage === 'ready' || core.stage === 'completed') {
         try {
             const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, responseWithConversationId);
+            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id);
 
             pathOrchestrator.runGoalAsync(
-            this.buildGoalPathRequest(conversation, responseWithConversationId, placeholderPath.id, options?.systemPromptOverrides),
+            {
+              ...this.buildGoalPathRequest(conversation, responseWithConversationId, placeholderPath.id, options?.systemPromptOverrides),
+              generationRunId: runId
+            },
             {
               onSuccess: () => {
                 logger.info('异步学习路径生成成功', {
@@ -455,17 +454,7 @@ async continueConversation(
                   error: (pathError as any)?.message || String(pathError)
                 });
 
-                try {
-                  await prisma.learning_paths.update({
-                    where: { id: placeholderPath.id },
-                    data: {
-                      status: 'failed',
-                      updatedAt: new Date()
-                    }
-                  });
-                } catch (updateError) {
-                  logger.error('更新占位路径失败状态失败', updateError);
-                }
+                await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
               }
             }
           );
@@ -479,12 +468,6 @@ async continueConversation(
               completedAt: new Date(),
               learningPathId: placeholderPath.id
             }
-          });
-
-          void learnerSnapshotRefreshService.refresh({
-            userId,
-            pathId: placeholderPath.id,
-            scope: 'path'
           });
 
           // 新格式返回：completed 状态
@@ -728,22 +711,31 @@ async continueConversation(
       data.learningPath = core.learningPath || null;
     }
 
-    await prisma.goal_conversations.update({
-      where: { id: conversationId },
-      data: { collectedData: JSON.stringify(data) }
-    });
-
-    const conversationOwner = await prisma.goal_conversations.findUnique({
-      where: { id: conversationId },
-      select: { userId: true }
-    });
-
-    if (conversationOwner?.userId) {
-      void learnerSnapshotRefreshService.refresh({
-        userId: conversationOwner.userId,
-        scope: 'global'
+    await prisma.$transaction(async (tx) => {
+      await tx.goal_conversations.update({
+        where: { id: conversationId },
+        data: {
+          collectedData: JSON.stringify(data),
+          stage: core.stage
+        }
       });
-    }
+      await enqueueDomainEvent(tx, createDomainEvent({
+        type: 'goal:understanding:updated',
+        aggregateType: 'goal',
+        aggregateId: conversationId,
+        userId: conversation.userId,
+        source: 'goal-conversation-service',
+        data: {
+          conversationId,
+          stage: core.stage,
+          confidence: core.confidence,
+          understanding: data.understanding,
+          normalizedGoalState: data.normalizedGoalState,
+          confirmedProposal: data.confirmedProposal || null,
+          structuredData: data.structuredData || null
+        }
+      }));
+    });
   }
 
   private buildGoalPathRequest(

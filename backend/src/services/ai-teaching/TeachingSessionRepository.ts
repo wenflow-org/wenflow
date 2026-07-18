@@ -1,4 +1,6 @@
 import prisma from '../../config/database';
+import type { DurableDomainEvent } from '../../events/contracts';
+import { enqueueDomainEvent } from '../../events/outbox.repository';
 
 export interface TeachingSessionMessage {
   role: 'user' | 'assistant' | 'system';
@@ -242,6 +244,37 @@ class TeachingSessionRepository {
         advisory: payload.advisory ? JSON.stringify(payload.advisory) : null,
         updatedAt: new Date(),
       }
+    });
+  }
+
+  async completeWithEvent(
+    sessionId: string,
+    payload: {
+      messages: TeachingSessionMessage[];
+      knowledgeState: TeachingKnowledgePointState[];
+      teachingState?: Record<string, any> | null;
+      wrapup?: Record<string, any> | null;
+      advisory?: Record<string, any> | null;
+      duration?: number | null;
+    },
+    event: DurableDomainEvent
+  ): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.teaching_sessions.update({
+        where: { id: sessionId },
+        data: {
+          status: 'completed',
+          endTime: new Date(),
+          duration: payload.duration ?? null,
+          messages: JSON.stringify(payload.messages),
+          knowledgeState: JSON.stringify(payload.knowledgeState),
+          teachingState: payload.teachingState ? JSON.stringify(payload.teachingState) : null,
+          wrapup: payload.wrapup ? JSON.stringify(payload.wrapup) : null,
+          advisory: payload.advisory ? JSON.stringify(payload.advisory) : null,
+          updatedAt: new Date()
+        }
+      });
+      await enqueueDomainEvent(tx, event);
     });
   }
 }

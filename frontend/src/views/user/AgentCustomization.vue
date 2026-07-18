@@ -1,5 +1,5 @@
 ﻿<template>
-  <CapabilityShell title="托管 Agent 选择" description="平台提供一组已发布的托管 Agent 来承担需求收集、路径规划、授课、辅导等职责。这里用于选择启用范围与参数，不支持用户侧导入或编写自定义 Agent。">
+  <CapabilityShell title="AI 助手" description="查看平台提供的 AI 助手并控制是否启用。如需调整模型参数，请前往「高级模型」。">
     <div class="agent-config-page">
 
     <div class="role-overview">
@@ -12,7 +12,7 @@
                 <div class="role-card__hint">{{ role.description }}</div>
               </div>
               <el-tag :type="role.active ? 'success' : 'info'" size="small">
-                {{ role.active ? '已就绪' : '待配置' }}
+                {{ role.active ? '已启用' : '未启用' }}
               </el-tag>
             </div>
             <div class="role-card__body">
@@ -27,11 +27,11 @@
 
     <!-- 标签页切换 -->
     <el-tabs v-model="activeTab" type="border-card" @tab-change="loadAgents">
-      <el-tab-pane label="全部应用" name="all">
-        <div class="tab-description">显示平台已发布的全部托管 Agent。</div>
+       <el-tab-pane label="全部助手" name="all">
+         <div class="tab-description">查看平台提供的全部 AI 助手。</div>
       </el-tab-pane>
-      <el-tab-pane label="系统应用" name="system">
-        <div class="tab-description">平台提供的默认托管 Agent。你可以调整参数并决定启用状态。</div>
+       <el-tab-pane label="平台助手" name="system">
+         <div class="tab-description">平台提供的默认 AI 助手，可以调整启用状态。</div>
       </el-tab-pane>
     </el-tabs>
 
@@ -41,7 +41,7 @@
         <el-col :span="6">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">候选 Agent 数</div>
+               <div class="label">可用助手</div>
               <div class="value">{{ agents.length }}</div>
             </div>
           </el-card>
@@ -57,7 +57,7 @@
         <el-col :span="6">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">平台默认</div>
+               <div class="label">平台提供</div>
               <div class="value">{{ agents.filter(a => a.isSystem).length }}</div>
             </div>
           </el-card>
@@ -65,8 +65,8 @@
         <el-col :span="6">
           <el-card shadow="hover">
             <div class="stat-item">
-              <div class="label">平台托管</div>
-              <div class="value">{{ agents.filter(a => a.isSystem).length }}</div>
+               <div class="label">未启用</div>
+               <div class="value">{{ agents.filter(a => !a.enabled).length }}</div>
             </div>
           </el-card>
         </el-col>
@@ -82,7 +82,7 @@
           </el-icon>
         </template>
         <div class="empty-guide" v-if="activeTab === 'system'">
-          <p>系统应用将在上方展示</p>
+           <p>当前筛选下没有可用的 AI 助手</p>
         </div>
       </el-empty>
 
@@ -123,8 +123,8 @@
                 :inactive-value="false"
               />
               <div class="candidate-card__actions">
-                <el-button link type="primary" @click="configPlatformAgent(agent)">配置</el-button>
-                <el-button link type="primary" @click="viewLogs(agent)">日志</el-button>
+                 <el-button link type="primary" @click="configPlatformAgent(agent)">调整参数</el-button>
+                 <el-button link type="primary" @click="viewLogs(agent)">查看调用记录</el-button>
               </div>
             </div>
           </el-card>
@@ -199,7 +199,7 @@
     <el-dialog
       v-model="dialogVisible"
       title="配置 Agent"
-      width="900px"
+      width="min(900px, calc(100vw - 32px))"
       @close="resetForm"
     >
       <el-form :model="formData" label-width="120px">
@@ -234,7 +234,7 @@
     </el-dialog>
 
     <!-- 日志对话框 -->
-    <el-dialog v-model="logsVisible" title="Agent 调用日志" width="900px">
+    <el-dialog v-model="logsVisible" title="Agent 调用日志" width="min(900px, calc(100vw - 32px))">
       <el-table :data="agentLogs" style="width: 100%">
         <el-table-column prop="success" label="状态" width="80">
           <template #default="{ row }">
@@ -279,14 +279,36 @@ const AGENT_ROLE_MAP: Record<string, string[]> = {
   'learner-model-agent': ['学习者模型']
 };
 
+interface UserAgentItem {
+  agentName: string;
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  isSystem?: boolean;
+  userConfigId?: string | null;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  systemPrompt?: string;
+  category?: string;
+}
+
+interface AgentLogItem {
+  success?: boolean;
+  durationMs?: number;
+  tokensUsed?: number;
+  error?: string | null;
+  calledAt?: string;
+}
+
 const loading = ref(false);
 const submitting = ref(false);
 const activeTab = ref('all');
-const agents = ref<any[]>([]);
+const agents = ref<UserAgentItem[]>([]);
 const dialogVisible = ref(false);
 const logsVisible = ref(false);
-const currentAgent = ref<any>(null);
-const agentLogs = ref<any[]>([]);
+const currentAgent = ref<UserAgentItem | null>(null);
+const agentLogs = ref<AgentLogItem[]>([]);
 
 const roleCards = computed(() => {
   const definitions = [
@@ -335,9 +357,9 @@ onMounted(async () => {
 const loadAgents = async () => {
   loading.value = true;
   try {
-    const params: any = {};
+    const params: { filter?: 'all' | 'system' | 'custom' } = {};
     if (activeTab.value !== 'all') {
-      params.filter = activeTab.value;
+      params.filter = activeTab.value as 'system' | 'custom';
     }
     const res = await getUserAgents(params);
     agents.value = res.data;
@@ -348,7 +370,7 @@ const loadAgents = async () => {
   }
 };
 
-const viewLogs = async (agent: any) => {
+const viewLogs = async (agent: UserAgentItem) => {
   try {
     const res = await getUserAgentLogs(agent.agentName, 50);
     agentLogs.value = res.data;
@@ -358,7 +380,7 @@ const viewLogs = async (agent: any) => {
   }
 };
 
-const toggleAgent = async (agent: any) => {
+const toggleAgent = async (agent: UserAgentItem) => {
   try {
     if (agent.enabled) {
       if (agent.userConfigId) {
@@ -398,11 +420,11 @@ const toggleAgent = async (agent: any) => {
   }
 };
 
-const configPlatformAgent = (agent: any) => {
+const configPlatformAgent = (agent: UserAgentItem) => {
   currentAgent.value = agent;
   formData.agentName = agent.agentName;
   formData.model = agent.model || 'deepseek-v4-flash';
-  formData.temperature = agent.temperature || 0.7;
+  formData.temperature = agent.temperature ?? 0.7;
   formData.maxTokens = agent.maxTokens || 4096;
   formData.systemPrompt = agent.systemPrompt || '';
   dialogVisible.value = true;
@@ -417,7 +439,7 @@ const getEmptyDescription = () => {
 };
 
 const getCategoryType = (category: string) => {
-  const types: any = {
+  const types: Record<string, string> = {
     learning: 'primary',
     content: 'success',
     teaching: 'warning',
@@ -429,7 +451,7 @@ const getCategoryType = (category: string) => {
 };
 
 const getCategoryLabel = (category: string) => {
-  const labels: any = {
+  const labels: Record<string, string> = {
     learning: '学习',
     content: '内容',
     teaching: '授课',
@@ -440,11 +462,11 @@ const getCategoryLabel = (category: string) => {
   return labels[category] || category;
 };
 
-const getAgentRoles = (agent: any) => {
+const getAgentRoles = (agent: UserAgentItem) => {
   return AGENT_ROLE_MAP[agent.agentName] || [];
 };
 
-const getReplacementHint = (agent: any) => {
+const getReplacementHint = (agent: UserAgentItem) => {
   const roles = getAgentRoles(agent);
 
   if (agent.isSystem) {

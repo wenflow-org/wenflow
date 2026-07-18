@@ -3,6 +3,13 @@ import systemPrisma from '../../config/system-database';
 import { logger } from '../../utils/logger';
 import { CallerInfo, ResolvedRoute } from './types';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
+import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
+
+const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
+const AGENT_KEY_CONTEXT = 'system.agent_model_configs.apiKey';
+const SKILL_KEY_CONTEXT = 'system.skill_model_configs.apiKey';
+const USER_KEY_CONTEXT = 'main.user_api_configs.apiKey';
+const USER_AGENT_KEY_CONTEXT = 'main.user_agent_model_configs.apiKey';
 
 interface Config {
   providerId: string;
@@ -141,9 +148,9 @@ export class APIRouter {
         || platformConfig?.apiUrl
         || this.resolveBaseEndpoint();
 
-      const apiKey = config.apiKey
+      const apiKey = decryptSecret(config.apiKey, SKILL_KEY_CONTEXT)
         || inheritedRoute.apiKey
-        || platformConfig?.apiKey
+        || decryptSecret(platformConfig?.apiKey, PLATFORM_KEY_CONTEXT)
         || process.env.AI_API_KEY
         || '';
 
@@ -169,6 +176,7 @@ export class APIRouter {
         skillId,
         errorMessage: error instanceof Error ? error.message : String(error),
       });
+      if (error instanceof SecretCryptoError) throw error;
       return null;
     }
   }
@@ -192,7 +200,10 @@ export class APIRouter {
       return {
         providerId: `user-agent:${userId}:${agentId}`,
         endpoint: config.endpoint || platformConfig?.apiUrl || this.resolveBaseEndpoint(),
-        apiKey: config.apiKey || platformConfig?.apiKey || process.env.AI_API_KEY || '',
+        apiKey: decryptSecret(config.apiKey, USER_AGENT_KEY_CONTEXT)
+          || decryptSecret(platformConfig?.apiKey, PLATFORM_KEY_CONTEXT)
+          || process.env.AI_API_KEY
+          || '',
         model: this.resolveModel(config.model || platformConfig?.defaultModel),
         thinkingMode: 'default',
         reasoningEffort: 'default',
@@ -205,6 +216,7 @@ export class APIRouter {
         agentId,
         errorMessage: error instanceof Error ? error.message : String(error)
       });
+      if (error instanceof SecretCryptoError) throw error;
       return null;
     }
   }
@@ -228,7 +240,7 @@ export class APIRouter {
       return {
         providerId: `user-provider:${userId}`,
         endpoint: config.endpoint,
-        apiKey: config.apiKey,
+        apiKey: decryptSecret(config.apiKey, USER_KEY_CONTEXT) || '',
         model: this.resolveModel(config.chatModel),
         thinkingMode: 'default',
         reasoningEffort: 'default',
@@ -240,6 +252,7 @@ export class APIRouter {
         userId,
         errorMessage: error instanceof Error ? error.message : String(error)
       });
+      if (error instanceof SecretCryptoError) throw error;
       return null;
     }
   }
@@ -263,6 +276,7 @@ export class APIRouter {
         agentId,
         errorMessage: error instanceof Error ? error.message : String(error)
       });
+      if (error instanceof SecretCryptoError) throw error;
       return null;
     }
   }
@@ -291,8 +305,8 @@ export class APIRouter {
       || platformConfig?.apiUrl
       || this.resolveBaseEndpoint();
 
-    const apiKey = config.apiKey
-      || platformConfig?.apiKey
+    const apiKey = decryptSecret(config.apiKey, AGENT_KEY_CONTEXT)
+      || decryptSecret(platformConfig?.apiKey, PLATFORM_KEY_CONTEXT)
       || process.env.AI_API_KEY
       || '';
 
@@ -349,7 +363,7 @@ export class APIRouter {
       return {
         providerId: 'platform',
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
-        apiKey: config.apiKey || process.env.AI_API_KEY || '',
+        apiKey: decryptSecret(config.apiKey, PLATFORM_KEY_CONTEXT) || process.env.AI_API_KEY || '',
         model: this.resolveModel(config.defaultModel),
         thinkingMode: 'default',
         reasoningEffort: 'default',
@@ -362,6 +376,7 @@ export class APIRouter {
       logger.error('[api-gateway] fetch platform config failed', {
         errorMessage: error instanceof Error ? error.message : String(error)
       });
+      if (error instanceof SecretCryptoError) throw error;
       return this.getFallbackConfig();
     }
   }

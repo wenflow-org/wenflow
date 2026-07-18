@@ -174,9 +174,9 @@ const formatThinkingMode = (mode?: string) =>
   mode === 'enabled' ? '开启' : mode === 'disabled' ? '关闭' : '继承/默认';
 const formatReasoningEffort = (effort?: string) =>
   effort === 'high' ? 'high' : effort === 'max' ? 'max' : '继承/默认';
-const thinkingTagType = (mode?: string): any =>
+const thinkingTagType = (mode?: string): 'warning' | 'success' | 'info' =>
   mode === 'enabled' ? 'warning' : mode === 'disabled' ? 'success' : 'info';
-const effortTagType = (effort?: string): any =>
+const effortTagType = (effort?: string): 'danger' | 'warning' | 'info' =>
   effort === 'max' ? 'danger' : effort === 'high' ? 'warning' : 'info';
 const formatTimeout = (timeoutMs?: number | null) =>
   !timeoutMs || Number.isNaN(Number(timeoutMs)) ? '继承' : `${Math.round(Number(timeoutMs) / 1000)}s`;
@@ -206,23 +206,31 @@ const toEditablePayload = (config: SkillNodeConfig) => ({
 
 const skillIdOnly = () => normalizedSkillId(props.agentId);
 
+const applySkill = (skill: SkillNodeConfig) => {
+  currentSkill.value = skill;
+  editForm.value = {
+    ...skill,
+    displayName: skill.displayName || SKILL_CN_NAMES[skill.skillId] || skill.skillId,
+    thinkingMode: skill.thinkingMode || 'default',
+    reasoningEffort: skill.reasoningEffort || 'default',
+  };
+};
+
 const loadSkill = async () => {
   const skillId = skillIdOnly();
   if (!skillId) return;
   loading.value = true;
   try {
-    const res = await adminSkillsApi.getSkillModelConfigs();
-    const skillList = Array.isArray(res.data?.data) ? res.data.data : [];
-    const skill = skillList.find((item: SkillNodeConfig) => item.skillId === skillId) || buildFallbackSkillConfig(skillId);
-    currentSkill.value = skill;
-    editForm.value = {
-      ...skill,
-      displayName: skill.displayName || SKILL_CN_NAMES[skill.skillId] || skill.skillId,
-      thinkingMode: skill.thinkingMode || 'default',
-      reasoningEffort: skill.reasoningEffort || 'default',
-    };
-  } catch {
-    toast.error('加载 Skill 节点配置失败');
+    // 单点查询，避免全量拉取再 find；无独立配置时后端返回 404，按继承默认展示
+    const res = await adminSkillsApi.getSkillModelConfig(skillId);
+    const skill = (res.data?.data || null) as SkillNodeConfig | null;
+    applySkill(skill ?? buildFallbackSkillConfig(skillId));
+  } catch (error) {
+    if ((error as { response?: { status?: number } })?.response?.status === 404) {
+      applySkill(buildFallbackSkillConfig(skillId));
+    } else {
+      toast.error('加载 Skill 节点配置失败');
+    }
   } finally {
     loading.value = false;
   }

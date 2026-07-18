@@ -97,9 +97,14 @@ interface AgentLike {
 
 const props = defineProps<{ agent: AgentLike | null }>()
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  const message = (error as { message?: unknown } | null)?.message
+  return typeof message === 'string' && message ? message : fallback
+}
+
 const sampleInputText = ref('{}')
 const loading = ref(false)
-const result = ref<any>(null)
+const result = ref<{ output?: unknown; data?: unknown; [key: string]: unknown } | null>(null)
 const error = ref('')
 const runAt = ref<string>('')
 
@@ -120,8 +125,8 @@ function formatJson() {
   try {
     const parsed = JSON.parse(sampleInputText.value)
     sampleInputText.value = JSON.stringify(parsed, null, 2)
-  } catch (e: any) {
-    toast.error(e?.message || 'JSON 不合法')
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'JSON 不合法'))
   }
 }
 
@@ -147,18 +152,18 @@ async function run() {
     return
   }
 
-  let parsedInput: any
+  let parsedInput: unknown
   try {
     parsedInput = JSON.parse(sampleInputText.value)
-  } catch (e: any) {
-    toast.error(e?.message || '输入 JSON 不合法')
+  } catch (e) {
+    toast.error(getErrorMessage(e, '输入 JSON 不合法'))
     return
   }
 
   loading.value = true
   error.value = ''
   try {
-    const response: any = await adminSkillsApi.testSkill(targetSkillId.value, parsedInput)
+    const response = await adminSkillsApi.testSkill(targetSkillId.value, parsedInput)
     result.value = response.data?.data || null
     runAt.value = new Date().toISOString()
     toast.success('试运行完成')

@@ -22,13 +22,13 @@
         </nav>
 
         <div class="header-right">
-          <router-link :to="goalConversationPath" class="header-cta">创建新目标</router-link>
+          <router-link :to="goalConversationPath" class="header-cta">规划新目标</router-link>
           <ThemeSwitcher />
           <MobileSiteMenu
             :user-name="userStore.user?.name || '同学'"
             :user-initial="userInitial"
             :nav-items="headerNavItems"
-            :primary-action="{ label: '创建新目标', to: goalConversationPath }"
+            :primary-action="{ label: '规划新目标', to: goalConversationPath }"
             @logout="handleLogout"
           />
           <el-dropdown>
@@ -40,7 +40,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="router.push('/user')">
                   <el-icon><User /></el-icon>
-                  能力中心
+                  个人中心
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">
                   <el-icon><Switch /></el-icon>
@@ -95,7 +95,16 @@
         </section>
 
         <div v-loading="loading" class="state-content">
-          <div v-if="!state" class="empty-state glass-card">
+          <div v-if="stateLoadError" class="empty-state glass-card">
+            <div class="empty-icon">!</div>
+            <h3 class="empty-title">学习状态加载失败</h3>
+            <p class="empty-desc">你的学习记录没有丢失，可以重新加载。</p>
+            <div class="empty-state__actions">
+              <button type="button" class="btn btn-primary" @click="refreshStatePage({ forceTrends: true })">重新加载</button>
+            </div>
+          </div>
+
+          <div v-else-if="!state" class="empty-state glass-card">
             <div class="empty-icon">📈</div>
             <h3 class="empty-title">还没有可展示的学习状态</h3>
             <p class="empty-desc">完成第一轮真实学习后，这里会汇总你的节奏、掌握情况和疲劳变化。</p>
@@ -161,7 +170,12 @@
                   </div>
                 </div>
                 <div v-else class="trends-card chart-empty">
-                  <el-empty description="暂无趋势数据" />
+                  <el-result v-if="trendsLoadError" icon="error" title="趋势加载失败" :sub-title="trendsLoadError">
+                    <template #extra>
+                      <el-button type="primary" @click="loadTrends(trendDays)">重新加载</el-button>
+                    </template>
+                  </el-result>
+                  <el-empty v-else description="完成一次学习后即可看到趋势" />
                 </div>
               </article>
 
@@ -199,34 +213,33 @@
                       <p>{{ warning.message }}</p>
                     </div>
                   </div>
-                  <div v-if="warnings.length > 3" class="state-insight-card__summary">其余 {{ warnings.length - 3 }} 条预警可在后续版本展开查看。</div>
                 </article>
               </section>
 
               <aside class="state-side-panels">
                 <article v-if="learnerCenter" class="glass-card state-insight-card state-insight-card--primary">
                   <div class="state-panel__head">
-                    <span class="section-kicker">学习档案</span>
+                     <span class="section-kicker">学习偏好</span>
                   </div>
                   <div class="state-definition-list">
                     <div class="state-definition-item">
-                      <strong>系统当前如何理解你的学习方式</strong>
+                       <strong>适合你的学习方式</strong>
                       <p>{{ learnerNarrativeSummary }}</p>
                     </div>
                     <div class="state-definition-item">
-                      <strong>可复用基础</strong>
+                       <strong>已有基础</strong>
                       <p>{{ reusableFoundationsText }}</p>
                     </div>
                     <div class="state-definition-item">
-                      <strong>不稳定前置</strong>
+                       <strong>建议先补的基础</strong>
                       <p>{{ blockedFoundationsText }}</p>
                     </div>
                   </div>
                   <div class="state-hero__actions-strip state-hero__actions-strip--stacked">
                     <router-link :to="'/user/account'" class="state-hero__action-card">
-                      <strong>查看账户设置</strong>
-                      <p>账户资料和学习状态入口已经集中整理。</p>
-                      <span>前往设置</span>
+                       <strong>查看个人中心</strong>
+                       <p>查看账户信息和当前学习入口。</p>
+                       <span>前往个人中心</span>
                     </router-link>
                   </div>
                 </article>
@@ -255,11 +268,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '../utils/toast';
-import request from '../utils/request';
+import request from '../utils/api';
 import { metricsAPI } from '../api/metrics';
 import { userAPI, type LearnerCenterSnapshot } from '../api/user';
 import { getReplanActionText, getReplanPriorityText } from '../utils/replanSignal';
@@ -347,9 +360,11 @@ interface TrendSummaryCard {
 const scrolled = ref(false);
 const loading = ref(true);
 const state = ref<StateMetrics | null>(null);
+const stateLoadError = ref('');
 const trends = ref<TrendData[]>([]);
 const trendDays = ref<TrendRangeKey>(0);
 const trendRangeMeta = ref<TrendRangeMeta | null>(null);
+const trendsLoadError = ref('');
 const trendChart = ref<HTMLCanvasElement | null>(null);
 const warnings = ref<Array<{
   type: string;
@@ -385,15 +400,15 @@ const stateGuidanceActions = computed(() => {
       to: pathId ? `${learningPathBasePath.value}/${pathId}` : learningPathsPath.value,
     },
     {
-      title: '继续学习',
-      desc: '如果状态稳定，就继续完成当前最小任务。',
-      action: '继续学习',
+      title: '回到学习台',
+      desc: '查看当前任务和下一步安排。',
+      action: '回到学习台',
       to: dashboardPath.value,
     },
     {
-      title: '创建新目标',
+      title: '规划新目标',
       desc: '如果当前路径不再适合，可以重新开始一个目标。',
-      action: '创建目标',
+      action: '规划目标',
       to: goalConversationPath.value,
     },
   ];
@@ -408,8 +423,8 @@ const currentPathDetailPath = computed(() => {
 });
 const learnerNarrativeSummary = computed(() => {
   const narrative = learnerCenter.value?.profile?.narrativeInsights;
-  if (!narrative) return '暂无学习者画像摘要。';
-  return [narrative.contentReceptionPattern, narrative.practicePreferenceNote, narrative.supportStyleNote].filter(Boolean).join('；') || '暂无学习者画像摘要。';
+  if (!narrative) return '完成更多学习后，这里会给出更准确的建议。';
+  return [narrative.contentReceptionPattern, narrative.practicePreferenceNote, narrative.supportStyleNote].filter(Boolean).join('；') || '完成更多学习后，这里会给出更准确的建议。';
 });
 const reusableFoundationsText = computed(() => {
   const values = learnerCenter.value?.knowledgeMemory?.globalBackground?.reusableFoundations || [];
@@ -426,30 +441,30 @@ const stateMetricCards = computed(() => {
 
   return [
     {
-      label: 'LSB 学习状态',
+      label: '整体状态',
       value: state.value.lsb.toFixed(2),
       note: `状态判断：${getLSBText(state.value.lsb)}`,
       tone: 'lsb',
       valueClass: getLSBValueClass(state.value.lsb)
     },
     {
-      label: 'LSS 学习压力',
+      label: '学习压力',
       value: state.value.lss.toFixed(2),
-      note: '最近一次课程压力，已换算为 0-100 展示',
+      note: '最近一次学习中的压力水平',
       tone: 'lss',
       valueClass: getLSSValueClass(state.value.lss)
     },
     {
-      label: 'KTL 知识掌握',
+      label: '掌握趋势',
       value: state.value.ktl.toFixed(2),
-      note: '42 天加权平均后的长期掌握度',
+      note: '近期学习内容的掌握变化',
       tone: 'ktl',
       valueClass: 'value-primary'
     },
     {
-      label: 'LF 学习疲劳',
+      label: '疲劳程度',
       value: state.value.lf.toFixed(2),
-      note: '近期疲劳累计，已换算为 0-100 展示',
+      note: '近期学习后的疲劳变化',
       tone: 'lf',
       valueClass: getLFValueClass(state.value.lf)
     }
@@ -458,10 +473,10 @@ const stateMetricCards = computed(() => {
 
 const stateDefinitionCards = computed(() => {
   return [
-    { title: 'LSS 学习压力', desc: '最近一次课程的即时压力，内部按 0-10 评估，对外换算为 0-100。' },
-    { title: 'KTL 知识掌握', desc: '长期知识积累的量化指标，使用 42 天加权平均计算，并换算为 0-100 展示。' },
-    { title: 'LF 学习疲劳', desc: '近期疲劳程度，使用 7 天加权平均计算，并换算为 0-100 展示。' },
-    { title: 'LSB 状态平衡值', desc: '核心指标，计算公式为 LSB = KTL - LF，内部范围约 -10 到 10，对外按 -100 到 100 展示。' }
+    { title: '学习压力', desc: '反映最近一次学习中感受到的难度和压力。' },
+    { title: '掌握趋势', desc: '反映近期学习内容的掌握变化。' },
+    { title: '疲劳程度', desc: '反映近期学习后的疲劳积累。' },
+    { title: '整体状态', desc: '综合掌握趋势和疲劳程度，帮助判断下一步节奏。' }
   ];
 });
 
@@ -613,9 +628,11 @@ const handleLogout = async () => {
 // 加载当前状态
 const loadCurrentState = async () => {
   try {
+    stateLoadError.value = '';
     state.value = await metricsAPI.getCurrentState();
-  } catch (error: any) {
-    toast.error(error.response?.data?.error?.message || '加载学习状态失败');
+  } catch {
+    stateLoadError.value = '学习状态加载失败';
+    toast.error('学习状态加载失败，请重试');
   }
 };
 
@@ -635,7 +652,7 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
       labels,
       datasets: [
         {
-          label: 'LSS (压力)',
+           label: '学习压力',
           data: data.map(item => item.lss),
           borderColor: 'rgba(239, 68, 68, 0.88)',
           backgroundColor: createGradient('rgba(239, 68, 68, 1)'),
@@ -647,7 +664,7 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
           pointHoverRadius: 5,
         },
         {
-          label: 'KTL (知识)',
+           label: '掌握趋势',
           data: data.map(item => item.ktl),
           borderColor: 'rgba(79, 70, 229, 0.96)',
           backgroundColor: createGradient('rgba(79, 70, 229, 1)'),
@@ -658,7 +675,7 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
           pointHoverRadius: 5,
         },
         {
-          label: 'LF (疲劳)',
+           label: '疲劳程度',
           data: data.map(item => item.lf),
           borderColor: 'rgba(245, 158, 11, 0.9)',
           backgroundColor: createGradient('rgba(245, 158, 11, 1)'),
@@ -670,7 +687,7 @@ const createTrendChart = (ctx: CanvasRenderingContext2D, data: TrendData[]) => {
           pointHoverRadius: 5,
         },
         {
-          label: 'LSB (状态)',
+           label: '整体状态',
           data: data.map(item => item.lsb),
           borderColor: '#10b981',
           backgroundColor: createGradient('rgba(16, 185, 129, 1)'),
@@ -759,15 +776,21 @@ const updateTrendChart = (data: TrendData[]) => {
   chartInstance.data.datasets[1].data = data.map(item => item.ktl);
   chartInstance.data.datasets[2].data = data.map(item => item.lf);
   chartInstance.data.datasets[3].data = data.map(item => item.lsb);
-  const scales = chartInstance.options.scales as any;
+  const scales = chartInstance.options.scales as {
+    x?: { ticks?: { maxTicksLimit?: number } };
+  } | undefined;
   if (scales?.x?.ticks) {
     scales.x.ticks.maxTicksLimit = getTrendMaxTicks(data.length);
   }
   chartInstance.update('none');
 };
 
-// 加载趋势数据
+// 加载趋势数据；请求序号防护：快速切换范围时，过期响应不得覆盖新数据
+let trendRequestSeq = 0;
+
 const loadTrends = async (days: TrendRangeKey) => {
+  const requestSeq = ++trendRequestSeq;
+  trendsLoadError.value = '';
   const cached = trendCache.get(days);
   if (cached) {
     trends.value = cached.trends;
@@ -790,7 +813,8 @@ const loadTrends = async (days: TrendRangeKey) => {
   try {
     const query = days === 0 ? 'range=all' : `days=${days}`;
     const response = await request.get(`/state/trends?${query}`);
-    const payload = response.data.data as TrendResponsePayload;
+    if (requestSeq !== trendRequestSeq) return; // 已有更新的请求，丢弃过期响应
+    const payload = response.data as TrendResponsePayload;
     trends.value = payload.trends || [];
     trendRangeMeta.value = payload.range || null;
     if (trendRangeMeta.value) {
@@ -814,6 +838,14 @@ const loadTrends = async (days: TrendRangeKey) => {
       chartInstance = null;
     }
   } catch (error: any) {
+    if (requestSeq !== trendRequestSeq) return; // 过期请求的错误也不写回
+    trends.value = [];
+    trendRangeMeta.value = null;
+    trendsLoadError.value = error.response?.data?.error?.message || '无法读取趋势数据，请稍后重试。';
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
     toast.error(error.response?.data?.error?.message || '加载趋势数据失败');
   }
 };
@@ -836,8 +868,8 @@ const refreshStatePage = async (options?: { forceTrends?: boolean }) => {
 const loadWarnings = async () => {
   try {
     const response = await request.get('/state/warnings');
-    warnings.value = response.data.data.warnings || [];
-  } catch (error: any) {
+    warnings.value = response.data?.warnings || [];
+  } catch (error: unknown) {
     console.error('加载预警信息失败:', error);
   }
 };
@@ -866,10 +898,10 @@ const getLSBValueClass = (lsb: number) => {
 };
 
 const getLSBText = (lsb: number) => {
-  if (lsb < 0) return '恢复优先';
-  if (lsb < 20) return '谨慎推进';
-  if (lsb >= 40) return '推进窗口';
-  return '相对平衡';
+  if (lsb < 0) return '建议先休息';
+  if (lsb < 20) return '适合轻量学习';
+  if (lsb >= 40) return '适合继续推进';
+  return '保持当前节奏';
 };
 
 const getLSSValueClass = (lss: number) => {
@@ -890,6 +922,10 @@ watch(trendDays, (newDays) => {
   loadTrends(newDays);
 });
 
+// 延迟任务句柄：卸载时需取消，避免销毁后仍执行 loadWarnings
+let warningsIdleHandle: number | null = null;
+let warningsTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
 onMounted(() => {
   const init = async () => {
     if (isProjectionMode()) {
@@ -904,11 +940,11 @@ onMounted(() => {
 
     // 预警放到首屏之后，降低图表首屏阻塞
     if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(() => {
+      warningsIdleHandle = window.requestIdleCallback(() => {
         loadWarnings();
       }, { timeout: 800 });
     } else {
-      setTimeout(() => {
+      warningsTimeoutHandle = setTimeout(() => {
         loadWarnings();
       }, 120);
     }
@@ -919,14 +955,16 @@ onMounted(() => {
   window.addEventListener('scroll', handleScroll);
 });
 
-onActivated(() => {
-  refreshStatePage({ forceTrends: true });
-});
-
 onUnmounted(() => {
   if (chartInstance) {
     chartInstance.destroy();
     chartInstance = null;
+  }
+  if (warningsIdleHandle !== null && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(warningsIdleHandle);
+  }
+  if (warningsTimeoutHandle !== null) {
+    clearTimeout(warningsTimeoutHandle);
   }
   window.removeEventListener('scroll', handleScroll);
 });

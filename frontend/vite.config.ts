@@ -1,12 +1,46 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import Components from 'unplugin-vue-components/vite';
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 import { resolve } from 'path';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+// @element-plus/icons-vue 的全部导出名，用于模板图标的按需自动引入
+const iconNames = new Set(Object.keys(require('@element-plus/icons-vue')));
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    Components({
+      resolvers: [
+        ElementPlusResolver(),
+        // 模板中使用的 EP 图标组件按需自动引入（替代 main.ts 的全量注册）
+        (name) => {
+          if (iconNames.has(name)) {
+            return { name, from: '@element-plus/icons-vue' };
+          }
+        }
+      ],
+      // 本地组件目录不参与自动解析，避免与图标重名时误判
+      dirs: [],
+      dts: false
+    })
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src')
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          mermaid: ['mermaid'],
+          katex: ['katex']
+        }
+      }
     }
   },
   server: {
@@ -14,12 +48,15 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: process.env.VITE_DEV_API_TARGET || 'http://localhost:3001',
         changeOrigin: false,
-        configure: (proxy, options) => {
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            // 确保响应使用 UTF-8 编码
-            proxyRes.headers['content-type'] = 'application/json; charset=utf-8';
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            // 仅对 JSON API 响应强制 UTF-8（避免破坏 CSV 等二进制导出）
+            const contentType = proxyRes.headers['content-type'] || '';
+            if (contentType.includes('application/json') || !contentType) {
+              proxyRes.headers['content-type'] = 'application/json; charset=utf-8';
+            }
           });
         }
       }

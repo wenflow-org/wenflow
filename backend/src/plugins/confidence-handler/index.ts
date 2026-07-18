@@ -80,12 +80,17 @@ export const confidenceHandler: AgentPlugin = {
         });
 
         if (event.data?.annotation && event.data?.confidence < LOW_CONFIDENCE_THRESHOLD) {
-          const result = await this.handleLowConfidence(
-            event.data.annotation,
-            event.data.confidence,
-            event.data.skillName,
-            event.data.context || {}
-          );
+          const { getGateway } = await import('../../gateway');
+          const execution = await getGateway().executeSkill(this.id, {
+            pluginInput: {
+              annotation: event.data.annotation,
+              confidence: event.data.confidence,
+              skillName: event.data.skillName,
+              skillContext: event.data.context || {},
+            },
+            pluginContext: { userId: event.userId },
+          });
+          const result = execution.output?.internal as ConfidenceHandlerResult;
 
           if (result.action === 'clarification-requested') {
             await eventBus.emit({
@@ -195,7 +200,7 @@ export const confidenceHandler: AgentPlugin = {
     skillContext: Record<string, any>
   ): Promise<ConfidenceHandlerResult> {
     const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'confidence-handler' };
+    const caller: CallerInfo = { skillId: 'confidence-handler' };
 
     const messages = [
       {

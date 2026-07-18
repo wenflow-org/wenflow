@@ -1,13 +1,24 @@
 // 用户 MCP 配置路由
 import express from 'express';
 import prisma from '../config/database';
-import { authMiddleware } from '../middleware/auth.middleware';
-import axios from 'axios';
 import { randomUUID as uuidv4 } from 'crypto';
+import { safeHttpRequest } from '../utils/safe-http';
+import { preserveNestedSecrets, preserveNestedSecretsById, toSecretSafeResponse } from '../utils/secret-redaction';
+import { decryptSecretTree, encryptSecretTree } from '../utils/secret-crypto';
+
+const SERVERS_CONTEXT = 'main.user_mcp_configs.servers';
+const TOOLS_CONTEXT = 'main.user_mcp_configs.tools';
+const HEALTH_CONTEXT = 'main.user_mcp_configs.healthCheck';
+
+function parseSecretJson(value: string | null, context: string, fallback: any) {
+  return value ? decryptSecretTree(JSON.parse(value), context) : fallback;
+}
+
+function serializeSecretJson(value: any, context: string) {
+  return JSON.stringify(encryptSecretTree(value, context));
+}
 
 const router = express.Router();
-
-router.use(authMiddleware);
 
 // 获取用户 MCP 配置
 router.get('/', async (req, res, next) => {
@@ -35,11 +46,11 @@ router.get('/', async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        servers: config.servers ? JSON.parse(config.servers) : [],
-        tools: config.tools ? JSON.parse(config.tools) : [],
+        servers: toSecretSafeResponse(parseSecretJson(config.servers, SERVERS_CONTEXT, [])),
+        tools: toSecretSafeResponse(parseSecretJson(config.tools, TOOLS_CONTEXT, [])),
         routingStrategy: config.routingStrategy,
         fallbackEnabled: config.fallbackEnabled,
-        healthCheck: config.healthCheck ? JSON.parse(config.healthCheck) : null
+        healthCheck: toSecretSafeResponse(parseSecretJson(config.healthCheck, HEALTH_CONTEXT, null))
       }
     });
   } catch (error) {
@@ -57,26 +68,33 @@ router.put('/', async (req, res, next) => {
       where: { userId }
     });
 
+    const existingServers = parseSecretJson(config?.servers || null, SERVERS_CONTEXT, []);
+    const existingTools = parseSecretJson(config?.tools || null, TOOLS_CONTEXT, []);
+    const existingHealthCheck = parseSecretJson(config?.healthCheck || null, HEALTH_CONTEXT, {});
+    const mergedServers = preserveNestedSecretsById(Array.isArray(servers) ? servers : [], existingServers);
+    const mergedTools = preserveNestedSecretsById(Array.isArray(tools) ? tools : [], existingTools);
+    const mergedHealthCheck = preserveNestedSecrets(healthCheck || {}, existingHealthCheck);
+
     if (config) {
       config = await prisma.user_mcp_configs.update({
         where: { userId },
         data: {
-          servers: JSON.stringify(servers || []),
-          tools: JSON.stringify(tools || []),
+          servers: serializeSecretJson(mergedServers, SERVERS_CONTEXT),
+          tools: serializeSecretJson(mergedTools, TOOLS_CONTEXT),
           routingStrategy: routingStrategy || 'priority',
           fallbackEnabled: fallbackEnabled !== false,
-          healthCheck: JSON.stringify(healthCheck || {}),
+          healthCheck: serializeSecretJson(mergedHealthCheck, HEALTH_CONTEXT),
           updatedAt: new Date()
         }
       });
     } else {
       const data: any = {
         id: uuidv4(),
-        servers: JSON.stringify(servers || []),
-        tools: JSON.stringify(tools || []),
+        servers: serializeSecretJson(mergedServers, SERVERS_CONTEXT),
+        tools: serializeSecretJson(mergedTools, TOOLS_CONTEXT),
         routingStrategy: routingStrategy || 'priority',
         fallbackEnabled: fallbackEnabled !== false,
-        healthCheck: JSON.stringify(healthCheck || {}),
+        healthCheck: serializeSecretJson(mergedHealthCheck, HEALTH_CONTEXT),
         updatedAt: new Date(),
         users: {
           connect: { id: userId }
@@ -88,11 +106,11 @@ router.put('/', async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        servers,
-        tools,
+        servers: toSecretSafeResponse(mergedServers),
+        tools: toSecretSafeResponse(mergedTools),
         routingStrategy,
         fallbackEnabled,
-        healthCheck
+        healthCheck: toSecretSafeResponse(mergedHealthCheck)
       }
     });
   } catch (error) {
@@ -117,10 +135,10 @@ router.get('/servers', async (req, res, next) => {
       return;
     }
 
-    const servers = JSON.parse(config.servers);
+    const servers = parseSecretJson(config.servers, SERVERS_CONTEXT, []);
     res.json({
       success: true,
-      data: servers
+      data: toSecretSafeResponse(servers)
     });
   } catch (error) {
     next(error);
@@ -131,7 +149,7 @@ router.get('/servers', async (req, res, next) => {
 router.post('/servers', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    const server = req.body;
+    let server = req.body;
 
     if (!server.id || !server.name || !server.endpoint) {
       return res.status(400).json({
@@ -146,8 +164,10 @@ router.post('/servers', async (req, res, next) => {
 
     let servers = [];
     if (config && config.servers) {
-      servers = JSON.parse(config.servers);
+      servers = parseSecretJson(config.servers, SERVERS_CONTEXT, []);
     }
+
+    server = preserveNestedSecretsById([server], servers)[0];
 
     // 检查是否已存在
     const existingIndex = servers.findIndex((s: any) => s.id === server.id);
@@ -165,18 +185,18 @@ router.post('/servers', async (req, res, next) => {
       config = await prisma.user_mcp_configs.update({
         where: { userId },
         data: {
-          servers: JSON.stringify(servers),
+          servers: serializeSecretJson(servers, SERVERS_CONTEXT),
           updatedAt: new Date()
         }
       });
     } else {
       const data: any = {
         id: uuidv4(),
-        servers: JSON.stringify(servers),
-        tools: JSON.stringify([]),
+        servers: serializeSecretJson(servers, SERVERS_CONTEXT),
+        tools: serializeSecretJson([], TOOLS_CONTEXT),
         routingStrategy: 'priority',
         fallbackEnabled: true,
-        healthCheck: JSON.stringify({}),
+        healthCheck: serializeSecretJson({}, HEALTH_CONTEXT),
         updatedAt: new Date(),
         users: {
           connect: { id: userId }
@@ -187,7 +207,7 @@ router.post('/servers', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { servers }
+      data: { servers: toSecretSafeResponse(servers) }
     });
   } catch (error) {
     next(error);
@@ -211,20 +231,20 @@ router.delete('/servers/:id', async (req, res, next) => {
       });
     }
 
-    let servers = JSON.parse(config.servers);
+    let servers = parseSecretJson(config.servers, SERVERS_CONTEXT, []);
     servers = servers.filter((s: any) => s.id !== id);
 
     await prisma.user_mcp_configs.update({
       where: { userId },
       data: {
-        servers: JSON.stringify(servers),
+        servers: serializeSecretJson(servers, SERVERS_CONTEXT),
         updatedAt: new Date()
       }
     });
 
     res.json({
       success: true,
-      data: { servers }
+      data: { servers: toSecretSafeResponse(servers) }
     });
   } catch (error) {
     next(error);
@@ -249,10 +269,14 @@ router.post('/test-connection', async (req, res, next) => {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
-      const response = await axios.get(`${endpoint}/models`, {
+      const response = await safeHttpRequest<any>(`${endpoint}/models`, {
         headers,
-        timeout: 5000
+        timeoutMs: 5000
       });
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
       res.json({
         success: true,
@@ -292,7 +316,7 @@ router.get('/status', async (req, res, next) => {
       return;
     }
 
-    const servers = JSON.parse(config.servers);
+    const servers = parseSecretJson(config.servers, SERVERS_CONTEXT, []);
     const statusPromises = servers.map(async (server: any) => {
       try {
         const headers: any = { 'Content-Type': 'application/json' };
@@ -301,10 +325,13 @@ router.get('/status', async (req, res, next) => {
         }
 
         const startTime = Date.now();
-        await axios.get(`${server.endpoint}/models`, {
+        const response = await safeHttpRequest(`${server.endpoint}/models`, {
           headers,
-          timeout: 3000
+          timeoutMs: 3000
         });
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const duration = Date.now() - startTime;
 
         return {

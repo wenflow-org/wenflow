@@ -345,7 +345,7 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   pathSceneFraming?: any;
 }> {
   const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'skill:path-planning' };
+  const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
    
   const structuredData = input.structuredData as any;
   const confirmedProposal = input.confirmedProposal as any;
@@ -594,7 +594,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
     defaultSystemPrompt: '',
-    caller: { agentId: 'skill:path-planning' },
+    caller: { agentId: 'path-agent', skillId: 'path-planning' },
     modelDefaults: {
       maxTokens: PATH_AGENT_MAX_TOKENS,
       temperature: 0.2,
@@ -642,7 +642,7 @@ export async function replanPath(
   
   const eventBus = getEventBus();
   const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'skill:path-planning' };
+  const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
   
   let adjustment = '';
   

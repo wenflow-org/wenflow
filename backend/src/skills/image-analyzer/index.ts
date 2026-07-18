@@ -10,6 +10,7 @@ import {
   SkillExecutionResult
 } from '../protocol';
 import { logger } from '../../utils/logger';
+import { safeHttpRequest } from '../../utils/safe-http';
 
 // 输入类型定义
 export interface ImageAnalyzerInput {
@@ -322,13 +323,10 @@ async function getImageMetadata(buffer: Buffer): Promise<ImageAnalyzerOutput['me
  */
 async function fetchImage(url: string): Promise<{ data: Buffer; metadata: ImageAnalyzerOutput['metadata'] }> {
   try {
-    // 使用动态导入避免类型问题
-    const axios = (await import('axios')).default;
-
-    const response = await axios.get(url, {
+    const response = await safeHttpRequest<ArrayBuffer>(url, {
       responseType: 'arraybuffer',
-      timeout: 30000,
-      maxContentLength: 10 * 1024 * 1024, // 10MB
+      timeoutMs: 30000,
+      maxResponseBytes: 10 * 1024 * 1024,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }

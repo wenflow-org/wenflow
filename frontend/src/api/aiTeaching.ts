@@ -1,4 +1,4 @@
-import api from '../utils/api';
+import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
 
 export interface TeachingSession {
   sessionId: string;
@@ -73,12 +73,13 @@ export interface MessageResult {
   endReason?: 'completion-candidate' | 'learner-requested-end' | null;
   peerTriggered: boolean;
   autoEnded?: boolean;
+  recovered?: boolean;
   wrapup?: WrapupArtifact | null;
   advisory?: ReplanAdvisory | null;
   peerMessage?: string | null;
-  peerDebug?: any;
+  peerDebug?: Record<string, unknown> | null;
   checkpoint?: Checkpoint | null;
-  promptDebug?: any;
+  promptDebug?: Record<string, unknown> | null;
 }
 
 export interface PeerMessageResult {
@@ -121,8 +122,8 @@ export interface SessionDetail {
   endTime: string | null;
   duration: number | null;
   status: string;
-  messages: Array<{ role: string; content: string; timestamp: string; analysis?: any; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: any; peerTriggered?: boolean; peerMessage?: string | null; peerDebug?: any }>;
-  state: any;
+  messages: Array<{ role: string; content: string; timestamp: string; analysis?: Record<string, unknown>; strategies?: string[]; knowledgePoint?: string | null; knowledgePoints?: KnowledgePointStatus[]; promptDebug?: Record<string, unknown> | null; peerTriggered?: boolean; peerMessage?: string | null; peerDebug?: Record<string, unknown> | null }>;
+  state: Record<string, unknown> | null;
   knowledgePoints?: KnowledgePointStatus[];
   wrapup?: WrapupArtifact | null;
   advisory?: ReplanAdvisory | null;
@@ -252,17 +253,17 @@ export interface TaskEvaluationDetail {
 
 export const aiTeachingAPI = {
   async startSession(taskId: string, options?: { forceNew?: boolean }): Promise<TeachingSession> {
-    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, { forceNew: !!options?.forceNew });
+    const result = await api.post(`/ai-teaching/tasks/${taskId}/session`, { forceNew: !!options?.forceNew }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 
   async sendMessage(sessionId: string, message: string): Promise<MessageResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message });
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 
   async sendPeerMessage(sessionId: string, message: string): Promise<PeerMessageResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message });
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message }, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 
@@ -270,7 +271,7 @@ export const aiTeachingAPI = {
     wrapup: WrapupArtifact;
     advisory: ReplanAdvisory;
   }> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/end`);
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/end`, undefined, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   },
 
@@ -316,7 +317,7 @@ export const aiTeachingAPI = {
   },
 
   async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload): Promise<CheckpointSubmitResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`, payload);
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`, payload, { timeout: AI_REQUEST_TIMEOUT });
     return result.data || result;
   }
 };

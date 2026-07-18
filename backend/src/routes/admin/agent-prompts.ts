@@ -17,8 +17,10 @@ import {
   loadCoreAgentPromptSeeds,
   ensureCoreAgentPrompts,
 } from '../../scripts/seed-core-agent-prompts';
+import { rejectAgentPromptMutation } from '../../middleware/prompt-file-truth.middleware';
 
 const router = Router();
+router.use(rejectAgentPromptMutation);
 
 function resolveAgentPromptIds(agentId: string): string[] {
   const canonicalId = getCanonicalAgentId(agentId);

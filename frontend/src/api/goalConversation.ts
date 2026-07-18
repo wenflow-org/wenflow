@@ -1,4 +1,34 @@
-import api from '@/utils/api';
+import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
+
+export interface GoalUnderstanding {
+  surface_goal?: string;
+  real_problem?: string;
+  motivation?: string;
+  urgency?: string;
+  background?: {
+    current_level?: string;
+    expected_time?: string;
+    available_time?: string;
+    constraints?: string[];
+    strengths?: string[];
+  };
+  pain_points?: string;
+  current_baseline?: {
+    level?: string;
+    evidence?: string;
+  };
+  available_resources?: {
+    time_budget?: string;
+    time_horizon?: string;
+    time_per_session?: string;
+  };
+  success_criteria?: {
+    observable_result?: string;
+    acceptance_check?: string;
+    time_window?: string;
+  };
+  constraints_and_boundaries?: string[];
+}
 
 export interface GoalConversationEnvelope {
   userVisible: string;
@@ -15,13 +45,13 @@ export interface GoalConversationEnvelope {
     };
     ext: {
       goalConversation: {
-        understanding: Record<string, any>;
+        understanding: GoalUnderstanding;
         nextQuestions?: string[];
         quickReplies?: Array<{ text: string; icon?: string }>;
-        structuredData?: any;
-        confirmedProposal?: any;
-        confidenceScores?: any;
-        collected?: Record<string, any>;
+        structuredData?: Record<string, unknown> | null;
+        confirmedProposal?: Record<string, unknown> | null;
+        confidenceScores?: Record<string, unknown> | null;
+        collected?: Record<string, unknown>;
       };
     };
   };
@@ -32,7 +62,7 @@ export interface GoalConversationEnvelope {
   meta: {
     source: string;
     timestamp: string;
-    debug?: Record<string, any>;
+    debug?: Record<string, unknown>;
     messages?: Array<{
       role: 'user' | 'ai';
       content: string;
@@ -60,7 +90,7 @@ export async function startGoalConversation(
   const response = await api.post('/goal-conversation/start', {
     input: { text },
     contextMode: options.contextMode || 'recent'
-  }) as GoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
 }
@@ -74,7 +104,7 @@ export async function replyGoalConversation(
     input: { text },
     contextMode: options.contextMode || 'recent',
     confirmProposal: options.confirmProposal === true
-  }) as GoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
 }
@@ -89,7 +119,7 @@ export async function regenerateGoalConversation(conversationId: string, adjustm
   const response = await api.post(`/goal-conversation/${conversationId}/regenerate`, {
     input: { text: adjustments || '' },
     adjustments
-  }) as GoalConversationApiResponse;
+  }, { timeout: AI_REQUEST_TIMEOUT }) as GoalConversationApiResponse;
 
   return response.data;
 }

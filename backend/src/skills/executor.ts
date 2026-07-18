@@ -1,0 +1,249 @@
+import prisma from '../config/database';
+import systemPrisma from '../config/system-database';
+import { getRequestContext, runWithContext } from '../gateway/api-gateway/context';
+import { getAgentOfSkill } from '../services/agent-manifest.service';
+import { logger } from '../utils/logger';
+import { SkillDefinition, SkillExecutionResult } from './protocol';
+
+export type SkillHandler = (input: any) => Promise<any>;
+
+function normalizeSkillId(definition: SkillDefinition | { id?: string; name?: string }): string {
+  const rawId = definition.id || definition.name;
+  if (!rawId) throw new Error('Skill definition is missing id or name');
+  return rawId.replace(/^skill:/, '');
+}
+
+function summarizeSkillPayload(value: any, depth = 0): any {
+  if (depth > 2) return '[max-depth]';
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    return value.length > 160 ? `${value.slice(0, 160)}...` : value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) {
+    return {
+      count: value.length,
+      sample: value.slice(0, 2).map((item) => summarizeSkillPayload(item, depth + 1)),
+    };
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value)
+      .slice(0, 10)
+      .map(([key, item]) => [key, summarizeSkillPayload(item, depth + 1)]);
+    return Object.fromEntries(entries);
+  }
+  return String(value);
+}
+
+function normalizeHandlerResult(result: any, durationMs: number): SkillExecutionResult {
+  if (result && typeof result === 'object' && typeof result.success === 'boolean') {
+    if (!result.success) {
+      const error = result.error;
+      return {
+        success: false,
+        error: typeof error === 'object' && error
+          ? {
+              code: error.code || 'SKILL_EXECUTION_FAILED',
+              message: error.message || 'Skill execution failed',
+              details: error.details,
+            }
+          : {
+              code: 'SKILL_EXECUTION_FAILED',
+              message: typeof error === 'string' ? error : 'Skill execution failed',
+            },
+        duration: durationMs,
+      };
+    }
+
+    if (Object.prototype.hasOwnProperty.call(result, 'output')) {
+      return {
+        success: true,
+        output: result.output,
+        duration: durationMs,
+        cached: result.cached,
+      };
+    }
+  }
+
+  return {
+    success: true,
+    output: result,
+    duration: durationMs,
+  };
+}
+
+function resolveExecutionUserId(input: any, inheritedUserId?: string): string | undefined {
+  if (inheritedUserId) return inheritedUserId;
+  const candidates = [
+    input?.context?.userId,
+    input?.input?.context?.userId,
+    input?.pluginContext?.userId,
+    input?.metadata?.userId,
+    input?.input?.metadata?.userId,
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.trim())?.trim();
+}
+
+async function assertSkillEnabledForUser(skillId: string, userId?: string): Promise<void> {
+  if (!userId || userId === 'system') return;
+  const config = await prisma.user_skill_configs.findUnique({
+    where: { userId_skillName: { userId, skillName: skillId } },
+    select: { enabled: true },
+  });
+  if (config?.enabled === false) {
+    throw Object.assign(new Error(`Skill ${skillId} is disabled for this user`), {
+      code: 'SKILL_DISABLED',
+    });
+  }
+}
+
+export async function executeSkillHandler(
+  definition: SkillDefinition | { id?: string; name?: string },
+  input: any,
+  handler: SkillHandler
+): Promise<SkillExecutionResult> {
+  const skillId = normalizeSkillId(definition);
+  const startedAt = Date.now();
+  const parentContext = getRequestContext();
+  const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const parentAgent = getAgentOfSkill(`skill:${skillId}`)?.id;
+  const userId = resolveExecutionUserId(input, parentContext.userId);
+
+  return runWithContext({
+    ...parentContext,
+    userId,
+    agentId: parentContext.agentId || parentAgent,
+    callerAgent: parentContext.callerAgent || parentAgent,
+    skillId,
+    executionLogId,
+  }, async () => {
+    logger.info('[skill-executor] 开始执行', {
+      skillId,
+      inputSummary: summarizeSkillPayload(input),
+    });
+
+    try {
+      await assertSkillEnabledForUser(skillId, userId);
+      const rawResult = await handler(input);
+      const durationMs = Date.now() - startedAt;
+      const result = normalizeHandlerResult(rawResult, durationMs);
+
+      if (!result.success) {
+        throw Object.assign(new Error(result.error?.message || `Skill ${skillId} execution failed`), {
+          code: result.error?.code,
+          details: result.error?.details,
+        });
+      }
+
+      await recordSkillStats(skillId, true, durationMs);
+      void recordSkillSpan(executionLogId, skillId, parentContext, input, result.output, durationMs, true);
+
+      logger.info('[skill-executor] 执行完成', {
+        skillId,
+        durationMs,
+        outputSummary: summarizeSkillPayload(result.output),
+      });
+
+      return result;
+    } catch (error: any) {
+      const durationMs = Date.now() - startedAt;
+      if (error && typeof error === 'object') {
+        error.skillDurationMs = durationMs;
+      }
+      await recordSkillStats(skillId, false, durationMs);
+      void recordSkillSpan(
+        executionLogId,
+        skillId,
+        parentContext,
+        input,
+        null,
+        durationMs,
+        false,
+        error?.message || String(error)
+      );
+      logger.error('[skill-executor] 执行失败', {
+        skillId,
+        durationMs,
+        error: error?.message || String(error),
+      });
+      throw error;
+    }
+  });
+}
+
+async function recordSkillStats(skillId: string, success: boolean, durationMs: number): Promise<void> {
+  try {
+    const current = await systemPrisma.skill_registrations.findUnique({
+      where: { name: skillId },
+      select: { callCount: true, successRate: true }
+    });
+
+    if (!current) return;
+
+    const nextCallCount = current.callCount + 1;
+    const previousSuccesses = current.successRate * current.callCount;
+    const nextSuccessRate = (previousSuccesses + (success ? 1 : 0)) / nextCallCount;
+
+    await systemPrisma.skill_registrations.update({
+      where: { name: skillId },
+      data: {
+        callCount: nextCallCount,
+        successRate: nextSuccessRate,
+        updatedAt: new Date()
+      }
+    });
+  } catch (error: any) {
+    logger.warn('[skill-executor] 更新 Skill 统计失败', {
+      skillId,
+      success,
+      durationMs,
+      error: error?.message || String(error)
+    });
+  }
+}
+
+async function recordSkillSpan(
+  executionLogId: string,
+  skillId: string,
+  ctx: ReturnType<typeof getRequestContext>,
+  input: any,
+  output: any,
+  durationMs: number,
+  success: boolean,
+  errorMessage?: string
+): Promise<void> {
+  try {
+    const inputStr = JSON.stringify(summarizeSkillPayload(input)).slice(0, 1000);
+    const outputStr = output === undefined || output === null
+      ? null
+      : JSON.stringify(summarizeSkillPayload(output)).slice(0, 1000);
+    await prisma.agent_call_logs.create({
+      data: {
+        id: executionLogId,
+        agentId: `skill:${skillId}`,
+        userId: ctx.userId || 'system',
+        sourceEntry: ctx.sourceEntry || 'platform',
+        traceId: ctx.traceId || null,
+        callerAgent: ctx.callerAgent || null,
+        userRole: ctx.userRole || 'user',
+        input: inputStr,
+        output: outputStr,
+        success,
+        durationMs,
+        error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
+        errorCode: success ? null : 'SKILL_EXECUTION_FAILED',
+        metadata: JSON.stringify({
+          layer: 'skill-executor',
+          skillId,
+          parentSkillId: ctx.skillId || null,
+          actorType: 'skill',
+          actorId: skillId,
+          experimentId: ctx.experimentId || null,
+          runId: ctx.runId || null,
+        }),
+      },
+    });
+  } catch {
+    // 调试日志失败不影响主流程。
+  }
+}

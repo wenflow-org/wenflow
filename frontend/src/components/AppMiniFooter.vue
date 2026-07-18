@@ -4,11 +4,11 @@
       <div class="app-mini-footer__brand">
         <img src="/favicon.png" alt="问流" class="app-mini-footer__logo" />
         <span class="app-mini-footer__name">问流 WenFlow</span>
-        <span class="app-mini-footer__tag">让 AI 真正陪你学</span>
+        <span class="app-mini-footer__tag">从问题到学习路径</span>
       </div>
       <nav class="app-mini-footer__links" aria-label="footer">
         <router-link to="/vision" class="app-mini-footer__link">愿景</router-link>
-        <router-link to="/docs" class="app-mini-footer__link">开发文档</router-link>
+        <router-link to="/docs" class="app-mini-footer__link">开发者文档</router-link>
         <a
           href="https://github.com/wenflow-org/wenflow"
           target="_blank"
@@ -27,9 +27,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { version as appVersion } from '../../package.json';
 
 const year = computed(() => new Date().getFullYear());
-const version = '0.9';
+const version = appVersion;
 </script>
 
 <style scoped>

@@ -1,14 +1,15 @@
 import { Router } from 'express';
 import agentModelConfigService from '../../services/agentModelConfig.service';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
+import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
 
 const router = Router();
 
 function toResponseShape(config: any) {
-  return {
+  return toSecretSafeResponse({
     ...config,
     ...getAgentRequestTimeoutInfo(config.agentId),
-  };
+  });
 }
 
 function pickEditableConfig(body: any) {
@@ -48,7 +49,9 @@ router.get('/:agentId', async (req, res) => {
 
 router.put('/:agentId', async (req, res) => {
   try {
-    const config = await agentModelConfigService.upsert(req.params.agentId, pickEditableConfig(req.body));
+    const existing = await agentModelConfigService.get(req.params.agentId);
+    const input = preserveConfiguredSecret(pickEditableConfig(req.body), existing as any);
+    const config = await agentModelConfigService.upsert(req.params.agentId, input);
     res.json({ success: true, data: toResponseShape(config), message: '配置已更新' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

@@ -190,6 +190,7 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
   const parentExecutionId = typeof req.query.parentExecutionId === 'string' && req.query.parentExecutionId.trim()
     ? req.query.parentExecutionId.trim()
     : null;
+  const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
 
   const rows = await prisma.prompt_call_logs.findMany({
     where: {
@@ -198,6 +199,9 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
       ...(pipelineRunId ? { pipelineRunId } : {}),
       ...(traceId ? { traceId } : {}),
       ...(parentExecutionId ? { parentExecutionId } : {}),
+      ...(status === 'success' ? { success: true } : {}),
+      ...(status === 'error' ? { success: false } : {}),
+      ...(status === 'drift' ? { promptDrift: true } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: limit,

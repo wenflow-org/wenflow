@@ -15,6 +15,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { rejectPromptOpsRuntimeMutation } from '../../middleware/prompt-file-truth.middleware';
 import { randomUUID } from 'crypto';
 import systemPrisma from '../../config/system-database';
 import prisma from '../../config/database';
@@ -45,6 +46,7 @@ import {
 } from '../../services/prompt-source-fields';
 
 const router = Router();
+router.use(rejectPromptOpsRuntimeMutation);
 
 // ============================================================
 // ============================================================

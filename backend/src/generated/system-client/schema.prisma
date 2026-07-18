@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/system-client"
+  output   = "../../src/generated/system-client"
 }
 
 datasource db {
@@ -143,6 +143,10 @@ model platform_api_configs {
   chatModels             String?
   reasoningModels        String?
   lightModels            String?
+  adminAccessMode        String?
+  adminAllowedIps        String?
+  allowPrivateNetwork    Boolean?
+  privateNetworkHosts    String?
 }
 
 model skill_model_configs {
