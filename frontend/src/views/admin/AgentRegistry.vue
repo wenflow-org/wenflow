@@ -49,7 +49,7 @@
           <el-button type="primary" @click="loadRegistry">重新加载</el-button>
         </template>
       </el-result>
-      <el-table v-else :data="filteredSkills" v-loading="loading" stripe style="width: 100%">
+      <el-table v-else :data="filteredSkills" v-loading="loading" stripe style="width: 100%" class="skill-table" @row-click="(row: SkillDirectoryRow) => openNode(row.skillId)">
 
         <el-table-column label="Skill" min-width="300">
           <template #default="{ row }">
@@ -63,19 +63,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="状态" min-width="190">
+        <el-table-column label="状态" min-width="200">
           <template #default="{ row }">
-            <div class="status-cell">
-              <div class="status-cell__row">
-                <span class="status-cell__label">健康</span>
-                <el-tag :type="getHealthTagType(row.status)" size="small">{{ getHealthLabel(row.status) }}</el-tag>
-              </div>
-              <div class="status-cell__row">
-                <span class="status-cell__label">配置</span>
-                <el-tag size="small" effect="plain" :type="row.configEnabled ? 'success' : 'info'">
-                  {{ row.configEnabled ? '独立配置' : '继承默认' }}
-                </el-tag>
-              </div>
+            <div class="status-cell status-cell--inline">
+              <el-tag :type="getHealthTagType(row.status)" size="small">{{ getHealthLabel(row.status) }}</el-tag>
+              <el-tag size="small" effect="plain" :type="row.configEnabled ? 'success' : 'info'">
+                {{ row.configEnabled ? '独立配置' : '继承默认' }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
@@ -85,10 +79,10 @@
             <div class="metrics-cell">
               <div class="metrics-cell__row">
                 <span>{{ row.callCount }} 调用</span>
-                <span :class="rateClass(row.successRate)">{{ row.successRate }}%</span>
+                <span :class="rateCellClass(row)">{{ rateText(row.callCount, row.successRate) }}</span>
               </div>
               <div class="metrics-cell__row metrics-cell__row--sub">
-                <span>{{ formatDuration(row.avgDuration) }} 平均</span>
+                <span>{{ avgText(row.callCount, formatDuration(row.avgDuration) + ' 平均') }}</span>
                 <span>{{ formatTime(row.lastActivity) }}</span>
               </div>
             </div>
@@ -135,8 +129,8 @@
         </div>
         <div class="admin-mobile-card__metrics">
           <span>{{ skill.callCount }} 调用</span>
-          <strong :class="rateClass(skill.successRate)">{{ skill.successRate }}%</strong>
-          <span>{{ formatDuration(skill.avgDuration) }} 平均</span>
+          <strong :class="rateCellClass(skill)">{{ rateText(skill.callCount, skill.successRate) }}</strong>
+          <span>{{ avgText(skill.callCount, formatDuration(skill.avgDuration) + ' 平均') }}</span>
         </div>
         <div class="admin-mobile-card__tags">
           <el-tag size="small" effect="plain" :type="skill.configEnabled ? 'success' : 'info'">
@@ -167,6 +161,7 @@ import { adminAxios, adminSkillsApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SkillNodeWorkbench from './components/SkillNodeWorkbench.vue'
 import { toast } from '../../utils/toast'
+import { rateText, rateClass as zeroRateClass, avgText } from '@/utils/zeroData'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog'
 
 type SkillHealth = 'healthy' | 'warning' | 'error' | 'idle'
@@ -584,6 +579,10 @@ const rateClass = (rate: number) => {
   return 'rate-bad'
 }
 
+/** 零数据规范：无调用样本时比率显示 — 且不着色；样本不足时降权 */
+const rateCellClass = (row: { callCount: number; successRate: number }) =>
+  zeroRateClass(row.callCount, rateClass(row.successRate))
+
 onMounted(async () => {
   await loadRegistry()
   await openRequestedSkillFromQuery()
@@ -631,6 +630,27 @@ watch(
   padding: 0 12px;
 }
 
+/* 行级交互：整行可点击，快速查看按钮 hover/聚焦时浮现（触屏常驻） */
+.skill-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.skill-table .table-link-btn {
+  opacity: 0;
+  transition: opacity var(--admin-transition-fast);
+}
+
+.skill-table :deep(.el-table__row:hover) .table-link-btn,
+.skill-table :deep(.el-table__row:focus-within) .table-link-btn {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .skill-table .table-link-btn {
+    opacity: 1;
+  }
+}
+
 .admin-list-card {
   width: 100%;
   background: var(--admin-bg-surface);
@@ -652,7 +672,7 @@ watch(
   background: rgba(52, 120, 246, 0.03);
   font-weight: 700;
   font-size: 0.8125rem;
-  color: #7085a6;
+  color: var(--admin-text-muted);
 }
 
 .admin-list-card :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
@@ -685,25 +705,15 @@ watch(
 }
 
 .skill-cell__meta {
-  color: #7085a6;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
-.status-cell {
-  display: grid;
-  gap: 6px;
-}
-
-.status-cell__row {
+.status-cell--inline {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.status-cell__label {
-  color: #7085a6;
-  font-size: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .metrics-cell {
@@ -719,7 +729,7 @@ watch(
 }
 
 .metrics-cell__row--sub {
-  color: #7085a6;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 
@@ -733,6 +743,17 @@ watch(
 
 .rate-bad {
   color: var(--admin-color-error);
+}
+
+/* 零数据规范：无样本比率灰显；样本不足时语义色降权为灰（透明度方案会拉低对比度，故用实色） */
+.rate--na {
+  color: var(--admin-text-muted);
+  font-weight: 500;
+}
+
+.rate--muted {
+  color: var(--admin-text-muted);
+  font-weight: 500;
 }
 
 .prompt-cell {
