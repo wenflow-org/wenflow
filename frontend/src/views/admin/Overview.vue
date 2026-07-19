@@ -81,11 +81,18 @@
             </div>
           </div>
 
-          <div class="overview-kpi-strip">
-            <article v-for="item in overviewKpiItems" :key="item.label" class="overview-kpi-chip">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-            </article>
+          <div class="overview-funnel">
+            <template v-for="(node, i) in funnelNodes" :key="node.label">
+              <div class="funnel-node" :class="{ 'is-idle': node.idle }">
+                <span class="funnel-node__label">{{ node.label }}</span>
+                <strong class="funnel-node__value">{{ node.value }}</strong>
+                <span class="funnel-node__sub">{{ node.sub }}</span>
+              </div>
+              <div v-if="i < funnelNodes.length - 1" class="funnel-link" aria-hidden="true">
+                <span class="funnel-link__rate">{{ funnelLinks[i] }}</span>
+                <span class="funnel-link__arrow">→</span>
+              </div>
+            </template>
           </div>
         </section>
 
@@ -149,27 +156,20 @@
             </article>
           </div>
 
-          <div class="trend-panel" v-if="activeTrendPoints.length > 0">
-            <div class="trend-row trend-row--head">
-              <span class="trend-time">时间</span>
-              <span class="trend-bars-label">调用量 / 异常率</span>
-              <span class="trend-values">结论</span>
-            </div>
-            <div class="trend-row" v-for="point in activeTrendPoints" :key="point.time">
-              <span class="trend-time">{{ point.label }}</span>
-              <div class="trend-bars">
-                <div class="trend-bar-track">
-                  <div class="trend-bar trend-bar--calls" :style="{ width: `${(point.total / maxCalls) * 100}%` }"></div>
-                </div>
-                <div class="trend-meta-line">
-                  <span>{{ point.total }} 次调用</span>
-                  <span :class="['trend-rate-badge', point.issueRate > 0 ? 'is-warning' : 'is-good']">
-                    {{ formatRate(point.issueRate) }} 异常率
-                  </span>
-                </div>
-              </div>
-              <span class="trend-values">{{ point.summary }}</span>
-            </div>
+          <div
+            class="trend-spark"
+            v-if="activeTrendPoints.length > 0"
+            role="img"
+            :aria-label="`24 小时调用趋势：共 ${totalTrendCalls} 次调用，${totalTrendIssues} 次异常或超时`"
+          >
+            <div
+              v-for="bar in trendSparkBars"
+              :key="bar.time"
+              class="trend-spark__bar"
+              :class="{ 'has-issue': bar.issueCount > 0, 'is-idle': bar.total === 0 }"
+              :style="{ height: bar.heightPct }"
+              :title="`${bar.label} · ${bar.total} 次调用 · ${bar.issueCount} 次异常/超时`"
+            ></div>
           </div>
           <el-empty v-else description="暂无 24 小时调用趋势数据" />
         </section>
@@ -228,6 +228,7 @@ import { adminDashboardApi, adminAgentsApi } from '@/api/adminApi'
 import { Cpu, TrendCharts, DataAnalysis } from '@element-plus/icons-vue'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import { toast } from '../../utils/toast'
+import { hasSample, rateReliable, MIN_RATE_SAMPLE } from '@/utils/zeroData'
 
 interface TrendPoint {
   time?: string
@@ -299,24 +300,45 @@ const recentProjectionGrantSummary = computed(() => recentProjectionGrantUses.va
   ].filter(Boolean).join(' · '),
   createdAt: grant.lastUsedAt || grant.createdAt
 })))
-const overviewKpiItems = computed(() => {
-  if (!statsAvailable.value) {
-    return ['用户', '今日活跃', 'Goal', '活跃 Goal', '路径', '活跃路径', '任务', '完成率']
-      .map((label) => ({ label, value: '--' }))
-  }
+// 学习主链漏斗：用户 → 目标 → 路径 → 任务 → 完成，断点（数量为 0 的首个环节起）降权显示
+const funnelNodes = computed(() => {
   const users: NonNullable<OverviewStats['users']> = stats.value?.users || {}
   const learning: NonNullable<OverviewStats['learning']> = stats.value?.learning || {}
   const conversations: NonNullable<OverviewStats['conversations']> = stats.value?.conversations || {}
 
+  if (!statsAvailable.value) {
+    return ['用户', '目标', '路径', '任务', '完成'].map((label) => ({ label, value: '--', sub: ' ', idle: false }))
+  }
+
+  const totals = [
+    Number(users.total || 0),
+    Number(conversations.total || 0),
+    Number(learning.totalPaths || 0),
+    Number(learning.totalTasks || 0),
+    Number(learning.completedTasks || 0)
+  ]
+  // 首个为 0 的环节即断点；断点及之后全部 idle
+  const breakIndex = totals.findIndex((n) => n <= 0)
+  const idleFrom = breakIndex === -1 ? Infinity : breakIndex
+
   return [
-    { label: '用户', value: String(users.total || 0) },
-    { label: '今日活跃', value: String(users.activeToday || 0) },
-    { label: 'Goal', value: String(conversations.total || 0) },
-    { label: '活跃 Goal', value: String(conversations.active || 0) },
-    { label: '路径', value: String(learning.totalPaths || 0) },
-    { label: '活跃路径', value: String(learning.activePaths || 0) },
-    { label: '任务', value: String(learning.totalTasks || 0) },
-    { label: '完成率', value: `${learning.completionRate || 0}%` }
+    { label: '用户', value: String(totals[0]), sub: `今日活跃 ${users.activeToday || 0}` },
+    { label: '目标', value: String(totals[1]), sub: `活跃 ${conversations.active || 0}` },
+    { label: '路径', value: String(totals[2]), sub: `活跃 ${learning.activePaths || 0}` },
+    { label: '任务', value: String(totals[3]), sub: `完成率 ${learning.completionRate || 0}%` },
+    { label: '完成', value: String(totals[4]), sub: '已完成任务' }
+  ].map((node, i) => ({ ...node, idle: i >= idleFrom }))
+})
+
+// 环节间转化率：分母为 0 时显示 —（零数据规范）
+const funnelLinks = computed(() => {
+  const nums = funnelNodes.value.map((n) => Number(n.value))
+  const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '—')
+  return [
+    pct(nums[1], nums[0]),
+    pct(nums[2], nums[1]),
+    pct(nums[3], nums[2]),
+    pct(nums[4], nums[3])
   ]
 })
 
@@ -344,8 +366,24 @@ const activeTrendPoints = computed(() => {
 })
 
 const maxCalls = computed(() => {
-  const max = activeTrendPoints.value.reduce((acc: number, item) => Math.max(acc, item.total || 0), 0)
+  const max = trendPoints.value.reduce((acc: number, item) => Math.max(acc, Number(item.total || 0)), 0)
   return max > 0 ? max : 1
+})
+
+// 24h sparkline：每个时段一根竖条，异常时段标红，无调用时段为细底线
+const trendSparkBars = computed(() => {
+  return trendPoints.value.map((point) => {
+    const total = Number(point.total || 0)
+    const issueCount = Number(point.error || 0) + Number(point.timeout || 0)
+    const pct = total > 0 ? Math.max((total / maxCalls.value) * 100, 10) : 4
+    return {
+      time: String(point.time || point.label || ''),
+      label: point.label || point.time || '',
+      total,
+      issueCount,
+      heightPct: `${pct}%`
+    }
+  })
 })
 
 const totalTrendCalls = computed(() => {
@@ -360,7 +398,10 @@ const overallIssueRate = computed(() => {
   return totalTrendCalls.value > 0 ? totalTrendIssues.value / totalTrendCalls.value : 0
 })
 
-const overallIssueRateLabel = computed(() => formatRate(overallIssueRate.value))
+const overallIssueRateLabel = computed(() => {
+  // 样本不足时比率没有统计意义，绝对次数见下方说明
+  return rateReliable(totalTrendCalls.value) ? formatRate(overallIssueRate.value) : '—'
+})
 
 const peakTrendPoint = computed(() => {
   if (!activeTrendPoints.value.length) return null
@@ -393,7 +434,7 @@ const attentionAgentStatuses = computed(() => {
         ? 3
         : errorCalls > 0 || timeoutCount > 0
           ? 2
-          : successRate < 90
+          : totalCalls >= MIN_RATE_SAMPLE && successRate < 90
             ? 1
             : 0
 
@@ -406,7 +447,7 @@ const attentionAgentStatuses = computed(() => {
     } else if (errorCalls > 0 || timeoutCount > 0) {
       summary = `${errorCalls + timeoutCount} 次失败 / 超时`
       detail = `失败 ${errorCalls} 次，超时 ${timeoutCount} 次。`
-    } else if (successRate < 90) {
+    } else if (totalCalls >= MIN_RATE_SAMPLE && successRate < 90) {
       summary = '成功率偏低'
       detail = `成功率 ${successRate}%`
     }
@@ -454,13 +495,25 @@ const healthSummary = computed(() => {
   const successRate = Number(stats.value?.agents?.successRate || 100)
   const timeouts = Number(stats.value?.agents?.todayTimeouts || 0)
   const activeUsers = Number(stats.value?.users?.activeToday || 0)
+  const todayCalls = Number(stats.value?.agents?.todayCalls || 0)
+
+  // 零数据规范：无调用时比率无意义；样本不足时降权，不用比率定性
+  const successRateItem = !hasSample(todayCalls)
+    ? { tone: 'is-neutral', title: '今日暂无调用', description: '产生调用后展示成功率' }
+    : !rateReliable(todayCalls)
+      ? {
+          tone: 'is-neutral',
+          title: '调用样本较少',
+          description: `成功率 ${successRate}% · 今日 ${todayCalls} 次调用，样本少仅供参考`
+        }
+      : {
+          tone: successRate >= 90 ? 'is-good' : 'is-warning',
+          title: successRate >= 90 ? '成功率稳定' : '成功率需要关注',
+          description: `${successRate}% · 今日 ${todayCalls} 次调用`
+        }
 
   return {
-    successRate: {
-      tone: successRate >= 90 ? 'is-good' : 'is-warning',
-      title: successRate >= 90 ? '成功率稳定' : '成功率需要关注',
-      description: `${successRate}% · 今日 ${stats.value?.agents?.todayCalls || 0} 次调用`
-    },
+    successRate: successRateItem,
     timeout: {
       tone: timeouts === 0 ? 'is-good' : 'is-warning',
       title: timeouts === 0 ? '超时正常' : '存在超时',
@@ -482,6 +535,7 @@ const overviewHeadline = computed(() => {
   }
   const activeUsers = Number(stats.value?.users?.activeToday || 0)
   const successRate = Number(stats.value?.agents?.successRate || 100)
+  const todayCalls = Number(stats.value?.agents?.todayCalls || 0)
   const issueCount = totalIssueCount.value
 
   if (issueCount > 0) {
@@ -496,7 +550,7 @@ const overviewHeadline = computed(() => {
     }
   }
 
-  if (successRate >= 90) {
+  if (!rateReliable(todayCalls) || successRate >= 90) {
     return {
       title: '运行平稳'
     }
@@ -525,6 +579,7 @@ const priorityQueue = computed(() => {
   const activeUsers = Number(stats.value?.users?.activeToday || 0)
   const successRate = Number(stats.value?.agents?.successRate || 100)
   const timeoutCount = Number(stats.value?.agents?.todayTimeouts || 0)
+  const todayCallsCount = Number(stats.value?.agents?.todayCalls || 0)
   const completedTasks = Number(stats.value?.learning?.completedTasks || 0)
 
   attentionAgentStatuses.value.forEach((item) => {
@@ -560,7 +615,7 @@ const priorityQueue = computed(() => {
     })
   }
 
-  if (statsAvailable.value && (timeoutCount > 0 || successRate < 90)) {
+  if (statsAvailable.value && (timeoutCount > 0 || (rateReliable(todayCallsCount) && successRate < 90))) {
     items.push({
       id: 'runtime-trend',
       level: timeoutCount > 0 ? '风险趋势' : '稳定性关注',
@@ -739,7 +794,7 @@ onMounted(async () => {
 
 .hero-kpi__copy h2 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: var(--admin-text-title-lg);
   color: var(--admin-text-primary);
 }
 
@@ -765,7 +820,7 @@ onMounted(async () => {
   min-height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  font-size: 0.76rem;
+  font-size: var(--admin-text-caption);
   font-weight: 700;
 }
 
@@ -808,12 +863,12 @@ onMounted(async () => {
 
 .health-item strong {
   color: var(--admin-text-primary);
-  font-size: 0.92rem;
+  font-size: var(--admin-text-body);
 }
 
 .health-item p {
   margin: 4px 0 0;
-  font-size: 0.84rem;
+  font-size: var(--admin-text-body-sm);
   color: var(--admin-text-muted);
   line-height: 1.55;
 }
@@ -858,7 +913,7 @@ onMounted(async () => {
   background: var(--admin-bg-surface-alt);
   color: var(--admin-text-primary);
   text-decoration: none;
-  font-size: 0.84rem;
+  font-size: var(--admin-text-body-sm);
   font-weight: 600;
   transition: all 180ms ease;
 }
@@ -868,30 +923,73 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.overview-kpi-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+/* 学习主链漏斗：节点 + 转化率连接符 */
+.overview-funnel {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.overview-kpi-chip {
+.funnel-node {
+  flex: 1 1 120px;
+  min-width: 120px;
   display: grid;
-  gap: 6px;
-  padding: 16px;
+  gap: 4px;
+  padding: 14px 16px;
   border-radius: var(--admin-radius-card);
   border: var(--admin-border);
   background: var(--admin-bg-surface-alt);
+  transition: border-color var(--admin-transition-fast);
 }
 
-.overview-kpi-chip span {
+.funnel-node.is-idle {
+  border-style: dashed;
+  background: transparent;
+}
+
+.funnel-node__label {
   color: var(--admin-text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--admin-text-body-sm);
+  font-weight: 600;
 }
 
-.overview-kpi-chip strong {
+.funnel-node__value {
   color: var(--admin-text-primary);
-  font-size: 1.2rem;
+  font-size: var(--admin-text-headline);
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel-node.is-idle .funnel-node__value {
+  color: var(--admin-text-muted);
+}
+
+.funnel-node__sub {
+  color: var(--admin-text-muted);
+  font-size: var(--admin-text-caption);
+}
+
+.funnel-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 34px;
+}
+
+.funnel-link__rate {
+  font-size: var(--admin-text-micro);
+  font-weight: 700;
+  color: var(--admin-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel-link__arrow {
+  color: var(--admin-border-color);
+  font-size: var(--admin-text-title-sm);
+  line-height: 1;
 }
 
 .priority-card {
@@ -919,13 +1017,13 @@ onMounted(async () => {
 
 .priority-card__title-wrap strong {
   color: var(--admin-text-primary);
-  font-size: 0.94rem;
+  font-size: var(--admin-text-body);
 }
 
 .priority-card__meta,
 .priority-card__description {
   color: var(--admin-text-secondary);
-  font-size: 0.84rem;
+  font-size: var(--admin-text-body-sm);
 }
 
 .priority-card__description {
@@ -960,7 +1058,7 @@ onMounted(async () => {
 .attention-card__time,
 .attention-card__meta {
   color: var(--admin-text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--admin-text-body-sm);
 }
 
 .attention-card__summary {
@@ -970,13 +1068,13 @@ onMounted(async () => {
 
 .attention-card__summary strong {
   color: var(--admin-text-primary);
-  font-size: 0.92rem;
+  font-size: var(--admin-text-body);
 }
 
 .attention-card__summary p {
   margin: 0;
   color: var(--admin-text-muted);
-  font-size: 0.84rem;
+  font-size: var(--admin-text-body-sm);
   line-height: 1.55;
 }
 
@@ -1018,13 +1116,13 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 1.02rem;
+  font-size: var(--admin-text-title-sm);
   color: var(--admin-text-primary);
 }
 
 .section-subtitle {
   margin: 6px 0 0;
-  font-size: 0.84rem;
+  font-size: var(--admin-text-body-sm);
   color: var(--admin-text-secondary);
   line-height: 1.55;
 }
@@ -1038,7 +1136,7 @@ onMounted(async () => {
 
 .section-note {
   color: var(--admin-text-muted);
-  font-size: 0.82rem;
+  font-size: var(--admin-text-body-sm);
   font-weight: 600;
 }
 
@@ -1051,11 +1149,6 @@ onMounted(async () => {
 .agent-name-text {
   color: var(--admin-text-primary);
   font-weight: 600;
-}
-
-.trend-panel {
-  display: grid;
-  gap: 2px;
 }
 
 .trend-summary {
@@ -1075,104 +1168,54 @@ onMounted(async () => {
 }
 
 .trend-summary-card span {
-  font-size: 0.8rem;
+  font-size: var(--admin-text-body-sm);
   color: var(--admin-text-secondary);
 }
 
 .trend-summary-card strong {
-  font-size: 1.5rem;
+  font-size: var(--admin-text-headline);
   line-height: 1.1;
   color: var(--admin-text-primary);
 }
 
 .trend-summary-card em {
   font-style: normal;
-  font-size: 0.82rem;
+  font-size: var(--admin-text-body-sm);
   color: var(--admin-text-muted);
 }
 
-.trend-row {
-  align-items: center;
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 92px;
-  gap: 14px;
-  padding: 10px 0;
-  border-bottom: var(--admin-border-subtle);
-}
-
-.trend-row:last-child {
-  border-bottom: none;
-}
-
-.trend-row--head {
-  padding-top: 0;
-  color: var(--admin-text-secondary);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.trend-time {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.82rem;
-  color: var(--admin-text-primary);
-}
-
-.trend-bars {
-  display: grid;
-  gap: 8px;
-}
-
-.trend-meta-line {
+/* 24h sparkline：竖条迷你趋势图 */
+.trend-spark {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--admin-text-muted);
-  font-size: 0.8rem;
+  align-items: flex-end;
+  gap: 3px;
+  height: 72px;
+  padding: 8px 4px 4px;
 }
 
-.trend-bar-track {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
+.trend-spark__bar {
+  flex: 1 1 0;
+  min-width: 4px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, #5b93ff, #3d7cff);
+  opacity: 0.85;
+  transition: opacity var(--admin-transition-fast), transform var(--admin-transition-fast);
+}
+
+.trend-spark__bar:hover {
+  opacity: 1;
+  transform: scaleY(1.03);
+  transform-origin: bottom;
+}
+
+.trend-spark__bar.has-issue {
+  background: linear-gradient(180deg, #f87171, #dc2626);
+  opacity: 1;
+}
+
+.trend-spark__bar.is-idle {
   background: var(--admin-bg-muted);
-}
-
-.trend-bar {
-  height: 100%;
-  border-radius: inherit;
-  min-width: 2px;
-  transition: width 0.35s ease;
-}
-
-.trend-bar--calls {
-  background: linear-gradient(90deg, #3d7cff, #6aa0ff);
-}
-
-.trend-bars-label,
-.trend-values {
-  color: var(--admin-text-muted);
-  font-size: 0.82rem;
-}
-
-.trend-rate-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.trend-rate-badge.is-good {
-  background: var(--admin-color-success-bg);
-  color: var(--admin-color-success);
-}
-
-.trend-rate-badge.is-warning {
-  background: var(--admin-color-warning-bg);
-  color: var(--admin-color-warning);
+  opacity: 0.7;
 }
 
 .activity-feed {
@@ -1197,18 +1240,18 @@ onMounted(async () => {
 
 .activity-card__head strong {
   color: var(--admin-text-primary);
-  font-size: 0.92rem;
+  font-size: var(--admin-text-body);
 }
 
 .activity-card__head span {
   color: var(--admin-text-secondary);
-  font-size: 0.76rem;
+  font-size: var(--admin-text-caption);
   white-space: nowrap;
 }
 
 .activity-card p {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: var(--admin-text-body-sm);
   color: var(--admin-text-secondary);
   line-height: 1.6;
 }
