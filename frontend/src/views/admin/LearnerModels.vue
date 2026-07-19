@@ -16,10 +16,22 @@
 
     <div class="admin-list-toolbar">
       <div class="admin-list-toolbar__group">
-        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
-        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 200px" @input="handleSearch" />
-        <el-checkbox v-model="filters.riskOnly" @change="handleSearch">仅风险用户</el-checkbox>
-        <el-checkbox v-model="filters.staleOnly" @change="handleSearch">仅过期快照</el-checkbox>
+        <div class="risk-filter" role="group" aria-label="风险快速筛选">
+          <button
+            v-for="opt in riskFilterOptions"
+            :key="opt.key"
+            type="button"
+            class="risk-filter__pill"
+            :class="{ 'is-active': riskFilter === opt.key }"
+            :aria-pressed="riskFilter === opt.key"
+            @click="setRiskFilter(opt.key)"
+          >
+            {{ opt.label }}
+            <span v-if="opt.count !== null" class="risk-filter__count">{{ opt.count }}</span>
+          </button>
+        </div>
+        <el-input v-model="filters.userId" placeholder="按用户 ID 筛选" clearable style="width: 180px" @input="handleSearch" />
+        <el-input v-model="filters.pathId" placeholder="按路径 ID 筛选" clearable style="width: 180px" @input="handleSearch" />
       </div>
       <div class="admin-list-toolbar__group">
         <el-button @click="resetFilters">
@@ -57,11 +69,18 @@
         </el-table-column>
         <el-table-column label="学习进度" min-width="320">
           <template #default="{ row }">
-            <div class="progress-cell">
-              <div class="progress-cell__line">路径：{{ truncateText(row.pathTitle, 28) }}</div>
-              <div class="progress-cell__line">阶段：{{ truncateText(row.currentMilestone, 28) }}</div>
-              <div class="progress-cell__line">任务：{{ truncateText(row.currentTask, 28) }}</div>
+            <div v-if="row.pathTitle || row.currentMilestone || row.currentTask" class="progress-cell">
+              <div class="progress-cell__line">
+                路径：<span :class="{ 'progress-cell__empty': !row.pathTitle }">{{ progressText(row.pathTitle) }}</span>
+              </div>
+              <div class="progress-cell__line">
+                阶段：<span :class="{ 'progress-cell__empty': !row.currentMilestone }">{{ progressText(row.currentMilestone) }}</span>
+              </div>
+              <div class="progress-cell__line">
+                任务：<span :class="{ 'progress-cell__empty': !row.currentTask }">{{ progressText(row.currentTask) }}</span>
+              </div>
             </div>
+            <span v-else class="progress-cell__empty">尚未开始学习</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="92" align="center">
@@ -210,6 +229,24 @@ const staleCount = computed(() => items.value.filter((item) => {
   return diffMs > 10 * 60 * 1000;
 }).length);
 
+// 风险快速筛选（运营动线：先找有问题的人）
+// 计数仅「全部」展示（后端口径）；风险/过期的后端判定与客户端字段不完全一致，不显示以免误导
+const riskFilter = ref<'all' | 'risk' | 'stale'>('all');
+
+const riskFilterOptions = computed(() => [
+  { key: 'all' as const, label: '全部', count: pagination.total },
+  { key: 'risk' as const, label: '需关注', count: null },
+  { key: 'stale' as const, label: '快照过期', count: null }
+] as Array<{ key: 'all' | 'risk' | 'stale'; label: string; count: number | null }>);
+
+const setRiskFilter = (key: 'all' | 'risk' | 'stale') => {
+  riskFilter.value = key;
+  filters.riskOnly = key === 'risk';
+  filters.staleOnly = key === 'stale';
+  pagination.page = 1;
+  loadData();
+};
+
 const modelHighlights = computed(() => [
   { label: `${pagination.total} 个快照`, tone: 'info' as const },
   { label: `${riskCount.value} 个风险用户`, tone: riskCount.value > 0 ? 'danger' as const : 'neutral' as const },
@@ -247,12 +284,18 @@ const handleSearch = () => {
   }, 300);
 };
 
-const trendLabel = (value?: string) => value === 'improving' ? '上升' : value === 'declining' ? '下降' : '稳定';
+const trendLabel = (value?: string) => value === 'improving' ? '↗ 上升' : value === 'declining' ? '↘ 下降' : '→ 稳定';
 const riskLabel = (value?: string) => value === 'high' ? '高' : value === 'medium' ? '中' : '低';
 
 const truncateText = (text: string | undefined, maxLen: number) => {
   if (!text) return '--';
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
+};
+
+// 学习进度占位：空值显示「未开始」而非 --
+const progressText = (text: string | undefined) => {
+  if (!text) return '未开始';
+  return truncateText(text, 28);
 };
 
 const formatRelativeTime = (value: string | undefined) => {
@@ -311,6 +354,7 @@ const resetFilters = () => {
   filters.pathId = '';
   filters.riskOnly = false;
   filters.staleOnly = false;
+  riskFilter.value = 'all';
   pagination.page = 1;
   loadData();
 };
@@ -506,6 +550,59 @@ onMounted(loadData);
   line-height: 1.3;
   color: var(--text-secondary);
   word-break: break-word;
+}
+
+.progress-cell__empty {
+  color: var(--admin-text-muted);
+  font-size: 12px;
+}
+
+/* 风险快速筛选 pills */
+.risk-filter {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--admin-radius-md);
+  border: var(--admin-border-subtle);
+  background: var(--admin-bg-surface-alt);
+}
+
+.risk-filter__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: calc(var(--admin-radius-md) - 4px);
+  background: transparent;
+  color: var(--admin-text-secondary);
+  font-size: var(--admin-text-body-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--admin-transition-fast);
+}
+
+.risk-filter__pill:hover {
+  color: var(--admin-text-primary);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.risk-filter__pill.is-active {
+  background: var(--admin-bg-surface);
+  color: var(--admin-text-primary);
+  box-shadow: inset 0 0 0 1px rgba(52, 120, 246, 0.16), var(--admin-shadow-xs);
+}
+
+.risk-filter__count {
+  font-size: var(--admin-text-micro);
+  font-weight: 700;
+  color: var(--admin-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-filter__pill.is-active .risk-filter__count {
+  color: var(--admin-text-brand);
 }
 
 .risk-cell {
