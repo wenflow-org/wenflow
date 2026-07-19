@@ -21,49 +21,25 @@
       <el-button size="small" class="config-load-error__retry" @click="loadConfig">重新加载</el-button>
     </el-alert>
 
-    <!-- 连接健康横幅：先回答「现在能用吗」 -->
-    <section class="health-banner" :class="`health-banner--${overallHealth.tone}`">
-      <div class="health-banner__verdict">
-        <span class="health-banner__dot"></span>
-        <div class="health-banner__copy">
-          <strong>{{ overallHealth.title }}</strong>
-          <p>{{ overallHealth.description }}</p>
-        </div>
-      </div>
-      <div class="health-banner__metrics">
-        <div class="health-banner__metric">
-          <span>密钥</span>
-          <strong>{{ keyStateLabel }}</strong>
-        </div>
-        <div class="health-banner__metric">
-          <span>可用模型</span>
-          <strong>{{ form.availableModels.length }}</strong>
-        </div>
-        <div class="health-banner__metric">
-          <span>默认路由</span>
-          <strong>{{ routingReadyCount }}/3</strong>
-        </div>
-        <div class="health-banner__metric">
-          <span>Admin 范围</span>
-          <strong>{{ adminAccessModeLabel }}</strong>
-        </div>
-      </div>
-      <el-button type="primary" class="health-banner__action" :loading="testing" @click="fetchModels">
-        {{ connectionStatus === 'connected' ? '重新拉取模型' : '连接并拉取模型' }}
+    <!-- 健康状态条：单行 -->
+    <section class="health-bar" :class="`health-bar--${overallHealth.tone}`">
+      <span class="health-bar__dot"></span>
+      <strong class="health-bar__title">{{ overallHealth.title }}</strong>
+      <span class="health-bar__sep"></span>
+      <span class="health-bar__meta">密钥 {{ keyStateLabel }}</span>
+      <span class="health-bar__meta">模型 {{ form.availableModels.length }}</span>
+      <span class="health-bar__meta">路由 {{ routingReadyCount }}/3</span>
+      <span class="health-bar__meta">{{ adminAccessModeLabel }}</span>
+      <el-button class="health-bar__action" type="primary" plain size="small" :loading="testing" @click="fetchModels">
+        {{ connectionStatus === 'connected' ? '重新拉取' : '连接拉取' }}
       </el-button>
     </section>
 
     <div class="config-layout">
       <div class="config-main">
-        <section class="flow-section">
-          <div class="flow-section__head flow-section__head--split">
-            <div class="section-title-row">
-              <span class="section-index">01</span>
-              <div>
-                <h2>接入与密钥</h2>
-                <p>模型服务的地址与凭证。密钥留空表示沿用已保存的值。</p>
-              </div>
-            </div>
+        <section class="config-section">
+          <div class="config-section__head">
+            <h2>接入与密钥</h2>
             <span class="head-badge" :class="`head-badge--${connectionStepStatus.tone}`">{{ connectionStepStatus.label }}</span>
           </div>
 
@@ -89,24 +65,14 @@
           </div>
         </section>
 
-        <section class="flow-section">
-          <div class="flow-section__head flow-section__head--split">
-            <div class="section-title-row">
-              <span class="section-index">02</span>
-              <div>
-                <h2>模型与路由</h2>
-                <p>从可用模型中为不同用途指定默认模型。</p>
-              </div>
-            </div>
-            <div class="flow-section__meta-actions">
-              <span class="section-meta">最近拉取：{{ lastFetchLabel }}</span>
+        <section class="config-section">
+          <div class="config-section__head">
+            <h2>模型与路由</h2>
+            <div class="config-section__meta">
+              <span class="section-meta">最近拉取 {{ lastFetchLabel }}</span>
               <span class="head-badge" :class="`head-badge--${modelStepStatus.tone}`">{{ modelStepStatus.label }}</span>
             </div>
           </div>
-
-          <p v-if="!form.availableModels.length && connectionStatus !== 'connected'" class="step-guide">
-            先在「01 接入与密钥」填写地址与密钥，然后点右上角「连接并拉取模型」。
-          </p>
 
           <el-form :model="form" label-position="top" class="config-form">
             <el-form-item label="可用模型">
@@ -129,7 +95,7 @@
                   filterable
                   allow-create
                   default-first-option
-                  placeholder="选择对话默认模型"
+                  placeholder="对话默认模型"
                 >
                   <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
                 </el-select>
@@ -141,7 +107,7 @@
                   filterable
                   allow-create
                   default-first-option
-                  placeholder="选择推理默认模型"
+                  placeholder="推理默认模型"
                 >
                   <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
                 </el-select>
@@ -153,7 +119,7 @@
                   filterable
                   allow-create
                   default-first-option
-                  placeholder="选择评估默认模型"
+                  placeholder="评估默认模型"
                 >
                   <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
                 </el-select>
@@ -162,36 +128,24 @@
           </el-form>
         </section>
 
-        <section class="flow-section security-section">
-          <div class="flow-section__head flow-section__head--split">
-            <div class="section-title-row">
-              <span class="section-index">03</span>
-              <div>
-                <h2>网络边界</h2>
-                <p>控制后台访问来源，以及模型、MCP 和内容提取是否可以连接本机或局域网服务。</p>
-              </div>
-            </div>
+        <section class="config-section">
+          <div class="config-section__head">
+            <h2>网络边界</h2>
             <span class="head-badge head-badge--info">{{ policySourceLabel }}</span>
           </div>
 
           <div class="policy-grid">
             <article class="policy-panel">
-              <div class="policy-panel__head">
-                <div>
-                  <h3>Admin 访问范围</h3>
-                  <p>默认允许服务器本机和同一局域网，公网来源会被拒绝。</p>
-                </div>
-              </div>
-
+              <h3>Admin 访问范围</h3>
               <el-radio-group v-model="networkPolicy.adminAccessMode" class="mode-grid">
                 <el-radio-button value="loopback">
                   <span class="mode-option"><strong>仅本机</strong><small>127.0.0.1 / ::1</small></span>
                 </el-radio-button>
                 <el-radio-button value="private">
-                  <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐用于开发和内网部署</small></span>
+                  <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐</small></span>
                 </el-radio-button>
                 <el-radio-button value="any">
-                  <span class="mode-option"><strong>不限制来源</strong><small>仅配合 VPN、网关或防火墙</small></span>
+                  <span class="mode-option"><strong>不限制来源</strong><small>需配合网关</small></span>
                 </el-radio-button>
               </el-radio-group>
 
@@ -203,19 +157,15 @@
                     filterable
                     allow-create
                     default-first-option
-                    placeholder="例如 203.0.113.10"
+                    placeholder="精确 IP，如 203.0.113.10"
                   />
-                  <span class="field-help">适合 VPN 出口或固定运维终端，填写精确 IP，不填写网段。</span>
                 </el-form-item>
               </el-form>
             </article>
 
             <article class="policy-panel policy-panel--network">
               <div class="policy-panel__head policy-panel__head--switch">
-                <div>
-                  <h3>允许私有网络服务</h3>
-                  <p>用于 Ollama、本地模型、局域网 MCP 或内部内容服务。</p>
-                </div>
+                <h3>私有网络服务</h3>
                 <el-switch
                   v-model="networkPolicy.allowPrivateNetwork"
                   inline-prompt
@@ -225,13 +175,8 @@
                 />
               </div>
 
-              <div class="policy-state" :class="networkPolicy.allowPrivateNetwork ? 'policy-state--open' : 'policy-state--guarded'">
-                <strong>{{ networkPolicy.allowPrivateNetwork ? '开发模式：允许本机与局域网目标' : '受控模式：仅允许下方白名单' }}</strong>
-                <span>Link-local、云元数据、组播和保留地址始终禁止。</span>
-              </div>
-
               <el-form label-position="top" class="config-form config-form--tight">
-                <el-form-item label="私有服务 Host / IP 白名单">
+                <el-form-item label="Host / IP 白名单">
                   <el-select
                     v-model="networkPolicy.privateNetworkHosts"
                     multiple
@@ -239,9 +184,8 @@
                     allow-create
                     default-first-option
                     :disabled="networkPolicy.allowPrivateNetwork"
-                    placeholder="例如 192.168.31.26 或 ollama.local"
+                    :placeholder="networkPolicy.allowPrivateNetwork ? '已允许全部私有地址' : '如 192.168.31.26 或 ollama.local'"
                   />
-                  <span class="field-help">关闭总开关时，仅这些精确 Host 或 IP 可以作为模型与 MCP 地址。</span>
                 </el-form-item>
               </el-form>
             </article>
@@ -254,12 +198,9 @@
       </div>
 
       <aside class="config-side">
-        <section class="flow-section verify-card">
-          <div class="flow-section__head flow-section__head--split">
-            <div>
-              <h2>连通性验证</h2>
-              <p>不影响上方配置，随时试。</p>
-            </div>
+        <section class="verify-card">
+          <div class="config-section__head">
+            <h2>连通性验证</h2>
             <span class="head-badge" :class="`head-badge--${modelTestTone}`">{{ modelTestStateLabel }}</span>
           </div>
 
@@ -416,22 +357,20 @@ const modelStepStatus = computed(() => {
   return { tone: 'neutral', label: '未拉取' }
 })
 
-// 整体健康结论：横幅先回答「现在能用吗」
+// 整体健康结论：单行状态条只取一句标题
 const overallHealth = computed(() => {
   if (connectionStatus.value === 'failed') {
-    return { tone: 'danger', title: '模型服务连接失败', description: '检查服务地址与密钥后重新连接。' }
+    return { tone: 'danger', title: '模型服务连接失败' }
   }
   if (!form.apiUrl && !form.apiKeyConfigured) {
-    return { tone: 'neutral', title: '尚未接入模型服务', description: '完成下方 01、02 两步后即可使用。' }
+    return { tone: 'neutral', title: '尚未接入模型服务' }
   }
-  const missing: string[] = []
-  if (connectionStatus.value !== 'connected') missing.push('连接未验证')
-  if (!form.availableModels.length) missing.push('未拉取模型')
-  if (routingReadyCount.value < 3) missing.push(`默认路由 ${routingReadyCount.value}/3`)
-  if (missing.length === 0) {
-    return { tone: 'success', title: '模型服务已就绪', description: '连接、密钥、模型与默认路由均已配置。' }
-  }
-  return { tone: 'warning', title: '配置尚未完成', description: `待补齐：${missing.join('、')}。` }
+  const ready = connectionStatus.value === 'connected'
+    && form.availableModels.length > 0
+    && routingReadyCount.value === 3
+  return ready
+    ? { tone: 'success', title: '模型服务已就绪' }
+    : { tone: 'warning', title: '配置尚未完成' }
 })
 
 const modelTestStateLabel = computed(() => {
@@ -692,119 +631,87 @@ onMounted(() => {
   gap: 18px;
 }
 
-.summary-strip {
-  display: none;
-}
-
-/* ---------- 连接健康横幅 ---------- */
-.health-banner {
+/* ---------- 健康状态条（单行） ---------- */
+.health-bar {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 18px 22px;
-  border-radius: var(--admin-radius-lg);
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--admin-radius-md);
   border: 1px solid rgba(223, 231, 243, 0.92);
   background: rgba(248, 250, 255, 0.88);
   flex-wrap: wrap;
 }
 
-.health-banner__verdict {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  flex: 1 1 280px;
-  min-width: 240px;
-}
-
-.health-banner__dot {
-  width: 12px;
-  height: 12px;
-  margin-top: 6px;
+.health-bar__dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--admin-color-neutral);
 }
 
-.health-banner--success .health-banner__dot { background: var(--admin-color-success); box-shadow: 0 0 0 4px var(--admin-color-success-bg); }
-.health-banner--warning .health-banner__dot { background: var(--admin-color-warning); box-shadow: 0 0 0 4px var(--admin-color-warning-bg); }
-.health-banner--danger .health-banner__dot { background: var(--admin-color-error); box-shadow: 0 0 0 4px var(--admin-color-error-bg); }
-.health-banner--neutral .health-banner__dot { background: var(--admin-color-neutral); box-shadow: 0 0 0 4px var(--admin-color-neutral-bg); }
+.health-bar--success .health-bar__dot { background: var(--admin-color-success); }
+.health-bar--warning .health-bar__dot { background: var(--admin-color-warning); }
+.health-bar--danger .health-bar__dot { background: var(--admin-color-error); }
+.health-bar--neutral .health-bar__dot { background: var(--admin-color-neutral); }
 
-.health-banner__copy {
-  display: grid;
-  gap: 3px;
-}
-
-.health-banner__copy strong {
-  font-size: var(--admin-text-title-sm);
+.health-bar__title {
+  font-size: var(--admin-text-body);
   color: var(--admin-text-primary);
-  letter-spacing: -0.01em;
+  font-weight: 700;
 }
 
-.health-banner__copy p {
-  margin: 0;
+.health-bar__sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(223, 231, 243, 0.92);
+}
+
+.health-bar__meta {
   font-size: var(--admin-text-body-sm);
   color: var(--admin-text-secondary);
-  line-height: 1.55;
-}
-
-.health-banner__metrics {
-  display: flex;
-  gap: 0;
-  flex: 1 1 auto;
-}
-
-.health-banner__metric {
-  display: grid;
-  gap: 2px;
-  padding: 0 18px;
-  border-left: 1px solid rgba(223, 231, 243, 0.92);
-}
-
-.health-banner__metric:first-child {
-  border-left: none;
-  padding-left: 0;
-}
-
-.health-banner__metric span {
-  font-size: var(--admin-text-caption);
-  color: var(--admin-text-muted);
-  font-weight: 600;
-}
-
-.health-banner__metric strong {
-  font-size: var(--admin-text-title-sm);
-  color: var(--admin-text-primary);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.health-banner__action {
-  flex-shrink: 0;
+.health-bar__action {
+  margin-left: auto;
 }
 
-/* 步骤引导提示 */
-.step-guide {
-  margin: -4px 0 0;
-  padding: 10px 14px;
-  border-radius: var(--admin-radius-sm);
-  background: var(--admin-color-info-bg);
-  color: var(--admin-text-brand);
-  font-size: var(--admin-text-body-sm);
-  line-height: 1.55;
-}
-
-.flow-section {
+/* ---------- 紧凑分区 ---------- */
+.config-section {
   display: grid;
-  gap: 16px;
-  padding: 18px 0 22px;
+  gap: 14px;
+  padding: 14px 0 18px;
   border-bottom: 1px solid rgba(223, 231, 243, 0.92);
 }
 
-.flow-section:last-child {
+.config-section:last-child {
   border-bottom: none;
 }
 
-/* ---------- 重设计：左主右辅布局 ---------- */
+.config-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.config-section__head h2 {
+  margin: 0;
+  color: var(--admin-text-primary);
+  font-size: var(--admin-text-title-sm);
+  font-weight: 700;
+}
+
+.config-section__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---------- 左主右辅布局 ---------- */
 .config-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
@@ -818,10 +725,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.config-main .flow-section:first-child {
-  padding-top: 4px;
-}
-
 .config-side {
   position: sticky;
   top: 16px;
@@ -829,37 +732,12 @@ onMounted(() => {
 }
 
 .verify-card {
-  padding: 18px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
   border: var(--admin-border-subtle);
   border-radius: var(--admin-radius-md);
   background: var(--admin-bg-surface-alt);
-}
-
-.verify-card .flow-section__head h2 {
-  font-size: var(--admin-text-title-sm);
-}
-
-/* 区块编号 */
-.section-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.section-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 30px;
-  height: 30px;
-  margin-top: 1px;
-  border-radius: var(--admin-radius-sm);
-  background: var(--admin-bg-selected);
-  color: var(--admin-text-brand);
-  font-size: var(--admin-text-caption);
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 未保存变更条 ---------- */
@@ -1019,17 +897,11 @@ onMounted(() => {
   gap: 16px;
 }
 
-.policy-panel__head h3 {
+.policy-panel h3 {
   margin: 0;
-  color: #22344d;
-  font-size: var(--admin-text-title-sm);
-}
-
-.policy-panel__head p {
-  margin: 6px 0 0;
-  color: var(--admin-text-muted);
-  font-size: var(--admin-text-body-sm);
-  line-height: 1.55;
+  color: var(--admin-text-primary);
+  font-size: var(--admin-text-body);
+  font-weight: 700;
 }
 
 .mode-grid {
@@ -1049,40 +921,10 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.mode-option small,
-.field-help {
+.mode-option small {
   color: #7b8ba3;
   font-size: var(--admin-text-micro);
   line-height: 1.45;
-}
-
-.field-help {
-  display: block;
-  margin-top: 7px;
-}
-
-.policy-state {
-  display: grid;
-  gap: 5px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  font-size: 12px;
-}
-
-.policy-state span {
-  opacity: 0.78;
-}
-
-.policy-state--open {
-  color: #206b47;
-  background: rgba(228, 249, 237, 0.84);
-  border: 1px solid rgba(67, 193, 120, 0.2);
-}
-
-.policy-state--guarded {
-  color: #5d6880;
-  background: rgba(239, 244, 252, 0.86);
-  border: 1px solid rgba(120, 145, 183, 0.18);
 }
 
 :deep(.mode-grid .el-radio-button__inner) {
@@ -1315,15 +1157,6 @@ onMounted(() => {
     position: static;
   }
 
-  .health-banner {
-    gap: 14px;
-  }
-
-  .health-banner__metrics {
-    flex-wrap: wrap;
-    row-gap: 10px;
-  }
-
   .field-grid--three,
   .field-grid--test {
     grid-template-columns: 1fr;
@@ -1339,8 +1172,9 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
-  .health-banner__metric {
-    padding: 0 12px;
+  .health-bar__action {
+    margin-left: 0;
+    width: 100%;
   }
 
   .field-grid--two {
