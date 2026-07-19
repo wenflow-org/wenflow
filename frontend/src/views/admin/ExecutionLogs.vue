@@ -18,15 +18,8 @@
     </AdminPageHeader>
 
     <section class="admin-filter-panel">
-      <div class="admin-section-head">
-        <div class="admin-section-head__copy">
-          <h3 class="admin-section-head__title">筛选</h3>
-        </div>
-        <el-button class="filter-toggle" text @click="filterExpanded = !filterExpanded">
-          {{ filterExpanded ? '收起' : `展开${activeFilterCount ? ` · ${activeFilterCount} 项` : ''}` }}
-        </el-button>
-      </div>
-      <div v-show="filterExpanded" class="admin-filter-grid admin-filter-grid--wide">
+      <!-- 高频筛选：始终可见 -->
+      <div class="filter-primary-row">
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">时间范围</label>
           <el-select v-model="filters.timeRange" class="filter-select" @change="filters.timeRangeExact = null">
@@ -37,6 +30,57 @@
             <el-option label="全部" value="all" />
           </el-select>
         </div>
+
+        <div class="admin-filter-field">
+          <label class="admin-filter-field__label">状态</label>
+          <el-select
+            v-model="filters.status"
+            placeholder="全部状态"
+            clearable
+            class="filter-select"
+          >
+            <el-option label="成功" value="success">
+              <span class="status-dot success"></span> 成功
+            </el-option>
+            <el-option label="失败" value="error">
+              <span class="status-dot error"></span> 失败
+            </el-option>
+            <el-option label="超时" value="timeout">
+              <span class="status-dot warning"></span> 超时
+            </el-option>
+          </el-select>
+        </div>
+
+        <div class="admin-filter-field filter-primary-row__search">
+          <label class="admin-filter-field__label">搜索</label>
+          <el-input
+            v-model="filters.keyword"
+            placeholder="搜索输入/输出/错误，或粘贴 Trace ID"
+            aria-label="搜索输入/输出/错误"
+            clearable
+            class="search-input"
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+
+        <div class="filter-actions">
+          <el-button type="primary" @click="handleSearch" :loading="loading">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button class="filter-toggle" text @click="moreFiltersExpanded = !moreFiltersExpanded">
+            {{ moreFiltersExpanded ? '收起筛选' : `更多筛选${advancedActiveCount ? ` · ${advancedActiveCount}` : ''}` }}
+            <el-icon class="filter-toggle__icon" :class="{ 'is-expanded': moreFiltersExpanded }"><ArrowDown /></el-icon>
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 低频筛选：按需展开 -->
+      <div v-show="moreFiltersExpanded" class="admin-filter-grid admin-filter-grid--wide filter-advanced">
         <div class="admin-filter-field">
           <label class="admin-filter-field__label">能力类型</label>
           <el-select
@@ -88,26 +132,6 @@
         </div>
 
         <div class="admin-filter-field">
-          <label class="admin-filter-field__label">状态</label>
-          <el-select
-            v-model="filters.status"
-            placeholder="全部状态"
-            clearable
-            class="filter-select"
-          >
-            <el-option label="成功" value="success">
-              <span class="status-dot success"></span> 成功
-            </el-option>
-            <el-option label="失败" value="error">
-              <span class="status-dot error"></span> 失败
-            </el-option>
-            <el-option label="超时" value="timeout">
-              <span class="status-dot warning"></span> 超时
-            </el-option>
-          </el-select>
-        </div>
-
-        <div class="admin-filter-field">
           <label class="admin-filter-field__label">来源</label>
           <el-select v-model="filters.sourceEntry" placeholder="全部来源" clearable class="filter-select">
             <el-option label="用户侧" value="user" />
@@ -132,32 +156,22 @@
             class="time-picker"
           />
         </div>
+      </div>
 
-        <div class="admin-filter-field admin-filter-field--span-2 search-item">
-          <label class="admin-filter-field__label">搜索</label>
-          <el-input
-            v-model="filters.keyword"
-            placeholder="搜索输入/输出/错误"
-            aria-label="搜索输入/输出/错误"
-            clearable
-            class="search-input"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </div>
-
-        <div class="filter-actions">
-          <el-button type="primary" @click="handleSearch" :loading="loading">
-            <el-icon><Search /></el-icon>
-            查询
-          </el-button>
-          <el-button type="default" @click="handleReset">
-            <el-icon><Refresh /></el-icon>
-            重置
-          </el-button>
-        </div>
+      <!-- 活跃筛选：可单独清除 -->
+      <div v-if="activeFilterChips.length" class="filter-chips">
+        <span class="filter-chips__label">当前筛选</span>
+        <el-tag
+          v-for="chip in activeFilterChips"
+          :key="chip.key"
+          closable
+          size="small"
+          class="filter-chip"
+          @close="clearFilter(chip.key)"
+        >
+          {{ chip.label }}：{{ chip.value }}
+        </el-tag>
+        <el-button text size="small" class="filter-chips__clear" @click="handleReset">全部清除</el-button>
       </div>
     </section>
 
@@ -430,7 +444,8 @@ import {
   Refresh,
   DocumentCopy,
   Download,
-  Cpu
+  Cpu,
+  ArrowDown
 } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { adminAxios, adminRuntimeDefinitionsApi } from '@/api/adminApi';
@@ -500,7 +515,7 @@ interface PromptLog {
 const loading = ref(false);
 const loadError = ref('');
 const logs = ref<Log[]>([]);
-const filterExpanded = ref(typeof window === 'undefined' || window.innerWidth > 768);
+const moreFiltersExpanded = ref(false); // 低频筛选默认收起，高频三项常驻
 const pagination = reactive<Pagination>({
   total: 0,
   page: 1,
@@ -529,17 +544,70 @@ const filters = reactive({
   keyword: ''
 });
 
-const activeFilterCount = computed(() => [
+// 低频筛选激活数（用于「更多筛选 · N」提示）
+const advancedActiveCount = computed(() => [
   filters.agentName,
   filters.agentId,
   filters.traceId,
   filters.sessionId,
-  filters.status,
   filters.sourceEntry,
-  filters.timeRange !== 'today' ? filters.timeRange : '',
   filters.timeRangeExact,
-  filters.keyword,
 ].filter(Boolean).length);
+
+const TIME_RANGE_LABELS: Record<string, string> = {
+  today: '今天',
+  yesterday: '昨天',
+  week: '最近 7 天',
+  month: '最近 30 天',
+  all: '全部'
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  success: '成功',
+  error: '失败',
+  timeout: '超时'
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  user: '用户侧',
+  test: '测试站点',
+  admin: 'Admin 后台',
+  platform: '平台内部'
+};
+
+// 活跃筛选 chips：当前表单状态摘要，可单独清除
+const activeFilterChips = computed(() => {
+  const chips: Array<{ key: string; label: string; value: string }> = [];
+  if (filters.timeRange !== 'today') chips.push({ key: 'timeRange', label: '时间范围', value: TIME_RANGE_LABELS[filters.timeRange] || filters.timeRange });
+  if (filters.status) chips.push({ key: 'status', label: '状态', value: STATUS_LABELS[filters.status] || filters.status });
+  if (filters.keyword) chips.push({ key: 'keyword', label: '搜索', value: filters.keyword });
+  if (filters.agentName) chips.push({ key: 'agentName', label: '能力类型', value: getAgentDisplayName(filters.agentName) });
+  if (filters.agentId) chips.push({ key: 'agentId', label: '节点 ID', value: filters.agentId });
+  if (filters.traceId) chips.push({ key: 'traceId', label: 'Trace ID', value: filters.traceId.slice(0, 12) });
+  if (filters.sessionId) chips.push({ key: 'sessionId', label: 'Session ID', value: filters.sessionId.slice(0, 12) });
+  if (filters.sourceEntry) chips.push({ key: 'sourceEntry', label: '来源', value: SOURCE_LABELS[filters.sourceEntry] || filters.sourceEntry });
+  if (filters.timeRangeExact) chips.push({ key: 'timeRangeExact', label: '精确时间', value: '自定义区间' });
+  return chips;
+});
+
+const FILTER_DEFAULTS: Record<string, '' | 'today' | null> = {
+  timeRange: 'today',
+  status: '',
+  keyword: '',
+  agentName: '',
+  agentId: '',
+  traceId: '',
+  sessionId: '',
+  sourceEntry: '',
+  timeRangeExact: null
+};
+
+const clearFilter = (key: string) => {
+  if (key in FILTER_DEFAULTS) {
+    (filters as Record<string, unknown>)[key] = FILTER_DEFAULTS[key];
+    handleSearch();
+  }
+};
 
 // 时间快捷选项
 const timeShortcuts = [
@@ -1057,8 +1125,69 @@ onUnmounted(() => {
   align-items: center;
 }
 
+/* 高频筛选行：时间 / 状态 / 搜索常驻 */
+.filter-primary-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.filter-primary-row__search {
+  min-width: 0;
+}
+
 .filter-toggle {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.filter-toggle__icon {
+  transition: transform var(--admin-transition-fast);
+}
+
+.filter-toggle__icon.is-expanded {
+  transform: rotate(180deg);
+}
+
+/* 低频筛选区 */
+.filter-advanced {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: var(--admin-border-subtle);
+}
+
+/* 活跃筛选 chips */
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: var(--admin-border-subtle);
+}
+
+.filter-chips__label {
+  font-size: var(--admin-text-caption);
+  color: var(--admin-text-muted);
+  font-weight: 600;
+}
+
+.filter-chip {
+  max-width: 280px;
+}
+
+.filter-chip :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chips__clear {
+  color: var(--admin-text-muted);
 }
 
 .admin-error-row {
@@ -1511,8 +1640,8 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .filter-toggle {
-    display: inline-flex;
+  .filter-primary-row {
+    grid-template-columns: 1fr;
   }
 
   .admin-error-row {
