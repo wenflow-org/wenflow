@@ -21,31 +21,151 @@
       <el-button size="small" class="config-load-error__retry" @click="loadConfig">重新加载</el-button>
     </el-alert>
 
-    <section class="summary-strip">
-      <div class="summary-strip__item">
-        <span>连接</span>
-        <strong>{{ connectionStateLabel }}</strong>
+    <!-- 连接健康横幅：先回答「现在能用吗」 -->
+    <section class="health-banner" :class="`health-banner--${overallHealth.tone}`">
+      <div class="health-banner__verdict">
+        <span class="health-banner__dot"></span>
+        <div class="health-banner__copy">
+          <strong>{{ overallHealth.title }}</strong>
+          <p>{{ overallHealth.description }}</p>
+        </div>
       </div>
-      <div class="summary-strip__item">
-        <span>密钥</span>
-        <strong>{{ keyStateLabel }}</strong>
+      <div class="health-banner__metrics">
+        <div class="health-banner__metric">
+          <span>密钥</span>
+          <strong>{{ keyStateLabel }}</strong>
+        </div>
+        <div class="health-banner__metric">
+          <span>可用模型</span>
+          <strong>{{ form.availableModels.length }}</strong>
+        </div>
+        <div class="health-banner__metric">
+          <span>默认路由</span>
+          <strong>{{ routingReadyCount }}/3</strong>
+        </div>
+        <div class="health-banner__metric">
+          <span>Admin 范围</span>
+          <strong>{{ adminAccessModeLabel }}</strong>
+        </div>
       </div>
-      <div class="summary-strip__item">
-        <span>Admin 范围</span>
-        <strong>{{ adminAccessModeLabel }}</strong>
-      </div>
-      <div class="summary-strip__item">
-        <span>私有网络</span>
-        <strong>{{ networkPolicy.allowPrivateNetwork ? '允许' : '精确放行' }}</strong>
-      </div>
+      <el-button type="primary" class="health-banner__action" :loading="testing" @click="fetchModels">
+        {{ connectionStatus === 'connected' ? '重新拉取模型' : '连接并拉取模型' }}
+      </el-button>
     </section>
 
     <div class="config-layout">
       <div class="config-main">
-        <section class="flow-section security-section">
+        <section class="flow-section">
           <div class="flow-section__head flow-section__head--split">
             <div class="section-title-row">
               <span class="section-index">01</span>
+              <div>
+                <h2>接入与密钥</h2>
+                <p>模型服务的地址与凭证。密钥留空表示沿用已保存的值。</p>
+              </div>
+            </div>
+            <span class="head-badge" :class="`head-badge--${connectionStepStatus.tone}`">{{ connectionStepStatus.label }}</span>
+          </div>
+
+          <el-form :model="form" label-position="top" class="config-form">
+            <div class="field-grid field-grid--two">
+              <el-form-item label="服务地址">
+                <el-input v-model="form.apiUrl" placeholder="https://api.example.com/v1" />
+              </el-form-item>
+
+              <el-form-item label="API Key">
+                <el-input
+                  v-model="form.apiKeyInput"
+                  type="password"
+                  show-password
+                  :placeholder="form.apiKeyConfigured ? '留空则沿用' : '输入 API Key'"
+                />
+              </el-form-item>
+            </div>
+          </el-form>
+
+          <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
+            <span>{{ testResult.message }}</span>
+          </div>
+        </section>
+
+        <section class="flow-section">
+          <div class="flow-section__head flow-section__head--split">
+            <div class="section-title-row">
+              <span class="section-index">02</span>
+              <div>
+                <h2>模型与路由</h2>
+                <p>从可用模型中为不同用途指定默认模型。</p>
+              </div>
+            </div>
+            <div class="flow-section__meta-actions">
+              <span class="section-meta">最近拉取：{{ lastFetchLabel }}</span>
+              <span class="head-badge" :class="`head-badge--${modelStepStatus.tone}`">{{ modelStepStatus.label }}</span>
+            </div>
+          </div>
+
+          <p v-if="!form.availableModels.length && connectionStatus !== 'connected'" class="step-guide">
+            先在「01 接入与密钥」填写地址与密钥，然后点右上角「连接并拉取模型」。
+          </p>
+
+          <el-form :model="form" label-position="top" class="config-form">
+            <el-form-item label="可用模型">
+              <el-select
+                v-model="form.availableModels"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                placeholder="选择或补充模型"
+              >
+                <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
+              </el-select>
+            </el-form-item>
+
+            <div class="field-grid field-grid--three">
+              <el-form-item label="对话默认">
+                <el-select
+                  v-model="form.defaultModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择对话默认模型"
+                >
+                  <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="推理默认">
+                <el-select
+                  v-model="form.defaultReasoningModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择推理默认模型"
+                >
+                  <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="评估默认">
+                <el-select
+                  v-model="form.defaultEvaluationModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择评估默认模型"
+                >
+                  <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+            </div>
+          </el-form>
+        </section>
+
+        <section class="flow-section security-section">
+          <div class="flow-section__head flow-section__head--split">
+            <div class="section-title-row">
+              <span class="section-index">03</span>
               <div>
                 <h2>网络边界</h2>
                 <p>控制后台访问来源，以及模型、MCP 和内容提取是否可以连接本机或局域网服务。</p>
@@ -130,106 +250,6 @@
           <div v-if="networkPolicy.adminAccessMode === 'any'" class="issue-row issue-row--danger">
             Admin 已允许公网来源。请确认前方存在 VPN、访问网关或防火墙白名单。
           </div>
-        </section>
-
-        <section class="flow-section">
-          <div class="flow-section__head flow-section__head--split">
-            <div class="section-title-row">
-              <span class="section-index">02</span>
-              <div>
-                <h2>接入与密钥</h2>
-                <p>模型服务的地址与凭证。密钥留空表示沿用已保存的值。</p>
-              </div>
-            </div>
-            <el-button class="api-btn api-btn--ghost" @click="fetchModels" :loading="testing">连接并拉取模型</el-button>
-          </div>
-
-          <el-form :model="form" label-position="top" class="config-form">
-            <div class="field-grid field-grid--two">
-              <el-form-item label="服务地址">
-                <el-input v-model="form.apiUrl" placeholder="https://api.example.com/v1" />
-              </el-form-item>
-
-              <el-form-item label="API Key">
-                <el-input
-                  v-model="form.apiKeyInput"
-                  type="password"
-                  show-password
-                  :placeholder="form.apiKeyConfigured ? '留空则沿用' : '输入 API Key'"
-                />
-              </el-form-item>
-            </div>
-          </el-form>
-
-          <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
-            <span>{{ testResult.message }}</span>
-          </div>
-        </section>
-
-        <section class="flow-section">
-          <div class="flow-section__head flow-section__head--split">
-            <div class="section-title-row">
-              <span class="section-index">03</span>
-              <div>
-                <h2>模型与路由</h2>
-                <p>从可用模型中为不同用途指定默认模型。</p>
-              </div>
-            </div>
-            <span class="section-meta">最近拉取：{{ lastFetchLabel }}</span>
-          </div>
-
-          <el-form :model="form" label-position="top" class="config-form">
-            <el-form-item label="可用模型">
-              <el-select
-                v-model="form.availableModels"
-                multiple
-                filterable
-                allow-create
-                default-first-option
-                placeholder="选择或补充模型"
-              >
-                <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
-              </el-select>
-            </el-form-item>
-
-            <div class="field-grid field-grid--three">
-              <el-form-item label="对话默认">
-                <el-select
-                  v-model="form.defaultModel"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择对话默认模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="推理默认">
-                <el-select
-                  v-model="form.defaultReasoningModel"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择推理默认模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="评估默认">
-                <el-select
-                  v-model="form.defaultEvaluationModel"
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="选择评估默认模型"
-                >
-                  <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
-                </el-select>
-              </el-form-item>
-            </div>
-          </el-form>
         </section>
       </div>
 
@@ -376,6 +396,42 @@ const connectionStateLabel = computed(() => {
     default:
       return '未检测'
   }
+})
+
+// 默认路由完成度（对话/推理/评估 三项）
+const routingReadyCount = computed(() =>
+  [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length
+)
+
+// 01 接入与密钥 状态徽章
+const connectionStepStatus = computed(() => {
+  if (connectionStatus.value === 'connected') return { tone: 'success', label: connectionStateLabel.value }
+  if (connectionStatus.value === 'failed') return { tone: 'danger', label: connectionStateLabel.value }
+  return { tone: 'neutral', label: '待配置' }
+})
+
+// 02 模型与路由 状态徽章
+const modelStepStatus = computed(() => {
+  if (form.availableModels.length > 0) return { tone: 'success', label: `${form.availableModels.length} 个可用模型` }
+  return { tone: 'neutral', label: '未拉取' }
+})
+
+// 整体健康结论：横幅先回答「现在能用吗」
+const overallHealth = computed(() => {
+  if (connectionStatus.value === 'failed') {
+    return { tone: 'danger', title: '模型服务连接失败', description: '检查服务地址与密钥后重新连接。' }
+  }
+  if (!form.apiUrl && !form.apiKeyConfigured) {
+    return { tone: 'neutral', title: '尚未接入模型服务', description: '完成下方 01、02 两步后即可使用。' }
+  }
+  const missing: string[] = []
+  if (connectionStatus.value !== 'connected') missing.push('连接未验证')
+  if (!form.availableModels.length) missing.push('未拉取模型')
+  if (routingReadyCount.value < 3) missing.push(`默认路由 ${routingReadyCount.value}/3`)
+  if (missing.length === 0) {
+    return { tone: 'success', title: '模型服务已就绪', description: '连接、密钥、模型与默认路由均已配置。' }
+  }
+  return { tone: 'warning', title: '配置尚未完成', description: `待补齐：${missing.join('、')}。` }
 })
 
 const modelTestStateLabel = computed(() => {
@@ -637,35 +693,104 @@ onMounted(() => {
 }
 
 .summary-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
+  display: none;
+}
+
+/* ---------- 连接健康横幅 ---------- */
+.health-banner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 22px;
+  border-radius: var(--admin-radius-lg);
   border: 1px solid rgba(223, 231, 243, 0.92);
-  border-radius: 20px;
-  overflow: hidden;
   background: rgba(248, 250, 255, 0.88);
+  flex-wrap: wrap;
 }
 
-.summary-strip__item {
+.health-banner__verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 280px;
+  min-width: 240px;
+}
+
+.health-banner__dot {
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--admin-color-neutral);
+}
+
+.health-banner--success .health-banner__dot { background: var(--admin-color-success); box-shadow: 0 0 0 4px var(--admin-color-success-bg); }
+.health-banner--warning .health-banner__dot { background: var(--admin-color-warning); box-shadow: 0 0 0 4px var(--admin-color-warning-bg); }
+.health-banner--danger .health-banner__dot { background: var(--admin-color-error); box-shadow: 0 0 0 4px var(--admin-color-error-bg); }
+.health-banner--neutral .health-banner__dot { background: var(--admin-color-neutral); box-shadow: 0 0 0 4px var(--admin-color-neutral-bg); }
+
+.health-banner__copy {
   display: grid;
-  gap: 6px;
-  padding: 16px 18px;
+  gap: 3px;
 }
 
-.summary-strip__item + .summary-strip__item {
+.health-banner__copy strong {
+  font-size: var(--admin-text-title-sm);
+  color: var(--admin-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.health-banner__copy p {
+  margin: 0;
+  font-size: var(--admin-text-body-sm);
+  color: var(--admin-text-secondary);
+  line-height: 1.55;
+}
+
+.health-banner__metrics {
+  display: flex;
+  gap: 0;
+  flex: 1 1 auto;
+}
+
+.health-banner__metric {
+  display: grid;
+  gap: 2px;
+  padding: 0 18px;
   border-left: 1px solid rgba(223, 231, 243, 0.92);
 }
 
-.summary-strip__item span {
-  font-size: 12px;
-  color: #7b8ba3;
-  font-weight: 700;
+.health-banner__metric:first-child {
+  border-left: none;
+  padding-left: 0;
 }
 
-.summary-strip__item strong {
-  color: #22344d;
-  font-size: 1rem;
-  line-height: 1.35;
+.health-banner__metric span {
+  font-size: var(--admin-text-caption);
+  color: var(--admin-text-muted);
+  font-weight: 600;
+}
+
+.health-banner__metric strong {
+  font-size: var(--admin-text-title-sm);
+  color: var(--admin-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.health-banner__action {
+  flex-shrink: 0;
+}
+
+/* 步骤引导提示 */
+.step-guide {
+  margin: -4px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-color-info-bg);
+  color: var(--admin-text-brand);
+  font-size: var(--admin-text-body-sm);
+  line-height: 1.55;
 }
 
 .flow-section {
@@ -1159,7 +1284,7 @@ onMounted(() => {
 :deep(.el-textarea__inner),
 :deep(.el-input-number),
 :deep(.el-input-group__append) {
-  border-radius: 16px;
+  border-radius: var(--admin-radius-sm);
 }
 
 :deep(.el-input__wrapper),
@@ -1190,13 +1315,18 @@ onMounted(() => {
     position: static;
   }
 
+  .health-banner {
+    gap: 14px;
+  }
+
+  .health-banner__metrics {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
   .field-grid--three,
   .field-grid--test {
     grid-template-columns: 1fr;
-  }
-
-  .summary-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .policy-grid {
@@ -1209,13 +1339,8 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
-  .summary-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-strip__item + .summary-strip__item {
-    border-left: none;
-    border-top: 1px solid rgba(223, 231, 243, 0.92);
+  .health-banner__metric {
+    padding: 0 12px;
   }
 
   .field-grid--two {
