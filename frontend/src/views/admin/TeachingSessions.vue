@@ -106,7 +106,17 @@
           <el-button type="primary" plain @click="selectSession(session)">查看详情</el-button>
         </div>
       </article>
-      <el-empty v-if="!loading && sessions.length === 0" description="暂无教学会话" />
+      <el-result
+        v-if="loadError && !loading"
+        icon="error"
+        title="教学会话加载失败"
+        :sub-title="loadError"
+      >
+        <template #extra>
+          <el-button type="primary" @click="loadSessions">重新加载</el-button>
+        </template>
+      </el-result>
+      <el-empty v-else-if="!loading && sessions.length === 0" description="暂无教学会话" />
     </section>
 
     <div class="pager admin-list-pagination">
@@ -239,6 +249,7 @@ interface TeachingSessionRow {
 }
 
 const loading = ref(false);
+const loadError = ref('');
 const sessions = ref<TeachingSessionRow[]>([]);
 const total = ref(0);
 const page = ref(1);
@@ -289,6 +300,7 @@ const getTaskTypeLabel = (type: string | undefined) => ({
 
 const loadSessions = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const response = await adminTeachingSessionsApi.list({
       page: page.value,
@@ -307,6 +319,7 @@ const loadSessions = async () => {
     sessions.value = items;
     total.value = data.total || 0;
   } catch (error: any) {
+    loadError.value = '无法获取教学会话数据，请检查服务连接后重试。';
     toast.error(error.response?.data?.error?.message || error.message || '加载教学会话失败');
   } finally {
     loading.value = false;

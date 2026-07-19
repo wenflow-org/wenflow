@@ -20,6 +20,16 @@
       </template>
     </AdminPageHeader>
 
+    <el-alert
+      v-if="!statsAvailable && !refreshing"
+      type="error"
+      title="平台概览数据加载失败"
+      description="无法获取统计数据，页面展示的不是真实运行状态。请检查服务连接后点击右上角「刷新数据」重试。"
+      show-icon
+      :closable="false"
+      class="overview-load-error"
+    />
+
     <section class="overview-hero-grid">
       <article class="insight-card insight-card--primary">
         <div class="hero-kpi__copy">
@@ -1224,7 +1234,11 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .admin-overview {
+.overview-load-error {
+  margin-bottom: 2px;
+}
+
+.admin-overview {
     gap: 14px;
   }
 

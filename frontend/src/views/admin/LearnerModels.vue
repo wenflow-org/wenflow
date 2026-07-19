@@ -180,6 +180,7 @@ interface LearnerModelRow {
 
 const router = useRouter();
 const loading = ref(false);
+const loadError = ref('');
 const items = ref<LearnerModelRow[]>([]);
 
 const filters = reactive({
@@ -217,10 +218,12 @@ const modelHighlights = computed(() => [
 ]);
 
 const emptyStateTitle = computed(() => {
+  if (loadError.value) return '学习者模型加载失败';
   return hasFiltersApplied.value ? '当前筛选下没有匹配的学习者快照' : '还没有可展示的学习者模型';
 });
 
 const emptyStateDescription = computed(() => {
+  if (loadError.value) return loadError.value;
   return hasFiltersApplied.value
     ? '放宽筛选条件后再试。'
     : '学习轨迹累积后自动生成。';
@@ -284,6 +287,7 @@ const handleSizeChange = () => {
 
 const loadData = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const res = await adminLearnerModelsApi.list({
       ...filters,
@@ -295,6 +299,7 @@ const loadData = async () => {
     pagination.total = data.total || 0;
   } catch (error) {
     console.error(error);
+    loadError.value = '无法获取学习者模型数据，请检查服务连接后重试。';
     toast.error('加载学习者模型失败');
   } finally {
     loading.value = false;

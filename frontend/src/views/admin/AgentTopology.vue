@@ -139,6 +139,16 @@
           </template>
         </VueFlow>
 
+        <el-result
+          v-else-if="!loading && loadError"
+          icon="error"
+          title="拓扑数据加载失败"
+          :sub-title="loadError"
+        >
+          <template #extra>
+            <el-button type="primary" @click="loadAll">重新加载</el-button>
+          </template>
+        </el-result>
         <el-empty v-else-if="!loading" description="暂无拓扑数据" />
       </div>
     </section>
@@ -185,6 +195,7 @@ interface TopologyEdge {
 
 const range = ref<'24h' | '7d' | '30d'>('7d');
 const loading = ref(false);
+const loadError = ref('');
 const summary = ref<TopologySummary | null>(null);
 const elements = ref<Array<Node | Edge>>([]);
 
@@ -220,12 +231,14 @@ const SKILL_TOP_OFFSET = 250;
 
 async function loadAll() {
   loading.value = true;
+  loadError.value = '';
   try {
     const r = await adminAgentTopologyApi.getTopology(range.value);
     const { nodes, edges, summary: s } = r.data?.data || {};
     summary.value = s;
     elements.value = buildElements(nodes || [], edges || []);
   } catch (err: any) {
+    loadError.value = '无法获取拓扑数据，请检查服务连接后重试。';
     toast.error(err?.response?.data?.error?.message || '加载拓扑失败');
   } finally {
     loading.value = false;

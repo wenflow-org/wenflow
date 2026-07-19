@@ -11,6 +11,18 @@
       </template>
     </AdminPageHeader>
 
+    <el-result
+      v-if="!loading && !snapshot"
+      :icon="loadError ? 'error' : 'info'"
+      :title="loadError ? '学习者模型加载失败' : '暂无学习者模型数据'"
+      :sub-title="loadError || '该用户还没有生成学习者模型快照。'"
+    >
+      <template #extra>
+        <el-button v-if="loadError" type="primary" @click="loadData">重新加载</el-button>
+        <el-button @click="goBack">返回列表</el-button>
+      </template>
+    </el-result>
+
     <div v-if="snapshot" class="summary-meta">
       <div class="summary-meta__item"><span>版本</span><strong>{{ snapshot.snapshotVersion || '--' }}</strong></div>
       <div class="summary-meta__item"><span>生成于</span><strong>{{ formatTime(snapshot.freshness?.generatedAt) }}</strong></div>
@@ -333,6 +345,7 @@ interface LearnerModelSnapshot {
 }
 
 const loading = ref(false);
+const loadError = ref('');
 const recomputing = ref(false);
 const snapshot = ref<LearnerModelSnapshot | null>(null);
 const evidence = ref<LearnerEvidenceItem[]>([]);
@@ -420,6 +433,7 @@ const conceptRows = computed(() => snapshot.value?.knowledgeMemory?.currentPath?
 
 const loadData = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const [detailRes, evidenceRes] = await Promise.all([
       adminLearnerModelsApi.getDetail(userId, { pathId, mode: pathId ? 'path' : 'global' }),
@@ -430,6 +444,7 @@ const loadData = async () => {
     evidence.value = evidenceRes.data?.data || evidenceRes.data || [];
   } catch (error) {
     console.error(error);
+    loadError.value = '无法获取学习者模型详情，请检查服务连接后重试。';
     toast.error('加载学习者模型详情失败');
   } finally {
     loading.value = false;

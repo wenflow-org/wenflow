@@ -64,7 +64,17 @@
         style="min-width: 100%"
         >
           <template #empty>
-            <el-empty description="暂无用户数据" />
+            <el-result
+              v-if="loadError"
+              icon="error"
+              title="用户列表加载失败"
+              :sub-title="loadError"
+            >
+              <template #extra>
+                <el-button type="primary" @click="loadUsers">重新加载</el-button>
+              </template>
+            </el-result>
+            <el-empty v-else description="暂无用户数据" />
           </template>
           <el-table-column type="selection" width="48" />
           <el-table-column prop="name" label="昵称" min-width="220">
@@ -122,7 +132,17 @@
         </dl>
         <el-button class="admin-mobile-card__action" @click="openEditDialog(user)">编辑用户</el-button>
       </article>
-      <el-empty v-if="!loading && users.length === 0" description="暂无用户数据" />
+      <el-result
+        v-if="loadError && !loading"
+        icon="error"
+        title="用户列表加载失败"
+        :sub-title="loadError"
+      >
+        <template #extra>
+          <el-button type="primary" @click="loadUsers">重新加载</el-button>
+        </template>
+      </el-result>
+      <el-empty v-else-if="!loading && users.length === 0" description="暂无用户数据" />
     </section>
 
     <!-- 分页 -->
@@ -313,6 +333,7 @@ const createFormRef = ref<FormInstance>();
 const editFormRef = ref<FormInstance>();
 
 const loading = ref(false);
+const loadError = ref('');
 const users = ref<AdminUserRecord[]>([]);
 const tableRef = ref<{ clearSelection?: () => void } | null>(null);
 const createVisible = ref(false);
@@ -405,6 +426,7 @@ const projectionGrantNoteLabel = computed(() => projectionGrant.value?.note?.tri
 
 const loadUsers = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const response = await adminUsersApi.getUsers({
       page: pagination.page,
@@ -438,6 +460,7 @@ const loadUsers = async () => {
     }
   } catch (error) {
     console.error('加载用户列表失败:', error);
+    loadError.value = '无法获取用户数据，请检查服务连接后重试。';
     toast.error('加载用户列表失败');
   } finally {
     loading.value = false;

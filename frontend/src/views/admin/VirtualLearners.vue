@@ -113,6 +113,16 @@
           </div>
 
           <div v-if="loading" class="empty-state">正在加载虚拟学习者...</div>
+          <el-result
+            v-else-if="loadError && profiles.length === 0"
+            icon="error"
+            title="虚拟学习者加载失败"
+            :sub-title="loadError"
+          >
+            <template #extra>
+              <el-button type="primary" @click="loadProfiles">重新加载</el-button>
+            </template>
+          </el-result>
           <div v-else-if="filteredProfiles.length === 0" class="empty-state">无匹配虚拟学习者</div>
           <div v-else class="profile-accordion">
             <template v-for="group in pagedProfilesGrouped" :key="group.initial">
@@ -547,9 +557,12 @@ interface PersonaSeed {
   [key: string]: unknown
 }
 
+// 优先使用后端返回的中文错误消息，其次用场景化兜底文案；
+// 不直接展示 axios 原始英文消息（如 "Request failed with status code 500"）
 const getErrorMessage = (error: unknown, fallback: string) => {
-  const message = (error as { message?: unknown } | null)?.message
-  return typeof message === 'string' && message ? message : fallback
+  const err = error as { response?: { data?: { error?: { message?: unknown } } } } | null
+  const backendMessage = err?.response?.data?.error?.message
+  return typeof backendMessage === 'string' && backendMessage ? backendMessage : fallback
 }
 
 const PERSONA_PROFILE_TEXT_FIELDS = [
@@ -595,6 +608,7 @@ type VirtualLearnerProfileDraft = VirtualLearnerForm['profile']
 
 const router = useRouter()
 const loading = ref(false)
+const loadError = ref('')
 const submitting = ref(false)
 const generatingScenario = ref(false)
 const profiles = ref<VirtualLearnerProfile[]>([])
@@ -841,6 +855,7 @@ const setFilter = (value: ProfileFilter) => {
 
 const loadProfiles = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await adminApi.getVirtualLearners({
       page: 1,
@@ -853,6 +868,7 @@ const loadProfiles = async () => {
       pagination.value.total = profiles.value.length
     }
   } catch (error) {
+    loadError.value = '无法获取虚拟学习者数据，请检查服务连接后重试。'
     ElMessage.error(getErrorMessage(error, '加载失败'))
   } finally {
     loading.value = false

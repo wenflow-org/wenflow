@@ -118,7 +118,17 @@
           <el-button type="primary" plain @click="openSkillWorkbench(config)">快速查看</el-button>
         </div>
       </article>
-      <el-empty v-if="!loading && filteredConfigs.length === 0" description="没有匹配的外挂组件" />
+      <el-result
+        v-if="loadError && !loading"
+        icon="error"
+        title="外挂组件配置加载失败"
+        :sub-title="loadError"
+      >
+        <template #extra>
+          <el-button type="primary" @click="fetchConfigs">重新加载</el-button>
+        </template>
+      </el-result>
+      <el-empty v-else-if="!loading && filteredConfigs.length === 0" description="没有匹配的外挂组件" />
     </section>
 
     <SkillNodeWorkbench v-model:visible="skillWorkbenchVisible" :skill-id="currentSkillId" @changed="fetchConfigs" />
@@ -152,6 +162,7 @@ interface SkillModelConfig {
 
 const configs = ref<SkillModelConfig[]>([]);
 const loading = ref(false);
+const loadError = ref('');
 const keyword = ref('');
 const statusFilter = ref('');
 const onlyEnabled = ref(false);
@@ -212,11 +223,13 @@ const getSkillDisplayName = (row: SkillModelConfig) => {
 
 const fetchConfigs = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const res = await adminSkillsApi.getSkillModelConfigs();
     configs.value = (res.data?.data || []).filter((config: SkillModelConfig) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(config.skillId));
     updateSummary();
   } catch {
+    loadError.value = '无法获取外挂组件配置，请检查服务连接后重试。';
     toast.error('获取 Skill 配置失败');
   }
   loading.value = false;

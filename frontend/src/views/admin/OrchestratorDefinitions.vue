@@ -9,6 +9,18 @@
       </template>
     </AdminPageHeader>
 
+    <el-alert
+      v-if="loadError"
+      type="error"
+      title="编排结构加载失败"
+      :description="loadError"
+      show-icon
+      :closable="false"
+      class="load-error-alert"
+    >
+      <el-button size="small" class="load-error-alert__retry" @click="loadOrchestrators">重新加载</el-button>
+    </el-alert>
+
     <nav class="stage-nav" aria-label="编排阶段">
       <button
         v-for="phase in phaseCards"
@@ -455,6 +467,7 @@ const router = useRouter()
 const route = useRoute()
 
 const loading = ref(false)
+const loadError = ref('')
 const orchestrators = ref<OrchestratorDefinition[]>([])
 const agentDefinitions = ref<RuntimeDefinition[]>([])
 const topologyData = ref<{ nodes?: TopologyNodeItem[] } | null>(null)
@@ -932,6 +945,7 @@ const syncPhaseFromRoute = () => {
 
 const loadOrchestrators = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const [orchestratorResponse, definitionResponse, topologyResponse] = await Promise.all([
       adminRuntimeDefinitionsApi.getOrchestratorDefinitions(),
@@ -946,6 +960,7 @@ const loadOrchestrators = async () => {
     const phaseId = typeof route.query.phaseId === 'string' ? route.query.phaseId : ''
     selectedPhaseId.value = PHASES.some((phase) => phase.id === phaseId) ? phaseId : PHASES[0].id
   } catch (error: any) {
+    loadError.value = '无法获取编排结构数据，请检查服务连接后重试。'
     toast.error(error.response?.data?.error?.message || '加载编排结构失败')
   } finally {
     loading.value = false
@@ -976,6 +991,10 @@ onMounted(() => {
 <style scoped>
 .orchestrator-definitions-page {
   gap: 16px;
+}
+
+.load-error-alert__retry {
+  margin-left: 12px;
 }
 
 .stage-nav {

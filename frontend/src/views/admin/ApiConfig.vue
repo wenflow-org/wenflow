@@ -10,6 +10,18 @@
       </template>
     </AdminPageHeader>
 
+    <el-alert
+      v-if="loadError"
+      type="error"
+      title="配置加载失败"
+      :description="loadError + '，当前展示的内容可能不是服务端实际配置，请恢复连接后刷新。'"
+      show-icon
+      :closable="false"
+      class="config-load-error"
+    >
+      <el-button size="small" class="config-load-error__retry" @click="loadConfig">重新加载</el-button>
+    </el-alert>
+
     <section class="summary-strip">
       <div class="summary-strip__item">
         <span>连接</span>
@@ -299,6 +311,7 @@ import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
 const loading = ref(false);
+const loadError = ref('');
 const saving = ref(false);
 const testing = ref(false);
 const lastFetchAt = ref('');
@@ -374,6 +387,7 @@ const policySourceLabel = computed(() => networkPolicy.source === 'database' ? '
 
 async function loadConfig() {
   loading.value = true;
+  loadError.value = '';
   try {
     const response = await adminApiConfigApi.getConfig();
     const data = response.data.data;
@@ -396,8 +410,10 @@ async function loadConfig() {
     networkPolicy.privateNetworkHosts = Array.isArray(policy.privateNetworkHosts) ? policy.privateNetworkHosts : [];
     networkPolicy.source = policy.source === 'database' ? 'database' : 'environment';
   } catch (error) {
-    const message = (error as { message?: unknown } | null)?.message;
-    toast.error(typeof message === 'string' && message ? message : '加载 API 配置失败');
+    const err = error as { response?: { data?: { error?: { message?: unknown } } } } | null;
+    const backendMessage = err?.response?.data?.error?.message;
+    loadError.value = typeof backendMessage === 'string' && backendMessage ? backendMessage : '无法获取配置数据，请检查服务连接后重试。';
+    toast.error('加载 API 配置失败');
   } finally {
     loading.value = false;
   }
@@ -559,6 +575,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.config-load-error__retry {
+  margin-left: 12px;
+}
+
 .api-config-page {
   display: grid;
   gap: 18px;
