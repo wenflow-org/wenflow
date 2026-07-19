@@ -155,7 +155,7 @@ defineProps<{
 .admin-page-header__pill--info {
   background: var(--admin-color-info-bg);
   border-color: rgba(52, 120, 246, 0.18);
-  color: var(--admin-text-brand);
+  color: #295bd2;
 }
 .admin-page-header__pill--success {
   background: var(--admin-color-success-bg);
@@ -175,7 +175,11 @@ defineProps<{
 .admin-page-header__pill--neutral {
   background: var(--admin-color-neutral-bg);
   border-color: rgba(100, 116, 139, 0.18);
-  color: var(--admin-color-neutral);
+  color: var(--admin-text-secondary);
+}
+
+[data-theme="dark"] .admin-page-header__pill--info {
+  color: var(--admin-text-brand);
 }
 
 .admin-page-header__actions {

@@ -48,6 +48,14 @@
   --tremor-spacing: var(--spacing-4);
   --tremor-spacing-md: var(--spacing-6);
   --tremor-spacing-lg: var(--spacing-8);
+
+  /* el-avatar 默认浅灰底(#c0c4cc)配白字仅 1.75:1，统一加深为品牌蓝保证可读 */
+  --el-avatar-bg-color: #1f57cc;
+}
+
+/* EP 在元素级定义了 --el-avatar-bg-color，需用更高优先级覆盖 */
+#app .el-avatar {
+  --el-avatar-bg-color: #1f57cc;
 }
 
 /* ========================================

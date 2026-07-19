@@ -38,7 +38,19 @@
     </section>
 
     <section class="admin-list-card skill-browser">
-      <el-table :data="filteredSkills" v-loading="loading" stripe style="width: 100%">
+      <el-result
+        v-if="loadError && !loading && skills.length === 0"
+        icon="error"
+        title="Skill 目录加载失败"
+        :sub-title="loadError"
+        class="skill-load-error"
+      >
+        <template #extra>
+          <el-button type="primary" @click="loadRegistry">重新加载</el-button>
+        </template>
+      </el-result>
+      <el-table v-else :data="filteredSkills" v-loading="loading" stripe style="width: 100%">
+
         <el-table-column label="Skill" min-width="300">
           <template #default="{ row }">
             <div class="skill-cell">
@@ -230,6 +242,7 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const loadError = ref('')
 const skills = ref<SkillDirectoryRow[]>([])
 const summary = ref<{ total: number; active24h: number; neverCalled: number; unhealthy: number } | null>(null)
 const keyword = ref('')
@@ -471,6 +484,7 @@ const loadPromptSummaries = async (directorySkills: SkillDirectoryRow[]) => {
 
 const loadRegistry = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const [skillConfigResponse, runtimeSkillResponse] = await Promise.all([
       adminSkillsApi.getSkillModelConfigs(),
@@ -495,6 +509,7 @@ const loadRegistry = async () => {
     void loadPromptSummaries(skills.value)
   } catch (error) {
     console.error('加载 Skill 目录失败:', error)
+    loadError.value = '无法获取 Skill 数据，请检查服务连接后重试。'
     toast.error('加载 Skill 目录失败')
   } finally {
     loading.value = false
