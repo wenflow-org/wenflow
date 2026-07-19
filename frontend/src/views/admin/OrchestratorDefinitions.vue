@@ -762,7 +762,7 @@ const flowElements = computed<Array<Node | Edge>>(() => {
       animated: hasLoop,
       style: {
         stroke: hasCondition
-          ? '#d97706'
+          ? '#b45309'
           : sharedVariables.length
             ? '#3478f6'
             : '#94a3b8',

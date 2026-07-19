@@ -87,9 +87,9 @@
           <template v-else>
           <section class="achievement-filter-row">
             <div class="achievement-filter-tabs">
-              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'all' }" @click="filterType = 'all'">全部</button>
-              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'unlocked' }" @click="filterType = 'unlocked'">已解锁</button>
-              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'locked' }" @click="filterType = 'locked'">未解锁</button>
+              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'all' }" :aria-pressed="filterType === 'all'" @click="filterType = 'all'">全部</button>
+              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'unlocked' }" :aria-pressed="filterType === 'unlocked'" @click="filterType = 'unlocked'">已解锁</button>
+              <button class="achievement-filter-chip" :class="{ 'achievement-filter-chip--active': filterType === 'locked' }" :aria-pressed="filterType === 'locked'" @click="filterType = 'locked'">未解锁</button>
             </div>
             <div class="achievement-filter-tags">
               <button
@@ -97,6 +97,7 @@
                 :key="type.value"
                 class="achievement-filter-chip achievement-filter-chip--tag"
                 :class="{ 'achievement-filter-chip--active': filterCategory === type.value }"
+                :aria-pressed="filterCategory === type.value"
                 @click="filterCategory = filterCategory === type.value ? 'all' : type.value"
               >
                 {{ type.label }}
@@ -904,6 +905,7 @@ onUnmounted(() => {
   font: inherit;
   font-size: 13px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .achievement-filter-chip--active {

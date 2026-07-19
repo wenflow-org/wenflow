@@ -787,6 +787,36 @@ onMounted(() => {
   padding: 8px 10px;
 }
 
+/* 选中态改用浅蓝底 + 深色文字：纯色蓝底会让卡片内的说明文字（small）几乎不可见 */
+:deep(.mode-grid .el-radio-button.is-active .el-radio-button__inner) {
+  background: rgba(52, 120, 246, 0.1);
+  border-color: rgba(52, 120, 246, 0.45);
+  color: #295bd2;
+  box-shadow: none;
+}
+
+:deep(.mode-grid .el-radio-button.is-active .mode-option strong) {
+  color: #295bd2;
+}
+
+:deep(.mode-grid .el-radio-button.is-active .mode-option small) {
+  color: #5d6880;
+}
+
+[data-theme="dark"] :deep(.mode-grid .el-radio-button.is-active .el-radio-button__inner) {
+  background: rgba(90, 148, 248, 0.18);
+  border-color: rgba(90, 148, 248, 0.45);
+  color: #a8c5fc;
+}
+
+[data-theme="dark"] :deep(.mode-grid .el-radio-button.is-active .mode-option strong) {
+  color: #a8c5fc;
+}
+
+[data-theme="dark"] :deep(.mode-grid .el-radio-button.is-active .mode-option small) {
+  color: #8ba3b5;
+}
+
 .topbar-btn--primary {
   box-shadow: none;
 }

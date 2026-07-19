@@ -266,6 +266,7 @@
                     @compositionstart="isComposing = true"
                     @compositionend="isComposing = false"
                     :placeholder="hasConversationStarted ? '回答上面的问题，或补充你的基础、时间和限制…' : '先说说你最近想解决什么，或现在卡在哪里...'"
+                    aria-label="输入你想解决的事或补充信息"
                     :disabled="loading"
                     rows="1"
                     @input="autoResize"
@@ -279,7 +280,8 @@
                   </span>
                 </div>
                 <div class="planning-composer__row">
-                  <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn">
+                  <span class="planning-composer__hint">Enter 发送，Shift+Enter 换行</span>
+                  <button @click="sendMessage" :disabled="loading || (!userInput.trim() && selectedQuickReplies.length === 0)" class="planning-send-btn" aria-label="发送" title="发送（Enter）">
                     <el-icon v-if="loading"><Loading /></el-icon>
                     <el-icon v-else><Promotion /></el-icon>
                     <span>发送</span>
@@ -1311,11 +1313,19 @@ const retryLastMessage = async () => {
 
   const resetConversation = async () => {
     try {
-       await ElMessageBox.confirm('确定清空本次对话吗？', '清空本次对话', {
+      const confirmPromise = ElMessageBox.confirm('清空后当前对话记录将被删除，且无法恢复。', '清空本次对话', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
       });
+
+      // 危险操作的默认焦点放在"取消"上，避免误按回车直接执行
+      setTimeout(() => {
+        const cancelBtn = document.querySelector<HTMLElement>('.el-message-box__btns .el-button');
+        cancelBtn?.focus();
+      }, 0);
+
+      await confirmPromise;
 
       if (conversationId.value) {
         if (isTestMode.value) {
@@ -1418,10 +1428,8 @@ const startConversation = async (goal: string) => {
     const failureEnvelope = getStructuredFailureEnvelope(error);
     if (failureEnvelope) {
       syncConversationState(failureEnvelope);
-      toast.warning('这次没有成功整理你的回答，请重试。');
-    } else {
-      toast.error(error.message || '开始对话失败，请稍后重试');
     }
+    // 错误提示统一走对话内的可重试气泡，不再重复弹 toast
     appendRetryableFailureMessage('这次没有成功开始对话。');
   } finally {
     loading.value = false;
@@ -1549,10 +1557,8 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
       if (!isTestMode.value && userMessages.value.length > 0) {
         userMessages.value.pop();
       }
-      toast.warning('这次没有成功整理你的回答，请重试确认。');
-    } else {
-      toast.error(error.message || '确认失败，请重试');
     }
+    // 错误提示统一走对话内的可重试气泡，不再重复弹 toast
     appendRetryableFailureMessage('这次没有成功确认并生成路径。', 'confirm');
   } finally {
     loading.value = false;
@@ -1604,10 +1610,8 @@ const sendMessageInternal = async (content: string) => {
       if (!isTestMode.value && userMessages.value.length > 0) {
         userMessages.value.pop();
       }
-      toast.warning('这次没有成功整理你的回答，请点击重试。');
-    } else {
-      toast.error(error.message || '回复失败，请稍后重试');
     }
+    // 错误提示统一走对话内的可重试气泡，不再重复弹 toast
     appendRetryableFailureMessage('这次没有成功处理你的回答。');
   } finally {
     loading.value = false;
@@ -2954,6 +2958,23 @@ onUnmounted(() => {
 .planning-send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.planning-composer__hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--planning-muted);
+  opacity: 0.75;
+  white-space: nowrap;
+  user-select: none;
+}
+
+@media (max-width: 768px) {
+  .planning-composer__hint {
+    display: none;
+  }
 }
 
 .proposal-action-panel {

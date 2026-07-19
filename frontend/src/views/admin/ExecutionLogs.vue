@@ -59,6 +59,7 @@
           <el-input
             v-model="filters.agentId"
             placeholder="如 ai-teaching-agent"
+            aria-label="节点 ID（精确）"
             clearable
             class="filter-input"
           />
@@ -69,6 +70,7 @@
           <el-input
             v-model="filters.traceId"
             placeholder="链路追踪 ID"
+            aria-label="Trace ID"
             clearable
             class="filter-input"
           />
@@ -79,6 +81,7 @@
           <el-input
             v-model="filters.sessionId"
             placeholder="学习会话 ID"
+            aria-label="Session ID"
             clearable
             class="filter-input"
           />
@@ -135,6 +138,7 @@
           <el-input
             v-model="filters.keyword"
             placeholder="搜索输入/输出/错误"
+            aria-label="搜索输入/输出/错误"
             clearable
             class="search-input"
           >

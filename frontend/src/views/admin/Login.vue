@@ -51,7 +51,7 @@
 
             <div class="auth-switch auth-switch--admin">
               <span>没有账号或无法登录？</span>
-              <strong>请联系管理员</strong>
+              <strong>请联系平台所有者开通，或查看部署文档</strong>
             </div>
           </el-form>
         </div>
@@ -128,7 +128,8 @@ const handleLogin = async () => {
       toast.error(response.data.message || '登录失败，请检查账号密码');
     }
   } catch (error: any) {
-    console.error('登录失败:', error);
+    // 不打印完整 AxiosError（其 config.data 含明文密码），只记录状态码
+    console.debug('管理员登录请求失败:', error?.response?.status ?? error?.code ?? 'network-error');
     toast.error(error.response?.data?.error?.message || '登录失败，请检查账号密码');
   } finally {
     loading.value = false;

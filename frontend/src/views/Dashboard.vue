@@ -1627,6 +1627,156 @@ a.dashboard-list__item:hover .dashboard-list__action {
   }
 }
 
+/* ========== 暗色模式 ========== */
+[data-theme="dark"] .dashboard-page {
+  --dash-ink: #edf2f6;
+  --dash-muted: #8ba3b5;
+  --dash-blue: #5a94f8;
+  --dash-blue-deep: #8db3fa;
+  background: #0f1820;
+}
+
+[data-theme="dark"] .dashboard-bg-grid {
+  background-image: linear-gradient(rgba(237, 242, 246, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(237, 242, 246, 0.045) 1px, transparent 1px);
+}
+
+[data-theme="dark"] .dashboard-header {
+  background: rgba(15, 24, 32, 0.82);
+  border-bottom-color: rgba(237, 242, 246, 0.08);
+}
+
+[data-theme="dark"] .dashboard-header--scrolled {
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
+}
+
+[data-theme="dark"] .header-nav {
+  background: rgba(30, 45, 58, 0.72);
+  border-color: rgba(237, 242, 246, 0.08);
+}
+
+[data-theme="dark"] .nav-item {
+  color: color-mix(in srgb, var(--dash-ink) 68%, transparent);
+}
+
+[data-theme="dark"] .nav-item:hover,
+[data-theme="dark"] .nav-item--active {
+  background: rgba(90, 148, 248, 0.16);
+}
+
+[data-theme="dark"] .user-chip {
+  background: rgba(30, 45, 58, 0.78);
+  border-color: rgba(237, 242, 246, 0.1);
+}
+
+[data-theme="dark"] .surface-card,
+[data-theme="dark"] .overview-card,
+[data-theme="dark"] .today-card {
+  background: rgba(26, 37, 47, 0.76);
+  border-color: rgba(237, 242, 246, 0.07);
+}
+
+[data-theme="dark"] .pill {
+  background: rgba(90, 148, 248, 0.14);
+}
+
+[data-theme="dark"] .dashboard-list__item {
+  background: rgba(30, 45, 58, 0.8);
+}
+
+[data-theme="dark"] .dashboard-list__item:hover {
+  background: rgba(42, 61, 77, 0.9);
+}
+
+[data-theme="dark"] .dashboard-list__item--primary {
+  background: linear-gradient(135deg, rgba(90, 148, 248, 0.14), rgba(31, 87, 204, 0.08));
+  border-color: rgba(90, 148, 248, 0.26);
+}
+
+[data-theme="dark"] .dashboard-list__item--primary:hover {
+  background: linear-gradient(135deg, rgba(90, 148, 248, 0.2), rgba(31, 87, 204, 0.12));
+  border-color: rgba(90, 148, 248, 0.4);
+}
+
+[data-theme="dark"] .dashboard-list__item--accent {
+  background: rgba(30, 45, 58, 0.6);
+  border-color: rgba(90, 148, 248, 0.12);
+}
+
+[data-theme="dark"] .dashboard-list__item--muted {
+  background: rgba(30, 45, 58, 0.5);
+}
+
+[data-theme="dark"] .dashboard-list__action--muted,
+[data-theme="dark"] .dashboard-list__item--muted .dashboard-list__action {
+  background: rgba(237, 242, 246, 0.1);
+}
+
+[data-theme="dark"] .today-item {
+  background: rgba(30, 45, 58, 0.8);
+}
+
+[data-theme="dark"] .today-item:hover {
+  background: rgba(42, 61, 77, 0.9);
+}
+
+[data-theme="dark"] .today-item__action {
+  background: rgba(90, 148, 248, 0.14);
+}
+
+[data-theme="dark"] .focus-card {
+  background: linear-gradient(180deg, rgba(90, 148, 248, 0.1), rgba(26, 37, 47, 0.76));
+  border-color: rgba(90, 148, 248, 0.16);
+}
+
+[data-theme="dark"] .focus-card__badge {
+  background: rgba(90, 148, 248, 0.16);
+}
+
+[data-theme="dark"] .focus-card__stats article,
+[data-theme="dark"] .achievement-summary article,
+[data-theme="dark"] .friction-card {
+  background: rgba(30, 45, 58, 0.72);
+  border-color: rgba(237, 242, 246, 0.07);
+}
+
+[data-theme="dark"] .achievement-note {
+  background: rgba(90, 148, 248, 0.1);
+}
+
+[data-theme="dark"] .dashboard-calendar-status__card {
+  background: rgba(30, 45, 58, 0.72);
+  border-color: rgba(237, 242, 246, 0.06);
+}
+
+[data-theme="dark"] .dashboard-calendar-status__zone--z1 {
+  background: rgba(59, 130, 246, 0.18);
+  color: #8db3fa;
+}
+
+[data-theme="dark"] .dashboard-calendar-status__zone--z2 {
+  background: rgba(245, 158, 11, 0.16);
+  color: #f5b54a;
+}
+
+[data-theme="dark"] .dashboard-calendar-status__zone--z3 {
+  background: rgba(239, 68, 68, 0.16);
+  color: #f49a9c;
+}
+
+[data-theme="dark"] .dashboard-calendar-status__zone--rest {
+  background: rgba(139, 163, 181, 0.16);
+  color: #a3b5c6;
+}
+
+[data-theme="dark"] .dashboard-calendar-status__analysis {
+  background: rgba(90, 148, 248, 0.1);
+  border-color: rgba(90, 148, 248, 0.16);
+}
+
+[data-theme="dark"] .dashboard-calendar-status__analysis p {
+  color: color-mix(in srgb, var(--dash-ink) 82%, transparent);
+}
+
 @media (max-width: 480px) {
   .dashboard-main {
     width: min(100% - 16px, 1240px);

@@ -22,7 +22,7 @@
               @change="handleEnabledChange"
             />
             <div class="field-hint">
-              启用后将使用你配置的 API，禁用则使用平台默认
+              填写并保存配置后即可启用。启用后 AI 调用使用你的 API，禁用则使用平台默认
             </div>
           </el-form-item>
 
@@ -30,7 +30,7 @@
             <el-input
               v-model="apiConfig.endpoint"
               placeholder="https://api.openai.com/v1"
-              :disabled="!apiConfig.enabled || busy"
+              :disabled="busy"
             />
             <div class="field-hint">
               例如：https://api.openai.com/v1 或 https://api.deepseek.com
@@ -43,7 +43,7 @@
               type="password"
               :placeholder="hasSavedApiKey ? '已保存密钥，留空表示继续使用' : 'sk-...'"
               show-password
-              :disabled="!apiConfig.enabled || busy"
+              :disabled="busy"
             />
             <div class="field-hint">
               {{ hasSavedApiKey ? '密钥已安全保存。仅在需要替换时输入新值。' : '你的 API 密钥，仅用于身份验证。' }}
@@ -54,7 +54,7 @@
             <el-input
               v-model="apiConfig.chatModel"
               placeholder="deepseek-v4-flash"
-              :disabled="!apiConfig.enabled || busy"
+              :disabled="busy"
             />
             <div class="field-hint">
               用于常规对话和任务生成的模型
@@ -65,7 +65,7 @@
             <el-input
               v-model="apiConfig.reasoningModel"
               placeholder="deepseek-v4-pro"
-              :disabled="!apiConfig.enabled || busy"
+              :disabled="busy"
             />
             <div class="field-hint">
               用于复杂推理任务的模型（可选，默认同对话模型）
@@ -78,7 +78,7 @@
                 type="default"
                 :loading="testing"
                 @click="testConnection"
-                :disabled="!apiConfig.enabled || busy"
+                :disabled="busy"
               >
                 测试连接
               </el-button>
@@ -86,7 +86,7 @@
                 type="primary"
                 :loading="saving"
                 @click="saveApiConfig"
-                :disabled="!apiConfig.enabled || busy"
+                :disabled="busy"
               >
                 保存配置
               </el-button>
@@ -194,20 +194,20 @@ const testConnection = async () => {
   }
 };
 
-const saveApiConfig = async () => {
+const saveApiConfig = async (): Promise<boolean> => {
   if (!apiConfig.endpoint) {
     toast.warning('请先填写模型端点');
-    return;
+    return false;
   }
 
   if (!isValidEndpoint(apiConfig.endpoint)) {
     toast.warning('模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL');
-    return;
+    return false;
   }
 
   if (apiConfig.enabled && !apiConfig.apiKey && !hasSavedApiKey.value) {
     toast.warning('启用时必须填写 API Key');
-    return;
+    return false;
   }
 
   saving.value = true;
@@ -225,8 +225,10 @@ const saveApiConfig = async () => {
       hasSavedApiKey.value = true;
       apiConfig.apiKey = '';
     }
+    return true;
   } catch (error: any) {
     toast.error(`保存失败：${error.message}`);
+    return false;
   } finally {
     saving.value = false;
   }
@@ -269,7 +271,14 @@ const handleEnabledChange = async (enabled: boolean) => {
 
   if (!apiConfig.endpoint || !isValidEndpoint(apiConfig.endpoint) || (!hasSavedApiKey.value && !apiConfig.apiKey)) {
     apiConfig.enabled = false;
-    toast.info('请补全配置并保存后启用');
+    toast.info('请先填写模型端点和 API Key，保存后再启用');
+    return;
+  }
+
+  // 启用即保存，避免"界面显示已启用但服务端未生效"的不一致状态
+  const saved = await saveApiConfig();
+  if (!saved) {
+    apiConfig.enabled = false;
   }
 };
 </script>

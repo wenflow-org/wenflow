@@ -158,7 +158,7 @@
             <el-input v-model="createForm.email" />
           </el-form-item>
           <el-form-item label="密码" prop="password">
-            <el-input v-model="createForm.password" type="password" show-password placeholder="设置密码" />
+            <el-input v-model="createForm.password" type="password" show-password placeholder="设置密码" autocomplete="new-password" />
           </el-form-item>
           <el-form-item label="管理员">
             <el-switch v-model="createForm.isAdmin" />
@@ -201,7 +201,7 @@
             <el-switch v-model="editForm.isAdmin" />
           </el-form-item>
           <el-form-item label="重置密码" prop="password">
-            <el-input v-model="editForm.password" type="password" show-password placeholder="留空则不修改" />
+            <el-input v-model="editForm.password" type="password" show-password placeholder="留空则不修改" autocomplete="new-password" />
           </el-form-item>
         </el-form>
 

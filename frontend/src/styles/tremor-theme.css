@@ -794,6 +794,25 @@ body {
   color: var(--text-primary) !important;
 }
 
+/* el-alert 浅色变体文字对比度修复：EP 默认 #f56c6c / #e6a23c / #67c23a 在浅底上均不足 4.5:1 */
+.el-alert--error.is-light .el-alert__title,
+.el-alert--error.is-light .el-alert__description {
+  color: #b91c1c;
+}
+
+.el-alert--warning.is-light .el-alert__title {
+  color: #92400e;
+}
+
+.el-alert--warning.is-light .el-alert__description {
+  color: #b45309;
+}
+
+.el-alert--success.is-light .el-alert__title,
+.el-alert--success.is-light .el-alert__description {
+  color: #15803d;
+}
+
 [data-theme="dark"] .el-alert {
   background: var(--bg-surface) !important;
 }

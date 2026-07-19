@@ -393,7 +393,7 @@ watch(
 .summary-card .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
 .summary-card .value { font-size: 1.75rem; font-weight: 800; margin-top: 0.25rem; }
 .summary-card--blue .value { color: var(--color-primary); }
-.summary-card--green .value { color: #16a34a; }
+.summary-card--green .value { color: var(--admin-color-success, #15803d); }
 .summary-card--orange .value { color: #ea580c; }
 .summary-card--red .value { color: #dc2626; }
 .summary-card .danger { color: #dc2626; }

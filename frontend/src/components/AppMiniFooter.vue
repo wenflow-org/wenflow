@@ -81,6 +81,10 @@ const version = appVersion;
 }
 
 .app-mini-footer__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 4px;
   color: var(--text-secondary, #64748b);
   text-decoration: none;
   transition: color 0.18s ease;
@@ -105,6 +109,19 @@ const version = appVersion;
 
 [data-theme='dark'] .app-mini-footer {
   border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='dark'] .app-mini-footer__link {
+  color: var(--neutral-700, #afc5d3);
+}
+
+[data-theme='dark'] .app-mini-footer__link:hover {
+  color: var(--color-primary-light, #8db3fa);
+}
+
+[data-theme='dark'] .app-mini-footer__tag,
+[data-theme='dark'] .app-mini-footer__meta {
+  color: var(--neutral-600, #8ba3b5);
 }
 
 @media (max-width: 640px) {

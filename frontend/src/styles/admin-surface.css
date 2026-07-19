@@ -45,15 +45,15 @@
   /* ----- 文字 ----- */
   --admin-text-primary: #1a2a44;
   --admin-text-secondary: #5b6577;
-  --admin-text-muted: #94a3b8;
+  --admin-text-muted: #64748b;
   --admin-text-brand: #3478f6;
 
   /* ----- 状态色 ----- */
-  --admin-color-success: #16a34a;
+  --admin-color-success: #15803d;
   --admin-color-success-bg: #ecfdf5;
   --admin-color-error: #dc2626;
   --admin-color-error-bg: #fef2f2;
-  --admin-color-warning: #d97706;
+  --admin-color-warning: #b45309;
   --admin-color-warning-bg: #fffbeb;
   --admin-color-info: #3478f6;
   --admin-color-info-bg: #eff6ff;
@@ -141,8 +141,14 @@
 
   --admin-text-primary: #e6edf6;
   --admin-text-secondary: #94a3b8;
-  --admin-text-muted: #64748b;
+  --admin-text-muted: #8ba3b5;
   --admin-text-brand: #5a94f8;
+
+  /* 暗色下状态文字色需要提亮（浅色的 success/warning 在深色底上对比度不足） */
+  --admin-color-success: #4ade80;
+  --admin-color-error: #f87171;
+  --admin-color-warning: #fbbf24;
+  --admin-color-neutral: #94a3b8;
 
   --admin-color-success-bg: rgba(22, 163, 74, 0.12);
   --admin-color-error-bg: rgba(220, 38, 38, 0.12);

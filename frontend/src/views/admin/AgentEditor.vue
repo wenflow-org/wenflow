@@ -686,7 +686,7 @@ onMounted(async () => {
 }
 
 .ed-meta-chip .k {
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 700;
@@ -741,7 +741,7 @@ onMounted(async () => {
 }
 
 .ed-loading {
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   font-size: 13px;
 }
 
@@ -969,7 +969,7 @@ onMounted(async () => {
 
 .req--no {
   background: #f1f5f9;
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
 }
 
 .protocol-block__call-sites {
@@ -1146,7 +1146,7 @@ onMounted(async () => {
 .rules-loading {
   padding: 60px;
   text-align: center;
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
 }
 
 @media (max-width: 900px) {

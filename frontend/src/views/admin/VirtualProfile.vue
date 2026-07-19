@@ -1240,7 +1240,7 @@ watch(() => route.params.storyId, () => {
 }
 
 .muted-marker {
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   font-size: 12px;
 }
 
