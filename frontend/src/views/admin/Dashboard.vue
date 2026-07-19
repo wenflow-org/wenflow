@@ -17,6 +17,16 @@
       </div>
 
       <div class="admin-header__right">
+        <button
+          class="admin-header__search"
+          type="button"
+          aria-label="快速跳转（Ctrl+K）"
+          @click="commandPaletteOpen = true"
+        >
+          <el-icon><Search /></el-icon>
+          <span class="admin-header__search-text">快速跳转</span>
+          <kbd class="admin-header__search-kbd">Ctrl K</kbd>
+        </button>
         <el-dropdown trigger="click">
           <div class="admin-header__user">
             <el-avatar :size="32" :src="currentUser?.avatarUrl">
@@ -87,14 +97,22 @@
         </div>
       </main>
     </div>
+
+    <!-- Ctrl+K 命令面板 -->
+    <AdminCommandPalette
+      v-model:visible="commandPaletteOpen"
+      :nav-groups="navGroups"
+      @select="handlePaletteSelect"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, type Component } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, type Component } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { adminAuthApi, hasAdminSession } from '@/api/adminApi';
 import { toast } from '../../utils/toast';
+import AdminCommandPalette from './components/AdminCommandPalette.vue';
 import {
   DataAnalysis,
   User,
@@ -110,6 +128,7 @@ import {
   Document,
   EditPen,
   Menu,
+  Search,
 } from '@element-plus/icons-vue';
 
 interface NavItem {
@@ -131,6 +150,30 @@ const isTestRoute = computed(() => route.path.startsWith('/admin/test/'));
 const currentUser = ref<{ name?: string; avatarUrl?: string; [key: string]: unknown } | null>(null);
 const sidebarCollapsed = ref(false);
 const mobileNavOpen = ref(false);
+const commandPaletteOpen = ref(false);
+
+// Ctrl+K / Cmd+K 打开命令面板
+const handleGlobalKeydown = (event: KeyboardEvent) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    commandPaletteOpen.value = !commandPaletteOpen.value;
+  }
+};
+
+interface PaletteNavItem {
+  to: string;
+  label: string;
+  icon: Component;
+  external?: boolean;
+}
+
+const handlePaletteSelect = (item: PaletteNavItem) => {
+  if (item.external) {
+    window.open(item.to, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  router.push(item.to);
+};
 
 // 侧边栏状态持久化
 onMounted(() => {
@@ -150,6 +193,12 @@ onMounted(() => {
   if (!hasAdminSession()) {
     router.push('/admin/login');
   }
+});
+
+window.addEventListener('keydown', handleGlobalKeydown);
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown);
 });
 
 const toggleSidebar = () => {
@@ -296,6 +345,39 @@ const handleLogout = () => {
   gap: 16px;
 }
 
+/* Ctrl+K 命令面板入口 */
+.admin-header__search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--admin-radius-md, 12px);
+  border: 1px solid rgba(214, 223, 240, 0.9);
+  background: rgba(255, 255, 255, 0.9);
+  color: #5f7187;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--fluent-duration-fast, 180ms) var(--fluent-easing, ease);
+}
+
+.admin-header__search:hover {
+  background: rgba(247, 250, 255, 0.98);
+  border-color: rgba(52, 120, 246, 0.24);
+  color: #22344d;
+}
+
+.admin-header__search-kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(214, 223, 240, 0.9);
+  background: #f6f8fc;
+  color: #8ba3b5;
+  font-size: 0.6875rem;
+  font-family: inherit;
+  font-weight: 600;
+}
+
 .admin-header__user {
   display: flex;
   align-items: center;
@@ -402,7 +484,7 @@ const handleLogout = () => {
   align-items: center;
   gap: 10px;
   padding: 11px 14px;
-  border-radius: 16px;
+  border-radius: var(--admin-radius-md, 12px);
   border: 1px solid transparent;
   background: transparent;
   color: #5f7187;
@@ -428,7 +510,15 @@ const handleLogout = () => {
 }
 
 .admin-sidebar__item.active::before {
-  display: none;
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 0 3px 3px 0;
+  background: var(--admin-text-brand, #3478f6);
 }
 
 .admin-sidebar__item--secondary {
@@ -453,7 +543,7 @@ const handleLogout = () => {
   margin: 0 12px;
   height: 42px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--admin-radius-md, 12px);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -529,6 +619,11 @@ const handleLogout = () => {
 
   .admin-header__menu {
     display: inline-flex;
+  }
+
+  .admin-header__search-text,
+  .admin-header__search-kbd {
+    display: none;
   }
 
   .admin-header__logo {
