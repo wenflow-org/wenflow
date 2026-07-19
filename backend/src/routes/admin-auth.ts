@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import prisma from '../config/database';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
@@ -80,7 +80,6 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
     res.json({
       success: true,
       data: {
-        token,
         user: userWithoutPassword,
       },
       message: '登录成功',

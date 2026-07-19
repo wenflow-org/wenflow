@@ -1554,9 +1554,6 @@ const confirmProposal = async (confirmText = '确认方案，生成学习路径'
     const failureEnvelope = getStructuredFailureEnvelope(error);
     if (failureEnvelope) {
       syncConversationState(failureEnvelope);
-      if (!isTestMode.value && userMessages.value.length > 0) {
-        userMessages.value.pop();
-      }
     }
     // 错误提示统一走对话内的可重试气泡，不再重复弹 toast
     appendRetryableFailureMessage('这次没有成功确认并生成路径。', 'confirm');
@@ -1607,9 +1604,6 @@ const sendMessageInternal = async (content: string) => {
     const failureEnvelope = getStructuredFailureEnvelope(error);
     if (failureEnvelope) {
       syncConversationState(failureEnvelope);
-      if (!isTestMode.value && userMessages.value.length > 0) {
-        userMessages.value.pop();
-      }
     }
     // 错误提示统一走对话内的可重试气泡，不再重复弹 toast
     appendRetryableFailureMessage('这次没有成功处理你的回答。');
@@ -1625,7 +1619,7 @@ const handleScroll = () => {
 onMounted(() => {
   void restoreConversation();
   
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
 });
 
 watch(

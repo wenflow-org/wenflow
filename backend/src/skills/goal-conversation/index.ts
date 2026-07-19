@@ -635,7 +635,8 @@ async function callAIWithRetry(
       temperature: options.temperature,
       maxTokens: currentMaxTokens,
       model: options.model,
-      agentId: 'skill:goal-conversation',
+      agentId: 'goal-agent',
+      skillId: 'goal-conversation',
       userId,
       action: 'goal-conversation:dialogue',
       sanitizeUserVisible: false

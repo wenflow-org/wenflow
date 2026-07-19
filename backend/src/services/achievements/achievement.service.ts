@@ -4,7 +4,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import AchievementSystem, { ACHIEVEMENTS, type AchievementDefinition } from './achievement-system';
-import stateTrackingService from '../learning/state-tracking.service';
+import learningStateService from '../learning/learning-state.service';
 
 interface UserStats {
   completedTasks: number;
@@ -14,6 +14,33 @@ interface UserStats {
   ktl: number;
   weekCompletionRate?: number;
   timeEfficiency?: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function achievementRecordId(userId: string, achievementId: string): string {
+  return `ach_${userId}_${achievementId}`;
+}
+
+export function calculateCurrentStreak(endTimes: Date[], now = new Date()): number {
+  const dateKeys = new Set(endTimes.map((date) => date.toISOString().slice(0, 10)));
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const todayKey = new Date(todayUtc).toISOString().slice(0, 10);
+  const yesterdayKey = new Date(todayUtc - DAY_MS).toISOString().slice(0, 10);
+
+  let cursor = dateKeys.has(todayKey)
+    ? todayUtc
+    : dateKeys.has(yesterdayKey)
+      ? todayUtc - DAY_MS
+      : null;
+  let streak = 0;
+
+  while (cursor !== null && dateKeys.has(new Date(cursor).toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor -= DAY_MS;
+  }
+
+  return streak;
 }
 
 class AchievementService {
@@ -40,36 +67,44 @@ class AchievementService {
           }
         });
 
-if (!exists) {
-          // 保存新成就
-          await prisma.achievements.create({
-            data: {
-              id: `ach_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-              userId,
-              type: achievement.type,
-              title: achievement.name,
-              description: achievement.description,
-              iconUrl: achievement.icon,
-              xpReward: achievement.xpReward,
-              earnedAt: new Date()
-            }
-          });
+        if (exists) continue;
 
-          // 奖励XP
-          await prisma.users.update({
-            where: { id: userId },
-            data: {
-              xp: { increment: achievement.xpReward }
-            }
-          });
-
-          newAchievements.push(achievement);
-
-          logger.info(`成就解锁: ${achievement.name}`, {
-            userId,
-            xpReward: achievement.xpReward
-          });
+        const unlockedAt = new Date();
+        try {
+          await prisma.$transaction([
+            prisma.achievements.create({
+              data: {
+                id: achievementRecordId(userId, achievement.id),
+                userId,
+                type: achievement.type,
+                title: achievement.name,
+                description: achievement.description,
+                iconUrl: achievement.icon,
+                completed: true,
+                xpReward: achievement.xpReward,
+                unlockedAt,
+                earnedAt: unlockedAt
+              }
+            }),
+            prisma.users.update({
+              where: { id: userId },
+              data: {
+                xp: { increment: achievement.xpReward }
+              }
+            })
+          ]);
+        } catch (error) {
+          // 稳定主键充当并发 claim；另一请求已解锁时不重复发放 XP。
+          if ((error as { code?: string })?.code === 'P2002') continue;
+          throw error;
         }
+
+        newAchievements.push(achievement);
+
+        logger.info(`成就解锁: ${achievement.name}`, {
+          userId,
+          xpReward: achievement.xpReward
+        });
       }
 
       return newAchievements;
@@ -96,7 +131,7 @@ if (!exists) {
     try {
       const achievements = await prisma.achievements.findMany({
         where: { userId },
-        orderBy: { unlockedAt: 'desc' }
+        orderBy: { earnedAt: 'desc' }
       });
 
       return achievements.map(a => ({
@@ -106,7 +141,7 @@ if (!exists) {
         description: a.description ?? '',
         iconUrl: a.iconUrl,
         xpReward: a.xpReward ?? 0,
-        earnedAt: a.unlockedAt
+        earnedAt: a.unlockedAt || a.earnedAt
       }));
     } catch (error) {
       logger.error('获取用户成就失败:', error);
@@ -200,47 +235,42 @@ if (!exists) {
         where: { userId },
         select: {
           id: true,
+          status: true,
           milestones: {
             select: { status: true }
           }
         }
       });
 
-      const completedPaths = pathsWithAllMilestonesCompleted.filter(path =>
-        path.milestones.length > 0 && path.milestones.every(m => m.status === 'completed')
+      // 失败或仍在生成的占位路径不属于“应完成路径”。
+      const eligiblePaths = pathsWithAllMilestonesCompleted.filter(path =>
+        path.milestones.length > 0 && path.status !== 'failed' && path.status !== 'generating'
+      );
+      const completedPaths = eligiblePaths.filter(path =>
+        path.milestones.every(m => m.status === 'completed')
       ).length;
+      const totalPaths = eligiblePaths.length;
 
-      // 总学习路径数
-      const totalPaths = await prisma.learning_paths.count({
-        where: { userId }
-      });
-
-      // 当前KTL
-      const currentState = await stateTrackingService.getCurrentState(userId);
+      // 成就阈值使用 canonical 内部尺度（0-10），展示 API 继续使用 0-100。
+      const currentState = await learningStateService.getCurrentState(userId);
       const ktl = currentState?.ktl ?? 0;
 
-      // 计算连续学习天数（简化版，实际可能需要更复杂的逻辑）
-      // 注意：endTime是必需字段，无需过滤null值
+      // streak 只需覆盖最长 30 天成就，按 UTC 自然日从今天或昨天连续回溯。
+      const streakWindowStart = new Date(Date.now() - 31 * DAY_MS);
       const sessions = await prisma.teaching_sessions.findMany({
         where: {
-          userId
+          userId,
+          status: 'completed',
+          wrapup: { not: null },
+          endTime: { gte: streakWindowStart }
         },
-        orderBy: { startTime: 'desc' },
-        take: 30
+        select: { endTime: true },
+        orderBy: { endTime: 'desc' }
       });
 
-      let currentStreak = 0;
-      const dates = new Set<string>();
-
-      for (const session of sessions) {
-        if (session.endTime) {
-          const date = session.endTime.toISOString().split('T')[0];
-          if (!dates.has(date)) {
-            dates.add(date);
-            currentStreak++;
-          }
-        }
-      }
+      const currentStreak = calculateCurrentStreak(
+        sessions.flatMap((session) => session.endTime ? [session.endTime] : [])
+      );
 
       return {
         completedTasks,

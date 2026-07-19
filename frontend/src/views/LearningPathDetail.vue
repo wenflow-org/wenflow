@@ -1194,7 +1194,7 @@ const previewReplan = async () => {
   try {
     const response = await learningAPI.requestPathReplan(pathId.value, {
       triggerSource: 'learner-model-agent',
-      mode: 'new_version',
+      mode: 'overwrite',
       reason: pathReplanSignal.value?.rationale || '根据学习者状态建议确认当前路径的后续阶段安排',
       requireConfirmation: true,
     });
@@ -1223,7 +1223,7 @@ const confirmReplan = async () => {
     const request = latestReplanPreview.value.request;
     const response = await learningAPI.requestPathReplan(pathId.value, {
       triggerSource: request.triggerSource || 'learner-model-agent',
-      mode: request.mode || 'new_version',
+      mode: request.mode || 'overwrite',
       stageNumber: request.stageNumber,
       reason: request.reason,
       evidence: request.evidence,
@@ -1480,7 +1480,7 @@ const loadVirtualContext = async () => {
 
 onMounted(() => {
   loadPathData();
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 

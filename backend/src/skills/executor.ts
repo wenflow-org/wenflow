@@ -3,6 +3,7 @@ import systemPrisma from '../config/system-database';
 import { getRequestContext, runWithContext } from '../gateway/api-gateway/context';
 import { getAgentOfSkill } from '../services/agent-manifest.service';
 import { logger } from '../utils/logger';
+import { redactLogValue } from '../utils/secret-redaction';
 import { SkillDefinition, SkillExecutionResult } from './protocol';
 
 export type SkillHandler = (input: any) => Promise<any>;
@@ -33,6 +34,28 @@ function summarizeSkillPayload(value: any, depth = 0): any {
     return Object.fromEntries(entries);
   }
   return String(value);
+}
+
+function summarizeSkillLogPayload(
+  skillId: string,
+  value: any,
+  direction: 'input' | 'output'
+): any {
+  if (skillId === 'mcp-tool') {
+    if (direction === 'input') {
+      return {
+        toolId: typeof value?.toolId === 'string' ? value.toolId : null,
+        params: '[REDACTED]'
+      };
+    }
+    const result = value?.result;
+    return {
+      toolId: typeof value?.toolId === 'string' ? value.toolId : null,
+      source: typeof value?.source === 'string' ? value.source : null,
+      resultType: result === null ? 'null' : Array.isArray(result) ? 'array' : typeof result
+    };
+  }
+  return redactLogValue(summarizeSkillPayload(value));
 }
 
 function normalizeHandlerResult(result: any, durationMs: number): SkillExecutionResult {
@@ -108,18 +131,19 @@ export async function executeSkillHandler(
   const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const parentAgent = getAgentOfSkill(`skill:${skillId}`)?.id;
   const userId = resolveExecutionUserId(input, parentContext.userId);
-
-  return runWithContext({
+  const executionContext = {
     ...parentContext,
     userId,
     agentId: parentContext.agentId || parentAgent,
     callerAgent: parentContext.callerAgent || parentAgent,
     skillId,
     executionLogId,
-  }, async () => {
+  };
+
+  return runWithContext(executionContext, async () => {
     logger.info('[skill-executor] 开始执行', {
       skillId,
-      inputSummary: summarizeSkillPayload(input),
+      inputSummary: summarizeSkillLogPayload(skillId, input, 'input'),
     });
 
     try {
@@ -136,12 +160,21 @@ export async function executeSkillHandler(
       }
 
       await recordSkillStats(skillId, true, durationMs);
-      void recordSkillSpan(executionLogId, skillId, parentContext, input, result.output, durationMs, true);
+      void recordSkillSpan(
+        executionLogId,
+        skillId,
+        executionContext,
+        parentContext.skillId,
+        input,
+        result.output,
+        durationMs,
+        true
+      );
 
       logger.info('[skill-executor] 执行完成', {
         skillId,
         durationMs,
-        outputSummary: summarizeSkillPayload(result.output),
+        outputSummary: summarizeSkillLogPayload(skillId, result.output, 'output'),
       });
 
       return result;
@@ -154,17 +187,22 @@ export async function executeSkillHandler(
       void recordSkillSpan(
         executionLogId,
         skillId,
-        parentContext,
+        executionContext,
+        parentContext.skillId,
         input,
         null,
         durationMs,
         false,
-        error?.message || String(error)
+        skillId === 'mcp-tool'
+          ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
+          : error?.message || String(error)
       );
       logger.error('[skill-executor] 执行失败', {
         skillId,
         durationMs,
-        error: error?.message || String(error),
+        error: skillId === 'mcp-tool'
+          ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
+          : error?.message || String(error),
       });
       throw error;
     }
@@ -206,6 +244,7 @@ async function recordSkillSpan(
   executionLogId: string,
   skillId: string,
   ctx: ReturnType<typeof getRequestContext>,
+  parentSkillId: string | undefined,
   input: any,
   output: any,
   durationMs: number,
@@ -213,10 +252,10 @@ async function recordSkillSpan(
   errorMessage?: string
 ): Promise<void> {
   try {
-    const inputStr = JSON.stringify(summarizeSkillPayload(input)).slice(0, 1000);
+    const inputStr = JSON.stringify(summarizeSkillLogPayload(skillId, input, 'input')).slice(0, 1000);
     const outputStr = output === undefined || output === null
       ? null
-      : JSON.stringify(summarizeSkillPayload(output)).slice(0, 1000);
+      : JSON.stringify(summarizeSkillLogPayload(skillId, output, 'output')).slice(0, 1000);
     await prisma.agent_call_logs.create({
       data: {
         id: executionLogId,
@@ -235,7 +274,7 @@ async function recordSkillSpan(
         metadata: JSON.stringify({
           layer: 'skill-executor',
           skillId,
-          parentSkillId: ctx.skillId || null,
+          parentSkillId: parentSkillId || null,
           actorType: 'skill',
           actorId: skillId,
           experimentId: ctx.experimentId || null,

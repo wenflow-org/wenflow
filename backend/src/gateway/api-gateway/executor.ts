@@ -40,8 +40,7 @@ export class APIExecutor {
     if (status === 429) {
       return normalized.includes('quota')
         || normalized.includes('exceeded today')
-        || normalized.includes('try again tomorrow')
-        || normalized.includes('rate limit');
+        || normalized.includes('try again tomorrow');
     }
 
     if (status === 402 || status === 403) {
@@ -72,7 +71,7 @@ export class APIExecutor {
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
       attemptsMade = attempt;
       try {
-        const { response, statusCode } = await this.executeRequest(route, request);
+        const { response, statusCode } = await this.executeRequest(route, request, normalizedContext);
         lastStatusCode = statusCode;
         
         await this.logExecution(route, request, response, normalizedContext, startTime, attempt, true, undefined, lastStatusCode);
@@ -101,7 +100,12 @@ export class APIExecutor {
         }
         
         if (attempt < this.maxAttempts) {
-          await this.delay(this.retryDelay * attempt);
+          try {
+            await this.delay(this.retryDelay * attempt, normalizedContext.abortSignal);
+          } catch (delayError) {
+            lastError = delayError as Error;
+            break;
+          }
         }
       }
     }
@@ -110,7 +114,11 @@ export class APIExecutor {
     throw lastError || new Error('API execution failed after retries');
   }
 
-  private async executeRequest(route: ResolvedRoute, request: ChatRequest): Promise<{ response: ChatResponse; statusCode: number }> {
+  private async executeRequest(
+    route: ResolvedRoute,
+    request: ChatRequest,
+    context: ExecutionContext
+  ): Promise<{ response: ChatResponse; statusCode: number }> {
     if (isEncryptedSecret(route.apiKey)) {
       throw new APIExecutionError('API Key 解密边界缺失，已阻止发送数据库密文', { retryable: false });
     }
@@ -146,7 +154,12 @@ export class APIExecutor {
         body: requestBody,
         timeoutMs,
         maxResponseBytes: 10 * 1024 * 1024,
-        responseType: 'text'
+        responseType: 'text',
+        privateNetworkPolicy: route.privateNetworkPolicy
+          || (route.source === 'user-provider' || route.source === 'user-agent-override'
+            ? 'public-only'
+            : 'runtime'),
+        signal: context.abortSignal
       });
 
       const contentType = response.headers['content-type'] || '';
@@ -206,7 +219,15 @@ export class APIExecutor {
           requestUrl
         });
       }
-      if (error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')) {
+      if (error?.code === 'ERR_CANCELED') {
+        throw new APIExecutionError('API request canceled', {
+          retryable: false,
+          requestUrl
+        });
+      }
+      if (error?.code === 'ECONNABORTED'
+        || error?.code === 'ETIMEDOUT'
+        || /timeout|超时/i.test(error?.message || '')) {
         throw new APIExecutionError(`API request timed out after ${timeoutMs}ms`, {
           retryable: true,
           requestUrl
@@ -243,8 +264,22 @@ export class APIExecutor {
     return supportsThinkingMode(model);
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) return new Promise(resolve => setTimeout(resolve, ms));
+    if (signal.aborted) {
+      return Promise.reject(new APIExecutionError('API request canceled', { retryable: false }));
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      }, ms);
+      const abort = () => {
+        clearTimeout(timer);
+        reject(new APIExecutionError('API request canceled', { retryable: false }));
+      };
+      signal.addEventListener('abort', abort, { once: true });
+    });
   }
 
   private async logExecution(

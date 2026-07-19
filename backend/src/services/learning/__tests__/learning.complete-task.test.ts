@@ -142,7 +142,8 @@ describe('LearningService.completeTask milestone progression', () => {
       milestones: {
         updateMany: jest.fn(async ({ where, data }: any) => {
           const milestone = milestones.find(item => item.id === where.id)!
-          if (milestone.status === 'completed') return { count: 0 }
+          if (!milestone || (where.learningPathId && milestone.learningPathId !== where.learningPathId)) return { count: 0 }
+          if (where.status?.not === 'completed' && milestone.status === 'completed') return { count: 0 }
           Object.assign(milestone, data)
           return { count: 1 }
         }),
@@ -163,7 +164,8 @@ describe('LearningService.completeTask milestone progression', () => {
           return path
         }),
         updateMany: jest.fn(async ({ where, data }: any) => {
-          if (path.id !== where.id || path.status === 'completed') return { count: 0 }
+          if (path.id !== where.id || (where.userId && where.userId !== userId)) return { count: 0 }
+          if (where.status?.not === 'completed' && path.status === 'completed') return { count: 0 }
           Object.assign(path, data)
           return { count: 1 }
         })
@@ -211,5 +213,169 @@ describe('LearningService.completeTask milestone progression', () => {
     expect(duplicate.alreadyCompleted).toBe(true)
     expect(xp).toBe(100)
     expect(outbox.map(item => item.eventType)).toEqual(['task:completed', 'task:completed', 'path:completed'])
+    expect(mockUpdateLearningMetrics).not.toHaveBeenCalled()
+  })
+
+  it('任务在事务获得父级写锁前被替换时返回冲突而不是伪造已完成', async () => {
+    tx.subtasks.findUnique.mockResolvedValueOnce(null)
+
+    await expect(learningService.completeTask({ taskId: 'task-2', userId }))
+      .rejects.toMatchObject({ status: 409, code: 'PATH_TASK_REPLACED' })
+
+    expect(xp).toBe(0)
+    expect(outbox).toHaveLength(0)
+  })
+
+  it('回滚冲突生成时不会把已取消的旧 worker 恢复为可运行状态', async () => {
+    const restoreTx = {
+      learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          activeGenerationRunId: 'new-run',
+          aiPromptTemplate: '{"during":true}',
+          status: 'generating'
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      },
+      path_generation_runs: {
+        findUnique: jest.fn().mockResolvedValue({
+          rollbackSnapshot: JSON.stringify({
+            version: 1,
+            path: {
+              activeGenerationRunId: 'old-run',
+              aiPromptTemplate: '{"before":true}',
+              status: 'active',
+              restoreStatus: true
+            },
+            supersededRun: {
+              id: 'old-run',
+              status: 'processing',
+              retryAllowed: false,
+              finishedAt: null,
+              leaseExpiresAt: null,
+              errorCode: null,
+              errorMessage: null
+            }
+          })
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      }
+    }
+    mockPrisma.$transaction.mockImplementationOnce(async (callback: any) => callback(restoreTx))
+
+    await (learningService as any).restorePathAfterMutationConflict('path-1', 'new-run', {
+      status: 409,
+      code: 'PATH_MUTATION_HAS_LEARNING_PROGRESS',
+      message: 'blocked'
+    })
+
+    expect(restoreTx.path_generation_runs.updateMany).toHaveBeenCalledTimes(1)
+    expect(restoreTx.learning_paths.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        activeGenerationRunId: null,
+        aiPromptTemplate: '{"before":true}',
+        status: 'active'
+      })
+    }))
+  })
+
+  it('现有路径普通生成失败时恢复快照并保留失败 run 供重试', async () => {
+    const restoreTx = {
+      learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          activeGenerationRunId: 'new-run',
+          aiPromptTemplate: '{"during":true}',
+          status: 'generating'
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      },
+      path_generation_runs: {
+        findUnique: jest.fn().mockResolvedValue({
+          rollbackSnapshot: JSON.stringify({
+            version: 1,
+            path: {
+              activeGenerationRunId: 'old-run',
+              aiPromptTemplate: '{"before":true}',
+              status: 'active',
+              restoreStatus: true
+            },
+            supersededRun: null
+          })
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      }
+    }
+    mockPrisma.$transaction.mockImplementationOnce(async (callback: any) => callback(restoreTx))
+
+    await (learningService as any).restorePathAfterMutationConflict(
+      'path-1',
+      'new-run',
+      new Error('provider unavailable'),
+      {
+        runStatus: 'failed',
+        retryAllowed: true,
+        errorCode: 'PATH_GENERATION_CORE_FAILED'
+      }
+    )
+
+    expect(restoreTx.path_generation_runs.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: 'failed',
+        retryAllowed: true,
+        errorCode: 'PATH_GENERATION_CORE_FAILED'
+      })
+    }))
+    expect(restoreTx.learning_paths.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'path-1', activeGenerationRunId: 'new-run', status: 'generating' },
+      data: expect.objectContaining({
+        activeGenerationRunId: 'new-run',
+        aiPromptTemplate: '{"before":true}',
+        status: 'active'
+      })
+    }))
+  })
+
+  it('现有路径在生成期间已完成时只标记 run 失败，不回滚路径状态或提示词', async () => {
+    const restoreTx = {
+      learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          activeGenerationRunId: 'new-run',
+          aiPromptTemplate: '{"progress":true}',
+          status: 'completed'
+        }),
+        updateMany: jest.fn()
+      },
+      path_generation_runs: {
+        findUnique: jest.fn().mockResolvedValue({
+          rollbackSnapshot: JSON.stringify({
+            version: 1,
+            path: {
+              activeGenerationRunId: null,
+              aiPromptTemplate: '{"before":true}',
+              status: 'active',
+              restoreStatus: true
+            },
+            supersededRun: null
+          })
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      }
+    }
+    mockPrisma.$transaction.mockImplementationOnce(async (callback: any) => callback(restoreTx))
+
+    await (learningService as any).restorePathAfterMutationConflict(
+      'path-1',
+      'new-run',
+      new Error('provider unavailable'),
+      {
+        runStatus: 'failed',
+        retryAllowed: true,
+        errorCode: 'PATH_GENERATION_CORE_FAILED'
+      }
+    )
+
+    expect(restoreTx.path_generation_runs.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'failed', retryAllowed: true })
+    }))
+    expect(restoreTx.learning_paths.updateMany).not.toHaveBeenCalled()
   })
 })

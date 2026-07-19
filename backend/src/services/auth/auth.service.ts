@@ -1,5 +1,5 @@
 // 认证服务
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { signSessionToken, verifySessionToken } from '../../utils/session-token';

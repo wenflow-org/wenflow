@@ -83,6 +83,10 @@ import { teachingStrategySelector as teachingStrategySelectorFn } from './teachi
 export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
 import { promptCompilerHandler as promptCompilerFn } from './prompt-compiler';
 
+// MCP 非 LLM 工具能力
+export { mcpToolDefinition } from './mcp-tool';
+import { executeMcpTool as executeMcpToolFn } from './mcp-tool';
+
 // 虚拟学习者场景设计
 export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './virtual-learner-scenario-designer';
 import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } from './virtual-learner-scenario-designer';
@@ -156,6 +160,7 @@ import { goalUnderstandingComposerDefinition } from './goal-understanding-compos
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
 import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
 import { promptCompilerDefinition } from './prompt-compiler';
+import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   textStructureAnalyzerDefinition,
@@ -184,6 +189,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   acceptanceEvidenceEvaluatorDefinition,
   teachingStrategySelectorDefinition,
   promptCompilerDefinition,
+  mcpToolDefinition,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
     name: 'goal-conversation',
@@ -275,6 +281,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
   'teaching-strategy-selector': teachingStrategySelectorFn,
   'prompt-compiler': promptCompilerFn,
+  'mcp-tool': executeMcpToolFn,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),

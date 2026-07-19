@@ -9,8 +9,23 @@ import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middle
 import { logger } from '../utils/logger';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
+import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 
 const router = express.Router();
+
+const sendPathMutationConflict = (res: express.Response, error: unknown) => {
+  if (!isPathMutationConflictError(error)) return false;
+
+  res.status(409).json({
+    success: false,
+    error: {
+      message: error.message,
+      code: error.code,
+      status: 409
+    }
+  });
+  return true;
+};
 
 const stripPathGenerationInternals = (path: any) => {
   if (!path || typeof path !== 'object') return path;
@@ -332,7 +347,7 @@ router.post('/paths/create', async (req, res, next) => {
         updatedAt: new Date()
       }
     });
-    const runId = await learningService.claimPathCoreGeneration(placeholderPath.id);
+    const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
 
 // 2. 后台异步生成路径（不等待）
     // 解析时间表达式
@@ -364,6 +379,7 @@ router.post('/paths/create', async (req, res, next) => {
       deadlineText: data.deadlineText,
       existingPathId: placeholderPath.id,
       generationRunId: runId,
+      createdPlaceholder: true,
       userProfile: data.userProfile
     }, {
       onSuccess: () => {
@@ -542,7 +558,10 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       });
     }
 
-    const runId = await learningService.claimPathCoreGeneration(pathId);
+    const runId = await learningService.claimPathCoreGeneration(
+      pathId,
+      retry.expectedActiveGenerationRunId
+    );
 
     const storedGoalRequest = buildStoredGoalPathRequest(path)
       || await buildGoalPathRequestFromConversation(path);
@@ -581,6 +600,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       message: '正在重新生成学习路径'
     });
   } catch (error: any) {
+    if (sendPathMutationConflict(res, error)) return;
     next(error);
   }
 });
@@ -609,7 +629,7 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       });
     }
 
-    const runId = await learningService.claimPathCoreGeneration(pathId);
+    const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId);
 
     const storedGoalRequest = buildStoredGoalPathRequest(path)
       || await buildGoalPathRequestFromConversation(path);
@@ -647,6 +667,7 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       message: '正在重新生成学习路径'
     });
   } catch (error: any) {
+    if (sendPathMutationConflict(res, error)) return;
     next(error);
   }
 });
@@ -702,6 +723,8 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
       });
     }
 
+    if (sendPathMutationConflict(res, error)) return;
+
     next(error);
   }
 });
@@ -732,6 +755,8 @@ router.delete('/paths/:pathId', async (req, res, next) => {
         error: { message: error.message }
       });
     }
+
+    if (sendPathMutationConflict(res, error)) return;
 
     next(error);
   }
@@ -805,6 +830,8 @@ router.post('/paths/:pathId/retry-stage-design', async (req, res, next) => {
       });
     }
 
+    if (sendPathMutationConflict(res, error)) return;
+
     next(error);
   }
 });
@@ -851,6 +878,8 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
         error: { message: error.message }
       });
     }
+
+    if (sendPathMutationConflict(res, error)) return;
 
     next(error);
   }

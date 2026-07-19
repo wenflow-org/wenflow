@@ -322,7 +322,7 @@ onMounted(async () => {
   }
 
   loadAchievements();
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
 });
 
 onUnmounted(() => {

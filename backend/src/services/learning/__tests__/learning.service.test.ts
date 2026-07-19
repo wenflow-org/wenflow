@@ -93,10 +93,24 @@ describe('path generation status', () => {
     const claimedAt = new Date('2026-07-16T12:00:00.000Z');
     const tx = {
       learning_paths: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'path-1', activeGenerationRunId: 'old-run' }),
-        update: jest.fn().mockResolvedValue({ id: 'path-1' })
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'path-1',
+          status: 'active',
+          aiPromptTemplate: '{"before":true}',
+          activeGenerationRunId: 'old-run'
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
       },
       path_generation_runs: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'old-run',
+          status: 'failed',
+          retryAllowed: true,
+          finishedAt: claimedAt,
+          leaseExpiresAt: claimedAt,
+          errorCode: 'FAILED',
+          errorMessage: 'failed'
+        }),
         updateMany: jest.fn()
           .mockResolvedValueOnce({ count: 1 })
           .mockResolvedValueOnce({ count: 1 }),
@@ -116,12 +130,13 @@ describe('path generation status', () => {
       now: claimedAt
     });
 
-    expect(tx.path_generation_runs.updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: { id: 'old-run', status: { in: ['queued', 'processing'] } },
-      data: expect.objectContaining({ status: 'cancelled', errorCode: 'SUPERSEDED' })
+    expect(tx.path_generation_runs.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        rollbackSnapshot: expect.stringContaining('"activeGenerationRunId":"old-run"')
+      })
     }));
-    expect(tx.learning_paths.update).toHaveBeenCalledWith({
-      where: { id: 'path-1' },
+    expect(tx.learning_paths.updateMany).toHaveBeenCalledWith({
+      where: { id: 'path-1', activeGenerationRunId: 'old-run' },
       data: {
         activeGenerationRunId: 'new-run',
         status: 'generating',
@@ -131,6 +146,76 @@ describe('path generation status', () => {
     expect(run).toMatchObject({ id: 'new-run', status: 'processing', startedAt: claimedAt });
   });
 
+  it('runs the mutation guard before cancelling the current generation run', async () => {
+    const tx = {
+      learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'path-1',
+          status: 'active',
+          aiPromptTemplate: null,
+          activeGenerationRunId: 'old-run'
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      },
+      path_generation_runs: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
+        count: jest.fn(),
+        create: jest.fn()
+      }
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback: any) => callback(tx))
+    };
+    const guardError = new Error('blocked');
+    const guard = jest.fn().mockRejectedValue(guardError);
+
+    await expect(createAndClaimPathGenerationRun(prisma, {
+      runId: 'new-run',
+      pathId: 'path-1',
+      phase: 'core',
+      guard
+    })).rejects.toBe(guardError);
+
+    expect(guard).toHaveBeenCalledWith(tx);
+    expect(tx.path_generation_runs.updateMany).not.toHaveBeenCalled();
+    expect(tx.learning_paths.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.learning_paths.updateMany).toHaveBeenCalledWith({
+      where: { id: 'path-1', activeGenerationRunId: 'old-run' },
+      data: { updatedAt: expect.any(Date) }
+    });
+    expect(tx.path_generation_runs.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects retry creation when the active generation run changed', async () => {
+    const tx = {
+      learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'path-1',
+          status: 'active',
+          aiPromptTemplate: null,
+          activeGenerationRunId: 'newer-run'
+        })
+      },
+      path_generation_runs: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
+        count: jest.fn(),
+        create: jest.fn()
+      }
+    };
+    const prisma = { $transaction: jest.fn(async (callback: any) => callback(tx)) };
+
+    await expect(createAndClaimPathGenerationRun(prisma, {
+      runId: 'retry-run',
+      pathId: 'path-1',
+      phase: 'stageDesign',
+      expectedActiveGenerationRunId: 'observed-run'
+    })).rejects.toMatchObject({ code: 'PATH_GENERATION_RUN_CHANGED', status: 409 });
+
+    expect(tx.path_generation_runs.create).not.toHaveBeenCalled();
+  });
+
   it('claims an expired active run with the lease condition in the same transaction', async () => {
     const expiredAt = new Date('2026-07-16T12:00:00.000Z');
     const tx = {
@@ -138,6 +223,11 @@ describe('path generation status', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 })
       },
       learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'generating',
+          activeGenerationRunId: 'expired-run',
+          _count: { milestones: 0 }
+        }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 })
       }
     };
@@ -150,7 +240,15 @@ describe('path generation status', () => {
       pathId: 'path-1',
       expiredAt,
       now: expiredAt
-    })).resolves.toBe(true);
+    })).resolves.toEqual({
+      claimed: true,
+      pathRestored: false,
+      pathState: {
+        status: 'generating',
+        activeGenerationRunId: 'expired-run',
+        milestoneCount: 0
+      }
+    });
 
     expect(tx.path_generation_runs.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
@@ -175,6 +273,11 @@ describe('path generation status', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 0 })
       },
       learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'generating',
+          activeGenerationRunId: 'renewed-run',
+          _count: { milestones: 0 }
+        }),
         updateMany: jest.fn()
       }
     };
@@ -186,7 +289,52 @@ describe('path generation status', () => {
       runId: 'renewed-run',
       pathId: 'path-1',
       expiredAt: new Date('2026-07-16T12:00:00.000Z')
-    })).resolves.toBe(false);
+    })).resolves.toEqual(expect.objectContaining({ claimed: false }));
     expect(tx.learning_paths.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not restore a path whose learning status changed after generation started', async () => {
+    const expiredAt = new Date('2026-07-16T12:00:00.000Z');
+    const tx = {
+      path_generation_runs: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      },
+      learning_paths: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'completed',
+          activeGenerationRunId: 'expired-run',
+          _count: { milestones: 2 }
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 })
+      }
+    };
+    const prisma = { $transaction: jest.fn(async (callback: any) => callback(tx)) };
+
+    await expect(claimExpiredGenerationRun(prisma, {
+      runId: 'expired-run',
+      pathId: 'path-1',
+      expiredAt,
+      now: expiredAt,
+      restorePath: {
+        status: 'active',
+        aiPromptTemplate: '{"before":true}'
+      }
+    })).resolves.toEqual({
+      claimed: true,
+      pathRestored: false,
+      pathState: {
+        status: 'completed',
+        activeGenerationRunId: 'expired-run',
+        milestoneCount: 2
+      }
+    });
+
+    expect(tx.learning_paths.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: 'path-1',
+        activeGenerationRunId: 'expired-run',
+        status: 'generating'
+      }
+    }));
   });
 });

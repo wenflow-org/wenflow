@@ -1,9 +1,9 @@
-jest.mock('bcrypt', () => ({
+jest.mock('bcryptjs', () => ({
   __esModule: true,
   default: { hash: jest.fn().mockResolvedValue('hashed-password') }
 }))
 
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import { initializeAdmin } from '../init-admin.service'
 
 function database(existing: any = null) {

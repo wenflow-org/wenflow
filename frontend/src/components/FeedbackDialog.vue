@@ -158,10 +158,7 @@ async function submitFeedback() {
       difficulty: form.difficulty || undefined,
       comment: form.comment || undefined,
       confusionPoint: form.confusionPoint || undefined,
-      suggestions: form.suggestions || undefined,
-      strategy: props.strategy,
-      uiType: props.uiType,
-      roundNumber: props.roundNumber
+      suggestions: form.suggestions || undefined
     });
     
     toast.success('感谢你的反馈！帮助我们做得更好 🎉');

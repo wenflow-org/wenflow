@@ -11,8 +11,6 @@
 import type { PrismaClient } from '../generated/system-client';
 import { loadAllPromptFiles } from '../composers/prompt-files/loader';
 
-const DEFAULT_MODEL = (process.env.AI_MODEL || '').trim();
-
 export interface CoreAgentPromptSeed {
   agentId: string;
   name: string;
@@ -88,7 +86,8 @@ async function createPromptSeedRecord(
   prisma: PrismaClient,
   seed: CoreAgentPromptSeed,
   version: number,
-  createdBy: string
+  createdBy: string,
+  defaultModel: string
 ) {
   await prisma.agent_prompts.create({
     data: {
@@ -100,7 +99,7 @@ async function createPromptSeedRecord(
       systemPrompt: seed.systemPrompt,
       temperature: seed.temperature,
       maxTokens: seed.maxTokens,
-      model: DEFAULT_MODEL,
+      model: defaultModel || null,
       status: 'ACTIVE',
       createdBy,
       publishedAt: new Date(),
@@ -117,11 +116,19 @@ function matchesSeedConfig(activePrompt: {
   temperature: number | null;
   maxTokens: number | null;
   model: string | null;
-}, seed: CoreAgentPromptSeed): boolean {
+}, seed: CoreAgentPromptSeed, defaultModel: string): boolean {
   return normalizePromptText(activePrompt.systemPrompt) === normalizePromptText(seed.systemPrompt)
     && Number(activePrompt.temperature ?? seed.temperature) === Number(seed.temperature)
     && Number(activePrompt.maxTokens ?? seed.maxTokens) === Number(seed.maxTokens)
-    && String(activePrompt.model || DEFAULT_MODEL) === String(DEFAULT_MODEL);
+    && (!defaultModel || String(activePrompt.model || '') === defaultModel);
+}
+
+async function resolveDefaultModel(prisma: PrismaClient): Promise<string> {
+  const config = await prisma.platform_api_configs.findUnique({
+    where: { id: 'platform' },
+    select: { defaultModel: true }
+  });
+  return String(config?.defaultModel || process.env.AI_MODEL || '').trim();
 }
 
 async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
@@ -132,6 +139,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
   const created: string[] = [];
   const updated: string[] = [];
   const skipped: string[] = [];
+  const defaultModel = await resolveDefaultModel(prisma);
 
   const seeds = loadCoreAgentPromptSeeds();
   for (const seed of seeds) {
@@ -164,12 +172,12 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
         select: { version: true },
       });
       const nextVersion = (latest?.version || 0) + 1;
-      await createPromptSeedRecord(prisma, seed, nextVersion, 'system-sync');
+      await createPromptSeedRecord(prisma, seed, nextVersion, 'system-sync', defaultModel);
       created.push(seed.agentId);
       continue;
     }
 
-    if (matchesSeedConfig(activePrompt, seed)) {
+    if (matchesSeedConfig(activePrompt, seed, defaultModel)) {
       skipped.push(seed.agentId);
       continue;
     }
@@ -203,7 +211,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
           systemPrompt: seed.systemPrompt,
           temperature: seed.temperature,
           maxTokens: seed.maxTokens,
-          model: DEFAULT_MODEL,
+          model: defaultModel || null,
           status: 'ACTIVE',
           createdBy: 'system-sync',
           publishedAt: new Date(),
@@ -240,10 +248,7 @@ export async function findMissingCorePromptSeeds(prisma: PrismaClient): Promise<
 }
 
 export async function seedCoreAgentPrompts(prisma: PrismaClient): Promise<CoreAgentPromptSeedResult> {
-  if (!DEFAULT_MODEL) {
-    throw new Error('AI_MODEL is required to seed core agent prompts');
-  }
-
+  const defaultModel = await resolveDefaultModel(prisma);
   const result: CoreAgentPromptSeedResult = {
     created: [],
     skipped: [],
@@ -266,7 +271,7 @@ export async function seedCoreAgentPrompts(prisma: PrismaClient): Promise<CoreAg
       continue;
     }
 
-    await createPromptSeedRecord(prisma, seed, 1, 'system-seed');
+    await createPromptSeedRecord(prisma, seed, 1, 'system-seed', defaultModel);
 
     result.created.push(seed.agentId);
   }
@@ -278,10 +283,6 @@ export async function ensureCoreAgentPrompts(
   prisma: PrismaClient,
   mode: CoreAgentPromptEnsureMode
 ): Promise<CoreAgentPromptEnsureResult> {
-  if (!DEFAULT_MODEL) {
-    throw new Error('AI_MODEL is required to ensure core agent prompts');
-  }
-
   const totalPromptCountBefore = await prisma.agent_prompts.count();
   const missingBefore = (await findMissingCorePromptSeeds(prisma)).map((seed) => seed.agentId);
 
@@ -344,6 +345,7 @@ export async function ensureCoreAgentPrompts(
   }
 
   const created: string[] = [];
+  const defaultModel = await resolveDefaultModel(prisma);
   const skipped = seeds
     .map((seed) => seed.agentId)
     .filter((agentId) => !missingSeeds.some((seed) => seed.agentId === agentId));
@@ -355,7 +357,7 @@ export async function ensureCoreAgentPrompts(
       select: { version: true },
     });
     const nextVersion = (latest?.version || 0) + 1;
-    await createPromptSeedRecord(prisma, seed, nextVersion, 'system-backfill');
+    await createPromptSeedRecord(prisma, seed, nextVersion, 'system-backfill', defaultModel);
     created.push(seed.agentId);
   }
 

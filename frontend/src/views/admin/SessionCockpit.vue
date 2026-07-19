@@ -75,6 +75,17 @@
       </div>
     </section>
 
+    <SessionStateTimeline
+      v-if="isBlackboxMode"
+      :timeline="blackboxSnapshot?.stateTimeline || null"
+      :loading="loading"
+      :friction-budget="
+        stageResults.experimentSnapshot?.frictionBudget ||
+        stageResults.simulationConfig?.frictionBudget ||
+        null
+      "
+    />
+
     <!-- ============ Main workspace ============ -->
     <div class="cockpit-main">
       <!-- Center: Stage content -->
@@ -435,6 +446,7 @@ import { adminApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
 import SessionControlPanel from './components/virtual/SessionControlPanel.vue'
 import SessionLiveLog, { type LogEntry } from './components/virtual/SessionLiveLog.vue'
+import SessionStateTimeline from './components/virtual/SessionStateTimeline.vue'
 
 type NavKey = 'goal' | 'path' | 'learning' | 'wrapup' | 'referee'
 
@@ -652,6 +664,44 @@ interface BlackboxSnapshot {
   actorAuditReportCount?: number
   publicTrace?: BlackboxTraceEntry[]
   control?: { goalCompleted?: boolean; runCompleted?: boolean; [key: string]: unknown }
+  stateTimeline?: {
+    scope?: string
+    actor?: {
+      scale?: string
+      entries?: Array<{
+        sequence: number
+        stage: 'goal' | 'learning'
+        taskId?: string | null
+        phaseFocus?: string | null
+        emotion?: string | null
+        degraded?: boolean
+        transition?: string | null
+        stateChangeReason?: string | null
+        visibleSignal?: string | null
+        metrics?: Record<string, number>
+        flags?: Record<string, boolean>
+        blockers?: string[]
+        generatedAt?: string | null
+      }>
+    }
+    platform?: {
+      scale?: string
+      status?: 'ok' | 'unavailable'
+      errorCode?: string | null
+      entries?: Array<{
+        teachingSessionId: string
+        taskId?: string | null
+        pathId?: string | null
+        status?: string
+        metrics?: { lss: number; ktl: number; lf: number; lsb: number } | null
+        calculatedAt?: string | null
+        source?: 'committed-metric' | 'teaching-wrapup' | 'missing'
+        summarySource?: string | null
+        evaluationSource?: string | null
+        degraded?: boolean
+      }>
+    }
+  }
   [key: string]: unknown
 }
 
@@ -1836,7 +1886,7 @@ watch(sessionId, async (next, prev) => {
 
 .ms-badge {
   background: #f0fdf4;
-  color: #16a34a;
+  color: var(--admin-color-success, #15803d);
   border-color: #bfe5cb;
 }
 
@@ -1890,7 +1940,7 @@ watch(sessionId, async (next, prev) => {
 
 .conv-round__idx {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
 }
 
 .conv-round__msg {
@@ -1924,7 +1974,7 @@ watch(sessionId, async (next, prev) => {
   padding: 1px 8px;
   border-radius: 4px;
   background: #f0fdf4;
-  color: #16a34a;
+  color: var(--admin-color-success, #15803d);
 }
 
 /* Concern pool */
@@ -1958,7 +2008,7 @@ watch(sessionId, async (next, prev) => {
   padding: 2px 10px;
   border-radius: 999px;
   background: #f0f2f5;
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   border: 1px solid #e1e8f2;
 }
 
@@ -2035,7 +2085,7 @@ watch(sessionId, async (next, prev) => {
 
 .task-chip.done {
   background: #ecfdf5;
-  color: #16a34a;
+  color: var(--admin-color-success, #15803d);
   border-color: #bfe5cb;
 }
 
@@ -2055,7 +2105,7 @@ watch(sessionId, async (next, prev) => {
   gap: 8px;
   font-weight: 700;
   font-size: 13px;
-  color: #16a34a;
+  color: var(--admin-color-success, #15803d);
   margin-bottom: 6px;
 }
 
@@ -2097,7 +2147,7 @@ watch(sessionId, async (next, prev) => {
 
 .metric-cell span {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -2185,7 +2235,7 @@ watch(sessionId, async (next, prev) => {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   transition: all 0.18s;
 }
 
@@ -2221,7 +2271,7 @@ watch(sessionId, async (next, prev) => {
 }
 
 .empty-text {
-  color: #94a3b8;
+  color: var(--admin-text-muted, #64748b);
   font-size: 13px;
   padding: 16px 0;
 }

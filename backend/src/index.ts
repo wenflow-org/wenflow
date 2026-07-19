@@ -28,6 +28,7 @@ import { learnerEvidenceProjector } from './services/learner/LearnerEvidenceProj
 import { learnerSnapshotRefreshService } from './services/learner/LearnerSnapshotRefreshService';
 import { learnerProfileService } from './services/learner/LearnerProfileService';
 import { lessonKnowledgeEnrichmentConsumer } from './services/learner/LessonKnowledgeEnrichmentConsumer';
+import { reconcileTaskCompletionMetric } from './services/metrics/LearningMetricService';
 import { refreshRuntimeNetworkPolicy } from './services/runtime-network-policy.service';
 import type { Server } from 'http';
 import { ReadinessService } from './services/readiness.service';
@@ -37,6 +38,7 @@ import { resolveTrustProxySetting } from './utils/trust-proxy';
 import { ApplicationLifecycle, resolveShutdownDeadlineMs } from './services/application-lifecycle.service';
 import { backgroundTaskTracker, runBackgroundTask } from './services/background-task-tracker.service';
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
+import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -62,6 +64,7 @@ import { adminMiddleware } from './middleware/admin.middleware';
 import { adminAccessRestrictMiddleware } from './middleware/admin-access-restrict.middleware';
 import { csrfMiddleware } from './middleware/csrf.middleware';
 import { validateSecretEncryptionConfig } from './utils/secret-crypto';
+import { validateSafeHttpConfig } from './utils/safe-http';
 
 // 加载环境变量
 dotenv.config();
@@ -89,6 +92,7 @@ if (process.env.JWT_SECRET === 'your-secret-key-change-in-production' ||
 
 console.log('✅ 安全配置检查通过');
 validateSecretEncryptionConfig(true);
+validateSafeHttpConfig();
 validateRuntimeDatabaseUrls(process.env.DATABASE_URL, process.env.SYSTEM_DATABASE_URL);
 
 const app = express();
@@ -136,7 +140,7 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
 };
 app.use(cors(corsOptions));
 
@@ -217,10 +221,13 @@ import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-
 import adminDevtoolsRoutes from './routes/admin/devtools';
 import adminTestRoutes from './routes/admin/test';
 import adminDebugRoutes from './routes/admin/debug';
+import adminFeedbackRoutes from './routes/admin/feedback';
+import adminSystemStatusRoutes from './routes/admin/system-status';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
 import abTestingRoutes from './routes/ab-testing';
 import configRoutes from './routes/config';
+import systemStatusRoutes from './routes/system-status';
 
 // 用户自定义路由
 import userAgentsRoutes from './routes/user-agents';
@@ -321,6 +328,7 @@ app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('tes
 app.use('/api/auth', authRoutes);
 // 公共配置路由（不需要认证，用于获取模型列表等）
 app.use('/api/config', configRoutes);
+app.use('/api/system', systemStatusRoutes);
 // 管理员登录路由（应用本地访问限制中间件）
 app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
 const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin')];
@@ -339,6 +347,8 @@ app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModels
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
 app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
+app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
+app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
 app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
 app.use('/api/admin/test', ...adminRouteMiddleware, adminTestRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminDebugRoutes);
@@ -350,7 +360,7 @@ app.use('/api/skills', authMiddleware, acpContextMiddleware('user'), skillsRoute
 app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
 app.use('/api/plugins', authMiddleware, acpContextMiddleware('user'), pluginRoutes);
 app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
-app.use('/api/feedback', authMiddleware, acpContextMiddleware('user'), feedbackRoutes);
+app.use('/api/feedback', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), feedbackRoutes);
 app.use('/api/ab-testing', authMiddleware, acpContextMiddleware('user'), abTestingRoutes);
 
 
@@ -587,12 +597,16 @@ export async function startServer() {
     await purgeRetiredSkills();
      await initializeGateway();
      assertStartupActive();
+     await aiCapabilityHealthService.refresh();
+     aiCapabilityHealthService.start();
+     assertStartupActive();
     
      // 初始化 Agent 协作服务
      await initializeAgentCollaboration();
      assertStartupActive();
 
       const durableConsumers = new DurableEventConsumerRegistry();
+      durableConsumers.register(['task:completed'], reconcileTaskCompletionMetric);
       durableConsumers.register([
         'goal:understanding:updated',
         'task:completed',
@@ -675,9 +689,10 @@ export async function shutdown(signal: string) {
   logger.info(`${signal} received. Draining server...`, { shutdownDeadlineMs });
   const report = await lifecycle.shutdown(signal, {
     httpServer,
-    stopSchedulers: () => {
+    stopSchedulers: async () => {
       if (enrichmentRetryTimer) clearInterval(enrichmentRetryTimer);
       enrichmentRetryTimer = null;
+      await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
     collaboration: collaborationService,

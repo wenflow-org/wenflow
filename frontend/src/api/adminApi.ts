@@ -2,12 +2,41 @@
 import axios from 'axios';
 import { setAuthFlashMessage } from '@/utils/authFlash';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
 
 /**
  * 管理员会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
  * 旧的 admin_token 为历史遗留，读取处保留兼容
  */
 export const ADMIN_SESSION_KEY = 'wenflow_admin_session';
+export const ADMIN_SESSION_CLEAR_EVENT_KEY = 'wenflow_admin_session_cleared';
+
+const adminSessionTabId = createCommandId();
+
+function isProtectedAdminPathname(pathname: string): boolean {
+  const normalizedPath = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  if (normalizedPath !== '/admin' && !normalizedPath.startsWith('/admin/')) return false;
+
+  return normalizedPath !== '/admin/login'
+    && normalizedPath !== '/admin/test'
+    && !normalizedPath.startsWith('/admin/test/');
+}
+
+let adminProtectedLocationResolver = () => isProtectedAdminPathname(window.location.pathname);
+
+export function setAdminProtectedLocationResolver(resolver: () => boolean): void {
+  adminProtectedLocationResolver = resolver;
+}
+
+export function isAdminSessionClearBroadcast(value: string | null): boolean {
+  if (!value) return false;
+
+  try {
+    return JSON.parse(value).source !== adminSessionTabId;
+  } catch {
+    return true;
+  }
+}
 
 export const hasAdminSession = (): boolean =>
   localStorage.getItem(ADMIN_SESSION_KEY) === '1'
@@ -63,17 +92,38 @@ adminAxios.interceptors.request.use(
 
 let unauthorizedRedirect: Promise<void> | null = null;
 
+function isAdminLogoutRequest(url?: string): boolean {
+  return url === '/admin-auth/logout';
+}
+
+/** 清除失效会话并跳转登录页；重复调用只执行一次，避免重复广播。 */
+export function handleAdminAuthenticationFailure(): void {
+  if (unauthorizedRedirect) return;
+
+  unauthorizedRedirect = Promise.resolve().then(() => {
+    try {
+      clearAdminSession();
+    } catch (error) {
+      console.error('[admin-session-clear-error]', error);
+    }
+    setAuthFlashMessage('管理员登录状态已失效，请重新登录');
+    // 保留回跳地址，重新登录后可返回原页面
+    const redirect = encodeURIComponent(
+      window.location.pathname + window.location.search + window.location.hash
+    );
+    window.location.replace(`/admin/login?redirect=${redirect}`);
+  });
+}
+
 adminAxios.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && hasAdminSession() && !unauthorizedRedirect) {
-      unauthorizedRedirect = Promise.resolve().then(() => {
-        clearAdminSession();
-        setAuthFlashMessage('管理员登录状态已失效，请重新登录');
-        // 保留回跳地址，重新登录后可返回原页面
-        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.replace(`/admin/login?redirect=${redirect}`);
-      });
+    if (
+      error.response?.status === 401
+      && adminProtectedLocationResolver()
+      && !isAdminLogoutRequest(error.config?.url)
+    ) {
+      handleAdminAuthenticationFailure();
     }
     return Promise.reject(error);
   }
@@ -82,14 +132,25 @@ adminAxios.interceptors.response.use(
 // 导出 axios 实例供其他模块使用
 export { adminAxios };
 
-/** 清除管理员会话的所有本地标记 */
-export function clearAdminSession(): void {
+/** 清除管理员会话的所有本地标记，并默认通知其他标签页 */
+export function clearAdminSession(notifyOtherTabs = true): void {
   localStorage.removeItem('admin_token');
   sessionStorage.removeItem('admin_token');
   localStorage.removeItem('admin_user');
   sessionStorage.removeItem('admin_user');
   localStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
+
+  if (notifyOtherTabs) {
+    try {
+      localStorage.setItem(ADMIN_SESSION_CLEAR_EVENT_KEY, JSON.stringify({
+        source: adminSessionTabId,
+        nonce: createCommandId()
+      }));
+    } catch (error) {
+      console.error('[admin-session-clear-broadcast-error]', error);
+    }
+  }
 }
 
 /** 记录管理员会话标记（remember 决定存 localStorage 还是 sessionStorage） */
@@ -115,17 +176,24 @@ export const adminAuthApi = {
   },
 
   /**
-   * 获取当前管理员信息
+   * 获取当前管理员信息；会话校验使用短超时，避免 BFCache 恢复时长时间隐藏页面
    */
   getMe: async () => {
-    return adminAxios.get('/admin-auth/me');
+    return adminAxios.get('/admin-auth/me', { timeout: ADMIN_SESSION_REQUEST_TIMEOUT_MS });
   },
 
   /**
-   * 登出：通知后端清除 HttpOnly Cookie（失败不阻塞本地登出），并清除本地标记
+   * 登出：以后端成功清除 HttpOnly Cookie 为准，确认后才清除并广播本地会话
    */
-  logout: () => {
-    void adminAxios.post('/admin-auth/logout').catch(() => {});
+  logout: async (): Promise<void> => {
+    const response = await adminAxios.post(
+      '/admin-auth/logout',
+      undefined,
+      { timeout: ADMIN_SESSION_REQUEST_TIMEOUT_MS }
+    );
+    if (response.data?.success !== true) {
+      throw new Error('管理员登出未获得服务端确认');
+    }
     clearAdminSession();
   },
 };

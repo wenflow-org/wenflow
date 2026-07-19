@@ -27,6 +27,11 @@
       </section>
 
       <template v-else-if="sessionDetail">
+        <section v-if="evaluationDegraded" class="evaluation-degraded" role="status">
+          <strong>课堂总结已生成，详细表现分析暂不可用</strong>
+          <p>这不会影响你保存进度、完成任务或查看本次对话。</p>
+        </section>
+
         <CompletionCard
           :topic="sessionDetail.topic"
           :mastered-count="knowledgePoints.filter(kp => kp.status === 'mastered').length"
@@ -38,6 +43,13 @@
           :busy="completeTaskBusy"
           @action="handleAction"
           @advisory-action="handleAdvisoryAction"
+        />
+
+        <SessionFeedbackPanel
+          v-if="canSubmitSessionFeedback"
+          :session-id="sessionId"
+          :task-id="taskId"
+          @difficulty-change="subjectiveDifficulty = $event"
         />
 
         <section class="evaluation-transcript-card">
@@ -85,9 +97,11 @@ import { ElMessageBox } from 'element-plus';
 // html2canvas 体积大，仅导出图片时动态加载
 import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
+import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
+import { isProjectionMode } from '@/utils/projection';
 
 const route = useRoute();
 const router = useRouter();
@@ -123,6 +137,7 @@ const pollTimer = ref<number | null>(null);
 const reportRef = ref<HTMLElement | null>(null);
 const exportingImage = ref(false);
 const completeTaskBusy = ref(false);
+const subjectiveDifficulty = ref<number | undefined>(undefined);
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 60000;
 let pollStartedAt = 0;
@@ -170,6 +185,12 @@ const wrapup = computed<WrapupArtifact>(() => {
 });
 
 const knowledgePoints = computed(() => sessionDetail.value?.knowledgePoints || []);
+const evaluationDegraded = computed(() => {
+  const currentWrapup = sessionDetail.value?.wrapup;
+  return currentWrapup?.evaluationSource === 'failed'
+    || currentWrapup?.sources?.evaluation === 'failed';
+});
+const canSubmitSessionFeedback = computed(() => !isTestMode.value && !isAdminRoute.value && !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
 const durationSeconds = computed(() => {
   const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration ?? 0;
@@ -306,10 +327,20 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
     if (completeTaskBusy.value) return;
     completeTaskBusy.value = true;
     try {
-      await api.post(`/learning/tasks/${taskId.value}/complete`, { actualMinutes: Math.ceil(durationSeconds.value / 60) });
+      const result = await aiTeachingAPI.finalizeSessionReliably(sessionId.value, {
+        action: 'complete_task',
+        revision: sessionDetail.value?.revision || 0,
+        actualMinutes: Math.ceil(durationSeconds.value / 60),
+        subjectiveDifficulty: subjectiveDifficulty.value
+      });
+      if (sessionDetail.value) sessionDetail.value.revision = result.revision;
       toast.success('已将本任务标记为完成');
       goBackToPath(true);
     } catch (err: any) {
+      const recoveredRevision = err?.finalization?.revision;
+      if (sessionDetail.value && Number.isInteger(recoveredRevision)) {
+        sessionDetail.value.revision = recoveredRevision;
+      }
       toast.error(err?.message || '标记任务完成失败');
     } finally {
       completeTaskBusy.value = false;
@@ -367,7 +398,7 @@ const handleAdvisoryAction = async (action: string) => {
     };
     await api.post(`/learning/paths/${learningPathId}/replan`, {
       triggerSource: 'ai-teaching',
-      mode: 'new_version',
+      mode: 'overwrite',
       reason: reasonMap[resolvedAction],
       evidence: {
         advisoryAction: resolvedAction,
@@ -447,6 +478,27 @@ onUnmounted(() => {
   margin: 0 auto;
   display: grid;
   gap: 20px;
+}
+
+.evaluation-degraded {
+  padding: 14px 18px;
+  border: 1px solid var(--color-warning-border, rgba(244, 170, 70, 0.24));
+  border-left: 4px solid var(--color-warning, #f4aa46);
+  border-radius: 12px;
+  background: var(--color-warning-bg, rgba(244, 170, 70, 0.08));
+  color: var(--text-primary, #172033);
+}
+
+.evaluation-degraded strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.evaluation-degraded p {
+  margin: 0;
+  color: var(--text-secondary, #607086);
+  font-size: 13px;
 }
 
 .evaluation-head {

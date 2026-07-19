@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger';
 import { CallerInfo, ResolvedRoute } from './types';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
+import { endpointsMatch } from '../../utils/endpoint-identity';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
 const AGENT_KEY_CONTEXT = 'system.agent_model_configs.apiKey';
@@ -20,6 +21,7 @@ interface Config {
   reasoningEffort?: 'default' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
+  privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
 }
 
 interface AgentConfigRecord {
@@ -33,18 +35,6 @@ interface AgentConfigRecord {
   maxTokens: number | null;
 }
 
-interface SkillConfigRecord {
-  endpoint: string | null;
-  apiKey: string | null;
-  model: string | null;
-  tier: string | null;
-  thinkingMode?: string | null;
-  reasoningEffort?: string | null;
-  temperature: number | null;
-  maxTokens: number | null;
-  requestTimeoutMs?: number | null;
-}
-
 export class APIRouter {
   private resolveBaseEndpoint(): string {
     return (process.env.AI_API_URL || '').trim() || 'https://api.openai.com/v1';
@@ -54,7 +44,7 @@ export class APIRouter {
     const timeoutInfo = getAgentRequestTimeoutInfo(agentId);
     return {
       ...route,
-      timeoutMs: timeoutInfo.requestTimeoutMs,
+      timeoutMs: route.timeoutMs ?? timeoutInfo.requestTimeoutMs,
     };
   }
 
@@ -140,19 +130,23 @@ export class APIRouter {
 
       const tier = (config.tier || '').toLowerCase();
       const isReasoning = tier === 'reasoning';
-      const platformConfig = await this.getPlatformConfigRecord();
-
-      const endpoint = config.endpoint
-        || inheritedRoute.endpoint
-        || (isReasoning ? platformConfig?.reasoningEndpoint : undefined)
-        || platformConfig?.apiUrl
-        || this.resolveBaseEndpoint();
-
-      const apiKey = decryptSecret(config.apiKey, SKILL_KEY_CONTEXT)
-        || inheritedRoute.apiKey
-        || decryptSecret(platformConfig?.apiKey, PLATFORM_KEY_CONTEXT)
-        || process.env.AI_API_KEY
-        || '';
+      const configuredEndpoint = (config.endpoint || '').trim();
+      const configuredApiKey = configuredEndpoint
+        ? decryptSecret(config.apiKey, SKILL_KEY_CONTEXT) || ''
+        : '';
+      const endpointChanged = Boolean(configuredEndpoint)
+        && !endpointsMatch(configuredEndpoint, inheritedRoute.endpoint);
+      const endpoint = configuredEndpoint || inheritedRoute.endpoint;
+      const inheritedUserEndpoint = inheritedRoute.privateNetworkPolicy === 'public-only';
+      const apiKey = endpointChanged
+        ? configuredApiKey
+        : inheritedUserEndpoint
+          ? inheritedRoute.apiKey
+          : configuredApiKey || inheritedRoute.apiKey;
+      const privateNetworkPolicy = endpointChanged ? 'runtime' : inheritedRoute.privateNetworkPolicy;
+      const source = endpointChanged || (!inheritedUserEndpoint && Boolean(configuredApiKey))
+        ? 'platform'
+        : inheritedRoute.source;
 
       const model = config.model
         ? (isReasoning ? this.resolveReasoningModel(config.model) : this.resolveModel(config.model))
@@ -169,7 +163,8 @@ export class APIRouter {
         temperature: config.temperature ?? inheritedRoute.temperature,
         maxTokens: config.maxTokens ?? inheritedRoute.maxTokens,
         timeoutMs: config.requestTimeoutMs ?? inheritedRoute.timeoutMs,
-        source: 'platform',
+        privateNetworkPolicy,
+        source,
       };
     } catch (error) {
       logger.error('[api-gateway] fetch skill config failed', {
@@ -197,18 +192,23 @@ export class APIRouter {
 
       const platformConfig = await this.getPlatformConfigRecord();
 
+      const customEndpoint = (config.endpoint || '').trim();
+      const customApiKey = customEndpoint
+        ? decryptSecret(config.apiKey, USER_AGENT_KEY_CONTEXT) || ''
+        : '';
+
       return {
         providerId: `user-agent:${userId}:${agentId}`,
-        endpoint: config.endpoint || platformConfig?.apiUrl || this.resolveBaseEndpoint(),
-        apiKey: decryptSecret(config.apiKey, USER_AGENT_KEY_CONTEXT)
-          || decryptSecret(platformConfig?.apiKey, PLATFORM_KEY_CONTEXT)
-          || process.env.AI_API_KEY
-          || '',
+        endpoint: customEndpoint || platformConfig?.apiUrl || this.resolveBaseEndpoint(),
+        apiKey: customEndpoint
+          ? customApiKey
+          : this.resolvePlatformApiKey(platformConfig, platformConfig?.apiUrl || this.resolveBaseEndpoint()),
         model: this.resolveModel(config.model || platformConfig?.defaultModel),
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
-        maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000
+        maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000,
+        privateNetworkPolicy: customEndpoint ? 'public-only' : 'runtime'
       };
     } catch (error) {
       logger.error('[api-gateway] fetch user agent override failed', {
@@ -245,7 +245,8 @@ export class APIRouter {
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: 0.7,
-        maxTokens: 2000
+        maxTokens: 2000,
+        privateNetworkPolicy: 'public-only'
       };
     } catch (error) {
       logger.error('[api-gateway] fetch user provider failed', {
@@ -292,23 +293,54 @@ export class APIRouter {
         defaultTemperature: true,
         defaultMaxTokens: true,
         reasoningEndpoint: true,
+        lightEndpoint: true,
       }
     });
+  }
+
+  private resolvePlatformApiKey(
+    config: {
+      apiUrl?: string | null;
+      apiKey?: string | null;
+      reasoningEndpoint?: string | null;
+      lightEndpoint?: string | null;
+    } | null,
+    targetEndpoint?: string | null
+  ): string {
+    const configuredApiKey = decryptSecret(config?.apiKey, PLATFORM_KEY_CONTEXT) || '';
+    const configuredEndpoint = (config?.apiUrl || '').trim();
+    const target = (targetEndpoint || configuredEndpoint || this.resolveBaseEndpoint()).trim();
+    const configuredTargets = [
+      configuredEndpoint,
+      config?.reasoningEndpoint,
+      config?.lightEndpoint
+    ].filter((endpoint): endpoint is string => Boolean(endpoint));
+    if (configuredApiKey
+      && configuredEndpoint
+      && configuredTargets.some(endpoint => endpointsMatch(endpoint, target))) {
+      return configuredApiKey;
+    }
+    return endpointsMatch(target, this.resolveBaseEndpoint()) ? process.env.AI_API_KEY || '' : '';
   }
 
   private async buildAgentConfig(agentId: string, config: AgentConfigRecord): Promise<Config> {
     const platformConfig = await this.getPlatformConfigRecord();
     const tier = (config.tier || '').toLowerCase();
     const isReasoning = tier === 'reasoning';
-
-    const endpoint = (isReasoning ? config.endpoint || platformConfig?.reasoningEndpoint : config.endpoint)
+    const configuredEndpoint = (config.endpoint || '').trim();
+    const inheritedEndpoint = (isReasoning ? platformConfig?.reasoningEndpoint : undefined)
       || platformConfig?.apiUrl
       || this.resolveBaseEndpoint();
-
-    const apiKey = decryptSecret(config.apiKey, AGENT_KEY_CONTEXT)
-      || decryptSecret(platformConfig?.apiKey, PLATFORM_KEY_CONTEXT)
-      || process.env.AI_API_KEY
-      || '';
+    const endpoint = configuredEndpoint || inheritedEndpoint;
+    const configuredApiKey = configuredEndpoint
+      ? decryptSecret(config.apiKey, AGENT_KEY_CONTEXT) || ''
+      : '';
+    const apiKey = configuredEndpoint
+      ? configuredApiKey
+        || (endpointsMatch(configuredEndpoint, inheritedEndpoint)
+          ? this.resolvePlatformApiKey(platformConfig, inheritedEndpoint)
+          : '')
+      : this.resolvePlatformApiKey(platformConfig, inheritedEndpoint);
 
     const model = isReasoning
       ? this.resolveReasoningModel(config.model || platformConfig?.defaultReasoningModel)
@@ -322,7 +354,8 @@ export class APIRouter {
       thinkingMode: this.normalizeThinkingMode(config.thinkingMode),
       reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort),
       temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
-      maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000
+      maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000,
+      privateNetworkPolicy: 'runtime'
     };
   }
 
@@ -363,12 +396,13 @@ export class APIRouter {
       return {
         providerId: 'platform',
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
-        apiKey: decryptSecret(config.apiKey, PLATFORM_KEY_CONTEXT) || process.env.AI_API_KEY || '',
+        apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
         model: this.resolveModel(config.defaultModel),
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
+        privateNetworkPolicy: 'runtime',
         providerType: 'openai-compatible',
         source: 'platform'
       };
@@ -391,6 +425,7 @@ export class APIRouter {
       reasoningEffort: 'default',
       temperature: 0.7,
       maxTokens: 2000,
+      privateNetworkPolicy: 'runtime',
       providerType: 'openai-compatible',
       source: 'env-fallback'
     };

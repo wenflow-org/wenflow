@@ -293,7 +293,7 @@ class LearnerProgressService {
 
     try {
       const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: 'skill:learner-model' };
+      const caller: CallerInfo = { agentId: 'learner-agent', skillId: 'learner-model' };
       const signalDescriptions = signals.map((s) => {
         const typeMap: Record<string, string> = {
           'fatigue-high': '疲劳度较高',

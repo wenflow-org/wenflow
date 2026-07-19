@@ -50,6 +50,7 @@ export async function registerPluginSkills(gateway: {
   registerSkill: (definition: any, handler?: (input: any) => Promise<any>) => Promise<string>;
 }): Promise<void> {
   registerAllPlugins();
+  await agentPluginRegistry.ready();
   for (const plugin of allPlugins) {
     const { definition, handler } = adaptPluginToSkill(plugin);
     await gateway.registerSkill(definition, handler);

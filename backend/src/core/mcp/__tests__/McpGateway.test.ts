@@ -54,4 +54,16 @@ describe('McpGateway filesystem tool', () => {
     await expect(gateway.callTool('file-reader', { path: './uploads-private/secret.txt' }))
       .rejects.toThrow('允许范围')
   })
+
+  it('拒绝外部配置调用服务器本地工具', async () => {
+    await expect(gateway.callConfiguredTool({
+      id: 'user-file-reader',
+      name: 'user file reader',
+      description: 'test',
+      type: 'filesystem',
+      endpoint: 'local',
+      enabled: true
+    }, { path: './uploads/lesson.txt' }, { allowLocal: false }))
+      .rejects.toThrow('不允许执行服务器本地')
+  })
 })

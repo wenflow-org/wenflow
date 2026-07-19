@@ -18,6 +18,7 @@ import { logger } from '../utils/logger';
  */
 export class AgentPluginRegistry {
   private plugins: Map<string, AgentRegistration> = new Map();
+  private initializationTasks: Map<string, Promise<void>> = new Map();
   
   /**
    * 注册插件
@@ -29,9 +30,12 @@ export class AgentPluginRegistry {
     
     // 如果插件有初始化方法，调用它
     if (plugin.initialize) {
-      plugin.initialize().catch(err => {
+      const initialization = plugin.initialize().catch(err => {
         logger.error(`Failed to initialize plugin ${plugin.id}:`, err);
+      }).finally(() => {
+        this.initializationTasks.delete(plugin.id);
       });
+      this.initializationTasks.set(plugin.id, initialization);
     }
     
     this.plugins.set(plugin.id, {
@@ -43,6 +47,10 @@ export class AgentPluginRegistry {
     });
     
     logger.info(`✅ Plugin registered: ${plugin.id} (${plugin.name})`);
+  }
+
+  async ready(): Promise<void> {
+    await Promise.all([...this.initializationTasks.values()]);
   }
   
   /**
@@ -199,6 +207,9 @@ export class AgentPluginRegistry {
   async unregister(pluginId: string): Promise<void> {
     const registration = this.plugins.get(pluginId);
     if (!registration) return;
+
+    const initialization = this.initializationTasks.get(pluginId);
+    if (initialization) await initialization;
     
     // 如果插件有销毁方法，调用它
     if (registration.plugin.destroy) {
@@ -206,6 +217,7 @@ export class AgentPluginRegistry {
     }
     
     this.plugins.delete(pluginId);
+    this.initializationTasks.delete(pluginId);
     logger.info(`✅ Plugin unregistered: ${pluginId}`);
   }
   

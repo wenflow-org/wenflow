@@ -29,7 +29,7 @@ jest.mock('../../config/database', () => ({
   }
 }))
 
-jest.mock('bcrypt', () => ({
+jest.mock('bcryptjs', () => ({
   __esModule: true,
   default: { compare: bcryptCompare }
 }))
@@ -55,6 +55,7 @@ function createResponse() {
   return {
     statusCode: 200,
     body: undefined as any,
+    cookie: jest.fn(),
     status(code: number) {
       this.statusCode = code
       return this
@@ -103,5 +104,42 @@ describe('Admin 登录安全边界', () => {
     })
     expect(bcryptCompare).toHaveBeenCalledTimes(1)
     expect(recordLoginAttempt).toHaveBeenCalledWith('admin', '127.0.0.1', false, 'admin')
+  })
+
+  it('登录成功时仅在 HttpOnly Cookie 中下发 token，响应不包含 token', async () => {
+    usersFindFirst.mockResolvedValue({
+      id: 'admin-1',
+      name: 'admin',
+      email: 'admin@example.com',
+      password: 'hash',
+      role: 'admin',
+      isAdmin: true
+    })
+    bcryptCompare.mockResolvedValue(true)
+
+    const res = await runLogin({ name: 'admin', password: 'correct-password', remember: false })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.data).toEqual({
+      user: {
+        id: 'admin-1',
+        name: 'admin',
+        email: 'admin@example.com',
+        role: 'admin',
+        isAdmin: true
+      }
+    })
+    expect(res.body.data).not.toHaveProperty('token')
+    expect(JSON.stringify(res.body)).not.toContain('admin-token')
+    expect(res.cookie).toHaveBeenCalledWith(
+      'wenflow_admin_token',
+      'admin-token',
+      expect.objectContaining({
+        httpOnly: true,
+        sameSite: 'strict',
+        path: '/'
+      })
+    )
+    expect(res.cookie.mock.calls[0][2]).not.toHaveProperty('maxAge')
   })
 })

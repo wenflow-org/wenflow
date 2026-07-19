@@ -30,6 +30,7 @@ export interface ResolvedRoute {
   temperature: number;
   maxTokens: number;
   timeoutMs?: number;
+  privateNetworkPolicy: 'runtime' | 'public-only';
   source: RouteSource;
 }
 
@@ -41,6 +42,7 @@ export interface RouteExecutionOverride {
   thinkingMode?: ResolvedRoute['thinkingMode'];
   reasoningEffort?: ResolvedRoute['reasoningEffort'];
   timeoutMs?: number;
+  privateNetworkPolicy?: ResolvedRoute['privateNetworkPolicy'];
 }
 
 export interface ChatRequest {
@@ -68,12 +70,13 @@ export interface ExecutionContext {
   sessionId?: string;
   traceId?: string;
   executionLogId?: string;
-  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
+  sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation' | 'system-canary';
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
   experimentId?: string;
   runId?: string;
   requestPath?: string;
+  abortSignal?: AbortSignal;
   [key: string]: any;
 }
 

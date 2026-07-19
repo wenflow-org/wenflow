@@ -1,9 +1,11 @@
 import express, { Request, Response } from 'express';
 import prisma from '../config/database';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { runGoalConversationAgent, type GoalConversationAgentResult } from '../skills/goal-conversation';
+import { executeSkill } from '../skills';
+import { goalConversationAgentDefinition, type GoalConversationAgentResult } from '../skills/goal-conversation';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import goalConversationService from '../services/learning/goal-conversation.service';
+import learningService from '../services/learning/learning.service';
 import { logger } from '../utils/logger';
 
 const router = express.Router();
@@ -310,6 +312,9 @@ async function startPathGeneration(session: TestGoalSession, result: GoalConvers
   const mockConversation = buildMockConversation(session) as any;
   const placeholderPath = await (goalConversationService as any)['createGeneratingPlaceholderPath'](mockConversation, result as any);
   const goalPathRequest = (goalConversationService as any)['buildGoalPathRequest'](mockConversation, result as any, placeholderPath.id);
+  const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
+  goalPathRequest.generationRunId = runId;
+  goalPathRequest.createdPlaceholder = true;
 
   session.path = {
     id: placeholderPath.id,
@@ -335,10 +340,7 @@ async function startPathGeneration(session: TestGoalSession, result: GoalConvers
       await persistSession(session);
 
       try {
-        await prisma.learning_paths.update({
-          where: { id: placeholderPath.id },
-          data: { status: 'failed', updatedAt: new Date() }
-        });
+        await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
       } catch (updateError) {
         logger.error('[test-goal] update failed path status failed', { sessionId: session.id, error: updateError });
       }
@@ -482,7 +484,7 @@ async function callAgent(session: TestGoalSession, input: string): Promise<{ res
   const stageBefore = session.stage;
   const startedAt = Date.now();
 
-  const result = await runGoalConversationAgent({
+  const result = await executeSkill(goalConversationAgentDefinition, {
     input,
     userId: session.userId,
     conversationHistory: history,

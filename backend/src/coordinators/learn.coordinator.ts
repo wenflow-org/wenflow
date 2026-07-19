@@ -25,18 +25,17 @@ class LearnCoordinator {
       agentId: this.id,
       userId: input.userId,
       taskId: input.taskId,
-      forceNew: input.forceNew ?? false,
     });
     return AITeachingCoordinator.startSession(input);
   }
 
-  async processStudentMessage(sessionId: string, message: string) {
+  async processStudentMessage(sessionId: string, message: string, revision: number) {
     logger.info('[learn-coordinator] teaching-turn', {
       agentId: this.id,
       sessionId,
       messagePreview: message.slice(0, 120),
     });
-    return AITeachingCoordinator.processStudentMessage(sessionId, message);
+    return AITeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision: revision });
   }
 
   async triggerPeerSupport(sessionId: string, message: string) {
@@ -48,12 +47,12 @@ class LearnCoordinator {
     return AITeachingCoordinator.processPeerMessage(sessionId, message);
   }
 
-  async completeSession(sessionId: string) {
+  async completeSession(sessionId: string, revision: number) {
     logger.info('[learn-coordinator] session-wrapup', {
       agentId: this.id,
       sessionId,
     });
-    return AITeachingCoordinator.endSession(sessionId);
+    return AITeachingCoordinator.endSession(sessionId, 'manual-end', revision);
   }
 }
 

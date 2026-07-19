@@ -5,6 +5,7 @@ import authService, { InvalidCredentialsError } from '../services/auth/auth.serv
 import { getPlatformSettings } from '../services/platform-settings.service';
 import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
 import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
+import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 
 const router = express.Router();
 
@@ -12,10 +13,13 @@ const router = express.Router();
 router.get('/registration-status', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
+    const coreLearningAvailable = aiCapabilityHealthService.isCapabilityAvailable('goal-conversation');
     res.status(200).json({
       success: true,
       data: {
-        registrationEnabled: settings.registrationEnabled
+        registrationEnabled: settings.registrationEnabled && coreLearningAvailable,
+        configuredRegistrationEnabled: settings.registrationEnabled,
+        temporaryUnavailable: settings.registrationEnabled && !coreLearningAvailable
       }
     });
   } catch (error: any) {
@@ -41,12 +45,17 @@ const loginSchema = z.object({
 router.post('/register', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
-    if (!settings.registrationEnabled) {
-      return res.status(403).json({
+    const coreLearningAvailable = aiCapabilityHealthService.isCapabilityAvailable('goal-conversation');
+    if (!settings.registrationEnabled || !coreLearningAvailable) {
+      const temporaryUnavailable = settings.registrationEnabled && !coreLearningAvailable;
+      return res.status(temporaryUnavailable ? 503 : 403).json({
         success: false,
         error: {
-          message: '平台注册已关闭，请联系管理员',
-          status: 403
+          message: temporaryUnavailable
+            ? '核心学习服务正在恢复，暂时无法创建账号'
+            : '平台注册已关闭，请联系管理员',
+          code: temporaryUnavailable ? 'REGISTRATION_TEMPORARILY_UNAVAILABLE' : 'REGISTRATION_DISABLED',
+          status: temporaryUnavailable ? 503 : 403
         }
       });
     }

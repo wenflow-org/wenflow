@@ -4,6 +4,7 @@ import {
   encryptSecret,
   encryptSecretTree,
   isEncryptedSecret,
+  reencryptSecretTree,
   SecretCryptoError,
   validateSecretEncryptionConfig
 } from '../secret-crypto'
@@ -42,6 +43,10 @@ describe('secret crypto', () => {
     parts[5] = `${tag.slice(0, index)}${tag[index] === 'A' ? 'B' : 'A'}${tag.slice(index + 1)}`
     const tampered = parts.join(':')
     expect(() => decryptSecret(tampered, 'table.column')).toThrow(SecretCryptoError)
+
+    const truncatedTag = encrypted.split(':')
+    truncatedTag[5] = Buffer.from(truncatedTag[5], 'base64url').subarray(0, 4).toString('base64url')
+    expect(() => decryptSecret(truncatedTag.join(':'), 'table.column')).toThrow('数据库 Secret 密文格式无效')
   })
 
   it('保留旧密钥用于解密并用当前密钥写入', () => {
@@ -65,12 +70,49 @@ describe('secret crypto', () => {
 
     expect(isEncryptedSecret(encrypted.headers.Authorization)).toBe(true)
     expect(isEncryptedSecret(encrypted.env.OPENAI_API_KEY)).toBe(true)
-    expect(encrypted.env.REGION).toBe('cn')
+    expect(isEncryptedSecret(encrypted.env.REGION)).toBe(true)
     expect(decryptSecretTree(encrypted, 'main.user_mcp_configs.servers')).toEqual(source)
+  })
+
+  it('headers 和 env 中所有字符串都按不透明 Secret 处理', () => {
+    const source = {
+      headers: { 'X-Service-Key': 'header-value', Accept: 'application/json' },
+      env: { SERVICE_KEY: 'env-value', REGION: 'cn' }
+    }
+    const encrypted = encryptSecretTree(source, 'main.user_mcp_configs.healthCheck')
+
+    expect(isEncryptedSecret(encrypted.headers['X-Service-Key'])).toBe(true)
+    expect(isEncryptedSecret(encrypted.headers.Accept)).toBe(true)
+    expect(isEncryptedSecret(encrypted.env.SERVICE_KEY)).toBe(true)
+    expect(isEncryptedSecret(encrypted.env.REGION)).toBe(true)
+    expect(decryptSecretTree(encrypted, 'main.user_mcp_configs.healthCheck')).toEqual(source)
+  })
+
+  it('拒绝把伪造密文当作可信已加密值', () => {
+    expect(() => encryptSecret('wfsec:v1:invalid', 'table.column')).toThrow(SecretCryptoError)
+  })
+
+  it('纯空白 Secret 规范化为空值而不是加密为已配置', () => {
+    expect(encryptSecret('   ', 'table.column')).toBe('')
+  })
+
+  it('迁移时可将历史根字符串作为 Secret 加密', () => {
+    const encrypted = reencryptSecretTree('Bearer legacy-secret', 'main.user_mcp_configs.healthCheck', true)
+
+    expect(isEncryptedSecret(encrypted)).toBe(true)
+    expect(decryptSecret(encrypted, 'main.user_mcp_configs.healthCheck')).toBe('Bearer legacy-secret')
   })
 
   it('生产环境缺少密钥时拒绝启动', () => {
     delete process.env.SECRET_ENCRYPTION_KEYS
     expect(() => validateSecretEncryptionConfig(true)).toThrow(SecretCryptoError)
+  })
+
+  it('拒绝重复 Key ID 和非规范 Base64 Key', () => {
+    process.env.SECRET_ENCRYPTION_KEYS = `v1:${KEY_1},v1:${KEY_2}`
+    expect(() => validateSecretEncryptionConfig(true)).toThrow('Secret 加密密钥 ID 重复: v1')
+
+    process.env.SECRET_ENCRYPTION_KEYS = 'v1:not-valid-base64!'
+    expect(() => validateSecretEncryptionConfig(true)).toThrow('Secret 加密密钥必须是带 ID 的 32 字节 Base64 值')
   })
 })

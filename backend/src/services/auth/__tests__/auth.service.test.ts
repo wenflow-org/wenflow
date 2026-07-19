@@ -14,7 +14,7 @@ jest.mock('../../../config/database', () => ({
   }
 }))
 
-jest.mock('bcrypt', () => ({
+jest.mock('bcryptjs', () => ({
   __esModule: true,
   default: {
     compare: bcryptCompare,

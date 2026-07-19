@@ -1,4 +1,5 @@
-﻿import { logger } from '../../utils/logger';
+﻿import { randomUUID } from 'crypto';
+import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
@@ -9,8 +10,10 @@ import { executeSkill, sessionWrapupAgentDefinition, peerAgentDefinition } from 
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
 import {
   teachingSessionRepository,
+  TeachingSessionConflictError,
   type TeachingKnowledgePointState,
   type TeachingSessionMessage,
+  type TeachingSessionOperationClaim,
   type TeachingSessionRecord,
 } from './TeachingSessionRepository';
 import { knowledgeStateService } from './KnowledgeStateService';
@@ -22,7 +25,7 @@ import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSn
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
-import learningService from '../learning/learning.service';
+import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -53,12 +56,12 @@ export interface CheckpointSubmitResult {
   feedback: string;
   hint?: string;
   nextAction: 'continue' | 'review' | 'retry';
+  revision: number;
 }
 
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
-  forceNew?: boolean;
 }
 
 export interface TeachingOpening {
@@ -70,10 +73,23 @@ export interface TeachingOpening {
 
 type SessionResumeMode = 'new' | 'resumed';
 
+interface ProcessStudentMessageOptions {
+  operationClaim?: TeachingSessionOperationClaim;
+  checkpointId?: string;
+  expectedRevision?: number;
+}
+
 const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 function buildSessionId(userId: string) {
-  return `teaching_${Date.now()}_${userId}`;
+  return `teaching_${userId}_${randomUUID()}`;
+}
+
+function requireTeachingRevision(revision: number | undefined): number {
+  if (!Number.isInteger(revision) || Number(revision) < 0) {
+    throw new TeachingSessionConflictError('缺少有效的课堂 revision', 'TEACHING_REVISION_REQUIRED');
+  }
+  return Number(revision);
 }
 
 function toMessageRole(role: string): 'user' | 'assistant' | 'system' {
@@ -844,75 +860,12 @@ export class AITeachingOrchestrator {
     opening: TeachingOpening;
     knowledgePoints: KnowledgePointStatus[];
     mode: SessionResumeMode;
+    revision: number;
   }> {
-    const previousSession = input.forceNew
-      ? null
-      : await teachingSessionRepository.getRecoverableByTask(
-          input.userId,
-          input.taskId,
-          RECOVERY_WINDOW_MS,
-        );
-
-    if (previousSession) {
-      const sessionArtifacts = parseSessionArtifacts(previousSession.teachingState);
-      const resumedContext = await buildTeachingScenarioContext(input.userId, input.taskId, previousSession);
-      const effectiveInitialKnowledgeState = cloneKnowledgePoints(
-        Array.isArray(sessionArtifacts.initialKnowledgeState) && sessionArtifacts.initialKnowledgeState.length > 0
-          ? sessionArtifacts.initialKnowledgeState
-          : resumedContext.taskKnowledgeSeeds
-      );
-      const resumedKnowledgeState = normalizeFrozenKnowledgeState(
-        effectiveInitialKnowledgeState,
-        previousSession.knowledgeState,
-      );
-      const wasPausedAt = typeof sessionArtifacts.pausedAt === 'string'
-        ? new Date(sessionArtifacts.pausedAt).getTime()
-        : null;
-      const additionalPausedMs = wasPausedAt ? Math.max(0, Date.now() - wasPausedAt) : 0;
-      const resumedArtifacts = {
-        ...sessionArtifacts,
-        initialKnowledgeState: effectiveInitialKnowledgeState,
-        pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(resumedContext),
-        pausedAt: null,
-        pauseReason: null,
-        pausedDurationMs: Math.max(0, Number(sessionArtifacts.pausedDurationMs || 0)) + additionalPausedMs,
-        resumedAt: new Date().toISOString(),
-      };
-
-      await teachingSessionRepository.updateLifecycleState(previousSession.id, {
-        status: 'active',
-        endTime: null,
-        duration: null,
-        teachingState: buildTeachingStateWithArtifacts(previousSession.teachingState, resumedArtifacts),
-      });
-
-      await teachingSessionRepository.updateTurnState(previousSession.id, {
-        messages: previousSession.messages,
-        knowledgeState: resumedKnowledgeState,
-        teachingState: buildTeachingStateWithArtifacts(previousSession.teachingState, resumedArtifacts),
-      });
-
-      const opening = buildRecoveredOpening(previousSession);
-      return {
-        sessionId: previousSession.id,
-        subject: previousSession.subject,
-        topic: previousSession.topic,
-        startTime: previousSession.startTime,
-        welcomeMessage: previousSession.messages[0]?.content || `${opening.message}\n\n${opening.question}`,
-        opening,
-        knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
-        mode: 'resumed',
-      };
-    }
-
-    const context = await buildTeachingScenarioContext(input.userId, input.taskId, previousSession);
+    const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
     const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
-
     const sessionId = buildSessionId(input.userId);
-    const opening = await this.generateOpening(context);
-    const welcomeMessage = `${opening.message}\n\n${opening.question}`;
-
-    const session = await teachingSessionRepository.create({
+    const reservation = await teachingSessionRepository.reserve({
       id: sessionId,
       userId: input.userId,
       taskId: context.taskId,
@@ -922,7 +875,81 @@ export class AITeachingOrchestrator {
       topic: context.topic,
       taskType: context.taskType,
       mode: 'tutor',
-      messages: [
+      messages: [],
+      knowledgeState: seededKnowledgeState,
+      teachingState: null,
+    }, RECOVERY_WINDOW_MS);
+
+    if (!reservation.created) {
+      if (reservation.session.status === 'initializing' || reservation.session.status === 'finalizing') {
+        throw new TeachingSessionConflictError('课堂正在启动或结束，请稍后重试', 'TEACHING_SESSION_BUSY');
+      }
+
+      const claim = await teachingSessionRepository.claimOperation(
+        reservation.session.id,
+        'resume',
+        ['active', 'paused', 'timeout']
+      );
+      let committed = false;
+      try {
+        const previousSession = claim.session;
+        const sessionArtifacts = parseSessionArtifacts(previousSession.teachingState);
+        const resumedContext = await buildTeachingScenarioContext(input.userId, input.taskId, previousSession);
+        const effectiveInitialKnowledgeState = cloneKnowledgePoints(
+          Array.isArray(sessionArtifacts.initialKnowledgeState) && sessionArtifacts.initialKnowledgeState.length > 0
+            ? sessionArtifacts.initialKnowledgeState
+            : resumedContext.taskKnowledgeSeeds
+        );
+        const resumedKnowledgeState = normalizeFrozenKnowledgeState(
+          effectiveInitialKnowledgeState,
+          previousSession.knowledgeState,
+        );
+        const wasPausedAt = typeof sessionArtifacts.pausedAt === 'string'
+          ? new Date(sessionArtifacts.pausedAt).getTime()
+          : null;
+        const additionalPausedMs = wasPausedAt ? Math.max(0, Date.now() - wasPausedAt) : 0;
+        const resumedTeachingState = buildTeachingStateWithArtifacts(previousSession.teachingState, {
+          ...sessionArtifacts,
+          initialKnowledgeState: effectiveInitialKnowledgeState,
+          pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(resumedContext),
+          pausedAt: null,
+          pauseReason: null,
+          pausedDurationMs: Math.max(0, Number(sessionArtifacts.pausedDurationMs || 0)) + additionalPausedMs,
+          resumedAt: new Date().toISOString(),
+        });
+
+        await teachingSessionRepository.commitTurnState(previousSession.id, claim.operationId, {
+          messages: previousSession.messages,
+          knowledgeState: resumedKnowledgeState,
+          teachingState: resumedTeachingState,
+          allowedStatuses: ['active', 'paused', 'timeout']
+        });
+        committed = true;
+
+        const opening = buildRecoveredOpening(previousSession);
+        return {
+          sessionId: previousSession.id,
+          subject: previousSession.subject,
+          topic: previousSession.topic,
+          startTime: previousSession.startTime,
+          welcomeMessage: previousSession.messages[0]?.content || `${opening.message}\n\n${opening.question}`,
+          opening,
+          knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
+          mode: 'resumed',
+          revision: previousSession.revision + 1,
+        };
+      } finally {
+        if (!committed) {
+          await teachingSessionRepository.releaseOperation(claim.session.id, claim.operationId);
+        }
+      }
+    }
+
+    const operationId = reservation.operationId as string;
+    try {
+      const opening = await this.generateOpening(context);
+      const welcomeMessage = `${opening.message}\n\n${opening.question}`;
+      const messages: TeachingSessionMessage[] = [
         {
           role: 'assistant',
           content: welcomeMessage,
@@ -932,9 +959,8 @@ export class AITeachingOrchestrator {
             quickReplies: opening.quickReplies,
           }
         }
-      ],
-      knowledgeState: seededKnowledgeState,
-      teachingState: {
+      ];
+      const teachingState = {
         ...(context.learningState || {}),
         learnerStateContext: buildLearnerStateContext(context, null, {
           cognitiveLevel: null,
@@ -995,25 +1021,34 @@ export class AITeachingOrchestrator {
           pathBackgroundContext: buildPathBackgroundContext(context),
           endReason: null,
         },
-      },
-    });
+      };
+      const session = await teachingSessionRepository.completeInitialization(sessionId, operationId, {
+        messages,
+        knowledgeState: seededKnowledgeState,
+        teachingState
+      });
 
-    logger.info('[AITeaching] 新教学会话已创建', {
-      sessionId: session.id,
-      userId: input.userId,
-      taskId: input.taskId,
-    });
+      logger.info('[AITeaching] 新教学会话已创建', {
+        sessionId: session.id,
+        userId: input.userId,
+        taskId: input.taskId,
+      });
 
-    return {
-      sessionId: session.id,
-      subject: session.subject,
-      topic: session.topic,
-      startTime: session.startTime,
-      welcomeMessage,
-      opening,
-      knowledgePoints: normalizeKnowledgePoints(seededKnowledgeState),
-      mode: 'new',
-    };
+      return {
+        sessionId: session.id,
+        subject: session.subject,
+        topic: session.topic,
+        startTime: session.startTime,
+        welcomeMessage,
+        opening,
+        knowledgePoints: normalizeKnowledgePoints(seededKnowledgeState),
+        mode: 'new',
+        revision: session.revision,
+      };
+    } catch (error) {
+      await teachingSessionRepository.failInitialization(sessionId, operationId);
+      throw error;
+    }
   }
 
   private async generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
@@ -1125,6 +1160,7 @@ export class AITeachingOrchestrator {
   async processStudentMessage(
     sessionId: string,
     message: string,
+    options: ProcessStudentMessageOptions = {},
   ): Promise<{
     analysis: TeachingTurnOutput['analysis'];
     aiResponse: string;
@@ -1149,27 +1185,36 @@ export class AITeachingOrchestrator {
       evaluationSource: 'model' | 'ai-fallback' | 'failed';
     };
     advisory?: ReplanAdvisory;
+    revision: number;
+    checkpointResolution?: {
+      passed: boolean;
+      understanding: number;
+    };
   }> {
-    const session = await teachingSessionRepository.getById(sessionId);
-    if (!session) {
-      throw new Error('会话不存在或已结束，请重新开始授课');
-    }
-    let recovered = false;
-    if (session.status === 'timeout') {
-      logger.info('[AITeaching] 会话超时，自动恢复为活跃状态', { sessionId });
-      await teachingSessionRepository.updateLifecycleState(sessionId, {
-        status: 'active',
-        endTime: null,
-      });
-      session.status = 'active';
-      session.endTime = null;
-      recovered = true;
-    } else if (session.status !== 'active') {
-      throw new Error('会话不存在或已结束，请重新开始授课');
-    }
+    const operationClaim = options.operationClaim || await teachingSessionRepository.claimOperation(
+      sessionId,
+      options.checkpointId ? `checkpoint:${options.checkpointId}` : 'message',
+      ['active', 'timeout'],
+      requireTeachingRevision(options.expectedRevision)
+    );
+    let committed = false;
 
-    const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
-    const endIntent = detectEndIntent(message);
+    try {
+      const session = operationClaim.session;
+      const recovered = session.status === 'timeout';
+      if (recovered) {
+        logger.info('[AITeaching] 会话超时，本轮提交时自动恢复为活跃状态', { sessionId });
+      }
+
+      const submittedCheckpoint = options.checkpointId
+        ? getPendingCheckpoint(session.teachingState)
+        : null;
+      if (options.checkpointId && (!submittedCheckpoint || submittedCheckpoint.id !== options.checkpointId)) {
+        throw new Error('理解检查不存在或已处理');
+      }
+
+      const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+      const endIntent = detectEndIntent(message);
 
     const updatedMessages = appendTimestamp([
       ...session.messages,
@@ -1406,7 +1451,7 @@ export class AITeachingOrchestrator {
       taskType: normalizedTaskType,
     });
 
-    const teachingState = {
+      const teachingState: Record<string, any> = {
       ...currentState,
       analysis: effectiveTeachingOutput.analysis,
       strategies: effectiveTeachingOutput.pedagogy.strategies,
@@ -1427,17 +1472,44 @@ export class AITeachingOrchestrator {
             ? 'completion-candidate'
             : parseSessionArtifacts(session.teachingState).endReason,
       },
-    };
+      };
 
-    await teachingSessionRepository.updateTurnState(sessionId, {
-      messages: persistedMessages,
-      knowledgeState: mergedKnowledge,
-      teachingState,
-    });
+      let checkpointResolution: { passed: boolean; understanding: number } | undefined;
+      if (submittedCheckpoint) {
+        const understanding = Number(teachingOutput.analysis?.understanding ?? 0);
+        const currentPoint = effectiveTeachingOutput.knowledge.currentPoint?.trim().toLowerCase();
+        const passed = completionReady || !!currentPoint && mergedKnowledge.some(
+          (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
+        );
+        const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
+          ? [...teachingState.checkpointHistory]
+          : [];
+        checkpointHistory.push({
+          checkpointId: submittedCheckpoint.id,
+          submittedAt: new Date().toISOString(),
+          passed,
+          understanding,
+        });
 
-    await learningService.markTaskInProgress(session.taskId, session.userId);
+        delete teachingState.pendingCheckpoint;
+        const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
+        delete nextSessionArtifacts.pendingCheckpoint;
+        teachingState.sessionArtifacts = nextSessionArtifacts;
+        teachingState.checkpointHistory = checkpointHistory.slice(-20);
+        checkpointResolution = { passed, understanding };
+      }
 
-    const baseResult = {
+      await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
+        messages: persistedMessages,
+        knowledgeState: mergedKnowledge,
+        teachingState,
+        taskId: session.taskId,
+        userId: session.userId,
+        markTaskInProgress: true,
+      });
+      committed = true;
+
+      const baseResult = {
       analysis: teachingOutput.analysis,
       aiResponse: teachingOutput.reply,
       strategies: effectiveTeachingOutput.pedagogy.strategies,
@@ -1456,34 +1528,60 @@ export class AITeachingOrchestrator {
           ? 'completion-candidate' as const
           : null,
       recovered,
-      checkpoint: getPendingCheckpoint(teachingState),
-    };
+        checkpoint: getPendingCheckpoint(teachingState),
+        checkpointResolution,
+        revision: session.revision + 1,
+      };
 
-    return baseResult;
+      return baseResult;
+    } finally {
+      if (!committed) {
+        await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
+      }
+    }
   }
 
-  async endSession(sessionId: string, endReason = 'manual-end'): Promise<{
-    wrapup: SessionWrapupArtifact & {
+  async endSession(
+    sessionId: string,
+    endReason = 'manual-end',
+    expectedRevision?: number,
+    requestedOperationId: string = randomUUID()
+  ): Promise<{
+    status: 'completed' | 'processing';
+    operationId: string;
+    wrapup?: SessionWrapupArtifact & {
       stateUpdate: LearningStateMetrics | null;
       duration: number;
       summarySource: 'model' | 'fallback';
       evaluationSource: 'model' | 'ai-fallback' | 'failed';
     };
-    advisory: ReplanAdvisory;
+    advisory?: ReplanAdvisory;
+    revision: number;
   }> {
-    const session = await teachingSessionRepository.getById(sessionId);
-    if (!session) {
-      throw new Error('会话不存在或已结束');
-    }
-
-    // 结束接口可能因下游任务完成失败而被重试；复用已保存结果，避免重复 Wrapup 和事件副作用。
-    if (session.status === 'completed' && session.wrapup) {
+    const finalization = await teachingSessionRepository.claimFinalization(
+      sessionId,
+      'end_only',
+      requestedOperationId,
+      requireTeachingRevision(expectedRevision)
+    );
+    if (finalization.status === 'completed') {
       return {
-        wrapup: session.wrapup as any,
-        advisory: session.advisory as ReplanAdvisory,
+        status: 'completed',
+        operationId: finalization.session.teachingState?.finalization?.lastOperationId || requestedOperationId,
+        wrapup: finalization.session.wrapup as any,
+        advisory: finalization.session.advisory as ReplanAdvisory,
+        revision: finalization.session.revision,
       };
     }
-
+    if (finalization.status === 'processing') {
+      return {
+        status: 'processing',
+        operationId: finalization.operationId,
+        revision: finalization.session.revision
+      };
+    }
+    const { session, operationId } = finalization;
+    try {
     const durationMinutes = computeEffectiveDurationMinutes(session);
     const sessionArtifacts = {
       ...parseSessionArtifacts(session.teachingState),
@@ -1550,120 +1648,158 @@ export class AITeachingOrchestrator {
     const wrapupResult = wrapupOutput.internal.ext.sessionWrapup.result;
     const wrapupArtifact = wrapupOutput.internal.ext.sessionWrapup.artifact;
 
-    const evaluationResult = wrapupResult.evaluation
+    const evaluationResult = hasReliableSessionEvaluation(
+      wrapupResult.evaluation,
+      wrapupResult.evaluationSource
+    )
       ? {
           source: wrapupResult.evaluationSource,
-          evaluation: wrapupResult.evaluation,
+          evaluation: wrapupResult.evaluation!,
         }
       : null;
 
-    const finalState = evaluationResult
-      ? await learningStateService.calculateAndUpdateFromSessionScore(session.userId, {
-          sessionLss: evaluationResult.evaluation.sessionLss,
-          sessionKtl: evaluationResult.evaluation.sessionKtl,
-          sessionLf: evaluationResult.evaluation.sessionLf,
-          durationMinutes,
-          confidence: evaluationResult.evaluation.confidence,
-          pathId: session.learningPathId || null,
-          taskId: session.taskId,
-          sessionId,
-        })
-      : null;
-
     const lastAnalyzedMessage = [...session.messages].reverse().find((message) => !!message.analysis);
-
-    const persistedEvaluation = {
-      ...(evaluationResult ? evaluationResult.evaluation : {}),
-      lss: finalState?.lss ?? 0,
-      ktl: finalState?.ktl ?? 0,
-      lf: finalState?.lf ?? 0,
-      lsb: finalState?.lsb ?? 0,
-      evaluationSource: (evaluationResult?.source || 'failed') as 'model' | 'ai-fallback' | 'failed',
-      messageCount: session.messages.filter((message) => message.role === 'user').length,
-      avgUnderstanding: sessionEvidence.avgUnderstanding ?? 0,
-      avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',
-      duration: durationMinutes,
-    };
-
-    const persistedWrapup = {
-      ...wrapupArtifact,
-      duration: durationMinutes,
-      stateUpdate: finalState,
-      summarySource: wrapupResult.summarySource,
-      evaluationSource: wrapupResult.evaluationSource,
-    };
-
-    const learnerSnapshot = await learnerSnapshotService.getSnapshot({
-      userId: session.userId,
-      learningPathId: session.learningPathId || undefined,
-      milestoneId: session.milestoneId || undefined,
+    const scoreInput = evaluationResult ? {
+      sessionLss: evaluationResult.evaluation.sessionLss,
+      sessionKtl: evaluationResult.evaluation.sessionKtl,
+      sessionLf: evaluationResult.evaluation.sessionLf,
+      durationMinutes,
+      confidence: evaluationResult.evaluation.confidence,
+      pathId: session.learningPathId || null,
       taskId: session.taskId,
-      mode: 'teaching',
-    });
-    const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
-    const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
-    const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
-    const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
-    const advisory = replanAdvisoryService.build({
-      wrapup: persistedWrapup,
-      learnerReplanProjection,
-      nextMilestone: nextMilestone ? {
-        milestoneId: nextMilestone.milestoneId,
-        title: nextMilestone.title,
-        goal: nextMilestone.goal,
-        totalTasks: nextMilestone.totalTasks,
-      } : null,
-    });
+      sessionId,
+    } : null;
 
-    const finalWrapup = {
-      ...persistedWrapup,
-      learner: {
-        recentTrend: learnerSnapshot.dynamicState.recentTrend,
-        fatigueRisk: learnerSnapshot.dynamicState.fatigueRisk,
-        recommendedPacing: learnerSnapshot.dynamicState.recommendedPacing,
-      },
-    };
-
-    const lessonEvent = createDomainEvent({
-      type: 'lesson:completed',
-      aggregateType: 'lesson',
-      aggregateId: session.id,
-      userId: session.userId,
-      source: AI_TEACHING_AGENT_ID,
-      data: {
-        lessonId: session.id,
-        sessionId: session.id,
-        taskId: session.taskId,
-        pathId: session.learningPathId,
-        milestoneId: session.milestoneId,
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const metricCommit = scoreInput
+        ? await learningStateService.prepareSessionScoreCommit(session.userId, scoreInput)
+        : null;
+      const finalState = metricCommit?.metrics || null;
+      const persistedEvaluation = {
+        ...(evaluationResult ? evaluationResult.evaluation : {}),
+        lss: finalState?.lss ?? 0,
+        ktl: finalState?.ktl ?? 0,
+        lf: finalState?.lf ?? 0,
+        lsb: finalState?.lsb ?? 0,
+        evaluationSource: (evaluationResult?.source || 'failed') as 'model' | 'ai-fallback' | 'failed',
+        messageCount: session.messages.filter((message) => message.role === 'user').length,
+        avgUnderstanding: sessionEvidence.avgUnderstanding ?? 0,
+        avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',
         duration: durationMinutes,
-        performance: evaluationResult ? persistedEvaluation : null,
-        knowledgeState: session.knowledgeState,
-        visibleDialogueContext: session.messages.slice(-16).map((message) => ({
-          role: message.role,
-          content: message.content,
-          analysis: message.analysis || null,
-        })),
-        classroomEventHistory,
-        wrapup: finalWrapup,
-        advisory
+      };
+      const persistedWrapup = {
+        ...wrapupArtifact,
+        duration: durationMinutes,
+        stateUpdate: finalState,
+        summarySource: wrapupResult.summarySource,
+        evaluationSource: wrapupResult.evaluationSource,
+      };
+      const snapshotInput = {
+        userId: session.userId,
+        learningPathId: session.learningPathId || undefined,
+        milestoneId: session.milestoneId || undefined,
+        taskId: session.taskId,
+        mode: 'teaching' as const,
+      };
+      const learnerSnapshot = finalState
+        ? await learnerSnapshotService.previewSnapshotFromMetrics({
+            ...snapshotInput,
+            metrics: finalState,
+            generatedAt: finalState.timestamp,
+          })
+        : await learnerSnapshotService.getSnapshot(snapshotInput);
+      const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
+      const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
+      const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
+      const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
+      const advisory = replanAdvisoryService.build({
+        wrapup: persistedWrapup,
+        learnerReplanProjection,
+        nextMilestone: nextMilestone ? {
+          milestoneId: nextMilestone.milestoneId,
+          title: nextMilestone.title,
+          goal: nextMilestone.goal,
+          totalTasks: nextMilestone.totalTasks,
+        } : null,
+      });
+      const finalWrapup = {
+        ...persistedWrapup,
+        learner: {
+          recentTrend: learnerSnapshot.dynamicState.recentTrend,
+          fatigueRisk: learnerSnapshot.dynamicState.fatigueRisk,
+          recommendedPacing: learnerSnapshot.dynamicState.recommendedPacing,
+        },
+      };
+      const lessonEvent = createDomainEvent({
+        id: `evt_lesson_completed_${session.id}`,
+        type: 'lesson:completed',
+        aggregateType: 'lesson',
+        aggregateId: session.id,
+        userId: session.userId,
+        source: AI_TEACHING_AGENT_ID,
+        data: {
+          lessonId: session.id,
+          sessionId: session.id,
+          taskId: session.taskId,
+          pathId: session.learningPathId,
+          milestoneId: session.milestoneId,
+          duration: durationMinutes,
+          performance: evaluationResult ? persistedEvaluation : null,
+          knowledgeState: session.knowledgeState,
+          visibleDialogueContext: session.messages.slice(-16).map((message) => ({
+            role: message.role,
+            content: message.content,
+            analysis: message.analysis || null,
+          })),
+          classroomEventHistory,
+          wrapup: finalWrapup,
+          advisory
+        }
+      });
+
+      try {
+        await teachingSessionRepository.completeWithEvent(sessionId, operationId, {
+          messages: session.messages,
+          knowledgeState: session.knowledgeState,
+          teachingState: mergeFinalTeachingState(session.teachingState, finalState, sessionArtifacts),
+          wrapup: finalWrapup,
+          advisory,
+          duration: durationMinutes
+        }, lessonEvent, metricCommit ? {
+          userId: metricCommit.userId,
+          expectedRevision: metricCommit.expectedRevision,
+          sourceKey: metricCommit.sourceKey,
+          data: metricCommit.data,
+        } : null);
+      } catch (error) {
+        if (
+          error instanceof TeachingSessionConflictError
+          && error.code === 'TEACHING_LEARNING_STATE_STALE'
+          && attempt < 4
+        ) {
+          continue;
+        }
+        throw error;
       }
-    });
-    await teachingSessionRepository.completeWithEvent(sessionId, {
-      messages: session.messages,
-      knowledgeState: session.knowledgeState,
-      teachingState: finalState ? { ...finalState, sessionArtifacts } : { sessionArtifacts },
-      wrapup: finalWrapup,
-      advisory,
-      duration: durationMinutes
-    }, lessonEvent);
 
-    dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
+      dashboardGuidanceSnapshotService.refreshInBackground(session.userId, 'lesson-wrapup');
+      return {
+        status: 'completed',
+        operationId,
+        wrapup: finalWrapup,
+        advisory,
+        revision: session.revision + 1,
+      };
+    }
 
-    return {
-      wrapup: finalWrapup,
-      advisory,
-    };
+    throw new TeachingSessionConflictError('学习状态持续变化，请稍后重试', 'TEACHING_LEARNING_STATE_STALE');
+    } catch (error) {
+      const code = error instanceof TeachingSessionConflictError
+        ? error.code
+        : 'SESSION_FINALIZATION_FAILED';
+      await teachingSessionRepository.failFinalization(sessionId, operationId, 'end_only', code);
+      throw error;
+    }
   }
 
   async getSessionHistory(userId: string): Promise<Array<{
@@ -1706,6 +1842,7 @@ export class AITeachingOrchestrator {
     wrapup?: any | null;
     advisory?: ReplanAdvisory | null;
     pendingCheckpoint?: TeachingCheckpoint | null;
+    revision: number;
   } | null> {
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.userId !== userId) {
@@ -1727,6 +1864,7 @@ export class AITeachingOrchestrator {
       wrapup: session.wrapup,
       advisory: (session.advisory as ReplanAdvisory | null) || null,
       pendingCheckpoint: getPendingCheckpoint(session.teachingState),
+      revision: session.revision,
     };
   }
 
@@ -1734,141 +1872,150 @@ export class AITeachingOrchestrator {
     sessionId: string,
     checkpointId: string,
     payload: CheckpointSubmitPayload,
+    expectedRevision?: number,
   ): Promise<CheckpointSubmitResult> {
-    const session = await teachingSessionRepository.getById(sessionId);
-    if (!session) {
-      throw new Error('会话不存在或已结束');
-    }
-    if (session.status !== 'active' && session.status !== 'timeout') {
-      throw new Error('当前会话无法提交理解检查');
-    }
+    const operationClaim = await teachingSessionRepository.claimOperation(
+      sessionId,
+      `checkpoint:${checkpointId}`,
+      ['active', 'timeout'],
+      requireTeachingRevision(expectedRevision)
+    );
+    const session = operationClaim.session;
 
     const checkpoint = getPendingCheckpoint(session.teachingState);
     if (!checkpoint || checkpoint.id !== checkpointId) {
+      await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
       throw new Error('理解检查不存在或已处理');
     }
 
-    let answer: string;
-    if (checkpoint.type === 'short_answer') {
-      answer = payload.answerText?.trim() || '';
-      if (!answer) {
-        throw new Error('缺少作答内容');
-      }
-    } else {
-      const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
-      const options = Array.isArray(checkpoint.options) ? checkpoint.options : [];
-      const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
-      if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
-        throw new Error('提交的选项无效');
-      }
-      if (checkpoint.type === 'single_choice' && selectedOptions.length !== 1) {
-        throw new Error('单选题只能提交一个选项');
-      }
-      answer = selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
-    }
-
-    // 复用完整教学回合，由现有认知分析和知识状态更新能力判断本次检核表现。
-    const turn = await this.processStudentMessage(
-      sessionId,
-      `理解检查：${checkpoint.question}\n我的答案：${answer}`,
-    );
-    const understanding = Number(turn.analysis?.understanding ?? 0);
-    const currentPoint = turn.knowledgePoint?.trim().toLowerCase();
-    const passed = turn.isCompletion || !!currentPoint && turn.knowledgePoints.some(
-      (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
-    );
-
-    const updatedSession = await teachingSessionRepository.getById(sessionId);
-    if (updatedSession) {
-      const teachingState = { ...(updatedSession.teachingState || {}) };
-      const sessionArtifacts = { ...parseSessionArtifacts(teachingState) };
-      if (teachingState.pendingCheckpoint?.id === checkpointId) {
-        delete teachingState.pendingCheckpoint;
-      }
-      if (sessionArtifacts.pendingCheckpoint?.id === checkpointId) {
-        delete sessionArtifacts.pendingCheckpoint;
+    try {
+      let answer: string;
+      if (checkpoint.type === 'short_answer') {
+        answer = payload.answerText?.trim() || '';
+        if (!answer) {
+          throw new Error('缺少作答内容');
+        }
+      } else {
+        const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
+        const options = Array.isArray(checkpoint.options) ? checkpoint.options : [];
+        const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
+        if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
+          throw new Error('提交的选项无效');
+        }
+        if (checkpoint.type === 'single_choice' && selectedOptions.length !== 1) {
+          throw new Error('单选题只能提交一个选项');
+        }
+        answer = selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
       }
 
-      const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
-        ? [...teachingState.checkpointHistory]
-        : [];
-      checkpointHistory.push({
-        checkpointId,
-        submittedAt: new Date().toISOString(),
+      const turn = await this.processStudentMessage(
+        sessionId,
+        `理解检查：${checkpoint.question}\n我的答案：${answer}`,
+        { operationClaim, checkpointId }
+      );
+      const passed = turn.checkpointResolution?.passed === true;
+      const hint = !passed && turn.analysis?.confusionPoints?.length
+        ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
+        : undefined;
+      return {
         passed,
-        understanding,
-      });
-
-      await teachingSessionRepository.updateTurnState(sessionId, {
-        messages: updatedSession.messages,
-        knowledgeState: updatedSession.knowledgeState,
-        teachingState: {
-          ...teachingState,
-          checkpointHistory: checkpointHistory.slice(-20),
-          sessionArtifacts,
-        },
-      });
+        feedback: turn.aiResponse,
+        ...(hint ? { hint } : {}),
+        nextAction: passed ? 'continue' : 'review',
+        revision: turn.revision,
+      };
+    } catch (error) {
+      await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
+      throw error;
     }
-
-    const hint = !passed && turn.analysis?.confusionPoints?.length
-      ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
-      : undefined;
-    return {
-      passed,
-      feedback: turn.aiResponse,
-      ...(hint ? { hint } : {}),
-      nextAction: passed ? 'continue' : 'review',
-    };
   }
 
   async pauseSession(
     sessionId: string,
     userId: string,
-    reason: 'manual' | 'pagehide' = 'manual'
-  ): Promise<void> {
+    reason: 'manual' | 'pagehide' = 'manual',
+    expectedRevision?: number
+  ): Promise<number> {
+    requireTeachingRevision(expectedRevision);
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error('会话不存在');
     }
-    if (session.status === 'completed') {
+    if (['completed', 'discarded', 'superseded'].includes(session.status)) {
       throw new Error('已结束的会话无法暂停');
     }
 
     const sessionArtifacts = parseSessionArtifacts(session.teachingState);
     if (session.status === 'paused' && sessionArtifacts.pausedAt) {
-      return;
+      return session.revision;
     }
 
-    await teachingSessionRepository.updateLifecycleState(sessionId, {
-      status: 'paused',
-      endTime: null,
-      duration: null,
-      teachingState: buildTeachingStateWithArtifacts(session.teachingState, {
-        ...sessionArtifacts,
-        pausedAt: new Date().toISOString(),
-        pauseReason: reason,
-      }),
-    });
+    const operationClaim = await teachingSessionRepository.claimOperation(
+      sessionId,
+      `pause:${reason}`,
+      ['active', 'timeout'],
+      expectedRevision
+    );
+    let committed = false;
+    try {
+      const currentArtifacts = parseSessionArtifacts(operationClaim.session.teachingState);
+      await teachingSessionRepository.commitLifecycleState(sessionId, operationClaim.operationId, {
+        status: 'paused',
+        endTime: null,
+        duration: null,
+        teachingState: buildTeachingStateWithArtifacts(operationClaim.session.teachingState, {
+          ...currentArtifacts,
+          pausedAt: new Date().toISOString(),
+          pauseReason: reason,
+        }),
+      });
+      committed = true;
+      return operationClaim.session.revision + 1;
+    } finally {
+      if (!committed) {
+        await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
+      }
+    }
   }
 
-  async resetSession(sessionId: string, userId: string): Promise<void> {
+  async resetSession(sessionId: string, userId: string, expectedRevision?: number): Promise<number> {
+    requireTeachingRevision(expectedRevision);
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error('会话不存在');
     }
-    if (session.status === 'completed') {
+    if (session.status === 'discarded') {
+      return session.revision;
+    }
+    if (['completed', 'superseded'].includes(session.status)) {
       throw new Error('已结束的会话无法重置');
     }
 
-    await teachingSessionRepository.updateLifecycleState(sessionId, {
-      status: 'completed',
-      endTime: new Date(),
-      duration: computeEffectiveDurationMinutes(session),
-      teachingState: buildTeachingStateWithArtifacts(session.teachingState, {
-        ...parseSessionArtifacts(session.teachingState),
-        resetAt: new Date().toISOString(),
-      }),
-    });
+    const operationClaim = await teachingSessionRepository.claimOperation(
+      sessionId,
+      'reset',
+      ['active', 'paused', 'timeout'],
+      expectedRevision
+    );
+    let committed = false;
+    try {
+      await teachingSessionRepository.commitLifecycleState(sessionId, operationClaim.operationId, {
+        status: 'discarded',
+        endTime: new Date(),
+        duration: computeEffectiveDurationMinutes(operationClaim.session),
+        clearOpenKey: true,
+        teachingState: buildTeachingStateWithArtifacts(operationClaim.session.teachingState, {
+          ...parseSessionArtifacts(operationClaim.session.teachingState),
+          resetAt: new Date().toISOString(),
+        }),
+      });
+      committed = true;
+      return operationClaim.session.revision + 1;
+    } finally {
+      if (!committed) {
+        await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
+      }
+    }
   }
 
   private async syncVirtualSessionTimeout(sessionId: string): Promise<void> {
@@ -1982,27 +2129,21 @@ export class AITeachingOrchestrator {
   }
 
   private async checkIdleSessions(): Promise<void> {
+    const cutoff = new Date(Date.now() - this.idleTimeoutMs);
     const sessions = await prisma.teaching_sessions.findMany({
-      where: { status: 'active' },
+      where: {
+        status: 'active',
+        updatedAt: { lte: cutoff }
+      },
       select: {
         id: true,
-        updatedAt: true,
+        revision: true,
       }
     });
 
-    const now = Date.now();
     for (const session of sessions) {
-      const idleTime = now - new Date(session.updatedAt).getTime();
-      if (idleTime > this.idleTimeoutMs) {
-        await prisma.teaching_sessions.update({
-          where: { id: session.id },
-          data: {
-            status: 'timeout',
-            endTime: new Date(),
-            updatedAt: new Date(),
-          }
-        });
-
+      const timedOut = await teachingSessionRepository.timeoutIfIdle(session.id, session.revision, cutoff);
+      if (timedOut) {
         await this.syncVirtualSessionTimeout(session.id);
       }
     }

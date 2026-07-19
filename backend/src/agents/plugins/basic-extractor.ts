@@ -10,6 +10,7 @@ import {
   AgentOutput
 } from '../plugin-types';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { getRequestContext } from '../../gateway/api-gateway/context';
 import { safeHttpRequest } from '../../utils/safe-http';
 
 /**
@@ -193,6 +194,8 @@ export const basicExtractor: AgentPlugin = {
     try {
       const response = await safeHttpRequest<string>(url, {
         timeoutMs: 30000,
+        privateNetworkPolicy: 'public-only',
+        signal: getRequestContext().abortSignal,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },

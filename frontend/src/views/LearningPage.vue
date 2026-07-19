@@ -342,7 +342,8 @@ const sessionInfo = ref({
   sessionId: '',
   subject: '',
   topic: '',
-  difficulty: 5
+  difficulty: 5,
+  revision: 0
 });
 
 interface ChatMessage {
@@ -619,12 +620,18 @@ const resetSessionState = () => {
 };
 
 const persistPauseOnPageHide = () => {
-  if (!sessionInfo.value.sessionId || !sessionActive.value || endingSession.value || autoPausing.value) {
+  if (
+    isAdminVirtualSessionView.value
+    || !sessionInfo.value.sessionId
+    || !sessionActive.value
+    || endingSession.value
+    || autoPausing.value
+  ) {
     return;
   }
 
   const url = `${API_BASE_URL}/ai-teaching/sessions/${sessionInfo.value.sessionId}/pause`;
-  const payload = JSON.stringify({ reason: 'pagehide' });
+  const payload = JSON.stringify({ reason: 'pagehide', revision: sessionInfo.value.revision });
 
   // 优先 sendBeacon：页面卸载时可靠投递，且不会触发 CORS 预检（Cookie 同源自动携带）
   if (typeof navigator.sendBeacon === 'function') {
@@ -673,7 +680,8 @@ const startSession = async () => {
       sessionId: session.sessionId,
       subject: session.subject,
       topic: session.topic,
-      difficulty: 5
+      difficulty: 5,
+      revision: session.revision
     };
 
     if (session.knowledgePoints && session.knowledgePoints.length > 0) {
@@ -728,8 +736,10 @@ const sendMessage = async () => {
   try {
     const result = await aiTeachingAPI.sendMessage(
       sessionInfo.value.sessionId,
-      text
+      text,
+      sessionInfo.value.revision
     );
+    sessionInfo.value.revision = result.revision;
     
     messages.value.push({
       role: 'assistant',
@@ -860,8 +870,10 @@ const handleCheckpointSubmit = async (payload: CheckpointSubmitPayload) => {
     const result = await aiTeachingAPI.submitCheckpoint(
       sessionInfo.value.sessionId,
       activeCheckpoint.value.id,
-      payload
+      payload,
+      sessionInfo.value.revision
     );
+    sessionInfo.value.revision = result.revision;
 
     checkpointRef.value?.applyResult(result as CheckpointSubmitResult);
 
@@ -977,9 +989,12 @@ const handleCompletionAction = async (action: 'end' | 'continue-task' | 'complet
     try {
       // 纯阅读等场景不计活跃时长，但至少按 1 分钟提交，避免出现 0 分钟
       const actualMinutes = Math.max(1, Math.ceil(activeTime / 60));
-      await api.post(`/learning/tasks/${effectiveTaskId.value}/complete`, {
+      const result = await aiTeachingAPI.finalizeSessionReliably(sessionInfo.value.sessionId, {
+        action: 'complete_task',
+        revision: sessionInfo.value.revision,
         actualMinutes
       });
+      sessionInfo.value.revision = result.revision;
       toast.success('已将本任务标记为完成');
       closeEvaluationAndReturn();
     } catch (error: any) {
@@ -1038,7 +1053,13 @@ const endSession = async (options?: {
 
     endingSession.value = true;
     
-    const result = await aiTeachingAPI.endSession(sessionInfo.value.sessionId);
+    const result = await aiTeachingAPI.finalizeSessionReliably(sessionInfo.value.sessionId, {
+      action: 'end_only',
+      revision: sessionInfo.value.revision,
+      reason: 'manual-end'
+    });
+    if (!result.wrapup) throw new Error('课堂已结束，但学习反馈尚未保存');
+    sessionInfo.value.revision = result.revision;
     showCompletionPrompt.value = false;
     completionPromptReason.value = null;
     activeCheckpoint.value = null;
@@ -1054,7 +1075,7 @@ const endSession = async (options?: {
     });
     
     sessionWrapup.value = result.wrapup;
-    sessionAdvisory.value = result.advisory;
+    sessionAdvisory.value = result.advisory || null;
 
     const evaluationDurationMinutes = result.wrapup?.duration;
     completionDurationSeconds.value = typeof evaluationDurationMinutes === 'number'
@@ -1081,6 +1102,10 @@ const endSession = async (options?: {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
+      const recoveredRevision = error?.finalization?.revision;
+      if (sessionInfo.value && Number.isInteger(recoveredRevision)) {
+        sessionInfo.value.revision = recoveredRevision;
+      }
       toast.error(error.message || '结束会话失败');
       // 兜底: 即使后端结束失败,也复位提示和按钮状态,避免一直卡在"准备结束"
       showCompletionPrompt.value = false;
@@ -1153,7 +1178,7 @@ const handleWrapupAdvisoryAction = async (action: string) => {
 
     const result = await api.post(`/learning/paths/${task.value.learningPath.id}/replan`, {
       triggerSource: 'ai-teaching',
-      mode: 'new_version',
+      mode: 'overwrite',
       reason: reasonMap[resolvedAction],
       evidence: {
         advisoryAction: resolvedAction,
@@ -1220,9 +1245,18 @@ const formatTime = (seconds: number | string) => {
 };
 
 const pauseAndLeave = async () => {
-  if (sessionActive.value && !sessionPaused.value && sessionInfo.value.sessionId) {
+  if (
+    !isAdminVirtualSessionView.value
+    && sessionActive.value
+    && !sessionPaused.value
+    && sessionInfo.value.sessionId
+  ) {
     try {
-      await aiTeachingAPI.pauseSession(sessionInfo.value.sessionId, 'manual');
+      sessionInfo.value.revision = await aiTeachingAPI.pauseSession(
+        sessionInfo.value.sessionId,
+        'manual',
+        sessionInfo.value.revision
+      );
       sessionPaused.value = true;
       sessionActive.value = false;
       stopTimer();
@@ -1264,7 +1298,7 @@ const resetAndRestart = async () => {
   }
 
   try {
-    await aiTeachingAPI.resetSession(sessionInfo.value.sessionId);
+    await aiTeachingAPI.resetSession(sessionInfo.value.sessionId, sessionInfo.value.revision);
   } catch (error: any) {
     toast.error(error.message || '重置会话失败，请稍后重试');
     return;
@@ -1272,15 +1306,16 @@ const resetAndRestart = async () => {
 
   resetSessionState();
   sessionActive.value = false;
-  sessionInfo.value = { sessionId: '', subject: '', topic: '', difficulty: 5 };
+  sessionInfo.value = { sessionId: '', subject: '', topic: '', difficulty: 5, revision: 0 };
 
   try {
-    const session = await aiTeachingAPI.startSession((task.value as LearningTaskRecord).id, { forceNew: true });
+    const session = await aiTeachingAPI.startSession((task.value as LearningTaskRecord).id);
     sessionInfo.value = {
       sessionId: session.sessionId,
       subject: session.subject,
       topic: session.topic,
       difficulty: 5,
+      revision: session.revision,
     };
     sessionActive.value = true;
     messages.value.push({
@@ -1334,7 +1369,8 @@ const resumeSession = async (sessionId: string) => {
       sessionId: detail.id,
       subject: detail.subject,
       topic: detail.topic,
-      difficulty: 5
+      difficulty: 5,
+      revision: detail.revision
     };
     
     messages.value = detail.messages.map((m: SessionDetail['messages'][number]) => ({
@@ -1403,13 +1439,63 @@ const retryInitialization = async () => {
   await initializeLearning();
 };
 
+const reconcileSessionAfterPageShow = (event: PageTransitionEvent) => {
+  if (!event.persisted || !sessionInfo.value.sessionId || endingSession.value) return;
+
+  void (async () => {
+    const sessionId = sessionInfo.value.sessionId;
+    stopTimer();
+    autoPausing.value = false;
+    sessionActive.value = false;
+
+    try {
+      if (isAdminVirtualSessionView.value) {
+        await resumeSession(sessionId);
+        return;
+      }
+
+      const detail = await aiTeachingAPI.getSessionDetail(sessionId);
+      if (!detail) throw new Error('课堂记录不存在');
+      sessionInfo.value.revision = detail.revision;
+
+      if (detail.status === 'completed') {
+        sessionPaused.value = false;
+        sessionWrapup.value = detail.wrapup || sessionWrapup.value;
+        sessionAdvisory.value = detail.advisory || null;
+        return;
+      }
+      if (['discarded', 'superseded', 'failed'].includes(detail.status)) {
+        sessionPaused.value = true;
+        sessionInitError.value = '课堂已结束，请重新开始本节学习';
+        return;
+      }
+
+      sessionPaused.value = true;
+      await startSession();
+    } catch (error: any) {
+      sessionPaused.value = true;
+      sessionInitError.value = error.message || '恢复课堂状态失败';
+      toast.error(sessionInitError.value);
+    }
+  })();
+};
+
 onBeforeRouteLeave(async () => {
+  if (isAdminVirtualSessionView.value) {
+    stopTimer();
+    return true;
+  }
+
   if (!sessionInfo.value.sessionId || !sessionActive.value || endingSession.value) {
     return true;
   }
 
   try {
-    await aiTeachingAPI.pauseSession(sessionInfo.value.sessionId, 'manual');
+    sessionInfo.value.revision = await aiTeachingAPI.pauseSession(
+      sessionInfo.value.sessionId,
+      'manual',
+      sessionInfo.value.revision
+    );
     sessionActive.value = false;
     sessionPaused.value = true;
     stopTimer();
@@ -1423,12 +1509,14 @@ onBeforeRouteLeave(async () => {
 onMounted(async () => {
   // 只监听 pagehide（覆盖关闭/导航/刷新场景），避免与 beforeunload 双触发
   window.addEventListener('pagehide', persistPauseOnPageHide);
+  window.addEventListener('pageshow', reconcileSessionAfterPageShow);
   await initializeLearning();
 });
 
 onUnmounted(() => {
   stopTimer();
   window.removeEventListener('pagehide', persistPauseOnPageHide);
+  window.removeEventListener('pageshow', reconcileSessionAfterPageShow);
 });
 </script>
 

@@ -102,6 +102,12 @@ router.get('/:skillName', async (req: Request, res: Response) => {
 router.post('/execute/:skillName', async (req: Request, res: Response) => {
   try {
     const { skillName } = req.params;
+    if (skillName === 'mcp-tool') {
+      return res.status(403).json({
+        success: false,
+        error: 'MCP 工具只能通过 /api/user/mcp/tools/:id/execute 调用'
+      });
+    }
     const input = req.body;
     
     logger.info('[skills-route] executing skill', {

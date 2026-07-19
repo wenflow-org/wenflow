@@ -15,7 +15,8 @@ const ROUTE_RULES: RouteRule[] = [
   { method: 'GET', pattern: /^\/api\/learning\/paths\/[^/]+\/?$/, capability: 'path:read' },
   { method: 'POST', pattern: /^\/api\/learning\/tasks\/[^/]+\/complete\/?$/, capability: 'task:write' },
   { method: 'POST', pattern: /^\/api\/ai-teaching\/tasks\/[^/]+\/session\/?$/, capability: 'teaching:write' },
-  { method: 'POST', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/(messages|end)\/?$/, capability: 'teaching:write' },
+  { method: 'POST', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/(messages|end|finalize)\/?$/, capability: 'teaching:write' },
+  { method: 'GET', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/finalization\/?$/, capability: 'teaching:write' },
   { method: 'POST', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/checkpoints\/[^/]+\/submit\/?$/, capability: 'teaching:write' },
 ]
 

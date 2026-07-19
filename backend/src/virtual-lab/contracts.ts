@@ -36,11 +36,22 @@ export type LearnerObservation = {
   }
 }
 
+export type TaskCompletionCheckpoint = {
+  taskId: string
+  teachingSessionId: string
+  teachingRevision: number | null
+  status: 'teaching_finalized' | 'task_completed'
+  updatedAt: string
+  lastError?: string
+}
+
 export type PlatformControlReceipt = {
   conversationId?: string
   learningPathId?: string
   teachingSessionId?: string | null
+  teachingRevision?: number | null
   taskId?: string | null
+  taskCompletionCheckpoint?: TaskCompletionCheckpoint | null
   platformStage?: string
   goalCompleted?: boolean
   taskCompleted?: boolean

@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { randomUUID } from 'crypto'
 import type {
   LearnerAction,
   LearnerObservation,
@@ -57,6 +58,13 @@ function unwrap<T = any>(response: any): T {
   return response?.data?.data ?? response?.data
 }
 
+function requireTeachingRevision(value: unknown, operation: string): number {
+  if (!Number.isInteger(value) || Number(value) < 0) {
+    throw new PlatformAdapterError(`平台 ${operation} 响应缺少有效的课堂 revision`)
+  }
+  return Number(value)
+}
+
 export class PlatformUserAdapter {
   private readonly transport: PlatformHttpTransport
 
@@ -80,6 +88,20 @@ export class PlatformUserAdapter {
         ? { 'X-Projection-Token': credential.token }
         : { Authorization: `Bearer ${credential.token}` })
     }
+  }
+
+  private async resolveTeachingRevision(sessionId: string, revision?: number | null): Promise<number> {
+    if (Number.isInteger(revision) && Number(revision) >= 0) return Number(revision)
+    const response = await this.transport.request<any>({
+      method: 'GET',
+      url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/detail`,
+      headers: await this.headers()
+    })
+    const detail = unwrap<any>(response)
+    if (!Number.isInteger(detail?.revision) || Number(detail.revision) < 0) {
+      throw new PlatformAdapterError('平台未返回有效的课堂 revision')
+    }
+    return Number(detail.revision)
   }
 
   async startGoal(text: string): Promise<PlatformInteractionResult> {
@@ -215,25 +237,33 @@ export class PlatformUserAdapter {
         availableActions: ['chat', 'request_hint', 'request_example', 'submit_answer', 'submit_code', 'abandon'],
         lastActionResult: { status: 'success', visibleMessage: visibleText }
       },
-      control: { teachingSessionId: result?.sessionId, taskId, platformStage: 'learning', rawTraceId: traceIdFrom(response.headers) }
+      control: {
+        teachingSessionId: result?.sessionId,
+        teachingRevision: result?.revision,
+        taskId,
+        platformStage: 'learning',
+        rawTraceId: traceIdFrom(response.headers)
+      }
     }
   }
 
-  async sendTeachingMessage(sessionId: string, action: LearnerAction): Promise<PlatformInteractionResult> {
+  async sendTeachingMessage(sessionId: string, revision: number | null | undefined, action: LearnerAction): Promise<PlatformInteractionResult> {
     const message = action.type === 'submit_code' ? action.code
       : action.type === 'submit_answer' ? action.answer
       : 'text' in action ? action.text
       : 'reason' in action ? action.reason
       : action.type
+    const expectedRevision = await this.resolveTeachingRevision(sessionId, revision)
     const response = await this.transport.request<any>({
       method: 'POST',
       url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/messages`,
-      data: { message },
+      data: { message, revision: expectedRevision },
       headers: await this.headers()
     })
     const result = unwrap<any>(response)
     const platformText = result?.aiResponse || ''
     const shouldConfirmEnd = result?.shouldConfirmEnd === true
+    const nextRevision = requireTeachingRevision(result?.revision, 'Teaching 消息')
     return {
       observation: {
         stage: result?.autoEnded ? 'completed' : 'learning',
@@ -254,7 +284,12 @@ export class PlatformUserAdapter {
             ],
         lastActionResult: { status: 'success', visibleMessage: platformText }
       },
-      control: { teachingSessionId: sessionId, platformStage: result?.autoEnded ? 'completed' : 'learning', rawTraceId: traceIdFrom(response.headers) },
+      control: {
+        teachingSessionId: sessionId,
+        teachingRevision: nextRevision,
+        platformStage: result?.autoEnded ? 'completed' : 'learning',
+        rawTraceId: traceIdFrom(response.headers)
+      },
       diagnostic: {
         // 旁路裁判可读取，绝不传入下一轮虚拟学习者 Observation。
         analysis: result?.analysis || null,
@@ -267,15 +302,37 @@ export class PlatformUserAdapter {
 
   async endTeaching(
     sessionId: string,
+    revision: number | null | undefined,
     terminalReason: 'completed' | 'abandoned' = 'completed',
     learnerReason?: string
   ): Promise<PlatformInteractionResult> {
+    const expectedRevision = await this.resolveTeachingRevision(sessionId, revision)
     const response = await this.transport.request<any>({
       method: 'POST',
-      url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/end`,
-      data: { reason: terminalReason === 'abandoned' ? 'learner-abandoned' : 'task-completed' },
-      headers: await this.headers()
+      url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/finalize`,
+      data: {
+        action: 'end_only',
+        reason: terminalReason === 'abandoned' ? 'learner-abandoned' : 'task-completed',
+        revision: expectedRevision
+      },
+      headers: {
+        ...await this.headers(),
+        'Idempotency-Key': `simulation-finalize-${randomUUID()}`
+      }
     })
+    let result = unwrap<any>(response)
+    if (result?.status === 'processing') {
+      const statusResponse = await this.transport.request<any>({
+        method: 'GET',
+        url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/finalization`,
+        headers: await this.headers()
+      })
+      result = unwrap<any>(statusResponse)
+    }
+    if (result?.status !== 'completed') {
+      throw new PlatformAdapterError('平台 Teaching 结束仍在处理或已失败')
+    }
+    const nextRevision = requireTeachingRevision(result?.revision, 'Teaching 结束')
     return {
       observation: {
         stage: 'completed',
@@ -286,8 +343,14 @@ export class PlatformUserAdapter {
           visibleMessage: terminalReason === 'abandoned' ? '学习者已结束本次学习' : '本次学习已结束'
         }
       },
-      control: { teachingSessionId: sessionId, platformStage: 'completed', terminalReason, rawTraceId: traceIdFrom(response.headers) },
-      diagnostic: { endResult: unwrap(response) }
+      control: {
+        teachingSessionId: sessionId,
+        teachingRevision: nextRevision,
+        platformStage: 'completed',
+        terminalReason,
+        rawTraceId: traceIdFrom(response.headers)
+      },
+      diagnostic: { endResult: result }
     }
   }
 

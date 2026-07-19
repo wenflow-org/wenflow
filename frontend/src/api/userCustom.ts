@@ -2,6 +2,7 @@
 import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 
 const API_BASE = '/user';
+const MCP_TOOL_REQUEST_TIMEOUT = AI_REQUEST_TIMEOUT + 30_000;
 const USER_ME_BASE = '/users/me';
 const USER_PROJECTION_GRANT_BASE = `${API_BASE}/developer/access-grants`;
 
@@ -264,25 +265,82 @@ export const testApiConnection = async (data: {
 
 // ==================== MCP 配置 ====================
 
+export interface UserMcpToolConfig {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  endpoint: string;
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  config?: { timeout?: number };
+  enabled: boolean;
+}
+
+export interface UserMcpServerConfig {
+  id: string;
+  name: string;
+  endpoint: string;
+  type?: 'openai' | 'anthropic' | 'openai-compatible';
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  models?: string[];
+  defaultModel?: string;
+  priority?: number;
+  enabled?: boolean;
+  config?: {
+    temperature?: number;
+    maxTokens?: number;
+    timeout?: number;
+  };
+}
+
+export type UserMcpRoutingStrategy = 'priority' | 'latency' | 'round-robin';
+
+export interface UserMcpHealthCheckConfig {
+  enabled?: boolean;
+  interval?: number;
+  timeout?: number;
+  headers?: Record<string, string>;
+  auth?: {
+    type?: string;
+    username?: string;
+    password?: string;
+    apiKey?: string;
+    token?: string;
+    clientId?: string;
+    clientSecret?: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+  };
+  env?: Record<string, string>;
+}
+
 export const getUserMcpConfig = async () => {
   return await api.get(`${API_BASE}/mcp`);
 };
 
 export const updateUserMcpConfig = async (data: {
-  servers?: Array<Record<string, unknown>>;
-  tools?: Record<string, unknown>;
-  routingStrategy?: string;
+  servers?: UserMcpServerConfig[];
+  tools?: UserMcpToolConfig[];
+  routingStrategy?: UserMcpRoutingStrategy;
   fallbackEnabled?: boolean;
-  healthCheck?: Record<string, unknown>;
+  healthCheck?: UserMcpHealthCheckConfig | null;
 }) => {
   return await api.put(`${API_BASE}/mcp`, data);
+};
+
+export const executeMcpTool = async (id: string, params: Record<string, unknown> = {}) => {
+  return await api.post(`${API_BASE}/mcp/tools/${encodeURIComponent(id)}/execute`, { params }, {
+    timeout: MCP_TOOL_REQUEST_TIMEOUT
+  });
 };
 
 export const getMcpServers = async () => {
   return await api.get(`${API_BASE}/mcp/servers`);
 };
 
-export const addMcpServer = async (server: Record<string, unknown>) => {
+export const addMcpServer = async (server: UserMcpServerConfig) => {
   return await api.post(`${API_BASE}/mcp/servers`, server);
 };
 

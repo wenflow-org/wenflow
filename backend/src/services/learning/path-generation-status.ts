@@ -31,6 +31,45 @@ export interface RetryDecision {
   reason: 'failed' | 'stale' | 'not-failed' | 'completed';
 }
 
+export interface PathGenerationRollbackSnapshotV1 {
+  version: 1;
+  path: {
+    activeGenerationRunId: string | null;
+    aiPromptTemplate: string | null;
+    status: string;
+    restoreStatus: boolean;
+  };
+  supersededRun: {
+    id: string;
+    status: string;
+    retryAllowed: boolean;
+    finishedAt: string | null;
+    leaseExpiresAt: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+  } | null;
+}
+
+export interface ExpiredGenerationRunClaimOutcome {
+  claimed: boolean;
+  pathRestored: boolean;
+  pathState: {
+    status: string;
+    activeGenerationRunId: string | null;
+    milestoneCount: number;
+  } | null;
+}
+
+export class PathGenerationRunConflictError extends Error {
+  readonly status = 409;
+  readonly code = 'PATH_GENERATION_RUN_CHANGED';
+
+  constructor() {
+    super('路径生成状态已变化，请刷新后重试');
+    this.name = 'PathGenerationRunConflictError';
+  }
+}
+
 export const PATH_GENERATION_LEASE_MS = 5 * 60 * 1000;
 export const PATH_GENERATION_LEASE_OWNER = process.env.INSTANCE_ID || `process-${process.pid}`;
 const STALE_STAGE_DESIGN_MINUTES = 4;
@@ -197,32 +236,69 @@ export async function createAndClaimPathGenerationRun(
     retryType?: PathGenerationRetryType | null;
     totalItems?: number;
     now?: Date;
+    guard?: (tx: any) => Promise<void>;
+    expectedActiveGenerationRunId?: string | null;
   }
 ) {
   const now = input.now || new Date();
   return prisma.$transaction(async (tx: any) => {
     const path = await tx.learning_paths.findUnique({
       where: { id: input.pathId },
-      select: { id: true, activeGenerationRunId: true }
+      select: {
+        id: true,
+        status: true,
+        aiPromptTemplate: true,
+        activeGenerationRunId: true
+      }
     });
     if (!path) throw new Error('学习路径不存在');
 
-    if (path.activeGenerationRunId) {
-      await tx.path_generation_runs.updateMany({
-        where: {
-          id: path.activeGenerationRunId,
-          status: { in: ['queued', 'processing'] }
-        },
-        data: {
-          status: 'cancelled',
-          retryAllowed: false,
-          finishedAt: now,
-          leaseExpiresAt: now,
-          errorCode: 'SUPERSEDED',
-          errorMessage: '已由新的生成任务接管'
-        }
-      });
+    const expectedActiveRunId = input.expectedActiveGenerationRunId === undefined
+      ? path.activeGenerationRunId
+      : input.expectedActiveGenerationRunId;
+    if (
+      input.expectedActiveGenerationRunId !== undefined
+      && path.activeGenerationRunId !== input.expectedActiveGenerationRunId
+    ) {
+      throw new PathGenerationRunConflictError();
     }
+
+    const lockedPath = await tx.learning_paths.updateMany({
+      where: {
+        id: input.pathId,
+        activeGenerationRunId: expectedActiveRunId
+      },
+      data: { updatedAt: now }
+    });
+    if (lockedPath.count !== 1) {
+      throw new PathGenerationRunConflictError();
+    }
+
+    if (input.guard) await input.guard(tx);
+
+    const previousRun = expectedActiveRunId
+      ? await tx.path_generation_runs.findUnique({ where: { id: expectedActiveRunId } })
+      : null;
+    const rollbackSnapshot: PathGenerationRollbackSnapshotV1 = {
+      version: 1,
+      path: {
+        activeGenerationRunId: expectedActiveRunId,
+        aiPromptTemplate: path.aiPromptTemplate,
+        status: path.status,
+        restoreStatus: input.phase === 'core'
+      },
+      supersededRun: previousRun && ['queued', 'processing'].includes(previousRun.status)
+        ? {
+            id: previousRun.id,
+            status: previousRun.status,
+            retryAllowed: previousRun.retryAllowed,
+            finishedAt: previousRun.finishedAt?.toISOString?.() || null,
+            leaseExpiresAt: previousRun.leaseExpiresAt?.toISOString?.() || null,
+            errorCode: previousRun.errorCode,
+            errorMessage: previousRun.errorMessage
+          }
+        : null
+    };
 
     const attempt = await tx.path_generation_runs.count({
       where: { learningPathId: input.pathId, phase: input.phase }
@@ -238,25 +314,51 @@ export async function createAndClaimPathGenerationRun(
         attempt,
         totalItems: input.totalItems || 0,
         completedItems: 0,
-        progress: 0
+        progress: 0,
+        rollbackSnapshot: JSON.stringify(rollbackSnapshot)
       }
     });
 
-    await tx.learning_paths.update({
-      where: { id: input.pathId },
+    const claimedPath = await tx.learning_paths.updateMany({
+      where: {
+        id: input.pathId,
+        activeGenerationRunId: expectedActiveRunId
+      },
       data: {
         activeGenerationRunId: input.runId,
         ...(input.phase === 'core' ? { status: 'generating' } : {}),
         updatedAt: now
       }
     });
+    if (claimedPath.count !== 1) {
+      throw new PathGenerationRunConflictError();
+    }
+
+    if (rollbackSnapshot.supersededRun) {
+      await tx.path_generation_runs.updateMany({
+        where: {
+          id: rollbackSnapshot.supersededRun.id,
+          learningPathId: input.pathId,
+          status: { in: ['queued', 'processing'] }
+        },
+        data: {
+          status: 'cancelled',
+          retryAllowed: false,
+          finishedAt: now,
+          leaseExpiresAt: now,
+          errorCode: 'SUPERSEDED',
+          errorMessage: '已由新的生成任务接管'
+        }
+      });
+    }
 
     const leaseExpiresAt = new Date(now.getTime() + PATH_GENERATION_LEASE_MS);
     const claimed = await tx.path_generation_runs.updateMany({
       where: {
         id: input.runId,
         learningPathId: input.pathId,
-        status: 'queued'
+        status: 'queued',
+        learningPath: { activeGenerationRunId: input.runId }
       },
       data: {
         status: 'processing',
@@ -287,10 +389,30 @@ export async function claimExpiredGenerationRun(
     pathId: string;
     expiredAt: Date;
     now?: Date;
+    restorePath?: {
+      status: string;
+      aiPromptTemplate: string | null;
+    };
   }
-): Promise<boolean> {
+): Promise<ExpiredGenerationRunClaimOutcome> {
   const now = input.now || new Date();
   return prisma.$transaction(async (tx: any) => {
+    const path = await tx.learning_paths.findUnique({
+      where: { id: input.pathId },
+      select: {
+        status: true,
+        activeGenerationRunId: true,
+        _count: { select: { milestones: true } }
+      }
+    });
+    const pathState = path
+      ? {
+          status: path.status,
+          activeGenerationRunId: path.activeGenerationRunId,
+          milestoneCount: path._count?.milestones || 0
+        }
+      : null;
+
     const claimed = await tx.path_generation_runs.updateMany({
       where: {
         id: input.runId,
@@ -312,12 +434,26 @@ export async function claimExpiredGenerationRun(
         errorMessage: 'GENERATION_LEASE_EXPIRED'
       }
     });
-    if (claimed.count !== 1) return false;
+    if (claimed.count !== 1) {
+      return { claimed: false, pathRestored: false, pathState };
+    }
 
-    await tx.learning_paths.updateMany({
-      where: { id: input.pathId, activeGenerationRunId: input.runId },
-      data: { updatedAt: now }
-    });
-    return true;
+    let pathRestored = false;
+    if (input.restorePath) {
+      const restored = await tx.learning_paths.updateMany({
+        where: {
+          id: input.pathId,
+          activeGenerationRunId: input.runId,
+          status: 'generating'
+        },
+        data: {
+          ...input.restorePath,
+          updatedAt: now
+        }
+      });
+      pathRestored = restored.count === 1;
+    }
+
+    return { claimed: true, pathRestored, pathState };
   });
 }

@@ -3,6 +3,11 @@ const mockCoordinator = {
   submitCheckpoint: jest.fn(),
 };
 
+const mockSessionFinalizationService = {
+  finalize: jest.fn(),
+  getStatus: jest.fn(),
+};
+
 const mockTeachingSessionRepository = {
   assertOwnership: jest.fn(),
 };
@@ -13,6 +18,10 @@ jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
 }));
 jest.mock('../../services/ai-teaching/TeachingSessionRepository', () => ({
   teachingSessionRepository: mockTeachingSessionRepository,
+  isTeachingSessionConflictError: jest.fn(() => false),
+}));
+jest.mock('../../services/ai-teaching/SessionFinalizationService', () => ({
+  sessionFinalizationService: mockSessionFinalizationService,
 }));
 jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: any, _res: any, next: () => void) => next(),
@@ -25,8 +34,8 @@ jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
 
 import router from '../ai-teaching.routes';
 
-function getRouteHandler(path: string) {
-  const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.post);
+function getRouteHandler(path: string, method: 'get' | 'post' = 'post') {
+  const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
   if (!layer) throw new Error(`Route not found: ${path}`);
   return layer.route.stack[layer.route.stack.length - 1].handle;
 }
@@ -75,7 +84,7 @@ describe('ai-teaching routes', () => {
     await handler({
       user: { userId: 'user-1' },
       params: { sessionId: 'session-1' },
-      body: { message: '我完成了' },
+      body: { message: '我完成了', revision: 3 },
     }, res);
 
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -101,14 +110,14 @@ describe('ai-teaching routes', () => {
     await handler({
       user: { userId: 'user-1' },
       params: { sessionId: 'session-1', checkpointId: 'checkpoint-1' },
-      body: { selectedOptionIds: ['A'] },
+      body: { selectedOptionIds: ['A'], revision: 4 },
     }, res);
 
     expect(mockTeachingSessionRepository.assertOwnership).toHaveBeenCalledWith('session-1', 'user-1');
     expect(mockCoordinator.submitCheckpoint).toHaveBeenCalledWith('session-1', 'checkpoint-1', {
       selectedOptionIds: ['A'],
       answerText: undefined,
-    });
+    }, 4);
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: { passed: true, feedback: '回答正确', nextAction: 'continue' },
@@ -126,5 +135,85 @@ describe('ai-teaching routes', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(mockCoordinator.submitCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it('拒绝缺少 revision 的课堂写入', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      body: { message: '继续' },
+    }, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+  });
+
+  it('Finalization 正在执行时返回 202 和轮询信息', async () => {
+    mockSessionFinalizationService.finalize.mockResolvedValue({
+      operationId: 'finalize-1',
+      status: 'processing',
+      pollAfterMs: 1500,
+      revision: 5,
+    });
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'finalize-1' },
+      body: { action: 'end_only', revision: 5 },
+    }, res);
+
+    expect(mockSessionFinalizationService.finalize).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'finalize-1',
+      revision: 5,
+    }));
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: expect.objectContaining({ status: 'processing', pollAfterMs: 1500 })
+    });
+  });
+
+  it('Finalization 拒绝缺少 Idempotency-Key', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: {},
+      body: { action: 'end_only', revision: 5 },
+    }, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockSessionFinalizationService.finalize).not.toHaveBeenCalled();
+  });
+
+  it('查询持久化 Finalization 状态', async () => {
+    mockSessionFinalizationService.getStatus.mockResolvedValue({
+      operationId: 'finalize-1',
+      status: 'completed',
+      revision: 6,
+    });
+    const handler = getRouteHandler('/sessions/:sessionId/finalization', 'get');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+    }, res);
+
+    expect(mockSessionFinalizationService.getStatus).toHaveBeenCalledWith('session-1', 'user-1');
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { operationId: 'finalize-1', status: 'completed', revision: 6 }
+    });
   });
 });

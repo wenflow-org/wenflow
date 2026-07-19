@@ -2,6 +2,7 @@ import { Router } from 'express';
 import agentModelConfigService from '../../services/agentModelConfig.service';
 import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
+import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 
 const router = Router();
 
@@ -50,7 +51,31 @@ router.get('/:agentId', async (req, res) => {
 router.put('/:agentId', async (req, res) => {
   try {
     const existing = await agentModelConfigService.get(req.params.agentId);
-    const input = preserveConfiguredSecret(pickEditableConfig(req.body), existing as any);
+    const body = req.body || {};
+    const endpointProvided = Object.prototype.hasOwnProperty.call(body, 'endpoint');
+    if (endpointProvided && body.endpoint !== null && typeof body.endpoint !== 'string') {
+      return res.status(400).json({ success: false, error: 'endpoint 必须是字符串或 null' });
+    }
+    const endpointChanged = endpointProvided
+      && normalizeEndpointIdentity(body.endpoint) !== normalizeEndpointIdentity(existing?.endpoint);
+    const finalEndpoint = endpointProvided
+      ? normalizeEndpointIdentity(body.endpoint)
+      : normalizeEndpointIdentity(existing?.endpoint);
+    if (typeof body.apiKey === 'string' && body.apiKey.trim() && !finalEndpoint) {
+      return res.status(400).json({ success: false, error: '配置独立 apiKey 时必须同时提供 endpoint' });
+    }
+    if (endpointChanged
+      && normalizeEndpointIdentity(body.endpoint)
+      && !(typeof body.apiKey === 'string' && body.apiKey.trim())) {
+      return res.status(400).json({ success: false, error: '更换 endpoint 时必须提供新的 apiKey' });
+    }
+    const input = preserveConfiguredSecret(
+      pickEditableConfig(body),
+      endpointChanged ? { ...existing, apiKey: null } as any : existing as any
+    );
+    if (endpointChanged && !(typeof body.apiKey === 'string' && body.apiKey.trim())) {
+      input.apiKey = null;
+    }
     const config = await agentModelConfigService.upsert(req.params.agentId, input);
     res.json({ success: true, data: toResponseShape(config), message: '配置已更新' });
   } catch (error: any) {

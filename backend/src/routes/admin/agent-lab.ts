@@ -9,6 +9,7 @@ import { ARENA_AGENT_CONFIGS } from '../../services/arena/agent-configs';
 import apiConfigService from '../../services/apiConfig.service';
 import { rejectPromptMutation } from '../../middleware/prompt-file-truth.middleware';
 import { safeHttpRequest } from '../../utils/safe-http';
+import { resolveEndpointBoundSecret } from '../../utils/endpoint-identity';
 import { agentPluginRegistry, agentPluginConfig } from '../../agents';
 import { registerAllPlugins } from '../../agents/plugins';
 import { getGateway } from '../../gateway';
@@ -458,13 +459,24 @@ router.put('/plugin-config', (req, res) => {
 router.put('/api-config', async (req, res) => {
   const { apiUrl, apiKey, availableModels, defaultModel, defaultReasoningModel, defaultEvaluationModel } = req.body;
   const currentConfig = await apiConfigService.getConfig();
-  const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim()
-    ? apiKey.trim()
-    : currentConfig.apiKey;
+  const finalApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : currentConfig.apiUrl;
+  const resolvedApiKey = resolveEndpointBoundSecret(finalApiUrl, apiKey, currentConfig.apiUrl, currentConfig.apiKey);
+  if (!finalApiUrl && typeof apiKey === 'string' && apiKey.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: '配置 API Key 时必须提供服务地址'
+    });
+  }
+  if (finalApiUrl && !resolvedApiKey) {
+    return res.status(400).json({
+      success: false,
+      error: '更换服务地址时必须提供新的 API Key'
+    });
+  }
   
   const updatedConfig = await apiConfigService.updateConfig({
-    apiUrl,
-    apiKey: resolvedApiKey,
+    apiUrl: finalApiUrl,
+    apiKey: finalApiUrl ? resolvedApiKey : '',
     availableModels: availableModels ? availableModels.split(',').map((m: string) => m.trim()) : undefined,
     defaultModel,
     defaultReasoningModel,

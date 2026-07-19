@@ -320,6 +320,7 @@ class AIService {
     timeout?: number; // 自定义超时（毫秒）
     // 日志记录相关参数
     agentId?: string;
+    skillId?: string;
     userId?: string;
     action?: string;
     allowReasoningFallback?: boolean;
@@ -341,6 +342,7 @@ class AIService {
       const gateway = getAPIGateway();
       const caller: CallerInfo = {
         agentId: options?.agentId,
+        skillId: options?.skillId,
         userId: options?.userId,
         action: options?.action,
       };
@@ -647,7 +649,8 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ], { 
-        agentId: 'skill:path-planning',
+        agentId: 'path-agent',
+        skillId: 'path-planning',
         userId: userId,
         action: 'analyzeLearningGoal'
       });

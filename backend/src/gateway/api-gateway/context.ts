@@ -13,6 +13,7 @@ export interface RequestContext {
   traceId?: string;
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
+  abortSignal?: AbortSignal;
   experimentId?: string;
   runId?: string;
   promptRuntimeOverride?: {

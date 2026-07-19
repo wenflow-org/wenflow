@@ -75,7 +75,17 @@
 
     <!-- Agent 列表 -->
     <div class="agent-list">
-      <el-empty v-if="!loading && agents.length === 0" :description="getEmptyDescription()">
+      <el-result
+        v-if="loadError && !loading"
+        icon="error"
+        title="AI 助手加载失败"
+        :sub-title="loadError"
+      >
+        <template #extra>
+          <el-button type="primary" @click="loadAgents">重新加载</el-button>
+        </template>
+      </el-result>
+      <el-empty v-else-if="!loading && agents.length === 0" :description="getEmptyDescription()">
         <template #image>
           <el-icon :size="100" color="var(--el-color-primary)">
             <Reading />
@@ -302,6 +312,7 @@ interface AgentLogItem {
 }
 
 const loading = ref(false);
+const loadError = ref('');
 const submitting = ref(false);
 const activeTab = ref('all');
 const agents = ref<UserAgentItem[]>([]);
@@ -356,6 +367,7 @@ onMounted(async () => {
 
 const loadAgents = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const params: { filter?: 'all' | 'system' | 'custom' } = {};
     if (activeTab.value !== 'all') {
@@ -364,6 +376,7 @@ const loadAgents = async () => {
     const res = await getUserAgents(params);
     agents.value = res.data;
   } catch (error) {
+    loadError.value = '无法读取 AI 助手列表，请检查网络或服务状态后重试。';
     toast.error('加载失败');
   } finally {
     loading.value = false;

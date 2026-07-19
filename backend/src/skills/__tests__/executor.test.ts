@@ -108,4 +108,30 @@ describe('统一 Skill Executor', () => {
     })
     expect(handler).not.toHaveBeenCalled()
   })
+
+  it('MCP Skill 日志不持久化调用参数和远程结果正文', async () => {
+    await runWithContext({ userId: 'user-1' }, () => executeSkillHandler(
+      { name: 'mcp-tool' },
+      { toolId: 'echo', params: { credential: 'secret', content: 'private input' } },
+      async () => ({
+        success: true,
+        output: {
+          toolId: 'echo',
+          source: 'user',
+          result: { credential: 'secret', content: 'private output' }
+        }
+      })
+    ))
+    await new Promise(resolve => setImmediate(resolve))
+
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(JSON.parse(data.input)).toEqual({ toolId: 'echo', params: '[REDACTED]' })
+    expect(JSON.parse(data.output)).toEqual({
+      toolId: 'echo',
+      source: 'user',
+      resultType: 'object'
+    })
+    expect(data.input).not.toContain('private input')
+    expect(data.output).not.toContain('private output')
+  })
 })

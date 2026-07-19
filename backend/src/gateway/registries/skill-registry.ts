@@ -174,42 +174,6 @@ export class SkillRegistry {
       .filter((s): s is SkillRegistration => s !== undefined);
   }
 
-  /**
-   * 更新统计数据
-   */
-  async updateStats(
-    skillName: string,
-    success: boolean,
-    latency: number
-  ): Promise<void> {
-    const registration = this.skills.get(skillName);
-    if (!registration) return;
-
-    const stats = registration.definition.stats;
-    
-    // 更新调用次数
-    stats.callCount++;
-    
-    // 更新成功率（移动平均）
-    const previousSuccesses = stats.successRate * (stats.callCount - 1);
-    stats.successRate = (previousSuccesses + (success ? 1 : 0)) / stats.callCount;
-    
-    // 更新平均延迟
-    stats.avgLatency = (stats.avgLatency * (stats.callCount - 1) + latency) / stats.callCount;
-    
-    // 更新最后调用时间
-    registration.lastCalledAt = new Date();
-
-    // 持久化更新
-    await this.prisma.skill_registrations.update({
-      where: { name: skillName },
-      data: {
-        callCount: stats.callCount,
-        successRate: stats.successRate,
-      }
-    }).catch(() => {});
-  }
-
   /** 更新运行时视图；持久化统计由统一 Skill Executor 负责。 */
   recordExecution(skillName: string, success: boolean, latency: number): void {
     const registration = this.skills.get(skillName);

@@ -24,6 +24,7 @@ export interface PathGenerationInput {
   sourceConversationId?: string;
   existingPathId?: string;
   generationRunId?: string;
+  createdPlaceholder?: boolean;
   userProfile?: any;
   systemPromptOverrides?: {
     pathAgent?: string;
@@ -84,6 +85,7 @@ export interface GoalPathRequest {
   sourceConversationId?: string;
   existingPathId?: string;
   generationRunId?: string;
+  createdPlaceholder?: boolean;
   source?: 'goal';
   mode?: 'generate';
   rawGoal: string;
@@ -279,6 +281,7 @@ class PathCoordinator {
       sourceConversationId: input.sourceConversationId,
       existingPathId: input.existingPathId,
       generationRunId: input.generationRunId,
+      createdPlaceholder: input.createdPlaceholder,
       description,
       subject: typeof subject === 'string' && subject.trim() ? subject.trim() : undefined,
       deadline,

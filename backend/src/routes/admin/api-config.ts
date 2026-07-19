@@ -9,6 +9,8 @@ import {
   getRuntimeNetworkPolicy,
   updateRuntimeNetworkPolicy
 } from '../../services/runtime-network-policy.service';
+import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
+import { endpointsMatch, resolveEndpointBoundSecret } from '../../utils/endpoint-identity';
 
 const router = Router();
 
@@ -111,9 +113,45 @@ router.put('/', async (req, res) => {
     } = req.body;
 
     const currentConfig = await apiConfigService.getConfig();
-    const resolvedApiKey = typeof apiKey === 'string' && apiKey.trim().length > 0
-      ? apiKey.trim()
-      : currentConfig.apiKey;
+    const hasReasoningEndpoint = Object.prototype.hasOwnProperty.call(req.body || {}, 'reasoningEndpoint');
+    const hasLightEndpoint = Object.prototype.hasOwnProperty.call(req.body || {}, 'lightEndpoint');
+    const finalApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : currentConfig.apiUrl;
+    const finalReasoningEndpoint = hasReasoningEndpoint
+      ? (typeof reasoningEndpoint === 'string' ? reasoningEndpoint.trim() || undefined : undefined)
+      : currentConfig.reasoningEndpoint;
+    const finalLightEndpoint = hasLightEndpoint
+      ? (typeof lightEndpoint === 'string' ? lightEndpoint.trim() || undefined : undefined)
+      : currentConfig.lightEndpoint;
+    const freshApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+    const mainEndpointChanged = !endpointsMatch(finalApiUrl, currentConfig.apiUrl);
+    const endpointRebound = (mainEndpointChanged && Boolean(finalApiUrl))
+      || (!endpointsMatch(finalReasoningEndpoint, currentConfig.reasoningEndpoint) && Boolean(finalReasoningEndpoint))
+      || (!endpointsMatch(finalLightEndpoint, currentConfig.lightEndpoint) && Boolean(finalLightEndpoint));
+    let resolvedApiKey = freshApiKey
+      || (!endpointRebound ? currentConfig.apiKey : '');
+    if (!finalApiUrl && !finalReasoningEndpoint && !finalLightEndpoint) {
+      resolvedApiKey = '';
+    }
+    if (!finalApiUrl && (finalReasoningEndpoint || finalLightEndpoint)) {
+      return res.status(400).json({
+        success: false,
+        error: '配置推理或轻量 Endpoint 前必须提供主服务地址'
+      });
+    }
+    if (freshApiKey && !finalApiUrl) {
+      return res.status(400).json({
+        success: false,
+        error: '配置 API Key 时必须提供主服务地址'
+      });
+    }
+    if ((finalApiUrl || finalReasoningEndpoint || finalLightEndpoint) && !resolvedApiKey) {
+      return res.status(400).json({
+        success: false,
+        error: !endpointRebound
+          ? 'API Key 未配置'
+          : '更换任一服务地址时必须提供新的 API Key'
+      });
+    }
 
     const modelsArray = Array.isArray(availableModels)
       ? availableModels
@@ -122,7 +160,7 @@ router.put('/', async (req, res) => {
         : currentConfig.availableModels;
 
     const updatedConfig = await apiConfigService.updateConfig({
-      apiUrl,
+      apiUrl: finalApiUrl,
       apiKey: resolvedApiKey,
       availableModels: modelsArray,
       defaultModel,
@@ -130,14 +168,15 @@ router.put('/', async (req, res) => {
       defaultEvaluationModel,
       defaultTemperature: defaultTemperature ?? currentConfig.defaultTemperature,
       defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
-      reasoningEndpoint,
-      lightEndpoint,
+      reasoningEndpoint: finalReasoningEndpoint,
+      lightEndpoint: finalLightEndpoint,
       chatModels: chatModels || currentConfig.chatModels,
       reasoningModels: reasoningModels || currentConfig.reasoningModels,
       lightModels: lightModels || currentConfig.lightModels
     });
 
     getAPIGateway().invalidateCache();
+    void aiCapabilityHealthService.refresh().catch(() => undefined);
 
     res.json({
       success: true,
@@ -209,7 +248,12 @@ router.post('/test-model', async (req, res) => {
 
     const currentConfig = await apiConfigService.getConfig();
     const resolvedUrl = String(apiUrl || currentConfig.apiUrl || '').trim();
-    const resolvedKey = String(apiKey || currentConfig.apiKey || '').trim();
+    const resolvedKey = resolveEndpointBoundSecret(
+      resolvedUrl,
+      apiKey,
+      currentConfig.apiUrl,
+      currentConfig.apiKey
+    );
     const resolvedModel = String(model || currentConfig.defaultModel || '').trim();
     const resolvedPrompt = String(prompt || '请用一句中文确认模型测试成功。').trim();
 
@@ -281,6 +325,7 @@ router.post('/reset', async (req, res) => {
   try {
     await apiConfigService.resetConfig();
     getAPIGateway().invalidateCache();
+    void aiCapabilityHealthService.refresh().catch(() => undefined);
     
     res.json({
       success: true,

@@ -16,7 +16,17 @@
         </div>
 
         <div class="agent-model-settings__table mobile-table-scroll">
-          <el-table :data="configs" v-loading="loading">
+          <el-result
+            v-if="loadError && !loading && configs.length === 0"
+            icon="error"
+            title="模型配置加载失败"
+            :sub-title="loadError"
+          >
+            <template #extra>
+              <el-button type="primary" @click="fetchConfigs">重新加载</el-button>
+            </template>
+          </el-result>
+          <el-table v-else :data="configs" v-loading="loading">
             <el-table-column label="AI 能力" width="240">
               <template #default="{ row }">
                 <div class="agent-cell">
@@ -102,6 +112,7 @@ interface AgentDefinition {
 
 const configs = ref<UserAgentConfig[]>([]);
 const loading = ref(false);
+const loadError = ref('');
 const editDialogVisible = ref(false);
 const busyAgentId = ref('');
 const busyAction = ref<'' | 'toggle' | 'save' | 'reset'>('');
@@ -148,6 +159,7 @@ const toConfigPayload = (config: UserAgentConfig) => ({
 
 const fetchConfigs = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const [configRes, agentsRes] = await Promise.all([
       api.get('/user/agent-model-configs'),
@@ -159,6 +171,7 @@ const fetchConfigs = async () => {
 
     configs.value = buildConfigRows(agents, overrides);
   } catch (error) {
+    loadError.value = '无法读取模型配置，请检查网络或服务状态后重试。';
     toast.error('获取配置失败');
   }
   loading.value = false;

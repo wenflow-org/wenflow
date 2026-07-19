@@ -203,6 +203,8 @@ class ReportService {
     const sessions = await prisma.teaching_sessions.findMany({
       where: {
         userId,
+        status: 'completed',
+        wrapup: { not: null },
         startTime: { gte: startDate, lte: endDate },
         endTime: { not: null } as any
       }
@@ -358,6 +360,8 @@ class ReportService {
     const sessions = await prisma.teaching_sessions.findMany({
       where: {
         userId,
+        status: 'completed',
+        wrapup: { not: null },
         startTime: { gte: startDate, lte: endDate },
         endTime: { not: null } as any
       }

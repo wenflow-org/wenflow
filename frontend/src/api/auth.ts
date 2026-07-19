@@ -58,9 +58,17 @@ export const authAPI = {
   },
 
   // 娉ㄥ唽鐘舵€?
-  async getRegistrationStatus(): Promise<{ registrationEnabled: boolean }> {
+  async getRegistrationStatus(): Promise<{
+    registrationEnabled: boolean;
+    configuredRegistrationEnabled?: boolean;
+    temporaryUnavailable?: boolean;
+  }> {
     const response = await api.get('/auth/registration-status');
-    return unwrapAuthPayload<{ registrationEnabled: boolean }>(response) || { registrationEnabled: true };
+    return unwrapAuthPayload<{
+      registrationEnabled: boolean;
+      configuredRegistrationEnabled?: boolean;
+      temporaryUnavailable?: boolean;
+    }>(response) || { registrationEnabled: false, temporaryUnavailable: true };
   },
 
 

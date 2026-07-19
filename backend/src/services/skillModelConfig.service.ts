@@ -17,8 +17,8 @@ export interface SkillModelConfig {
   model?: string;
   thinkingMode?: string;
   reasoningEffort?: string;
-  endpoint?: string;
-  apiKey?: string;
+  endpoint?: string | null;
+  apiKey?: string | null;
   temperature: number;
   maxTokens: number;
   requestTimeoutMs?: number | null;

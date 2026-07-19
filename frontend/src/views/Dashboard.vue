@@ -289,7 +289,8 @@ const headerNavItems = computed(() => [
 
 const pathCount = computed(() => Math.max(stats.value?.paths?.total || 0, paths.value.length));
 const hasLearningPath = computed(() => pathCount.value > 0);
-const completedTaskCount = computed(() => stats.value?.tasks.completed || stats.value?.subtasks?.completed || 0);
+// completed 为 0 时不能用 || 兜底到 subtasks 口径，必须用 ?? 保留真实的 0
+const completedTaskCount = computed(() => stats.value?.tasks.completed ?? stats.value?.subtasks?.completed ?? 0);
 const inProgressTaskCount = computed(() => stats.value?.tasks.inProgress || stats.value?.subtasks?.inProgress || 0);
 const totalTaskCount = computed(() => stats.value?.tasks.total || stats.value?.subtasks?.total || 0);
 const taskProgressText = computed(() => totalTaskCount.value > 0 ? `${completedTaskCount.value}/${totalTaskCount.value}` : '尚未生成任务');
@@ -371,11 +372,15 @@ const dashboardSubtitle = computed(() => {
   return '从上次停下的位置继续，把学习接上。';
 });
 
-const primaryPathTitle = computed(() => primaryPath.value?.name || primaryPath.value?.title || (hasLearningPath.value ? '学习路径' : '还没有学习路径'));
+const primaryPathTitle = computed(() => {
+  if (dashboardError.value) return '暂时无法读取路径';
+  return primaryPath.value?.name || primaryPath.value?.title || (hasLearningPath.value ? '学习路径' : '还没有学习路径');
+});
 
 const primaryPathState = computed(() => getPathDisplayState(primaryPath.value));
 const primaryPathBadge = computed(() => {
   if (loading.value) return '加载中';
+  if (dashboardError.value) return '加载失败';
   if (!hasLearningPath.value) return '待开始';
   return ({
     active: primaryActionTask.value?.status === 'in_progress' ? '学习中' : '待开始',
@@ -472,7 +477,6 @@ const todayActionItems = computed(() => {
   }
 
   const lsb = stats.value?.state?.lsb;
-  const suggestion = stats.value?.suggestion?.message;
 
   const task = {
     id: 'task',
@@ -495,10 +499,7 @@ const todayActionItems = computed(() => {
   };
 
   let suggest;
-  if (typeof lsb === 'number' && suggestion) {
-    const tone = lsb >= 0 ? 'accent' : 'warn';
-    suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '查看状态', to: learningStatePath.value };
-  } else if (typeof lsb === 'number') {
+  if (typeof lsb === 'number') {
     const tone = lsb >= 0 ? 'accent' : 'warn';
     suggest = { id: 'state', tone, dot: lsb >= 0 ? 'active' : 'warn', title: '查看学习状态', desc: '看看当前节奏、负荷和建议。', action: '查看状态', to: learningStatePath.value };
   } else {

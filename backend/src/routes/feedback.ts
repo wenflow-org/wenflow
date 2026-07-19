@@ -1,292 +1,128 @@
 import { Router, Request, Response } from 'express';
-import { feedbackCollectionService } from '../services/feedback/feedback-collection.service';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { z } from 'zod';
+import {
+  FeedbackCollectionError,
+  feedbackCollectionService
+} from '../services/feedback/feedback-collection.service';
 import { logger } from '../utils/logger';
-import prisma from '../config/database';
 
 const router = Router();
 
-interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-    isAdmin?: boolean;
-  };
+const feedbackBodySchema = z.object({
+  taskId: z.string().trim().min(1),
+  rating: z.number().int().min(1).max(5),
+  helpfulness: z.number().int().min(1).max(5).optional(),
+  clarity: z.number().int().min(1).max(5).optional(),
+  difficulty: z.number().int().min(1).max(5).optional(),
+  difficultyFit: z.enum(['too_easy', 'appropriate', 'too_hard']).optional(),
+  comment: z.string().trim().max(1000).optional(),
+  suggestions: z.string().trim().max(1000).optional(),
+  confusionPoint: z.string().trim().max(500).optional(),
+  reasonCodes: z.array(z.string().trim().min(1).max(64)).max(10).optional()
+}).strict();
+
+function sendFeedbackError(res: Response, error: unknown, fallback: string) {
+  if (error instanceof z.ZodError) {
+    return res.status(400).json({
+      success: false,
+      error: { message: error.errors[0]?.message || '反馈格式无效', code: 'VALIDATION_ERROR' }
+    });
+  }
+  if (error instanceof FeedbackCollectionError) {
+    return res.status(error.status).json({
+      success: false,
+      error: { message: error.message, code: error.code, status: error.status }
+    });
+  }
+
+  logger.error(fallback, error);
+  return res.status(500).json({
+    success: false,
+    error: { message: fallback, code: 'INTERNAL_ERROR', status: 500 }
+  });
 }
 
-// 从数据库实时验证管理员权限
-const ensureAdminFromDB = async (userId?: string): Promise<boolean> => {
-  if (!userId) return false;
-  const user = await prisma.users.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true }
-  });
-  return !!user?.isAdmin;
-};
-
-// 提交反馈
-router.post('/submit', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const userId = req.user?.userId;
-  const {
-    sessionId,
-    taskId,
-    rating,
-    helpfulness,
-    clarity,
-    difficulty,
-    comment,
-    suggestions,
-    confusionPoint,
-    strategy,
-    uiType,
-    roundNumber
-  } = req.body;
-  
-  // 验证必填字段
-  if (!sessionId || !taskId) {
-    return res.status(400).json({
-      error: '缺少必填字段：sessionId 或 taskId'
-    });
-  }
-  
-  // 验证评分
-  if (!rating || rating < 1 || rating > 5) {
-    return res.status(400).json({
-      error: '评分必须在 1-5 之间'
-    });
-  }
-  
-  // 验证其他维度评分（如果提供）
-  const dimensionFields = ['helpfulness', 'clarity', 'difficulty'];
-  for (const field of dimensionFields) {
-    const value = (req.body as any)[field];
-    if (value !== undefined && (value < 1 || value > 5)) {
-      return res.status(400).json({
-        error: `${field} 评分必须在 1-5 之间`
-      });
-    }
-  }
-  
+async function submitSessionFeedback(req: Request, res: Response, sessionId: string) {
   try {
-    await feedbackCollectionService.submitFeedback({
-      userId: userId!,
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    const input = feedbackBodySchema.parse(req.body);
+    const feedback = await feedbackCollectionService.submitFeedback({
+      userId,
       sessionId,
-      taskId,
-      rating,
-      helpfulness,
-      clarity,
-      difficulty,
-      comment,
-      suggestions,
-      confusionPoint,
-      strategy,
-      uiType,
-      roundNumber
+      taskId: input.taskId!,
+      rating: input.rating!,
+      helpfulness: input.helpfulness,
+      clarity: input.clarity,
+      difficulty: input.difficulty,
+      difficultyFit: input.difficultyFit,
+      comment: input.comment,
+      suggestions: input.suggestions,
+      confusionPoint: input.confusionPoint,
+      reasonCodes: input.reasonCodes
     });
-    
-    res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: '感谢你的反馈！',
-      data: { submitted: true }
+      data: feedback
     });
   } catch (error) {
-    logger.error('提交反馈失败:', error);
-    res.status(500).json({ 
-      error: '提交失败，请重试',
-      details: error instanceof Error ? error.message : '未知错误'
+    return sendFeedbackError(res, error, '提交反馈失败，请重试');
+  }
+}
+
+router.put('/sessions/:sessionId', async (req, res) => {
+  return submitSessionFeedback(req, res, req.params.sessionId);
+});
+
+// 兼容旧客户端；新客户端使用 PUT /sessions/:sessionId。
+router.post('/submit', async (req, res) => {
+  const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId.trim() : '';
+  if (!sessionId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: '缺少 sessionId', code: 'VALIDATION_ERROR' }
     });
+  }
+  const body = { ...(req.body || {}) };
+  delete body.sessionId;
+  delete body.strategy;
+  delete body.uiType;
+  delete body.roundNumber;
+  req.body = body;
+  return submitSessionFeedback(req, res, sessionId);
+});
+
+router.get('/sessions/:sessionId', async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    const feedback = await feedbackCollectionService.getSessionFeedback(userId, req.params.sessionId);
+    return res.json({ success: true, data: feedback });
+  } catch (error) {
+    return sendFeedbackError(res, error, '获取反馈失败，请重试');
   }
 });
 
-// 获取我的反馈历史
-router.get('/my-feedback', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const userId = req.user?.userId;
-  const limit = parseInt(req.query.limit as string) || 50;
-  const page = parseInt(req.query.page as string) || 1;
-  const skip = (page - 1) * limit;
-  
+router.get('/my-feedback', async (req, res) => {
   try {
-    const feedbacks = await feedbackCollectionService.getUserFeedback(userId!, limit);
-    
-    res.json({ 
-      success: true, 
-      data: feedbacks,
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(String(req.query.limit || '50'), 10) || 50));
+    const result = await feedbackCollectionService.getUserFeedback(userId, page, limit);
+    return res.json({
+      success: true,
+      data: result.items,
       pagination: {
         page,
         limit,
-        total: feedbacks.length
+        total: result.total,
+        totalPages: Math.ceil(result.total / limit)
       }
     });
   } catch (error) {
-    logger.error('获取反馈历史失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
-  }
-});
-
-// 获取任务反馈统计（管理员）
-router.get('/task/:taskId/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const { taskId } = req.params;
-  
-  // 从数据库实时验证管理员权限
-  const isAdmin = await ensureAdminFromDB(req.user?.userId);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: '需要管理员权限'
-    });
-  }
-  
-  try {
-    const stats = await feedbackCollectionService.getTaskFeedbackStats(taskId);
-    
-    res.json({ 
-      success: true, 
-      data: stats
-    });
-  } catch (error) {
-    logger.error('获取任务反馈统计失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
-  }
-});
-
-// 获取策略反馈统计（管理员）
-router.get('/strategy/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 从数据库实时验证管理员权限
-  const isAdmin = await ensureAdminFromDB(req.user?.userId);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: '需要管理员权限'
-    });
-  }
-  
-  try {
-    const stats = await feedbackCollectionService.getStrategyFeedbackStats();
-    
-    res.json({ 
-      success: true, 
-      data: stats
-    });
-  } catch (error) {
-    logger.error('获取策略反馈统计失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
-  }
-});
-
-// 获取 UI 类型反馈统计（管理员）
-router.get('/uitype/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 从数据库实时验证管理员权限
-  const isAdmin = await ensureAdminFromDB(req.user?.userId);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: '需要管理员权限'
-    });
-  }
-  
-  try {
-    const stats = await feedbackCollectionService.getUITypeFeedbackStats();
-    
-    res.json({ 
-      success: true, 
-      data: stats
-    });
-  } catch (error) {
-    logger.error('获取 UI 类型反馈统计失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
-  }
-});
-
-// 获取低分反馈（管理员）
-router.get('/low-ratings', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 从数据库实时验证管理员权限
-  const isAdmin = await ensureAdminFromDB(req.user?.userId);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: '需要管理员权限'
-    });
-  }
-  
-  const threshold = parseInt(req.query.threshold as string) || 3;
-  const limit = parseInt(req.query.limit as string) || 100;
-  
-  try {
-    const feedbacks = await feedbackCollectionService.getLowRatingFeedback(threshold, limit);
-    
-    res.json({ 
-      success: true, 
-      data: feedbacks,
-      pagination: {
-        threshold,
-        limit,
-        total: feedbacks.length
-      }
-    });
-  } catch (error) {
-    logger.error('获取低分反馈失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
-  }
-});
-
-// 获取反馈趋势（管理员）
-router.get('/trend', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 从数据库实时验证管理员权限
-  const isAdmin = await ensureAdminFromDB(req.user?.userId);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: '需要管理员权限'
-    });
-  }
-  
-  const days = parseInt(req.query.days as string) || 30;
-  
-  try {
-    const trend = await feedbackCollectionService.getFeedbackTrend(days);
-    
-    res.json({ 
-      success: true, 
-      data: trend
-    });
-  } catch (error) {
-    logger.error('获取反馈趋势失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
-  }
-});
-
-// 获取时间段反馈统计（管理员）
-router.get('/time-range/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // 从数据库实时验证管理员权限
-  const isAdmin = await ensureAdminFromDB(req.user?.userId);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: '需要管理员权限'
-    });
-  }
-  
-  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
-  
-  try {
-    const stats = await feedbackCollectionService.getTimeRangeFeedbackStats(startDate, endDate);
-    
-    res.json({ 
-      success: true, 
-      data: stats
-    });
-  } catch (error) {
-    logger.error('获取时间段反馈统计失败:', error);
-    res.status(500).json({ 
-      error: '获取失败，请重试'
-    });
+    return sendFeedbackError(res, error, '获取反馈历史失败，请重试');
   }
 });
 

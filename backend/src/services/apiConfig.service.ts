@@ -4,6 +4,7 @@ import { safeHttpRequest } from '../utils/safe-http';
 import systemPrisma from '../config/system-database';
 import { getAPIGateway } from '../gateway/api-gateway';
 import { decryptSecret, encryptSecret, SecretCryptoError } from '../utils/secret-crypto';
+import { endpointsMatch, resolveEndpointBoundSecret } from '../utils/endpoint-identity';
 
 const prisma = systemPrisma;
 
@@ -50,9 +51,15 @@ class APIConfigService {
       });
 
       if (dbConfig) {
+        const configuredEndpoint = (dbConfig.apiUrl || '').trim();
+        const apiUrl = configuredEndpoint || defaultConfig.apiUrl;
+        const configuredApiKey = decryptSecret(dbConfig.apiKey, 'system.platform_api_configs.apiKey') || '';
         return {
-          apiUrl: dbConfig.apiUrl || defaultConfig.apiUrl,
-          apiKey: decryptSecret(dbConfig.apiKey, 'system.platform_api_configs.apiKey') || defaultConfig.apiKey,
+          apiUrl,
+          apiKey: configuredEndpoint
+            ? configuredApiKey
+              || (endpointsMatch(configuredEndpoint, defaultConfig.apiUrl) ? defaultConfig.apiKey : '')
+            : defaultConfig.apiKey,
           availableModels: dbConfig.availableModels 
             ? dbConfig.availableModels.split(',').filter(m => m.trim()) 
             : defaultConfig.availableModels,
@@ -179,8 +186,8 @@ class APIConfigService {
     modelsCount?: number;
   }> {
     const config = await this.getConfig();
-    const url = testUrl || config.apiUrl;
-    const key = testKey || config.apiKey;
+    const url = String(testUrl || config.apiUrl || '').trim();
+    const key = resolveEndpointBoundSecret(url, testKey, config.apiUrl, config.apiKey);
 
     if (!url || !key) {
       return { 
@@ -211,24 +218,6 @@ class APIConfigService {
           modelsCount: models.length,
         });
 
-        // 更新连接状态到数据库（使用 upsert 确保记录存在）
-        await prisma.platform_api_configs.upsert({
-          where: { id: 'platform' },
-          update: {
-            connectionStatus: 'connected',
-            lastCheckedAt: new Date(),
-            availableModels: models.join(','),
-          },
-          create: {
-            id: 'platform',
-            apiUrl: url,
-            apiKey: encryptSecret(key, 'system.platform_api_configs.apiKey'),
-            availableModels: models.join(','),
-            connectionStatus: 'connected',
-            lastCheckedAt: new Date(),
-          },
-        });
-
         return { 
           success: true, 
           models,
@@ -237,21 +226,6 @@ class APIConfigService {
       } else {
         const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
         logger.error('API 连接测试失败:', errorMsg);
-
-        await prisma.platform_api_configs.upsert({
-          where: { id: 'platform' },
-          update: {
-            connectionStatus: 'failed',
-            lastCheckedAt: new Date(),
-          },
-          create: {
-            id: 'platform',
-            apiUrl: url,
-            apiKey: encryptSecret(key, 'system.platform_api_configs.apiKey'),
-            connectionStatus: 'failed',
-            lastCheckedAt: new Date(),
-          },
-        });
 
         return { 
           success: false, 

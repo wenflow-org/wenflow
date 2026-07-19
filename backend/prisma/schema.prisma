@@ -329,28 +329,37 @@ model arena_sessions {
 }
 
 model content_feedback {
-  id             String   @id
-  userId         String
-  sessionId      String
-  subtaskId      String?
-  agentId        String   @default("ai-teaching-agent")
-  rating         Int
-  helpfulness    Int?
-  clarity        Int?
-  difficulty     Int?
-  comment        String?
-  suggestions    String?
-  confusionPoint String?
-  strategy       String?
-  uiType         String?
-  roundNumber    Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime
-  users          users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String    @id
+  feedbackKey     String?   @unique
+  userId          String
+  sessionId       String
+  subtaskId       String?
+  agentId         String    @default("teaching-agent")
+  rating          Int
+  helpfulness     Int?
+  clarity         Int?
+  difficulty      Int?
+  difficultyFit   String?
+  comment         String?
+  suggestions     String?
+  confusionPoint  String?
+  reasonCodes     String?
+  strategy        String?
+  uiType          String?
+  roundNumber     Int?
+  status          String    @default("new")
+  assigneeAdminId String?
+  internalNote    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  users           users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sessionId])
   @@index([agentId])
+  @@index([status, createdAt])
+  @@index([rating, createdAt])
 }
 
 model debug_learning_paths {
@@ -475,6 +484,7 @@ model learning_goals {
 
 model learning_metrics {
   id           String   @id
+  sourceKey    String?  @unique
   userId       String
   pathId       String?
   taskId       String?
@@ -543,6 +553,7 @@ model path_generation_runs {
   completedItems     Int                           @default(0)
   progress           Int                           @default(0)
   inputSnapshot      String?
+  rollbackSnapshot   String?
   heartbeatAt        DateTime?
   leaseExpiresAt     DateTime?
   leaseOwner         String?
@@ -707,29 +718,36 @@ model system_announcements {
 }
 
 model teaching_sessions {
-  id             String    @id
-  userId         String
-  taskId         String
-  learningPathId String?
-  milestoneId    String?
-  subject        String
-  topic          String
-  taskType       String    @default("practice")
-  mode           String    @default("tutor")
-  status         String    @default("active")
-  messages       String?
-  knowledgeState String?
-  teachingState  String?
-  wrapup         String?
-  advisory       String?
-  startTime      DateTime  @default(now())
-  endTime        DateTime?
-  duration       Int?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @default(now())
-  users          users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String    @id
+  userId                  String
+  taskId                  String
+  learningPathId          String?
+  milestoneId             String?
+  subject                 String
+  topic                   String
+  taskType                String    @default("practice")
+  mode                    String    @default("tutor")
+  status                  String    @default("active")
+  messages                String?
+  knowledgeState          String?
+  teachingState           String?
+  wrapup                  String?
+  advisory                String?
+  startTime               DateTime  @default(now())
+  endTime                 DateTime?
+  duration                Int?
+  revision                Int       @default(0)
+  openKey                 String?   @unique
+  operationId             String?
+  operationKind           String?
+  operationLeaseExpiresAt DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now())
+  users                   users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, taskId, status])
+  @@index([status, updatedAt])
+  @@index([operationLeaseExpiresAt])
   @@index([status])
   @@index([taskId])
   @@index([userId])
@@ -932,6 +950,7 @@ model users {
   updatedAt                 DateTime
   lastLoginAt               DateTime?
   dashboardGuidanceSnapshot String?
+  learningStateRevision     Int                        @default(0)
   achievements              achievements[]
   content_feedback          content_feedback[]
   dialogue_sessions         dialogue_sessions[]

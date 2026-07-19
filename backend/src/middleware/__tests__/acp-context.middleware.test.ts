@@ -1,0 +1,46 @@
+import { getRequestContext } from '../../gateway/api-gateway/context'
+import { acpContextMiddleware } from '../acp-context.middleware'
+
+function runMiddleware(user: Record<string, unknown>) {
+  let captured: ReturnType<typeof getRequestContext> | undefined
+  const req: any = { headers: {}, user }
+  const res: any = { setHeader: jest.fn() }
+
+  acpContextMiddleware('admin')(req, res, () => {
+    captured = getRequestContext()
+  })
+  return captured
+}
+
+describe('acpContextMiddleware userRole', () => {
+  it('从已认证 Admin 会话派生管理员角色', () => {
+    expect(runMiddleware({
+      userId: 'admin-1',
+      isAdmin: true,
+      sessionType: 'admin'
+    })).toEqual(expect.objectContaining({
+      userId: 'admin-1',
+      userRole: 'admin',
+      sourceEntry: 'admin',
+      abortSignal: expect.any(AbortSignal)
+    }))
+  })
+
+  it('普通用户不能通过来源 Header 提升角色', () => {
+    let captured: ReturnType<typeof getRequestContext> | undefined
+    const req: any = {
+      headers: { 'x-source-entry': 'admin' },
+      user: { userId: 'user-1', isAdmin: false, sessionType: 'user' }
+    }
+    const res: any = { setHeader: jest.fn() }
+
+    acpContextMiddleware('user')(req, res, () => {
+      captured = getRequestContext()
+    })
+
+    expect(captured).toEqual(expect.objectContaining({
+      sourceEntry: 'admin',
+      userRole: 'user'
+    }))
+  })
+})

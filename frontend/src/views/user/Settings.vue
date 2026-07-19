@@ -12,6 +12,18 @@
           </div>
         </template>
 
+        <el-alert
+          v-if="loadError"
+          type="error"
+          title="配置加载失败"
+          :description="loadError + '，当前表单内容可能不是服务端实际配置。'"
+          show-icon
+          :closable="false"
+          class="settings-load-error"
+        >
+          <el-button size="small" class="settings-load-error__retry" @click="loadApiConfig">重新加载</el-button>
+        </el-alert>
+
         <el-form v-loading="loading" label-width="140px" class="api-form">
           <el-form-item label="启用自定义 API">
             <el-switch
@@ -118,6 +130,7 @@ import { disableUserApiConfig, getUserApiConfig, testApiConnection, updateUserAp
 const saving = ref(false);
 const testing = ref(false);
 const loading = ref(false);
+const loadError = ref('');
 const disabling = ref(false);
 const hasSavedApiKey = ref(false);
 const busy = computed(() => loading.value || saving.value || testing.value || disabling.value);
@@ -137,6 +150,7 @@ onMounted(async () => {
 
 const loadApiConfig = async () => {
   loading.value = true;
+  loadError.value = '';
   try {
     const res = await getUserApiConfig();
     const data = res.data;
@@ -147,6 +161,7 @@ const loadApiConfig = async () => {
     apiConfig.chatModel = data.chatModel || 'deepseek-v4-flash';
     apiConfig.reasoningModel = data.reasoningModel || 'deepseek-v4-pro';
   } catch {
+    loadError.value = '无法读取已保存的配置，请检查网络或服务状态。';
     toast.error('加载 API 配置失败');
   } finally {
     loading.value = false;
@@ -287,6 +302,14 @@ const handleEnabledChange = async (enabled: boolean) => {
 .user-settings-page {
   display: grid;
   gap: 14px;
+}
+
+.settings-load-error {
+  margin-bottom: 14px;
+}
+
+.settings-load-error__retry {
+  margin-left: 12px;
 }
 
 .page-alert {

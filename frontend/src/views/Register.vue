@@ -51,9 +51,22 @@
           </div>
 
           <div v-else-if="!registrationEnabled" class="auth-registration-state">
-            <strong>当前暂未开放注册</strong>
-            <p>你可以先查看产品介绍，开放后再创建账号。</p>
-            <router-link to="/" class="auth-registration-state__action">返回首页</router-link>
+            <strong>{{ registrationTemporaryUnavailable ? '新账号注册暂时不可用' : '当前暂未开放注册' }}</strong>
+            <p>
+              {{ registrationTemporaryUnavailable
+                ? '核心学习服务正在恢复，请稍后再试。'
+                : '你可以先查看产品介绍，开放后再创建账号。' }}
+            </p>
+            <button
+              v-if="registrationTemporaryUnavailable"
+              type="button"
+              class="auth-registration-state__action"
+              :disabled="registrationChecking"
+              @click="loadRegistrationStatus"
+            >
+              {{ registrationChecking ? '正在重试...' : '重新查询' }}
+            </button>
+            <router-link v-else to="/" class="auth-registration-state__action">返回首页</router-link>
           </div>
 
           <el-form
@@ -127,6 +140,7 @@ const loading = ref(false);
 const registrationEnabled = ref<boolean | null>(null);
 const registrationChecking = ref(false);
 const registrationCheckFailed = ref(false);
+const registrationTemporaryUnavailable = ref(false);
 
 const registerPoints = [
   { title: '先说出目标', desc: '不用写完整计划，只需要描述最近想解决什么。' },
@@ -226,11 +240,13 @@ const loadRegistrationStatus = async () => {
 
   registrationChecking.value = true;
   registrationCheckFailed.value = false;
+  registrationTemporaryUnavailable.value = false;
   registrationEnabled.value = null;
 
   try {
     const status = await authAPI.getRegistrationStatus();
     registrationEnabled.value = status.registrationEnabled;
+    registrationTemporaryUnavailable.value = status.temporaryUnavailable === true;
   } catch (error) {
     registrationCheckFailed.value = true;
   } finally {

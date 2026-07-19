@@ -244,10 +244,11 @@
             </div>
 
             <section v-else-if="!loading" class="paths-empty-state glass-card">
-              <span class="pill">{{ activePathFilter === 'all' ? '开始第一条路径' : '当前筛选无结果' }}</span>
+              <span class="pill">{{ loadError ? '加载失败' : activePathFilter === 'all' ? '开始第一条路径' : '当前筛选无结果' }}</span>
               <h2>{{ emptyStateTitle }}</h2>
               <p>{{ emptyStateDescription }}</p>
-              <button v-if="activePathFilter !== 'all'" type="button" class="btn btn-primary" @click="activePathFilter = 'all'">查看全部路径</button>
+              <button v-if="loadError" type="button" class="btn btn-primary" @click="loadPaths">重新加载</button>
+              <button v-else-if="activePathFilter !== 'all'" type="button" class="btn btn-primary" @click="activePathFilter = 'all'">查看全部路径</button>
               <router-link v-else :to="goalConversationPath" class="btn btn-primary">规划第一个目标</router-link>
             </section>
           </div>
@@ -422,6 +423,7 @@ const headerNavItems = computed(() => [
 ])
 const scrolled = ref(false);
 const loading = ref(true);
+const loadError = ref('');
 const paths = ref<LearningPathRecord[]>([]);
 const deleting = ref(false);
 const showDeleteDialog = ref(false);
@@ -725,6 +727,7 @@ const setPathFilter = (key: string) => {
 };
 
 const emptyStateTitle = computed(() => {
+  if (loadError.value) return '学习路径加载失败';
   if (activePathFilter.value === 'all') return '还没有学习路径';
   if (activePathFilter.value === 'active') return '没有进行中的路径';
   if (activePathFilter.value === 'completed') return '还没有完成的路径';
@@ -732,14 +735,12 @@ const emptyStateTitle = computed(() => {
   return '没有需要重试的路径';
 });
 
-const emptyStateDescription = computed(() => activePathFilter.value === 'all'
-  ? '先规划一个目标，生成第一条学习路径。'
-  : '可以查看其他状态的学习路径。');
-
-// 检查是否有正在生成的路径
-const checkGeneratingPath = () => {
-  return generatingPaths.value.length > 0;
-};
+const emptyStateDescription = computed(() => {
+  if (loadError.value) return loadError.value;
+  return activePathFilter.value === 'all'
+    ? '先规划一个目标，生成第一条学习路径。'
+    : '可以查看其他状态的学习路径。';
+});
 
 const POLLING_INTERVAL_MS = 5000;
 const POLLING_MAX_BACKOFF_MS = 60000;
@@ -883,6 +884,7 @@ const handleLogout = async () => {
 
 const loadPaths = async () => {
   if (paths.value.length === 0) loading.value = true;
+  loadError.value = '';
   try {
     updatePaths(await fetchPathsSingleFlight());
     pollingFailureCount = 0;
@@ -890,6 +892,7 @@ const loadPaths = async () => {
     else stopPolling();
   } catch (error: any) {
     console.error('加载学习路径失败:', error);
+    loadError.value = '无法读取学习路径数据，请检查网络或服务状态后重试。';
     toast.error(error.response?.data?.error?.message || '加载学习路径失败');
   } finally {
     loading.value = false;
@@ -1125,16 +1128,17 @@ const retryPathGeneration = async (path: LearningPathRecord) => {
   }
 };
 
-onMounted(() => {
-  // 检查是否有正在生成的路径
-  checkGeneratingPath();
+// 提示自动关闭的定时器句柄，卸载时需清理
+let generatingAlertTimer: ReturnType<typeof setTimeout> | null = null;
 
+onMounted(() => {
   // 检查是否从 goal-conversation 跳转过来
   if (route.query.from === 'goal' && route.query.auto === '1') {
     showGeneratingAlert.value = true;
     // 5秒后自动关闭提示
-    setTimeout(() => {
+    generatingAlertTimer = setTimeout(() => {
       showGeneratingAlert.value = false;
+      generatingAlertTimer = null;
     }, 5000);
   }
 
@@ -1145,12 +1149,16 @@ onMounted(() => {
     }
   });
 
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
   stopPolling();
+  if (generatingAlertTimer !== null) {
+    clearTimeout(generatingAlertTimer);
+    generatingAlertTimer = null;
+  }
   window.removeEventListener('scroll', handleScroll);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
 });

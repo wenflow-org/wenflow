@@ -942,7 +942,7 @@ const handleScroll = () => {
 };
 
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
   window.addEventListener('resize', handleResize);
   handleScroll(); // 初始化
   restoreSidebarState();

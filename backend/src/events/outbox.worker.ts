@@ -68,12 +68,27 @@ export class DurableOutboxWorker {
           { status: 'processing', lockedAt: { lte: staleLock } }
         ]
       },
-      orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       take: 20
     });
 
+    const taskUsersSeen = new Set<string>();
     for (const record of records) {
       if (this.stopping) return;
+      if (record.eventType === 'task:completed' && record.userId) {
+        if (taskUsersSeen.has(record.userId)) continue;
+        taskUsersSeen.add(record.userId);
+        const oldestUnresolved = await prisma.domain_event_outbox.findFirst({
+          where: {
+            eventType: 'task:completed',
+            userId: record.userId,
+            status: { in: ['pending', 'processing'] }
+          },
+          orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true }
+        });
+        if (oldestUnresolved?.id !== record.id) continue;
+      }
       const claimed = await prisma.domain_event_outbox.updateMany({
         where: {
           id: record.id,
@@ -100,13 +115,14 @@ export class DurableOutboxWorker {
         });
       } catch (error) {
         const attemptCount = record.attemptCount + 1;
-        const dead = attemptCount >= MAX_ATTEMPTS;
+        const dead = record.eventType !== 'task:completed' && attemptCount >= MAX_ATTEMPTS;
+        const backoffMs = Math.min(60_000, 1000 * 2 ** Math.min(attemptCount, 6));
         await prisma.domain_event_outbox.updateMany({
           where: { id: record.id, status: 'processing', lockOwner: this.owner },
           data: {
             status: dead ? 'dead' : 'pending',
             attemptCount,
-            availableAt: new Date(Date.now() + Math.min(60_000, 1000 * 2 ** attemptCount)),
+            availableAt: new Date(Date.now() + backoffMs),
             lockedAt: null,
             lockOwner: null,
             lastError: error instanceof Error ? error.message : String(error)

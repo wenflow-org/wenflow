@@ -11,7 +11,7 @@ export interface UserAgentModelConfig {
   agentId: string;
   model?: string;
   endpoint?: string;
-  apiKey?: string;
+  apiKey?: string | null;
   temperature?: number;
   maxTokens?: number;
   enabled: boolean;

@@ -520,6 +520,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:mcp-tool',
+    name: 'MCP 工具调用 Skill',
+    description: '通过统一 Capability Runtime 调用用户或平台配置的 MCP 工具',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 

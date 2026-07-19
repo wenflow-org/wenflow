@@ -8,7 +8,9 @@ import type {
   BlackboxRefereeTraceEntry,
   LearnerAction,
   LearnerObservation,
+  PlatformControlReceipt,
   PlatformInteractionResult,
+  TaskCompletionCheckpoint,
   VirtualLearnerActorAuditInput,
   VirtualLearnerRefereeInput
 } from './contracts'
@@ -36,6 +38,8 @@ import {
 import { getRequestContext, runWithContext } from '../gateway/api-gateway/context'
 import { getAPIGateway } from '../gateway/api-gateway'
 import { agentConfigService } from '../services/agentConfig.service'
+import { learningStateService } from '../services/learning/learning-state.service'
+import { logger } from '../utils/logger'
 
 function parseJson(value: string | null | undefined, fallback: any = {}) {
   try {
@@ -47,6 +51,48 @@ function parseJson(value: string | null | undefined, fallback: any = {}) {
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'abandoned'])
 const COMMAND_LEASE_MS = 10 * 60 * 1000
+const COMMAND_LEASE_RENEW_MS = 2 * 60 * 1000
+const LEASE_RETRY_DELAYS_MS = [25, 50, 100]
+
+function isPrismaErrorCode(error: unknown, code: string) {
+  return typeof error === 'object' && error !== null && (error as any).code === code
+}
+
+function isLeaseDatabaseBusyError(error: unknown) {
+  if (isPrismaErrorCode(error, 'P1008')) return true
+  const code = typeof error === 'object' && error !== null ? String((error as any).code || '') : ''
+  const message = error instanceof Error ? error.message : String(error || '')
+  return code === 'SQLITE_BUSY'
+    || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message)
+}
+
+type PendingProjectionReceipt = {
+  projectionPending: true
+  projectionKey: string
+  finalProjection: boolean
+} & ({
+  receiptKind: 'result'
+  platformResult: PlatformInteractionResult
+  commandResult: unknown
+} | {
+  receiptKind: 'checkpoint'
+  checkpoint: TaskCompletionCheckpoint
+})
+
+type CommandContext = {
+  commandRowId: string
+  kind: 'action' | 'step' | 'observe'
+  projectionSequence: number
+}
+
+type LeaseContext = {
+  sessionId: string
+  ownerId: string
+  expiresAt: number
+  renewal: Promise<void>
+  failureError: unknown | null
+  timer?: NodeJS.Timeout
+}
 
 export class BlackboxRunStateError extends Error {
   readonly retryable = false
@@ -57,8 +103,54 @@ export class BlackboxRunStateError extends Error {
   }
 }
 
+export class BlackboxReconciliationPendingError extends Error {
+  readonly code = 'BLACKBOX_RECONCILIATION_PENDING'
+  readonly statusCode = 503
+  readonly retryable = true
+
+  constructor(message: string, readonly originalError?: unknown) {
+    super(message)
+    this.name = 'BlackboxReconciliationPendingError'
+  }
+}
+
+export class BlackboxLeaseLostError extends Error {
+  readonly code = 'BLACKBOX_LEASE_LOST'
+  readonly statusCode = 503
+  readonly retryable = true
+
+  constructor(message = '黑盒实验执行租约已丢失，请使用相同 Idempotency-Key 重试') {
+    super(message)
+    this.name = 'BlackboxLeaseLostError'
+  }
+}
+
+export class BlackboxSessionBusyError extends Error {
+  readonly code = 'BLACKBOX_SESSION_BUSY'
+  readonly statusCode = 409
+  readonly retryable = true
+
+  constructor() {
+    super('当前实验正在由另一实例执行，请稍后重试')
+    this.name = 'BlackboxSessionBusyError'
+  }
+}
+
+export class BlackboxDatabaseBusyError extends Error {
+  readonly code = 'DB_BUSY'
+  readonly statusCode = 503
+  readonly retryable = true
+
+  constructor(readonly originalError?: unknown) {
+    super('租约数据库暂时繁忙，请稍后重试')
+    this.name = 'BlackboxDatabaseBusyError'
+  }
+}
+
 export class BlackboxVirtualLearnerRunner {
   private readonly sessionLocks = new Map<string, Promise<void>>()
+  private readonly commandContexts = new Map<string, CommandContext>()
+  private readonly leaseContexts = new Map<string, LeaseContext>()
 
   async runExclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
     const previous = this.sessionLocks.get(sessionId) || Promise.resolve()
@@ -100,72 +192,145 @@ export class BlackboxVirtualLearnerRunner {
       const existing = await prisma.virtual_experiment_commands.findUnique({
         where: { runId_commandId: { runId, commandId } }
       })
-      if (existing) return this.reuseCommand<T>(existing, options.kind, options.request)
+      if (existing && existing.status !== 'processing' && !this.isReconciliationPendingCommand(existing)) {
+        return this.reuseCommand<T>(existing, options.kind, options.request)
+      }
+      if (existing) this.assertCommandMatches(existing, options.kind, options.request)
 
       const leaseOwner = `cmd_${uuidv4()}`
-      await this.acquireCommandLease(options.sessionId, leaseOwner)
+      const leaseExpiresAt = await this.acquireCommandLease(options.sessionId, leaseOwner)
+      const lease = this.startLeaseRenewal(options.sessionId, leaseOwner, leaseExpiresAt)
+      let primaryError: unknown
       try {
         const afterLease = await prisma.virtual_experiment_commands.findUnique({
           where: { runId_commandId: { runId, commandId } }
         })
-        if (afterLease) return this.reuseCommand<T>(afterLease, options.kind, options.request)
+        if (afterLease && afterLease.status !== 'processing' && !this.isReconciliationPendingCommand(afterLease)) {
+          await this.assertCurrentLease(options.sessionId)
+          return this.reuseCommand<T>(afterLease, options.kind, options.request)
+        }
+        if (afterLease) this.assertCommandMatches(afterLease, options.kind, options.request)
 
-        const freshSession = await this.getSession(options.sessionId)
-        const freshState = parseJson(freshSession.stageResults)
-        const currentTraceCount = Array.isArray(freshState.blackbox?.publicTrace) ? freshState.blackbox.publicTrace.length : 0
-        if (currentTraceCount !== options.expectedTraceCount) {
-          throw new BlackboxRunStateError(
-            `实验轨迹已更新，当前序号为 ${currentTraceCount}`,
-            'BLACKBOX_TRACE_SEQUENCE_MISMATCH'
+        const pendingCommands = await prisma.virtual_experiment_commands.findMany({
+          where: { runId, status: { in: ['processing', 'failed'] } },
+          orderBy: { sequence: 'asc' }
+        })
+        const barriers = pendingCommands.filter(command => this.isCommandOrderingBarrier(command)
+          && (!afterLease || command.commandId === commandId || command.sequence < afterLease.sequence))
+        if (afterLease && this.isCommandOrderingBarrier(afterLease)
+          && !barriers.some(command => command.id === afterLease.id)) barriers.push(afterLease)
+        barriers.sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
+        const earliestPending = barriers[0] || null
+        if (earliestPending && earliestPending.commandId !== commandId) {
+          throw new BlackboxReconciliationPendingError(
+            `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
           )
         }
 
-        const latestCommand = await prisma.virtual_experiment_commands.findFirst({
-          where: { runId },
-          orderBy: { sequence: 'desc' },
-          select: { sequence: true }
-        })
-        const command = await prisma.virtual_experiment_commands.create({
-          data: {
-            sessionId: options.sessionId,
-            experimentId,
-            runId,
-            commandId,
-            sequence: (latestCommand?.sequence || 0) + 1,
-            kind: options.kind,
-            requestJson: JSON.stringify(options.request ?? null),
+        const freshSession = await this.getSession(options.sessionId)
+        const freshState = parseJson(freshSession.stageResults)
+        let command = afterLease
+        let projectionSequence = 0
+        if (command) {
+          const receipt = this.pendingProjectionReceipt(command)
+          if (!receipt) {
+            throw new BlackboxRunStateError(
+              '待对账命令缺少平台投影回执，不能安全重试',
+              'BLACKBOX_RECONCILIATION_RECEIPT_MISSING'
+            )
+          }
+          await this.assertCurrentLease(options.sessionId)
+          await prisma.virtual_experiment_commands.update({
+            where: { id: command.id },
+            data: {
+              status: 'processing',
+              errorJson: null,
+              completedAt: null,
+              triggeredBy: options.operatorId
+            }
+          })
+          command = {
+            ...command,
+            status: 'processing',
+            errorJson: null,
+            completedAt: null,
             triggeredBy: options.operatorId
           }
+          try {
+            if (receipt.receiptKind === 'checkpoint') {
+              await this.persistTaskCompletionCheckpoint(
+                options.sessionId,
+                freshState,
+                receipt.checkpoint,
+                receipt.projectionKey
+              )
+              projectionSequence = this.projectionSequence(receipt.projectionKey)
+            } else {
+              await this.persist(freshSession, freshState, receipt.platformResult, receipt.projectionKey)
+              if (receipt.finalProjection) {
+                await this.completeCommand(options.sessionId, command.id, receipt.commandResult)
+                return { result: receipt.commandResult as T, reused: false }
+              }
+              projectionSequence = this.projectionSequence(receipt.projectionKey)
+            }
+          } catch (error: any) {
+            if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) {
+              throw error
+            }
+            const reconciliationError = error instanceof BlackboxReconciliationPendingError
+              ? error
+              : this.reconciliationPendingError(error)
+            await this.recordCommandFailure(options.sessionId, command.id, reconciliationError)
+            throw reconciliationError
+          }
+        } else {
+          const currentTraceCount = Array.isArray(freshState.blackbox?.publicTrace)
+            ? freshState.blackbox.publicTrace.length : 0
+          if (currentTraceCount !== options.expectedTraceCount) {
+            throw new BlackboxRunStateError(
+              `实验轨迹已更新，当前序号为 ${currentTraceCount}`,
+              'BLACKBOX_TRACE_SEQUENCE_MISMATCH'
+            )
+          }
+          const latestCommand = await prisma.virtual_experiment_commands.findFirst({
+            where: { runId },
+            orderBy: { sequence: 'desc' },
+            select: { sequence: true }
+          })
+          await this.assertCurrentLease(options.sessionId)
+          command = await prisma.virtual_experiment_commands.create({
+            data: {
+              sessionId: options.sessionId,
+              experimentId,
+              runId,
+              commandId,
+              sequence: (latestCommand?.sequence || 0) + 1,
+              kind: options.kind,
+              requestJson: JSON.stringify(options.request ?? null),
+              triggeredBy: options.operatorId
+            }
+          })
+        }
+        this.commandContexts.set(options.sessionId, {
+          commandRowId: command.id,
+          kind: options.kind,
+          projectionSequence
         })
         try {
           const result = await work()
-          await prisma.virtual_experiment_commands.update({
-            where: { id: command.id },
-            data: {
-              status: 'completed',
-              resultJson: JSON.stringify(result),
-              completedAt: new Date()
-            }
-          })
+          await this.completeCommand(options.sessionId, command.id, result)
           return { result, reused: false }
         } catch (error: any) {
-          await prisma.virtual_experiment_commands.update({
-            where: { id: command.id },
-            data: {
-              status: 'failed',
-              errorJson: JSON.stringify({
-                name: error?.name || 'Error',
-                message: error?.message || '黑盒命令执行失败',
-                code: error?.code || null,
-                statusCode: error?.statusCode || null
-              }),
-              completedAt: new Date()
-            }
-          })
+          await this.recordCommandFailure(options.sessionId, command.id, error)
           throw error
+        } finally {
+          this.commandContexts.delete(options.sessionId)
         }
+      } catch (error) {
+        primaryError = error
+        throw error
       } finally {
-        await this.releaseCommandLease(options.sessionId, leaseOwner)
+        await this.cleanupLease(lease, primaryError)
       }
     })
   }
@@ -173,11 +338,18 @@ export class BlackboxVirtualLearnerRunner {
   async runLeasedExclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
     return this.runExclusive(sessionId, async () => {
       const ownerId = `lease_${uuidv4()}`
-      await this.acquireCommandLease(sessionId, ownerId)
+      const leaseExpiresAt = await this.acquireCommandLease(sessionId, ownerId)
+      const lease = this.startLeaseRenewal(sessionId, ownerId, leaseExpiresAt)
+      let primaryError: unknown
       try {
-        return await work()
+        const result = await work()
+        await this.assertCurrentLease(sessionId)
+        return result
+      } catch (error) {
+        primaryError = error
+        throw error
       } finally {
-        await this.releaseCommandLease(sessionId, ownerId)
+        await this.cleanupLease(lease, primaryError)
       }
     })
   }
@@ -210,6 +382,7 @@ export class BlackboxVirtualLearnerRunner {
       }
     }
 
+    await this.assertCurrentLease(sessionId)
     await prisma.virtual_sessions.update({
       where: { id: sessionId },
       data: { stageResults: JSON.stringify(next), updatedAt: new Date() }
@@ -262,7 +435,8 @@ export class BlackboxVirtualLearnerRunner {
         if (latest?.observation) return latest
         throw new BlackboxRunStateError('当前还没有可观察的 Path，请先执行 Goal 动作', 'BLACKBOX_PATH_NOT_AVAILABLE')
       }
-      return this.persist(session, state, await adapter.getPath(pathId))
+      const result = await adapter.getPath(pathId)
+      return this.projectPlatformResult(session, state, result)
     })
   }
 
@@ -270,6 +444,20 @@ export class BlackboxVirtualLearnerRunner {
     const session = await this.getSession(sessionId)
     const state = parseJson(session.stageResults)
     assertBlackboxSessionMode(state)
+    await this.assertSyntheticUserBinding(session)
+    const teachingSessionIds = this.teachingSessionIds(state)
+    let platformTimeline: Awaited<ReturnType<typeof learningStateService.getSessionStateTimeline>> = []
+    let platformTimelineStatus: 'ok' | 'unavailable' = 'ok'
+    try {
+      platformTimeline = await learningStateService.getSessionStateTimeline(session.userId, teachingSessionIds)
+    } catch (error) {
+      platformTimelineStatus = 'unavailable'
+      logger.warn('[Blackbox] 获取当前 Run 的平台学习状态失败', {
+        sessionId,
+        teachingSessionCount: teachingSessionIds.length,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
     return {
       experiment: state.experiment || null,
       observation: state.blackbox?.publicTrace?.slice(-1)[0]?.observation || null,
@@ -279,7 +467,31 @@ export class BlackboxVirtualLearnerRunner {
       latestRefereeReport: this.latestRefereeReport(state),
       refereeReportCount: state.blackbox?.refereeReports?.length || 0,
       latestActorAuditReport: this.latestActorAuditReport(state),
-      actorAuditReportCount: state.blackbox?.actorAuditReports?.length || 0
+      actorAuditReportCount: state.blackbox?.actorAuditReports?.length || 0,
+      stateTimeline: {
+        scope: 'current-run',
+        actor: {
+          scale: 'display-100',
+          entries: this.actorStateTimeline(state)
+        },
+        platform: {
+          scale: 'display-100',
+          status: platformTimelineStatus,
+          errorCode: platformTimelineStatus === 'unavailable' ? 'PLATFORM_STATE_TIMELINE_UNAVAILABLE' : null,
+          entries: platformTimeline.map((entry) => ({
+            teachingSessionId: entry.teachingSessionId,
+            taskId: entry.taskId,
+            pathId: entry.pathId,
+            status: entry.status,
+            metrics: entry.metrics ? this.displayPlatformMetrics(entry.metrics) : null,
+            calculatedAt: entry.calculatedAt.toISOString(),
+            source: entry.source,
+            summarySource: entry.summarySource,
+            evaluationSource: entry.evaluationSource,
+            degraded: entry.degraded
+          }))
+        }
+      }
     }
   }
 
@@ -340,6 +552,7 @@ export class BlackboxVirtualLearnerRunner {
         latestRefereeReportId: refereeRecord.id
       }
     }
+    await this.assertCurrentLease(sessionId)
     await prisma.virtual_sessions.update({
       where: { id: sessionId },
       data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() }
@@ -401,6 +614,7 @@ export class BlackboxVirtualLearnerRunner {
         latestActorAuditReportId: auditRecord.id
       }
     }
+    await this.assertCurrentLease(session.id)
     await prisma.virtual_sessions.update({
       where: { id: sessionId },
       data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() }
@@ -412,14 +626,14 @@ export class BlackboxVirtualLearnerRunner {
     return this.executeWithFailurePersistence(sessionId, 'BLACKBOX_ACTION_FAILED', async () => {
       const { session, state, adapter } = await this.context(sessionId, operatorId)
       this.assertMutableSession(session)
-      const control = state.blackbox?.control || {}
+      const control = (state.blackbox?.control || {}) as PlatformControlReceipt
       const latestObservation = state.blackbox?.publicTrace?.slice(-1)[0]?.observation as LearnerObservation | undefined
       this.assertActionAllowed(action, latestObservation, control)
       let result: PlatformInteractionResult
 
       if (action.type === 'abandon') {
         result = control.teachingSessionId
-          ? await adapter.endTeaching(control.teachingSessionId, 'abandoned', action.reason)
+          ? await adapter.endTeaching(control.teachingSessionId, control.teachingRevision, 'abandoned', action.reason)
           : adapter.abandonExperiment(latestObservation?.stage || 'goal', action.reason)
       } else if (!control.conversationId) {
         if (action.type !== 'chat') {
@@ -430,29 +644,32 @@ export class BlackboxVirtualLearnerRunner {
         result = await adapter.replyGoal(control.conversationId, action)
       } else if (action.type === 'start_learning') {
         const taskId = action.taskId || control.taskId
-        result = await adapter.startTeaching(taskId!)
+        const teachingResult = await adapter.startTeaching(taskId!)
+        result = {
+          ...teachingResult,
+          control: {
+            ...teachingResult.control,
+            taskCompleted: false,
+            taskCompletionCheckpoint: null
+          }
+        }
       } else if (action.type === 'confirm_complete') {
-        const endResult = await adapter.endTeaching(control.teachingSessionId!, 'completed')
-        const taskResult = await adapter.completeTask(control.taskId!)
-        const pathResult = await adapter.getPath(control.learningPathId!)
-        result = this.completedTaskPathResult(pathResult, taskResult, endResult)
+        result = await this.completeCurrentTask(session, state, adapter, control, latestObservation)
       } else if (action.type === 'skip') {
         throw new BlackboxRunStateError('平台当前没有公开的跳过任务动作', 'BLACKBOX_SKIP_UNSUPPORTED')
       } else {
         if (!control.teachingSessionId) {
           throw new BlackboxRunStateError('当前没有可交互的教学会话', 'BLACKBOX_TEACHING_NOT_AVAILABLE')
         }
-        const teachingResult = await adapter.sendTeachingMessage(control.teachingSessionId, action)
+        const teachingResult = await adapter.sendTeachingMessage(control.teachingSessionId, control.teachingRevision, action)
         if (teachingResult.observation.stage === 'completed' && control.taskId && control.learningPathId) {
-          const taskResult = await adapter.completeTask(control.taskId)
-          const pathResult = await adapter.getPath(control.learningPathId)
-          result = this.completedTaskPathResult(pathResult, taskResult, teachingResult)
+          result = await this.completeCurrentTask(session, state, adapter, control, latestObservation, teachingResult)
         } else {
           result = teachingResult
         }
       }
 
-      return this.persist(session, state, result)
+      return this.projectPlatformResult(session, state, result, action)
     })
   }
 
@@ -461,6 +678,11 @@ export class BlackboxVirtualLearnerRunner {
       const { session, state } = await this.context(sessionId, operatorId)
       this.assertMutableSession(session)
       const latest = state.blackbox?.publicTrace?.slice(-1)[0]?.observation
+      const control = (state.blackbox?.control || {}) as PlatformControlReceipt
+      if (this.currentTaskCompletionCheckpoint(control)) {
+        const action: LearnerAction = { type: 'confirm_complete' }
+        return { action, result: await this.act(sessionId, operatorId, action) }
+      }
       const snapshot = await this.getExperimentSnapshot(session, state)
       const story = snapshot.story
       const learner = snapshot.actorProfile
@@ -494,7 +716,12 @@ export class BlackboxVirtualLearnerRunner {
         if (!output?.reply) throw new Error('虚拟学习者 Goal 动作生成失败')
         const shouldConfirm = latest.availableActions.includes('confirm_proposal') && output?.learnerState?.readyToAdvance === true
         action = { type: shouldConfirm ? 'confirm_proposal' : 'chat', text: output.reply }
-        await this.persistPrivateState(session, state, 'goal', output.learnerState)
+        await this.persistPrivateState(session, state, 'goal', output.learnerState, {
+          emotion: output.emotion,
+          degraded: output.degraded,
+          visibleSignal: output.debug?.visibleSignal,
+          stateChangeReason: output.debug?.stateChangeReason
+        })
       } else if (latest.stage === 'path') {
         if (!latest.visiblePath || !latest.availableActions.includes('start_learning')) {
           const observed = await this.observe(sessionId, operatorId)
@@ -542,6 +769,11 @@ export class BlackboxVirtualLearnerRunner {
         await this.persistPrivateState(session, state, 'learning', {
           ...output.learnerState,
           learnerFeedback: output.learnerFeedback
+        }, {
+          emotion: output.emotion,
+          degraded: output.degraded,
+          visibleSignal: output.debug?.visibleSignal,
+          stateChangeReason: output.debug?.stateChangeReason
         })
       } else {
         throw new BlackboxRunStateError('当前黑盒实验已经结束', 'BLACKBOX_OBSERVATION_TERMINAL')
@@ -574,14 +806,23 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
-  private async persist(session: any, state: any, result: PlatformInteractionResult) {
+  private async persist(
+    session: any,
+    state: any,
+    result: PlatformInteractionResult,
+    projectionCommandId?: string
+  ) {
     const fresh = await this.getSession(session.id)
-    this.assertMutableSession(fresh)
     const latestState = parseJson(fresh.stageResults, state)
+    const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)
+      ? latestState.blackbox.projectedCommandIds : []
+    if (projectionCommandId && projectedCommandIds.includes(projectionCommandId)) return result
+    this.assertMutableSession(fresh)
     const previousControl = latestState.blackbox?.control || {}
     const control = Object.fromEntries(
       Object.entries({ ...previousControl, ...result.control }).filter(([, value]) => value !== undefined)
     )
+    if (control.terminalReason === 'completed' && control.runCompleted !== true) delete control.terminalReason
     const publicTrace = [...(latestState.blackbox?.publicTrace || []), {
       timestamp: new Date().toISOString(),
       observation: result.observation,
@@ -598,7 +839,10 @@ export class BlackboxVirtualLearnerRunner {
         ...(latestState.blackbox || {}),
         control,
         publicTrace,
-        refereeTrace
+        refereeTrace,
+        ...(projectionCommandId
+          ? { projectedCommandIds: [...projectedCommandIds, projectionCommandId].slice(-200) }
+          : {})
       }
     }
     const abandoned = result.control.terminalReason === 'abandoned'
@@ -614,14 +858,25 @@ export class BlackboxVirtualLearnerRunner {
       const completedTaskState = nextState.blackbox.learnerPrivateState.learning
       const privateStateTrace = Array.isArray(nextState.blackbox.learnerPrivateStateTrace)
         ? nextState.blackbox.learnerPrivateStateTrace : []
-      nextState.blackbox.learnerPrivateStateTrace = [...privateStateTrace, {
+      const completedTaskTrace = [...privateStateTrace].reverse().find((entry: any) =>
+        entry?.stage === 'learning' && (!entry?.taskId || entry.taskId === previousControl.taskId)
+      )
+      const completedTaskId = previousControl.taskId || fresh.currentTaskId || null
+      const alreadyArchived = privateStateTrace.some((entry: any) =>
+        entry?.stage === 'learning' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
+      )
+      nextState.blackbox.learnerPrivateStateTrace = (alreadyArchived ? privateStateTrace : [...privateStateTrace, {
         sequence: publicTrace.length,
         stage: 'learning',
-        taskId: previousControl.taskId || fresh.currentTaskId || null,
+        taskId: completedTaskId,
         state: completedTaskState,
+        emotion: completedTaskTrace?.emotion || null,
+        degraded: completedTaskTrace?.degraded === true,
+        visibleSignal: completedTaskTrace?.visibleSignal || null,
+        stateChangeReason: completedTaskTrace?.stateChangeReason || null,
         transition: 'task_completed',
         generatedAt: new Date().toISOString()
-      }].slice(-120)
+      }]).slice(-120)
       const { learning: _completedTaskState, ...remainingPrivateState } = nextState.blackbox.learnerPrivateState
       nextState.blackbox.learnerPrivateState = remainingPrivateState
     }
@@ -630,6 +885,7 @@ export class BlackboxVirtualLearnerRunner {
     const completedTasks = typeof control.completedTasks === 'number'
       ? control.completedTasks
       : completedTaskIncrement ? (fresh.completedTasks || 0) + completedTaskIncrement : fresh.completedTasks || 0
+    await this.assertCurrentLease(session.id)
     await prisma.virtual_sessions.update({
       where: { id: session.id },
       data: {
@@ -648,6 +904,149 @@ export class BlackboxVirtualLearnerRunner {
     return result
   }
 
+  private async projectPlatformResult(
+    session: any,
+    state: any,
+    result: PlatformInteractionResult,
+    action?: LearnerAction
+  ) {
+    try {
+      const projection = await this.journalProjectionReceipt(session.id, result, action)
+      return await this.persist(session, state, result, projection?.projectionKey)
+    } catch (error: any) {
+      if (error instanceof BlackboxReconciliationPendingError) throw error
+      if (error instanceof BlackboxLeaseLostError) throw error
+      if (error instanceof BlackboxDatabaseBusyError) throw error
+      throw this.reconciliationPendingError(error)
+    }
+  }
+
+  private async journalProjectionReceipt(
+    sessionId: string,
+    platformResult: PlatformInteractionResult,
+    action?: LearnerAction
+  ) {
+    const context = this.commandContexts.get(sessionId)
+    if (!context || context.kind === 'observe' && action) return undefined
+    const projectionKey = `${context.commandRowId}:${++context.projectionSequence}`
+    const commandResult = context.kind === 'step'
+      ? action ? { action, result: platformResult } : { result: platformResult }
+      : platformResult
+    const receipt: PendingProjectionReceipt = {
+      projectionPending: true,
+      projectionKey,
+      finalProjection: context.kind !== 'step' || Boolean(action),
+      receiptKind: 'result',
+      platformResult,
+      commandResult
+    }
+    try {
+      await this.assertCurrentLease(sessionId)
+      await prisma.virtual_experiment_commands.update({
+        where: { id: context.commandRowId },
+        data: { resultJson: JSON.stringify(receipt) }
+      })
+      return {
+        projectionKey,
+        finalProjection: receipt.finalProjection,
+        commandRowId: context.commandRowId
+      }
+    } catch (error: any) {
+      if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
+      throw this.reconciliationPendingError(error)
+    }
+  }
+
+  private async journalCheckpointReceipt(sessionId: string, checkpoint: TaskCompletionCheckpoint) {
+    const context = this.commandContexts.get(sessionId)
+    if (!context) return undefined
+    const projectionKey = `${context.commandRowId}:${++context.projectionSequence}`
+    const receipt: PendingProjectionReceipt = {
+      projectionPending: true,
+      projectionKey,
+      finalProjection: false,
+      receiptKind: 'checkpoint',
+      checkpoint
+    }
+    try {
+      await this.assertCurrentLease(sessionId)
+      await prisma.virtual_experiment_commands.update({
+        where: { id: context.commandRowId },
+        data: { resultJson: JSON.stringify(receipt) }
+      })
+      return { commandRowId: context.commandRowId, projectionKey }
+    } catch (error: any) {
+      if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
+      throw this.reconciliationPendingError(error)
+    }
+  }
+
+  private projectionSequence(projectionKey: string) {
+    const suffix = Number(projectionKey.split(':').at(-1))
+    return Number.isInteger(suffix) && suffix > 0 ? suffix : 0
+  }
+
+  private reconciliationPendingError(error: any) {
+    const detail = String(error?.message || '虚拟会话持久化失败').slice(0, 500)
+    return new BlackboxReconciliationPendingError(
+      `平台操作已完成，但黑盒会话持久化失败，请使用相同 Idempotency-Key 重试对账：${detail}`,
+      error
+    )
+  }
+
+  private async completeCommand(sessionId: string, commandId: string, result: unknown) {
+    const resultJson = JSON.stringify(result)
+    try {
+      await this.assertCurrentLease(sessionId)
+      await prisma.virtual_experiment_commands.update({
+        where: { id: commandId },
+        data: {
+          status: 'completed',
+          resultJson,
+          errorJson: null,
+          completedAt: new Date()
+        }
+      })
+    } catch (error) {
+      if (error instanceof BlackboxLeaseLostError) throw error
+      const current = await prisma.virtual_experiment_commands.findUnique({ where: { id: commandId } })
+      if (current?.status === 'completed' && current.resultJson === resultJson) return
+      throw error
+    }
+  }
+
+  private async recordCommandFailure(sessionId: string, commandId: string, error: any) {
+    if (error instanceof BlackboxLeaseLostError) return
+    let current: any = null
+    try {
+      current = await prisma.virtual_experiment_commands.findUnique({ where: { id: commandId } })
+    } catch {
+      return
+    }
+    if (current?.status === 'completed') return
+    if (error instanceof BlackboxReconciliationPendingError) {
+      if (!this.pendingProjectionReceipt(current)) return
+    }
+    await this.assertCurrentLease(sessionId)
+    try {
+      await prisma.virtual_experiment_commands.update({
+        where: { id: commandId },
+        data: {
+          status: 'failed',
+          errorJson: JSON.stringify({
+            name: error?.name || 'Error',
+            message: error?.message || '黑盒命令执行失败',
+            code: error?.code || null,
+            statusCode: error?.statusCode || null
+          }),
+          completedAt: new Date()
+        }
+      })
+    } catch (markError) {
+      if (!(error instanceof BlackboxReconciliationPendingError)) throw markError
+    }
+  }
+
   private assertMutableSession(session: any) {
     if (TERMINAL_SESSION_STATUSES.has(session.status)) {
       throw new BlackboxRunStateError('当前黑盒实验已经结束，不能继续修改', 'BLACKBOX_RUN_TERMINAL')
@@ -655,9 +1054,7 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   private reuseCommand<T>(command: any, kind: string, request: unknown): { result: T; reused: boolean } {
-    if (command.kind !== kind || command.requestJson !== JSON.stringify(request ?? null)) {
-      throw new BlackboxRunStateError('Idempotency-Key 已用于其他黑盒命令', 'BLACKBOX_COMMAND_ID_REUSED')
-    }
+    this.assertCommandMatches(command, kind, request)
     if (command.status === 'completed' && command.resultJson) {
       return { result: parseJson(command.resultJson, null) as T, reused: true }
     }
@@ -671,26 +1068,164 @@ export class BlackboxVirtualLearnerRunner {
     throw new BlackboxRunStateError('相同黑盒命令正在执行或结果待对账', 'BLACKBOX_COMMAND_IN_PROGRESS')
   }
 
-  private async acquireCommandLease(sessionId: string, ownerId: string) {
+  private assertCommandMatches(command: any, kind: string, request: unknown) {
+    if (command.kind !== kind || command.requestJson !== JSON.stringify(request ?? null)) {
+      throw new BlackboxRunStateError('Idempotency-Key 已用于其他黑盒命令', 'BLACKBOX_COMMAND_ID_REUSED')
+    }
+  }
+
+  private isReconciliationPendingCommand(command: any): boolean {
+    if (this.pendingProjectionReceipt(command)) return true
+    return command?.status === 'failed'
+      && parseJson(command.errorJson, {}).code === 'BLACKBOX_RECONCILIATION_PENDING'
+  }
+
+  private isCommandOrderingBarrier(command: any): boolean {
+    return command?.status === 'processing' || this.isReconciliationPendingCommand(command)
+  }
+
+  private pendingProjectionReceipt(command: any): PendingProjectionReceipt | null {
+    const receipt = parseJson(command?.resultJson, null)
+    if (receipt?.projectionPending !== true || typeof receipt.projectionKey !== 'string'
+      || !receipt.projectionKey || typeof receipt.finalProjection !== 'boolean') return null
+    if (receipt.receiptKind === 'result' && receipt.platformResult && 'commandResult' in receipt) {
+      return receipt as PendingProjectionReceipt
+    }
+    if (receipt.receiptKind === 'checkpoint' && receipt.checkpoint) return receipt as PendingProjectionReceipt
+    return null
+  }
+
+  private async acquireCommandLease(sessionId: string, ownerId: string): Promise<Date> {
     const now = new Date()
     const expiresAt = new Date(now.getTime() + COMMAND_LEASE_MS)
-    const updated = await prisma.virtual_experiment_leases.updateMany({
-      where: { sessionId, expiresAt: { lt: now } },
-      data: { ownerId, expiresAt }
-    })
-    if (updated.count === 1) return
+    try {
+      const updated = await prisma.virtual_experiment_leases.updateMany({
+        where: { sessionId, expiresAt: { lt: now } },
+        data: { ownerId, expiresAt }
+      })
+      if (updated.count === 1) return expiresAt
+    } catch (error) {
+      if (isLeaseDatabaseBusyError(error)) throw new BlackboxDatabaseBusyError(error)
+      throw error
+    }
     try {
       await prisma.virtual_experiment_leases.create({ data: { sessionId, ownerId, expiresAt } })
-    } catch {
-      throw new BlackboxRunStateError('当前实验正在由另一实例执行，请稍后重试', 'BLACKBOX_SESSION_BUSY')
+      return expiresAt
+    } catch (error) {
+      if (isPrismaErrorCode(error, 'P2002')) throw new BlackboxSessionBusyError()
+      if (isLeaseDatabaseBusyError(error)) throw new BlackboxDatabaseBusyError(error)
+      throw error
     }
   }
 
   private async releaseCommandLease(sessionId: string, ownerId: string) {
-    await prisma.virtual_experiment_leases.deleteMany({ where: { sessionId, ownerId } })
+    try {
+      await prisma.virtual_experiment_leases.deleteMany({ where: { sessionId, ownerId } })
+    } catch (error) {
+      if (isLeaseDatabaseBusyError(error)) throw new BlackboxDatabaseBusyError(error)
+      throw error
+    }
   }
 
-  private assertActionAllowed(action: LearnerAction, latestObservation: LearnerObservation | undefined, control: any) {
+  private startLeaseRenewal(sessionId: string, ownerId: string, expiresAt: Date): LeaseContext {
+    const context: LeaseContext = {
+      sessionId,
+      ownerId,
+      expiresAt: expiresAt.getTime(),
+      renewal: Promise.resolve(),
+      failureError: null
+    }
+    context.timer = setInterval(() => {
+      void this.renewLease(context).catch(() => undefined)
+    }, COMMAND_LEASE_RENEW_MS)
+    context.timer.unref?.()
+    this.leaseContexts.set(sessionId, context)
+    return context
+  }
+
+  private async stopLeaseRenewal(context: LeaseContext) {
+    if (context.timer) clearInterval(context.timer)
+    try {
+      await context.renewal
+    } finally {
+      if (this.leaseContexts.get(context.sessionId) === context) this.leaseContexts.delete(context.sessionId)
+    }
+  }
+
+  private async cleanupLease(context: LeaseContext, primaryError: unknown) {
+    let cleanupError: unknown
+    try {
+      await this.stopLeaseRenewal(context)
+    } catch (error) {
+      cleanupError = error
+    }
+    try {
+      await this.releaseCommandLease(context.sessionId, context.ownerId)
+    } catch (error) {
+      if (!cleanupError) cleanupError = error
+    }
+    if (!cleanupError) return
+    logger.error('[Blackbox] 执行租约清理失败', {
+      sessionId: context.sessionId,
+      ownerId: context.ownerId,
+      error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+    })
+    if (!primaryError) throw cleanupError
+  }
+
+  private async renewLease(context: LeaseContext) {
+    const renewal = context.renewal.then(async () => {
+      if (context.failureError) throw context.failureError
+      for (let attempt = 0; ; attempt += 1) {
+        const now = new Date()
+        if (now.getTime() >= context.expiresAt) {
+          context.failureError = new BlackboxLeaseLostError()
+          throw context.failureError
+        }
+        const expiresAt = new Date(now.getTime() + COMMAND_LEASE_MS)
+        try {
+          const renewed = await prisma.virtual_experiment_leases.updateMany({
+            where: { sessionId: context.sessionId, ownerId: context.ownerId, expiresAt: { gt: now } },
+            data: { expiresAt }
+          })
+          if (renewed.count !== 1) {
+            context.failureError = new BlackboxLeaseLostError()
+            throw context.failureError
+          }
+          context.expiresAt = expiresAt.getTime()
+          return
+        } catch (error) {
+          if (!isLeaseDatabaseBusyError(error)) throw error
+          const delayMs = LEASE_RETRY_DELAYS_MS[attempt]
+          const remainingMs = context.expiresAt - Date.now()
+          if (delayMs === undefined || remainingMs <= delayMs) {
+            context.failureError = new BlackboxDatabaseBusyError(error)
+            throw context.failureError
+          }
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+        }
+      }
+    })
+    context.renewal = renewal.catch(error => {
+      if (!context.failureError) context.failureError = error
+      throw error
+    })
+    await context.renewal
+  }
+
+  private async assertCurrentLease(sessionId: string) {
+    const context = this.leaseContexts.get(sessionId)
+    if (context) await this.renewLease(context)
+  }
+
+  private assertActionAllowed(
+    action: LearnerAction,
+    latestObservation: LearnerObservation | undefined,
+    control: PlatformControlReceipt
+  ) {
+    const completionCheckpoint = this.currentTaskCompletionCheckpoint(control)
+    if (action.type === 'confirm_complete' && completionCheckpoint) return
+
     if (!latestObservation) {
       if (action.type !== 'chat' && action.type !== 'abandon') {
         throw new BlackboxRunStateError('Blackbox Goal 首轮必须使用 chat 动作', 'BLACKBOX_FIRST_ACTION_INVALID')
@@ -722,18 +1257,199 @@ export class BlackboxVirtualLearnerRunner {
     }
   }
 
+  private async completeCurrentTask(
+    session: any,
+    state: any,
+    adapter: PlatformUserAdapter,
+    control: PlatformControlReceipt,
+    latestObservation?: LearnerObservation,
+    finalizedTeachingResult?: PlatformInteractionResult
+  ): Promise<PlatformInteractionResult> {
+    const taskId = control.taskId
+    const teachingSessionId = control.teachingSessionId
+    const learningPathId = control.learningPathId
+    if (!taskId || !teachingSessionId || !learningPathId) {
+      throw new BlackboxRunStateError('当前教学任务缺少完成所需的平台标识', 'BLACKBOX_COMPLETION_NOT_READY')
+    }
+
+    let checkpoint = this.currentTaskCompletionCheckpoint(control)
+    let teachingEndResult = finalizedTeachingResult || null
+    if (!checkpoint) {
+      teachingEndResult = teachingEndResult
+        || await adapter.endTeaching(teachingSessionId, control.teachingRevision, 'completed')
+      checkpoint = {
+        taskId,
+        teachingSessionId,
+        teachingRevision: this.checkpointTeachingRevision(teachingEndResult.control?.teachingRevision, control.teachingRevision),
+        status: 'teaching_finalized',
+        updatedAt: new Date().toISOString()
+      }
+      await this.persistTaskCompletionCheckpointAfterExternal(session.id, state, checkpoint)
+    }
+
+    let taskResult: PlatformInteractionResult | null = null
+    if (checkpoint.status !== 'task_completed') {
+      try {
+        taskResult = await adapter.completeTask(taskId)
+      } catch (error: any) {
+        const lastError = String(error?.message || '任务完成同步失败').slice(0, 1000)
+        checkpoint = {
+          ...checkpoint,
+          status: 'teaching_finalized',
+          updatedAt: new Date().toISOString(),
+          lastError
+        }
+        await this.persistTaskCompletionCheckpointAfterExternal(session.id, state, checkpoint)
+        return this.taskCompletionRetryResult(control, checkpoint, latestObservation, teachingEndResult, error)
+      }
+
+      checkpoint = {
+        ...checkpoint,
+        status: 'task_completed',
+        updatedAt: new Date().toISOString()
+      }
+      delete checkpoint.lastError
+      await this.persistTaskCompletionCheckpointAfterExternal(session.id, state, checkpoint)
+    }
+
+    let pathResult: PlatformInteractionResult
+    try {
+      pathResult = await adapter.getPath(learningPathId)
+    } catch (error: any) {
+      return this.taskCompletionRetryResult(
+        control,
+        checkpoint,
+        latestObservation,
+        teachingEndResult,
+        error,
+        true
+      )
+    }
+    return this.completedTaskPathResult(pathResult, taskResult, teachingEndResult, checkpoint)
+  }
+
+  private currentTaskCompletionCheckpoint(control: PlatformControlReceipt): TaskCompletionCheckpoint | null {
+    const checkpoint = control.taskCompletionCheckpoint
+    if (!checkpoint || typeof checkpoint !== 'object') return null
+    if (checkpoint.taskId !== control.taskId || checkpoint.teachingSessionId !== control.teachingSessionId) return null
+    if (!['teaching_finalized', 'task_completed'].includes(checkpoint.status)) return null
+    return checkpoint
+  }
+
+  private checkpointTeachingRevision(primary: unknown, fallback: unknown): number | null {
+    if (Number.isInteger(primary) && Number(primary) >= 0) return Number(primary)
+    if (Number.isInteger(fallback) && Number(fallback) >= 0) return Number(fallback)
+    return null
+  }
+
+  private async persistTaskCompletionCheckpoint(
+    sessionId: string,
+    state: any,
+    checkpoint: TaskCompletionCheckpoint,
+    projectionKey?: string
+  ) {
+    const fresh = await this.getSession(sessionId)
+    this.assertMutableSession(fresh)
+    const latestState = parseJson(fresh.stageResults, state)
+    const projectedCommandIds = Array.isArray(latestState.blackbox?.projectedCommandIds)
+      ? latestState.blackbox.projectedCommandIds : []
+    if (projectionKey && projectedCommandIds.includes(projectionKey)) return
+    const control = {
+      ...(latestState.blackbox?.control || {}),
+      taskCompletionCheckpoint: checkpoint
+    }
+    if (control.terminalReason === 'completed' && control.runCompleted !== true) delete control.terminalReason
+    const nextState = {
+      ...latestState,
+      blackbox: {
+        ...(latestState.blackbox || {}),
+        control,
+        ...(projectionKey
+          ? { projectedCommandIds: [...projectedCommandIds, projectionKey].slice(-200) }
+          : {})
+      }
+    }
+    await this.assertCurrentLease(sessionId)
+    await prisma.virtual_sessions.update({
+      where: { id: sessionId },
+      data: { stageResults: JSON.stringify(nextState), updatedAt: new Date() }
+    })
+  }
+
+  private async persistTaskCompletionCheckpointAfterExternal(
+    sessionId: string,
+    state: any,
+    checkpoint: TaskCompletionCheckpoint
+  ) {
+    try {
+      const receipt = await this.journalCheckpointReceipt(sessionId, checkpoint)
+      await this.persistTaskCompletionCheckpoint(sessionId, state, checkpoint, receipt?.projectionKey)
+    } catch (error: any) {
+      if (error instanceof BlackboxReconciliationPendingError) throw error
+      if (error instanceof BlackboxLeaseLostError || error instanceof BlackboxDatabaseBusyError) throw error
+      throw this.reconciliationPendingError(error)
+    }
+  }
+
+  private taskCompletionRetryResult(
+    control: PlatformControlReceipt,
+    checkpoint: TaskCompletionCheckpoint,
+    latestObservation: LearnerObservation | undefined,
+    teachingEndResult: PlatformInteractionResult | null,
+    error: any,
+    taskCompleted = false
+  ): PlatformInteractionResult {
+    const errorMessage = String(error?.message || '任务完成同步失败').slice(0, 300)
+    const visibleMessage = taskCompleted
+      ? `任务已完成，但学习路径刷新失败：${errorMessage}。请重试刷新学习路径。`
+      : `课堂已结束，但任务完成同步失败：${errorMessage}。请重试完成任务。`
+    return {
+      observation: {
+        stage: 'learning',
+        visibleMessages: [
+          ...(teachingEndResult?.observation?.visibleMessages || []),
+          { role: 'platform', content: visibleMessage }
+        ],
+        visibleTask: latestObservation?.visibleTask,
+        availableActions: ['confirm_complete', 'abandon'],
+        lastActionResult: { status: 'error', visibleMessage }
+      },
+      control: {
+        learningPathId: control.learningPathId,
+        teachingSessionId: checkpoint.teachingSessionId,
+        teachingRevision: checkpoint.teachingRevision,
+        taskId: checkpoint.taskId,
+        taskCompleted,
+        platformStage: taskCompleted ? 'path-refresh-pending' : 'task-completion-pending',
+        taskCompletionCheckpoint: checkpoint
+      },
+      diagnostic: {
+        teachingEnd: teachingEndResult?.diagnostic || null,
+        completedTask: {
+          status: taskCompleted ? 'completed_path_refresh_pending' : 'pending_retry',
+          error: {
+            name: String(error?.name || 'Error'),
+            message: errorMessage,
+            status: typeof error?.status === 'number' ? error.status : null
+          }
+        }
+      }
+    }
+  }
+
   private completedTaskPathResult(
     pathResult: PlatformInteractionResult,
-    taskResult: PlatformInteractionResult,
-    teachingEndResult: PlatformInteractionResult
+    taskResult: PlatformInteractionResult | null,
+    teachingEndResult: PlatformInteractionResult | null,
+    checkpoint: TaskCompletionCheckpoint
   ): PlatformInteractionResult {
     return {
       ...pathResult,
-      control: { ...pathResult.control, taskCompleted: true },
+      control: { ...pathResult.control, taskCompleted: true, taskCompletionCheckpoint: checkpoint },
       diagnostic: {
         ...(pathResult.diagnostic || {}),
-        completedTask: taskResult.diagnostic || null,
-        teachingEnd: teachingEndResult.diagnostic || null,
+        completedTask: taskResult?.diagnostic || null,
+        teachingEnd: teachingEndResult?.diagnostic || null,
         resetLearningPrivateState: pathResult.control.runCompleted !== true
       }
     }
@@ -743,7 +1459,12 @@ export class BlackboxVirtualLearnerRunner {
     try {
       return await work()
     } catch (error: any) {
-      if (!(error instanceof BlackboxRunStateError) && !(error instanceof VirtualSessionModeError)) {
+      if (!(error instanceof BlackboxRunStateError)
+        && !(error instanceof VirtualSessionModeError)
+        && !(error instanceof BlackboxReconciliationPendingError)
+        && !(error instanceof BlackboxLeaseLostError)
+        && !(error instanceof BlackboxDatabaseBusyError)
+        && !(error instanceof BlackboxSessionBusyError)) {
         await this.persistUnexpectedFailure(sessionId, code, error)
       }
       throw error
@@ -797,6 +1518,103 @@ export class BlackboxVirtualLearnerRunner {
     const reports = Array.isArray(state.blackbox?.actorAuditReports) ? state.blackbox.actorAuditReports : []
     const latestId = state.blackbox?.latestActorAuditReportId
     return reports.find((item: any) => item.id === latestId) || reports[reports.length - 1] || null
+  }
+
+  private teachingSessionIds(state: any): string[] {
+    const ids = new Set<string>()
+    const trace = Array.isArray(state.blackbox?.publicTrace) ? state.blackbox.publicTrace : []
+    for (const entry of trace) {
+      const sessionId = entry?.control?.teachingSessionId
+      if (typeof sessionId === 'string' && sessionId.trim()) ids.add(sessionId.trim())
+    }
+    const currentSessionId = state.blackbox?.control?.teachingSessionId
+    if (typeof currentSessionId === 'string' && currentSessionId.trim()) ids.add(currentSessionId.trim())
+    return [...ids]
+  }
+
+  private async assertSyntheticUserBinding(session: any) {
+    const profile = await prisma.virtual_learner_profiles.findUnique({
+      where: { id: session.virtualProfileId },
+      select: { userId: true }
+    })
+    if (!profile) {
+      throw new BlackboxRunStateError('虚拟学习者画像不存在', 'BLACKBOX_PROFILE_NOT_FOUND', 404)
+    }
+    if (profile.userId !== session.userId) {
+      throw new BlackboxRunStateError('虚拟会话与合成用户绑定不一致', 'BLACKBOX_SYNTHETIC_USER_MISMATCH')
+    }
+  }
+
+  private displayPlatformMetrics(metrics: { lss: number; ktl: number; lf: number; lsb: number }) {
+    return {
+      lss: Number((metrics.lss * 10).toFixed(2)),
+      ktl: Number((metrics.ktl * 10).toFixed(2)),
+      lf: Number((metrics.lf * 10).toFixed(2)),
+      lsb: Number((metrics.lsb * 10).toFixed(2))
+    }
+  }
+
+  private actorStateTimeline(state: any) {
+    const trace = Array.isArray(state.blackbox?.learnerPrivateStateTrace)
+      ? state.blackbox.learnerPrivateStateTrace.slice(-120) : []
+    return trace.map((entry: any, index: number) => {
+      const stage = entry?.stage === 'learning' ? 'learning' : 'goal'
+      const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
+      const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
+        ? actorState.learnerFeedback : {}
+      const metricKeys = stage === 'goal'
+        ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
+        : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
+      const feedbackKeys = stage === 'learning' ? ['satisfaction', 'confidence'] : []
+      const metrics = Object.fromEntries([
+        ...metricKeys.map((key) => [key, this.displayActorMetric(actorState[key])]),
+        ...feedbackKeys.map((key) => [key, this.displayActorMetric(feedback[key])])
+      ].filter(([, value]) => value !== null))
+      const flagKeys = stage === 'goal'
+        ? ['willingToTry', 'readyToProceed', 'wantsClarification', 'readyToAdvance']
+        : ['wantsHint', 'wantsWorkedExample', 'readyForNextTask']
+      const feedbackFlagKeys = stage === 'learning'
+        ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
+      const flags = Object.fromEntries([
+        ...flagKeys.map((key) => [key, actorState[key]]),
+        ...feedbackFlagKeys.map((key) => [key, feedback[key]])
+      ].filter(([, value]) => typeof value === 'boolean'))
+      const blockers = stage === 'goal'
+        ? actorState.remainingUnknowns
+        : Array.isArray(feedback.remainingBlockers) && feedback.remainingBlockers.length
+          ? feedback.remainingBlockers : actorState.remainingBlockers
+      const visibleSignal = this.timelineText(entry?.visibleSignal || actorState?.debug?.visibleSignal, 240)
+
+      return {
+        sequence: Number.isInteger(entry?.sequence) ? entry.sequence : index,
+        stage,
+        taskId: typeof entry?.taskId === 'string' ? entry.taskId : null,
+        phaseFocus: this.timelineText(actorState.phaseFocus, 64),
+        emotion: this.timelineText(entry?.emotion || actorState.emotion, 64),
+        degraded: entry?.degraded === true || actorState.degraded === true || visibleSignal === 'fallback',
+        transition: this.timelineText(entry?.transition, 64),
+        stateChangeReason: this.timelineText(entry?.stateChangeReason || actorState?.debug?.stateChangeReason, 320),
+        visibleSignal,
+        metrics,
+        flags,
+        blockers: Array.isArray(blockers)
+          ? blockers.map((item: any) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
+        generatedAt: this.timelineText(entry?.generatedAt, 64)
+      }
+    })
+  }
+
+  private displayActorMetric(value: unknown): number | null {
+    if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
+    const numeric = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(numeric)) return null
+    return Number((Math.max(0, Math.min(1, numeric)) * 100).toFixed(2))
+  }
+
+  private timelineText(value: unknown, limit: number): string | null {
+    if (typeof value !== 'string') return null
+    const normalized = value.trim()
+    return normalized ? normalized.slice(0, limit) : null
   }
 
   private buildRefereeInput(session: any, state: any): VirtualLearnerRefereeInput {
@@ -940,7 +1758,18 @@ export class BlackboxVirtualLearnerRunner {
     return String(value)
   }
 
-  private async persistPrivateState(session: any, state: any, stage: string, privateState: any) {
+  private async persistPrivateState(
+    session: any,
+    state: any,
+    stage: string,
+    privateState: any,
+    metadata: {
+      emotion?: unknown
+      degraded?: unknown
+      visibleSignal?: unknown
+      stateChangeReason?: unknown
+    } = {}
+  ) {
     const fresh = await this.getSession(session.id)
     const latestState = parseJson(fresh.stageResults, state)
     const trace = Array.isArray(latestState.blackbox?.learnerPrivateStateTrace)
@@ -956,9 +1785,14 @@ export class BlackboxVirtualLearnerRunner {
         stage,
         taskId: stage === 'learning' ? latestState.blackbox?.control?.taskId || fresh.currentTaskId || null : null,
         state: privateState,
+        emotion: this.timelineText(metadata.emotion, 64),
+        degraded: metadata.degraded === true,
+        visibleSignal: this.timelineText(metadata.visibleSignal, 240),
+        stateChangeReason: this.timelineText(metadata.stateChangeReason, 320),
         generatedAt: new Date().toISOString()
       }].slice(-120)
     }
+    await this.assertCurrentLease(session.id)
     await prisma.virtual_sessions.update({
       where: { id: session.id },
       data: { stageResults: JSON.stringify(latestState), updatedAt: new Date() }
@@ -1091,6 +1925,7 @@ export class BlackboxVirtualLearnerRunner {
       source: route.source,
       endpoint: this.replaySafeEndpoint(route.endpoint),
       model: route.model,
+      privateNetworkPolicy: route.privateNetworkPolicy || 'runtime',
       thinkingMode: route.thinkingMode || 'default',
       reasoningEffort: route.reasoningEffort || 'default',
       timeoutMs: route.timeoutMs ?? null,
@@ -1156,7 +1991,8 @@ export class BlackboxVirtualLearnerRunner {
         model: route.model || undefined,
         thinkingMode: route.thinkingMode || undefined,
         reasoningEffort: route.reasoningEffort || undefined,
-        timeoutMs: Number.isFinite(route.timeoutMs) ? route.timeoutMs : undefined
+        timeoutMs: Number.isFinite(route.timeoutMs) ? route.timeoutMs : undefined,
+        ...(route.privateNetworkPolicy ? { privateNetworkPolicy: route.privateNetworkPolicy } : {})
       } : undefined
     }
   }

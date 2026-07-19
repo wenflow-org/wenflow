@@ -29,6 +29,11 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
       sourceEntry = headerSourceEntry;
     }
     
+    const abortController = new AbortController();
+    const abort = () => abortController.abort();
+    req.once?.('aborted', abort);
+    res.once?.('close', abort);
+
     const context: RequestContext = {
       userId: (req as any).user?.userId,
       agentId: (req as any).agentId,
@@ -36,7 +41,8 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
       sourceEntry,
       traceId: req.headers['x-trace-id'] as string || generateTraceId(),
       callerAgent: req.headers['x-caller-agent'] as string,
-      userRole: (req as any).user?.role || 'user',
+      userRole: req.user?.isAdmin && req.user.sessionType === 'admin' ? 'admin' : 'user',
+      abortSignal: abortController.signal,
       experimentId: req.user?.projection?.grantSource === 'synthetic'
         ? req.user.projection.experimentId || undefined
         : undefined,

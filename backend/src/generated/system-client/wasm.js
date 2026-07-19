@@ -253,6 +253,13 @@ exports.Prisma.Platform_api_configsScalarFieldEnum = {
   privateNetworkHosts: 'privateNetworkHosts'
 };
 
+exports.Prisma.Platform_settingsScalarFieldEnum = {
+  key: 'key',
+  value: 'value',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.Skill_model_configsScalarFieldEnum = {
   id: 'id',
   skillId: 'skillId',
@@ -404,6 +411,7 @@ exports.Prisma.ModelName = {
   orchestrator_definitions: 'orchestrator_definitions',
   agent_registrations: 'agent_registrations',
   platform_api_configs: 'platform_api_configs',
+  platform_settings: 'platform_settings',
   skill_model_configs: 'skill_model_configs',
   skill_registrations: 'skill_registrations',
   field_definitions: 'field_definitions',

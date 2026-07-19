@@ -11,6 +11,7 @@ import {
 } from '../protocol';
 import { logger } from '../../utils/logger';
 import { safeHttpRequest } from '../../utils/safe-http';
+import { getRequestContext } from '../../gateway/api-gateway/context';
 
 // 输入类型定义
 export interface ImageAnalyzerInput {
@@ -326,6 +327,8 @@ async function fetchImage(url: string): Promise<{ data: Buffer; metadata: ImageA
     const response = await safeHttpRequest<ArrayBuffer>(url, {
       responseType: 'arraybuffer',
       timeoutMs: 30000,
+      privateNetworkPolicy: 'public-only',
+      signal: getRequestContext().abortSignal,
       maxResponseBytes: 10 * 1024 * 1024,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'

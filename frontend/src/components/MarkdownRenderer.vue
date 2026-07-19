@@ -81,11 +81,10 @@ const props = defineProps<{
 
 const rendererRef = ref<HTMLElement | null>(null);
 
-// 允许 KaTeX / 代码高亮 / Mermaid 占位所需的标签与属性，但禁止任何脚本、事件处理器和危险协议。
+// 原始 HTML 已禁用；这里仅清洗 Markdown/KaTeX 生成的结构和 Mermaid 文本占位。
 const SANITIZE_CONFIG: DOMPurifyConfig = {
-  ADD_TAGS: ['svg', 'path', 'g', 'line', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'text', 'tspan', 'defs', 'marker', 'foreignObject', 'semantics', 'annotation', 'math', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'mfrac', 'msqrt'],
-  ADD_ATTR: ['class', 'style', 'viewBox', 'd', 'x', 'y', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'points', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'transform', 'text-anchor', 'font-size', 'aria-hidden'],
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base'],
+  USE_PROFILES: { html: true, mathMl: true },
+  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'base', 'svg', 'foreignObject'],
   ALLOW_DATA_ATTR: false,
 };
 
@@ -95,7 +94,7 @@ function sanitizeHtml(html: string): string {
 
 // 显式标注类型：highlight 回调中引用了 md 自身，需打破循环类型推断
 const md: MarkdownIt = new MarkdownIt({
-  html: true,
+  html: false,
   breaks: true,
   linkify: true,
   highlight: (str: string, lang: string) => {

@@ -149,6 +149,13 @@ model platform_api_configs {
   privateNetworkHosts    String?
 }
 
+model platform_settings {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model skill_model_configs {
   id               String   @id
   skillId          String   @unique

@@ -15,9 +15,80 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import learningService from '../services/learning/learning.service';
-import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
+import {
+  isTeachingSessionConflictError,
+  teachingSessionRepository
+} from '../services/ai-teaching/TeachingSessionRepository';
+import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 
 const router = Router();
+
+const parseExpectedRevision = (value: unknown): number | undefined => {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+};
+
+const requireExpectedRevision = (value: unknown): number => {
+  const revision = parseExpectedRevision(value);
+  if (revision === undefined) {
+    const error = new Error('缺少有效的课堂 revision');
+    (error as any).code = 'TEACHING_REVISION_REQUIRED';
+    throw error;
+  }
+  return revision;
+};
+
+const requireIdempotencyKey = (value: unknown): string => {
+  const key = typeof value === 'string' ? value.trim() : '';
+  if (!key || key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
+    const error = new Error('缺少有效的 Idempotency-Key');
+    (error as any).code = 'FINALIZATION_IDEMPOTENCY_KEY_REQUIRED';
+    throw error;
+  }
+  return key;
+};
+
+const sendTeachingError = (res: any, error: any, fallbackMessage: string) => {
+  const message = error instanceof Error ? error.message : String(error || fallbackMessage);
+  let status = Number.isInteger(error?.status) && error.status >= 400 && error.status < 500
+    ? error.status
+    : 500;
+  let code = typeof error?.code === 'string' ? error.code : 'INTERNAL_ERROR';
+
+  if (isTeachingSessionConflictError(error)) {
+    status = 409;
+  } else if (code === 'FINALIZATION_ACTION_UNSUPPORTED' || code === 'FINALIZATION_ACTION_MODE_MISMATCH') {
+    status = 409;
+  } else if (code === 'FINALIZATION_SESSION_NOT_CLOSED') {
+    status = 409;
+  } else if (message.includes('无权访问')) {
+    status = 403;
+    code = 'FORBIDDEN';
+  } else if (message.includes('不存在')) {
+    status = 404;
+    code = 'NOT_FOUND';
+  } else if (message.includes('缺少') || message.includes('无效') || message.includes('只能提交')) {
+    status = 400;
+    code = 'VALIDATION_ERROR';
+  } else if (
+    message.includes('已结束')
+    || message.includes('无法')
+    || message.includes('尚未解锁')
+    || message.includes('还在生成')
+    || message.includes('正在生成')
+  ) {
+    status = 409;
+    code = 'TEACHING_SESSION_STATE_CHANGED';
+  }
+
+  return res.status(status).json({
+    success: false,
+    error: {
+      message: status >= 500 ? fallbackMessage : message,
+      code,
+      status
+    }
+  });
+};
 
 // 应用认证中间件
 router.use(authMiddleware);
@@ -40,7 +111,6 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
     const session = await aiTeachingCoordinator.startSession({
       userId,
       taskId,
-      forceNew: !!req.body?.forceNew,
     });
 
     res.json({
@@ -53,15 +123,13 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
         welcomeMessage: session.welcomeMessage,
         opening: req.user?.projection?.grantSource === 'synthetic' ? undefined : session.opening,
         mode: session.mode,
+        revision: session.revision,
         ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
       },
     });
   } catch (error: any) {
     logger.error('开始授课会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '开始会话失败',
-    });
+    return sendTeachingError(res, error, '开始会话失败');
   }
 });
 
@@ -80,15 +148,17 @@ router.post('/sessions/:sessionId/pause', async (req: any, res) => {
     const reason = req.body?.reason === 'pagehide' ? 'pagehide' : 'manual';
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
-    await aiTeachingCoordinator.pauseSession(sessionId, userId, reason);
+    const revision = await aiTeachingCoordinator.pauseSession(
+      sessionId,
+      userId,
+      reason,
+      requireExpectedRevision(req.body?.revision)
+    );
 
-    res.json({ success: true, data: { sessionId, status: 'paused' } });
+    res.json({ success: true, data: { sessionId, status: 'paused', revision } });
   } catch (error: any) {
     logger.error('暂停授课会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '暂停会话失败',
-    });
+    return sendTeachingError(res, error, '暂停会话失败');
   }
 });
 
@@ -106,15 +176,16 @@ router.post('/sessions/:sessionId/reset', async (req: any, res) => {
     const { sessionId } = req.params;
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
-    await aiTeachingCoordinator.resetSession(sessionId, userId);
+    const revision = await aiTeachingCoordinator.resetSession(
+      sessionId,
+      userId,
+      requireExpectedRevision(req.body?.revision)
+    );
 
-    res.json({ success: true, data: { sessionId, status: 'completed' } });
+    res.json({ success: true, data: { sessionId, status: 'discarded', revision } });
   } catch (error: any) {
     logger.error('重置授课会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '重置会话失败',
-    });
+    return sendTeachingError(res, error, '重置会话失败');
   }
 });
 
@@ -144,7 +215,8 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
 
     const result = await aiTeachingCoordinator.processStudentMessage(
       sessionId,
-      message
+      message,
+      { expectedRevision: requireExpectedRevision(req.body?.revision) }
     );
 
     if (req.user?.projection?.grantSource === 'synthetic') {
@@ -158,6 +230,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
           recovered: result.recovered === true,
           wrapup: result.autoEnded === true ? result.wrapup || null : null,
           peerMessage: result.peerTriggered ? result.peerMessage || null : null,
+          revision: result.revision,
           schemaVersion: 'synthetic-user-v1'
         }
       });
@@ -196,14 +269,12 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
         checkpoint: result.checkpoint || null,
         promptDebug: result.promptDebug || null,
         peerDebug: result.peerDebug || null,
+        revision: result.revision,
       },
     });
   } catch (error: any) {
     logger.error('处理消息失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '处理消息失败',
-    });
+    return sendTeachingError(res, error, '处理消息失败');
   }
 });
 
@@ -232,15 +303,12 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     const result = await aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, {
       selectedOptionIds,
       answerText,
-    });
+    }, requireExpectedRevision(req.body?.revision));
 
     return res.json({ success: true, data: result });
   } catch (error: any) {
     logger.error('提交理解检查失败:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || '提交理解检查失败',
-    });
+    return sendTeachingError(res, error, '提交理解检查失败');
   }
 });
 
@@ -262,18 +330,81 @@ router.post('/sessions/:sessionId/end', async (req: any, res) => {
     const endReason = req.body?.reason === 'learner-abandoned'
       ? 'learner-abandoned'
       : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end';
-    const result = await aiTeachingCoordinator.endSession(sessionId, endReason);
+    const result = await aiTeachingCoordinator.endSession(
+      sessionId,
+      endReason,
+      requireExpectedRevision(req.body?.revision)
+    );
 
-    res.json({
+    res.status(result.status === 'processing' ? 202 : 200).json({
       success: true,
       data: result,
     });
   } catch (error: any) {
     logger.error('结束会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '结束会话失败',
+    return sendTeachingError(res, error, '结束会话失败');
+  }
+});
+
+/**
+ * 可靠课堂结束与任务完成
+ * POST /api/ai-teaching/sessions/:sessionId/finalize
+ */
+router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+
+    const action = req.body?.action;
+    if (!['end_only', 'complete_task', 'complete_review'].includes(action)) {
+      const error = new Error('缺少有效的 Finalization action');
+      (error as any).code = 'FINALIZATION_ACTION_INVALID';
+      throw error;
+    }
+    const actualMinutes = req.body?.actualMinutes;
+    const subjectiveDifficulty = req.body?.subjectiveDifficulty;
+    if (actualMinutes !== undefined && (!Number.isFinite(actualMinutes) || actualMinutes < 0)) {
+      throw new Error('actualMinutes 无效');
+    }
+    if (
+      subjectiveDifficulty !== undefined
+      && (!Number.isFinite(subjectiveDifficulty) || subjectiveDifficulty < 1 || subjectiveDifficulty > 10)
+    ) {
+      throw new Error('subjectiveDifficulty 无效');
+    }
+
+    const result = await sessionFinalizationService.finalize({
+      sessionId: req.params.sessionId,
+      userId,
+      action,
+      operationId: requireIdempotencyKey(req.headers['idempotency-key']),
+      revision: requireExpectedRevision(req.body?.revision),
+      actualMinutes,
+      subjectiveDifficulty,
+      endReason: req.body?.reason === 'learner-abandoned'
+        ? 'learner-abandoned'
+        : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end'
     });
+    return res.status(result.status === 'processing' ? 202 : 200).json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('Finalization 失败:', error);
+    return sendTeachingError(res, error, '课堂结束处理失败');
+  }
+});
+
+/**
+ * 查询当前 Finalization 状态
+ * GET /api/ai-teaching/sessions/:sessionId/finalization
+ */
+router.get('/sessions/:sessionId/finalization', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: { message: '未登录' } });
+    const result = await sessionFinalizationService.getStatus(req.params.sessionId, userId);
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('查询 Finalization 状态失败:', error);
+    return sendTeachingError(res, error, '查询课堂结束状态失败');
   }
 });
 

@@ -460,14 +460,15 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
 };
 
 export function toWrapupArtifact(result: SessionWrapupResult, input: SessionWrapupInput): SessionWrapupArtifact {
+  const hasReliableEvaluation = result.evaluationSource !== 'failed' && !!result.evaluation;
   return {
-    status: result.evaluation ? 'complete' : 'summary-only',
+    status: hasReliableEvaluation ? 'complete' : 'summary-only',
     sources: {
       summary: result.summarySource,
       evaluation: result.evaluationSource,
     },
     summary: result.summary,
-    evaluation: result.evaluation,
+    evaluation: hasReliableEvaluation ? result.evaluation : null,
     progress: buildProgressSnapshot(input),
     evidence: buildEvidenceSnapshot(input),
   };

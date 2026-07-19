@@ -190,6 +190,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DesignLab.vue'),
     meta: { title: '设计实验室' }
   },
+  {
+    path: '/redesign-lab',
+    name: 'RedesignLab',
+    component: () => import('@/views/redesign/RedesignLab.vue'),
+    meta: { title: '重设计稿 · 学习台与目标规划' }
+  },
   // 管理平台路由
   {
     path: '/admin/login',

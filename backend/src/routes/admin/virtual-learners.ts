@@ -6,7 +6,7 @@
 
 import express from 'express';
 import { randomUUID as uuidv4 } from 'crypto';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
@@ -16,6 +16,7 @@ import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-le
 import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
 import { executeSkill } from '../../skills';
 import learningService from '../../services/learning/learning.service';
+import { assertPathMutationSafe } from '../../services/learning/path-mutation-safety';
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
 import { signProjectionToken, SyntheticCapability, verifyProjectionToken } from '../../utils/projection-token';
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
@@ -95,6 +96,17 @@ function parseJson<T = any>(value: string | null | undefined, fallback: T): T {
 
 function normalizeText(value: any) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseSimulationLimit(value: unknown, fallback: number, max: number, field: string) {
+  const limit = value === undefined ? fallback : value;
+  if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > max) {
+    throw Object.assign(new Error(`${field} 必须是 1 到 ${max} 之间的整数`), {
+      code: 'INVALID_SIMULATION_LIMIT',
+      statusCode: 400
+    });
+  }
+  return Number(limit);
 }
 
 function normalizeStoryId(value: any) {
@@ -1251,6 +1263,7 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: any, res) => {
         knowledgePoints: teachingSession.knowledgeState,
         wrapup: teachingSession.wrapup,
         advisory: teachingSession.advisory || null,
+        revision: teachingSession.revision,
       }
     });
   } catch (error: any) {
@@ -1894,13 +1907,36 @@ router.delete('/:id', async (req: any, res) => {
         error: '虚拟用户不存在'
       });
     }
-    
-    await prisma.virtual_learner_profiles.delete({
-      where: { id }
+
+    const sessionCount = await prisma.virtual_sessions.count({
+      where: { virtualProfileId: id }
     });
-    
-    await prisma.users.delete({
-      where: { id: profile.userId }
+    if (sessionCount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: '虚拟用户仍有模拟会话，请先逐个删除会话',
+        code: 'VIRTUAL_PROFILE_HAS_SESSIONS'
+      });
+    }
+
+    await prisma.$transaction(async tx => {
+      const currentProfile = await tx.virtual_learner_profiles.findUnique({
+        where: { id }
+      });
+      if (!currentProfile) throw new Error('虚拟用户不存在');
+
+      const currentSessionCount = await tx.virtual_sessions.count({
+        where: { virtualProfileId: id }
+      });
+      if (currentSessionCount > 0) {
+        throw Object.assign(new Error('虚拟用户仍有模拟会话，请先逐个删除会话'), {
+          code: 'VIRTUAL_PROFILE_HAS_SESSIONS',
+          statusCode: 409
+        });
+      }
+
+      await tx.virtual_learner_profiles.delete({ where: { id } });
+      await tx.users.delete({ where: { id: currentProfile.userId } });
     });
     
     logger.info('删除虚拟用户成功', {
@@ -1915,9 +1951,10 @@ router.delete('/:id', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('删除虚拟用户失败:', error);
-    res.status(500).json({
+    res.status(error?.statusCode || (error?.message === '虚拟用户不存在' ? 404 : 500)).json({
       success: false,
-      error: error.message || '删除虚拟用户失败'
+      error: error.message || '删除虚拟用户失败',
+      ...(error?.code ? { code: error.code } : {})
     });
   }
 });
@@ -2356,14 +2393,13 @@ router.get('/sessions/:sessionId/context', async (req: any, res) => {
 router.post('/sessions/:sessionId/step', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    
-    const session = await requireAssistedSession(sessionId);
-    
-    const result = await simulationCoordinator.executeSingleStep({
-      sessionId,
-      userId: session.userId,
-      mode: 'single-step'
-    });
+    const result = await runAssistedSessionMutation(sessionId, session =>
+      simulationCoordinator.executeSingleStep({
+        sessionId,
+        userId: session.userId,
+        mode: 'single-step'
+      })
+    );
     
     res.json({
       success: result.success,
@@ -2383,17 +2419,17 @@ router.post('/sessions/:sessionId/step', async (req: any, res) => {
 router.post('/sessions/:sessionId/auto', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    const { maxRounds = 20 } = req.body;
+    const maxRounds = parseSimulationLimit(req.body?.maxRounds, 20, 50, 'maxRounds');
     
-    const session = await requireAssistedSession(sessionId);
-    
-    const results = await simulationCoordinator.executeAutoLoop(
-      {
-        sessionId,
-        userId: session.userId,
-        mode: 'auto-loop'
-      },
-      { maxRounds }
+    const results = await runAssistedSessionMutation(sessionId, session =>
+      simulationCoordinator.executeAutoLoop(
+        {
+          sessionId,
+          userId: session.userId,
+          mode: 'auto-loop'
+        },
+        { maxRounds }
+      )
     );
     
     res.json({
@@ -2418,8 +2454,9 @@ router.post('/sessions/:sessionId/auto', async (req: any, res) => {
 router.post('/sessions/:sessionId/advance-path', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.advanceToPathGeneration(sessionId);
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.advanceToPathGeneration(sessionId)
+    );
     
     res.json({
       success: result.success,
@@ -2540,8 +2577,23 @@ async function requireAssistedSession(sessionId: string) {
   return session;
 }
 
+async function runAssistedSessionMutation<T>(
+  sessionId: string,
+  work: (session: any, assertLeaseOwned: (leaseClient?: any) => Promise<void>) => Promise<T>
+) {
+  await requireAssistedSession(sessionId);
+  return simulationCoordinator.runLeasedExclusive(sessionId, async assertLeaseOwned => {
+    const session = await requireAssistedSession(sessionId);
+    await assertLeaseOwned();
+    const result = await work(session, assertLeaseOwned);
+    await assertLeaseOwned();
+    return result;
+  });
+}
+
 function virtualSessionErrorStatus(error: any, fallback = 500) {
   if (typeof error?.statusCode === 'number') return error.statusCode;
+  if (typeof error?.status === 'number') return error.status;
   const message = String(error?.message || '');
   if (message.includes('不存在')) return 404;
   if (message.includes('不合法') || message.includes('缺少') || message.includes('不支持')) return 400;
@@ -2642,10 +2694,8 @@ router.post('/sessions/:sessionId/blackbox-referee', async (req: any, res) => {
     );
     res.json({ success: true, data: result });
   } catch (error: any) {
-    const status = error.message?.includes('不存在') ? 404
-      : error.message?.includes('不是') || error.message?.includes('尚未结束') ? 409 : 502;
     logger.error('生成黑盒裁判报告失败:', error);
-    res.status(status).json({ success: false, error: error.message || '生成黑盒裁判报告失败' });
+    sendVirtualSessionError(res, error, '生成黑盒裁判报告失败', 502);
   }
 });
 
@@ -2660,10 +2710,8 @@ router.post('/sessions/:sessionId/blackbox-evaluations', async (req: any, res) =
     );
     res.json({ success: true, data: result });
   } catch (error: any) {
-    const status = error.message?.includes('不存在') ? 404
-      : error.message?.includes('不是') || error.message?.includes('尚未结束') ? 409 : 502;
     logger.error('生成黑盒双评估报告失败:', error);
-    res.status(status).json({ success: false, error: error.message || '生成黑盒双评估报告失败' });
+    sendVirtualSessionError(res, error, '生成黑盒双评估报告失败', 502);
   }
 });
 
@@ -2721,8 +2769,9 @@ router.post('/sessions/:sessionId/synthetic-token', async (req: any, res) => {
  */
 router.post('/sessions/:sessionId/review-path', async (req: any, res) => {
   try {
-    await requireAssistedSession(req.params.sessionId);
-    const result = await simulationCoordinator.resolvePathReview(req.params.sessionId, { startLearning: true });
+    const result = await runAssistedSessionMutation(req.params.sessionId, () =>
+      simulationCoordinator.resolvePathReview(req.params.sessionId, { startLearning: true })
+    );
     res.json({ success: result.success, data: result, error: result.error });
   } catch (error: any) {
     logger.error('Path 评审失败:', error);
@@ -2872,8 +2921,9 @@ router.post('/sessions/:sessionId/start-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.startLearningPhase(sessionId, { taskId });
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.startLearningPhase(sessionId, { taskId })
+    );
     
     res.json({
       success: result.success,
@@ -2893,8 +2943,9 @@ router.post('/sessions/:sessionId/start-learning', async (req: any, res) => {
 router.post('/sessions/:sessionId/learning-step', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.executeLearningStep(sessionId);
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.executeLearningStep(sessionId)
+    );
     
     res.json({
       success: result.success,
@@ -2914,11 +2965,10 @@ router.post('/sessions/:sessionId/learning-step', async (req: any, res) => {
 router.post('/sessions/:sessionId/auto-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    const { maxMilestones = 10 } = req.body;
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.executeAutoLearning(sessionId, {
-      maxMilestones
-    });
+    const maxMilestones = parseSimulationLimit(req.body?.maxMilestones, 10, 20, 'maxMilestones');
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones })
+    );
     
     res.json({
       success: result.success,
@@ -2940,21 +2990,24 @@ router.post('/sessions/:sessionId/run-full', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     const {
-      maxRounds = 20,
-      maxMilestones = 10,
+      maxRounds: requestedMaxRounds,
+      maxMilestones: requestedMaxMilestones,
       continueOnTaskComplete = true,
       autoAdvanceToPath = true,
       autoAdvanceToLearning = true
     } = req.body || {};
+    const maxRounds = parseSimulationLimit(requestedMaxRounds, 20, 50, 'maxRounds');
+    const maxMilestones = parseSimulationLimit(requestedMaxMilestones, 10, 20, 'maxMilestones');
 
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.executeFullSession(sessionId, {
-      maxRounds,
-      maxMilestones,
-      continueOnTaskComplete,
-      autoAdvanceToPath,
-      autoAdvanceToLearning
-    });
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.executeFullSession(sessionId, {
+        maxRounds,
+        maxMilestones,
+        continueOnTaskComplete,
+        autoAdvanceToPath,
+        autoAdvanceToLearning
+      })
+    );
 
     res.json({
       success: result.success,
@@ -2974,8 +3027,9 @@ router.post('/sessions/:sessionId/run-full', async (req: any, res) => {
 router.post('/sessions/:sessionId/wrapup', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.generateWrapupForSession(sessionId);
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.generateWrapupForSession(sessionId)
+    );
 
     res.json({
       success: result.success,
@@ -2998,53 +3052,49 @@ router.put('/sessions/:sessionId/simulation-config', async (req: any, res) => {
     const { sessionId } = req.params;
     const { frictionBudget } = req.body || {};
 
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
-    if (!session) {
-      return res.status(404).json({ success: false, error: 'session 不存在' });
-    }
-
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
     }
 
-    const stageResults = parseJson<any>(session.stageResults, {});
-    if (stageResults.experiment?.mode === 'blackbox-api') {
-      return res.status(409).json({ success: false, error: 'Blackbox 实验配置已在创建时固化，请创建新 Run' });
-    }
-    const nextStageResults = {
-      ...stageResults,
-      simulationConfig: {
-        ...(stageResults.simulationConfig || {}),
-        ...(frictionBudget ? { frictionBudget } : {})
-      }
-    };
+    const simulationConfig = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
+      const stageResults = parseJson<any>(session.stageResults, {});
+      const nextStageResults = {
+        ...stageResults,
+        simulationConfig: {
+          ...(stageResults.simulationConfig || {}),
+          ...(frictionBudget ? { frictionBudget } : {})
+        }
+      };
 
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: {
-        stageResults: JSON.stringify(nextStageResults),
-        updatedAt: new Date()
-      }
+      await assertLeaseOwned();
+      await prisma.virtual_sessions.update({
+        where: { id: sessionId },
+        data: {
+          stageResults: JSON.stringify(nextStageResults),
+          updatedAt: new Date()
+        }
+      });
+
+      await assertLeaseOwned();
+      return nextStageResults.simulationConfig;
     });
 
     res.json({
       success: true,
-      data: { simulationConfig: nextStageResults.simulationConfig }
+      data: { simulationConfig }
     });
   } catch (error: any) {
     logger.error('更新 simulation-config 失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '更新 simulation-config 失败'
-    });
+    sendVirtualSessionError(res, error, '更新 simulation-config 失败');
   }
 });
 
 router.post('/sessions/:sessionId/restart-path', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.restartPathPhase(sessionId);
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.restartPathPhase(sessionId)
+    );
 
     res.json({
       success: result.success,
@@ -3061,8 +3111,9 @@ router.post('/sessions/:sessionId/restart-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.restartLearningPhase(sessionId, { taskId });
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.restartLearningPhase(sessionId, { taskId })
+    );
 
     res.json({
       success: result.success,
@@ -3078,8 +3129,9 @@ router.post('/sessions/:sessionId/restart-learning', async (req: any, res) => {
 router.post('/sessions/:sessionId/stop-learning', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    await requireAssistedSession(sessionId);
-    const result = await simulationCoordinator.emergencyStopLearning(sessionId, 'admin-emergency-stop');
+    const result = await runAssistedSessionMutation(sessionId, () =>
+      simulationCoordinator.emergencyStopLearning(sessionId, 'admin-emergency-stop')
+    );
 
     res.json({
       success: result.success,
@@ -3141,34 +3193,96 @@ router.get('/sessions/:sessionId/logs', async (req: any, res) => {
 router.delete('/sessions/:sessionId', async (req: any, res) => {
   try {
     const { sessionId } = req.params;
-    
-    const session = await prisma.virtual_sessions.findUnique({
+
+    const existingSession = await prisma.virtual_sessions.findUnique({
       where: { id: sessionId }
     });
-    
-    if (!session) {
+
+    if (!existingSession) {
       return res.status(404).json({
         success: false,
         error: '模拟会话不存在'
       });
     }
-    
-    if (session.goalConversationId) {
-      await prisma.goal_conversations.delete({
-        where: { id: session.goalConversationId }
-      }).catch(() => {});
-    }
-    
-    if (session.learningPathId) {
-      await prisma.learning_paths.delete({
-        where: { id: session.learningPathId }
-      }).catch(() => {});
-    }
-    
-    await prisma.virtual_sessions.delete({
-      where: { id: sessionId }
-    });
-    
+
+    const session = await simulationCoordinator.runLeasedExclusive(sessionId, async assertLeaseOwned => {
+      const leasedSession = await prisma.virtual_sessions.findUnique({
+        where: { id: sessionId }
+      });
+      if (!leasedSession) throw new Error('模拟会话不存在');
+
+      await assertLeaseOwned();
+      await prisma.$transaction(async tx => {
+        await assertLeaseOwned(tx);
+        const teachingSessionScopes: any[] = [];
+        const teachingSessionId = parseLearningProgress(leasedSession).teachingSessionId;
+        if (teachingSessionId) teachingSessionScopes.push({ id: String(teachingSessionId) });
+
+        if (leasedSession.learningPathId) {
+          const learningPath = await tx.learning_paths.findFirst({
+            where: {
+              id: leasedSession.learningPathId,
+              userId: leasedSession.userId
+            },
+            select: { id: true }
+          });
+          if (!learningPath) {
+            throw Object.assign(new Error('学习路径不属于当前虚拟学习者'), {
+              code: 'VIRTUAL_SESSION_PATH_OWNERSHIP_MISMATCH',
+              statusCode: 409
+            });
+          }
+
+          await assertPathMutationSafe(tx, learningPath.id, 'delete-path');
+
+          const pathTasks = await tx.subtasks.findMany({
+            where: { milestones: { learningPathId: learningPath.id } },
+            select: { id: true }
+          });
+          const taskIds = pathTasks.map((task: { id: string }) => task.id);
+          teachingSessionScopes.push(
+            { learningPathId: learningPath.id },
+            ...(taskIds.length > 0 ? [{ taskId: { in: taskIds } }] : [])
+          );
+        }
+
+        if (teachingSessionScopes.length > 0) {
+          const associatedTeachingSession = await tx.teaching_sessions.findFirst({
+            where: { OR: teachingSessionScopes },
+            select: { id: true }
+          });
+          if (associatedTeachingSession) {
+            throw Object.assign(new Error('模拟会话仍有关联课堂记录，不能删除'), {
+              code: 'VIRTUAL_SESSION_HAS_TEACHING_RECORDS',
+              statusCode: 409
+            });
+          }
+        }
+
+        if (leasedSession.goalConversationId) {
+          await tx.goal_conversations.deleteMany({
+            where: {
+              id: leasedSession.goalConversationId,
+              userId: leasedSession.userId
+            }
+          });
+        }
+        if (leasedSession.learningPathId) {
+          await tx.learning_paths.deleteMany({
+            where: {
+              id: leasedSession.learningPathId,
+              userId: leasedSession.userId
+            }
+          });
+        }
+        await tx.virtual_sessions.delete({
+          where: { id: sessionId }
+        });
+      });
+
+      return leasedSession;
+    }, { skipFinalLeaseCheck: true });
+
     logger.info('删除模拟会话成功', {
       sessionId,
       userId: session.userId
@@ -3180,10 +3294,7 @@ router.delete('/sessions/:sessionId', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('删除模拟会话失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '删除模拟会话失败'
-    });
+    sendVirtualSessionError(res, error, '删除模拟会话失败');
   }
 });
 
@@ -3199,7 +3310,8 @@ router.post('/:profileId/regression-run', async (req: any, res) => {
     }
 
     const { profileId } = req.params;
-    const { storyId, storyIndex, maxGoalRounds = 20, systemPromptOverrides } = req.body || {};
+    const { storyId, storyIndex, maxGoalRounds: requestedMaxGoalRounds, systemPromptOverrides } = req.body || {};
+    const maxGoalRounds = parseSimulationLimit(requestedMaxGoalRounds, 20, 50, 'maxGoalRounds');
 
     const profile = await prisma.virtual_learner_profiles.findUnique({
       where: { id: profileId }
@@ -3214,29 +3326,34 @@ router.post('/:profileId/regression-run', async (req: any, res) => {
       return res.status(404).json({ success: false, error: '虚拟用户不存在或故事池为空' });
     }
     const sessionId = session.id;
-    if (systemPromptOverrides && typeof systemPromptOverrides === 'object') {
-      const goalAgent = typeof systemPromptOverrides.goalAgent === 'string' ? systemPromptOverrides.goalAgent.trim() : '';
-      const pathAgent = typeof systemPromptOverrides.pathAgent === 'string' ? systemPromptOverrides.pathAgent.trim() : '';
-      if (goalAgent || pathAgent) {
-        await prisma.virtual_sessions.update({
-          where: { id: sessionId },
-          data: {
-            stageResults: JSON.stringify({
-              ...parseJson(session.stageResults, {}),
-              systemPromptOverrides: { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined }
-            })
-          }
-        });
-      }
-    }
 
     // 2. 执行全自动 (Goal→Path→Learn 一条龙, 受 maxGoalRounds 限制)
-    const result = await simulationCoordinator.executeFullSession(sessionId, {
-      maxRounds: maxGoalRounds,
-      maxMilestones: 5,
-      continueOnTaskComplete: false, // 回归测试只跑首个 task
-      autoAdvanceToPath: true,
-      autoAdvanceToLearning: false  // 回归测试主要看 Goal+Path, 不跑完整 Learn
+    const result = await runAssistedSessionMutation(sessionId, async (leasedSession, assertLeaseOwned) => {
+      if (systemPromptOverrides && typeof systemPromptOverrides === 'object') {
+        const goalAgent = typeof systemPromptOverrides.goalAgent === 'string' ? systemPromptOverrides.goalAgent.trim() : '';
+        const pathAgent = typeof systemPromptOverrides.pathAgent === 'string' ? systemPromptOverrides.pathAgent.trim() : '';
+        if (goalAgent || pathAgent) {
+          await assertLeaseOwned();
+          await prisma.virtual_sessions.update({
+            where: { id: sessionId },
+            data: {
+              stageResults: JSON.stringify({
+                ...parseJson(leasedSession.stageResults, {}),
+                systemPromptOverrides: { goalAgent: goalAgent || undefined, pathAgent: pathAgent || undefined }
+              })
+            }
+          });
+          await assertLeaseOwned();
+        }
+      }
+
+      return simulationCoordinator.executeFullSession(sessionId, {
+        maxRounds: maxGoalRounds,
+        maxMilestones: 5,
+        continueOnTaskComplete: false, // 回归测试只跑首个 task
+        autoAdvanceToPath: true,
+        autoAdvanceToLearning: false  // 回归测试主要看 Goal+Path, 不跑完整 Learn
+      });
     });
 
     res.json({
@@ -3249,10 +3366,7 @@ router.post('/:profileId/regression-run', async (req: any, res) => {
     });
   } catch (error: any) {
     logger.error('回归测试失败:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '回归测试失败'
-    });
+    sendVirtualSessionError(res, error, '回归测试失败');
   }
 });
 
