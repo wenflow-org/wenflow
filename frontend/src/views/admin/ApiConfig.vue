@@ -6,7 +6,6 @@
     >
       <template #actions>
         <el-button class="topbar-btn" @click="loadConfig" :loading="loading">刷新配置</el-button>
-        <el-button type="primary" class="topbar-btn topbar-btn--primary" @click="saveAll" :loading="saving">保存变更</el-button>
       </template>
     </AdminPageHeader>
 
@@ -41,269 +40,284 @@
       </div>
     </section>
 
-    <section class="flow-section security-section">
-      <div class="flow-section__head flow-section__head--split">
-        <div>
-          <h2>网络边界</h2>
-          <p>控制后台访问来源，以及模型、MCP 和内容提取是否可以连接本机或局域网服务。</p>
-        </div>
-        <span class="head-badge head-badge--info">{{ policySourceLabel }}</span>
-      </div>
-
-      <div class="policy-grid">
-        <article class="policy-panel">
-          <div class="policy-panel__head">
-            <div>
-              <h3>Admin 访问范围</h3>
-              <p>默认允许服务器本机和同一局域网，公网来源会被拒绝。</p>
+    <div class="config-layout">
+      <div class="config-main">
+        <section class="flow-section security-section">
+          <div class="flow-section__head flow-section__head--split">
+            <div class="section-title-row">
+              <span class="section-index">01</span>
+              <div>
+                <h2>网络边界</h2>
+                <p>控制后台访问来源，以及模型、MCP 和内容提取是否可以连接本机或局域网服务。</p>
+              </div>
             </div>
+            <span class="head-badge head-badge--info">{{ policySourceLabel }}</span>
           </div>
 
-          <el-radio-group v-model="networkPolicy.adminAccessMode" class="mode-grid">
-            <el-radio-button value="loopback">
-              <span class="mode-option"><strong>仅本机</strong><small>127.0.0.1 / ::1</small></span>
-            </el-radio-button>
-            <el-radio-button value="private">
-              <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐用于开发和内网部署</small></span>
-            </el-radio-button>
-            <el-radio-button value="any">
-              <span class="mode-option"><strong>不限制来源</strong><small>仅配合 VPN、网关或防火墙</small></span>
-            </el-radio-button>
-          </el-radio-group>
+          <div class="policy-grid">
+            <article class="policy-panel">
+              <div class="policy-panel__head">
+                <div>
+                  <h3>Admin 访问范围</h3>
+                  <p>默认允许服务器本机和同一局域网，公网来源会被拒绝。</p>
+                </div>
+              </div>
 
-          <el-form label-position="top" class="config-form config-form--tight">
-            <el-form-item label="额外允许的客户端 IP">
+              <el-radio-group v-model="networkPolicy.adminAccessMode" class="mode-grid">
+                <el-radio-button value="loopback">
+                  <span class="mode-option"><strong>仅本机</strong><small>127.0.0.1 / ::1</small></span>
+                </el-radio-button>
+                <el-radio-button value="private">
+                  <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐用于开发和内网部署</small></span>
+                </el-radio-button>
+                <el-radio-button value="any">
+                  <span class="mode-option"><strong>不限制来源</strong><small>仅配合 VPN、网关或防火墙</small></span>
+                </el-radio-button>
+              </el-radio-group>
+
+              <el-form label-position="top" class="config-form config-form--tight">
+                <el-form-item label="额外允许的客户端 IP">
+                  <el-select
+                    v-model="networkPolicy.adminAllowedIps"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="例如 203.0.113.10"
+                  />
+                  <span class="field-help">适合 VPN 出口或固定运维终端，填写精确 IP，不填写网段。</span>
+                </el-form-item>
+              </el-form>
+            </article>
+
+            <article class="policy-panel policy-panel--network">
+              <div class="policy-panel__head policy-panel__head--switch">
+                <div>
+                  <h3>允许私有网络服务</h3>
+                  <p>用于 Ollama、本地模型、局域网 MCP 或内部内容服务。</p>
+                </div>
+                <el-switch
+                  v-model="networkPolicy.allowPrivateNetwork"
+                  inline-prompt
+                  active-text="开启"
+                  inactive-text="关闭"
+                  size="large"
+                />
+              </div>
+
+              <div class="policy-state" :class="networkPolicy.allowPrivateNetwork ? 'policy-state--open' : 'policy-state--guarded'">
+                <strong>{{ networkPolicy.allowPrivateNetwork ? '开发模式：允许本机与局域网目标' : '受控模式：仅允许下方白名单' }}</strong>
+                <span>Link-local、云元数据、组播和保留地址始终禁止。</span>
+              </div>
+
+              <el-form label-position="top" class="config-form config-form--tight">
+                <el-form-item label="私有服务 Host / IP 白名单">
+                  <el-select
+                    v-model="networkPolicy.privateNetworkHosts"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    :disabled="networkPolicy.allowPrivateNetwork"
+                    placeholder="例如 192.168.31.26 或 ollama.local"
+                  />
+                  <span class="field-help">关闭总开关时，仅这些精确 Host 或 IP 可以作为模型与 MCP 地址。</span>
+                </el-form-item>
+              </el-form>
+            </article>
+          </div>
+
+          <div v-if="networkPolicy.adminAccessMode === 'any'" class="issue-row issue-row--danger">
+            Admin 已允许公网来源。请确认前方存在 VPN、访问网关或防火墙白名单。
+          </div>
+        </section>
+
+        <section class="flow-section">
+          <div class="flow-section__head flow-section__head--split">
+            <div class="section-title-row">
+              <span class="section-index">02</span>
+              <div>
+                <h2>接入与密钥</h2>
+                <p>模型服务的地址与凭证。密钥留空表示沿用已保存的值。</p>
+              </div>
+            </div>
+            <el-button class="api-btn api-btn--ghost" @click="fetchModels" :loading="testing">连接并拉取模型</el-button>
+          </div>
+
+          <el-form :model="form" label-position="top" class="config-form">
+            <div class="field-grid field-grid--two">
+              <el-form-item label="服务地址">
+                <el-input v-model="form.apiUrl" placeholder="https://api.example.com/v1" />
+              </el-form-item>
+
+              <el-form-item label="API Key">
+                <el-input
+                  v-model="form.apiKeyInput"
+                  type="password"
+                  show-password
+                  :placeholder="form.apiKeyConfigured ? '留空则沿用' : '输入 API Key'"
+                />
+              </el-form-item>
+            </div>
+          </el-form>
+
+          <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
+            <span>{{ testResult.message }}</span>
+          </div>
+        </section>
+
+        <section class="flow-section">
+          <div class="flow-section__head flow-section__head--split">
+            <div class="section-title-row">
+              <span class="section-index">03</span>
+              <div>
+                <h2>模型与路由</h2>
+                <p>从可用模型中为不同用途指定默认模型。</p>
+              </div>
+            </div>
+            <span class="section-meta">最近拉取：{{ lastFetchLabel }}</span>
+          </div>
+
+          <el-form :model="form" label-position="top" class="config-form">
+            <el-form-item label="可用模型">
               <el-select
-                v-model="networkPolicy.adminAllowedIps"
+                v-model="form.availableModels"
                 multiple
                 filterable
                 allow-create
                 default-first-option
-                placeholder="例如 203.0.113.10"
-              />
-              <span class="field-help">适合 VPN 出口或固定运维终端，填写精确 IP，不填写网段。</span>
+                placeholder="选择或补充模型"
+              >
+                <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
+              </el-select>
             </el-form-item>
-          </el-form>
-        </article>
 
-        <article class="policy-panel policy-panel--network">
-          <div class="policy-panel__head policy-panel__head--switch">
-            <div>
-              <h3>允许私有网络服务</h3>
-              <p>用于 Ollama、本地模型、局域网 MCP 或内部内容服务。</p>
+            <div class="field-grid field-grid--three">
+              <el-form-item label="对话默认">
+                <el-select
+                  v-model="form.defaultModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择对话默认模型"
+                >
+                  <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="推理默认">
+                <el-select
+                  v-model="form.defaultReasoningModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择推理默认模型"
+                >
+                  <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="评估默认">
+                <el-select
+                  v-model="form.defaultEvaluationModel"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择评估默认模型"
+                >
+                  <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
+                </el-select>
+              </el-form-item>
             </div>
-            <el-switch
-              v-model="networkPolicy.allowPrivateNetwork"
-              inline-prompt
-              active-text="开启"
-              inactive-text="关闭"
-              size="large"
-            />
+          </el-form>
+        </section>
+      </div>
+
+      <aside class="config-side">
+        <section class="flow-section verify-card">
+          <div class="flow-section__head flow-section__head--split">
+            <div>
+              <h2>连通性验证</h2>
+              <p>不影响上方配置，随时试。</p>
+            </div>
+            <span class="head-badge" :class="`head-badge--${modelTestTone}`">{{ modelTestStateLabel }}</span>
           </div>
 
-          <div class="policy-state" :class="networkPolicy.allowPrivateNetwork ? 'policy-state--open' : 'policy-state--guarded'">
-            <strong>{{ networkPolicy.allowPrivateNetwork ? '开发模式：允许本机与局域网目标' : '受控模式：仅允许下方白名单' }}</strong>
-            <span>Link-local、云元数据、组播和保留地址始终禁止。</span>
-          </div>
-
-          <el-form label-position="top" class="config-form config-form--tight">
-            <el-form-item label="私有服务 Host / IP 白名单">
+          <el-form :model="modelTestForm" label-position="top" class="test-form">
+            <el-form-item label="测试模型">
               <el-select
-                v-model="networkPolicy.privateNetworkHosts"
-                multiple
+                v-model="modelTestForm.model"
                 filterable
                 allow-create
                 default-first-option
-                :disabled="networkPolicy.allowPrivateNetwork"
-                placeholder="例如 192.168.31.26 或 ollama.local"
+                placeholder="选择测试模型"
+              >
+                <el-option v-for="model in modelOptions" :key="`test-${model}`" :label="model" :value="model" />
+              </el-select>
+            </el-form-item>
+
+            <div class="field-grid field-grid--two">
+              <el-form-item label="温度">
+                <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" />
+              </el-form-item>
+
+              <el-form-item label="最大输出">
+                <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" />
+              </el-form-item>
+            </div>
+
+            <el-form-item label="提示词">
+              <el-input
+                v-model="modelTestForm.prompt"
+                class="lab-textarea"
+                type="textarea"
+                :rows="4"
+                placeholder="请输入测试提示词"
               />
-              <span class="field-help">关闭总开关时，仅这些精确 Host 或 IP 可以作为模型与 MCP 地址。</span>
             </el-form-item>
           </el-form>
-        </article>
-      </div>
 
-      <div v-if="networkPolicy.adminAccessMode === 'any'" class="issue-row issue-row--danger">
-        Admin 已允许公网来源。请确认前方存在 VPN、访问网关或防火墙白名单。
-      </div>
-    </section>
-
-    <section class="flow-section">
-      <div class="flow-section__head">
-        <div>
-          <h2>接入</h2>
-        </div>
-      </div>
-
-      <el-form :model="form" label-position="top" class="config-form">
-        <div class="field-grid field-grid--two">
-          <el-form-item label="服务地址">
-            <el-input v-model="form.apiUrl" placeholder="https://api.example.com/v1" />
-          </el-form-item>
-
-          <el-form-item label="API Key">
-            <el-input
-              v-model="form.apiKeyInput"
-              type="password"
-              show-password
-              :placeholder="form.apiKeyConfigured ? '留空则沿用' : '输入 API Key'"
-            />
-          </el-form-item>
-        </div>
-      </el-form>
-
-      <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
-        <span>{{ testResult.message }}</span>
-      </div>
-    </section>
-
-    <section class="flow-section">
-      <div class="flow-section__head flow-section__head--split">
-        <div>
-          <h2>模型目录</h2>
-        </div>
-        <div class="flow-section__meta-actions">
-          <span class="section-meta">最近拉取：{{ lastFetchLabel }}</span>
-          <el-button class="api-btn api-btn--ghost" @click="fetchModels" :loading="testing">连接并拉取模型</el-button>
-        </div>
-      </div>
-
-      <div class="model-directory-panel">
-        <el-form :model="form" label-position="top" class="config-form config-form--tight">
-          <el-form-item label="可用模型">
-            <el-select
-              v-model="form.availableModels"
-              multiple
-              filterable
-              allow-create
-              default-first-option
-              placeholder="选择或补充模型"
-            >
-              <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
-            </el-select>
-          </el-form-item>
-
-        </el-form>
-      </div>
-    </section>
-
-    <section class="flow-section">
-      <div class="flow-section__head">
-        <div>
-          <h2>默认路由</h2>
-        </div>
-      </div>
-
-      <el-form :model="form" label-position="top" class="config-form">
-        <div class="field-grid field-grid--three">
-          <el-form-item label="对话默认">
-            <el-select
-              v-model="form.defaultModel"
-              filterable
-              allow-create
-              default-first-option
-              placeholder="选择对话默认模型"
-            >
-              <el-option v-for="model in modelOptions" :key="`default-${model}`" :label="model" :value="model" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="推理默认">
-            <el-select
-              v-model="form.defaultReasoningModel"
-              filterable
-              allow-create
-              default-first-option
-              placeholder="选择推理默认模型"
-            >
-              <el-option v-for="model in modelOptions" :key="`reason-${model}`" :label="model" :value="model" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="评估默认">
-            <el-select
-              v-model="form.defaultEvaluationModel"
-              filterable
-              allow-create
-              default-first-option
-              placeholder="选择评估默认模型"
-            >
-              <el-option v-for="model in modelOptions" :key="`eval-${model}`" :label="model" :value="model" />
-            </el-select>
-          </el-form-item>
-        </div>
-      </el-form>
-    </section>
-
-    <section class="flow-section">
-      <div class="flow-section__head flow-section__head--split">
-        <div>
-          <h2>验证</h2>
-        </div>
-        <span class="head-badge" :class="`head-badge--${modelTestTone}`">{{ modelTestStateLabel }}</span>
-      </div>
-
-      <el-form :model="modelTestForm" label-position="top" class="test-form">
-        <div class="field-grid field-grid--test">
-          <el-form-item label="测试模型">
-            <el-select
-              v-model="modelTestForm.model"
-              filterable
-              allow-create
-              default-first-option
-              placeholder="选择测试模型"
-            >
-              <el-option v-for="model in modelOptions" :key="`test-${model}`" :label="model" :value="model" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="温度">
-            <el-input-number v-model="modelTestForm.temperature" :min="0" :max="2" :step="0.1" />
-          </el-form-item>
-
-          <el-form-item label="最大输出">
-            <el-input-number v-model="modelTestForm.maxTokens" :min="32" :max="4000" :step="32" />
-          </el-form-item>
-        </div>
-
-        <el-form-item label="提示词">
-          <el-input
-            v-model="modelTestForm.prompt"
-            class="lab-textarea"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入测试提示词"
-          />
-        </el-form-item>
-      </el-form>
-
-      <div class="terminal-actions">
-        <el-button type="primary" class="api-btn" @click="runModelTest" :loading="modelTesting">运行测试</el-button>
-      </div>
-
-      <div v-if="modelTestResult" class="result-panel" :class="{ 'is-error': !modelTestResult.success }">
-        <div class="result-meta-grid">
-          <div class="result-meta">
-            <span>模型</span>
-            <strong>{{ modelTestResult.model || modelTestForm.model || '--' }}</strong>
+          <div class="terminal-actions">
+            <el-button type="primary" class="api-btn" @click="runModelTest" :loading="modelTesting">运行测试</el-button>
           </div>
-          <div class="result-meta">
-            <span>耗时</span>
-            <strong>{{ modelTestResult.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
+
+          <div v-if="modelTestResult" class="result-panel" :class="{ 'is-error': !modelTestResult.success }">
+            <div class="result-meta-grid">
+              <div class="result-meta">
+                <span>模型</span>
+                <strong>{{ modelTestResult.model || modelTestForm.model || '--' }}</strong>
+              </div>
+              <div class="result-meta">
+                <span>耗时</span>
+                <strong>{{ modelTestResult.durationMs ? `${modelTestResult.durationMs}ms` : '--' }}</strong>
+              </div>
+              <div class="result-meta">
+                <span>Tokens</span>
+                <strong>{{ formatUsage(modelTestResult.usage) }}</strong>
+              </div>
+            </div>
+            <pre class="result-output">{{ modelTestResult.content || modelTestResult.message }}</pre>
           </div>
-          <div class="result-meta">
-            <span>Tokens</span>
-            <strong>{{ formatUsage(modelTestResult.usage) }}</strong>
-          </div>
+        </section>
+      </aside>
+    </div>
+
+    <!-- 未保存变更条：dirty 时浮现于视口底部 -->
+    <transition name="save-bar">
+      <div v-if="dirtyCount > 0" class="save-bar" role="status">
+        <span class="save-bar__dot"></span>
+        <span class="save-bar__text">有 {{ dirtyCount }} 项未保存变更</span>
+        <div class="save-bar__actions">
+          <el-button @click="discardChanges" :disabled="saving">放弃变更</el-button>
+          <el-button type="primary" @click="saveAll" :loading="saving">保存变更</el-button>
         </div>
-        <pre class="result-output">{{ modelTestResult.content || modelTestResult.message }}</pre>
       </div>
-    </section>
+    </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Setting } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
 import { adminApiConfigApi } from '@/api/adminApi';
@@ -385,6 +399,41 @@ const adminAccessModeLabel = computed(() => ({
 }[networkPolicy.adminAccessMode]))
 const policySourceLabel = computed(() => networkPolicy.source === 'database' ? '平台策略 · 热生效' : '环境默认值')
 
+/* ---------- 未保存变更追踪 ----------
+   快照对比：加载/保存成功后记录基线，逐字段计数，
+   底部保存条仅在 dirty 时浮现 */
+const savedSnapshot = ref('')
+
+const currentConfigSnapshot = computed(() => JSON.stringify({
+  apiUrl: form.apiUrl,
+  apiKeyChanged: form.apiKeyInput.length > 0,
+  availableModels: form.availableModels,
+  defaultModel: form.defaultModel,
+  defaultReasoningModel: form.defaultReasoningModel,
+  defaultEvaluationModel: form.defaultEvaluationModel,
+  adminAccessMode: networkPolicy.adminAccessMode,
+  adminAllowedIps: networkPolicy.adminAllowedIps,
+  allowPrivateNetwork: networkPolicy.allowPrivateNetwork,
+  privateNetworkHosts: networkPolicy.privateNetworkHosts
+}))
+
+const dirtyCount = computed(() => {
+  if (!savedSnapshot.value) return 0
+  try {
+    const saved = JSON.parse(savedSnapshot.value) as Record<string, unknown>
+    const current = JSON.parse(currentConfigSnapshot.value) as Record<string, unknown>
+    return Object.keys(current).filter((key) => JSON.stringify(current[key]) !== JSON.stringify(saved[key])).length
+  } catch {
+    return 0
+  }
+})
+
+// 放弃变更 = 重新拉取服务端配置（同时重置快照）
+async function discardChanges() {
+  await loadConfig()
+  toast.success('已放弃未保存的变更')
+}
+
 async function loadConfig() {
   loading.value = true;
   loadError.value = '';
@@ -409,6 +458,9 @@ async function loadConfig() {
     networkPolicy.allowPrivateNetwork = policy.allowPrivateNetwork !== false;
     networkPolicy.privateNetworkHosts = Array.isArray(policy.privateNetworkHosts) ? policy.privateNetworkHosts : [];
     networkPolicy.source = policy.source === 'database' ? 'database' : 'environment';
+    // 记录基线快照，用于未保存变更计数
+    await nextTick();
+    savedSnapshot.value = currentConfigSnapshot.value;
   } catch (error) {
     const err = error as { response?: { data?: { error?: { message?: unknown } } } } | null;
     const backendMessage = err?.response?.data?.error?.message;
@@ -625,6 +677,113 @@ onMounted(() => {
 
 .flow-section:last-child {
   border-bottom: none;
+}
+
+/* ---------- 重设计：左主右辅布局 ---------- */
+.config-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 24px;
+  align-items: start;
+}
+
+.config-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.config-main .flow-section:first-child {
+  padding-top: 4px;
+}
+
+.config-side {
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+}
+
+.verify-card {
+  padding: 18px;
+  border: var(--admin-border-subtle);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-bg-surface-alt);
+}
+
+.verify-card .flow-section__head h2 {
+  font-size: var(--admin-text-title-sm);
+}
+
+/* 区块编号 */
+.section-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.section-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  margin-top: 1px;
+  border-radius: var(--admin-radius-sm);
+  background: var(--admin-bg-selected);
+  color: var(--admin-text-brand);
+  font-size: var(--admin-text-caption);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 未保存变更条 ---------- */
+.save-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  margin: 8px auto 0;
+  padding: 10px 12px 10px 18px;
+  border-radius: var(--admin-radius-pill);
+  border: 1px solid rgba(52, 120, 246, 0.24);
+  background: var(--admin-bg-surface);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+}
+
+.save-bar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--admin-color-warning);
+  flex-shrink: 0;
+}
+
+.save-bar__text {
+  font-size: var(--admin-text-body-sm);
+  font-weight: 600;
+  color: var(--admin-text-primary);
+  white-space: nowrap;
+}
+
+.save-bar__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.save-bar-enter-active,
+.save-bar-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.save-bar-enter-from,
+.save-bar-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
 }
 
 .flow-section__head {
@@ -1023,6 +1182,14 @@ onMounted(() => {
 }
 
 @media (max-width: 1024px) {
+  .config-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .config-side {
+    position: static;
+  }
+
   .field-grid--three,
   .field-grid--test {
     grid-template-columns: 1fr;
