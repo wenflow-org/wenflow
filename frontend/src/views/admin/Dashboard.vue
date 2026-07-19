@@ -37,7 +37,7 @@
           </div>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="handleLogout">
+              <el-dropdown-item :disabled="logoutPending" @click="handleLogout">
                 <el-icon><SwitchButton /></el-icon>
                 退出登录
               </el-dropdown-item>
@@ -101,7 +101,7 @@
     <!-- Ctrl+K 命令面板 -->
     <AdminCommandPalette
       v-model:visible="commandPaletteOpen"
-      :nav-groups="navGroups"
+      :nav-groups="paletteGroups"
       @select="handlePaletteSelect"
     />
   </div>
@@ -151,6 +151,7 @@ const currentUser = ref<{ name?: string; avatarUrl?: string; [key: string]: unkn
 const sidebarCollapsed = ref(false);
 const mobileNavOpen = ref(false);
 const commandPaletteOpen = ref(false);
+const logoutPending = ref(false);
 
 // Ctrl+K / Cmd+K 打开命令面板
 const handleGlobalKeydown = (event: KeyboardEvent) => {
@@ -227,6 +228,11 @@ const isActiveRoute = (path: string) => {
     return route.path.startsWith('/admin/learner-center') || route.path.startsWith('/admin/learner-models');
   }
 
+  if (path === '/admin/path-generation-events') {
+    // 事件中心：流程事件与 Prompt 调用日志共用导航项
+    return route.path.startsWith('/admin/path-generation-events') || route.path.startsWith('/admin/prompt-call-logs');
+  }
+
   return route.path.startsWith(path);
 };
 
@@ -257,8 +263,7 @@ const navGroups: NavGroup[] = [
     title: '日志',
     items: [
       { to: '/admin/execution-logs', label: '执行日志', icon: Cpu },
-      { to: '/admin/path-generation-events', label: '流程事件', icon: Connection },
-      { to: '/admin/prompt-call-logs', label: 'Prompt 日志', icon: Document },
+      { to: '/admin/path-generation-events', label: '事件中心', icon: Connection },
     ],
   },
   {
@@ -277,10 +282,42 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const handleLogout = () => {
-  adminAuthApi.logout();
+// 命令面板使用完整页面清单（含被合并进事件中心的 Prompt 调用日志）
+const paletteGroups: NavGroup[] = navGroups.map((group) =>
+  group.title === '日志'
+    ? {
+        ...group,
+        items: [
+          ...group.items,
+          { to: '/admin/prompt-call-logs', label: 'Prompt 调用日志', icon: Document },
+        ],
+      }
+    : group
+);
+
+const handleLogout = async () => {
+  if (logoutPending.value) return;
+
+  logoutPending.value = true;
+  try {
+    await adminAuthApi.logout();
+  } catch (error: unknown) {
+    const requestError = error as {
+      code?: string;
+      response?: { status?: number; data?: { error?: { message?: string } } };
+    };
+    console.warn(
+      '管理员退出登录失败:',
+      requestError.response?.status ?? requestError.code ?? 'network-error'
+    );
+    toast.error(requestError.response?.data?.error?.message || '退出登录失败，请稍后重试');
+    return;
+  } finally {
+    logoutPending.value = false;
+  }
+
   toast.success('已退出登录');
-  router.push('/admin/login');
+  await router.push('/admin/login');
 };
 </script>
 

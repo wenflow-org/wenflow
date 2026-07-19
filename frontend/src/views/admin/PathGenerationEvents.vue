@@ -6,6 +6,8 @@
       </template>
     </AdminPageHeader>
 
+    <EventCenterTabs :trace-id="filters.traceId" />
+
     <section class="admin-filter-panel">
       <div class="admin-section-head">
         <div class="admin-section-head__copy">
@@ -156,6 +158,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Connection } from '@element-plus/icons-vue'
 import { adminRuntimeDefinitionsApi } from '@/api/adminApi'
 import AdminPageHeader from './components/AdminPageHeader.vue'
+import EventCenterTabs from './components/EventCenterTabs.vue'
 
 interface PathGenerationEvent {
   id: string
