@@ -21,20 +21,28 @@
       <el-button size="small" class="load-error-alert__retry" @click="loadOrchestrators">重新加载</el-button>
     </el-alert>
 
-    <nav class="stage-nav" aria-label="编排阶段">
-      <button
-        v-for="phase in phaseCards"
-        :key="phase.id"
-        type="button"
-        class="stage-nav__item"
-        :class="{ 'is-active': phase.id === selectedPhaseId }"
-        @click="selectPhase(phase.id)"
-      >
-        <span class="stage-nav__order">{{ String(phase.order).padStart(2, '0') }}</span>
-        <span class="stage-nav__label">{{ phase.shortName }}</span>
-        <span class="stage-nav__meta">{{ phase.stepCount }} 步</span>
-        <span class="stage-nav__meta">{{ phase.skillCount }} Skills</span>
-      </button>
+    <nav class="stage-pipeline" aria-label="编排阶段">
+      <template v-for="(phase, index) in phaseCards" :key="phase.id">
+        <button
+          type="button"
+          class="stage-pipeline__stage"
+          :class="{ 'is-active': phase.id === selectedPhaseId }"
+          :aria-current="phase.id === selectedPhaseId ? 'step' : undefined"
+          @click="selectPhase(phase.id)"
+        >
+          <span class="stage-pipeline__order">{{ String(phase.order).padStart(2, '0') }}</span>
+          <span class="stage-pipeline__text">
+            <span class="stage-pipeline__label">{{ phase.shortName }}</span>
+            <span class="stage-pipeline__meta">
+              <template v-if="phase.stepCount > 0">{{ phase.stepCount }} 步 · </template>{{ phase.skillCount }} Skills
+            </span>
+          </span>
+        </button>
+        <span v-if="index < phaseCards.length - 1" class="stage-pipeline__connector" aria-hidden="true">
+          <span class="stage-pipeline__connector-line"></span>
+          <span class="stage-pipeline__connector-arrow">→</span>
+        </span>
+      </template>
     </nav>
 
     <section v-if="currentPhase" class="admin-list-card blueprint-shell">
@@ -997,69 +1005,110 @@ onMounted(() => {
   margin-left: 12px;
 }
 
-.stage-nav {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+/* 阶段流水线：阶段卡 + 连接箭头，表达 Goal→Path→Teaching→Learner→Simulation 接力关系 */
+.stage-pipeline {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
 }
 
-.stage-nav__item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+.stage-pipeline__stage {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  min-height: 54px;
-  padding: 0 14px;
+  min-height: 56px;
+  padding: 8px 14px;
   border: var(--admin-border-subtle);
   border-radius: var(--admin-radius-md);
   background: var(--admin-bg-surface);
   color: inherit;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
-.stage-nav__item:hover {
-  border-color: rgba(52, 120, 246, 0.16);
-  transform: none;
+.stage-pipeline__stage:hover {
+  border-color: rgba(52, 120, 246, 0.3);
 }
 
-.stage-nav__item.is-active {
-  border-color: rgba(52, 120, 246, 0.18);
-  background: rgba(52, 120, 246, 0.02);
+.stage-pipeline__stage.is-active {
+  border-color: var(--admin-text-brand);
+  background: var(--admin-bg-selected);
+  box-shadow: 0 0 0 1px var(--admin-text-brand) inset;
 }
 
-.stage-nav__order {
+.stage-pipeline__order {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  min-width: 32px;
+  height: 32px;
+  border-radius: var(--admin-radius-sm);
   background: var(--admin-bg-surface-alt);
-  color: #5f718e;
+  color: var(--admin-text-secondary);
   font-size: var(--admin-text-micro);
   font-weight: 800;
   letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
-.stage-nav__label {
+.stage-pipeline__stage.is-active .stage-pipeline__order {
+  background: var(--admin-text-brand);
+  color: #fff;
+}
+
+.stage-pipeline__text {
+  display: grid;
+  gap: 2px;
   min-width: 0;
-  font-size: 14px;
+}
+
+.stage-pipeline__label {
+  font-size: var(--admin-text-body);
   font-weight: 700;
   color: var(--admin-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.stage-nav__meta {
+.stage-pipeline__meta {
   color: var(--admin-text-muted);
   font-size: var(--admin-text-micro);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.stage-nav__item.is-active .stage-nav__order {
-  background: rgba(52, 120, 246, 0.06);
-  color: var(--admin-text-brand);
+.stage-pipeline__connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  position: relative;
+  color: var(--admin-text-muted);
+}
+
+.stage-pipeline__connector-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: var(--admin-border-color);
+  border-radius: 1px;
+}
+
+.stage-pipeline__connector-arrow {
+  position: relative;
+  font-size: var(--admin-text-body-sm);
+  background: var(--admin-bg-page);
+  padding: 0 2px;
+  z-index: 1;
 }
 
 .blueprint-shell {
@@ -1654,8 +1703,16 @@ onMounted(() => {
 }
 
 @media (max-width: 1280px) {
-  .stage-nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .stage-pipeline {
+    flex-wrap: wrap;
+  }
+
+  .stage-pipeline__stage {
+    flex: 1 1 30%;
+  }
+
+  .stage-pipeline__connector {
+    display: none;
   }
 
   .blueprint-shell__metrics,
@@ -1678,8 +1735,13 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .stage-nav {
-    grid-template-columns: minmax(0, 1fr);
+  .stage-pipeline {
+    flex-direction: column;
+  }
+
+  .stage-pipeline__stage {
+    flex: none;
+    width: 100%;
   }
 
   .blueprint-shell__title-row,
