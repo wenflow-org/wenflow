@@ -196,6 +196,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/redesign/RedesignLab.vue'),
     meta: { title: '重设计稿 · 学习台与目标规划' }
   },
+  {
+    path: '/admin-redesign-lab',
+    name: 'AdminRedesignLab',
+    component: () => import('@/views/admin-redesign/AdminRedesignLab.vue'),
+    meta: { title: '重设计稿 · Admin 风格探索' }
+  },
   // 管理平台路由
   {
     path: '/admin/login',
