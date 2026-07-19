@@ -39,12 +39,16 @@
       <div class="config-main">
         <section class="config-section">
           <div class="config-section__head">
-            <h2>接入与密钥</h2>
-            <span class="head-badge" :class="`head-badge--${connectionStepStatus.tone}`">{{ connectionStepStatus.label }}</span>
+            <h2>接入与模型</h2>
+            <div class="config-section__meta">
+              <span class="section-meta">最近拉取 {{ lastFetchLabel }}</span>
+              <span class="head-badge" :class="`head-badge--${connectionStepStatus.tone}`">{{ connectionStepStatus.label }}</span>
+              <span class="head-badge" :class="`head-badge--${modelStepStatus.tone}`">{{ modelStepStatus.label }}</span>
+            </div>
           </div>
 
           <el-form :model="form" label-position="top" class="config-form">
-            <div class="field-grid field-grid--two">
+            <div class="field-grid field-grid--connect">
               <el-form-item label="服务地址">
                 <el-input v-model="form.apiUrl" placeholder="https://api.example.com/v1" />
               </el-form-item>
@@ -59,20 +63,6 @@
               </el-form-item>
             </div>
           </el-form>
-
-          <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
-            <span>{{ testResult.message }}</span>
-          </div>
-        </section>
-
-        <section class="config-section">
-          <div class="config-section__head">
-            <h2>模型与路由</h2>
-            <div class="config-section__meta">
-              <span class="section-meta">最近拉取 {{ lastFetchLabel }}</span>
-              <span class="head-badge" :class="`head-badge--${modelStepStatus.tone}`">{{ modelStepStatus.label }}</span>
-            </div>
-          </div>
 
           <el-form :model="form" label-position="top" class="config-form">
             <el-form-item label="可用模型">
@@ -126,73 +116,9 @@
               </el-form-item>
             </div>
           </el-form>
-        </section>
 
-        <section class="config-section">
-          <div class="config-section__head">
-            <h2>网络边界</h2>
-            <span class="head-badge head-badge--info">{{ policySourceLabel }}</span>
-          </div>
-
-          <div class="policy-grid">
-            <article class="policy-panel">
-              <h3>Admin 访问范围</h3>
-              <el-radio-group v-model="networkPolicy.adminAccessMode" class="mode-grid">
-                <el-radio-button value="loopback">
-                  <span class="mode-option"><strong>仅本机</strong><small>127.0.0.1 / ::1</small></span>
-                </el-radio-button>
-                <el-radio-button value="private">
-                  <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐</small></span>
-                </el-radio-button>
-                <el-radio-button value="any">
-                  <span class="mode-option"><strong>不限制来源</strong><small>需配合网关</small></span>
-                </el-radio-button>
-              </el-radio-group>
-
-              <el-form label-position="top" class="config-form config-form--tight">
-                <el-form-item label="额外允许的客户端 IP">
-                  <el-select
-                    v-model="networkPolicy.adminAllowedIps"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="精确 IP，如 203.0.113.10"
-                  />
-                </el-form-item>
-              </el-form>
-            </article>
-
-            <article class="policy-panel policy-panel--network">
-              <div class="policy-panel__head policy-panel__head--switch">
-                <h3>私有网络服务</h3>
-                <el-switch
-                  v-model="networkPolicy.allowPrivateNetwork"
-                  inline-prompt
-                  active-text="开启"
-                  inactive-text="关闭"
-                  size="large"
-                />
-              </div>
-
-              <el-form label-position="top" class="config-form config-form--tight">
-                <el-form-item label="Host / IP 白名单">
-                  <el-select
-                    v-model="networkPolicy.privateNetworkHosts"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
-                    :disabled="networkPolicy.allowPrivateNetwork"
-                    :placeholder="networkPolicy.allowPrivateNetwork ? '已允许全部私有地址' : '如 192.168.31.26 或 ollama.local'"
-                  />
-                </el-form-item>
-              </el-form>
-            </article>
-          </div>
-
-          <div v-if="networkPolicy.adminAccessMode === 'any'" class="issue-row issue-row--danger">
-            Admin 已允许公网来源。请确认前方存在 VPN、访问网关或防火墙白名单。
+          <div v-if="testResult" class="issue-row" :class="testResult.connected ? 'issue-row--success' : 'issue-row--danger'">
+            <span>{{ testResult.message }}</span>
           </div>
         </section>
       </div>
@@ -262,6 +188,74 @@
         </section>
       </aside>
     </div>
+
+    <section class="config-section config-section--full">
+      <div class="config-section__head">
+        <h2>网络边界</h2>
+        <span class="head-badge head-badge--info">{{ policySourceLabel }}</span>
+      </div>
+
+      <div class="policy-grid">
+        <article class="policy-panel">
+          <h3>Admin 访问范围</h3>
+          <el-radio-group v-model="networkPolicy.adminAccessMode" class="mode-grid">
+            <el-radio-button value="loopback">
+              <span class="mode-option"><strong>仅本机</strong><small>127.0.0.1 / ::1</small></span>
+            </el-radio-button>
+            <el-radio-button value="private">
+              <span class="mode-option"><strong>本机 + 局域网</strong><small>推荐</small></span>
+            </el-radio-button>
+            <el-radio-button value="any">
+              <span class="mode-option"><strong>不限制来源</strong><small>需配合网关</small></span>
+            </el-radio-button>
+          </el-radio-group>
+
+          <el-form label-position="top" class="config-form config-form--tight">
+            <el-form-item label="额外允许的客户端 IP">
+              <el-select
+                v-model="networkPolicy.adminAllowedIps"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                placeholder="精确 IP，如 203.0.113.10"
+              />
+            </el-form-item>
+          </el-form>
+        </article>
+
+        <article class="policy-panel policy-panel--network">
+          <div class="policy-panel__head policy-panel__head--switch">
+            <h3>私有网络服务</h3>
+            <el-switch
+              v-model="networkPolicy.allowPrivateNetwork"
+              inline-prompt
+              active-text="开启"
+              inactive-text="关闭"
+              size="large"
+            />
+          </div>
+
+          <el-form label-position="top" class="config-form config-form--tight">
+            <el-form-item label="Host / IP 白名单">
+              <el-select
+                v-model="networkPolicy.privateNetworkHosts"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                :disabled="networkPolicy.allowPrivateNetwork"
+                :placeholder="networkPolicy.allowPrivateNetwork ? '已允许全部私有地址' : '如 192.168.31.26 或 ollama.local'"
+              />
+            </el-form-item>
+          </el-form>
+        </article>
+      </div>
+
+      <div v-if="networkPolicy.adminAccessMode === 'any'" class="issue-row issue-row--danger">
+        Admin 已允许公网来源。请确认前方存在 VPN、访问网关或防火墙白名单。
+      </div>
+    </section>
 
     <!-- 未保存变更条：dirty 时浮现于视口底部 -->
     <transition name="save-bar">
@@ -688,6 +682,18 @@ onMounted(() => {
 
 .config-section:last-child {
   border-bottom: none;
+}
+
+/* 接入字段：地址宽、密钥窄 */
+.field-grid--connect {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* 全宽区块（网络边界） */
+.config-section--full {
+  margin-top: 4px;
 }
 
 .config-section__head {
