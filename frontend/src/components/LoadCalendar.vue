@@ -666,17 +666,17 @@ onUnmounted(() => {
 }
 
 .month-btn {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border: 1px solid #e2e8f0;
   background: white;
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
 }
 
 .month-btn:hover {

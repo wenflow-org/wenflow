@@ -75,7 +75,21 @@
               <el-input v-model="registerForm.password" type="password" placeholder="请输入密码" prefix-icon="Lock" autocomplete="new-password" show-password />
             </el-form-item>
 
-            <p class="auth-hint">密码至少 8 位，且需同时包含字母和数字。</p>
+            <ul v-if="registerForm.password.length > 0" class="auth-password-rules">
+              <li :class="{ 'is-ok': passwordChecks.length }">
+                <span class="auth-password-rules__icon" aria-hidden="true">{{ passwordChecks.length ? '✓' : '○' }}</span>
+                至少 8 位
+              </li>
+              <li :class="{ 'is-ok': passwordChecks.letter }">
+                <span class="auth-password-rules__icon" aria-hidden="true">{{ passwordChecks.letter ? '✓' : '○' }}</span>
+                包含字母
+              </li>
+              <li :class="{ 'is-ok': passwordChecks.digit }">
+                <span class="auth-password-rules__icon" aria-hidden="true">{{ passwordChecks.digit ? '✓' : '○' }}</span>
+                包含数字
+              </li>
+            </ul>
+            <p v-else class="auth-hint">密码至少 8 位，且需同时包含字母和数字。</p>
 
             <el-form-item label="确认密码" prop="confirmPassword">
               <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" prefix-icon="Lock" autocomplete="new-password" show-password />
@@ -125,6 +139,13 @@ const registerForm = reactive({
   password: '',
   confirmPassword: ''
 });
+
+// 密码规则实时反馈（视觉提示；校验仍在 blur 时由 el-form 给出）
+const passwordChecks = computed(() => ({
+  length: registerForm.password.length >= 8,
+  letter: /[a-zA-Z]/.test(registerForm.password),
+  digit: /[0-9]/.test(registerForm.password)
+}));
 
 const validatePass2 = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   if (value === '') {
@@ -274,6 +295,34 @@ onMounted(loadRegistrationStatus);
   color: var(--auth-muted);
   line-height: 1.7;
   font-size: 12px;
+}
+
+.auth-password-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  margin-top: -2px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--auth-muted);
+}
+
+.auth-password-rules li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.2s ease;
+}
+
+.auth-password-rules li.is-ok {
+  color: #15803d;
+}
+
+.auth-password-rules__icon {
+  font-weight: 700;
 }
 
 :deep(.el-form-item.is-error) {

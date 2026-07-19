@@ -388,9 +388,9 @@ const handleLogout = () => {
 
 .admin-sidebar__group-title {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: #8696ab;
+  color: #64748b;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0 14px;
