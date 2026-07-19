@@ -149,9 +149,9 @@
                     </div>
 
                     <div class="story-feature-card__lines story-feature-card__lines--inline">
-                      <span>Goal {{ story.stats?.goalCount || 0 }}</span>
-                      <span>Path {{ story.stats?.pathCount || 0 }}</span>
-                      <span>Learn {{ story.stats?.learnCount || 0 }}</span>
+                      <span>目标 {{ story.stats?.goalCount || 0 }}</span>
+                      <span>路径 {{ story.stats?.pathCount || 0 }}</span>
+                      <span>学习 {{ story.stats?.learnCount || 0 }}</span>
                     </div>
                   </button>
                   <div class="story-feature-card__actions">
@@ -363,10 +363,10 @@
           <section class="projection-runtime__section">
               <div class="panel-title">前台入口</div>
               <div class="projection-runtime__actions">
-              <el-button @click="openProjectionEntry('dashboard')">Dashboard</el-button>
-              <el-button :disabled="!testProjection.entries?.formal?.goal" @click="openProjectionEntry('goal')">Goal</el-button>
-              <el-button :disabled="!testProjection.entries?.formal?.path" @click="openProjectionEntry('path')">Path</el-button>
-              <el-button :disabled="!testProjection.entries?.formal?.learn" @click="openProjectionEntry('learn')">Learn</el-button>
+              <el-button @click="openProjectionEntry('dashboard')">学习台</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.goal" @click="openProjectionEntry('goal')">目标</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.path" @click="openProjectionEntry('path')">路径</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.learn" @click="openProjectionEntry('learn')">学习</el-button>
             </div>
           </section>
 
@@ -1251,7 +1251,7 @@ watch(() => route.params.storyId, () => {
   border-radius: 999px;
   background: #eef4ff;
   color: #2355d8;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
 }
 
@@ -1796,7 +1796,7 @@ watch(() => route.params.storyId, () => {
 
 .persona-fact-card strong {
   display: block;
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.45;
   color: #1f2937;
 }
@@ -1840,7 +1840,7 @@ watch(() => route.params.storyId, () => {
   border-radius: 999px;
   background: #eef4ff;
   color: #2355d8;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
 }
 
@@ -1908,7 +1908,7 @@ watch(() => route.params.storyId, () => {
 .story-stage-card__eyebrow {
   display: block;
   margin-bottom: 8px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -2047,14 +2047,14 @@ watch(() => route.params.storyId, () => {
 
 .story-feature-card__index,
 .story-feature-card__source {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: #7b8597;
 }
 
 .story-feature-card strong {
   display: block;
   margin-bottom: 8px;
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.35;
 }
 
@@ -2172,7 +2172,7 @@ watch(() => route.params.storyId, () => {
 .trait-card strong {
   display: block;
   margin-bottom: 8px;
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.5;
   color: #1f2937;
 }
@@ -2207,7 +2207,7 @@ watch(() => route.params.storyId, () => {
 .engine-card strong {
   display: block;
   margin-bottom: 8px;
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.4;
   color: #1f2937;
 }

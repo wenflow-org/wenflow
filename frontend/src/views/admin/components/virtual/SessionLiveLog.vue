@@ -142,7 +142,7 @@ onUnmounted(() => {
 }
 
 .live-log__count {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 800;
   color: #5b6577;
   background: #eef2f7;
@@ -155,7 +155,7 @@ onUnmounted(() => {
   max-height: 340px;
   display: grid;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 

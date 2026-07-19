@@ -512,7 +512,7 @@ onMounted(loadSessions);
   border-radius: 999px;
   background: rgba(52, 120, 246, 0.08);
   color: var(--admin-text-brand);
-  font-size: 0.72rem;
+  font-size: var(--admin-text-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -520,7 +520,7 @@ onMounted(loadSessions);
 
 .module-head__copy h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.25;
   color: var(--admin-text-primary);
 }
@@ -592,14 +592,14 @@ pre { width: 100%; max-width: 100%; box-sizing: border-box; margin: 0; white-spa
 .detail-banner strong {
   display: block;
   margin-bottom: 6px;
-  font-size: 0.98rem;
+  font-size: var(--admin-text-title-sm);
   color: #22344d;
 }
 .detail-banner p {
   margin: 0;
   color: #62758f;
   line-height: 1.6;
-  font-size: 0.88rem;
+  font-size: var(--admin-text-body);
 }
 .detail-banner--danger {
   border-color: rgba(244, 118, 118, 0.22);
@@ -620,7 +620,7 @@ pre { width: 100%; max-width: 100%; box-sizing: border-box; margin: 0; white-spa
 }
 .detail-empty-block strong {
   color: #22344d;
-  font-size: 0.95rem;
+  font-size: var(--admin-text-title-sm);
 }
 
 .detail-card {

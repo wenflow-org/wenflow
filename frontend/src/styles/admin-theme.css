@@ -1,4 +1,4 @@
-/* Admin Element Plus theme overrides.
+﻿/* Admin Element Plus theme overrides.
    Loaded after the shared Tremor theme so admin semantics remain authoritative. */
 
 body.admin-route {
@@ -20,16 +20,18 @@ body.admin-route {
   --el-text-color-primary: var(--admin-text-primary);
   --el-text-color-regular: var(--admin-text-secondary);
   --el-text-color-secondary: var(--admin-text-muted);
+  /* EP 默认 placeholder #a8abb2 在白底仅 2.3:1，提升至阶内灰 */
+  --el-text-color-placeholder: var(--admin-text-muted);
 }
 
 body.admin-route .el-button {
   min-height: 34px;
   padding: 0 13px;
   border: 1px solid var(--admin-button-border) !important;
-  border-radius: 7px !important;
+  border-radius: var(--admin-radius-sm) !important;
   background: var(--admin-bg-surface) !important;
   color: var(--admin-button-text) !important;
-  font-size: 13px;
+  font-size: var(--admin-text-body-sm);
   font-weight: 550 !important;
   letter-spacing: 0;
   box-shadow: 0 1px 1px rgba(15, 23, 42, 0.025) !important;
@@ -57,17 +59,17 @@ body.admin-route .el-button:active:not(.is-disabled) {
 body.admin-route .el-button--small {
   min-height: 30px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
 }
 
 body.admin-route .el-button--large {
   min-height: 40px;
   padding: 0 16px;
-  font-size: 14px;
+  font-size: var(--admin-text-body);
 }
 
 body.admin-route .el-button .el-icon {
-  font-size: 14px;
+  font-size: var(--admin-text-body);
 }
 
 body.admin-route .el-button.is-disabled,
@@ -158,7 +160,7 @@ body.admin-route .el-button.is-link {
   min-height: 30px;
   padding: 0 7px;
   border-color: transparent !important;
-  border-radius: 6px !important;
+  border-radius: var(--admin-radius-sm) !important;
   background: transparent !important;
   box-shadow: none !important;
 }
@@ -203,7 +205,7 @@ body.admin-route .admin-icon-button {
   height: 32px;
   min-height: 32px;
   padding: 0;
-  border-radius: 7px !important;
+  border-radius: var(--admin-radius-sm) !important;
 }
 
 body.admin-route .el-tag {
@@ -257,7 +259,7 @@ body.admin-route .el-table {
 body.admin-route .el-table th.el-table__cell {
   background: var(--admin-bg-surface-alt) !important;
   color: var(--admin-text-secondary) !important;
-  font-size: 12px;
+  font-size: var(--admin-text-caption);
 }
 
 body.admin-route .el-dialog,

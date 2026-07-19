@@ -761,7 +761,7 @@ onMounted(() => {
 
 .users-summary-card__meta {
   margin-top: 6px;
-  font-size: 0.82rem;
+  font-size: var(--admin-text-body-sm);
   color: var(--admin-text-secondary);
 }
 
@@ -803,14 +803,14 @@ onMounted(() => {
 }
 
 .user-primary-cell strong {
-  font-size: 0.92rem;
+  font-size: var(--admin-text-body);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .user-id-cell {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.72rem;
+  font-size: var(--admin-text-caption);
   line-height: 1.3;
   color: var(--text-muted);
 }

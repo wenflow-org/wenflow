@@ -309,7 +309,7 @@ watch(() => props.skillId, (value) => {
 
 :deep(.skill-quickview-drawer .el-drawer__title) {
   color: #22344d;
-  font-size: 1.05rem;
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
 }
 
@@ -357,7 +357,7 @@ watch(() => props.skillId, (value) => {
 :deep(.quickview-summary-cell p),
 :deep(.quickview-section__head span) {
   margin: 0;
-  color: #7085a6;
+  color: var(--admin-text-muted);
   line-height: 1.6;
   font-size: 0.875rem;
 }
@@ -420,7 +420,7 @@ watch(() => props.skillId, (value) => {
 
 :deep(.quickview-summary-cell strong),
 :deep(.quickview-version-row strong) {
-  font-size: 0.96rem;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.35;
   word-break: break-word;
 }
@@ -450,7 +450,7 @@ watch(() => props.skillId, (value) => {
 
 :deep(.quickview-spec-row dd) {
   text-align: right;
-  font-size: 0.96rem;
+  font-size: var(--admin-text-title-sm);
   font-weight: 600;
 }
 

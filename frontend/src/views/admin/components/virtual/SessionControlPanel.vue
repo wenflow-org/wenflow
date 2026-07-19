@@ -100,11 +100,11 @@
           </div>
         </div>
         <div v-if="!blackboxMode" class="config-row">
-          <label>Goal 最大轮数</label>
+          <label>目标最大轮数</label>
           <el-input-number v-model="localConfig.maxRounds" :min="1" :max="50" size="small" controls-position="right" @change="emitConfig" />
         </div>
         <div v-if="!blackboxMode" class="config-row">
-          <label>Learn 最大里程碑</label>
+          <label>学习最大里程碑</label>
           <el-input-number v-model="localConfig.maxMilestones" :min="1" :max="30" size="small" controls-position="right" @change="emitConfig" />
         </div>
         <div v-if="!blackboxMode" class="config-row config-row--switch">
@@ -112,7 +112,7 @@
           <el-switch v-model="localConfig.autoAdvanceToPath" @change="emitConfig" />
         </div>
         <div v-if="!blackboxMode" class="config-row config-row--switch">
-          <label>Path 生成后自动进 Learn</label>
+          <label>路径生成后自动进学习</label>
           <el-switch v-model="localConfig.autoAdvanceToLearning" @change="emitConfig" />
         </div>
         <div v-if="!blackboxMode" class="config-row config-row--switch">
@@ -318,7 +318,7 @@ const bridgeActions = computed(() => {
 .action-btn > em {
   grid-area: hint;
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: #5b6577;
 }
 
@@ -372,7 +372,7 @@ const bridgeActions = computed(() => {
 }
 
 .bridge__label {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   color: #92400e;
   letter-spacing: 0.5px;
@@ -446,7 +446,7 @@ const bridgeActions = computed(() => {
 
 .config-row__hint {
   color: #8a94a6;
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
 }
 
 .config-row--switch {

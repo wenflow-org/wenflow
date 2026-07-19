@@ -17,7 +17,7 @@
       </div>
       <div v-show="filterExpanded" class="admin-filter-grid admin-filter-grid--wide">
         <div class="admin-filter-field">
-          <label class="admin-filter-field__label">Path ID</label>
+          <label class="admin-filter-field__label">路径 ID</label>
           <el-input v-model="filters.pathId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
@@ -90,7 +90,7 @@
               <el-tag size="small" :type="statusTagType(event.status)">{{ statusLabel(event.status) }}</el-tag>
             </div>
             <div class="event-card__secondary">
-              <span v-if="event.pathId">Path {{ event.pathId }}</span>
+              <span v-if="event.pathId">路径 {{ event.pathId }}</span>
               <span v-if="event.triggerSource">来源 {{ event.triggerSource }}</span>
               <span v-if="event.traceId">Trace {{ event.traceId }}</span>
             </div>
@@ -118,7 +118,7 @@
             <strong>{{ statusLabel(selectedEvent.status) }}</strong>
           </div>
           <div class="detail-overview-card">
-            <span class="detail-overview-card__label">Path</span>
+            <span class="detail-overview-card__label">路径</span>
             <strong>{{ selectedEvent.pathId || '未记录' }}</strong>
           </div>
           <div class="detail-overview-card">

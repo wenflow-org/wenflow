@@ -147,7 +147,7 @@ onMounted(initialize)
 .inspector-control__meta {
   display: flex;
   gap: 16px;
-  color: #7085a6;
+  color: var(--admin-text-muted);
   font-size: 12px;
 }
 

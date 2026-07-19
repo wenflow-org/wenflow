@@ -382,7 +382,7 @@ watch(
 @keyframes orb-d { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -20px) scale(1.05); } 66% { transform: translate(-20px, 30px) scale(0.95); } }
 
 .page-hero { position: relative; z-index: 1; padding: 24px 28px; border-radius: 20px; border: 1px solid rgba(52, 120, 246, 0.08); background: radial-gradient(circle at top right, rgba(52, 120, 246, 0.06), transparent 38%), linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 252, 0.92)); backdrop-filter: blur(16px); margin-bottom: 1.5rem; }
-.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: 1.6rem; font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
+.page-hero__title.admin-page-title { margin: 8px 0 0; font-size: var(--admin-text-headline); font-weight: 700; color: #22344d; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
 .admin-page-title__icon { font-size: 1.25rem; color: var(--color-primary); }
 .page-hero__subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9375rem; }
 .pill { display: inline-flex; align-items: center; width: fit-content; min-height: 26px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary-dark, #1f57cc); font-size: 12px; font-weight: 700; }
@@ -437,7 +437,7 @@ watch(
   background: rgba(52, 120, 246, 0.03);
   font-weight: 700;
   font-size: 0.8125rem;
-  color: #7085a6;
+  color: var(--admin-text-muted);
 }
 
 .admin-list-card :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
@@ -600,7 +600,7 @@ watch(
   border-radius: 999px;
   background: var(--admin-color-info-bg);
   color: var(--admin-text-brand);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -609,7 +609,7 @@ watch(
 .workbench-hero__main h3 {
   margin: 0;
   color: var(--admin-text-primary);
-  font-size: 1.2rem;
+  font-size: var(--admin-text-title-lg);
 }
 
 .workbench-hero__main p {
@@ -635,7 +635,7 @@ watch(
 }
 
 .workbench-glance-card__label {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   color: var(--admin-text-muted);
   text-transform: uppercase;

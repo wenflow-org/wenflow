@@ -296,7 +296,7 @@ onMounted(() => {
 
 .auth-point strong {
   color: #fff;
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
 }
 
 .auth-point span {
@@ -366,7 +366,7 @@ onMounted(() => {
   min-height: 50px;
   border: none;
   border-radius: 999px;
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   font-weight: 900;
   background: linear-gradient(135deg, var(--auth-blue), var(--auth-blue-deep));
   box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);

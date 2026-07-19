@@ -641,15 +641,15 @@ onMounted(() => {
 .flow-section__head h2 {
   margin: 0;
   color: #20324d;
-  font-size: 1.12rem;
+  font-size: var(--admin-text-title);
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .flow-section__head p {
   margin: 6px 0 0;
-  color: #7085a6;
-  font-size: 0.9rem;
+  color: var(--admin-text-muted);
+  font-size: var(--admin-text-body);
   line-height: 1.6;
 }
 
@@ -662,7 +662,7 @@ onMounted(() => {
 
 .section-meta {
   font-size: 12px;
-  color: #7085a6;
+  color: var(--admin-text-muted);
   font-weight: 700;
 }
 
@@ -738,13 +738,13 @@ onMounted(() => {
 .policy-panel__head h3 {
   margin: 0;
   color: #22344d;
-  font-size: 0.98rem;
+  font-size: var(--admin-text-title-sm);
 }
 
 .policy-panel__head p {
   margin: 6px 0 0;
-  color: #7085a6;
-  font-size: 0.82rem;
+  color: var(--admin-text-muted);
+  font-size: var(--admin-text-body-sm);
   line-height: 1.55;
 }
 
@@ -768,7 +768,7 @@ onMounted(() => {
 .mode-option small,
 .field-help {
   color: #7b8ba3;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   line-height: 1.45;
 }
 
@@ -949,7 +949,7 @@ onMounted(() => {
 
 .result-meta span {
   color: #7b8ba3;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;

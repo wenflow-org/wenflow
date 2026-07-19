@@ -164,7 +164,7 @@ onMounted(load)
 .prompt-readonly__panel header span,
 .prompt-readonly__runtime span {
   color: #7b8ba3;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
 }
 
 .prompt-readonly__panel pre {

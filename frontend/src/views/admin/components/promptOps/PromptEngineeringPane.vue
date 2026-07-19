@@ -194,7 +194,7 @@ function formatTime(value: string): string {
 .kv-table th {
   text-align: left;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: #475569;
   padding: 5px 8px;
   width: 160px;
@@ -214,7 +214,7 @@ function formatTime(value: string): string {
 
 .kv-table code {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
   background: #f1f5f9;
   color: #475569;
   padding: 1px 5px;

@@ -359,7 +359,7 @@ onMounted(loadData);
 
 .module-head__copy h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.25;
   color: var(--admin-text-primary);
 }
@@ -407,7 +407,7 @@ onMounted(loadData);
 
 .empty-state-card__copy h3 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: var(--admin-text-headline);
   line-height: 1.15;
   letter-spacing: -0.03em;
   color: var(--text-primary);
@@ -415,7 +415,7 @@ onMounted(loadData);
 
 .empty-state-card__copy p {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.6;
   color: var(--text-secondary);
 }

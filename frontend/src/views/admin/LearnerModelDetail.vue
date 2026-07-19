@@ -603,7 +603,7 @@ onMounted(loadData);
 }
 
 .kpi-card__value--sm {
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
 }
 
 .overview-progress {

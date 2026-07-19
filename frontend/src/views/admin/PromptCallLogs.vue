@@ -21,7 +21,7 @@
           <el-input v-model="filters.agentId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
-          <label class="admin-filter-field__label">Path ID</label>
+          <label class="admin-filter-field__label">路径 ID</label>
           <el-input v-model="filters.pathId" clearable class="filter-input" />
         </div>
         <div class="admin-filter-field">
@@ -501,7 +501,7 @@ watch(filters, () => {
 
 .prompt-log-card__agent {
   color: var(--admin-text-primary);
-  font-size: 0.98rem;
+  font-size: var(--admin-text-title-sm);
   line-height: 1.3;
 }
 
@@ -579,7 +579,7 @@ watch(filters, () => {
   border-radius: 999px;
   background: rgba(239, 68, 68, 0.08);
   color: #d14343;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
 }
 
@@ -633,7 +633,7 @@ watch(filters, () => {
 
 .detail-overview-card strong {
   color: var(--admin-text-primary);
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   word-break: break-word;
 }
 

@@ -201,7 +201,7 @@ function formatTime(value: string) {
 }
 
 .card-head__title {
-  font-size: 0.95rem;
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
   color: #22344d;
 }
@@ -230,17 +230,17 @@ function formatTime(value: string) {
 .editor-block__header strong,
 .result-block__header strong {
   color: #22344d;
-  font-size: 0.92rem;
+  font-size: var(--admin-text-body);
 }
 
 .editor-block__header span {
   color: #62758f;
-  font-size: 0.82rem;
+  font-size: var(--admin-text-body-sm);
 }
 
 .json-editor :deep(.el-textarea__inner) {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  font-size: 12.5px;
+  font-size: var(--admin-text-caption);
   line-height: 1.6;
   background: rgba(247, 250, 255, 0.86);
 }
@@ -262,7 +262,7 @@ function formatTime(value: string) {
   border-radius: 12px;
   padding: 14px 16px;
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  font-size: 12.5px;
+  font-size: var(--admin-text-caption);
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;

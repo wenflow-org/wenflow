@@ -1039,7 +1039,7 @@ onMounted(() => {
   border-radius: 9px;
   background: var(--admin-bg-surface-alt);
   color: #5f718e;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 800;
   letter-spacing: 0.04em;
 }
@@ -1053,7 +1053,7 @@ onMounted(() => {
 
 .stage-nav__meta {
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
 }
 
@@ -1096,7 +1096,7 @@ onMounted(() => {
 
 .blueprint-shell__title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--admin-text-title-sm);
   font-weight: 700;
   color: var(--admin-text-primary);
 }
@@ -1146,7 +1146,7 @@ onMounted(() => {
 
 .blueprint-shell__variables-more {
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
 }
 
@@ -1235,13 +1235,13 @@ onMounted(() => {
 
 .phase-directory-item__step {
   color: #5f718e;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
 }
 
 .phase-directory-item__kind {
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1264,7 +1264,7 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: var(--admin-text-muted);
 }
 
@@ -1276,7 +1276,7 @@ onMounted(() => {
 }
 
 .phase-directory-item__hint {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: var(--admin-text-muted);
 }
 
@@ -1286,7 +1286,7 @@ onMounted(() => {
   gap: 14px;
   margin-bottom: 12px;
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
 }
 
@@ -1386,7 +1386,7 @@ onMounted(() => {
   border-radius: 999px;
   background: rgba(52, 120, 246, 0.08);
   color: var(--admin-text-brand);
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -1398,7 +1398,7 @@ onMounted(() => {
 
 .vf-node-step {
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
 }
 
@@ -1434,7 +1434,7 @@ onMounted(() => {
   min-width: 32px;
   height: 22px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
   font-weight: 800;
   letter-spacing: 0.05em;
   flex-shrink: 0;
@@ -1462,13 +1462,13 @@ onMounted(() => {
   height: 22px;
   line-height: 20px;
   padding: 0 6px;
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
 }
 
 .var-more,
 .var-empty {
   color: var(--admin-text-muted);
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
 }
 
@@ -1479,7 +1479,7 @@ onMounted(() => {
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
 }
 
@@ -1541,7 +1541,7 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 10px;
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
 }
 
 .handoff-grid {
@@ -1611,7 +1611,7 @@ onMounted(() => {
 .handoff-grid__empty,
 .handoff-grid__more {
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 600;
 }
 
@@ -1622,7 +1622,7 @@ onMounted(() => {
 
 .analysis-pane--table :deep(.el-table th.el-table__cell) {
   background: rgba(52, 120, 246, 0.03);
-  color: #7085a6;
+  color: var(--admin-text-muted);
   font-weight: 700;
   font-size: 0.8125rem;
 }

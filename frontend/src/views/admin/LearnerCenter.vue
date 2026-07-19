@@ -89,7 +89,7 @@ watch(activeTab, (next) => {
   background: transparent;
   text-align: center;
   color: var(--admin-text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--admin-text-body);
   font-weight: 600;
   transition: all 180ms ease;
   cursor: pointer;

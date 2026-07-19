@@ -618,7 +618,7 @@ onMounted(async () => {
 
 .ed-kind {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
   font-weight: 800;
   padding: 2px 7px;
   border-radius: 4px;
@@ -629,7 +629,7 @@ onMounted(async () => {
 
 .ed-title {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--admin-text-title);
   font-weight: 800;
   color: #1a2a44;
   white-space: nowrap;
@@ -639,7 +639,7 @@ onMounted(async () => {
 }
 
 .ed-health {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   padding: 2px 9px;
   border-radius: 999px;
@@ -671,7 +671,7 @@ onMounted(async () => {
 
 .ed-id {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
   color: #475569;
   background: #f1f5f9;
   padding: 2px 8px;
@@ -682,7 +682,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
 }
 
 .ed-meta-chip .k {
@@ -690,14 +690,14 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--admin-text-micro);
 }
 
 .ed-meta-chip .v {
   color: #475569;
   font-family: 'JetBrains Mono', Consolas, monospace;
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
 }
 
 .ed-meta-chip--warn {
@@ -706,7 +706,7 @@ onMounted(async () => {
   background: rgba(245, 158, 11, 0.14);
   color: #b45309;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
 }
 
 .ed-meta-chip--info {
@@ -795,7 +795,7 @@ onMounted(async () => {
 }
 
 .ed-pill__icon {
-  font-size: 15px;
+  font-size: var(--admin-text-title-sm);
   line-height: 1;
 }
 
@@ -868,7 +868,7 @@ onMounted(async () => {
 
 .protocol-status {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 10.5px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
@@ -887,7 +887,7 @@ onMounted(async () => {
 .protocol-block__summary {
   margin: 0 0 8px;
   color: #62758f;
-  font-size: 12.5px;
+  font-size: var(--admin-text-caption);
   line-height: 1.7;
 }
 
@@ -912,7 +912,7 @@ onMounted(async () => {
 
 .protocol-block__file {
   margin: 6px 0;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
 }
 
 .protocol-block__file code,
@@ -923,7 +923,7 @@ onMounted(async () => {
   color: #475569;
   padding: 1px 5px;
   border-radius: 3px;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
 }
 
 .protocol-table {
@@ -937,7 +937,7 @@ onMounted(async () => {
 .protocol-table th {
   text-align: left;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -956,7 +956,7 @@ onMounted(async () => {
 
 .req {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 10.5px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 3px;
@@ -974,7 +974,7 @@ onMounted(async () => {
 
 .protocol-block__call-sites {
   margin-top: 10px;
-  font-size: 11.5px;
+  font-size: var(--admin-text-caption);
 }
 
 .protocol-block__call-sites strong {
@@ -1025,7 +1025,7 @@ onMounted(async () => {
 }
 
 .rules-stat span {
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: #64748b;
 }
 
@@ -1078,7 +1078,7 @@ onMounted(async () => {
 
 .rules-group__count {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   color: #475569;
   background: #f1f5f9;
   padding: 2px 6px;
@@ -1113,7 +1113,7 @@ onMounted(async () => {
 
 .rules-row__id {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--admin-text-micro);
   font-weight: 700;
   color: #6d28d9;
   background: transparent;
