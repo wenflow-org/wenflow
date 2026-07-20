@@ -11,15 +11,15 @@
           <strong>{{ data.score }}</strong>
         </div>
         <div>
-          <h3>{{ data.headline }}</h3>
-          <p>{{ data.subline }}</p>
+          <h3>{{ health.headline }}</h3>
+          <p>{{ health.subline }}</p>
         </div>
       </div>
       <ul v-if="data.actions.length" class="brief-actions">
         <li v-for="(a, i) in data.actions" :key="i">
           <span class="brief-actions__dot" :class="`brief-actions__dot--${a.tone}`"></span>
           <span class="brief-actions__text">{{ a.text }}</span>
-          <span class="brief-actions__link">{{ a.link }} →</span>
+          <button type="button" class="brief-actions__link" @click="investigateAgent(a.agentId)">{{ a.link }} →</button>
         </li>
       </ul>
       <p v-else class="brief-actions__clear">没有需要立即处理的事项。</p>
@@ -81,6 +81,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { overviewHealth, investigateAgent } from './mockStore';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -89,7 +90,7 @@ interface BriefData {
   score: number;
   headline: string;
   subline: string;
-  actions: { text: string; link: string; tone: Tone }[];
+  actions: { text: string; link: string; tone: Tone; agentId: string }[];
   funnel: { label: string; value: string; idle: boolean }[];
   rates: string[];
   funnelNote: string;
@@ -101,6 +102,9 @@ interface BriefData {
 }
 
 const props = defineProps<{ state: 'normal' | 'incident' | 'fresh' }>();
+
+// 结论来自 mockStore（由 spans 推导，与日志/瀑布/Skill 同源）；funnel/pulse/feed 为静态演示
+const health = computed(() => overviewHealth.value);
 
 const pulse = (hot: number[]) =>
   Array.from({ length: 24 }, (_, i) => ({
@@ -141,8 +145,8 @@ const datasets: Record<string, BriefData> = {
     headline: '需要关注：2 件',
     subline: '教学链路连续失败，学习侧今日无活跃。',
     actions: [
-      { text: 'teaching-round 连续 2 次 429 限流', link: '排查执行日志', tone: 'bad' },
-      { text: '今日学习活跃为 0', link: '处理学习者状态', tone: 'warn' }
+      { text: 'teaching-round 连续 2 次 429 限流', link: '排查执行日志', tone: 'bad', agentId: 'teaching-round' },
+      { text: '伴学降级介入，产出质量下降', link: '查看 Skill 详情', tone: 'warn', agentId: 'companion-boost' }
     ],
     funnel: [
       { label: '用户', value: '128', idle: false },

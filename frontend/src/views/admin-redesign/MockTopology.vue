@@ -1,22 +1,16 @@
 <template>
   <div class="mk-page">
-    <div class="mk-status" :class="incident ? 'mk-status--bad' : 'mk-status--ok'">
+    <div class="mk-status" :class="hasError ? 'mk-status--bad' : 'mk-status--ok'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ incident ? '教学链路存在异常节点' : '拓扑运行正常' }}</strong>
+      <strong class="mk-status__title">{{ hasError ? '拓扑存在异常节点' : '拓扑运行正常' }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">5 Agent</span>
-      <span class="mk-status__meta">24 Skill</span>
-      <span class="mk-status__meta">7 天调用 {{ incident ? '8,412' : '9,040' }}</span>
-      <div class="mk-pills" style="margin-left:auto">
-        <button type="button" class="mk-pill mk-pill--active">7 天</button>
-        <button type="button" class="mk-pill">24 小时</button>
-        <button type="button" class="mk-pill">30 天</button>
-      </div>
+      <span class="mk-status__meta">{{ agentNodes.length }} Agent</span>
+      <span class="mk-status__meta">{{ skillProfiles.length }} Skill</span>
+      <span class="mk-status__meta">提示：点 Skill 看详情，点 Agent 查日志</span>
     </div>
 
     <div class="topo-canvas">
       <svg :viewBox="`0 0 ${W} ${H}`" class="topo-svg" role="img" aria-label="Agent 拓扑图">
-        <!-- 边：agent → skill -->
         <path
           v-for="(e, i) in edges"
           :key="`e-${i}`"
@@ -28,8 +22,8 @@
           opacity="0.75"
         />
 
-        <!-- Agent 节点 -->
-        <g v-for="a in agents" :key="a.id">
+        <!-- Agent 节点（点击 → 查该节点日志） -->
+        <g v-for="a in agentNodes" :key="a.id" class="topo-click" @click="investigateAgent(a.id)">
           <rect
             :x="a.x" :y="a.y" :width="a.w" :height="a.h"
             rx="12"
@@ -44,8 +38,8 @@
           <text :x="a.x + 14" :y="a.y + 60" class="topo-meta">{{ a.meta }}</text>
         </g>
 
-        <!-- Skill 节点 -->
-        <g v-for="s in skills" :key="s.id">
+        <!-- Skill 节点（点击 → 详情抽屉） -->
+        <g v-for="s in skillNodes" :key="s.id" class="topo-click" @click="openSkillDrawer(s.skillId)">
           <rect
             :x="s.x" :y="s.y" :width="s.w" :height="s.h"
             rx="9"
@@ -59,7 +53,6 @@
       </svg>
 
       <div class="topo-legend">
-        <span><i class="lg lg--agent"></i>Agent</span>
         <span><i class="lg lg--ok"></i>正常</span>
         <span><i class="lg lg--idle"></i>空闲</span>
         <span><i class="lg lg--err"></i>异常</span>
@@ -71,101 +64,79 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-
-const props = defineProps<{ state: 'normal' | 'incident' }>()
-const incident = computed(() => props.state === 'incident')
+import { skillProfiles, skillStatOf, openSkillDrawer, investigateAgent, spans } from './mockStore'
 
 const W = 1080
-const H = 520
-
-interface AgentNode { id: string; name: string; meta: string; x: number; y: number; w: number; h: number; error?: boolean }
-interface SkillNode { id: string; name: string; meta: string; x: number; y: number; w: number; h: number; idle?: boolean; error?: boolean }
+const H = 470
 
 const agentDefs = [
-  { id: 'goal', name: '目标 Agent', meta: '4 Skill · 收集与理解' },
-  { id: 'path', name: '路径 Agent', meta: '3 Skill · 规划与拆解' },
-  { id: 'teaching', name: '教学 Agent', meta: '6 Skill · 教学编排' },
-  { id: 'learner', name: '学习者 Agent', meta: '4 Skill · 画像与快照' },
-  { id: 'sim', name: '虚拟学习者 Agent', meta: '7 Skill · 模拟运行' }
+  { id: 'goal-agent', name: '目标 Agent' },
+  { id: 'path-agent', name: '路径 Agent' },
+  { id: 'teaching-agent', name: '教学 Agent' },
+  { id: 'learner-agent', name: '学习者 Agent' },
+  { id: 'virtual-agent', name: '虚拟学习者 Agent' }
 ]
 
-const skillDefs: Record<string, Array<{ name: string; calls: number; error?: boolean }>> = {
-  goal: [
-    { name: '目标对话', calls: 1284 },
-    { name: '画像推断', calls: 856 },
-    { name: '理解合成', calls: 640 },
-    { name: '概念抽取', calls: 1180 }
-  ],
-  path: [
-    { name: '路径规划', calls: 640 },
-    { name: '场景定帧', calls: 512 },
-    { name: '阶段设计', calls: 498 }
-  ],
-  teaching: [
-    { name: '教学回合', calls: 2210 },
-    { name: '伴学补强', calls: 388 },
-    { name: '课后产出', calls: 415 }
-  ],
-  learner: [
-    { name: '状态聚合', calls: 930 },
-    { name: '快照刷新', calls: 1204 },
-    { name: '知识沉淀', calls: 260 }
-  ],
-  sim: [
-    { name: '回合模拟', calls: 320 },
-    { name: '路径评估', calls: 96, error: false }
-  ]
-}
+const hasError = computed(() => spans.value.some((s) => s.status === 'err'))
 
-const agents = computed<AgentNode[]>(() =>
-  agentDefs.map((a, i) => ({
-    ...a,
-    x: 24 + i * 212,
-    y: 24,
-    w: 188,
-    h: 74,
-    error: incident.value && a.id === 'teaching'
-  }))
+const agentNodes = computed(() =>
+  agentDefs.map((a, i) => {
+    const members = skillProfiles.filter((p) => p.agentId === a.id)
+    const errors = members.filter((m) => skillStatOf(m.id).errors > 0).length
+    return {
+      ...a,
+      meta: `${members.length} Skill${errors ? ` · ${errors} 异常` : ''}`,
+      x: 24 + i * 212,
+      y: 24,
+      w: 188,
+      h: 74,
+      error: errors > 0
+    }
+  })
 )
 
-const skills = computed<SkillNode[]>(() => {
-  const out: SkillNode[] = []
+const skillNodes = computed(() => {
+  const out: Array<{ id: string; skillId: string; name: string; meta: string; x: number; y: number; w: number; h: number; idle?: boolean; error?: boolean }> = []
   agentDefs.forEach((a, i) => {
-    skillDefs[a.id].forEach((s, j) => {
-      const isErr = incident.value && a.id === 'teaching' && s.name === '教学回合'
-      out.push({
-        id: `${a.id}-${j}`,
-        name: s.name,
-        meta: isErr ? '429 限流 · 71.3%' : `${s.calls} 调用`,
-        x: 24 + i * 212,
-        y: 140 + j * 56,
-        w: 188,
-        h: 42,
-        idle: s.calls < 100,
-        error: isErr
+    skillProfiles
+      .filter((p) => p.agentId === a.id)
+      .forEach((p, j) => {
+        const stat = skillStatOf(p.id)
+        out.push({
+          id: `${a.id}-${j}`,
+          skillId: p.id,
+          name: p.name,
+          meta: stat.calls ? `${stat.calls} 调用${stat.errors ? ` · ${stat.errors} 失败` : ''}` : '未调用',
+          x: 24 + i * 212,
+          y: 140 + j * 58,
+          w: 188,
+          h: 44,
+          idle: stat.calls === 0,
+          error: stat.errors > 0
+        })
       })
-    })
   })
   return out
 })
 
 const edges = computed(() => {
   const out: Array<{ d: string; color: string; width: number; dashed?: boolean }> = []
-  agents.value.forEach((a, i) => {
+  agentNodes.value.forEach((a, i) => {
     const ax = a.x + a.w / 2
     const ay = a.y + a.h
-    skillDefs[a.id].forEach((s, j) => {
-      const sx = 24 + i * 212 + 94
-      const sy = 140 + j * 56
-      const err = incident.value && a.id === 'teaching' && s.name === '教学回合'
-      out.push({
-        d: `M ${ax} ${ay} C ${ax} ${ay + 22}, ${sx} ${sy - 22}, ${sx} ${sy}`,
-        color: err ? '#dc2626' : '#c3cede',
-        width: Math.min(1 + s.calls / 600, 3.5)
+    skillProfiles
+      .filter((p) => p.agentId === a.id)
+      .forEach((p, j) => {
+        const stat = skillStatOf(p.id)
+        const sx = 24 + i * 212 + 94
+        const sy = 140 + j * 58
+        out.push({
+          d: `M ${ax} ${ay} C ${ax} ${ay + 22}, ${sx} ${sy - 22}, ${sx} ${sy}`,
+          color: stat.errors > 0 ? '#dc2626' : '#c3cede',
+          width: Math.min(1 + stat.calls / 2, 3.5)
+        })
       })
-    })
-    // 跨阶段接力虚线
-    if (i < agents.value.length - 1) {
+    if (i < agentNodes.value.length - 1) {
       out.push({
         d: `M ${a.x + a.w} ${a.y + 37} L ${a.x + 212} ${a.y + 37}`,
         color: '#8492ab',
@@ -188,6 +159,8 @@ const edges = computed(() => {
   overflow: hidden;
 }
 .topo-svg { display: block; width: 100%; height: auto; }
+.topo-click { cursor: pointer; }
+.topo-click:hover rect { stroke: #3478f6; }
 .topo-kind { font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; }
 .topo-name { font-size: 13px; font-weight: 700; fill: #1a2a44; }
 .topo-meta { font-size: 10.5px; fill: #8492ab; }
@@ -204,8 +177,7 @@ const edges = computed(() => {
   align-items: center;
 }
 .topo-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.lg { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-.lg--agent { background: #fff; border: 1.5px solid #8492ab; }
+.lg { width: 10px; height: 10px; display: inline-block; }
 .lg--ok { background: #15803d; border-radius: 50%; }
 .lg--idle { background: #c3cede; border-radius: 50%; }
 .lg--err { background: #dc2626; border-radius: 50%; }

@@ -1,264 +1,246 @@
 <template>
-  <div class="term">
-    <!-- 命令行式筛选条 -->
-    <div class="term-bar">
-      <span class="term-bar__prompt">wenflow@admin</span>
-      <span class="term-bar__path">~/logs</span>
-      <span class="term-bar__dollar">$</span>
-      <span class="term-bar__cmd">tail -f execution.log <em>{{ filterCmd }}</em></span>
-      <span class="term-bar__caret"></span>
-      <div class="term-bar__stats">
-        <span class="term-stat term-stat--ok">✓ {{ stats.success }}</span>
-        <span class="term-stat term-stat--err">✗ {{ stats.error }}</span>
-        <span class="term-stat term-stat--warn">⏱ {{ stats.timeout }}</span>
+  <div class="mk-page">
+    <!-- 终端状态条 -->
+    <div class="log-status" :class="`log-status--${statusTone}`">
+      <span class="log-status__dot"></span>
+      <strong>{{ statusTitle }}</strong>
+      <span class="log-status__sep"></span>
+      <span class="log-status__meta mono">{{ filtered.length }} / {{ logs.length }} 行</span>
+      <span v-if="isFiltered" class="log-status__filter">
+        排查中：{{ intent.agentFilter }} · {{ intent.statusFilter === 'err' ? '仅失败' : '' }}
+        <button type="button" class="log-status__clear" @click="clearFilter">×</button>
+      </span>
+      <div class="log-status__filters">
+        <div class="mk-pills">
+          <button
+            v-for="p in statusPills"
+            :key="p.id"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': statusFilter === p.id }"
+            @click="statusFilter = statusFilter === p.id ? '' : p.id"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+        <select v-model="agentFilter" class="log-agent mono">
+          <option value="">全部节点</option>
+          <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
+        </select>
       </div>
     </div>
 
     <!-- 日志流 -->
-    <div v-if="rows.length" class="term-body" role="log">
+    <div v-if="filtered.length" class="log-body" role="log">
       <div
-        v-for="(row, i) in rows"
-        :key="i"
+        v-for="log in filtered"
+        :key="log.id"
         class="tline"
-        :class="[`tline--${row.level}`, { 'tline--open': row.open }]"
+        :class="[`tline--${log.status}`, { 'tline--open': openId === log.id }]"
       >
-        <button type="button" class="tline__main" @click="row.open = !row.open">
-          <span class="tline__time">{{ row.time }}</span>
-          <span class="tline__level">{{ levelMark(row.level) }}</span>
-          <span class="tline__agent">{{ row.agent }}</span>
-          <span class="tline__msg">{{ row.msg }}</span>
-          <span class="tline__dur">{{ row.dur }}</span>
-          <span class="tline__trace">{{ row.trace }}</span>
+        <button type="button" class="tline__main" @click="openId = openId === log.id ? '' : log.id">
+          <span class="tline__kind">{{ log.kind === 'flow' ? '流程' : '调用' }}</span>
+          <span class="tline__agent mono" @click.stop="openSkillDrawer(log.agent)">{{ log.agent }}</span>
+          <span class="tline__msg">{{ log.title }}<em>{{ log.detail }}</em></span>
+          <span class="tline__dur mono">{{ fmtMs(log.durationMs) }}</span>
+          <span class="tline__trace mono" @click.stop="openTrace(log.traceId)">{{ log.traceId }}</span>
         </button>
-        <div v-if="row.open" class="tline__payload">
-          <pre>{{ row.payload }}</pre>
+        <div v-if="openId === log.id" class="tline__payload">
+          <div class="tline__payload-meta">
+            <span>trace {{ log.traceId }}</span>
+            <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在瀑布中查看完整链路 →</button>
+          </div>
+          <pre v-if="log.payload">{{ log.payload }}</pre>
+          <p v-else class="tline__none">无 payload 记录</p>
         </div>
       </div>
     </div>
 
-    <!-- 空态 -->
-    <div v-else class="term-empty">
-      <pre class="term-empty__art">{{ emptyArt }}</pre>
-      <p>// 当前筛选无日志。调整时间范围或清除筛选条件。</p>
-    </div>
-
-    <!-- 底部状态行 -->
-    <div class="term-foot">
-      <span>LIVE · 5s 轮询</span>
-      <span>{{ rows.length }} 行</span>
-      <span>UTF-8</span>
+    <div v-else class="mk-empty">
+      <strong>{{ isFiltered ? '当前筛选无日志' : '暂无日志' }}</strong>
+      <span>{{ isFiltered ? '放宽筛选条件。' : '有真实调用后出现在这里。' }}</span>
+      <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue';
+import { computed, ref, watch } from 'vue'
+import { spans, intent, openTrace, openSkillDrawer, clearInvestigation } from './mockStore'
 
-type LogLevel = 'ok' | 'err' | 'warn' | 'info';
-interface LogRow {
-  time: string;
-  level: LogLevel;
-  agent: string;
-  msg: string;
-  dur: string;
-  trace: string;
-  payload?: string;
-  open?: boolean;
-}
+const openId = ref('')
+const statusFilter = ref('')
+const agentFilter = ref('')
 
-const props = defineProps<{ state: 'normal' | 'incident' | 'empty' }>();
-
-const normalRows: LogRow[] = [
-  { time: '16:42:07', level: 'ok', agent: 'goal-conversation', msg: '目标对话回合完成，抽取 2 个概念', dur: '1.2s', trace: 'tr:8f31a2', payload: '{\n  "round": 7,\n  "concepts": ["Excel 周报", "自动化"],\n  "confidence": 0.86\n}' },
-  { time: '16:41:55', level: 'ok', agent: 'path-planning', msg: '路径草稿生成，4 个阶段', dur: '3.8s', trace: 'tr:8f319e' },
-  { time: '16:41:31', level: 'info', agent: 'learner-model', msg: '快照刷新完成 user_1784…', dur: '210ms', trace: 'tr:8f319a' },
-  { time: '16:40:58', level: 'ok', agent: 'teaching-round', msg: '教学回合完成，掌握度 +0.12', dur: '940ms', trace: 'tr:8f3188' },
-  { time: '16:40:12', level: 'warn', agent: 'basic-generator', msg: '输出长度接近上限 3800/4000 tokens', dur: '2.1s', trace: 'tr:8f317f', payload: '{\n  "usage": { "prompt": 1240, "completion": 3796 },\n  "model": "deepseek-v4-flash"\n}' },
-  { time: '16:39:47', level: 'ok', agent: 'session-wrapup', msg: '课后产出已写入 3 条笔记', dur: '1.6s', trace: 'tr:8f3171' },
-  { time: '16:38:59', level: 'info', agent: 'virtual-sim', msg: '虚拟学习者第 4 轮模拟开始', dur: '—', trace: 'tr:8f316b' }
-];
-
-const incidentRows: LogRow[] = [
-  { time: '16:44:02', level: 'err', agent: 'teaching-round', msg: 'LLM 调用失败：429 rate limit', dur: '18.4s', trace: 'tr:8f31c4', open: true, payload: '{\n  "error": "RateLimitExceeded",\n  "provider": "deepseek",\n  "retryAfterMs": 20000,\n  "attempt": 3\n}' },
-  { time: '16:43:58', level: 'err', agent: 'teaching-round', msg: '教学回合中止：上游超时', dur: '30.0s', trace: 'tr:8f31c0' },
-  { time: '16:43:41', level: 'warn', agent: 'path-planning', msg: '阶段展开重试 2/3', dur: '9.2s', trace: 'tr:8f31b9' },
-  { time: '16:43:30', level: 'err', agent: 'goal-profile', msg: '画像推断输出解析失败，已回退默认', dur: '1.1s', trace: 'tr:8f31b2' },
-  { time: '16:42:59', level: 'ok', agent: 'goal-conversation', msg: '目标对话回合完成', dur: '1.3s', trace: 'tr:8f31a9' },
-  { time: '16:42:14', level: 'warn', agent: 'session-wrapup', msg: '产出质量评分低于阈值 0.6', dur: '2.0s', trace: 'tr:8f319f' }
-];
-
-const rows = reactive<LogRow[]>([]);
-const stats = reactive({ success: 0, error: 0, timeout: 0 });
-
+// 从排查意图进入时应用过滤
 watch(
-  () => props.state,
-  (s) => {
-    const source = s === 'incident' ? incidentRows : s === 'empty' ? [] : normalRows;
-    rows.splice(0, rows.length, ...source.map((r) => ({ ...r })));
-    stats.success = rows.filter((r) => r.level === 'ok').length;
-    stats.error = rows.filter((r) => r.level === 'err').length;
-    stats.timeout = rows.filter((r) => r.level === 'warn').length;
+  () => [intent.agentFilter, intent.statusFilter],
+  () => {
+    agentFilter.value = intent.agentFilter
+    statusFilter.value = intent.statusFilter
   },
   { immediate: true }
-);
+)
 
-const filterCmd = computed(() =>
-  props.state === 'incident' ? '| grep -E "err|warn"' : props.state === 'empty' ? '--since 24h' : ''
-);
+const logs = computed(() => spans.value)
+const agentOptions = computed(() => [...new Set(spans.value.map((s) => s.agent))].sort())
 
-const levelMark = (l: LogLevel) => ({ ok: ' ✓ ', err: ' ✗ ', warn: ' ! ', info: ' i ' })[l];
+const filtered = computed(() =>
+  logs.value.filter((l) => {
+    if (agentFilter.value && l.agent !== agentFilter.value) return false
+    if (statusFilter.value && l.status !== statusFilter.value) return false
+    return true
+  })
+)
 
-const emptyArt = [
-  '  ┌─────────────────────────┐',
-  '  │  no logs matched (0)    │',
-  '  └─────────────────────────┘'
-].join('\n');
+const isFiltered = computed(() => !!(agentFilter.value || statusFilter.value))
+const errCount = computed(() => logs.value.filter((l) => l.status === 'err').length)
+const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
+const statusTitle = computed(() => {
+  if (!logs.value.length) return '暂无日志'
+  if (errCount.value) return `执行日志 · ${errCount.value} 次失败`
+  return '执行日志 · 运行平稳'
+})
+
+const statusPills = [
+  { id: 'err', label: '失败' },
+  { id: 'warn', label: '降级' },
+  { id: 'ok', label: '成功' }
+]
+
+function clearFilter() {
+  agentFilter.value = ''
+  statusFilter.value = ''
+  clearInvestigation()
+}
+
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 </script>
 
 <style scoped>
-.term {
-  --bg: #0d1420;
-  --bg-alt: #111a2b;
-  --line: #1f2c44;
-  --ink: #d5e0f2;
-  --dim: #6d7f9c;
-  --ok: #4ade80;
-  --err: #f87171;
-  --warn: #fbbf24;
-  --info: #5a94f8;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-size: 12.5px;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  min-height: 560px;
-}
-
-/* 顶栏 */
-.term-bar {
+.log-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: var(--bg-alt);
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
   flex-wrap: wrap;
 }
-.term-bar__prompt { color: var(--ok); font-weight: 700; }
-.term-bar__path { color: var(--info); }
-.term-bar__dollar { color: var(--dim); }
-.term-bar__cmd { color: var(--ink); }
-.term-bar__cmd em { color: var(--warn); font-style: normal; }
-.term-bar__caret {
-  width: 8px;
-  height: 16px;
-  background: var(--ink);
-  animation: blink 1.1s steps(1) infinite;
-}
-@keyframes blink { 50% { opacity: 0; } }
-.term-bar__stats {
-  margin-left: auto;
-  display: flex;
-  gap: 14px;
+.log-status__dot { width: 9px; height: 9px; border-radius: 50%; }
+.log-status--ok .log-status__dot { background: var(--mk-green); }
+.log-status--bad .log-status__dot { background: var(--mk-red); }
+.log-status--muted .log-status__dot { background: var(--mk-faint); }
+.log-status strong { font-size: 14px; }
+.log-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
+.log-status__meta { color: var(--mk-muted); font-size: 12px; }
+.mono { font-family: var(--mk-mono); }
+
+.log-status__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: 11.5px;
   font-weight: 700;
 }
-.term-stat--ok { color: var(--ok); }
-.term-stat--err { color: var(--err); }
-.term-stat--warn { color: var(--warn); }
-
-/* 日志行 */
-.term-body {
-  overflow-y: auto;
-  max-height: 620px;
-  padding: 6px 0;
-}
-.tline {
-  border-left: 3px solid transparent;
-}
-.tline--ok { border-left-color: var(--ok); }
-.tline--err { border-left-color: var(--err); background: rgba(248, 113, 113, 0.06); }
-.tline--warn { border-left-color: var(--warn); }
-.tline--info { border-left-color: var(--info); }
-
-.tline__main {
-  display: grid;
-  grid-template-columns: 74px 30px 170px minmax(0, 1fr) 70px 96px;
-  gap: 10px;
-  align-items: baseline;
-  width: 100%;
-  padding: 7px 14px;
+.log-status__clear {
   border: 0;
   background: transparent;
   color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}
+
+.log-status__filters {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.log-agent {
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font-size: 11.5px;
+  color: var(--mk-ink);
+}
+
+.log-body {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+  overflow: hidden;
+}
+
+.tline { border-left: 3px solid transparent; border-bottom: 1px solid #f0f2f5; }
+.tline:last-child { border-bottom: none; }
+.tline--ok { border-left-color: var(--mk-green); }
+.tline--err { border-left-color: var(--mk-red); background: rgba(220, 38, 38, 0.04); }
+.tline--warn { border-left-color: var(--mk-amber); }
+
+.tline__main {
+  display: grid;
+  grid-template-columns: 44px 150px minmax(0, 1fr) 64px 92px;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.tline__main:hover { background: rgba(90, 148, 248, 0.07); }
+.tline__main:hover { background: #f6f9ff; }
 
-.tline__time { color: var(--dim); }
-.tline__level { font-weight: 800; text-align: center; }
-.tline--ok .tline__level { color: var(--ok); }
-.tline--err .tline__level { color: var(--err); }
-.tline--warn .tline__level { color: var(--warn); }
-.tline--info .tline__level { color: var(--info); }
-.tline__agent { color: var(--info); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tline__msg { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tline__dur { color: var(--dim); text-align: right; }
-.tline__trace { color: var(--warn); font-size: 11.5px; text-align: right; }
+.tline__kind {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--mk-faint);
+}
+.tline__agent {
+  font-size: 11px;
+  color: var(--mk-blue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tline__agent:hover { text-decoration: underline; }
+.tline__msg {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tline__msg em { font-style: normal; color: var(--mk-faint); margin-left: 8px; font-size: 11.5px; }
+.tline__dur { font-size: 11px; color: var(--mk-muted); text-align: right; }
+.tline__trace { font-size: 11px; color: #b45309; text-align: right; }
+.tline__trace:hover { text-decoration: underline; }
 
-.tline__payload {
-  padding: 4px 14px 10px 144px;
+.tline__payload { padding: 2px 14px 12px 68px; display: grid; gap: 8px; }
+.tline__payload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-family: var(--mk-mono);
 }
 .tline__payload pre {
   margin: 0;
   padding: 10px 12px;
-  background: var(--bg-alt);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--dim);
-  font: inherit;
-  font-size: 11.5px;
-  line-height: 1.6;
+  border-radius: 8px;
+  background: #0d1420;
+  color: #8ba3c7;
+  font: 11px/1.6 'JetBrains Mono', monospace;
   overflow-x: auto;
 }
-
-/* 空态 */
-.term-empty {
-  display: grid;
-  place-content: center;
-  gap: 14px;
-  padding: 80px 20px;
-  text-align: center;
-  color: var(--dim);
-}
-.term-empty__art {
-  margin: 0 auto;
-  color: var(--line);
-  font: inherit;
-  line-height: 1.5;
-}
-.term-empty p { margin: 0; }
-
-/* 底栏 */
-.term-foot {
-  display: flex;
-  gap: 18px;
-  padding: 8px 16px;
-  background: var(--bg-alt);
-  border-top: 1px solid var(--line);
-  color: var(--dim);
-  font-size: 11px;
-}
-.term-foot span:first-child { color: var(--ok); }
-
-@media (max-width: 900px) {
-  .tline__main {
-    grid-template-columns: 66px 26px minmax(0, 1fr) 64px;
-  }
-  .tline__agent,
-  .tline__trace { display: none; }
-  .tline__payload { padding-left: 14px; }
-}
+.tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
 </style>

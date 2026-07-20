@@ -2,8 +2,8 @@
   <section class="al">
     <header class="al-bar">
       <div class="al-bar__brand">
-        <span class="al-bar__pill">Admin 实验稿 v1.0</span>
-        <strong>整体重设计 · 运维简报式 Admin</strong>
+        <span class="al-bar__pill">Admin 实验稿 v2.0</span>
+        <strong>整体重设计 · 一条事故线贯穿全站</strong>
       </div>
       <div class="al-bar__actions">
         <button
@@ -21,15 +21,16 @@
 
     <div class="al-states">
       <button
-        v-for="st in currentScene.states"
+        v-for="st in GLOBAL_STATES"
         :key="st.id"
         type="button"
         class="al-chip"
-        :class="{ 'al-chip--active': currentState === st.id }"
-        @click="setState(st.id)"
+        :class="{ 'al-chip--active': labState === st.id }"
+        @click="labState = st.id"
       >
         {{ st.label }}<small>{{ st.hint }}</small>
       </button>
+      <span class="al-hint">全局状态：所有页面读同一份数据</span>
     </div>
 
     <main class="al-stage" :class="{ 'al-stage--compare': compare }">
@@ -51,16 +52,19 @@
         </div>
         <div class="al-frame">
           <MockShell :current="scene" @navigate="navigate">
-            <component :is="currentComponent" :state="currentState" />
+            <component :is="currentComponent" :state="mappedState" />
           </MockShell>
         </div>
       </div>
     </main>
+
+    <!-- Skill 详情抽屉（全局） -->
+    <MockSkillDrawer />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import MockShell from './MockShell.vue';
 import MockOverview from './MockOverview.vue';
 import MockUsers from './MockUsers.vue';
@@ -70,11 +74,13 @@ import MockSkills from './MockSkills.vue';
 import MockTopology from './MockTopology.vue';
 import MockOrchestrator from './MockOrchestrator.vue';
 import MockExecLogs from './MockExecLogs.vue';
-import MockEventCenter from './MockEventCenter.vue';
+import MockTraceWaterfall from './MockTraceWaterfall.vue';
 import MockApiConfig from './MockApiConfig.vue';
 import MockAddons from './MockAddons.vue';
 import MockPromptLab from './MockPromptLab.vue';
-import { MOCK_SCENES } from './mockManifest';
+import MockSkillDrawer from './MockSkillDrawer.vue';
+import { MOCK_SCENES, GLOBAL_STATES } from './mockManifest';
+import { labState, intent } from './mockStore';
 import './mock-shared.css';
 
 const components: Record<string, unknown> = {
@@ -86,26 +92,38 @@ const components: Record<string, unknown> = {
   'topology': MockTopology,
   'orchestrator': MockOrchestrator,
   'execution-logs': MockExecLogs,
-  'event-center': MockEventCenter,
+  'event-center': MockTraceWaterfall,
   'api-config': MockApiConfig,
   'addons': MockAddons,
   'prompt-lab': MockPromptLab
 };
 
+// 各页面把全局状态映射为自身语境（读 store 的页面无需映射）
+const STATE_MAP: Record<string, Record<string, string>> = {
+  'users': { normal: 'normal', incident: 'normal', fresh: 'empty' },
+  'learner-center': { normal: 'normal', incident: 'risk', fresh: 'empty' },
+  'virtual-learners': { normal: 'normal', incident: 'normal', fresh: 'empty' },
+  'api-config': { normal: 'ready', incident: 'ready', fresh: 'incomplete' },
+  'addons': { normal: 'normal', incident: 'normal', fresh: 'empty' }
+};
+
 const scene = ref('overview');
-// 每个场景记住自己的状态选择
-const stateMap = reactive<Record<string, string>>(
-  Object.fromEntries(MOCK_SCENES.map((s) => [s.id, s.states[0].id]))
-);
 const compare = ref(false);
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === scene.value) || MOCK_SCENES[0]);
 const currentComponent = computed(() => components[scene.value]);
-const currentState = computed(() => stateMap[scene.value]);
+const mappedState = computed(() => STATE_MAP[scene.value]?.[labState.value] || labState.value);
 
-function setState(id: string) {
-  stateMap[scene.value] = id;
-}
+// 场景与排查意图双向同步（点导航改 intent；事故卡/Trace 跳转改场景）
+watch(scene, (s) => {
+  if (intent.scene !== s) intent.scene = s;
+});
+watch(
+  () => intent.scene,
+  (s) => {
+    if (s && s !== scene.value) scene.value = s;
+  }
+);
 
 function navigate(id: string) {
   scene.value = id;
@@ -175,11 +193,12 @@ function navigate(id: string) {
 }
 
 .al-states {
-  display: flex; gap: 10px;
+  display: flex; gap: 10px; align-items: center;
   padding: 14px 20px 0;
   max-width: 1280px; margin: 0 auto;
   flex-wrap: wrap;
 }
+.al-hint { font-size: 11.5px; color: var(--faint); }
 .al-chip {
   display: inline-flex; align-items: baseline; gap: 8px;
   border: 1px solid var(--line); background: #fff;
