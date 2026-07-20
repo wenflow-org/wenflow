@@ -13,6 +13,12 @@ export type LabState = 'normal' | 'incident' | 'fresh'
 
 export const labState = ref<LabState>('normal')
 
+/* ---------- 数据源：演示 / 真实 ---------- */
+export const dataSource = ref<'demo' | 'live'>('demo')
+export const liveSpans = ref<TraceSpan[] | null>(null)
+export const liveSkillStatsMap = ref<Record<string, SkillStat> | null>(null)
+export const liveOverview = ref<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string } | null>(null)
+
 /* ---------- Trace Span（全站最小事实单元） ---------- */
 export interface TraceSpan {
   id: string
@@ -55,10 +61,15 @@ const backgroundSpans: TraceSpan[] = [
   { id: 'b3', traceId: 'tr:8f3188', kind: 'call', agent: 'basic-generator', stage: '内容生成', title: '输出接近上限', startMs: 0, durationMs: 2100, status: 'warn', detail: '3800/4000 tokens' }
 ]
 
-export const spans = computed<TraceSpan[]>(() => {
+const demoSpans = computed<TraceSpan[]>(() => {
   if (labState.value === 'fresh') return []
   if (labState.value === 'incident') return [...incidentTrace, ...successTrace.slice(0, 3), ...backgroundSpans]
   return [...successTrace, ...backgroundSpans]
+})
+
+export const spans = computed<TraceSpan[]>(() => {
+  if (dataSource.value === 'live' && liveSpans.value) return liveSpans.value
+  return demoSpans.value
 })
 
 /* ---------- Skill 档案（统计由 spans 推导） ---------- */
@@ -117,6 +128,10 @@ export interface SkillStat {
 }
 
 export function skillStatOf(skillId: string): SkillStat {
+  // 真实数据模式：直接用注册表统计
+  if (dataSource.value === 'live' && liveSkillStatsMap.value?.[skillId]) {
+    return liveSkillStatsMap.value[skillId]
+  }
   const mine = spans.value.filter((s) => s.kind === 'call' && s.agent === skillId)
   const errors = mine.filter((s) => s.status === 'err').length
   const avgMs = mine.length ? Math.round(mine.reduce((a, s) => a + s.durationMs, 0) / mine.length) : 0
@@ -431,6 +446,8 @@ export const userDetails: UserDetail[] = [
 
 /* ---------- 总览推导 ---------- */
 export const overviewHealth = computed(() => {
+  // 真实数据模式：用后端统计推导
+  if (dataSource.value === 'live' && liveOverview.value) return liveOverview.value
   if (labState.value === 'fresh') return { tone: 'muted' as const, score: 100, headline: '系统空闲', subline: '部署完成，等待第一个真实学习者。' }
   const errs = spans.value.filter((s) => s.status === 'err').length
   if (errs > 0) return { tone: 'warn' as const, score: 61, headline: `需要关注：${errs} 次失败`, subline: '教学链路连续 429 限流，伴学已降级介入。' }

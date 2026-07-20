@@ -51,6 +51,13 @@
       <main class="mshell__content">
         <slot />
       </main>
+      <footer class="mshell__footer">
+        <img src="/favicon.png" alt="" class="mshell__footer-logo" />
+        <span>WenFlow Admin · 重设计实验稿</span>
+        <span class="mshell__footer-sep">·</span>
+        <span>数据源：{{ sourceLabel }}</span>
+        <span class="mshell__footer-right">Quiet UI · 运维简报式</span>
+      </footer>
     </div>
   </div>
 </template>
@@ -58,9 +65,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
+import { dataSource } from './mockStore'
 
 const props = defineProps<{ current: string; crumb?: string }>()
 defineEmits<{ (e: 'navigate', id: string): void }>()
+
+const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实（API）' : '演示（mock）'))
 
 const groupedScenes = computed(() => {
   const groups: Array<{ title: string; items: MockSceneDef[] }> = []
@@ -104,14 +114,14 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
   padding: 2px 8px 0;
 }
 .mshell__logo-full {
-  height: 26px;
+  height: 32px;
   width: auto;
   display: block;
 }
 .mshell__logo-mark {
   display: none;
-  height: 30px;
-  width: 30px;
+  height: 34px;
+  width: 34px;
 }
 .mshell__brand-tag {
   padding: 2px 8px;
@@ -187,7 +197,7 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
 }
 
 /* 主区 */
-.mshell__main { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.mshell__main { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
 .mshell__topbar {
   display: flex;
   align-items: center;
@@ -216,6 +226,20 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
 }
 .mshell__search-hint { white-space: nowrap; }
 .mshell__content { min-width: 0; }
+
+/* 页脚 */
+.mshell__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-top: 1px solid #e1e8f2;
+  color: #8492ab;
+  font-size: 11.5px;
+}
+.mshell__footer-logo { height: 16px; width: 16px; border-radius: 4px; opacity: 0.8; }
+.mshell__footer-sep { color: #c3cede; }
+.mshell__footer-right { margin-left: auto; }
 
 @media (max-width: 860px) {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }

@@ -47,20 +47,25 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { skillProfiles, skillStatOf, openSkillDrawer } from './mockStore'
+import { skillProfiles, skillStatOf, openSkillDrawer, dataSource } from './mockStore'
+import { liveSkillProfiles } from './mockLive'
 
 type Health = 'ok' | 'idle' | 'error'
 
 const onlyAttention = ref(false)
 
-// 卡片数据 = 档案 + 由 spans 推导的实时统计（与日志/瀑布/总览同源）
-const cards = computed(() =>
-  skillProfiles.map((p) => {
+// 卡片数据 = 档案 + 实时统计（live 模式用真实注册表，demo 模式用演示档案）
+const cards = computed(() => {
+  const profiles =
+    dataSource.value === 'live' && liveSkillProfiles.value.length
+      ? liveSkillProfiles.value.map((p) => ({ ...p, agentId: '', agentName: '', promptVersion: '', description: '' }))
+      : skillProfiles
+  return profiles.map((p) => {
     const stat = skillStatOf(p.id)
     const health: Health = stat.errors > 0 ? 'error' : stat.calls === 0 ? 'idle' : 'ok'
     return { ...p, ...stat, health }
   })
-)
+})
 
 const filtered = computed(() => (onlyAttention.value ? cards.value.filter((c) => c.health !== 'ok') : cards.value))
 const activeCount = computed(() => cards.value.filter((c) => c.calls > 0).length)

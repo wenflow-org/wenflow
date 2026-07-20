@@ -35,12 +35,35 @@
         :key="st.id"
         type="button"
         class="al-chip"
-        :class="{ 'al-chip--active': labState === st.id }"
+        :class="{ 'al-chip--active': labState === st.id && dataSource === 'demo' }"
+        :disabled="dataSource === 'live'"
         @click="labState = st.id"
       >
         {{ st.label }}<small>{{ st.hint }}</small>
       </button>
       <span class="al-hint">全局状态：所有页面读同一份数据</span>
+      <div class="al-source">
+        <button
+          type="button"
+          class="al-chip"
+          :class="{ 'al-chip--active': dataSource === 'demo' }"
+          @click="backToDemo"
+        >
+          演示数据
+        </button>
+        <button
+          type="button"
+          class="al-chip al-chip--live"
+          :class="{ 'al-chip--active': dataSource === 'live' }"
+          :disabled="liveLoading"
+          @click="loadLiveData"
+        >
+          <span v-if="liveLoading">拉取中…</span>
+          <span v-else>真实数据<small>API</small></span>
+        </button>
+        <span v-if="liveError" class="al-source__error">{{ liveError }}</span>
+        <span v-else-if="dataSource === 'live'" class="al-source__ok">已接真实 API</span>
+      </div>
     </div>
 
     <main class="al-stage" :class="{ 'al-stage--compare': compare }">
@@ -101,7 +124,8 @@ import MockLearnerDetail from './MockLearnerDetail.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
 import MockUserDetail from './MockUserDetail.vue';
 import { MOCK_SCENES, GLOBAL_STATES } from './mockManifest';
-import { labState, intent, subPage } from './mockStore';
+import { labState, intent, subPage, dataSource } from './mockStore';
+import { loadLiveData, backToDemo, liveLoading, liveError } from './mockLive';
 import './mock-shared.css';
 
 const components: Record<string, unknown> = {
@@ -235,6 +259,22 @@ function navigate(id: string) {
   flex-wrap: wrap;
 }
 .al-hint { font-size: 11.5px; color: var(--faint); }
+
+.al-source {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.al-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+.al-chip--live.al-chip--active {
+  border-color: rgba(21, 128, 61, 0.4);
+  background: rgba(21, 128, 61, 0.08);
+  color: #15803d;
+}
+.al-chip--live.al-chip--active small { color: #15803d; }
+.al-source__error { font-size: 11.5px; color: #dc2626; font-weight: 600; }
+.al-source__ok { font-size: 11.5px; color: #15803d; font-weight: 700; }
 .al-chip {
   display: inline-flex; align-items: baseline; gap: 8px;
   border: 1px solid var(--line); background: #fff;
