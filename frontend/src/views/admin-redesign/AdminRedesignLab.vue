@@ -9,6 +9,15 @@
         <button
           type="button"
           class="al-compare"
+          :class="{ 'al-compare--on': fullscreen }"
+          :aria-pressed="fullscreen"
+          @click="fullscreen = !fullscreen"
+        >
+          {{ fullscreen ? '退出全屏' : '全屏预览' }}
+        </button>
+        <button
+          type="button"
+          class="al-compare"
           :class="{ 'al-compare--on': compare }"
           :aria-pressed="compare"
           @click="compare = !compare"
@@ -57,6 +66,14 @@
         </div>
       </div>
     </main>
+
+    <!-- 全屏预览：mock admin 以 100% 比例占满视口 -->
+    <div v-if="fullscreen" class="al-fs">
+      <button type="button" class="al-fs__exit" @click="fullscreen = false">✕ 退出全屏</button>
+      <MockShell :current="scene" @navigate="navigate">
+        <component :is="currentComponent" :state="mappedState" />
+      </MockShell>
+    </div>
 
     <!-- Skill 详情抽屉（全局） -->
     <MockSkillDrawer />
@@ -109,6 +126,7 @@ const STATE_MAP: Record<string, Record<string, string>> = {
 
 const scene = ref('overview');
 const compare = ref(false);
+const fullscreen = ref(false);
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === scene.value) || MOCK_SCENES[0]);
 const currentComponent = computed(() => components[scene.value]);
@@ -242,6 +260,37 @@ function navigate(id: string) {
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(23, 32, 51, 0.1);
 }
+
+/* 全屏预览：脱离画框，100% 比例 */
+.al-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--canvas);
+  overflow-y: auto;
+}
+
+.al-fs :deep(.mshell) {
+  min-height: 100vh;
+}
+.al-fs__exit {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 101;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(23, 32, 51, 0.12);
+}
+.al-fs__exit:hover { color: var(--ink); }
 
 @media (max-width: 1100px) {
   .al-stage--compare { grid-template-columns: 1fr; }
