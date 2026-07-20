@@ -2,6 +2,7 @@
   <section class="al">
     <header class="al-bar">
       <div class="al-bar__brand">
+        <img src="/favicon.png" alt="问流" class="al-bar__logo" />
         <span class="al-bar__pill">Admin 实验稿 v2.0</span>
         <strong>整体重设计 · 一条事故线贯穿全站</strong>
       </div>
@@ -196,6 +197,7 @@ function navigate(id: string) {
   border-bottom: 1px solid var(--line);
 }
 .al-bar__brand { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.al-bar__logo { height: 26px; width: 26px; border-radius: 7px; }
 .al-bar__pill {
   padding: 4px 10px;
   border-radius: 999px;

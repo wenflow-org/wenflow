@@ -3,8 +3,10 @@
     <!-- 迷你侧边栏（同时是导航与「侧栏再设计」演示） -->
     <aside class="mshell__side">
       <div class="mshell__brand">
-        <span class="mshell__logo">W</span>
-        <span class="mshell__brand-name">WenFlow Admin</span>
+        <!-- 展开：长方形全 logo（图标 + 问流）；折叠：正方形图标 -->
+        <img src="/logo.png" alt="问流" class="mshell__logo-full" />
+        <img src="/favicon.png" alt="问流" class="mshell__logo-mark" />
+        <span class="mshell__brand-tag">Admin</span>
       </div>
       <nav class="mshell__nav">
         <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
@@ -99,20 +101,27 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px;
+  padding: 2px 8px 0;
 }
-.mshell__logo {
-  width: 26px;
+.mshell__logo-full {
   height: 26px;
-  display: grid;
-  place-content: center;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #3478f6, #8d6bff);
-  color: #fff;
-  font-weight: 800;
-  font-size: 13px;
+  width: auto;
+  display: block;
 }
-.mshell__brand-name { font-weight: 800; font-size: 13px; letter-spacing: -0.01em; }
+.mshell__logo-mark {
+  display: none;
+  height: 30px;
+  width: 30px;
+}
+.mshell__brand-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2fa;
+  color: #8492ab;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
 
 .mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
 .mshell__group-title {
@@ -217,5 +226,11 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
   .mshell__foot span:last-child,
   .mshell__search { display: none; }
   .mshell__item { justify-content: center; }
+
+  /* 折叠：长方形 logo 换正方形图标 */
+  .mshell__logo-full,
+  .mshell__brand-tag { display: none; }
+  .mshell__logo-mark { display: block; }
+  .mshell__brand { justify-content: center; padding: 2px 0 0; }
 }
 </style>
