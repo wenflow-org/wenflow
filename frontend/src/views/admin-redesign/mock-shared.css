@@ -187,3 +187,122 @@
 }
 .mk-empty strong { color: var(--mk-muted); font-size: 13.5px; }
 .mk-empty span { font-size: 12.5px; }
+
+/* ----- 弹窗（表单/编辑） ----- */
+.mk-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(15, 23, 42, 0.36);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.mk-modal__panel {
+  width: min(480px, 100%);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: var(--mk-surface, #fff);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  display: grid;
+}
+.mk-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--mk-line, #e1e8f2);
+}
+.mk-modal__title { margin: 0; font-size: 15px; font-weight: 800; }
+.mk-modal__close {
+  border: 0;
+  background: #f0f2f5;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #5b6577;
+}
+.mk-modal__body { padding: 16px 18px; display: grid; gap: 14px; }
+.mk-modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--mk-line, #e1e8f2);
+}
+
+/* 表单字段 */
+.mk-field { display: grid; gap: 6px; }
+.mk-field__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
+.mk-field__hint { font-size: 11px; color: var(--mk-faint, #8492ab); }
+.mk-field__input,
+.mk-field__select,
+.mk-field__textarea {
+  width: 100%;
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line, #e1e8f2);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.mk-field__input:focus,
+.mk-field__select:focus,
+.mk-field__textarea:focus { border-color: var(--mk-blue, #3478f6); }
+.mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
+.mk-field--error .mk-field__input,
+.mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
+.mk-field__err { font-size: 11px; color: var(--mk-red, #dc2626); font-weight: 600; }
+
+/* 按钮 */
+.mk-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--mk-line, #e1e8f2);
+  background: var(--mk-surface, #fff);
+  color: var(--mk-ink, #1a2a44);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mk-btn:hover { background: #f6f9ff; }
+.mk-btn--primary {
+  background: var(--mk-blue, #3478f6);
+  border-color: var(--mk-blue, #3478f6);
+  color: #fff;
+}
+.mk-btn--primary:hover { background: #2b64d8; }
+.mk-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* 行内提示条 */
+.mk-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.mk-toast--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }
+.mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.mk-toast--info { background: #eff6ff; color: var(--mk-blue, #3478f6); }
+
+/* 加载点 */
+.mk-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(52, 120, 246, 0.25);
+  border-top-color: var(--mk-blue, #3478f6);
+  border-radius: 50%;
+  animation: mk-spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes mk-spin { to { transform: rotate(360deg); } }

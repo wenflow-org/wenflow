@@ -1,32 +1,37 @@
 <template>
   <div class="mk-page">
     <!-- 单行健康条 -->
-    <div class="mk-status" :class="ready ? 'mk-status--ok' : 'mk-status--warn'">
+    <div class="mk-status" :class="filled ? 'mk-status--ok' : 'mk-status--warn'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ ready ? '模型服务已就绪' : '配置尚未完成' }}</strong>
+      <strong class="mk-status__title">{{ filled ? '模型服务已就绪' : '配置尚未完成' }}</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">密钥 {{ ready ? '已配置' : '未配置' }}</span>
+      <span class="mk-status__meta">密钥 {{ keySet ? '已配置' : '未配置' }}</span>
       <span class="mk-status__meta">模型 {{ models.length }}</span>
       <span class="mk-status__meta">路由 3/3</span>
-      <button type="button" class="mk-status__action">重新拉取</button>
+      <button type="button" class="mk-status__action" :disabled="fetching" @click="fetchModels">
+        <span v-if="fetching"><span class="mk-spinner"></span> 拉取中…</span>
+        <span v-else>{{ filled ? '重新拉取' : '连接并拉取' }}</span>
+      </button>
     </div>
+
+    <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <div class="ac-grid">
       <!-- 接入与模型 -->
       <section class="mk-card ac-main">
         <div class="mk-card__head">
           <h3 class="mk-card__title">接入与模型</h3>
-          <span class="mk-badge" :class="ready ? 'mk-badge--ok' : 'mk-badge--muted'">{{ ready ? '连接正常' : '待配置' }}</span>
+          <span class="mk-badge" :class="filled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ filled ? '连接正常' : '待配置' }}</span>
         </div>
         <div class="ac-form">
           <div class="ac-row ac-row--2-1">
             <label class="ac-field">
               <span>服务地址</span>
-              <input class="mk-filter__input" :value="ready ? 'https://api.deepseek.com/v1' : ''" placeholder="https://api.example.com/v1" />
+              <input class="mk-filter__input" :value="keySet ? 'https://api.deepseek.com/v1' : ''" placeholder="https://api.example.com/v1" @input="dirty++" />
             </label>
             <label class="ac-field">
               <span>API Key</span>
-              <input class="mk-filter__input" type="password" :value="ready ? 'sk-demo-key' : ''" :placeholder="ready ? '留空则沿用' : '输入 API Key'" />
+              <input class="mk-filter__input" type="password" :value="keySet ? 'sk-demo-key' : ''" :placeholder="keySet ? '留空则沿用' : '输入 API Key'" @input="dirty++" />
             </label>
           </div>
           <label class="ac-field">
@@ -39,15 +44,15 @@
           <div class="ac-row ac-row--3">
             <label class="ac-field">
               <span>对话默认</span>
-              <select class="mk-filter__select"><option>{{ ready ? 'deepseek-v4-flash' : '未设置' }}</option></select>
+              <select class="mk-filter__select" :disabled="!models.length"><option>{{ filled ? 'deepseek-v4-flash' : '未设置' }}</option></select>
             </label>
             <label class="ac-field">
               <span>推理默认</span>
-              <select class="mk-filter__select"><option>{{ ready ? 'deepseek-v4-pro' : '未设置' }}</option></select>
+              <select class="mk-filter__select" :disabled="!models.length"><option>{{ filled ? 'deepseek-v4-pro' : '未设置' }}</option></select>
             </label>
             <label class="ac-field">
               <span>评估默认</span>
-              <select class="mk-filter__select"><option>{{ ready ? 'deepseek-v4-pro' : '未设置' }}</option></select>
+              <select class="mk-filter__select" :disabled="!models.length"><option>{{ filled ? 'deepseek-v4-pro' : '未设置' }}</option></select>
             </label>
           </div>
         </div>
@@ -57,21 +62,27 @@
       <section class="mk-card ac-side">
         <div class="mk-card__head">
           <h3 class="mk-card__title">连通性验证</h3>
-          <span class="mk-badge" :class="ready ? 'mk-badge--ok' : 'mk-badge--muted'">{{ ready ? '测试通过' : '未执行' }}</span>
+          <span class="mk-badge" :class="testPassed ? 'mk-badge--ok' : 'mk-badge--muted'">{{ testPassed ? '测试通过' : '未执行' }}</span>
         </div>
         <div class="ac-form">
           <label class="ac-field">
             <span>测试模型</span>
-            <select class="mk-filter__select"><option>{{ ready ? 'deepseek-v4-flash' : '无可用模型' }}</option></select>
+            <select class="mk-filter__select" :disabled="!models.length">
+              <option v-for="m in models" :key="m">{{ m }}</option>
+              <option v-if="!models.length">无可用模型</option>
+            </select>
           </label>
-          <div v-if="ready" class="ac-result">
+          <div v-if="testPassed" class="ac-result">
             <div class="ac-result__meta">
               <span>238ms</span>
               <span class="mono">P 12 / C 9 / T 21</span>
             </div>
             <p>「模型测试成功。」</p>
           </div>
-          <button type="button" class="ac-run" :disabled="!ready">运行测试</button>
+          <button type="button" class="ac-run" :disabled="!models.length || testing" @click="runTest">
+            <span v-if="testing"><span class="mk-spinner"></span> 测试中…</span>
+            <span v-else>运行测试</span>
+          </button>
         </div>
       </section>
     </div>
@@ -102,25 +113,85 @@
     </section>
 
     <!-- 保存条 -->
-    <div class="ac-save">
+    <div v-if="dirty > 0" class="ac-save">
       <span class="ac-save__dot"></span>
-      <span>2 项未保存变更</span>
-      <button type="button" class="mk-link">放弃</button>
-      <button type="button" class="ac-save__primary">保存变更</button>
+      <span>{{ dirty }} 项未保存变更</span>
+      <button type="button" class="mk-link" @click="discardAll">放弃</button>
+      <button type="button" class="ac-save__primary" @click="saveAll">保存变更</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{ state: 'ready' | 'incomplete' }>()
-const ready = computed(() => props.state === 'ready')
+
+/* 功能状态：拉取/测试/保存全部可操作 */
+const keySet = ref(props.state === 'ready')
+const filled = ref(props.state === 'ready')
+const fetching = ref(false)
+const testing = ref(false)
+const testPassed = ref(false)
+const dirty = ref(props.state === 'ready' ? 2 : 0)
+const toast = ref('')
+const toastCls = ref('mk-toast--ok')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => props.state,
+  (s) => {
+    keySet.value = s === 'ready'
+    filled.value = s === 'ready'
+    testPassed.value = false
+    dirty.value = s === 'ready' ? 2 : 0
+  }
+)
+
 const models = computed(() =>
-  ready.value
+  filled.value
     ? ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-lite', 'deepseek-v4-vision', 'qwen3-32b', 'qwen3-14b']
     : []
 )
+
+function showToast(msg: string, cls = 'mk-toast--ok') {
+  toast.value = msg
+  toastCls.value = cls
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 3000)
+}
+
+function fetchModels() {
+  if (fetching.value) return
+  fetching.value = true
+  setTimeout(() => {
+    fetching.value = false
+    keySet.value = true
+    filled.value = true
+    dirty.value += 1
+    showToast(`已获取 ${models.value.length} 个模型，记得保存`)
+  }, 900)
+}
+
+function runTest() {
+  if (testing.value || !models.value.length) return
+  testing.value = true
+  setTimeout(() => {
+    testing.value = false
+    testPassed.value = true
+    showToast('测试通过 · 238ms')
+  }, 800)
+}
+
+function saveAll() {
+  dirty.value = 0
+  showToast('连接与安全配置已保存')
+}
+
+function discardAll() {
+  dirty.value = 0
+  showToast('已放弃未保存的变更', 'mk-toast--info')
+}
 </script>
 
 <style scoped>

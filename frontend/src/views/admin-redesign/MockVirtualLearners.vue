@@ -7,8 +7,10 @@
       <span class="mk-status__meta">样本 {{ samples.length }}</span>
       <span class="mk-status__meta">跑通 Goal/Path {{ goalRate }}</span>
       <span class="mk-status__meta">Learn 完成 {{ learnRate }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary">新建虚拟学习者</button>
+      <button type="button" class="mk-status__action mk-status__action--primary" @click="createOpen = true">新建虚拟学习者</button>
     </div>
+
+    <div v-if="toast" class="mk-toast mk-toast--ok">✓ {{ toast }}</div>
 
     <!-- 实验进度看板 -->
     <div v-if="samples.length" class="vl-board">
@@ -85,6 +87,38 @@
         <span>从「新建虚拟学习者」写一个故事开始：她是谁、想解决什么。</span>
       </div>
     </div>
+
+    <!-- 新建虚拟学习者 -->
+    <div v-if="createOpen" class="mk-modal" @mousedown.self="createOpen = false">
+      <div class="mk-modal__panel" role="dialog" aria-label="新建虚拟学习者">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">新建虚拟学习者</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
+            <span class="mk-field__label">样本名</span>
+            <input v-model="form.name" class="mk-field__input" placeholder="例如 焦虑的转行者" />
+            <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
+          </label>
+          <label class="mk-field" :class="{ 'mk-field--error': errors.goal }">
+            <span class="mk-field__label">学习目标</span>
+            <input v-model="form.goal" class="mk-field__input" placeholder="例如 两个月入门产品经理" />
+            <span v-if="errors.goal" class="mk-field__err">{{ errors.goal }}</span>
+          </label>
+          <label class="mk-field" :class="{ 'mk-field--error': errors.story }">
+            <span class="mk-field__label">她的故事</span>
+            <textarea v-model="form.story" class="mk-field__textarea" placeholder="她是谁、卡在哪、为什么现在要学？越具体，模拟越真实。"></textarea>
+            <span class="mk-field__hint">{{ form.story.length }} 字 · 建议 ≥ 40 字</span>
+            <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
+          </label>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
+          <button type="button" class="mk-btn mk-btn--primary" @click="createSample">创建并生成画像</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -124,6 +158,36 @@ const filtered = computed(() => {
   if (!q) return samples.value
   return samples.value.filter((s) => `${s.name} ${s.goal} ${s.id}`.toLowerCase().includes(q))
 })
+
+/* 新建虚拟学习者：校验 + 真实加样本 */
+const createOpen = ref(false)
+const form = ref({ name: '', goal: '', story: '' })
+const errors = ref<{ name?: string; goal?: string; story?: string }>({})
+const toast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function createSample() {
+  errors.value = {}
+  if (!form.value.name.trim()) errors.value.name = '请输入样本名'
+  if (!form.value.goal.trim()) errors.value.goal = '请输入学习目标'
+  if (form.value.story.trim().length < 20) errors.value.story = '故事至少 20 字，模拟才有依据'
+  if (Object.keys(errors.value).length) return
+
+  const storyPct = Math.min(30 + Math.floor(form.value.story.trim().length / 4), 95)
+  samples.value.unshift({
+    id: `vl-${String(samples.value.length + 1).padStart(3, '0')}`,
+    name: form.value.name.trim(),
+    goal: form.value.goal.trim(),
+    story: storyPct,
+    progress: '待运行',
+    status: 'ready'
+  })
+  createOpen.value = false
+  form.value = { name: '', goal: '', story: '' }
+  toast.value = '样本已创建，画像推断完成，可运行'
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 2600)
+}
 
 const runningCount = computed(() => samples.value.filter((s) => s.status === 'running').length)
 const withStory = computed(() => samples.value.filter((s) => s.story >= 80).length)

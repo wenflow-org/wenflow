@@ -51,7 +51,7 @@
 
         <!-- Skill 节点 -->
         <div class="orch-skills">
-          <div v-for="s in current.skills" :key="s.id" class="orch-skill">
+          <div v-for="s in current.skills" :key="s.id" class="orch-skill" role="button" tabindex="0" @click="openSkillDrawer(s.id)" @keydown.enter="openSkillDrawer(s.id)">
             <span class="orch-skill__dot" :class="{ 'orch-skill__dot--idle': !s.calls }"></span>
             <div class="orch-skill__main">
               <strong>{{ s.name }}</strong>
@@ -70,6 +70,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { openSkillDrawer } from './mockStore'
 
 defineProps<{ state: 'normal' }>()
 
@@ -231,7 +232,10 @@ const current = computed(() => stages.find((s) => s.id === active.value) || stag
   border: 1px solid var(--mk-line);
   border-radius: 10px;
   background: var(--mk-surface);
+  cursor: pointer;
+  transition: border-color 0.14s ease;
 }
+.orch-skill:hover { border-color: rgba(52, 120, 246, 0.35); }
 .orch-skill__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-green); flex-shrink: 0; }
 .orch-skill__dot--idle { background: #c3cede; }
 .orch-skill__main { display: grid; min-width: 160px; }

@@ -93,12 +93,19 @@ export function skillsOfAgent(agentId: string): SkillProfile[] {
 export const skillProfiles: SkillProfile[] = [
   { id: 'goal-conversation', name: '目标对话', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v3.2 · 已生效', description: '与用户聊清真实场景，抽取可规划的概念。' },
   { id: 'goal-profile-inference', name: '目标画像推断', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v2.1 · 已生效', description: '从对话推断学习者的基础、偏好与约束。' },
+  { id: 'goal-understanding-composer', name: '目标理解合成', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v1.4 · 已生效', description: '把多轮对话合成为结构化的目标理解。' },
+  { id: 'dialogue-concept-extractor', name: '对话概念抽取', agentId: 'goal-agent', agentName: '目标 Agent', category: 'analysis', promptVersion: 'v2.0 · 已生效', description: '从对话中抽取候选学习概念。' },
   { id: 'generic-planner', name: '通用路径规划', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v4.0 · 已生效', description: '把目标拆解为阶段与里程碑。' },
+  { id: 'path-scene-framer', name: '路径场景定帧', agentId: 'path-agent', agentName: '路径 Agent', category: 'analysis', promptVersion: 'v1.1 · 已生效', description: '确定路径的使用场景与节奏假设。' },
   { id: 'stage-designer', name: '阶段设计', agentId: 'path-agent', agentName: '路径 Agent', category: 'generation', promptVersion: 'v1.8 · 草案', description: '展开每个阶段的任务与验收标准。' },
   { id: 'teaching-round', name: '教学回合', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v5.1 · 已生效', description: '单轮教学：讲解、练习、反馈。' },
   { id: 'companion-boost', name: '伴学补强', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching', promptVersion: 'v1.2 · 已生效', description: '在主教学失败或薄弱时介入补强。' },
   { id: 'session-wrapup', name: '课后产出', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'generation', promptVersion: 'v2.4 · 已生效', description: '把会话沉淀为笔记与下一步建议。' },
+  { id: 'state-aggregator', name: '状态聚合', agentId: 'learner-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v1.3 · 已生效', description: '聚合行为数据为学习者状态视图。' },
   { id: 'snapshot-refresh', name: '快照刷新', agentId: 'learner-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v1.5 · 已生效', description: '聚合行为数据，重算学习者快照。' },
+  { id: 'knowledge-distill', name: '知识沉淀', agentId: 'learner-agent', agentName: '学习者 Agent', category: 'analysis', promptVersion: 'v0.9 · 草案', description: '把掌握的知识点沉淀进概念图。' },
+  { id: 'turn-simulator', name: '回合模拟', agentId: 'virtual-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v1.0 · 已生效', description: '以虚拟学习者身份模拟教学回合。' },
+  { id: 'path-evaluator', name: '路径评估', agentId: 'virtual-agent', agentName: '虚拟学习者 Agent', category: 'simulation', promptVersion: 'v0.8 · 草案', description: '辅助调试：评估生成路径的可学性。' },
   { id: 'basic-generator', name: '基础内容生成', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'generation', promptVersion: 'generated · 默认草案', description: '通用生成兜底。' }
 ]
 

@@ -7,8 +7,10 @@
       <span class="mk-status__meta">{{ rows.length }} 个组件</span>
       <span class="mk-status__meta">独立配置 {{ customCount }}</span>
       <span class="mk-status__meta">继承默认 {{ rows.length - customCount }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary">新增组件</button>
+      <button type="button" class="mk-status__action mk-status__action--primary" @click="openEditor(null)">新增组件</button>
     </div>
+
+    <div v-if="toast" class="mk-toast mk-toast--ok">✓ {{ toast }}</div>
 
     <div class="mk-card">
       <table v-if="rows.length" class="mk-table">
@@ -38,7 +40,7 @@
             <td :class="{ 'mk-na': r.last === '从未' }">{{ r.last }}</td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link">配置</button>
+                <button type="button" class="mk-link" @click="openEditor(r)">配置</button>
               </div>
             </td>
           </tr>
@@ -48,6 +50,48 @@
       <div v-else class="mk-empty">
         <strong>还没有外挂组件</strong>
         <span>外挂组件让 Skill 使用独立的模型与参数，而不是全局默认。</span>
+      </div>
+    </div>
+
+    <!-- 新增 / 配置组件 -->
+    <div v-if="editor" class="mk-modal" @mousedown.self="editor = null">
+      <div class="mk-modal__panel" role="dialog" aria-label="组件配置">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">{{ editor.isNew ? '新增外挂组件' : `配置 · ${editor.row.name}` }}</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="editor = null">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <label v-if="editor.isNew" class="mk-field" :class="{ 'mk-field--error': errors.id }">
+            <span class="mk-field__label">挂载 Skill</span>
+            <select v-model="editor.form.id" class="mk-field__select">
+              <option value="">选择 Skill</option>
+              <option v-for="s in availableSkills" :key="s" :value="s">{{ s }}</option>
+            </select>
+            <span v-if="errors.id" class="mk-field__err">{{ errors.id }}</span>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">模型</span>
+            <select v-model="editor.form.model" class="mk-field__select">
+              <option>deepseek-v4-flash</option>
+              <option>deepseek-v4-pro</option>
+              <option>deepseek-v4-lite</option>
+              <option>继承全局</option>
+            </select>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">温度 · {{ editor.form.temp }}</span>
+            <input v-model.number="editor.form.temp" type="range" min="0" max="2" step="0.1" class="mk-field__input" />
+            <span class="mk-field__hint">0 更确定，2 更发散</span>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">最大输出 Tokens</span>
+            <input v-model.number="editor.form.maxTokens" type="number" min="32" max="8000" step="32" class="mk-field__input" />
+          </label>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="editor = null">取消</button>
+          <button type="button" class="mk-btn mk-btn--primary" @click="saveEditor">保存</button>
+        </div>
       </div>
     </div>
   </div>
@@ -87,6 +131,75 @@ watch(
 )
 
 const customCount = computed(() => rows.value.filter((r) => r.custom).length)
+
+/* 新增 / 配置编辑器 */
+interface EditorState {
+  isNew: boolean
+  row: Row
+  form: { id: string; model: string; temp: number; maxTokens: number }
+}
+
+const editor = ref<EditorState | null>(null)
+const errors = ref<{ id?: string }>({})
+const toast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const availableSkills = computed(() => {
+  const used = new Set(rows.value.map((r) => r.id))
+  return ['turn-simulator', 'path-evaluator', 'knowledge-distill', 'adaptive-guidance-copy'].filter((s) => !used.has(s))
+})
+
+function openEditor(row: Row | null) {
+  errors.value = {}
+  if (row) {
+    editor.value = {
+      isNew: false,
+      row,
+      form: { id: row.id, model: row.model === '继承全局' ? '继承全局' : row.model, temp: Number(row.temp), maxTokens: 2048 }
+    }
+  } else {
+    editor.value = {
+      isNew: true,
+      row: { id: '', name: '', mount: '生成', model: 'deepseek-v4-flash', temp: '0.5', custom: true, last: '从未' },
+      form: { id: '', model: 'deepseek-v4-flash', temp: 0.5, maxTokens: 2048 }
+    }
+  }
+}
+
+function saveEditor() {
+  if (!editor.value) return
+  const { isNew, row, form } = editor.value
+  if (isNew && !form.id) {
+    errors.value = { id: '请选择挂载的 Skill' }
+    return
+  }
+
+  if (isNew) {
+    rows.value.unshift({
+      id: form.id,
+      name: `${form.id} Skill`,
+      mount: '生成',
+      model: form.model,
+      temp: form.temp.toFixed(1),
+      custom: form.model !== '继承全局',
+      last: '从未'
+    })
+    showToast(`组件 ${form.id} 已创建`)
+  } else {
+    row.model = form.model
+    row.temp = form.temp.toFixed(1)
+    row.custom = form.model !== '继承全局'
+    row.last = '刚刚'
+    showToast(`「${row.name}」配置已保存`)
+  }
+  editor.value = null
+}
+
+function showToast(msg: string) {
+  toast.value = msg
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 2600)
+}
 </script>
 
 <style scoped>

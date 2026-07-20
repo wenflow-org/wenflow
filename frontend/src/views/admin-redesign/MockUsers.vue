@@ -7,8 +7,10 @@
       <span class="mk-status__meta">共 {{ users.length }} 人</span>
       <span class="mk-status__meta">管理员 {{ adminCount }}</span>
       <span class="mk-status__meta">今日活跃 {{ activeToday }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary">新建用户</button>
+      <button type="button" class="mk-status__action mk-status__action--primary" @click="createOpen = true">新建用户</button>
     </div>
+
+    <div v-if="toast" class="mk-toast mk-toast--ok">✓ {{ toast }}</div>
 
     <div class="mk-card">
       <div class="mk-card__head">
@@ -65,6 +67,39 @@
         <span>放宽筛选条件，或邀请第一位真实用户。</span>
       </div>
     </div>
+
+    <!-- 新建用户 -->
+    <div v-if="createOpen" class="mk-modal" @mousedown.self="createOpen = false">
+      <div class="mk-modal__panel" role="dialog" aria-label="新建用户">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">新建用户</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
+            <span class="mk-field__label">昵称</span>
+            <input v-model="form.name" class="mk-field__input" placeholder="例如 陈晓" />
+            <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
+          </label>
+          <label class="mk-field" :class="{ 'mk-field--error': errors.email }">
+            <span class="mk-field__label">邮箱</span>
+            <input v-model="form.email" class="mk-field__input" placeholder="name@example.com" />
+            <span v-if="errors.email" class="mk-field__err">{{ errors.email }}</span>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">角色</span>
+            <select v-model="form.admin" class="mk-field__select">
+              <option :value="false">用户</option>
+              <option :value="true">管理员</option>
+            </select>
+          </label>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
+          <button type="button" class="mk-btn mk-btn--primary" @click="createUser">创建</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -114,6 +149,37 @@ const pills = [
   { id: 'admin', label: '管理员' },
   { id: 'online', label: '已登录' }
 ]
+
+/* 新建用户：表单校验 + 真实加行 */
+const createOpen = ref(false)
+const form = ref({ name: '', email: '', admin: false })
+const errors = ref<{ name?: string; email?: string }>({})
+const toast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function createUser() {
+  errors.value = {}
+  if (!form.value.name.trim()) errors.value.name = '请输入昵称'
+  if (!form.value.email.trim()) errors.value.email = '请输入邮箱'
+  else if (!/^\S+@\S+\.\S+$/.test(form.value.email.trim())) errors.value.email = '邮箱格式不正确'
+  if (Object.keys(errors.value).length) return
+
+  const id = `u${Date.now() % 100000}`
+  users.value.unshift({
+    id,
+    name: form.value.name.trim(),
+    email: form.value.email.trim(),
+    admin: form.value.admin,
+    online: false,
+    lastLogin: '从未'
+  })
+  createOpen.value = false
+  form.value = { name: '', email: '', admin: false }
+  pill.value = 'all'
+  toast.value = '用户已创建，出现在列表顶部'
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 2600)
+}
 
 const adminCount = computed(() => users.value.filter((u) => u.admin).length)
 const activeToday = computed(() => users.value.filter((u) => u.online).length)

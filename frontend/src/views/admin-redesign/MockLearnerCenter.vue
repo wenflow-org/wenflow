@@ -7,8 +7,12 @@
       <span class="mk-status__meta">{{ rows.length }} 个快照</span>
       <span class="mk-status__meta">需关注 {{ riskCount }}</span>
       <span class="mk-status__meta">快照过期 {{ staleCount }}</span>
-      <button type="button" class="mk-status__action">全部重算</button>
+      <button type="button" class="mk-status__action" :disabled="recomputingAll" @click="recomputeAll">
+        {{ recomputingAll ? '重算中…' : '全部重算' }}
+      </button>
     </div>
+
+    <div v-if="toast" class="mk-toast mk-toast--ok">✓ {{ toast }}</div>
 
     <div class="mk-card">
       <div class="mk-card__head">
@@ -56,11 +60,11 @@
             <td><span class="trend" :class="`trend--${r.trend}`">{{ trendText(r.trend) }}</span></td>
             <td><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
             <td class="risk-text" :class="{ 'mk-na': !r.risk }">{{ r.risk || '—' }}</td>
-            <td class="mk-na">{{ r.updated }}</td>
+            <td class="mk-na">{{ r.updating ? '重算中…' : r.updated }}</td>
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-link" @click="openSubPage('learner', r.id)">详情</button>
-                <button type="button" class="mk-link">重算</button>
+                <button type="button" class="mk-link" :disabled="r.updating" @click="recompute(r)">重算</button>
               </div>
             </td>
           </tr>
@@ -91,6 +95,7 @@ interface Row {
   fatigue: '低' | '中' | '高'
   risk: string
   updated: string
+  updating?: boolean
 }
 
 const normalRows: Row[] = [
@@ -141,6 +146,41 @@ const statusTitle = computed(() => (!rows.value.length ? '还没有学习者快�
 
 const trendText = (t: string) => (t === 'up' ? '↗ 上升' : t === 'down' ? '↘ 下降' : '→ 稳定')
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
+
+/* 重算：真实状态反馈 */
+const toast = ref('')
+const recomputingAll = ref(false)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(msg: string) {
+  toast.value = msg
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 2600)
+}
+
+function recompute(row: Row) {
+  if (row.updating) return
+  row.updating = true
+  setTimeout(() => {
+    row.updating = false
+    row.updated = '刚刚'
+    showToast(`「${row.name}」快照已重算`)
+  }, 800)
+}
+
+function recomputeAll() {
+  if (recomputingAll.value || !rows.value.length) return
+  recomputingAll.value = true
+  rows.value.forEach((r) => (r.updating = true))
+  setTimeout(() => {
+    rows.value.forEach((r) => {
+      r.updating = false
+      r.updated = '刚刚'
+    })
+    recomputingAll.value = false
+    showToast(`已重算 ${rows.value.length} 个快照`)
+  }, 1200)
+}
 </script>
 
 <style scoped>
