@@ -59,7 +59,7 @@
             <td class="mk-na">{{ r.updated }}</td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link">详情</button>
+                <button type="button" class="mk-link" @click="openSubPage('learner', r.id)">详情</button>
                 <button type="button" class="mk-link">重算</button>
               </div>
             </td>
@@ -77,6 +77,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { openSubPage } from './mockStore'
 
 const props = defineProps<{ state: 'normal' | 'risk' | 'empty' }>()
 
@@ -95,12 +96,15 @@ interface Row {
 const normalRows: Row[] = [
   { id: 'l1', name: '陈晓', email: 'chenxiao@…', path: 'Excel 自动化入门', task: '阶段 2 · 数据清洗练习', trend: 'up', fatigue: '低', risk: '', updated: '6 分钟前' },
   { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '低', risk: '概念「采样偏差」挣扎', updated: '22 分钟前' },
-  { id: 'l3', name: '王梓', email: 'wangzi@…', path: '', task: '', trend: 'flat', fatigue: '低', risk: '', updated: '1 小时前' }
+  { id: 'l3', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'flat', fatigue: '低', risk: '', updated: '1 小时前' },
+  { id: 'l4', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'up', fatigue: '低', risk: '', updated: '2 小时前' },
+  { id: 'l5', name: '周洁', email: 'zhoujie@…', path: '职场英语', task: '阶段 1 · 邮件表达', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 22:05' },
+  { id: 'l6', name: '吴迪', email: 'wudi@…', path: '', task: '', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 18:40' }
 ]
 
 const riskRows: Row[] = [
-  { id: 'l4', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'down', fatigue: '高', risk: '连续 3 次任务失败', updated: '4 分钟前' },
-  { id: 'l5', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'down', fatigue: '中', risk: '近 7 天活跃下降 60%', updated: '13 分钟前' },
+  { id: 'l3', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'down', fatigue: '高', risk: '连续 3 次任务失败', updated: '4 分钟前' },
+  { id: 'l4', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'down', fatigue: '中', risk: '近 7 天活跃下降 60%', updated: '13 分钟前' },
   { id: 'l1', name: '陈晓', email: 'chenxiao@…', path: 'Excel 自动化入门', task: '阶段 2 · 数据清洗练习', trend: 'up', fatigue: '低', risk: '', updated: '6 分钟前' },
   { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '低', risk: '概念「采样偏差」挣扎', updated: '22 分钟前' }
 ]

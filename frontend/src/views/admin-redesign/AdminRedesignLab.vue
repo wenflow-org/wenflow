@@ -60,8 +60,8 @@
           运维简报式 Admin
         </div>
         <div class="al-frame">
-          <MockShell :current="scene" @navigate="navigate">
-            <component :is="currentComponent" :state="mappedState" />
+          <MockShell :current="scene" :crumb="subPage?.id" @navigate="navigate">
+            <component :is="detailComponent || currentComponent" :state="mappedState" />
           </MockShell>
         </div>
       </div>
@@ -70,8 +70,8 @@
     <!-- 全屏预览：mock admin 以 100% 比例占满视口 -->
     <div v-if="fullscreen" class="al-fs">
       <button type="button" class="al-fs__exit" @click="fullscreen = false">✕ 退出全屏</button>
-      <MockShell :current="scene" @navigate="navigate">
-        <component :is="currentComponent" :state="mappedState" />
+      <MockShell :current="scene" :crumb="subPage?.id" @navigate="navigate">
+        <component :is="detailComponent || currentComponent" :state="mappedState" />
       </MockShell>
     </div>
 
@@ -96,8 +96,11 @@ import MockApiConfig from './MockApiConfig.vue';
 import MockAddons from './MockAddons.vue';
 import MockPromptLab from './MockPromptLab.vue';
 import MockSkillDrawer from './MockSkillDrawer.vue';
+import MockLearnerDetail from './MockLearnerDetail.vue';
+import MockVirtualProfile from './MockVirtualProfile.vue';
+import MockUserDetail from './MockUserDetail.vue';
 import { MOCK_SCENES, GLOBAL_STATES } from './mockManifest';
-import { labState, intent } from './mockStore';
+import { labState, intent, subPage } from './mockStore';
 import './mock-shared.css';
 
 const components: Record<string, unknown> = {
@@ -115,6 +118,13 @@ const components: Record<string, unknown> = {
   'prompt-lab': MockPromptLab
 };
 
+// 二级页面（drill-in）
+const detailComponents: Record<string, unknown> = {
+  learner: MockLearnerDetail,
+  virtual: MockVirtualProfile,
+  user: MockUserDetail
+};
+
 // 各页面把全局状态映射为自身语境（读 store 的页面无需映射）
 const STATE_MAP: Record<string, Record<string, string>> = {
   'users': { normal: 'normal', incident: 'normal', fresh: 'empty' },
@@ -130,7 +140,13 @@ const fullscreen = ref(false);
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === scene.value) || MOCK_SCENES[0]);
 const currentComponent = computed(() => components[scene.value]);
+const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
 const mappedState = computed(() => STATE_MAP[scene.value]?.[labState.value] || labState.value);
+
+// 切换场景时退出二级页
+watch(scene, () => {
+  subPage.value = null;
+});
 
 // 场景与排查意图双向同步（点导航改 intent；事故卡/Trace 跳转改场景）
 watch(scene, (s) => {

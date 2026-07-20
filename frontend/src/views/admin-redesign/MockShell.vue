@@ -35,6 +35,10 @@
           <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
           <span class="mshell__crumb-sep">/</span>
           <strong>{{ currentScene?.label }}</strong>
+          <template v-if="crumb">
+            <span class="mshell__crumb-sep">/</span>
+            <span class="mshell__crumb-sub">{{ crumb }}</span>
+          </template>
         </div>
         <div class="mshell__search">
           <span class="mshell__search-icon">⌕</span>
@@ -53,7 +57,7 @@
 import { computed } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
 
-const props = defineProps<{ current: string }>()
+const props = defineProps<{ current: string; crumb?: string }>()
 defineEmits<{ (e: 'navigate', id: string): void }>()
 
 const groupedScenes = computed(() => {
@@ -187,7 +191,8 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
 }
 .mshell__crumbs { display: flex; align-items: center; gap: 8px; }
 .mshell__crumb-group { color: #8492ab; font-size: 12px; font-weight: 600; }
-.mshell__crumb-sep { color: #c3cede; }
+.mshell__crumb-sep { color: #c3cede; margin: 0 2px; }
+.mshell__crumb-sub { color: #3478f6; font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 .mshell__search {
   display: flex;
   align-items: center;

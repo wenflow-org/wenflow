@@ -53,7 +53,7 @@
             <td><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link">编辑</button>
+                <button type="button" class="mk-link" @click="openSubPage('user', u.id)">详情</button>
               </div>
             </td>
           </tr>
@@ -70,6 +70,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { openSubPage } from './mockStore'
 
 const props = defineProps<{ state: 'normal' | 'empty' }>()
 
@@ -88,7 +89,13 @@ const normalUsers: UserRow[] = [
   { id: 'u3', name: '王梓', email: 'wangzi@example.com', admin: false, online: false, lastLogin: '昨天 21:14' },
   { id: 'u4', name: '赵敏', email: 'zhaomin@example.com', admin: false, online: false, lastLogin: '3 天前' },
   { id: 'u5', name: 'admin', email: 'admin@wenflow.local', admin: true, online: true, lastLogin: '刚刚' },
-  { id: 'u6', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, lastLogin: '从未' }
+  { id: 'u6', name: '孙可', email: 'sunke@example.com', admin: false, online: false, lastLogin: '2 天前' },
+  { id: 'u7', name: '周洁', email: 'zhoujie@example.com', admin: false, online: false, lastLogin: '1 周前' },
+  { id: 'u8', name: '吴迪', email: 'wudi@example.com', admin: false, online: false, lastLogin: '昨天 08:32' },
+  { id: 'u9', name: '郑爽', email: 'zhengshuang@example.com', admin: false, online: false, lastLogin: '5 天前' },
+  { id: 'u10', name: '冯远', email: 'fengyuan@example.com', admin: false, online: false, lastLogin: '4 小时前' },
+  { id: 'u11', name: '褚燕', email: 'chuyan@example.com', admin: false, online: false, lastLogin: '从未' },
+  { id: 'u12', name: '测试账号', email: 'test@wenflow.local', admin: true, online: false, lastLogin: '从未' }
 ]
 
 const users = ref<UserRow[]>([])

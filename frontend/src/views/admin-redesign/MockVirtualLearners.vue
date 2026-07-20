@@ -73,7 +73,7 @@
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-link">运行</button>
-                <button type="button" class="mk-link">画像</button>
+                <button type="button" class="mk-link" @click="openSubPage('virtual', s.id)">画像</button>
               </div>
             </td>
           </tr>
@@ -90,6 +90,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { openSubPage } from './mockStore'
 
 const props = defineProps<{ state: 'normal' | 'empty' }>()
 
