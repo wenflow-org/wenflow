@@ -2,22 +2,10 @@
   <section class="al">
     <header class="al-bar">
       <div class="al-bar__brand">
-        <span class="al-bar__pill">Admin 实验稿 v0.1</span>
-        <strong>执行日志 · 平台总览 — 风格探索 Mock</strong>
+        <span class="al-bar__pill">Admin 实验稿 v1.0</span>
+        <strong>整体重设计 · 运维简报式 Admin</strong>
       </div>
       <div class="al-bar__actions">
-        <div class="al-seg" role="tablist" aria-label="页面">
-          <button
-            v-for="s in scenes"
-            :key="s.id"
-            type="button"
-            class="al-seg__item"
-            :class="{ 'al-seg__item--active': scene === s.id }"
-            @click="scene = s.id"
-          >
-            {{ s.label }}
-          </button>
-        </div>
         <button
           type="button"
           class="al-compare"
@@ -33,7 +21,7 @@
 
     <div class="al-states">
       <button
-        v-for="st in currentStates"
+        v-for="st in currentScene.states"
         :key="st.id"
         type="button"
         class="al-chip"
@@ -49,25 +37,22 @@
       <div v-if="compare" class="al-pane">
         <div class="al-pane__label">
           <span class="al-pane__tag al-pane__tag--old">现有</span>
-          {{ scene === 'logs' ? '/admin/execution-logs' : '/admin/dashboard' }}
+          {{ currentScene.realRoute }}
           <small>需 admin 会话</small>
         </div>
-        <iframe
-          class="al-iframe"
-          :src="scene === 'logs' ? '/admin/execution-logs' : '/admin/dashboard'"
-          title="现有页面"
-        ></iframe>
+        <iframe class="al-iframe" :src="currentScene.realRoute" title="现有页面"></iframe>
       </div>
 
-      <!-- 实验稿 -->
+      <!-- 重设计稿：完整迷你 admin -->
       <div class="al-pane">
         <div v-if="compare" class="al-pane__label">
-          <span class="al-pane__tag al-pane__tag--new">实验</span>
-          {{ scene === 'logs' ? '执行日志 · 终端流' : '平台总览 · 运营简报' }}
+          <span class="al-pane__tag al-pane__tag--new">重设计</span>
+          运维简报式 Admin
         </div>
         <div class="al-frame">
-          <MockExecLogs v-if="scene === 'logs'" :state="logState" />
-          <MockOverview v-else :state="overviewState" />
+          <MockShell :current="scene" @navigate="navigate">
+            <component :is="currentComponent" :state="currentState" />
+          </MockShell>
         </div>
       </div>
     </main>
@@ -75,45 +60,55 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import MockExecLogs from './MockExecLogs.vue';
+import { computed, reactive, ref } from 'vue';
+import MockShell from './MockShell.vue';
 import MockOverview from './MockOverview.vue';
+import MockUsers from './MockUsers.vue';
+import MockLearnerCenter from './MockLearnerCenter.vue';
+import MockVirtualLearners from './MockVirtualLearners.vue';
+import MockSkills from './MockSkills.vue';
+import MockTopology from './MockTopology.vue';
+import MockOrchestrator from './MockOrchestrator.vue';
+import MockExecLogs from './MockExecLogs.vue';
+import MockEventCenter from './MockEventCenter.vue';
+import MockApiConfig from './MockApiConfig.vue';
+import MockAddons from './MockAddons.vue';
+import MockPromptLab from './MockPromptLab.vue';
+import { MOCK_SCENES } from './mockManifest';
+import './mock-shared.css';
 
-type Scene = 'logs' | 'overview';
-type LogState = 'normal' | 'incident' | 'empty';
-type OverviewState = 'normal' | 'incident' | 'fresh';
+const components: Record<string, unknown> = {
+  'overview': MockOverview,
+  'users': MockUsers,
+  'learner-center': MockLearnerCenter,
+  'virtual-learners': MockVirtualLearners,
+  'skills': MockSkills,
+  'topology': MockTopology,
+  'orchestrator': MockOrchestrator,
+  'execution-logs': MockExecLogs,
+  'event-center': MockEventCenter,
+  'api-config': MockApiConfig,
+  'addons': MockAddons,
+  'prompt-lab': MockPromptLab
+};
 
-const scene = ref<Scene>('logs');
-const logState = ref<LogState>('normal');
-const overviewState = ref<OverviewState>('normal');
+const scene = ref('overview');
+// 每个场景记住自己的状态选择
+const stateMap = reactive<Record<string, string>>(
+  Object.fromEntries(MOCK_SCENES.map((s) => [s.id, s.states[0].id]))
+);
 const compare = ref(false);
 
-const scenes = [
-  { id: 'logs' as Scene, label: '执行日志 · 终端流' },
-  { id: 'overview' as Scene, label: '平台总览 · 运营简报' }
-];
-
-const logStates: { id: LogState; label: string; hint: string }[] = [
-  { id: 'normal', label: '正常流', hint: '稳定输出' },
-  { id: 'incident', label: '异常爆发', hint: '连续失败超时' },
-  { id: 'empty', label: '空数据', hint: '暂无日志' }
-];
-
-const overviewStates: { id: OverviewState; label: string; hint: string }[] = [
-  { id: 'normal', label: '日常运行', hint: '有活跃有完成' },
-  { id: 'incident', label: '需要关注', hint: '调用异常 + 活跃为 0' },
-  { id: 'fresh', label: '全新部署', hint: '一切为 0' }
-];
-
-const currentStates = computed(() => (scene.value === 'logs' ? logStates : overviewStates));
-const currentState = computed({
-  get: () => (scene.value === 'logs' ? logState.value : overviewState.value),
-  set: (v: string) => setState(v)
-});
+const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === scene.value) || MOCK_SCENES[0]);
+const currentComponent = computed(() => components[scene.value]);
+const currentState = computed(() => stateMap[scene.value]);
 
 function setState(id: string) {
-  if (scene.value === 'logs') logState.value = id as LogState;
-  else overviewState.value = id as OverviewState;
+  stateMap[scene.value] = id;
+}
+
+function navigate(id: string) {
+  scene.value = id;
 }
 </script>
 
@@ -159,14 +154,6 @@ function setState(id: string) {
 }
 .al-bar__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-.al-seg { display: inline-flex; padding: 3px; background: #eef2fa; border-radius: 12px; gap: 2px; }
-.al-seg__item {
-  border: 0; background: transparent; padding: 7px 14px; border-radius: 9px;
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
-  cursor: pointer; transition: 0.15s ease;
-}
-.al-seg__item--active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
-
 .al-compare {
   border: 1px solid var(--line);
   background: #fff;
@@ -204,7 +191,7 @@ function setState(id: string) {
 .al-chip--active { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.07); color: var(--blue-deep); }
 .al-chip--active small { color: var(--blue); }
 
-.al-stage { padding: 16px 20px 0; display: grid; gap: 16px; max-width: 1320px; margin: 0 auto; }
+.al-stage { padding: 16px 20px 0; display: grid; gap: 16px; max-width: 1360px; margin: 0 auto; }
 .al-stage--compare { grid-template-columns: 1fr 1fr; align-items: start; max-width: none; }
 
 .al-pane { display: grid; gap: 8px; min-width: 0; }
@@ -231,7 +218,6 @@ function setState(id: string) {
 
 .al-frame {
   width: 100%;
-  background: var(--canvas);
   border: 1px solid var(--line);
   border-radius: 20px;
   overflow: hidden;

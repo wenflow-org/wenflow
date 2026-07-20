@@ -1,0 +1,216 @@
+<template>
+  <div class="mshell">
+    <!-- 迷你侧边栏（同时是导航与「侧栏再设计」演示） -->
+    <aside class="mshell__side">
+      <div class="mshell__brand">
+        <span class="mshell__logo">W</span>
+        <span class="mshell__brand-name">WenFlow Admin</span>
+      </div>
+      <nav class="mshell__nav">
+        <section v-for="group in groupedScenes" :key="group.title" class="mshell__group">
+          <div class="mshell__group-title">{{ group.title }}</div>
+          <button
+            v-for="item in group.items"
+            :key="item.id"
+            type="button"
+            class="mshell__item"
+            :class="{ 'mshell__item--active': item.id === current }"
+            @click="$emit('navigate', item.id)"
+          >
+            <span class="mshell__item-label">{{ item.label }}</span>
+            <span v-if="item.badge" class="mshell__item-badge">{{ item.badge }}</span>
+          </button>
+        </section>
+      </nav>
+      <div class="mshell__foot">
+        <span class="mshell__kbd">⌘K</span>
+        <span>命令面板</span>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <div class="mshell__main">
+      <header class="mshell__topbar">
+        <div class="mshell__crumbs">
+          <span class="mshell__crumb-group">{{ currentScene?.group }}</span>
+          <span class="mshell__crumb-sep">/</span>
+          <strong>{{ currentScene?.label }}</strong>
+        </div>
+        <div class="mshell__search">
+          <span class="mshell__search-icon">⌕</span>
+          <span class="mshell__search-hint">搜索页面、Skill、Trace ID…</span>
+          <span class="mshell__kbd">⌘K</span>
+        </div>
+      </header>
+      <main class="mshell__content">
+        <slot />
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
+
+const props = defineProps<{ current: string }>()
+defineEmits<{ (e: 'navigate', id: string): void }>()
+
+const groupedScenes = computed(() => {
+  const groups: Array<{ title: string; items: MockSceneDef[] }> = []
+  for (const scene of MOCK_SCENES) {
+    let g = groups.find((x) => x.title === scene.group)
+    if (!g) {
+      g = { title: scene.group, items: [] }
+      groups.push(g)
+    }
+    g.items.push(scene)
+  }
+  return groups
+})
+
+const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
+</script>
+
+<style scoped>
+.mshell {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  min-height: 720px;
+  background: #f6f8fc;
+  color: #1a2a44;
+  font-size: 13px;
+}
+
+/* 侧边栏 */
+.mshell__side {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #e1e8f2;
+  padding: 14px 10px 10px;
+  gap: 14px;
+}
+.mshell__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+.mshell__logo {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #3478f6, #8d6bff);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+}
+.mshell__brand-name { font-weight: 800; font-size: 13px; letter-spacing: -0.01em; }
+
+.mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
+.mshell__group-title {
+  padding: 0 10px 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #8492ab;
+}
+.mshell__group { display: grid; gap: 1px; }
+.mshell__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #5b6577;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.12s ease;
+}
+.mshell__item:hover { background: #f6f9ff; color: #1a2a44; }
+.mshell__item--active {
+  background: #eef5ff;
+  color: #1f57cc;
+  box-shadow: inset 2px 0 0 #3478f6;
+}
+.mshell__item-label { flex: 1; }
+.mshell__item-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef2fa;
+  color: #8492ab;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.mshell__item--active .mshell__item-badge { background: #dbe9ff; color: #1f57cc; }
+
+.mshell__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid #eef2fa;
+  color: #8492ab;
+  font-size: 11.5px;
+}
+.mshell__kbd {
+  padding: 1px 6px;
+  border: 1px solid #e1e8f2;
+  border-radius: 5px;
+  background: #fafbfc;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+/* 主区 */
+.mshell__main { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.mshell__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e1e8f2;
+}
+.mshell__crumbs { display: flex; align-items: center; gap: 8px; }
+.mshell__crumb-group { color: #8492ab; font-size: 12px; font-weight: 600; }
+.mshell__crumb-sep { color: #c3cede; }
+.mshell__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: #fafbfc;
+  color: #8492ab;
+  font-size: 12px;
+  cursor: text;
+}
+.mshell__search-hint { white-space: nowrap; }
+.mshell__content { min-width: 0; }
+
+@media (max-width: 860px) {
+  .mshell { grid-template-columns: 64px minmax(0, 1fr); }
+  .mshell__brand-name,
+  .mshell__item-label,
+  .mshell__item-badge,
+  .mshell__group-title,
+  .mshell__foot span:last-child,
+  .mshell__search { display: none; }
+  .mshell__item { justify-content: center; }
+}
+</style>
