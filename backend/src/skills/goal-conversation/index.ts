@@ -1,6 +1,11 @@
 ﻿import { agentConfigService } from '../../services/agentConfig.service';
 import aiService from '../../services/ai/ai.service';
 import { logger } from '../../utils/logger';
+import { getRequestContext } from '../../gateway/api-gateway/context';
+import {
+  consumeLogicalRetry,
+  createRetryBudget
+} from '../../gateway/api-gateway/retry-budget';
 import {
   composePromptFromAgentRouting,
   isPromptSupplementEnabled,
@@ -629,8 +634,36 @@ async function callAIWithRetry(
   const attempts: RetryAttemptInfo[] = [];
   let currentMaxTokens = options.maxTokens ?? 8000;
   const tokenCeiling = 16000;
+  const retryBudget = getRequestContext().retryBudget || createRetryBudget();
+  const logicalRetryLimit = Math.min(
+    retryBudget.limits.maxLogicalRetries,
+    getRequestContext().logicalRetryLimit ?? retryBudget.limits.maxLogicalRetries
+  );
+  let localLogicalRetries = 0;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      if (localLogicalRetries >= logicalRetryLimit) {
+        retryBudget.exhaustedBy = 'logical-retries';
+        logger.warn('[GoalConversation] 结构化输出重试预算已耗尽', {
+          attempt: attempt + 1,
+          maxRetries,
+          retryBudgetId: retryBudget.id,
+          exhaustedBy: retryBudget.exhaustedBy
+        });
+        break;
+      }
+      if (!consumeLogicalRetry(retryBudget)) {
+        logger.warn('[GoalConversation] 结构化输出重试预算已耗尽', {
+          attempt: attempt + 1,
+          maxRetries,
+          retryBudgetId: retryBudget.id,
+          exhaustedBy: retryBudget.exhaustedBy
+        });
+        break;
+      }
+      localLogicalRetries += 1;
+    }
     const response = await aiService.chat(messages, {
       temperature: options.temperature,
       maxTokens: currentMaxTokens,
@@ -639,7 +672,8 @@ async function callAIWithRetry(
       skillId: 'goal-conversation',
       userId,
       action: 'goal-conversation:dialogue',
-      sanitizeUserVisible: false
+      sanitizeUserVisible: false,
+      retryBudget
     });
 
     lastContent = response.content;

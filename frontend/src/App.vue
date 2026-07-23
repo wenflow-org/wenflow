@@ -1,6 +1,7 @@
 <template>
   <el-config-provider :locale="zhCn">
     <div id="app">
+      <AnnouncementBanner />
       <RouterView v-slot="{ Component }">
         <transition name="route-fade" mode="out-in">
           <component :is="Component" />
@@ -18,6 +19,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { useUserStore } from './stores/user';
 import { isTestMode } from '@/utils/debugMode';
 import ToastHost from './components/ui/ToastHost.vue';
+import AnnouncementBanner from './components/AnnouncementBanner.vue';
 
 // 调试浮层仅测试模式加载，普通用户不下载其代码
 const DevOverlay = defineAsyncComponent(() => import('./components/dev/DevOverlay.vue'));

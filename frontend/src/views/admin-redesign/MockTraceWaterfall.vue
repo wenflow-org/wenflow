@@ -3,22 +3,18 @@
     <!-- 状态条：当前选中的链路 -->
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ statusTitle }}</strong>
+      <strong class="mk-status__title wf-title" :title="activeTrace">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ spansOfTrace.length }} 个 span</span>
       <span class="mk-status__meta">总耗时 {{ totalDuration }}</span>
       <span class="mk-status__meta">失败 {{ errorCount }}</span>
-      <div class="mk-pills" style="margin-left:auto">
-        <button
-          v-for="t in traceIds"
-          :key="t"
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': activeTrace === t }"
-          @click="activeTrace = t"
-        >
-          {{ t }}
-        </button>
+      <div class="wf-tracepick">
+        <span class="wf-tracepick__count">{{ traceIds.length }} 条链路</span>
+        <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
+          <option v-for="t in traceIds" :key="t" :value="t">
+            {{ traceLabel(t) }}
+          </option>
+        </select>
       </div>
     </div>
 
@@ -43,7 +39,7 @@
         <button type="button" class="wf-row__main" @click="openSpanId = openSpanId === span.id ? '' : span.id">
           <span class="wf-row__stage">
             <span class="wf-row__kind" :class="`wf-row__kind--${span.kind}`">{{ span.kind === 'flow' ? '流程' : '调用' }}</span>
-            {{ span.stage }}
+            <span class="wf-row__stage-name">{{ span.stage }}</span>
           </span>
           <span class="wf-row__agent" @click.stop="openSkillDrawer(span.agent)">{{ span.agent }}</span>
           <span class="wf-row__track">
@@ -151,11 +147,29 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 const statusText = (s: string) => (s === 'err' ? '失败' : s === 'warn' ? '降级' : '成功')
 
+/* 长 trace ID 在下拉与标题中截断显示 */
+const shortTrace = (t: string) => (t.length > 20 ? `…${t.slice(-16)}` : t)
+function traceLabel(t: string) {
+  const mine = spans.value.filter((s) => s.traceId === t)
+  const errs = mine.filter((s) => s.status === 'err').length
+  const total = mine.reduce((a, s) => Math.max(a, s.startMs + s.durationMs), 0)
+  return `${shortTrace(t)} · ${mine.length} span · ${fmtMs(total)}${errs ? ` · ${errs} 失败` : ''}`
+}
+
+/* 结论完全由当前链路数据推导，不带预设立场 */
 const verdictText = computed(() => {
   const errs = spansOfTrace.value.filter((s) => s.status === 'err')
   if (!errs.length) return ''
   const first = errs[0]
-  return `${first.agent} 在 ${fmtMs(first.durationMs)} 后首次失败（${first.detail}），后续 ${errs.length - 1} 次失败同源。故障点在上游限流，非本节点逻辑错误；伴学已降级兜底，未造成用户侧中断。`
+  const agents = [...new Set(errs.map((s) => s.agent))]
+  const slowest = spansOfTrace.value.reduce((a, s) => (s.durationMs > (a?.durationMs || 0) ? s : a), errs[0])
+  const parts = [
+    `首次失败出现在 ${first.agent}（${first.title}，耗时 ${fmtMs(first.durationMs)}）。`,
+    `本链路共 ${errs.length} 次失败，涉及 ${agents.length} 个节点：${agents.join('、')}。`,
+    `最慢节点为 ${slowest.agent}（${fmtMs(slowest.durationMs)}）。`
+  ]
+  if (first.payload) parts.push(`首个错误：${first.payload.slice(0, 120)}`)
+  return parts.join('')
 })
 </script>
 
@@ -167,9 +181,34 @@ const verdictText = computed(() => {
   overflow: hidden;
 }
 
+/* 链路选择器：替代 pills，避免长 trace ID 挤爆状态条 */
+.wf-title {
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-tracepick {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.wf-tracepick__count { font-size: 11.5px; color: var(--mk-faint); white-space: nowrap; }
+.wf-tracepick__select {
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font-size: 11.5px;
+  color: var(--mk-ink);
+}
+
 .wf-ruler {
   display: grid;
-  grid-template-columns: 210px 1fr;
+  grid-template-columns: 280px 1fr;
   align-items: center;
   border-bottom: 1px solid var(--mk-line);
   background: #fafbfc;
@@ -182,7 +221,7 @@ const verdictText = computed(() => {
   text-transform: uppercase;
   color: var(--mk-faint);
 }
-.wf-ruler__track { position: relative; height: 26px; margin-right: 90px; }
+.wf-ruler__track { position: relative; height: 26px; margin-right: 74px; }
 .wf-ruler__tick {
   position: absolute;
   top: 4px;
@@ -226,7 +265,13 @@ const verdictText = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+.wf-row__stage-name {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .wf-row__kind {
   padding: 1px 6px;
@@ -294,7 +339,10 @@ const verdictText = computed(() => {
   background: #0d1420;
   color: #8ba3c7;
   font: 11px/1.6 'JetBrains Mono', monospace;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 200px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .wf-row__detail-actions { display: flex; justify-content: flex-end; }
 

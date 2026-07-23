@@ -5,7 +5,7 @@
       <strong class="mk-status__title">{{ hasError ? '拓扑存在异常节点' : '拓扑运行正常' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ agentNodes.length }} Agent</span>
-      <span class="mk-status__meta">{{ skillProfiles.length }} Skill</span>
+      <span class="mk-status__meta">{{ skillNodes.length }} Skill</span>
       <span class="mk-status__meta">提示：点 Skill 看详情，点 Agent 查日志</span>
     </div>
 
@@ -64,12 +64,16 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { skillProfiles, skillStatOf, openSkillDrawer, investigateAgent, spans } from './mockStore'
+import { skillProfiles, skillStatOf, openSkillDrawer, investigateAgent, spans, dataSource } from './mockStore'
+import { liveTopoNodes } from './mockLive'
 
 const W = 1080
 const H = 470
 
-const agentDefs = [
+interface AgentDef { id: string; name: string }
+interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number }
+
+const demoAgentDefs: AgentDef[] = [
   { id: 'goal-agent', name: '目标 Agent' },
   { id: 'path-agent', name: '路径 Agent' },
   { id: 'teaching-agent', name: '教学 Agent' },
@@ -77,12 +81,44 @@ const agentDefs = [
   { id: 'virtual-agent', name: '虚拟学习者 Agent' }
 ]
 
-const hasError = computed(() => spans.value.some((s) => s.status === 'err'))
+const isLive = computed(() => dataSource.value === 'live' && liveTopoNodes.value.length > 0)
+
+/* live：真实拓扑节点（agent + skill，含真实统计与隶属） */
+const liveAgents = computed<AgentDef[]>(() =>
+  liveTopoNodes.value.filter((n) => n.type === 'agent').map((n) => ({ id: n.id, name: n.label }))
+)
+const liveSkills = computed<SkillItem[]>(() =>
+  liveTopoNodes.value
+    .filter((n) => n.type === 'skill' && n.parentAgentId)
+    .map((n) => ({
+      id: n.id.replace(/^skill:/, ''),
+      name: n.label.replace(/ Skill$/, ''),
+      agentId: n.parentAgentId as string,
+      calls: n.stats.totalCalls,
+      errors: n.stats.failed
+    }))
+)
+
+const agentDefs = computed<AgentDef[]>(() => (isLive.value ? liveAgents.value.slice(0, 5) : demoAgentDefs))
+
+function skillsOf(agentId: string): SkillItem[] {
+  if (isLive.value) return liveSkills.value.filter((s) => s.agentId === agentId)
+  return skillProfiles
+    .filter((p) => p.agentId === agentId)
+    .map((p) => {
+      const st = skillStatOf(p.id)
+      return { id: p.id, name: p.name, agentId: p.agentId, calls: st.calls, errors: st.errors }
+    })
+}
+
+const hasError = computed(() =>
+  isLive.value ? liveSkills.value.some((s) => s.errors > 0) : spans.value.some((s) => s.status === 'err')
+)
 
 const agentNodes = computed(() =>
-  agentDefs.map((a, i) => {
-    const members = skillProfiles.filter((p) => p.agentId === a.id)
-    const errors = members.filter((m) => skillStatOf(m.id).errors > 0).length
+  agentDefs.value.map((a, i) => {
+    const members = skillsOf(a.id)
+    const errors = members.filter((m) => m.errors > 0).length
     return {
       ...a,
       meta: `${members.length} Skill${errors ? ` · ${errors} 异常` : ''}`,
@@ -97,24 +133,21 @@ const agentNodes = computed(() =>
 
 const skillNodes = computed(() => {
   const out: Array<{ id: string; skillId: string; name: string; meta: string; x: number; y: number; w: number; h: number; idle?: boolean; error?: boolean }> = []
-  agentDefs.forEach((a, i) => {
-    skillProfiles
-      .filter((p) => p.agentId === a.id)
-      .forEach((p, j) => {
-        const stat = skillStatOf(p.id)
-        out.push({
-          id: `${a.id}-${j}`,
-          skillId: p.id,
-          name: p.name,
-          meta: stat.calls ? `${stat.calls} 调用${stat.errors ? ` · ${stat.errors} 失败` : ''}` : '未调用',
-          x: 24 + i * 212,
-          y: 140 + j * 58,
-          w: 188,
-          h: 44,
-          idle: stat.calls === 0,
-          error: stat.errors > 0
-        })
+  agentDefs.value.forEach((a, i) => {
+    skillsOf(a.id).forEach((p, j) => {
+      out.push({
+        id: `${a.id}-${j}`,
+        skillId: p.id,
+        name: p.name,
+        meta: p.calls ? `${p.calls} 调用${p.errors ? ` · ${p.errors} 失败` : ''}` : '未调用',
+        x: 24 + i * 212,
+        y: 140 + j * 58,
+        w: 188,
+        h: 44,
+        idle: p.calls === 0,
+        error: p.errors > 0
       })
+    })
   })
   return out
 })
@@ -124,18 +157,15 @@ const edges = computed(() => {
   agentNodes.value.forEach((a, i) => {
     const ax = a.x + a.w / 2
     const ay = a.y + a.h
-    skillProfiles
-      .filter((p) => p.agentId === a.id)
-      .forEach((p, j) => {
-        const stat = skillStatOf(p.id)
-        const sx = 24 + i * 212 + 94
-        const sy = 140 + j * 58
-        out.push({
-          d: `M ${ax} ${ay} C ${ax} ${ay + 22}, ${sx} ${sy - 22}, ${sx} ${sy}`,
-          color: stat.errors > 0 ? '#dc2626' : '#c3cede',
-          width: Math.min(1 + stat.calls / 2, 3.5)
-        })
+    skillsOf(a.id).forEach((p, j) => {
+      const sx = 24 + i * 212 + 94
+      const sy = 140 + j * 58
+      out.push({
+        d: `M ${ax} ${ay} C ${ax} ${ay + 22}, ${sx} ${sy - 22}, ${sx} ${sy}`,
+        color: p.errors > 0 ? '#dc2626' : '#c3cede',
+        width: Math.min(1 + p.calls / 2, 3.5)
       })
+    })
     if (i < agentNodes.value.length - 1) {
       out.push({
         d: `M ${a.x + a.w} ${a.y + 37} L ${a.x + 212} ${a.y + 37}`,

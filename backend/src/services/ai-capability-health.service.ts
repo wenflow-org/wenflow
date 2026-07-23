@@ -90,8 +90,29 @@ export class AICapabilityHealthService {
   private streaks = new Map(CAPABILITIES.map(item => [item.id, { successes: 0, failures: 0 }]));
   private timer: NodeJS.Timeout | null = null;
   private refreshInFlight: Promise<AICapabilitySnapshot> | null = null;
+  private enabled = true;
+
+  /** 当前探测开关状态（仅读取，不触发 IO） */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * 在运行时切换探测开关。开启时若此前未启动定时器则启动；
+   * 关闭时立即清除定时器并等待在途探测完成，从而停止后续周期性 LLM 请求。
+   * 调用前应先持久化到 platform_settings，本方法只负责内存态与定时器联动。
+   */
+  async setEnabled(enabled: boolean): Promise<void> {
+    this.enabled = enabled;
+    if (enabled) {
+      this.start();
+    } else {
+      await this.stop();
+    }
+  }
 
   start(): void {
+    if (!this.enabled) return;
     if (this.timer) return;
     this.timer = setInterval(() => {
       void this.refresh().catch(error => {
@@ -193,7 +214,8 @@ export class AICapabilityHealthService {
             { role: 'system', content: '这是连通性检查。请只回复 OK。' },
             { role: 'user', content: 'OK' }
           ],
-          max_tokens: 4,
+          // 推理模型会先消耗 reasoning tokens，4 个 token 必然截断导致空正文（INVALID_RESPONSE_SCHEMA）
+          max_tokens: 64,
           temperature: 0
         }, {
           sourceEntry: 'system-canary',

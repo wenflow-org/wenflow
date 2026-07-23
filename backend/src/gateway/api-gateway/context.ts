@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import type { RouteExecutionOverride } from './types';
+import type { RetryBudget } from './retry-budget';
 
 export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
 
@@ -9,6 +10,12 @@ export interface RequestContext {
   action?: string;
   skillId?: string;
   executionLogId?: string;
+  parentExecutionId?: string;
+  rootExecutionId?: string;
+  promptCallId?: string;
+  promptAttemptNo?: number;
+  retryBudget?: RetryBudget;
+  logicalRetryLimit?: number;
   sourceEntry?: SourceEntry;
   traceId?: string;
   callerAgent?: string;

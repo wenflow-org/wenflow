@@ -234,6 +234,22 @@ export const adminPlatformSettingsApi = {
 
   updateRegistrationSetting: async (registrationEnabled: boolean) => {
     return adminAxios.put('/admin/settings/registration', { registrationEnabled });
+  },
+
+  getReliabilitySettings: async () => {
+    return adminAxios.get('/admin/settings/reliability');
+  },
+
+  updateReliabilitySettings: async (data: {
+    maxUpstreamAttempts: number;
+    maxTransportRetries: number;
+    maxLogicalRetries: number;
+    defaultRequestTimeoutMs: number;
+    retryBaseDelayMs: number;
+    maxRetryAfterMs: number;
+    jitterEnabled: boolean;
+  }) => {
+    return adminAxios.put('/admin/settings/reliability', data);
   }
 };
 
@@ -625,8 +641,15 @@ export const adminAgentsApi = {
     status?: 'success' | 'error' | 'timeout';
     keyword?: string;
     timeRange?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'week' | 'month' | 'all';
+    sourceEntry?: string;
+    startTime?: string;
+    endTime?: string;
   }) => {
     return adminAxios.get('/admin/agents/logs', { params });
+  },
+
+  getLogDetail: async (id: string) => {
+    return adminAxios.get(`/admin/agents/logs/${encodeURIComponent(id)}`);
   },
 
   getRegistry: async () => {
@@ -872,6 +895,18 @@ export const adminApiConfigApi = {
 };
 
 /**
+ * AI 能力探测开关（控制后端是否定期向模型服务发送探活请求，约每 2 分钟一次）
+ */
+export const adminCapabilityProbeApi = {
+  getSettings: async () => {
+    return adminAxios.get('/admin/settings/capability-probe');
+  },
+  updateSettings: async (enabled: boolean) => {
+    return adminAxios.put('/admin/settings/capability-probe', { enabled });
+  }
+};
+
+/**
  * Agent Prompt 管理 API - 版本管理
  */
 export const adminAgentPromptsApi = {
@@ -973,6 +1008,7 @@ export const adminSkillsApi = {
     temperature?: number;
     maxTokens?: number;
     requestTimeoutMs?: number | null;
+    maxLogicalRetries?: number | null;
     enabled?: boolean;
   }) => {
     return adminAxios.put(`/admin/skill-model-configs/${skillId}`, data);
@@ -1185,6 +1221,30 @@ export const adminVirtualLearnersApi = {
 
   rerunBlackboxVirtualSession: async (sessionId: string) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-rerun`, {});
+  },
+
+  cloneQuickLearnFixture: async (profileId: string, data: { sourcePathId: string; titlePrefix?: string }) => {
+    return adminAxios.post(`/admin/virtual-learners/${profileId}/quick-learn/fixtures`, data);
+  },
+
+  getQuickLearnTasks: async (profileId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/${profileId}/quick-learn/tasks`);
+  },
+
+  startQuickLearnRun: async (profileId: string, data: { taskId: string; maxTurns?: number }) => {
+    return adminAxios.post(`/admin/virtual-learners/${profileId}/quick-learn/runs`, data);
+  },
+
+  getQuickLearnRuns: async (profileId: string, params?: { page?: number; pageSize?: number }) => {
+    return adminAxios.get(`/admin/virtual-learners/${profileId}/quick-learn/runs`, { params });
+  },
+
+  getQuickLearnRun: async (runId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/quick-learn/runs/${runId}`);
+  },
+
+  abortQuickLearnRun: async (runId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/quick-learn/runs/${runId}/abort`, {});
   },
 
   virtualSessionAuto: async (sessionId: string, data?: { maxRounds?: number }) => {

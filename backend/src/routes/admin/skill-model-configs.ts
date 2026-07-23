@@ -2,6 +2,7 @@ import { Router } from 'express';
 import skillModelConfigService from '../../services/skillModelConfig.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
 import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
+import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ function pickEditableConfig(body: any) {
     temperature: body?.temperature,
     maxTokens: body?.maxTokens,
     requestTimeoutMs: body?.requestTimeoutMs,
+    maxLogicalRetries: body?.maxLogicalRetries,
     enabled: body?.enabled,
   };
 }
@@ -45,6 +47,29 @@ router.put('/:skillId', async (req, res) => {
   try {
     const existing = await skillModelConfigService.get(req.params.skillId);
     const body = req.body || {};
+    if (
+      body.requestTimeoutMs !== undefined
+      && body.requestTimeoutMs !== null
+      && (!Number.isInteger(body.requestTimeoutMs) || body.requestTimeoutMs < 10_000 || body.requestTimeoutMs > 300_000)
+    ) {
+      return res.status(400).json({ success: false, error: 'requestTimeoutMs 必须是 10000 到 300000 的整数或 null' });
+    }
+    if (
+      body.maxLogicalRetries !== undefined
+      && body.maxLogicalRetries !== null
+      && (!Number.isInteger(body.maxLogicalRetries) || body.maxLogicalRetries < 0 || body.maxLogicalRetries > 2)
+    ) {
+      return res.status(400).json({ success: false, error: 'maxLogicalRetries 必须是 0 到 2 的整数或 null' });
+    }
+    if (body.maxLogicalRetries != null) {
+      const reliabilitySettings = await getPlatformReliabilitySettings();
+      if (body.maxLogicalRetries > reliabilitySettings.maxLogicalRetries) {
+        return res.status(400).json({
+          success: false,
+          error: `maxLogicalRetries 不能超过平台上限 ${reliabilitySettings.maxLogicalRetries}`
+        });
+      }
+    }
     const endpointProvided = Object.prototype.hasOwnProperty.call(body, 'endpoint');
     if (endpointProvided && body.endpoint !== null && typeof body.endpoint !== 'string') {
       return res.status(400).json({ success: false, error: 'endpoint 必须是字符串或 null' });

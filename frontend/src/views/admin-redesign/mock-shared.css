@@ -20,9 +20,13 @@
   color: var(--mk-ink);
   font-size: 13px;
   line-height: 1.5;
-  padding: 18px 20px 24px;
+  padding: 14px 16px 20px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
+  /* 关键：行高按内容计算，多余空间留在底部。
+     缺省 align-content: stretch 会把 auto 行拉满整个 min-height，
+     导致状态条等首行被拉伸成"虚高"。 */
+  align-content: start;
   min-height: 100%;
 }
 
@@ -30,9 +34,9 @@
 .mk-status {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 10px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   flex-wrap: wrap;
@@ -42,17 +46,18 @@
 .mk-status--warn .mk-status__dot { background: var(--mk-amber); }
 .mk-status--bad .mk-status__dot { background: var(--mk-red); }
 .mk-status--muted .mk-status__dot { background: var(--mk-faint); }
-.mk-status__title { font-weight: 700; font-size: 14px; }
-.mk-status__sep { width: 1px; height: 14px; background: var(--mk-line); }
-.mk-status__meta { color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-status__title { font-weight: 700; font-size: 13px; }
+.mk-status__sep { width: 1px; height: 13px; background: var(--mk-line); }
+.mk-status__meta { color: var(--mk-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mk-status__action {
   margin-left: auto;
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 4px 10px;
+  border-radius: 7px;
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-blue);
   font: inherit;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -72,7 +77,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
@@ -285,9 +290,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 14px;
-  border-radius: 10px;
-  font-size: 12.5px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  font-size: 12px;
   font-weight: 600;
 }
 .mk-toast--ok { background: var(--mk-green-bg, #ecfdf5); color: var(--mk-green, #15803d); }

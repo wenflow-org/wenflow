@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { APIGateway } from '../index'
 import { runWithContext } from '../context'
+import { createRetryBudget } from '../retry-budget'
 
 function route(apiKey = 'secret') {
   return {
@@ -42,6 +43,7 @@ describe('APIGateway route overrides', () => {
       endpoint: 'https://frozen.example/v1',
       model: 'frozen-model',
       timeoutMs: 12345,
+      timeoutSource: 'route-override',
       privateNetworkPolicy: 'public-only'
     }), { messages: [] }, expect.anything())
   })
@@ -130,6 +132,25 @@ describe('APIGateway route overrides', () => {
       skillId: 'path-planning',
       userId: 'user-1'
     }, 'user-1')
+  })
+
+  it('显式上下文未提供预算时继承当前请求的重试预算', async () => {
+    const gateway = new APIGateway() as any
+    gateway.cache = { getRoute: jest.fn().mockReturnValue(route()), setRoute: jest.fn() }
+    gateway.executor = { execute: jest.fn().mockResolvedValue({ id: 'ok' }) }
+    const retryBudget = createRetryBudget()
+
+    await runWithContext({ retryBudget }, () => gateway.execute(
+      { messages: [] },
+      { skillId: 'skill-1' },
+      { requestPath: '/test', retryBudget: undefined }
+    ))
+
+    expect(gateway.executor.execute).toHaveBeenCalledWith(
+      expect.anything(),
+      { messages: [] },
+      expect.objectContaining({ retryBudget })
+    )
   })
 
   it('resolveRoute 与 execute 使用相同的父 Agent 归一化', async () => {

@@ -6,7 +6,7 @@ import { isIP } from 'net'
 import { canAccessPrivateNetwork } from '../services/runtime-network-policy.service'
 
 const DEFAULT_TIMEOUT_MS = 15_000
-const MAX_TIMEOUT_MS = 300_000
+export const SAFE_HTTP_MAX_TIMEOUT_MS = 300_000
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const DEFAULT_MAX_REDIRECTS = 3
 const SENSITIVE_REDIRECT_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization'])
@@ -379,7 +379,7 @@ export async function safeHttpRequest<T = unknown>(
 ): Promise<SafeHttpResponse<T>> {
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS
   const timeoutMs = Number.isFinite(options.timeoutMs) && Number(options.timeoutMs) > 0
-    ? Math.min(Math.floor(Number(options.timeoutMs)), MAX_TIMEOUT_MS)
+    ? Math.min(Math.floor(Number(options.timeoutMs)), SAFE_HTTP_MAX_TIMEOUT_MS)
     : DEFAULT_TIMEOUT_MS
   const deadline = Date.now() + timeoutMs
   const abortController = new AbortController()

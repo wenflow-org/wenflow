@@ -294,6 +294,56 @@
         <!-- Tabs -->
         <el-tabs v-model="activeTab" class="drawer-tabs">
           <!-- 基本信息 -->
+          <el-tab-pane label="调用时间线" name="timeline">
+            <div class="attempt-timeline" v-loading="detailLoading">
+              <template v-if="attempts.length">
+                <article
+                  v-for="attempt in attempts"
+                  :key="attempt.id"
+                  class="attempt-card"
+                  :class="attempt.success ? 'attempt-card--success' : 'attempt-card--error'"
+                >
+                  <div class="attempt-card__rail">
+                    <span class="attempt-card__dot"></span>
+                    <span class="attempt-card__line"></span>
+                  </div>
+                  <div class="attempt-card__content">
+                    <div class="attempt-card__head">
+                      <div>
+                        <strong>Prompt {{ attempt.promptAttemptNo }} · 网络尝试 {{ attempt.transportAttemptNo }}</strong>
+                        <span class="attempt-card__time">{{ formatAttemptOffset(attempt.startedAt) }}</span>
+                      </div>
+                      <el-tag size="small" :type="attempt.success ? 'success' : attempt.willRetry ? 'warning' : 'danger'">
+                        {{ getAttemptStatusLabel(attempt) }}
+                      </el-tag>
+                    </div>
+                    <div class="attempt-card__meta">
+                      <span>{{ attempt.providerId || '未知 Provider' }}</span>
+                      <span>{{ attempt.resolvedModel || '未知模型' }}</span>
+                      <span v-if="attempt.statusCode">HTTP {{ attempt.statusCode }}</span>
+                      <span>{{ formatDuration(attempt.durationMs) }}</span>
+                      <span v-if="attempt.totalTokens">{{ attempt.totalTokens }} Tokens</span>
+                    </div>
+                    <p v-if="attempt.errorMessage" class="attempt-card__error">
+                      {{ attempt.errorCode || attempt.errorCategory || '调用失败' }}：{{ attempt.errorMessage }}
+                    </p>
+                    <p v-if="attempt.willRetry" class="attempt-card__retry">
+                      将在 {{ attempt.backoffMs || 0 }}ms 后自动重试
+                    </p>
+                    <div v-if="attempt.providerRequestId || attempt.completionId" class="attempt-card__ids">
+                      <span v-if="attempt.providerRequestId">Request ID: {{ attempt.providerRequestId }}</span>
+                      <span v-if="attempt.completionId">Completion ID: {{ attempt.completionId }}</span>
+                    </div>
+                  </div>
+                </article>
+              </template>
+              <el-empty
+                v-else-if="!detailLoading"
+                description="旧日志未记录 Provider Attempt 明细，仅展示可确认的数据"
+              />
+            </div>
+          </el-tab-pane>
+
           <el-tab-pane label="基本信息" name="basic">
             <el-descriptions :column="2" class="drawer-descriptions">
               <el-descriptions-item label="Trace ID" v-if="selectedLog.traceId">
@@ -318,7 +368,7 @@
                 {{ selectedLog.statusCode }}
               </el-descriptions-item>
               <el-descriptions-item label="尝试次数" v-if="selectedLog.attempts">
-                {{ selectedLog.attempts }}<template v-if="selectedLog.maxRetries"> / {{ selectedLog.maxRetries }}</template>
+                {{ selectedLog.attempts }}<template v-if="selectedLog.maxAttempts"> / {{ selectedLog.maxAttempts }}</template>
               </el-descriptions-item>
               <el-descriptions-item label="Path ID" v-if="selectedLog.pathId">
                 {{ selectedLog.pathId }}
@@ -372,10 +422,23 @@
                     <div class="prompt-child-card__submeta">
                       <span>{{ formatDateTime(item.createdAt) }}</span>
                       <span v-if="item.pipelineRunId">Run {{ item.pipelineRunId }}</span>
-                      <span v-if="item.pipelineStepIndex !== null && item.pipelineStepIndex !== undefined">步骤 {{ item.pipelineStepIndex }}</span>
-                    </div>
-                    <p v-if="describePromptLogIssue(item)" class="prompt-child-card__issue">{{ describePromptLogIssue(item) }}</p>
-                    <div v-if="item.errorMessage" class="prompt-child-card__error">{{ item.errorMessage }}</div>
+                        <span v-if="item.pipelineStepIndex !== null && item.pipelineStepIndex !== undefined">步骤 {{ item.pipelineStepIndex }}</span>
+                        <span v-if="item.promptAttemptCount">{{ item.promptAttemptCount }} 次逻辑尝试</span>
+                        <span v-if="item.llmRequestCount">{{ item.llmRequestCount }} 次网关调用</span>
+                      </div>
+                      <p v-if="describePromptLogIssue(item)" class="prompt-child-card__issue">{{ describePromptLogIssue(item) }}</p>
+                      <div v-if="item.errorMessage" class="prompt-child-card__error">{{ item.errorMessage }}</div>
+                      <div v-if="item.attempts?.length" class="prompt-attempt-list">
+                        <div v-for="attempt in item.attempts" :key="`${item.id}-${attempt.attempt}`" class="prompt-attempt-item">
+                          <span>逻辑尝试 {{ attempt.attempt }}</span>
+                          <el-tag size="small" :type="attempt.status === 'success' ? 'success' : 'warning'">
+                            {{ getPromptAttemptStatusLabel(attempt.status) }}
+                          </el-tag>
+                          <span v-if="attempt.durationMs">{{ formatDuration(attempt.durationMs) }}</span>
+                          <span v-if="attempt.transportAttemptCount">{{ attempt.transportAttemptCount }} 次网络尝试</span>
+                          <span v-if="attempt.failureReason">{{ attempt.failureReason }}</span>
+                        </div>
+                      </div>
                   </article>
                 </div>
               </template>
@@ -448,7 +511,7 @@ import {
   ArrowDown
 } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
-import { adminAxios, adminRuntimeDefinitionsApi } from '@/api/adminApi';
+import { adminAgentsApi, adminAxios, adminRuntimeDefinitionsApi } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
@@ -476,7 +539,9 @@ interface Log {
   routeSource?: string | null;
   statusCode?: number | null;
   attempts?: number | null;
-  maxRetries?: number | null;
+  maxAttempts?: number | null;
+  recoveredByRetry?: boolean;
+  model?: string | null;
   messageCount?: number | null;
   finishReason?: string | null;
   phase?: string | null;
@@ -508,7 +573,54 @@ interface PromptLog {
   pipelineStepIndex?: number | null;
   traceId?: string | null;
   parentExecutionId?: string | null;
+  promptAttemptCount?: number;
+  llmRequestCount?: number;
+  finalLlmRequestId?: string | null;
+  failureStage?: string | null;
+  providerId?: string | null;
+  model?: string | null;
+  attempts?: PromptAttempt[];
   createdAt: string;
+}
+
+interface PromptAttempt {
+  attempt: number;
+  status?: 'success' | 'validation_failed' | 'transport_failed';
+  durationMs?: number;
+  llmRequestId?: string;
+  transportAttemptCount?: number;
+  failureReason?: string;
+}
+
+interface LlmAttempt {
+  id: string;
+  llmRequestId: string;
+  promptCallId?: string | null;
+  promptAttemptNo: number;
+  transportAttemptNo: number;
+  maxAttempts: number;
+  providerId?: string | null;
+  providerType?: string | null;
+  routeSource?: string | null;
+  requestedModel?: string | null;
+  resolvedModel?: string | null;
+  responseModel?: string | null;
+  endpointHost?: string | null;
+  success: boolean;
+  retryable?: boolean | null;
+  willRetry: boolean;
+  statusCode?: number | null;
+  errorCategory?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  backoffMs?: number | null;
+  retryAfterMs?: number | null;
+  totalTokens?: number | null;
+  completionId?: string | null;
+  providerRequestId?: string | null;
 }
 
 // 状态
@@ -656,9 +768,13 @@ const executionHighlights = computed(() => {
 // 详情抽屉
 const drawerVisible = ref(false);
 const selectedLog = ref<Log | null>(null);
-const activeTab = ref('basic');
+const activeTab = ref('timeline');
+const detailLoading = ref(false);
+const attempts = ref<LlmAttempt[]>([]);
 const promptLogsLoading = ref(false);
+let detailRequestId = 0;
 const promptLogs = ref<PromptLog[]>([]);
+let promptLogsRequestId = 0;
 const route = useRoute();
 const router = useRouter();
 
@@ -799,9 +915,27 @@ const handleSizeChange = (size: number) => {
 // 显示详情
 const showDetail = (log: Log) => {
   selectedLog.value = log;
-  activeTab.value = 'basic';
+  activeTab.value = 'timeline';
+  attempts.value = [];
   drawerVisible.value = true;
+  void loadLogDetail(log.id);
   void loadPromptLogs(log);
+};
+
+const loadLogDetail = async (id: string) => {
+  const requestId = ++detailRequestId;
+  detailLoading.value = true;
+  try {
+    const response = await adminAgentsApi.getLogDetail(id);
+    if (requestId !== detailRequestId || selectedLog.value?.id !== id) return;
+    attempts.value = response.data?.data?.attempts || [];
+  } catch {
+    if (requestId !== detailRequestId || selectedLog.value?.id !== id) return;
+    attempts.value = [];
+    toast.error('加载 Provider 调用时间线失败');
+  } finally {
+    if (requestId === detailRequestId) detailLoading.value = false;
+  }
 };
 
 const buildPromptLogQuery = (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' | 'actorType' | 'executionLayer'> | null | undefined) => {
@@ -826,6 +960,7 @@ const openPromptLogs = (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' |
 };
 
 const loadPromptLogs = async (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'traceId' | 'actorType' | 'executionLayer'>) => {
+  const requestId = ++promptLogsRequestId;
   const query = buildPromptLogQuery(log);
   if (!Object.keys(query).length) {
     promptLogs.value = [];
@@ -841,12 +976,14 @@ const loadPromptLogs = async (log: Pick<Log, 'id' | 'agentId' | 'pathId' | 'trac
       traceId: query.traceId,
       parentExecutionId: query.parentExecutionId,
     });
+    if (requestId !== promptLogsRequestId || selectedLog.value?.id !== log.id) return;
     promptLogs.value = response.data?.data || [];
   } catch {
+    if (requestId !== promptLogsRequestId || selectedLog.value?.id !== log.id) return;
     promptLogs.value = [];
     toast.error('加载 Prompt 子日志失败');
   } finally {
-    promptLogsLoading.value = false;
+    if (requestId === promptLogsRequestId) promptLogsLoading.value = false;
   }
 };
 
@@ -941,6 +1078,26 @@ const formatDuration = (ms: number) => {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 };
+
+const formatAttemptOffset = (startedAt: string) => {
+  if (!attempts.value.length) return '';
+  const first = new Date(attempts.value[0].startedAt).getTime();
+  const current = new Date(startedAt).getTime();
+  const offset = Math.max(0, current - first);
+  return `+${formatDuration(offset)}`;
+};
+
+const getAttemptStatusLabel = (attempt: LlmAttempt) => {
+  if (attempt.success) return attempt.transportAttemptNo > 1 ? '重试恢复' : '成功';
+  if (attempt.willRetry) return '失败，准备重试';
+  return '最终失败';
+};
+
+const getPromptAttemptStatusLabel = (status?: PromptAttempt['status']) => ({
+  success: '通过',
+  validation_failed: '输出校验失败',
+  transport_failed: '网络调用失败'
+} as Record<string, string>)[status || ''] || '失败';
 
 const formatJson = (json: string) => {
   try {
@@ -1521,6 +1678,111 @@ onUnmounted(() => {
   padding-top: 4px;
   border-top: var(--admin-border-subtle);
   min-width: 0;
+}
+
+.attempt-timeline {
+  display: grid;
+  gap: 0;
+  min-height: 160px;
+}
+
+.attempt-card {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.attempt-card__rail {
+  display: grid;
+  grid-template-rows: 16px minmax(24px, 1fr);
+  justify-items: center;
+}
+
+.attempt-card__dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--admin-color-error);
+  box-shadow: 0 0 0 4px var(--admin-color-error-bg);
+}
+
+.attempt-card--success .attempt-card__dot {
+  background: var(--admin-color-success);
+  box-shadow: 0 0 0 4px var(--admin-color-success-bg);
+}
+
+.attempt-card__line {
+  width: 1px;
+  height: 100%;
+  background: var(--admin-border-color);
+}
+
+.attempt-card:last-child .attempt-card__line {
+  display: none;
+}
+
+.attempt-card__content {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: var(--admin-border-subtle);
+  border-radius: 12px;
+  background: var(--admin-bg-surface);
+}
+
+.attempt-card__head,
+.attempt-card__head > div,
+.attempt-card__meta,
+.attempt-card__ids {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.attempt-card__head {
+  justify-content: space-between;
+}
+
+.attempt-card__time,
+.attempt-card__meta,
+.attempt-card__ids {
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+}
+
+.attempt-card__error,
+.attempt-card__retry {
+  margin: 0;
+  font-size: 13px;
+}
+
+.attempt-card__error {
+  color: var(--admin-color-error);
+}
+
+.attempt-card__retry {
+  color: var(--admin-color-warning);
+}
+
+.prompt-attempt-list {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: var(--admin-border-subtle);
+}
+
+.prompt-attempt-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
 }
 
 .drawer-tabs :deep(.el-tabs__header) {

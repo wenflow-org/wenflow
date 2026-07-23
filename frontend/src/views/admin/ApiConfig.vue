@@ -189,6 +189,113 @@
       </aside>
     </div>
 
+    <section class="config-section config-section--full reliability-section">
+      <div class="config-section__head">
+        <div>
+          <h2>AI 调用可靠性</h2>
+          <p class="section-description">控制一次执行树的请求预算、重试恢复和默认超时。Skill 可单独收紧逻辑重试。</p>
+        </div>
+        <span class="head-badge" :class="reliabilityLoaded ? 'head-badge--info' : 'head-badge--danger'">
+          {{ reliabilityLoaded ? '平台默认 · 热生效' : '设置暂不可用' }}
+        </span>
+      </div>
+
+      <div class="reliability-grid">
+        <article class="reliability-panel">
+          <div class="reliability-panel__head">
+            <div>
+              <h3>执行预算</h3>
+              <p>初次请求、Transport Retry 和 Logical Retry 共用同一预算。</p>
+            </div>
+            <span class="effective-value">最多 {{ reliability.maxUpstreamAttempts }} 次</span>
+          </div>
+          <el-form label-position="top" class="config-form config-form--tight">
+            <el-form-item label="单次执行树最多 Provider 请求数">
+              <el-input-number
+                v-model="reliability.maxUpstreamAttempts"
+                :min="1"
+                :max="reliabilityHardLimits.maxUpstreamAttempts"
+                :disabled="!reliabilityLoaded"
+              />
+              <div class="field-help">代码硬上限 {{ reliabilityHardLimits.maxUpstreamAttempts }} 次，所有重试都会消耗此预算。</div>
+            </el-form-item>
+            <el-form-item label="默认 Logical Retry">
+              <el-input-number
+                v-model="reliability.maxLogicalRetries"
+                :min="0"
+                :max="reliabilityHardLimits.maxLogicalRetries"
+                :disabled="!reliabilityLoaded"
+              />
+              <div class="field-help">这是预算上限，仅在 Skill 已实现输出校验和修复提示时生效。</div>
+            </el-form-item>
+          </el-form>
+        </article>
+
+        <article class="reliability-panel">
+          <div class="reliability-panel__head">
+            <div>
+              <h3>传输恢复</h3>
+              <p>处理超时、临时网络错误、429 和部分 5xx。</p>
+            </div>
+            <span class="effective-value">最多 {{ effectiveTransportAttempts }} 次尝试</span>
+          </div>
+          <el-form label-position="top" class="config-form config-form--tight">
+            <div class="field-grid field-grid--two">
+              <el-form-item label="最大 Transport Retry">
+                <el-input-number
+                  v-model="reliability.maxTransportRetries"
+                  :min="0"
+                  :max="reliabilityHardLimits.maxTransportRetries"
+                  :disabled="!reliabilityLoaded"
+                />
+              </el-form-item>
+              <el-form-item label="默认单次请求超时">
+                <el-input-number
+                  v-model="reliability.defaultRequestTimeoutMs"
+                  :min="reliabilityHardLimits.minRequestTimeoutMs"
+                  :max="reliabilityHardLimits.maxRequestTimeoutMs"
+                  :step="10000"
+                  :disabled="!reliabilityLoaded"
+                />
+                <div class="field-help">毫秒，Skill 显式超时优先。硬上限 {{ reliabilityHardLimits.maxRequestTimeoutMs / 1000 }} 秒。</div>
+              </el-form-item>
+            </div>
+            <div class="field-grid field-grid--two">
+              <el-form-item label="初始 Backoff">
+                <el-input-number
+                  v-model="reliability.retryBaseDelayMs"
+                  :min="reliabilityHardLimits.minRetryBaseDelayMs"
+                  :max="reliabilityHardLimits.maxRetryBaseDelayMs"
+                  :step="100"
+                  :disabled="!reliabilityLoaded"
+                />
+              </el-form-item>
+              <el-form-item label="Retry-After 自动等待上限">
+                <el-input-number
+                  v-model="reliability.maxRetryAfterMs"
+                  :min="0"
+                  :max="reliabilityHardLimits.maxRetryAfterMs"
+                  :step="1000"
+                  :disabled="!reliabilityLoaded"
+                />
+              </el-form-item>
+            </div>
+            <el-form-item label="随机抖动">
+              <el-switch v-model="reliability.jitterEnabled" :disabled="!reliabilityLoaded" inline-prompt active-text="开启" inactive-text="关闭" />
+              <div class="field-help">建议保持开启，避免多个请求同时重试形成流量尖峰。</div>
+            </el-form-item>
+          </el-form>
+        </article>
+      </div>
+
+      <div class="reliability-invariants">
+        <span>认证失败不重试</span>
+        <span>额度耗尽不重试</span>
+        <span>调用方取消不重试</span>
+        <span>不会从用户 Provider 静默切换到平台 Provider</span>
+      </div>
+    </section>
+
     <section class="config-section config-section--full">
       <div class="config-section__head">
         <h2>网络边界</h2>
@@ -257,6 +364,38 @@
       </div>
     </section>
 
+    <!-- AI 能力探测开关 -->
+    <section class="config-section config-section--full">
+      <div class="config-section__head">
+        <h2>AI 能力探测</h2>
+        <span class="head-badge head-badge--info">{{ capabilityProbe.enabled ? '已开启' : '已关闭' }}</span>
+      </div>
+
+      <article class="policy-panel policy-panel--network">
+        <div class="policy-panel__head policy-panel__head--switch">
+          <h3>定期探活请求</h3>
+          <el-switch
+            v-model="capabilityProbe.enabled"
+            inline-prompt
+            active-text="开启"
+            inactive-text="关闭"
+            size="large"
+            :disabled="!capabilityProbe.loaded"
+          />
+        </div>
+        <p class="policy-panel__desc">
+          开启后，后端每隔约 2 分钟向已配置的模型服务发送一次极简探活请求
+          （单次约 15 个输入 token），用于实时判断 5 条核心学习链路（目标对话、
+          路径规划、阶段设计、教学回合、阶段收尾）的路由可用性，并在连接与安全
+          页的健康状态条上反映结果。
+        </p>
+        <p class="policy-panel__desc policy-panel__desc--muted">
+          关闭后将完全停止周期性 LLM 探活请求，可节省少量模型调用开销；
+          但健康状态条会停留在最后一次探测结果，直到再次开启或手动刷新。
+        </p>
+      </article>
+    </section>
+
     <!-- 未保存变更条：dirty 时浮现于视口底部 -->
     <transition name="save-bar">
       <div v-if="dirtyCount > 0" class="save-bar" role="status">
@@ -275,7 +414,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { Setting } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus';
-import { adminApiConfigApi } from '@/api/adminApi';
+import { adminApiConfigApi, adminPlatformSettingsApi, adminCapabilityProbeApi } from '@/api/adminApi';
 import AdminPageHeader from './components/AdminPageHeader.vue';
 import { toast } from '../../utils/toast';
 
@@ -283,6 +422,7 @@ const loading = ref(false);
 const loadError = ref('');
 const saving = ref(false);
 const testing = ref(false);
+const reliabilityLoaded = ref(false);
 const lastFetchAt = ref('');
 const connectionStatus = ref('unknown');
 const testResult = ref<{ connected: boolean; message: string } | null>(null);
@@ -313,6 +453,33 @@ const networkPolicy = reactive({
   allowPrivateNetwork: true,
   privateNetworkHosts: [] as string[],
   source: 'environment' as 'database' | 'environment'
+});
+
+const reliability = reactive({
+  maxUpstreamAttempts: 3,
+  maxTransportRetries: 1,
+  maxLogicalRetries: 1,
+  defaultRequestTimeoutMs: 300000,
+  retryBaseDelayMs: 1000,
+  maxRetryAfterMs: 10000,
+  jitterEnabled: true
+});
+
+const capabilityProbe = reactive({
+  enabled: true,
+  loaded: false,
+  lastPersistedEnabled: true
+});
+
+const reliabilityHardLimits = reactive({
+  maxUpstreamAttempts: 5,
+  maxTransportRetries: 2,
+  maxLogicalRetries: 2,
+  minRequestTimeoutMs: 10000,
+  maxRequestTimeoutMs: 300000,
+  minRetryBaseDelayMs: 100,
+  maxRetryBaseDelayMs: 5000,
+  maxRetryAfterMs: 10000
 });
 
 const modelTestForm = reactive({
@@ -387,6 +554,10 @@ const adminAccessModeLabel = computed(() => ({
   any: '不限制来源'
 }[networkPolicy.adminAccessMode]))
 const policySourceLabel = computed(() => networkPolicy.source === 'database' ? '平台策略 · 热生效' : '环境默认值')
+const effectiveTransportAttempts = computed(() => Math.min(
+  reliability.maxUpstreamAttempts,
+  reliability.maxTransportRetries + 1
+))
 
 /* ---------- 未保存变更追踪 ----------
    快照对比：加载/保存成功后记录基线，逐字段计数，
@@ -403,7 +574,15 @@ const currentConfigSnapshot = computed(() => JSON.stringify({
   adminAccessMode: networkPolicy.adminAccessMode,
   adminAllowedIps: networkPolicy.adminAllowedIps,
   allowPrivateNetwork: networkPolicy.allowPrivateNetwork,
-  privateNetworkHosts: networkPolicy.privateNetworkHosts
+  privateNetworkHosts: networkPolicy.privateNetworkHosts,
+  maxUpstreamAttempts: reliability.maxUpstreamAttempts,
+  maxTransportRetries: reliability.maxTransportRetries,
+  maxLogicalRetries: reliability.maxLogicalRetries,
+  defaultRequestTimeoutMs: reliability.defaultRequestTimeoutMs,
+  retryBaseDelayMs: reliability.retryBaseDelayMs,
+  maxRetryAfterMs: reliability.maxRetryAfterMs,
+  jitterEnabled: reliability.jitterEnabled,
+  capabilityProbeEnabled: capabilityProbe.enabled
 }))
 
 const dirtyCount = computed(() => {
@@ -426,8 +605,15 @@ async function discardChanges() {
 async function loadConfig() {
   loading.value = true;
   loadError.value = '';
+  reliabilityLoaded.value = false;
   try {
-    const response = await adminApiConfigApi.getConfig();
+    const [configResult, reliabilityResult, probeResult] = await Promise.allSettled([
+      adminApiConfigApi.getConfig(),
+      adminPlatformSettingsApi.getReliabilitySettings(),
+      adminCapabilityProbeApi.getSettings()
+    ]);
+    if (configResult.status === 'rejected') throw configResult.reason;
+    const response = configResult.value;
     const data = response.data.data;
     form.apiUrl = data.apiUrl || '';
     // 完整密钥不再写入内存（发送只用 apiKeyInput），避免敏感数据无谓滞留
@@ -447,6 +633,22 @@ async function loadConfig() {
     networkPolicy.allowPrivateNetwork = policy.allowPrivateNetwork !== false;
     networkPolicy.privateNetworkHosts = Array.isArray(policy.privateNetworkHosts) ? policy.privateNetworkHosts : [];
     networkPolicy.source = policy.source === 'database' ? 'database' : 'environment';
+    if (reliabilityResult.status === 'fulfilled') {
+      const reliabilityData = reliabilityResult.value.data?.data || {};
+      Object.assign(reliability, reliabilityData.settings || {});
+      Object.assign(reliabilityHardLimits, reliabilityData.hardLimits || {});
+      reliabilityLoaded.value = true;
+    } else {
+      loadError.value = '连接配置已加载，但 AI 可靠性设置暂时不可用';
+    }
+    if (probeResult.status === 'fulfilled') {
+      const probeData = probeResult.value.data?.data || {};
+      capabilityProbe.enabled = probeData.enabled !== false;
+      capabilityProbe.lastPersistedEnabled = capabilityProbe.enabled;
+      capabilityProbe.loaded = true;
+    } else {
+      loadError.value = loadError.value || '连接配置已加载，但 AI 能力探测设置暂时不可用';
+    }
     // 记录基线快照，用于未保存变更计数
     await nextTick();
     savedSnapshot.value = currentConfigSnapshot.value;
@@ -478,6 +680,23 @@ async function saveNetworkPolicy() {
     allowPrivateNetwork: networkPolicy.allowPrivateNetwork,
     privateNetworkHosts: networkPolicy.privateNetworkHosts
   });
+}
+
+async function saveReliabilitySettings() {
+  if (!reliabilityLoaded.value) return false;
+  await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability });
+  return true;
+}
+
+async function saveCapabilityProbe() {
+  if (!capabilityProbe.loaded) return false;
+  if (capabilityProbe.enabled === capabilityProbe.lastPersistedEnabled) return false;
+  const resp = await adminCapabilityProbeApi.updateSettings(capabilityProbe.enabled);
+  const data = resp.data?.data;
+  if (data && typeof data.enabled === 'boolean') {
+    capabilityProbe.lastPersistedEnabled = data.enabled;
+  }
+  return true;
 }
 
 function isLanBrowserHost() {
@@ -512,13 +731,24 @@ async function saveAll() {
   }
 
   saving.value = true;
+  let savedSections = 0;
   try {
     await saveConnectionConfig();
+    savedSections += 1;
     await saveNetworkPolicy();
-    toast.success('连接与安全配置已保存');
+    savedSections += 1;
+    const reliabilitySaved = await saveReliabilitySettings();
+    if (reliabilitySaved) savedSections += 1;
+    const probeSaved = await saveCapabilityProbe();
+    if (probeSaved) savedSections += 1;
+    toast.success(reliabilitySaved
+      ? '连接与安全配置已保存'
+      : '连接与网络配置已保存；可靠性设置未加载，已跳过');
     await loadConfig();
   } catch (error: any) {
-    toast.error(error.response?.data?.error || error.message || '保存配置失败');
+    const message = error.response?.data?.error?.message || error.response?.data?.error || error.message || '保存配置失败';
+    toast.error(savedSections > 0 ? `部分配置已保存，已重新加载服务端状态：${message}` : message);
+    await loadConfig();
   } finally {
     saving.value = false;
   }
@@ -744,6 +974,81 @@ onMounted(() => {
   border: var(--admin-border-subtle);
   border-radius: var(--admin-radius-md);
   background: var(--admin-bg-surface-alt);
+}
+
+.section-description {
+  margin: 5px 0 0;
+  color: var(--admin-text-muted);
+  font-size: var(--admin-text-body-sm);
+  line-height: 1.55;
+}
+
+.reliability-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 14px;
+}
+
+.reliability-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(211, 221, 237, 0.94);
+  border-radius: 18px;
+  background: rgba(250, 252, 255, 0.92);
+}
+
+.reliability-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reliability-panel h3 {
+  margin: 0;
+  color: var(--admin-text-primary);
+  font-size: var(--admin-text-body);
+}
+
+.reliability-panel p {
+  margin: 5px 0 0;
+  color: var(--admin-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.effective-value {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: var(--admin-radius-pill);
+  background: rgba(52, 120, 246, 0.09);
+  color: #295bd2;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field-help {
+  margin-top: 5px;
+  color: var(--admin-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.reliability-invariants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reliability-invariants span {
+  padding: 6px 10px;
+  border: 1px solid rgba(211, 221, 237, 0.94);
+  border-radius: var(--admin-radius-pill);
+  color: var(--admin-text-secondary);
+  background: var(--admin-bg-surface-alt);
+  font-size: 12px;
 }
 
 /* ---------- 未保存变更条 ---------- */
@@ -1169,6 +1474,10 @@ onMounted(() => {
   }
 
   .policy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reliability-grid {
     grid-template-columns: 1fr;
   }
 

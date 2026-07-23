@@ -19,6 +19,10 @@ export interface PromptAttemptTrace {
   attempt: number;
   rawOutput: string;
   failureReason?: string;
+  status?: 'success' | 'validation_failed' | 'transport_failed';
+  durationMs?: number;
+  llmRequestId?: string;
+  transportAttemptCount?: number;
 }
 
 export interface PromptDebugTrace<TOutput = any> {

@@ -47,7 +47,11 @@ export class AgentAlerts {
       const oneHourAgo = new Date(Date.now() - 3600000);
 
       const where: any = {
-        calledAt: { gte: oneHourAgo }
+        calledAt: { gte: oneHourAgo },
+        OR: [
+          { executionLayer: null },
+          { executionLayer: { not: 'api-gateway' } }
+        ]
       };
 
       if (agentId) {
@@ -116,7 +120,11 @@ export class AgentAlerts {
       const fiveMinutesAgo = new Date(Date.now() - 300000);
 
       const where: any = {
-        calledAt: { gte: fiveMinutesAgo }
+        calledAt: { gte: fiveMinutesAgo },
+        OR: [
+          { executionLayer: null },
+          { executionLayer: { not: 'api-gateway' } }
+        ]
       };
 
       if (agentId) {
@@ -182,7 +190,11 @@ export class AgentAlerts {
       const previous30Minutes = new Date(now - 3600000);
 
       const where: any = {
-        calledAt: { gte: last30Minutes }
+        calledAt: { gte: last30Minutes },
+        OR: [
+          { executionLayer: null },
+          { executionLayer: { not: 'api-gateway' } }
+        ]
       };
 
       if (agentId) {

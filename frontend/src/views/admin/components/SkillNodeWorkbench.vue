@@ -69,6 +69,22 @@
               <dt>超时</dt>
               <dd>{{ formatTimeout(meta.modelConfig?.timeoutMs) }}</dd>
             </div>
+            <div class="quickview-spec-row">
+              <dt>Provider 总预算</dt>
+              <dd>{{ meta.modelConfig?.reliability?.maxUpstreamAttempts ?? '--' }} 次</dd>
+            </div>
+            <div class="quickview-spec-row">
+              <dt>Transport Retry</dt>
+              <dd>{{ meta.modelConfig?.reliability?.maxTransportRetries ?? '--' }} 次 · 平台默认</dd>
+            </div>
+            <div class="quickview-spec-row">
+              <dt>Logical Retry</dt>
+              <dd>{{ formatLogicalRetry(meta.modelConfig?.reliability) }}</dd>
+            </div>
+            <div class="quickview-spec-row">
+              <dt>业务回退</dt>
+              <dd>由 Skill 代码定义</dd>
+            </div>
           </dl>
         </section>
 
@@ -136,6 +152,13 @@ type WorkbenchMeta = {
     source?: string
     inheritedFromAgent?: boolean
     hasSkillOverride?: boolean
+    reliability?: {
+      maxUpstreamAttempts?: number
+      maxTransportRetries?: number
+      maxLogicalRetries?: number
+      logicalRetrySource?: 'platform-default' | 'skill-override'
+      businessFallback?: 'code-defined'
+    }
   } | null
   promptVersions?: Array<{
     id: string
@@ -257,6 +280,12 @@ const formatMaxTokens = (value?: number | null) => {
 const formatNumber = (value?: number | null) => {
   if (value == null) return '--'
   return `${value}`
+}
+
+const formatLogicalRetry = (value?: NonNullable<WorkbenchMeta['modelConfig']>['reliability']) => {
+  if (!value) return '--'
+  const source = value.logicalRetrySource === 'skill-override' ? 'Skill 覆盖' : '平台默认'
+  return `${value.maxLogicalRetries ?? 0} 次预算 · ${source}`
 }
 
 const loadMeta = async () => {
@@ -509,4 +538,5 @@ watch(() => props.skillId, (value) => {
     margin-left: 0;
   }
 }
+
 </style>

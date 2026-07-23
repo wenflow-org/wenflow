@@ -9,10 +9,14 @@ import {
 } from './SessionFinalizationPolicy';
 
 const TEACHING_OPERATION_LEASE_MS = 30 * 60 * 1000;
+export const FINALIZATION_LEASE_MS = 3 * 60 * 1000;
+export const FINALIZATION_LEASE_RENEW_MS = 45 * 1000;
 const RECOVERABLE_SESSION_STATUSES = ['active', 'paused', 'timeout'] as const;
 
 export class TeachingSessionConflictError extends Error {
   readonly status = 409;
+  readonly retryable = true;
+  readonly category = 'conflict';
 
   constructor(
     message: string,
@@ -20,6 +24,19 @@ export class TeachingSessionConflictError extends Error {
   ) {
     super(message);
     this.name = 'TeachingSessionConflictError';
+  }
+}
+
+export class FinalizationOperationError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status: number,
+    readonly retryable: boolean,
+    readonly category: 'validation' | 'conflict' | 'lease' | 'upstream' | 'persistence'
+  ) {
+    super(message);
+    this.name = 'FinalizationOperationError';
   }
 }
 
@@ -93,9 +110,9 @@ export interface TeachingLearningStateCommit {
 }
 
 export type TeachingFinalizationClaim =
-  | { status: 'completed'; session: TeachingSessionRecord }
+  | { status: 'completed'; operationId: string; session: TeachingSessionRecord; result: Record<string, any> | null }
   | { status: 'processing'; operationId: string; session: TeachingSessionRecord }
-  | { status: 'claimed'; operationId: string; session: TeachingSessionRecord };
+  | { status: 'claimed'; operationId: string; leaseOwner: string; session: TeachingSessionRecord };
 
 interface CreateTeachingSessionInput {
   id: string;
@@ -541,16 +558,64 @@ export class TeachingSessionRepository {
 
   async claimFinalization(
     sessionId: string,
-    action: FinalizeAction = 'end_only',
-    operationId: string = randomUUID(),
+    action: FinalizeAction,
+    idempotencyKey: string,
+    requestHash: string,
+    requestJson: string,
     expectedRevision?: number
   ): Promise<TeachingFinalizationClaim> {
     const now = new Date();
+    const leaseOwner = randomUUID();
+    const leaseExpiresAt = new Date(now.getTime() + FINALIZATION_LEASE_MS);
 
     return prisma.$transaction(async (tx) => {
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
       if (!currentRecord) throw new Error('会话不存在或已结束');
       const current = mapRecord(currentRecord);
+      const existingOperation = await tx.session_finalization_operations.findUnique({
+        where: { sessionId_idempotencyKey: { sessionId, idempotencyKey } }
+      });
+      if (
+        existingOperation
+        && (
+          existingOperation.action !== action
+          || existingOperation.requestHash !== requestHash
+          || existingOperation.requestJson !== requestJson
+        )
+      ) {
+        throw new FinalizationOperationError(
+          'Idempotency-Key 已用于不同的课堂结束请求',
+          'FINALIZATION_IDEMPOTENCY_KEY_REUSED',
+          409,
+          false,
+          'conflict'
+        );
+      }
+      if (existingOperation?.status === 'completed') {
+        return {
+          status: 'completed' as const,
+          operationId: idempotencyKey,
+          session: current,
+          result: parseJsonSafe(existingOperation.resultJson, null)
+        };
+      }
+      if (
+        existingOperation?.status === 'processing'
+        && existingOperation.leaseOwner
+        && existingOperation.leaseExpiresAt
+        && existingOperation.leaseExpiresAt > now
+      ) {
+        return { status: 'processing' as const, operationId: idempotencyKey, session: current };
+      }
+      if (existingOperation?.status === 'failed' && existingOperation.retryable === false) {
+        throw new FinalizationOperationError(
+          '相同课堂结束请求此前发生不可重试错误',
+          existingOperation.errorCode || 'FINALIZATION_PREVIOUSLY_FAILED',
+          409,
+          false,
+          'conflict'
+        );
+      }
       const currentFinalization = getSessionFinalizationState(current.teachingState);
       const step = action === 'complete_task'
         ? 'taskCompletion'
@@ -559,7 +624,22 @@ export class TeachingSessionRepository {
         ? current.status === 'completed' && !!current.wrapup
         : currentFinalization?.[step] === 'completed';
       if (stepCompleted) {
-        return { status: 'completed' as const, session: current };
+        if (!existingOperation) {
+          await tx.session_finalization_operations.create({
+            data: {
+              sessionId,
+              idempotencyKey,
+              action,
+              requestHash,
+              requestJson,
+              status: 'completed',
+              attemptCount: 1,
+              completedAt: current.endTime || now,
+              updatedAt: now
+            }
+          });
+        }
+        return { status: 'completed' as const, operationId: idempotencyKey, session: current, result: null };
       }
       if (expectedRevision !== undefined && current.revision !== expectedRevision) {
         throw new TeachingSessionConflictError('课堂已在其他页面更新，请刷新后继续', 'TEACHING_SESSION_STALE');
@@ -572,9 +652,12 @@ export class TeachingSessionRepository {
         if (!current.operationKind?.startsWith('finalize:')) {
           throw new TeachingSessionConflictError('课堂正在处理另一项操作，请稍后重试', 'TEACHING_SESSION_BUSY');
         }
+        const activeOperation = await tx.session_finalization_operations.findFirst({
+          where: { sessionId, leaseOwner: current.operationId, status: 'processing' }
+        });
         return {
           status: 'processing' as const,
-          operationId: current.operationId!,
+          operationId: activeOperation?.idempotencyKey || idempotencyKey,
           session: current
         };
       }
@@ -602,11 +685,56 @@ export class TeachingSessionRepository {
       const nextTeachingState = updateSessionFinalizationState(
         baseTeachingState,
         action,
-        operationId,
+        idempotencyKey,
         step,
         'processing',
         { requestedAt: now.toISOString() }
       );
+
+      if (existingOperation) {
+        const reclaimed = await tx.session_finalization_operations.updateMany({
+          where: {
+            id: existingOperation.id,
+            requestHash,
+            OR: [
+              { status: 'failed', retryable: { not: false } },
+              { status: 'processing', leaseExpiresAt: { lte: now } },
+              { status: 'processing', leaseExpiresAt: null }
+            ]
+          },
+          data: {
+            status: 'processing',
+            leaseOwner,
+            leaseExpiresAt,
+            attemptCount: { increment: 1 },
+            errorCode: null,
+            retryable: null,
+            resultJson: null,
+            startedAt: now,
+            completedAt: null,
+            updatedAt: now
+          }
+        });
+        if (reclaimed.count !== 1) {
+          throw new TeachingSessionConflictError('课堂结束操作已被其他请求接管', 'FINALIZATION_LEASE_LOST');
+        }
+      } else {
+        await tx.session_finalization_operations.create({
+          data: {
+            sessionId,
+            idempotencyKey,
+            action,
+            requestHash,
+            requestJson,
+            status: 'processing',
+            leaseOwner,
+            leaseExpiresAt,
+            attemptCount: 1,
+            startedAt: now,
+            updatedAt: now
+          }
+        });
+      }
       const claimed = await tx.teaching_sessions.updateMany({
         where: {
           id: sessionId,
@@ -620,9 +748,9 @@ export class TeachingSessionRepository {
         data: {
           status: action === 'end_only' ? 'finalizing' : current.status,
           teachingState: JSON.stringify(nextTeachingState),
-          operationId,
+          operationId: leaseOwner,
           operationKind: `finalize:${action}`,
-          operationLeaseExpiresAt: new Date(now.getTime() + TEACHING_OPERATION_LEASE_MS),
+          operationLeaseExpiresAt: leaseExpiresAt,
           updatedAt: now
         }
       });
@@ -634,21 +762,64 @@ export class TeachingSessionRepository {
       if (!claimedRecord) throw new Error('会话不存在或已结束');
       return {
         status: 'claimed' as const,
-        operationId,
+        operationId: idempotencyKey,
+        leaseOwner,
         session: mapRecord(claimedRecord)
       };
     });
   }
 
+  async renewFinalizationLease(
+    sessionId: string,
+    idempotencyKey: string,
+    leaseOwner: string
+  ): Promise<Date> {
+    const now = new Date();
+    const leaseExpiresAt = new Date(now.getTime() + FINALIZATION_LEASE_MS);
+    await prisma.$transaction(async (tx) => {
+      const operation = await tx.session_finalization_operations.updateMany({
+        where: {
+          sessionId,
+          idempotencyKey,
+          leaseOwner,
+          status: 'processing',
+          leaseExpiresAt: { gt: now }
+        },
+        data: { leaseExpiresAt, updatedAt: now }
+      });
+      const session = await tx.teaching_sessions.updateMany({
+        where: {
+          id: sessionId,
+          operationId: leaseOwner,
+          operationKind: { startsWith: 'finalize:' },
+          operationLeaseExpiresAt: { gt: now }
+        },
+        data: { operationLeaseExpiresAt: leaseExpiresAt, updatedAt: now }
+      });
+      if (operation.count !== 1 || session.count !== 1) {
+        throw new FinalizationOperationError(
+          '课堂结束执行租约已失效',
+          'FINALIZATION_LEASE_LOST',
+          409,
+          true,
+          'lease'
+        );
+      }
+    });
+    return leaseExpiresAt;
+  }
+
   async failFinalization(
     sessionId: string,
-    operationId: string,
+    idempotencyKey: string,
+    leaseOwner: string,
     action: FinalizeAction,
-    errorCode: string
+    errorCode: string,
+    retryable = true
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
-      if (!currentRecord || currentRecord.operationId !== operationId) return;
+      if (!currentRecord || currentRecord.operationId !== leaseOwner) return;
       const current = mapRecord(currentRecord);
       const step = action === 'complete_task'
         ? 'taskCompletion'
@@ -656,13 +827,25 @@ export class TeachingSessionRepository {
       const teachingState = updateSessionFinalizationState(
         current.teachingState,
         action,
-        operationId,
+        idempotencyKey,
         step,
         'failed',
         { errorCode }
       );
-      await tx.teaching_sessions.updateMany({
-        where: { id: sessionId, operationId },
+      const operation = await tx.session_finalization_operations.updateMany({
+        where: { sessionId, idempotencyKey, leaseOwner, status: 'processing' },
+        data: {
+          status: 'failed',
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          errorCode,
+          retryable,
+          completedAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+      const session = await tx.teaching_sessions.updateMany({
+        where: { id: sessionId, operationId: leaseOwner },
         data: {
           status: action === 'end_only' ? 'finalization_failed' : current.status,
           teachingState: JSON.stringify(teachingState),
@@ -673,31 +856,52 @@ export class TeachingSessionRepository {
           updatedAt: new Date()
         }
       });
+      if (operation.count !== 1 || session.count !== 1) {
+        throw new FinalizationOperationError(
+          '课堂结束失败状态未能通过租约校验',
+          'FINALIZATION_LEASE_LOST',
+          409,
+          true,
+          'lease'
+        );
+      }
     });
   }
 
   async completeFinalizationStep(
     sessionId: string,
-    operationId: string,
-    action: Exclude<FinalizeAction, 'end_only'>
+    idempotencyKey: string,
+    leaseOwner: string,
+    action: Exclude<FinalizeAction, 'end_only'>,
+    result: Record<string, any>
   ): Promise<TeachingSessionRecord> {
     return prisma.$transaction(async (tx) => {
+      const now = new Date();
       const currentRecord = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
-      if (!currentRecord || currentRecord.operationId !== operationId) {
-        throw new TeachingSessionConflictError('课堂完成状态已变化，请刷新后重试', 'TEACHING_SESSION_STATE_CHANGED');
+      if (
+        !currentRecord
+        || currentRecord.operationId !== leaseOwner
+        || !currentRecord.operationLeaseExpiresAt
+        || currentRecord.operationLeaseExpiresAt <= now
+      ) {
+        throw new FinalizationOperationError('课堂完成执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
       }
       const current = mapRecord(currentRecord);
       const step = action === 'complete_task' ? 'taskCompletion' : 'reviewCompletion';
       const teachingState = updateSessionFinalizationState(
         current.teachingState,
         action,
-        operationId,
+        idempotencyKey,
         step,
         'completed',
-        { completedAt: new Date().toISOString() }
+        { completedAt: now.toISOString() }
       );
       const updated = await tx.teaching_sessions.updateMany({
-        where: { id: sessionId, operationId },
+        where: {
+          id: sessionId,
+          operationId: leaseOwner,
+          operationLeaseExpiresAt: { gt: now }
+        },
         data: {
           teachingState: JSON.stringify(teachingState),
           operationId: null,
@@ -708,17 +912,40 @@ export class TeachingSessionRepository {
         }
       });
       if (updated.count !== 1) {
-        throw new TeachingSessionConflictError('课堂完成状态已变化，请刷新后重试', 'TEACHING_SESSION_STATE_CHANGED');
+        throw new FinalizationOperationError('课堂完成执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
       }
-      const result = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
-      if (!result) throw new Error('会话不存在');
-      return mapRecord(result);
+      const operation = await tx.session_finalization_operations.updateMany({
+        where: {
+          sessionId,
+          idempotencyKey,
+          leaseOwner,
+          status: 'processing',
+          leaseExpiresAt: { gt: now }
+        },
+        data: {
+          status: 'completed',
+          resultJson: JSON.stringify(result),
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          errorCode: null,
+          retryable: null,
+          completedAt: now,
+          updatedAt: now
+        }
+      });
+      if (operation.count !== 1) {
+        throw new FinalizationOperationError('课堂完成执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
+      }
+      const updatedSession = await tx.teaching_sessions.findUnique({ where: { id: sessionId } });
+      if (!updatedSession) throw new Error('会话不存在');
+      return mapRecord(updatedSession);
     });
   }
 
   async completeWithEvent(
     sessionId: string,
-    operationId: string,
+    idempotencyKey: string,
+    leaseOwner: string,
     payload: {
       messages: TeachingSessionMessage[];
       knowledgeState: TeachingKnowledgePointState[];
@@ -731,6 +958,20 @@ export class TeachingSessionRepository {
     metricCommit?: TeachingLearningStateCommit | null
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const operation = await tx.session_finalization_operations.findFirst({
+        where: {
+          sessionId,
+          idempotencyKey,
+          leaseOwner,
+          action: 'end_only',
+          status: 'processing',
+          leaseExpiresAt: { gt: now }
+        }
+      });
+      if (!operation) {
+        throw new FinalizationOperationError('课堂结束执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
+      }
       if (metricCommit) {
         const claimedState = await tx.users.updateMany({
           where: {
@@ -752,7 +993,12 @@ export class TeachingSessionRepository {
       }
 
       const completed = await tx.teaching_sessions.updateMany({
-        where: { id: sessionId, status: 'finalizing', operationId },
+        where: {
+          id: sessionId,
+          status: 'finalizing',
+          operationId: leaseOwner,
+          operationLeaseExpiresAt: { gt: now }
+        },
         data: {
           status: 'completed',
           endTime: new Date(),
@@ -762,7 +1008,7 @@ export class TeachingSessionRepository {
           teachingState: JSON.stringify(updateSessionFinalizationState(
             payload.teachingState,
             'end_only',
-            operationId,
+            idempotencyKey,
             'sessionClosure',
             'completed',
             { completedAt: new Date().toISOString() }
@@ -778,10 +1024,105 @@ export class TeachingSessionRepository {
         }
       });
       if (completed.count !== 1) {
-        throw new TeachingSessionConflictError('课堂结束状态已变化，请刷新后重试', 'TEACHING_SESSION_STATE_CHANGED');
+        throw new FinalizationOperationError('课堂结束执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
       }
       await enqueueDomainEvent(tx, event);
+      const completedOperation = await tx.session_finalization_operations.updateMany({
+        where: {
+          id: operation.id,
+          leaseOwner,
+          status: 'processing',
+          leaseExpiresAt: { gt: now }
+        },
+        data: {
+          status: 'completed',
+          resultJson: JSON.stringify({ sessionClosure: 'completed' }),
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          errorCode: null,
+          retryable: null,
+          completedAt: now,
+          updatedAt: now
+        }
+      });
+      if (completedOperation.count !== 1) {
+        throw new FinalizationOperationError('课堂结束执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
+      }
     });
+  }
+
+  async recoverExpiredFinalizations(
+    limit = 100,
+    sessionId?: string,
+    leaseOwner?: string
+  ): Promise<number> {
+    const now = new Date();
+    const operations = await prisma.session_finalization_operations.findMany({
+      where: {
+        sessionId,
+        leaseOwner,
+        status: 'processing',
+        OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }]
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: limit
+    });
+    let recovered = 0;
+    for (const operation of operations) {
+      const result = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.session_finalization_operations.updateMany({
+          where: {
+            id: operation.id,
+            status: 'processing',
+            leaseOwner: operation.leaseOwner,
+            leaseExpiresAt: operation.leaseExpiresAt
+          },
+          data: {
+            status: 'failed',
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            errorCode: 'FINALIZATION_LEASE_EXPIRED',
+            retryable: true,
+            completedAt: now,
+            updatedAt: now
+          }
+        });
+        if (claimed.count !== 1) return false;
+        const sessionRecord = await tx.teaching_sessions.findUnique({ where: { id: operation.sessionId } });
+        if (!sessionRecord || sessionRecord.operationId !== operation.leaseOwner) return true;
+        const session = mapRecord(sessionRecord);
+        const step = operation.action === 'complete_task'
+          ? 'taskCompletion'
+          : operation.action === 'complete_review' ? 'reviewCompletion' : 'sessionClosure';
+        const teachingState = updateSessionFinalizationState(
+          session.teachingState,
+          operation.action as FinalizeAction,
+          operation.idempotencyKey,
+          step,
+          'failed',
+          { errorCode: 'FINALIZATION_LEASE_EXPIRED' }
+        );
+        await tx.teaching_sessions.updateMany({
+          where: {
+            id: operation.sessionId,
+            operationId: operation.leaseOwner,
+            operationLeaseExpiresAt: operation.leaseExpiresAt
+          },
+          data: {
+            status: operation.action === 'end_only' ? 'finalization_failed' : session.status,
+            teachingState: JSON.stringify(teachingState),
+            operationId: null,
+            operationKind: null,
+            operationLeaseExpiresAt: null,
+            revision: { increment: 1 },
+            updatedAt: now
+          }
+        });
+        return true;
+      });
+      if (result) recovered += 1;
+    }
+    return recovered;
   }
 
   async timeoutIfIdle(sessionId: string, expectedRevision: number, cutoff: Date): Promise<boolean> {

@@ -272,6 +272,7 @@ exports.Prisma.Skill_model_configsScalarFieldEnum = {
   temperature: 'temperature',
   maxTokens: 'maxTokens',
   requestTimeoutMs: 'requestTimeoutMs',
+  maxLogicalRetries: 'maxLogicalRetries',
   enabled: 'enabled',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

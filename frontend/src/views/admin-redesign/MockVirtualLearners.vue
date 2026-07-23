@@ -2,41 +2,15 @@
   <div class="mk-page">
     <div class="mk-status" :class="samples.length ? 'mk-status--ok' : 'mk-status--muted'">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ samples.length ? `实验进行中：${runningCount} 个运行中` : '还没有虚拟学习者' }}</strong>
+      <strong class="mk-status__title">{{ samples.length ? `${samples.length} 个样本就绪` : '还没有虚拟学习者' }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">样本 {{ samples.length }}</span>
-      <span class="mk-status__meta">跑通 Goal/Path {{ goalRate }}</span>
-      <span class="mk-status__meta">Learn 完成 {{ learnRate }}</span>
-      <button type="button" class="mk-status__action mk-status__action--primary" @click="createOpen = true">新建虚拟学习者</button>
+      <span class="mk-status__meta">有故事 {{ withStory }}</span>
+      <span class="mk-status__meta">累计会话 {{ totalSessions }}</span>
+      <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建虚拟学习者</button>
     </div>
 
-    <div v-if="toast" class="mk-toast mk-toast--ok">✓ {{ toast }}</div>
-
-    <!-- 实验进度看板 -->
-    <div v-if="samples.length" class="vl-board">
-      <div class="vl-board__item">
-        <span>样本与故事</span>
-        <strong>{{ samples.length }}</strong>
-        <em>{{ withStory }} 个有完整故事</em>
-      </div>
-      <div class="vl-board__item">
-        <span>Goal / Path</span>
-        <strong>{{ goalRate }}</strong>
-        <em>{{ goalDone }}/{{ samples.length }} 进入路径阶段</em>
-      </div>
-      <div class="vl-board__item">
-        <span>Learn 完成</span>
-        <strong>{{ learnRate }}</strong>
-        <em>{{ learnDone }}/{{ samples.length }} 完整跑通</em>
-      </div>
-      <div class="vl-board__item">
-        <span>状态分布</span>
-        <strong class="vl-board__dots">
-          <i v-for="s in samples" :key="s.id" :class="`dot--${s.status}`" :title="`${s.name}：${statusText(s.status)}`"></i>
-        </strong>
-        <em>逐样本状态点</em>
-      </div>
-    </div>
+    <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <div class="mk-card">
       <div class="mk-card__head">
@@ -50,8 +24,8 @@
             <th>样本</th>
             <th>学习目标</th>
             <th>故事完整度</th>
-            <th>实验进度</th>
-            <th>状态</th>
+            <th>会话</th>
+            <th>创建</th>
             <th style="text-align:right">操作</th>
           </tr>
         </thead>
@@ -66,16 +40,17 @@
             <td>{{ s.goal }}</td>
             <td>
               <div class="vl-story">
-                <span class="vl-story__bar"><i :style="{ width: s.story + '%' }"></i></span>
-                <span class="mk-num">{{ s.story }}%</span>
+                <span class="vl-story__bar"><i :style="{ width: s.storyPct + '%' }"></i></span>
+                <span class="mk-num">{{ s.storyPct }}%</span>
               </div>
             </td>
-            <td class="mk-num">{{ s.progress }}</td>
-            <td><span class="mk-badge" :class="statusBadge(s.status)">{{ statusText(s.status) }}</span></td>
+            <td class="mk-num">{{ s.sessions }}</td>
+            <td class="mk-na">{{ s.created }}</td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link">运行</button>
                 <button type="button" class="mk-link" @click="openSubPage('virtual', s.id)">画像</button>
+                <button v-if="isLive" type="button" class="mk-link" @click="openLaunch(s)">运行</button>
+                <button v-if="isLive" type="button" class="mk-link mk-link--danger" :disabled="s.busy" @click="removeSample(s)">删除</button>
               </div>
             </td>
           </tr>
@@ -84,7 +59,7 @@
 
       <div v-else class="mk-empty">
         <strong>{{ samples.length ? '没有匹配的样本' : '还没有虚拟学习者' }}</strong>
-        <span>从「新建虚拟学习者」写一个故事开始：她是谁、想解决什么。</span>
+        <span>从「新建虚拟学习者」写一个故事开始：她是谁、想解决什么问题。</span>
       </div>
     </div>
 
@@ -93,7 +68,7 @@
       <div class="mk-modal__panel" role="dialog" aria-label="新建虚拟学习者">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">新建虚拟学习者</h3>
-          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">×</button>
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
@@ -112,10 +87,51 @@
             <span class="mk-field__hint">{{ form.story.length }} 字 · 建议 ≥ 40 字</span>
             <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
           </label>
+          <button v-if="isLive" type="button" class="mk-link vl-ai" :disabled="personaBusy" @click="generatePersona">
+            {{ personaBusy ? '生成中…' : '✦ AI 生成身份（回填故事）' }}
+          </button>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
-          <button type="button" class="mk-btn mk-btn--primary" @click="createSample">创建并生成画像</button>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="createSample">
+            {{ creating ? '创建中…' : isLive ? '创建（真实写入）' : '创建并生成画像' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 启动实验 -->
+    <div v-if="launchTarget" class="mk-modal" @mousedown.self="launchTarget = null">
+      <div class="mk-modal__panel" role="dialog" aria-label="启动实验">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">启动实验 · {{ launchTarget.name }}</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="launchTarget = null">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <label class="mk-field">
+            <span class="mk-field__label">运行模式</span>
+            <select v-model="launchForm.mode" class="mk-field__select">
+              <option value="assisted">辅助模拟（白盒，链路可控）</option>
+              <option value="blackbox">黑盒 API（裁判评估，贴近真实）</option>
+            </select>
+          </label>
+          <label class="mk-field">
+            <span class="mk-field__label">对抗预算</span>
+            <select v-model="launchForm.friction" class="mk-field__select">
+              <option value="none">无摩擦</option>
+              <option value="low">低</option>
+              <option value="normal">正常</option>
+              <option value="high">高</option>
+              <option value="stress_test">压力测试</option>
+            </select>
+            <span class="mk-field__hint">预算越高，虚拟学习者越"难带"：分心、畏难、追问</span>
+          </label>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="launchTarget = null">取消</button>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="launchBusy" @click="startLaunch">
+            {{ launchBusy ? '启动中…' : '启动会话' }}
+          </button>
         </div>
       </div>
     </div>
@@ -124,33 +140,54 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { openSubPage } from './mockStore'
+import { openSubPage, dataSource } from './mockStore'
+import { liveVirtuals, liveCreateVirtual, liveDeleteVirtual, timeAgo, errMsg } from './mockLive'
+import { adminVirtualLearnersApi } from '@/api/adminApi'
 
 const props = defineProps<{ state: 'normal' | 'empty' }>()
+
+const isLive = computed(() => dataSource.value === 'live')
 
 interface Sample {
   id: string
   name: string
   goal: string
-  story: number
-  progress: string
-  status: 'ready' | 'running' | 'review' | 'done'
+  storyPct: number
+  sessions: number
+  created: string
+  busy?: boolean
 }
 
 const all: Sample[] = [
-  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', story: 92, progress: 'Learn 3/5', status: 'running' },
-  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', story: 78, progress: 'Path 已生成', status: 'ready' },
-  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', story: 85, progress: '完成', status: 'review' }
+  { id: 'vl-001', name: '疲惫的运营小张', goal: '把 Excel 周报自动化', storyPct: 92, sessions: 4, created: '3 天前' },
+  { id: 'vl-002', name: '转行的前教师', goal: '系统学数据分析', storyPct: 78, sessions: 1, created: '1 天前' },
+  { id: 'vl-003', name: '拖延的研究生', goal: '30 天写完论文初稿', storyPct: 85, sessions: 2, created: '6 小时前' },
+  { id: 'vl-004', name: '焦虑的实习产品经理', goal: '两周上手需求文档', storyPct: 64, sessions: 1, created: '昨天 22:10' },
+  { id: 'vl-005', name: '退休学摄影的阿姨', goal: '学会手机修图', storyPct: 41, sessions: 0, created: '2 小时前' }
 ]
 
-const samples = ref<Sample[]>([])
+const demoSamples = ref<Sample[]>([])
 watch(
   () => props.state,
   (s) => {
-    samples.value = s === 'empty' ? [] : all
+    demoSamples.value = s === 'empty' ? [] : [...all]
   },
   { immediate: true }
 )
+
+const samples = computed<Sample[]>(() => {
+  if (isLive.value) {
+    return liveVirtuals.value.map((v) => ({
+      id: v.id,
+      name: v.name,
+      goal: v.goal,
+      storyPct: Math.min(30 + Math.floor(v.story.length / 4), 95),
+      sessions: v.sessions,
+      created: timeAgo(v.createdAt)
+    }))
+  }
+  return demoSamples.value
+})
 
 const keyword = ref('')
 const filtered = computed(() => {
@@ -159,73 +196,142 @@ const filtered = computed(() => {
   return samples.value.filter((s) => `${s.name} ${s.goal} ${s.id}`.toLowerCase().includes(q))
 })
 
-/* 新建虚拟学习者：校验 + 真实加样本 */
+/* 新建 */
 const createOpen = ref(false)
+const creating = ref(false)
 const form = ref({ name: '', goal: '', story: '' })
 const errors = ref<{ name?: string; goal?: string; story?: string }>({})
 const toast = ref('')
+const toastCls = ref('mk-toast--ok')
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
-function createSample() {
+function showToast(msg: string, cls = 'mk-toast--ok') {
+  toast.value = msg
+  toastCls.value = cls
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 3000)
+}
+
+function openCreate() {
+  form.value = { name: '', goal: '', story: '' }
+  errors.value = {}
+  personaSeed.value = null
+  createOpen.value = true
+}
+
+async function createSample() {
   errors.value = {}
   if (!form.value.name.trim()) errors.value.name = '请输入样本名'
   if (!form.value.goal.trim()) errors.value.goal = '请输入学习目标'
   if (form.value.story.trim().length < 20) errors.value.story = '故事至少 20 字，模拟才有依据'
   if (Object.keys(errors.value).length) return
 
-  const storyPct = Math.min(30 + Math.floor(form.value.story.trim().length / 4), 95)
-  samples.value.unshift({
-    id: `vl-${String(samples.value.length + 1).padStart(3, '0')}`,
-    name: form.value.name.trim(),
-    goal: form.value.goal.trim(),
-    story: storyPct,
-    progress: '待运行',
-    status: 'ready'
-  })
-  createOpen.value = false
-  form.value = { name: '', goal: '', story: '' }
-  toast.value = '样本已创建，画像推断完成，可运行'
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (toast.value = ''), 2600)
+  creating.value = true
+  try {
+    if (isLive.value) {
+      await liveCreateVirtual({
+        name: form.value.name.trim(),
+        goal: form.value.goal.trim(),
+        story: form.value.story.trim(),
+        personaSeed: personaSeed.value || undefined
+      })
+      showToast('样本已创建（真实写入），可在画像页生成故事')
+    } else {
+      demoSamples.value.unshift({
+        id: `vl-${String(demoSamples.value.length + 1).padStart(3, '0')}`,
+        name: form.value.name.trim(),
+        goal: form.value.goal.trim(),
+        storyPct: Math.min(30 + Math.floor(form.value.story.trim().length / 4), 95),
+        sessions: 0,
+        created: '刚刚'
+      })
+      showToast('样本已创建，画像推断完成，可运行')
+    }
+    createOpen.value = false
+  } catch (e) {
+    showToast(`创建失败：${errMsg(e)}`, 'mk-toast--bad')
+  } finally {
+    creating.value = false
+  }
 }
 
-const runningCount = computed(() => samples.value.filter((s) => s.status === 'running').length)
-const withStory = computed(() => samples.value.filter((s) => s.story >= 80).length)
-const goalDone = computed(() => samples.value.filter((s) => s.status !== 'ready').length)
-const learnDone = computed(() => samples.value.filter((s) => s.progress === '完成').length)
-const pct = (n: number, total: number) => (total ? `${Math.round((n / total) * 100)}%` : '—')
-const goalRate = computed(() => pct(goalDone.value, samples.value.length))
-const learnRate = computed(() => pct(learnDone.value, samples.value.length))
+async function removeSample(s: Sample) {
+  if (!window.confirm(`确认删除样本「${s.name}」？其会话记录将一并清理。`)) return
+  s.busy = true
+  try {
+    await liveDeleteVirtual(s.id)
+    showToast(`「${s.name}」已删除`)
+  } catch (e) {
+    showToast(`删除失败：${errMsg(e)}`, 'mk-toast--bad')
+  } finally {
+    s.busy = false
+  }
+}
 
-const statusText = (s: string) => ({ ready: '可运行', running: '运行中', review: '待评审', done: '完成' }[s] || s)
-const statusBadge = (s: string) => ({ ready: 'mk-badge--info', running: 'mk-badge--ok', review: 'mk-badge--warn', done: 'mk-badge--muted' }[s])
+/* AI 生成身份：回填名称与故事，并保留完整 personaSeed 供创建时写入 */
+const personaBusy = ref(false)
+const personaSeed = ref<Record<string, unknown> | null>(null)
+async function generatePersona() {
+  if (personaBusy.value) return
+  personaBusy.value = true
+  try {
+    const res = await adminVirtualLearnersApi.generatePersona({
+      existingPersonaSeed: form.value.story
+        ? { name: form.value.name, learningGoal: form.value.goal, notes: form.value.story }
+        : undefined
+    })
+    const d = res.data?.data ?? res.data ?? {}
+    const seed = (d.personaSeed || d.profile || d) as Record<string, unknown>
+    personaSeed.value = seed
+    if (!form.value.name && (seed.name || seed.nameHint)) form.value.name = String(seed.name || seed.nameHint)
+    if (!form.value.goal && seed.learningGoal) form.value.goal = String(seed.learningGoal)
+    const story = String(seed.background || seed.corePersonality || '')
+    if (story) form.value.story = story
+    showToast('AI 身份已生成并回填，可继续修改')
+  } catch (e) {
+    showToast(`生成失败：${errMsg(e)}`, 'mk-toast--bad')
+  } finally {
+    personaBusy.value = false
+  }
+}
+
+/* 启动实验：辅助 / 黑盒 + 对抗预算 */
+const launchTarget = ref<Sample | null>(null)
+const launchForm = ref({ mode: 'assisted' as 'assisted' | 'blackbox', friction: 'normal' as 'none' | 'low' | 'normal' | 'high' | 'stress_test' })
+const launchBusy = ref(false)
+
+function openLaunch(s: Sample) {
+  launchTarget.value = s
+  launchForm.value = { mode: 'assisted', friction: 'normal' }
+}
+
+async function startLaunch() {
+  const target = launchTarget.value
+  if (!target || launchBusy.value) return
+  launchBusy.value = true
+  try {
+    const payload = { frictionBudget: launchForm.value.friction }
+    const res =
+      launchForm.value.mode === 'blackbox'
+        ? await adminVirtualLearnersApi.startBlackboxVirtualSession(target.id, payload)
+        : await adminVirtualLearnersApi.startVirtualSession(target.id, payload)
+    const session = res.data?.data ?? res.data ?? {}
+    const sid = String(session.id || session.sessionId || '')
+    launchTarget.value = null
+    showToast(`会话已启动：${sid.slice(0, 18)}${sid.length > 18 ? '…' : ''}，可在画像页查看`)
+    openSubPage('virtual', target.id)
+  } catch (e) {
+    showToast(`启动失败：${errMsg(e)}`, 'mk-toast--bad')
+  } finally {
+    launchBusy.value = false
+  }
+}
+
+const withStory = computed(() => samples.value.filter((s) => s.storyPct >= 60).length)
+const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessions, 0))
 </script>
 
 <style scoped>
-.vl-board {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-.vl-board__item {
-  display: grid;
-  gap: 4px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-}
-.vl-board__item span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
-.vl-board__item strong { font-size: 22px; font-variant-numeric: tabular-nums; }
-.vl-board__item em { font-style: normal; font-size: 11.5px; color: var(--mk-faint); }
-.vl-board__dots { display: flex; gap: 5px; align-items: center; min-height: 28px; }
-.vl-board__dots i { width: 9px; height: 9px; border-radius: 50%; }
-.dot--ready { background: #7aa8f8; }
-.dot--running { background: #4ade80; animation: vl-pulse 1.6s ease infinite; }
-.dot--review { background: #fbbf24; }
-.dot--done { background: #c3cede; }
-@keyframes vl-pulse { 50% { opacity: 0.35; } }
-
 .vl-story { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .vl-story__bar {
   flex: 1;
@@ -235,8 +341,7 @@ const statusBadge = (s: string) => ({ ready: 'mk-badge--info', running: 'mk-badg
   overflow: hidden;
 }
 .vl-story__bar i { display: block; height: 100%; background: linear-gradient(90deg, #6aa0ff, #3478f6); }
-
-@media (max-width: 900px) {
-  .vl-board { grid-template-columns: repeat(2, 1fr); }
-}
+.mk-link--danger { color: var(--mk-red, #dc2626); }
+.mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
+.vl-ai { justify-self: start; }
 </style>

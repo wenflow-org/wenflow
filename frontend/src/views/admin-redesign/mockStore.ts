@@ -54,17 +54,45 @@ const incidentTrace: TraceSpan[] = [
   { id: 'i5', traceId: 'tr:8f31c4', kind: 'flow', agent: 'learner-agent', stage: '状态回写', title: '疲劳信号上调', startMs: 31600, durationMs: 480, status: 'warn', detail: 'fatigue: 低 → 中（连续失败）' }
 ]
 
+/** 教学链路：一节课的完整执行（教学 → 伴学 → 产出 → 状态回写） */
+const teachingTrace: TraceSpan[] = [
+  { id: 't1', traceId: 'tr:8f31b7', kind: 'flow', agent: 'teaching-agent', stage: '教学执行', title: '教学回合完成', startMs: 0, durationMs: 14200, status: 'ok', detail: '阶段 2 · 数据清洗练习 · 一次通过', payload: '{\n  "milestone": "m2-2",\n  "user": "user_chenxiao",\n  "masteryDelta": 0.12\n}' },
+  { id: 't2', traceId: 'tr:8f31b7', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用', startMs: 120, durationMs: 12600, status: 'ok', detail: 'deepseek-v4-pro · P 3120 / C 1890' },
+  { id: 't3', traceId: 'tr:8f31b7', kind: 'call', agent: 'companion-boost', stage: '教学执行', title: '伴学轻量补强', startMs: 12800, durationMs: 940, status: 'ok', detail: '概念「绝对引用」小贴士' },
+  { id: 't4', traceId: 'tr:8f31b7', kind: 'call', agent: 'session-wrapup', stage: '课后产出', title: '产出写入', startMs: 13800, durationMs: 1600, status: 'ok', detail: '3 条笔记 · 1 条练习建议' },
+  { id: 't5', traceId: 'tr:8f31b7', kind: 'call', agent: 'state-aggregator', stage: '状态回写', title: '状态聚合', startMs: 15500, durationMs: 380, status: 'ok', detail: '行为事件 ×14 → 状态视图' },
+  { id: 't6', traceId: 'tr:8f31b7', kind: 'call', agent: 'snapshot-refresh', stage: '状态回写', title: '快照刷新', startMs: 15900, durationMs: 460, status: 'ok', detail: '置信 0.82 · v15' },
+  { id: 't7', traceId: 'tr:8f31b7', kind: 'call', agent: 'knowledge-distill', stage: '状态回写', title: '知识沉淀', startMs: 16400, durationMs: 720, status: 'ok', detail: '掌握 +2 · 脆弱 -1' }
+]
+
+/** 模拟链路：虚拟学习者的一轮黑盒评估 */
+const simulationTrace: TraceSpan[] = [
+  { id: 'v1', traceId: 'tr:8f31c9', kind: 'flow', agent: 'virtual-agent', stage: '黑盒模拟', title: 'Learn 回合模拟完成', startMs: 0, durationMs: 9400, status: 'ok', detail: '样本 vl-001 · 5 轮 · 未触发疲劳', payload: '{\n  "story": "疲惫的运营小张",\n  "rounds": 5,\n  "friction": "normal"\n}' },
+  { id: 'v2', traceId: 'tr:8f31c9', kind: 'call', agent: 'turn-simulator', stage: '黑盒模拟', title: '回合模拟', startMs: 100, durationMs: 8200, status: 'ok', detail: '角色保真 0.91' },
+  { id: 'v3', traceId: 'tr:8f31c9', kind: 'call', agent: 'path-evaluator', stage: '黑盒模拟', title: '路径可学性评估', startMs: 8400, durationMs: 860, status: 'ok', detail: '难度评分 0.64 · 通过' }
+]
+
+/** 理解与规划链路：概念抽取到阶段设计 */
+const planningTrace: TraceSpan[] = [
+  { id: 'p1', traceId: 'tr:8f31d1', kind: 'call', agent: 'dialogue-concept-extractor', stage: '目标收集', title: '概念抽取', startMs: 0, durationMs: 2100, status: 'ok', detail: '候选概念 ×3 · 置信 0.88' },
+  { id: 'p2', traceId: 'tr:8f31d1', kind: 'call', agent: 'goal-understanding-composer', stage: '目标收集', title: '目标理解合成', startMs: 2200, durationMs: 1700, status: 'ok', detail: '场景：周报自动化' },
+  { id: 'p3', traceId: 'tr:8f31d1', kind: 'call', agent: 'path-scene-framer', stage: '核心路径生成', title: '场景定帧', startMs: 4000, durationMs: 1100, status: 'ok', detail: '办公桌面 · 每周五 30 分钟' },
+  { id: 'p4', traceId: 'tr:8f31d1', kind: 'call', agent: 'stage-designer', stage: '阶段任务设计', title: '阶段展开', startMs: 5200, durationMs: 3400, status: 'ok', detail: '阶段 3/4 · 6 任务' }
+]
+
 /** 背景噪音日志（不构成完整 trace） */
 const backgroundSpans: TraceSpan[] = [
   { id: 'b1', traceId: 'tr:8f319e', kind: 'call', agent: 'snapshot-refresh', stage: '状态回写', title: '快照刷新', startMs: 0, durationMs: 210, status: 'ok', detail: 'user_1784… · 210ms' },
   { id: 'b2', traceId: 'tr:8f319b', kind: 'call', agent: 'session-wrapup', stage: '课后产出', title: '产出写入', startMs: 0, durationMs: 1600, status: 'ok', detail: '3 条笔记 · 1.6s' },
-  { id: 'b3', traceId: 'tr:8f3188', kind: 'call', agent: 'basic-generator', stage: '内容生成', title: '输出接近上限', startMs: 0, durationMs: 2100, status: 'warn', detail: '3800/4000 tokens' }
+  { id: 'b3', traceId: 'tr:8f3188', kind: 'call', agent: 'basic-generator', stage: '内容生成', title: '输出接近上限', startMs: 0, durationMs: 2100, status: 'warn', detail: '3800/4000 tokens' },
+  { id: 'b4', traceId: 'tr:8f3185', kind: 'call', agent: 'teaching-round', stage: '教学执行', title: '教学调用', startMs: 0, durationMs: 9800, status: 'ok', detail: '阶段 1 · 提问训练' },
+  { id: 'b5', traceId: 'tr:8f3182', kind: 'call', agent: 'state-aggregator', stage: '状态回写', title: '状态聚合', startMs: 0, durationMs: 340, status: 'ok', detail: 'user_2211 · 340ms' }
 ]
 
 const demoSpans = computed<TraceSpan[]>(() => {
   if (labState.value === 'fresh') return []
-  if (labState.value === 'incident') return [...incidentTrace, ...successTrace.slice(0, 3), ...backgroundSpans]
-  return [...successTrace, ...backgroundSpans]
+  if (labState.value === 'incident') return [...incidentTrace, ...successTrace.slice(0, 3), ...teachingTrace.slice(3), ...backgroundSpans]
+  return [...successTrace, ...teachingTrace, ...simulationTrace, ...planningTrace, ...backgroundSpans]
 })
 
 export const spans = computed<TraceSpan[]>(() => {
@@ -196,7 +224,7 @@ export function clearInvestigation() {
 }
 
 /* ---------- 二级页面（drill-in） ---------- */
-export type SubPageView = 'learner' | 'virtual' | 'user'
+export type SubPageView = 'learner' | 'virtual' | 'user' | 'session'
 
 export const subPage = ref<{ view: SubPageView; id: string } | null>(null)
 
@@ -440,6 +468,53 @@ export const userDetails: UserDetail[] = [
     activity: [
       { time: '22 分钟前', text: '完成「提问训练 1/4」' },
       { time: '5 天前', text: '注册并创建目标' }
+    ]
+  },
+  {
+    id: 'u3',
+    name: '赵敏',
+    email: 'zhaomin@example.com',
+    role: '用户',
+    joined: '21 天前',
+    lastLogin: '3 天前',
+    stats: [
+      { label: '目标', value: '2' },
+      { label: '路径', value: '2' },
+      { label: '任务完成', value: '31' },
+      { label: '连续学习', value: '0 天' }
+    ],
+    recentPaths: [
+      { title: 'SQL 基础', stage: '阶段 3/4 · JOIN 实战', pct: 61, tone: 'warn' },
+      { title: 'Excel 进阶', stage: '已完成', pct: 100, tone: 'ok' }
+    ],
+    activity: [
+      { time: '4 分钟前', text: '「JOIN 实战 3/4」失败，已伴学介入' },
+      { time: '昨天', text: '「JOIN 实战 2/4」失败' },
+      { time: '2 天前', text: '完成「GROUP BY 复习」' },
+      { time: '3 天前', text: '连续 3 天未登录' }
+    ]
+  },
+  {
+    id: 'u9',
+    name: '郑爽',
+    email: 'zhengshuang@example.com',
+    role: '用户',
+    joined: '16 天前',
+    lastLogin: '26 分钟前',
+    stats: [
+      { label: '目标', value: '2' },
+      { label: '路径', value: '2' },
+      { label: '任务完成', value: '18' },
+      { label: '连续学习', value: '9 天' }
+    ],
+    recentPaths: [
+      { title: '产品经理入门', stage: '阶段 2/5 · 需求文档', pct: 38, tone: 'ok' },
+      { title: '数据分析思维', stage: '阶段 1/3 · 提问训练', pct: 30, tone: 'ok' }
+    ],
+    activity: [
+      { time: '26 分钟前', text: '完成「PRD 结构拆解 2/3」' },
+      { time: '昨天 23:02', text: '完成「用户访谈提纲」' },
+      { time: '2 天前', text: '创建目标：两周上手需求文档' }
     ]
   }
 ]

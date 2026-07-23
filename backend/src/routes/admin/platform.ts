@@ -20,6 +20,17 @@ import {
 } from '../../services/agentConfig.service';
 import pathCoordinator from '../../coordinators/path.coordinator';
 import { logger } from '../../utils/logger';
+import {
+  getPlatformReliabilitySettings,
+  getReliabilityHardLimits,
+  updatePlatformReliabilitySettings
+} from '../../services/reliability-settings.service';
+import {
+  getPlatformCapabilityProbeEnabled,
+  DEFAULT_CAPABILITY_PROBE_ENABLED,
+  updatePlatformCapabilityProbeEnabled
+} from '../../services/capability-probe-settings.service';
+import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -367,6 +378,12 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       'request timeout',
       'socket hang up'
     ];
+    const businessExecutionWhere = {
+      OR: [
+        { executionLayer: null },
+        { executionLayer: { not: 'api-gateway' } }
+      ]
+    };
 
     const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
       const errorCode = String(log.errorCode || '').toLowerCase();
@@ -465,6 +482,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // Agent 调用统计 (使用 agentCallLog 表)
       prisma.agent_call_logs.groupBy({
         by: ['success'],
+        where: businessExecutionWhere,
         _count: true,
       }),
       
@@ -477,6 +495,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 今日 Agent 调用数
       prisma.agent_call_logs.count({
         where: {
+          ...businessExecutionWhere,
           calledAt: {
             gte: today,
             lt: tomorrow,
@@ -487,6 +506,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 今日 Agent 成功调用
       prisma.agent_call_logs.count({
         where: {
+          ...businessExecutionWhere,
           calledAt: {
             gte: today,
             lt: tomorrow,
@@ -498,18 +518,20 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 今日超时调用（按 error/errorCode 关键字识别）
       prisma.agent_call_logs.count({
         where: {
-          calledAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-          success: false,
-          OR: [
-            { errorCode: { contains: 'TIMEOUT' } },
-            { error: { contains: 'timeout' } },
-            { error: { contains: 'timed out' } },
-            { error: { contains: 'etimedout' } },
-            { error: { contains: 'deadline exceeded' } },
-            { error: { contains: 'request timeout' } }
+          AND: [
+            businessExecutionWhere,
+            {
+              calledAt: { gte: today, lt: tomorrow },
+              success: false,
+              OR: [
+                { errorCode: { contains: 'TIMEOUT' } },
+                { error: { contains: 'timeout' } },
+                { error: { contains: 'timed out' } },
+                { error: { contains: 'etimedout' } },
+                { error: { contains: 'deadline exceeded' } },
+                { error: { contains: 'request timeout' } }
+              ]
+            }
           ]
         }
       }),
@@ -518,6 +540,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       prisma.agent_call_logs.groupBy({
         by: ['agentId'],
         where: {
+          ...businessExecutionWhere,
           calledAt: { gte: new Date(Date.now() - 24 * 3600000) }
         }
       }),
@@ -525,6 +548,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       // 最近 24h 调用趋势
       prisma.agent_call_logs.findMany({
         where: {
+          ...businessExecutionWhere,
           calledAt: { gte: last24HoursStart }
         },
         select: {
@@ -1774,16 +1798,27 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       agentId: string;
       callerAgent: string | null;
       metadata: string | null;
+      executionLayer?: string | null;
+      actorType?: string | null;
+      actorId?: string | null;
+      providerId?: string | null;
+      providerType?: string | null;
+      routeSource?: string | null;
+      model?: string | null;
+      statusCode?: number | null;
+      attemptCount?: number | null;
+      maxAttempts?: number | null;
+      finishReason?: string | null;
     }) => {
       const parsed = parseLogMetadata(log.metadata);
-      const providerId = typeof parsed.providerId === 'string' ? parsed.providerId : null;
-      const metadataActorType = typeof parsed.actorType === 'string' ? parsed.actorType : null;
-      const metadataActorId = typeof parsed.actorId === 'string' ? parsed.actorId : null;
+      const providerId = log.providerId || (typeof parsed.providerId === 'string' ? parsed.providerId : null);
+      const metadataActorType = log.actorType || (typeof parsed.actorType === 'string' ? parsed.actorType : null);
+      const metadataActorId = log.actorId || (typeof parsed.actorId === 'string' ? parsed.actorId : null);
       const skillId = typeof parsed.skillId === 'string' ? parsed.skillId : null;
       const agentId = typeof parsed.agentId === 'string' ? parsed.agentId : null;
-      const layer = typeof parsed.executionLayer === 'string'
+      const layer = log.executionLayer || (typeof parsed.executionLayer === 'string'
         ? parsed.executionLayer
-        : (typeof parsed.layer === 'string' ? parsed.layer : null);
+        : (typeof parsed.layer === 'string' ? parsed.layer : null));
 
       const providerActorType = providerId?.startsWith('skill:')
         ? 'skill'
@@ -1823,13 +1858,16 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         invokerId,
         invokerType,
         providerId,
-        providerType: typeof parsed.providerType === 'string' ? parsed.providerType : null,
-        routeSource: typeof parsed.routeSource === 'string' ? parsed.routeSource : null,
-        statusCode: typeof parsed.statusCode === 'number' ? parsed.statusCode : null,
-        attempts: typeof parsed.attempts === 'number' ? parsed.attempts : null,
-        maxRetries: typeof parsed.maxRetries === 'number' ? parsed.maxRetries : null,
+        providerType: log.providerType || (typeof parsed.providerType === 'string' ? parsed.providerType : null),
+        routeSource: log.routeSource || (typeof parsed.routeSource === 'string' ? parsed.routeSource : null),
+        model: log.model || (typeof parsed.model === 'string' ? parsed.model : null),
+        statusCode: log.statusCode ?? (typeof parsed.statusCode === 'number' ? parsed.statusCode : null),
+        attempts: log.attemptCount ?? (typeof parsed.attempts === 'number' ? parsed.attempts : null),
+        maxAttempts: log.maxAttempts ?? (typeof parsed.maxAttempts === 'number'
+          ? parsed.maxAttempts
+          : (typeof parsed.maxRetries === 'number' ? parsed.maxRetries + 1 : null)),
         messageCount: typeof parsed.messageCount === 'number' ? parsed.messageCount : null,
-        finishReason: typeof parsed.finishReason === 'string' ? parsed.finishReason : null,
+        finishReason: log.finishReason || (typeof parsed.finishReason === 'string' ? parsed.finishReason : null),
       };
     };
 
@@ -1885,7 +1923,9 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       const identity = inferExecutionIdentity(log);
       return {
         id: log.id,
-        agentName: AGENT_ID_TO_NAME[log.agentId] || log.agentId,
+        agentName: identity.executionLayer === 'api-gateway'
+          ? `API 网关 · ${identity.actorId}`
+          : (AGENT_ID_TO_NAME[log.agentId] || log.agentId),
         agentId: log.agentId,
         sourceEntry: log.sourceEntry || 'platform',
         callerAgent: log.callerAgent,
@@ -1894,6 +1934,7 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         input: log.input,
         output: log.output,
         error: log.error,
+        errorCode: log.errorCode,
         traceId: log.traceId,
         sessionId: extractSessionIdFromMetadata(log.metadata),
         durationMs: log.durationMs,
@@ -1907,9 +1948,11 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         providerId: identity.providerId,
         providerType: identity.providerType,
         routeSource: identity.routeSource,
+        model: identity.model,
         statusCode: identity.statusCode,
         attempts: identity.attempts,
-        maxRetries: identity.maxRetries,
+        maxAttempts: identity.maxAttempts,
+        recoveredByRetry: Boolean(log.success && (identity.attempts || 0) > 1),
         messageCount: identity.messageCount,
         finishReason: identity.finishReason,
         phase: phaseInfo.phase,
@@ -1947,6 +1990,199 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         status: 500,
       },
     });
+  }
+});
+
+router.get('/settings/reliability', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const settings = await getPlatformReliabilitySettings();
+    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '获取 AI 可靠性设置失败' } });
+  }
+});
+
+router.put('/settings/reliability', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const input = req.body || {};
+    const integerFields = [
+      'maxUpstreamAttempts',
+      'maxTransportRetries',
+      'maxLogicalRetries',
+      'defaultRequestTimeoutMs',
+      'retryBaseDelayMs',
+      'maxRetryAfterMs'
+    ];
+    for (const field of integerFields) {
+      if (!Number.isInteger(input[field])) {
+        return res.status(400).json({ success: false, error: { message: `${field} 必须是整数` } });
+      }
+    }
+    if (typeof input.jitterEnabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: { message: 'jitterEnabled 必须是布尔值' } });
+    }
+    const limits = getReliabilityHardLimits();
+    const ranges: Record<string, [number, number]> = {
+      maxUpstreamAttempts: [1, limits.maxUpstreamAttempts],
+      maxTransportRetries: [0, limits.maxTransportRetries],
+      maxLogicalRetries: [0, limits.maxLogicalRetries],
+      defaultRequestTimeoutMs: [limits.minRequestTimeoutMs, limits.maxRequestTimeoutMs],
+      retryBaseDelayMs: [limits.minRetryBaseDelayMs, limits.maxRetryBaseDelayMs],
+      maxRetryAfterMs: [0, limits.maxRetryAfterMs]
+    };
+    for (const [field, [min, max]] of Object.entries(ranges)) {
+      if (input[field] < min || input[field] > max) {
+        return res.status(400).json({
+          success: false,
+          error: { message: `${field} 必须在 ${min} 到 ${max} 之间` }
+        });
+      }
+    }
+    const settings = await updatePlatformReliabilitySettings(input);
+    res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits() } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '更新 AI 可靠性设置失败' } });
+  }
+});
+
+router.get('/settings/capability-probe', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const enabled = await getPlatformCapabilityProbeEnabled();
+    res.json({
+      success: true,
+      data: {
+        enabled,
+        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
+        timerActive: aiCapabilityHealthService.isEnabled()
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '获取 AI 能力探测开关失败' } });
+  }
+});
+
+router.put('/settings/capability-probe', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: { message: 'enabled 必须是布尔值' } });
+    }
+    const value = await updatePlatformCapabilityProbeEnabled(enabled);
+    await aiCapabilityHealthService.setEnabled(value);
+    res.json({
+      success: true,
+      data: {
+        enabled: value,
+        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
+        timerActive: aiCapabilityHealthService.isEnabled()
+      },
+      message: value
+        ? 'AI 能力探测已开启，将每 2 分钟自动向模型服务发送探活请求'
+        : 'AI 能力探测已关闭，将停止周期性 LLM 探活请求'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error.message || '更新 AI 能力探测开关失败' } });
+  }
+});
+
+/**
+ * 获取单条执行日志及 Provider Attempt 时间线
+ * GET /api/admin/agents/logs/:id
+ */
+router.get('/agents/logs/:id', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const log = await prisma.agent_call_logs.findUnique({ where: { id } });
+    if (!log) {
+      return res.status(404).json({ success: false, error: { message: '执行日志不存在', status: 404 } });
+    }
+
+    const attempts = await prisma.llm_execution_attempts.findMany({
+      where: log.executionLayer === 'api-gateway'
+        ? { llmRequestId: id }
+        : {
+            OR: [
+              { parentExecutionId: id },
+              { rootExecutionId: id }
+            ]
+          },
+      orderBy: [{ startedAt: 'asc' }, { transportAttemptNo: 'asc' }],
+      take: 200
+    });
+    const logMetadata = parseLogMetadata(log.metadata);
+    const attemptTelemetryComplete = logMetadata.attemptTelemetryComplete !== false;
+
+    res.json({
+      success: true,
+      data: {
+        log: {
+          ...log,
+          dataCompleteness: attempts.length > 0
+            ? 'full'
+            : log.executionLayer === 'api-gateway' && log.attemptCount === 0
+              ? 'preflight'
+              : log.executionLayer === 'api-gateway' && !attemptTelemetryComplete
+                ? 'telemetry_failed'
+                : log.executionLayer === 'skill'
+                  ? 'none'
+              : 'legacy'
+        },
+        attempts: attempts.map((attempt) => ({
+          id: attempt.id,
+          llmRequestId: attempt.llmRequestId,
+          promptCallId: attempt.promptCallId,
+          promptAttemptNo: attempt.promptAttemptNo,
+          transportAttemptNo: attempt.transportAttemptNo,
+          maxAttempts: attempt.maxAttempts,
+          providerId: attempt.providerId,
+          providerType: attempt.providerType,
+          routeSource: attempt.routeSource,
+          requestedModel: attempt.requestedModel,
+          resolvedModel: attempt.resolvedModel,
+          responseModel: attempt.responseModel,
+          endpointHost: attempt.endpointHost,
+          success: attempt.success,
+          retryable: attempt.retryable,
+          willRetry: attempt.willRetry,
+          statusCode: attempt.statusCode,
+          errorCategory: attempt.errorCategory,
+          errorCode: attempt.errorCode,
+          errorMessage: attempt.errorMessage,
+          startedAt: attempt.startedAt,
+          completedAt: attempt.completedAt,
+          durationMs: attempt.durationMs,
+          backoffMs: attempt.backoffMs,
+          retryAfterMs: attempt.retryAfterMs,
+          configuredTimeoutMs: attempt.configuredTimeoutMs,
+          effectiveTimeoutMs: attempt.effectiveTimeoutMs,
+          promptTokens: attempt.promptTokens,
+          completionTokens: attempt.completionTokens,
+          totalTokens: attempt.totalTokens,
+          finishReason: attempt.finishReason,
+          completionId: attempt.completionId,
+          providerRequestId: attempt.providerRequestId
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('[admin-platform] 获取执行日志详情失败', { error });
+    res.status(500).json({ success: false, error: { message: '获取执行日志详情失败', status: 500 } });
   }
 });
 

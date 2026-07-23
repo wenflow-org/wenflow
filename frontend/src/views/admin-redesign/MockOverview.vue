@@ -81,7 +81,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { overviewHealth, investigateAgent } from './mockStore';
+import { overviewHealth, investigateAgent, dataSource } from './mockStore';
+import { liveOverviewFull } from './mockLive';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -196,7 +197,28 @@ const datasets: Record<string, BriefData> = {
   }
 };
 
-const data = computed(() => datasets[props.state]);
+const data = computed<BriefData>(() => {
+  // live 模式：全部来自真实统计
+  if (dataSource.value === 'live' && liveOverviewFull.value) {
+    const l = liveOverviewFull.value;
+    return {
+      tone: l.tone,
+      score: l.score,
+      headline: l.headline,
+      subline: l.subline,
+      actions: l.actions,
+      funnel: l.funnel,
+      rates: l.rates,
+      funnelNote: l.funnelNote,
+      pulse: l.pulse,
+      totalCalls: l.totalCalls,
+      totalIssues: l.totalIssues,
+      peak: l.peak,
+      feed: l.feed
+    };
+  }
+  return datasets[props.state];
+});
 const maxCalls = computed(() => Math.max(1, ...data.value.pulse.map((b) => b.calls)));
 const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.value) * 100, 8) : 4}%`;
 const scoreDash = computed(() => `${data.value.score * 1.194} 119.4`);

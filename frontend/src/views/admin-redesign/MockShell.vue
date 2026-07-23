@@ -42,10 +42,16 @@
             <span class="mshell__crumb-sub">{{ crumb }}</span>
           </template>
         </div>
-        <div class="mshell__search">
-          <span class="mshell__search-icon">⌕</span>
-          <span class="mshell__search-hint">搜索页面、Skill、Trace ID…</span>
-          <span class="mshell__kbd">⌘K</span>
+        <div class="mshell__topbar-right">
+          <div class="mshell__search" @click="$emit('palette')">
+            <span class="mshell__search-icon">⌕</span>
+            <span class="mshell__search-hint">搜索页面、Skill、Trace ID…</span>
+            <span class="mshell__kbd">⌘K</span>
+          </div>
+          <template v-if="release">
+            <span class="mshell__admin">{{ adminName }}</span>
+            <button type="button" class="mshell__logout" @click="logout">退出</button>
+          </template>
         </div>
       </header>
       <main class="mshell__content">
@@ -53,7 +59,7 @@
       </main>
       <footer class="mshell__footer">
         <img src="/favicon.png" alt="" class="mshell__footer-logo" />
-        <span>WenFlow Admin · 重设计实验稿</span>
+        <span>{{ release ? 'WenFlow Admin' : 'WenFlow Admin · 重设计实验稿' }}</span>
         <span class="mshell__footer-sep">·</span>
         <span>数据源：{{ sourceLabel }}</span>
         <span class="mshell__footer-right">Quiet UI · 运维简报式</span>
@@ -66,11 +72,33 @@
 import { computed } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
 import { dataSource } from './mockStore'
+import { adminAuthApi } from '@/api/adminApi'
 
-const props = defineProps<{ current: string; crumb?: string }>()
-defineEmits<{ (e: 'navigate', id: string): void }>()
+const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
+defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
 
 const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实（API）' : '演示（mock）'))
+
+/* release 模式：管理员信息与退出登录 */
+const adminName = computed(() => {
+  const raw = localStorage.getItem('admin_user') || sessionStorage.getItem('admin_user')
+  if (!raw) return 'admin'
+  try {
+    return String(JSON.parse(raw).name || 'admin')
+  } catch {
+    return 'admin'
+  }
+})
+
+async function logout() {
+  try {
+    await adminAuthApi.logout()
+  } finally {
+    window.location.replace('/admin/login')
+  }
+}
+
+const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
 
 const groupedScenes = computed(() => {
   const groups: Array<{ title: string; items: MockSceneDef[] }> = []
@@ -84,8 +112,6 @@ const groupedScenes = computed(() => {
   }
   return groups
 })
-
-const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
 </script>
 
 <style scoped>
@@ -203,7 +229,7 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 10px 20px;
+  padding: 7px 20px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid #e1e8f2;
@@ -227,12 +253,28 @@ const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.curre
 .mshell__search-hint { white-space: nowrap; }
 .mshell__content { min-width: 0; }
 
+/* release 模式：顶栏右侧管理员区 */
+.mshell__topbar-right { display: flex; align-items: center; gap: 12px; }
+.mshell__admin { font-size: 12px; font-weight: 700; color: #1a2a44; }
+.mshell__logout {
+  border: 1px solid #e1e8f2;
+  background: #fff;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5b6577;
+  cursor: pointer;
+}
+.mshell__logout:hover { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
+
 /* 页脚 */
 .mshell__footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
+  padding: 7px 20px;
   border-top: 1px solid #e1e8f2;
   color: #8492ab;
   font-size: 11.5px;

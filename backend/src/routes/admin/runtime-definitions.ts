@@ -231,6 +231,13 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
       pipelineStepIndex: row.pipelineStepIndex,
       traceId: (row as any).traceId,
       parentExecutionId: (row as any).parentExecutionId,
+      promptAttemptCount: row.promptAttemptCount,
+      llmRequestCount: row.llmRequestCount,
+      finalLlmRequestId: row.finalLlmRequestId,
+      failureStage: row.failureStage,
+      attempts: parseJson(row.attemptTrace) || [],
+      providerId: row.providerId,
+      model: row.model,
       createdAt: row.createdAt,
     })),
   });

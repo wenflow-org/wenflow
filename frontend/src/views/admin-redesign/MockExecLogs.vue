@@ -27,6 +27,25 @@
           <option value="">全部节点</option>
           <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
         </select>
+        <select v-if="isLive" v-model="timeRange" class="log-agent" @change="applyServerQuery">
+          <option value="today">今天</option>
+          <option value="yesterday">昨天</option>
+          <option value="week">近 7 天</option>
+          <option value="month">近 30 天</option>
+          <option value="all">全部</option>
+        </select>
+        <input
+          v-if="isLive"
+          v-model="keyword"
+          class="log-keyword"
+          placeholder="关键词，回车查询"
+          @keydown.enter="applyServerQuery"
+        />
+        <label v-if="isLive" class="log-auto">
+          <input type="checkbox" v-model="autoRefresh" />
+          自动刷新
+        </label>
+        <button v-if="isLive" type="button" class="mk-link" @click="exportJson">导出</button>
       </div>
     </div>
 
@@ -50,8 +69,57 @@
             <span>trace {{ log.traceId }}</span>
             <button type="button" class="mk-link" @click.stop="openTrace(log.traceId)">在瀑布中查看完整链路 →</button>
           </div>
-          <pre v-if="log.payload">{{ log.payload }}</pre>
-          <p v-else class="tline__none">无 payload 记录</p>
+          <template v-if="isLive">
+            <p v-if="detailLoading === log.id" class="tline__none">拉取日志详情…</p>
+            <template v-else-if="detailCache[log.id]">
+              <!-- 重试时间线：网关升级后的逐次尝试遥测 -->
+              <div v-if="detailCache[log.id].attempts.length" class="tline__section">
+                <span class="tline__label">调用时间线{{ detailCache[log.id].attemptCount > 1 ? ` · 共 ${detailCache[log.id].attemptCount}/${detailCache[log.id].maxAttempts} 次尝试` : '' }}</span>
+                <div class="tline-attempts">
+                  <div
+                    v-for="(a, i) in detailCache[log.id].attempts"
+                    :key="i"
+                    class="tline-attempt"
+                    :class="{ 'tline-attempt--fail': !a.success, 'tline-attempt--retry': a.willRetry }"
+                  >
+                    <div class="tline-attempt__head">
+                      <span class="tline-attempt__no">P#{{ a.promptAttemptNo }} · N#{{ a.transportAttemptNo }}</span>
+                      <span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span>
+                      <span v-if="a.willRetry" class="tline-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
+                      <span class="tline-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
+                    </div>
+                    <div class="tline-attempt__meta mono">
+                      <span>{{ a.provider || 'provider?' }}</span>
+                      <span>{{ a.model || 'model?' }}</span>
+                      <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
+                      <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
+                      <span v-if="a.routeSource">路由 {{ a.routeSource }}</span>
+                      <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
+                    </div>
+                    <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCategory ? `[${a.errorCategory}] ` : '' }}{{ a.errorCode ? `${a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
+                  </div>
+                </div>
+              </div>
+              <div v-if="detailCache[log.id].error" class="tline__section">
+                <span class="tline__label tline__label--err">错误</span>
+                <pre>{{ detailCache[log.id].error }}</pre>
+              </div>
+              <div v-if="detailCache[log.id].input" class="tline__section">
+                <span class="tline__label">输入</span>
+                <pre>{{ detailCache[log.id].input }}</pre>
+              </div>
+              <div v-if="detailCache[log.id].output" class="tline__section">
+                <span class="tline__label">输出</span>
+                <pre>{{ detailCache[log.id].output }}</pre>
+              </div>
+              <p v-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无 payload 记录</p>
+            </template>
+            <p v-else class="tline__none">详情不可用</p>
+          </template>
+          <template v-else>
+            <pre v-if="log.payload">{{ log.payload }}</pre>
+            <p v-else class="tline__none">无 payload 记录</p>
+          </template>
         </div>
       </div>
     </div>
@@ -65,12 +133,78 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { spans, intent, openTrace, openSkillDrawer, clearInvestigation } from './mockStore'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { spans, intent, openTrace, openSkillDrawer, clearInvestigation, dataSource } from './mockStore'
+import { fetchLogDetail, reloadLiveSpans, type LogDetail } from './mockLive'
 
 const openId = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
+const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week')
+const keyword = ref('')
+const autoRefresh = ref(false)
+const isLive = computed(() => dataSource.value === 'live')
+
+/* live 模式：服务端筛选（时间范围/关键词） */
+let querying = false
+async function applyServerQuery() {
+  if (!isLive.value || querying) return
+  querying = true
+  try {
+    await reloadLiveSpans({
+      timeRange: timeRange.value,
+      keyword: keyword.value.trim() || undefined
+    })
+  } finally {
+    querying = false
+  }
+}
+
+/* 自动刷新：10s 间隔，离开页面清除 */
+let autoTimer: ReturnType<typeof setInterval> | null = null
+watch(autoRefresh, (on) => {
+  if (autoTimer) {
+    clearInterval(autoTimer)
+    autoTimer = null
+  }
+  if (on && isLive.value) {
+    autoTimer = setInterval(() => {
+      if (document.hidden) return
+      void applyServerQuery()
+    }, 10000)
+  }
+})
+onBeforeUnmount(() => {
+  if (autoTimer) clearInterval(autoTimer)
+})
+
+/* 导出当前筛选结果为 JSON */
+function exportJson() {
+  const blob = new Blob([JSON.stringify(filtered.value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `execution-logs-${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/* live 模式：展开行时拉真实 input/output + 重试时间线 */
+const detailCache = ref<Record<string, LogDetail>>({})
+const detailLoading = ref('')
+
+watch(openId, async (id) => {
+  if (!id || !isLive.value || detailCache.value[id]) return
+  detailLoading.value = id
+  try {
+    const d = await fetchLogDetail(id)
+    detailCache.value = { ...detailCache.value, [id]: d }
+  } catch {
+    detailCache.value = { ...detailCache.value, [id]: { attempts: [], attemptCount: 0, maxAttempts: 1 } }
+  } finally {
+    if (detailLoading.value === id) detailLoading.value = ''
+  }
+})
 
 // 从排查意图进入时应用过滤
 watch(
@@ -171,12 +305,32 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   font-size: 11.5px;
   color: var(--mk-ink);
 }
+.log-keyword {
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface);
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--mk-ink);
+  width: 150px;
+}
+.log-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
 
 .log-body {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   background: var(--mk-surface);
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: 72vh;
 }
 
 .tline { border-left: 3px solid transparent; border-bottom: 1px solid #f0f2f5; }
@@ -187,7 +341,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 
 .tline__main {
   display: grid;
-  grid-template-columns: 44px 150px minmax(0, 1fr) 64px 92px;
+  grid-template-columns: 44px 176px minmax(0, 1fr) 64px 92px;
   gap: 10px;
   align-items: baseline;
   width: 100%;
@@ -240,7 +394,33 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   background: #0d1420;
   color: #8ba3c7;
   font: 11px/1.6 'JetBrains Mono', monospace;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 240px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
+.tline__section { display: grid; gap: 4px; }
+.tline__label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--mk-faint); }
+.tline__label--err { color: var(--mk-red); }
+
+/* 重试时间线 */
+.tline-attempts { display: grid; gap: 6px; }
+.tline-attempt {
+  border: 1px solid var(--mk-line);
+  border-left: 3px solid var(--mk-green);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  background: #fff;
+}
+.tline-attempt--fail { border-left-color: var(--mk-red); background: #fffafa; }
+.tline-attempt--retry { border-left-color: var(--mk-amber); }
+.tline-attempt__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tline-attempt__no { font-family: var(--mk-mono); font-size: 10.5px; font-weight: 800; color: var(--mk-muted); }
+.tline-attempt__retry { font-size: 10.5px; font-weight: 700; color: var(--mk-amber); }
+.tline-attempt__dur { margin-left: auto; font-size: 10.5px; color: var(--mk-faint); }
+.tline-attempt__meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--mk-faint); }
+.tline-attempt__err { margin: 0; font-size: 11px; color: var(--mk-red); word-break: break-all; }
 </style>

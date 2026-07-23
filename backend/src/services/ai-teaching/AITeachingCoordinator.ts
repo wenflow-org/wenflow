@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'crypto';
+﻿import { createHash, randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
@@ -26,6 +26,8 @@ import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { createDomainEvent } from '../../events/contracts';
 import { replanAdvisoryService, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
+import { classifyFinalizationError } from './FinalizationErrors';
+import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
 const AI_TEACHING_AGENT_ID = 'teaching-agent';
@@ -90,6 +92,14 @@ function requireTeachingRevision(revision: number | undefined): number {
     throw new TeachingSessionConflictError('缺少有效的课堂 revision', 'TEACHING_REVISION_REQUIRED');
   }
   return Number(revision);
+}
+
+function buildEndSessionRequestIdentity(endReason: string) {
+  const requestJson = JSON.stringify({ action: 'end_only', endReason });
+  return {
+    requestJson,
+    requestHash: createHash('sha256').update(requestJson).digest('hex')
+  };
 }
 
 function toMessageRole(role: string): 'user' | 'assistant' | 'system' {
@@ -1545,7 +1555,9 @@ export class AITeachingOrchestrator {
     sessionId: string,
     endReason = 'manual-end',
     expectedRevision?: number,
-    requestedOperationId: string = randomUUID()
+    requestedOperationId: string = randomUUID(),
+    requestedRequestHash?: string,
+    requestedRequestJson?: string
   ): Promise<{
     status: 'completed' | 'processing';
     operationId: string;
@@ -1558,16 +1570,21 @@ export class AITeachingOrchestrator {
     advisory?: ReplanAdvisory;
     revision: number;
   }> {
+    const fallbackIdentity = buildEndSessionRequestIdentity(endReason);
+    const requestHash = requestedRequestHash || fallbackIdentity.requestHash;
+    const requestJson = requestedRequestJson || fallbackIdentity.requestJson;
     const finalization = await teachingSessionRepository.claimFinalization(
       sessionId,
       'end_only',
       requestedOperationId,
+      requestHash,
+      requestJson,
       requireTeachingRevision(expectedRevision)
     );
     if (finalization.status === 'completed') {
       return {
         status: 'completed',
-        operationId: finalization.session.teachingState?.finalization?.lastOperationId || requestedOperationId,
+        operationId: finalization.operationId,
         wrapup: finalization.session.wrapup as any,
         advisory: finalization.session.advisory as ReplanAdvisory,
         revision: finalization.session.revision,
@@ -1580,7 +1597,9 @@ export class AITeachingOrchestrator {
         revision: finalization.session.revision
       };
     }
-    const { session, operationId } = finalization;
+    const { session, operationId, leaseOwner } = finalization;
+    const leaseGuard = new FinalizationLeaseGuard(sessionId, operationId, leaseOwner);
+    leaseGuard.start();
     try {
     const durationMinutes = computeEffectiveDurationMinutes(session);
     const sessionArtifacts = {
@@ -1758,7 +1777,8 @@ export class AITeachingOrchestrator {
       });
 
       try {
-        await teachingSessionRepository.completeWithEvent(sessionId, operationId, {
+        await leaseGuard.assertOwned();
+        await teachingSessionRepository.completeWithEvent(sessionId, operationId, leaseOwner, {
           messages: session.messages,
           knowledgeState: session.knowledgeState,
           teachingState: mergeFinalTeachingState(session.teachingState, finalState, sessionArtifacts),
@@ -1794,11 +1814,26 @@ export class AITeachingOrchestrator {
 
     throw new TeachingSessionConflictError('学习状态持续变化，请稍后重试', 'TEACHING_LEARNING_STATE_STALE');
     } catch (error) {
-      const code = error instanceof TeachingSessionConflictError
-        ? error.code
-        : 'SESSION_FINALIZATION_FAILED';
-      await teachingSessionRepository.failFinalization(sessionId, operationId, 'end_only', code);
+      const info = classifyFinalizationError(error);
+      try {
+        await teachingSessionRepository.failFinalization(
+          sessionId,
+          operationId,
+          leaseOwner,
+          'end_only',
+          info.code === 'FINALIZATION_PERSISTENCE_FAILED' ? 'SESSION_FINALIZATION_FAILED' : info.code,
+          info.retryable
+        );
+      } catch (markError) {
+        logger.error('[AITeaching] 课堂结束失败状态持久化失败', {
+          sessionId,
+          operationId,
+          error: markError instanceof Error ? markError.message : String(markError)
+        });
+      }
       throw error;
+    } finally {
+      await leaseGuard.stop();
     }
   }
 

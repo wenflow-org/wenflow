@@ -102,10 +102,20 @@ async function getSkillRuntimeStats(skillNames: string[]): Promise<Map<string, S
     }),
     prisma.agent_call_logs.findMany({
       where: {
-        OR: skillNames.flatMap((name) => [
-          { metadata: { contains: `"skillId":"${name}"` } },
-          { metadata: { contains: `"skillId":"skill:${name}"` } },
-        ]),
+        AND: [
+          {
+            OR: [
+              { executionLayer: null },
+              { executionLayer: { not: 'api-gateway' } }
+            ]
+          },
+          {
+            OR: skillNames.flatMap((name) => [
+              { metadata: { contains: `"skillId":"${name}"` } },
+              { metadata: { contains: `"skillId":"skill:${name}"` } },
+            ])
+          }
+        ]
       },
       select: { metadata: true, success: true, durationMs: true, calledAt: true },
     }),
@@ -861,7 +871,8 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     const parentAgent = getAgentOfSkill(canonicalId);
 
     // 并发拉取
-    const [skillConfig, promptVersions, contract, callStats, resolvedRoute] = await Promise.all([
+    const { getPlatformReliabilitySettings } = await import('../../services/reliability-settings.service');
+    const [skillConfig, promptVersions, contract, callStats, resolvedRoute, reliabilitySettings] = await Promise.all([
       systemPrisma.skill_model_configs.findFirst({ where: { skillId: canonicalId.replace(/^skill:/, '') } }),
       systemPrisma.agent_prompts.findMany({
         where: { agentId: canonicalId },
@@ -888,7 +899,8 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         _avg: { durationMs: true },
         _max: { calledAt: true }
       }),
-      getAPIGateway().resolveRoute({ agentId: parentAgent?.id, skillId: canonicalId.replace(/^skill:/, '') }).catch(() => null)
+      getAPIGateway().resolveRoute({ agentId: parentAgent?.id, skillId: canonicalId.replace(/^skill:/, '') }).catch(() => null),
+      getPlatformReliabilitySettings()
     ]);
 
     const totalCalls = callStats.reduce((s, g) => s + g._count._all, 0);
@@ -935,6 +947,16 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
           inheritedFromAgent: !!parentAgent && !skillConfig?.enabled,
           hasSkillOverride: !!skillConfig?.enabled,
           manifestDefault: manifest.defaultModelConfig || null,
+          reliability: {
+            maxUpstreamAttempts: reliabilitySettings.maxUpstreamAttempts,
+            maxTransportRetries: reliabilitySettings.maxTransportRetries,
+            maxLogicalRetries: Math.min(
+              skillConfig?.maxLogicalRetries ?? reliabilitySettings.maxLogicalRetries,
+              reliabilitySettings.maxLogicalRetries
+            ),
+            logicalRetrySource: skillConfig?.maxLogicalRetries == null ? 'platform-default' : 'skill-override',
+            businessFallback: 'code-defined'
+          }
         },
         contract: contract ? {
           stage: contract.stage,

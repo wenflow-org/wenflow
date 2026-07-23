@@ -28,6 +28,7 @@ import { learnerEvidenceProjector } from './services/learner/LearnerEvidenceProj
 import { learnerSnapshotRefreshService } from './services/learner/LearnerSnapshotRefreshService';
 import { learnerProfileService } from './services/learner/LearnerProfileService';
 import { lessonKnowledgeEnrichmentConsumer } from './services/learner/LessonKnowledgeEnrichmentConsumer';
+import { quickLearnService } from './virtual-lab/quick-learn/quick-learn.service';
 import { reconcileTaskCompletionMetric } from './services/metrics/LearningMetricService';
 import { refreshRuntimeNetworkPolicy } from './services/runtime-network-policy.service';
 import type { Server } from 'http';
@@ -39,6 +40,7 @@ import { ApplicationLifecycle, resolveShutdownDeadlineMs } from './services/appl
 import { backgroundTaskTracker, runBackgroundTask } from './services/background-task-tracker.service';
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
+import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -216,7 +218,10 @@ import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
+import adminAnnouncementsRoutes from './routes/admin/announcements';
+import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
+import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
 import adminDevtoolsRoutes from './routes/admin/devtools';
 import adminTestRoutes from './routes/admin/test';
@@ -318,6 +323,8 @@ app.use('/api/state', authMiddleware, dashboardProjectionPolicy, acpContextMiddl
 app.use('/api/achievements', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), achievementsRoutes);
 app.use('/api/reports', authMiddleware, acpContextMiddleware('platform'), reportRoutes);
 app.use('/api/metrics', authMiddleware, acpContextMiddleware('platform'), metricsRoutes);
+// 用户端公告（登录即可见，无平台策略限制）
+app.use('/api/announcements', authMiddleware, announcementsRoutes);
 
 // goal-conversation 路由（用户侧调用）
 app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('user'), goalConversationRoutes);
@@ -343,9 +350,11 @@ app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
 app.use('/api/admin/skill-author', ...adminRouteMiddleware, adminSkillAuthorRoutes);
 app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
 app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
+app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
 app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
 app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
 app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
+app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);
 app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
 app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
@@ -593,13 +602,18 @@ export async function startServer() {
       logger.warn('未创建初始管理员：未配置 INIT_ADMIN_PASSWORD');
     }
 
-     // 初始化 EduClaw Gateway
-    await purgeRetiredSkills();
-     await initializeGateway();
-     assertStartupActive();
+      // 初始化 EduClaw Gateway
+     await purgeRetiredSkills();
+      await initializeGateway();
+      assertStartupActive();
      await aiCapabilityHealthService.refresh();
-     aiCapabilityHealthService.start();
-     assertStartupActive();
+     {
+       const probeEnabled = await getRuntimeCapabilityProbeEnabled();
+       aiCapabilityHealthService.setEnabled(probeEnabled);
+       if (probeEnabled) aiCapabilityHealthService.start();
+       else logger.info('[ai-capability] 探测定时器已禁用（连接与安全开关关闭），跳过 start()');
+     }
+      assertStartupActive();
     
      // 初始化 Agent 协作服务
      await initializeAgentCollaboration();
@@ -636,6 +650,10 @@ export async function startServer() {
 
       // 回收因进程中断等原因遗留的 generating 路径
       await learningService.recoverStaleGeneratingPaths();
+      assertStartupActive();
+
+      // 标记因进程中断而遗留的代学运行（V1 不续跑）
+      await quickLearnService.recoverInterruptedRuns();
       assertStartupActive();
 
       // 持续自动重试仍在阶段任务生成失败中的路径

@@ -4,9 +4,9 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">编排主链完整</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">5 阶段</span>
-      <span class="mk-status__meta">24 Skills</span>
-      <span class="mk-status__meta">接力 4 处</span>
+      <span class="mk-status__meta">{{ stages.length }} 阶段</span>
+      <span class="mk-status__meta">{{ totalSkills }} Skills</span>
+      <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
     </div>
 
     <!-- 阶段流水线 -->
@@ -70,7 +70,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { openSkillDrawer } from './mockStore'
+import { openSkillDrawer, dataSource } from './mockStore'
+import { liveTopoNodes, liveSkillCatalog } from './mockLive'
 
 defineProps<{ state: 'normal' }>()
 
@@ -84,7 +85,7 @@ interface Stage {
   skills: SkillNode[]
 }
 
-const stages: Stage[] = [
+const demoStages: Stage[] = [
   {
     id: 'goal',
     name: 'Goal',
@@ -148,7 +149,42 @@ const stages: Stage[] = [
 ]
 
 const active = ref('goal')
-const current = computed(() => stages.find((s) => s.id === active.value) || stages[0])
+const stages = computed<Stage[]>(() => {
+  if (dataSource.value !== 'live' || !liveTopoNodes.value.length) return demoStages
+
+  return demoStages.map((stage) => {
+    const members = liveTopoNodes.value.filter(
+      (n) => n.type === 'skill' && n.parentAgentId === stage.agentId
+    )
+    const demoById = new Map(stage.skills.map((skill) => [skill.id, skill]))
+    // 真实变量流：来自 prompt-ops skill-catalog 的 input/output 字段
+    const catalogAgent = liveSkillCatalog.value.find((a) => a.agentId === stage.agentId)
+    const catalogById = new Map((catalogAgent?.skills || []).map((s) => [s.skillId, s]))
+    const skills = members.map((node) => {
+      const id = node.id.replace(/^skill:/, '')
+      const fallback = demoById.get(id)
+      const catalog = catalogById.get(id)
+      return {
+        id,
+        name: node.label.replace(/ Skill$/, ''),
+        calls: node.stats.totalCalls,
+        produces: catalog?.outputFields.length ? catalog.outputFields : fallback?.produces || []
+      }
+    })
+    // 阶段级变量：下辖 Skill 输入 = 消费，输出 = 产出（有真实字段时覆盖演示值）
+    const allInputs = [...new Set(skills.flatMap((s) => catalogById.get(s.id)?.inputFields || []))]
+    const allOutputs = [...new Set(skills.flatMap((s) => s.produces))]
+    return {
+      ...stage,
+      consumes: allInputs.length ? allInputs.slice(0, 5) : stage.consumes,
+      produces: allOutputs.length ? allOutputs.slice(0, 5) : stage.produces,
+      skills
+    }
+  })
+})
+
+const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
+const current = computed(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
 </script>
 
 <style scoped>

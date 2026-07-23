@@ -30,6 +30,7 @@ export interface ResolvedRoute {
   temperature: number;
   maxTokens: number;
   timeoutMs?: number;
+  timeoutSource?: 'skill-override' | 'agent-override' | 'route-override' | 'environment-default';
   privateNetworkPolicy: 'runtime' | 'public-only';
   source: RouteSource;
 }
@@ -62,6 +63,15 @@ export interface ChatResponse {
   }>;
   model: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  _gatewayMetadata?: {
+    llmRequestId: string;
+    providerId: string;
+    routeSource: RouteSource;
+    requestedModel?: string;
+    resolvedModel: string;
+    responseModel?: string;
+    attemptCount: number;
+  };
   [key: string]: any;
 }
 
@@ -70,6 +80,12 @@ export interface ExecutionContext {
   sessionId?: string;
   traceId?: string;
   executionLogId?: string;
+  parentExecutionId?: string;
+  rootExecutionId?: string;
+  promptCallId?: string;
+  promptAttemptNo?: number;
+  retryBudget?: import('./retry-budget').RetryBudget;
+  logicalRetryLimit?: number;
   sourceEntry?: 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation' | 'system-canary';
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';

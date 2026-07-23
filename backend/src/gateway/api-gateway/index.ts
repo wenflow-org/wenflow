@@ -6,6 +6,7 @@ import { getRequestContext } from './context';
 import { logger } from '../../utils/logger';
 import { createHash } from 'crypto';
 import { getAgentOfSkill } from '../../services/agent-manifest.service';
+import { createRuntimeRetryBudget } from '../../services/reliability-settings.service';
 
 export class APIGateway {
   private router: APIRouter;
@@ -43,25 +44,32 @@ export class APIGateway {
     context?: ExecutionContext
   ): Promise<ChatResponse> {
     const requestContext = getRequestContext();
+    const inheritedRetryBudget = context?.retryBudget || requestContext.retryBudget;
     const executionContext: ExecutionContext = {
+      ...context,
       userId: context?.userId || caller.userId || requestContext.userId,
       traceId: context?.traceId || requestContext.traceId,
       executionLogId: context?.executionLogId || requestContext.executionLogId,
+      parentExecutionId: context?.parentExecutionId || requestContext.executionLogId || requestContext.parentExecutionId,
+      rootExecutionId: context?.rootExecutionId || requestContext.rootExecutionId,
+      promptCallId: context?.promptCallId || requestContext.promptCallId,
+      promptAttemptNo: context?.promptAttemptNo || requestContext.promptAttemptNo,
+      retryBudget: inheritedRetryBudget,
       sessionId: context?.sessionId,
       sourceEntry: context?.sourceEntry || requestContext.sourceEntry,
       callerAgent: context?.callerAgent || caller.agentId || requestContext.callerAgent,
       userRole: context?.userRole || requestContext.userRole,
       experimentId: context?.experimentId || requestContext.experimentId,
       runId: context?.runId || requestContext.runId,
-      abortSignal: context?.abortSignal || requestContext.abortSignal,
-      ...context
+      abortSignal: context?.abortSignal || requestContext.abortSignal
     };
-    if (!executionContext.abortSignal) {
-      executionContext.abortSignal = requestContext.abortSignal;
-    }
     
     const normalizedCaller = this.normalizeCaller(caller, executionContext.userId);
     executionContext.callerAgent = context?.callerAgent || normalizedCaller.agentId || requestContext.callerAgent;
+    executionContext.agentId = normalizedCaller.agentId;
+    executionContext.skillId = normalizedCaller.skillId;
+    executionContext.retryBudget = inheritedRetryBudget
+      || await createRuntimeRetryBudget();
 
     let route = this.cache.getRoute(normalizedCaller, executionContext.userId);
     
@@ -110,6 +118,7 @@ export class APIGateway {
       thinkingMode: override.thinkingMode || route.thinkingMode,
       reasoningEffort: override.reasoningEffort || route.reasoningEffort,
       timeoutMs: override.timeoutMs ?? route.timeoutMs,
+      timeoutSource: override.timeoutMs != null ? 'route-override' : route.timeoutSource,
       privateNetworkPolicy,
     };
   }

@@ -37,6 +37,14 @@ function buildAgentLogWhere(userId: string, query: any) {
 
   if (includeSystem !== 'true' && !agentId && !capabilityType) {
     where.agentId = { notIn: ['system-call', 'unknown'] };
+    where.AND = [
+      {
+        OR: [
+          { executionLayer: null },
+          { executionLayer: { not: 'api-gateway' } }
+        ]
+      }
+    ];
   }
 
   if (startDate || endDate) {

@@ -4,7 +4,12 @@ import { getRequestContext, runWithContext } from '../gateway/api-gateway/contex
 import { getAgentOfSkill } from '../services/agent-manifest.service';
 import { logger } from '../utils/logger';
 import { redactLogValue } from '../utils/secret-redaction';
+import { telemetryWriter } from '../services/telemetry-writer.service';
 import { SkillDefinition, SkillExecutionResult } from './protocol';
+import {
+  createRuntimeRetryBudget,
+  getEffectiveLogicalRetryLimit
+} from '../services/reliability-settings.service';
 
 export type SkillHandler = (input: any) => Promise<any>;
 
@@ -131,6 +136,12 @@ export async function executeSkillHandler(
   const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const parentAgent = getAgentOfSkill(`skill:${skillId}`)?.id;
   const userId = resolveExecutionUserId(input, parentContext.userId);
+  const inheritedRetryBudget = parentContext.retryBudget;
+  const retryBudget = inheritedRetryBudget || await createRuntimeRetryBudget();
+  const logicalRetryLimit = await getEffectiveLogicalRetryLimit(
+    skillId,
+    retryBudget.limits.maxLogicalRetries
+  );
   const executionContext = {
     ...parentContext,
     userId,
@@ -138,6 +149,10 @@ export async function executeSkillHandler(
     callerAgent: parentContext.callerAgent || parentAgent,
     skillId,
     executionLogId,
+    parentExecutionId: parentContext.executionLogId,
+    rootExecutionId: parentContext.rootExecutionId || parentContext.executionLogId || executionLogId,
+    retryBudget,
+    logicalRetryLimit,
   };
 
   return runWithContext(executionContext, async () => {
@@ -168,7 +183,9 @@ export async function executeSkillHandler(
         input,
         result.output,
         durationMs,
-        true
+        true,
+        undefined,
+        undefined
       );
 
       logger.info('[skill-executor] 执行完成', {
@@ -195,7 +212,8 @@ export async function executeSkillHandler(
         false,
         skillId === 'mcp-tool'
           ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
-          : error?.message || String(error)
+          : error?.message || String(error),
+        error?.code
       );
       logger.error('[skill-executor] 执行失败', {
         skillId,
@@ -249,38 +267,42 @@ async function recordSkillSpan(
   output: any,
   durationMs: number,
   success: boolean,
-  errorMessage?: string
+  errorMessage?: string,
+  errorCode?: string
 ): Promise<void> {
   try {
     const inputStr = JSON.stringify(summarizeSkillLogPayload(skillId, input, 'input')).slice(0, 1000);
     const outputStr = output === undefined || output === null
       ? null
       : JSON.stringify(summarizeSkillLogPayload(skillId, output, 'output')).slice(0, 1000);
-    await prisma.agent_call_logs.create({
-      data: {
-        id: executionLogId,
-        agentId: `skill:${skillId}`,
-        userId: ctx.userId || 'system',
-        sourceEntry: ctx.sourceEntry || 'platform',
-        traceId: ctx.traceId || null,
-        callerAgent: ctx.callerAgent || null,
-        userRole: ctx.userRole || 'user',
-        input: inputStr,
-        output: outputStr,
-        success,
-        durationMs,
-        error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
-        errorCode: success ? null : 'SKILL_EXECUTION_FAILED',
-        metadata: JSON.stringify({
-          layer: 'skill-executor',
-          skillId,
-          parentSkillId: parentSkillId || null,
-          actorType: 'skill',
-          actorId: skillId,
-          experimentId: ctx.experimentId || null,
-          runId: ctx.runId || null,
-        }),
-      },
+    await telemetryWriter.createAgentCall({
+      id: executionLogId,
+      agentId: `skill:${skillId}`,
+      userId: ctx.userId || 'system',
+      sourceEntry: ctx.sourceEntry || 'platform',
+      traceId: ctx.traceId || null,
+      callerAgent: ctx.callerAgent || null,
+      userRole: ctx.userRole || 'user',
+      input: inputStr,
+      output: outputStr,
+      success,
+      durationMs,
+      error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
+      errorCode: success ? null : (errorCode || 'SKILL_EXECUTION_FAILED'),
+      executionLayer: 'skill',
+      actorType: 'skill',
+      actorId: skillId,
+      parentExecutionId: ctx.parentExecutionId || null,
+      rootExecutionId: ctx.rootExecutionId || executionLogId,
+      metadata: JSON.stringify({
+        layer: 'skill-executor',
+        skillId,
+        parentSkillId: parentSkillId || null,
+        actorType: 'skill',
+        actorId: skillId,
+        experimentId: ctx.experimentId || null,
+        runId: ctx.runId || null,
+      }),
     });
   } catch {
     // 调试日志失败不影响主流程。

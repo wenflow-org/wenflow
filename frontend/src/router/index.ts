@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { setTestMode, hasUserSession } from '../utils/api';
 import { hasAdminSession } from '../api/adminApi';
 import { setDebugMode } from '../utils/debugMode';
@@ -39,26 +39,50 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/Login.vue'),
+    component: () => import('@/views/v2/V2Login.vue'),
     meta: { title: '登录' }
   },
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/views/Register.vue'),
+    component: () => import('@/views/v2/V2Register.vue'),
     meta: { title: '注册' }
   },
   {
+    path: '/legacy/login',
+    name: 'LegacyLogin',
+    component: () => import('@/views/Login.vue'),
+    meta: { title: '登录 · 旧版' }
+  },
+  {
+    path: '/legacy/register',
+    name: 'LegacyRegister',
+    component: () => import('@/views/Register.vue'),
+    meta: { title: '注册 · 旧版' }
+  },
+  {
     path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('@/views/Dashboard.vue'),
+    name: 'V2Dashboard',
+    component: () => import('@/views/v2/V2Dashboard.vue'),
     meta: { title: '学习台', requiresAuth: true }
   },
   {
+    path: '/legacy/dashboard',
+    name: 'LegacyDashboard',
+    component: () => import('@/views/Dashboard.vue'),
+    meta: { title: '学习台 · 旧版', requiresAuth: true }
+  },
+  {
     path: '/learning-paths',
-    name: 'LearningPaths',
-    component: () => import('@/views/LearningPaths.vue'),
+    name: 'V2LearningPaths',
+    component: () => import('@/views/v2/V2LearningPaths.vue'),
     meta: { title: '学习路径', requiresAuth: true }
+  },
+  {
+    path: '/legacy/learning-paths',
+    name: 'LegacyLearningPaths',
+    component: () => import('@/views/LearningPaths.vue'),
+    meta: { title: '学习路径 · 旧版', requiresAuth: true }
   },
   {
     path: '/test/learning-paths',
@@ -68,21 +92,39 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/learning-state',
-    name: 'LearningState',
-    component: () => import('@/views/LearningState.vue'),
+    name: 'V2LearningState',
+    component: () => import('@/views/v2/V2LearningState.vue'),
     meta: { title: '学习状态', requiresAuth: true }
   },
   {
+    path: '/legacy/learning-state',
+    name: 'LegacyLearningState',
+    component: () => import('@/views/LearningState.vue'),
+    meta: { title: '学习状态 · 旧版', requiresAuth: true }
+  },
+  {
     path: '/achievements',
-    name: 'Achievements',
-    component: () => import('@/views/Achievements.vue'),
+    name: 'V2Achievements',
+    component: () => import('@/views/v2/V2Achievements.vue'),
     meta: { title: '成就', requiresAuth: true }
   },
   {
+    path: '/legacy/achievements',
+    name: 'LegacyAchievements',
+    component: () => import('@/views/Achievements.vue'),
+    meta: { title: '成就 · 旧版', requiresAuth: true }
+  },
+  {
     path: '/learning-path/:id',
-    name: 'LearningPathDetail',
-    component: () => import('@/views/LearningPathDetail.vue'),
+    name: 'V2LearningPathDetail',
+    component: () => import('@/views/v2/V2LearningPathDetail.vue'),
     meta: { title: '学习路径详情', requiresAuth: true }
+  },
+  {
+    path: '/legacy/learning-path/:id',
+    name: 'LegacyLearningPathDetail',
+    component: () => import('@/views/LearningPathDetail.vue'),
+    meta: { title: '学习路径详情 · 旧版', requiresAuth: true }
   },
   {
     path: '/test/learning-path/:id',
@@ -92,9 +134,15 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/learn/:taskId',
-    name: 'LearningPage',
-    component: () => import('@/views/LearningPage.vue'),
+    name: 'V2LearningPage',
+    component: () => import('@/views/v2/V2LearningPage.vue'),
     meta: { title: '学习中', requiresAuth: true }
+  },
+  {
+    path: '/legacy/learn/:taskId',
+    name: 'LegacyLearningPage',
+    component: () => import('@/views/LearningPage.vue'),
+    meta: { title: '学习中 · 旧版', requiresAuth: true }
   },
   {
     path: '/learn/:taskId/evaluation/:sessionId',
@@ -156,9 +204,15 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/goal-conversation/:conversationId?',
-    name: 'GoalConversation',
-    component: () => import('@/views/GoalConversation.vue'),
+    name: 'V2GoalConversation',
+    component: () => import('@/views/v2/V2GoalConversation.vue'),
     meta: { title: '目标规划', requiresAuth: true }
+  },
+  {
+    path: '/legacy/goal-conversation/:conversationId?',
+    name: 'LegacyGoalConversation',
+    component: () => import('@/views/GoalConversation.vue'),
+    meta: { title: '目标规划 · 旧版', requiresAuth: true }
   },
   {
     path: '/test/goal-conversation/:conversationId?',
@@ -192,15 +246,57 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/redesign-lab',
-    name: 'RedesignLab',
-    component: () => import('@/views/redesign/RedesignLab.vue'),
-    meta: { title: '重设计稿 · 学习台与目标规划' }
+    redirect: '/v2/dashboard'
+  },
+  // ===== /v2 已上线：旧地址全部重定向到正式路径 =====
+  {
+    path: '/v2',
+    redirect: '/dashboard'
+  },
+  {
+    path: '/v2/dashboard',
+    redirect: '/dashboard'
+  },
+  {
+    path: '/v2/goal-conversation/:conversationId?',
+    redirect: (to) => ({ path: `/goal-conversation/${to.params.conversationId || ''}`, query: to.query })
+  },
+  {
+    path: '/v2/learning-paths',
+    redirect: (to) => ({ path: '/learning-paths', query: to.query })
+  },
+  {
+    path: '/v2/learning-path/:id',
+    redirect: (to) => ({ path: `/learning-path/${to.params.id}`, query: to.query })
+  },
+  {
+    path: '/v2/learn/:taskId',
+    redirect: (to) => ({ path: `/learn/${to.params.taskId}`, query: to.query })
+  },
+  {
+    path: '/v2/learning-state',
+    redirect: '/learning-state'
+  },
+  {
+    path: '/v2/achievements',
+    redirect: '/achievements'
+  },
+  {
+    path: '/legacy',
+    redirect: '/dashboard'
   },
   {
     path: '/admin-redesign-lab',
     name: 'AdminRedesignLab',
     component: () => import('@/views/admin-redesign/AdminRedesignLab.vue'),
     meta: { title: '重设计稿 · Admin 风格探索' }
+  },
+  {
+    // 新版管理控制台（待上线版）：顶层路由，不嵌入旧后台壳
+    path: '/admin/console',
+    name: 'AdminConsole',
+    component: () => import('@/views/admin-redesign/AdminConsole.vue'),
+    meta: { title: '管理控制台' }
   },
   // 管理平台路由
   {

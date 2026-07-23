@@ -1,0 +1,170 @@
+﻿/* V2 共享设计变量与基础类 */
+.v2-page {
+  --ink: #172033;
+  --muted: #5b6577;
+  --faint: #8492ab;
+  --line: #e3e9f4;
+  --canvas: #f3f6fb;
+  --surface: #ffffff;
+  --blue: #3478f6;
+  --blue-deep: #1f57cc;
+  --accent: #8d6bff;
+  --cyan: #43b0d8;
+  --green: #31b16f;
+  --amber: #f4aa46;
+  --red: #ef7578;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+.v2-page > main {
+  flex: 1;
+  width: 100%;
+  /* flex:1 会让 main 高于内容，grid 默认 align-content:normal(=stretch)
+     会把多余空间均摊进每个轨道，导致 pill/卡片被纵向拉高；统一改为顶部对齐 */
+  align-content: start;
+}
+
+/* 共享基础组件 */
+.v2-page .kicker {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--blue-deep);
+}
+
+.v2-page .card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+}
+
+.v2-page .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 22px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.v2-page .btn-primary--off {
+  opacity: 0.55;
+  cursor: default;
+  box-shadow: none;
+}
+
+.v2-page .btn-ghost {
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.v2-page .errorbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(239, 117, 120, 0.08);
+  border: 1px solid rgba(239, 117, 120, 0.3);
+  color: #c0454a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.v2-page .errorbar__retry {
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.v2-page .spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 4px solid rgba(52, 120, 246, 0.15);
+  border-top-color: var(--blue);
+  animation: v2-spin 0.9s linear infinite;
+}
+
+.v2-page .spinner--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+@keyframes v2-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 徽章/药丸类：禁止换行与压缩（长标题会挤压导致竖排） */
+.v2-page .badge,
+.v2-page .pcard__badge,
+.v2-page .streak,
+.v2-page .tag {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 标题区允许收缩，避免把徽章挤变形 */
+.v2-page .path__title,
+.v2-page .pcard__title,
+.v2-page .quick__body,
+.v2-page .task__body,
+.v2-page .sug__body {
+  min-width: 0;
+}
+
+/* ================= 高分屏 / 超宽屏适配 ================= */
+/* 1680+：加宽容器，减少两侧留白（选择器加权到 3 类，压过组件内 max-width） */
+@media (min-width: 1680px) {
+  .v2-page.dash .dash__main,
+  .v2-page.paths .paths__main,
+  .v2-page.detail .detail__main,
+  .v2-page.state .state__main,
+  .v2-page.ach .ach__main {
+    max-width: 1360px;
+  }
+  .v2-page.learn .learn__body { max-width: 1400px; }
+  .v2-page.goal .work { max-width: 1400px; }
+  .v2-page.goal .entry { max-width: 1000px; }
+  .v2-page .v2footer__inner { max-width: 1360px; }
+}
+
+/* 2800+（4K@100% 及更高）：整体等比放大（数值档位，避开 zoom+clamp 兼容问题） */
+@media (min-width: 2800px) {
+  .v2-page { zoom: 1.15; }
+}
+@media (min-width: 3600px) {
+  .v2-page { zoom: 1.3; }
+}
+
+/* 移动端为底部导航留出空间 */
+@media (max-width: 900px) {
+  .v2-page { padding-bottom: 72px; }
+  .v2-page .v2footer { margin-bottom: 0; }
+}

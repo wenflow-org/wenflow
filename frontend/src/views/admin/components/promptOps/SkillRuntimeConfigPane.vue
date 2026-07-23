@@ -33,6 +33,7 @@
           <el-tag size="small" effect="plain">T={{ currentSkill.temperature ?? '--' }}</el-tag>
           <el-tag size="small" effect="plain">Max={{ currentSkill.maxTokens ?? '--' }}</el-tag>
           <el-tag size="small" effect="plain">{{ formatTimeout(currentSkill.requestTimeoutMs) }}</el-tag>
+          <el-tag size="small" effect="plain">Logical 预算 {{ effectiveLogicalRetries }} 次</el-tag>
           <el-tag size="small" effect="plain" :type="thinkingTagType(currentSkill.thinkingMode)">{{ formatThinkingMode(currentSkill.thinkingMode) }}</el-tag>
           <el-tag size="small" effect="plain" :type="effortTagType(currentSkill.reasoningEffort)">{{ formatReasoningEffort(currentSkill.reasoningEffort) }}</el-tag>
         </div>
@@ -84,12 +85,33 @@
           <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" :disabled="!editForm.enabled" />
         </el-form-item>
         <el-form-item label="请求超时(ms)">
-          <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="600000" :step="10000" :disabled="!editForm.enabled" />
+          <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="300000" :step="10000" :disabled="!editForm.enabled" />
+        </el-form-item>
+
+        <div class="runtime-section-divider">
+          <strong>失败处理与重试</strong>
+          <span>逻辑重试独立于模型覆盖；传输重试由平台统一管理。</span>
+        </div>
+
+        <el-form-item label="Logical Retry">
+          <el-select v-model="logicalRetryMode" style="width: 100%">
+            <el-option label="继承平台默认" value="inherit" />
+            <el-option label="禁用" value="disabled" />
+            <el-option label="自定义" value="custom" :disabled="platformLogicalRetries <= 0" />
+          </el-select>
+          <div class="field-hint">平台默认 {{ platformLogicalRetries }} 次；这是预算上限，实际次数不会超过 Skill 代码已实现的重试能力。</div>
+        </el-form-item>
+        <el-form-item v-if="logicalRetryMode === 'custom'" label="最大逻辑重试次数">
+          <el-input-number v-model="customLogicalRetries" :min="1" :max="platformLogicalRetries" />
+        </el-form-item>
+        <el-form-item label="业务回退">
+          <el-input model-value="由 Skill 代码定义" disabled />
+          <div class="field-hint">当前不开放通用回退开关，避免返回空对象或伪成功。</div>
         </el-form-item>
       </el-form>
 
       <div class="skill-runtime-pane__footer">
-        <el-button type="warning" :disabled="!currentSkill.enabled" @click="onDelete">恢复默认</el-button>
+        <el-button type="warning" :disabled="!currentSkill.enabled && currentSkill.maxLogicalRetries == null" @click="onDelete">恢复默认</el-button>
         <el-button type="primary" :loading="saving" @click="onSave">保存配置</el-button>
         <el-button @click="loadSkill">刷新</el-button>
       </div>
@@ -98,10 +120,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { FormInstance } from 'element-plus';
 import { ElMessageBox } from 'element-plus';
-import { adminSkillsApi } from '@/api/adminApi';
+import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi';
 import { toast } from '@/utils/toast';
 
 interface SkillNodeConfig {
@@ -115,6 +137,7 @@ interface SkillNodeConfig {
   temperature?: number;
   maxTokens?: number;
   requestTimeoutMs?: number | null;
+  maxLogicalRetries?: number | null;
   enabled: boolean;
 }
 
@@ -126,6 +149,9 @@ const emit = defineEmits<{ (e: 'changed'): void }>();
 
 const loading = ref(false);
 const saving = ref(false);
+const platformLogicalRetries = ref(1);
+const logicalRetryMode = ref<'inherit' | 'disabled' | 'custom'>('inherit');
+const customLogicalRetries = ref(1);
 const currentSkill = ref<SkillNodeConfig | null>(null);
 const editFormRef = ref<FormInstance>();
 const editForm = ref<SkillNodeConfig>({
@@ -191,6 +217,21 @@ const buildFallbackSkillConfig = (skillId: string): SkillNodeConfig => ({
   maxTokens: 2000,
   requestTimeoutMs: null,
   enabled: false,
+  maxLogicalRetries: null,
+});
+
+const effectiveLogicalRetries = computed(() => {
+  if (logicalRetryMode.value === 'inherit') return platformLogicalRetries.value;
+  if (logicalRetryMode.value === 'disabled') return 0;
+  return customLogicalRetries.value;
+});
+
+watch(platformLogicalRetries, (limit) => {
+  if (limit <= 0 && logicalRetryMode.value === 'custom') {
+    logicalRetryMode.value = 'disabled';
+    return;
+  }
+  customLogicalRetries.value = Math.min(Math.max(1, customLogicalRetries.value), limit || 1);
 });
 
 const toEditablePayload = (config: SkillNodeConfig) => ({
@@ -201,6 +242,9 @@ const toEditablePayload = (config: SkillNodeConfig) => ({
   temperature: config.temperature,
   maxTokens: config.maxTokens,
   requestTimeoutMs: config.enabled ? config.requestTimeoutMs : null,
+  maxLogicalRetries: logicalRetryMode.value === 'inherit'
+    ? null
+    : logicalRetryMode.value === 'disabled' ? 0 : customLogicalRetries.value,
   enabled: config.enabled,
 });
 
@@ -214,6 +258,12 @@ const applySkill = (skill: SkillNodeConfig) => {
     thinkingMode: skill.thinkingMode || 'default',
     reasoningEffort: skill.reasoningEffort || 'default',
   };
+  logicalRetryMode.value = skill.maxLogicalRetries == null
+    ? 'inherit'
+    : skill.maxLogicalRetries === 0 ? 'disabled' : 'custom';
+  customLogicalRetries.value = skill.maxLogicalRetries && skill.maxLogicalRetries > 0
+    ? Math.min(skill.maxLogicalRetries, platformLogicalRetries.value || 1)
+    : 1;
 };
 
 const loadSkill = async () => {
@@ -221,12 +271,17 @@ const loadSkill = async () => {
   if (!skillId) return;
   loading.value = true;
   try {
-    // 单点查询，避免全量拉取再 find；无独立配置时后端返回 404，按继承默认展示
-    const res = await adminSkillsApi.getSkillModelConfig(skillId);
-    const skill = (res.data?.data || null) as SkillNodeConfig | null;
-    applySkill(skill ?? buildFallbackSkillConfig(skillId));
-  } catch (error) {
-    if ((error as { response?: { status?: number } })?.response?.status === 404) {
+    const [skillResult, reliabilityResult] = await Promise.allSettled([
+      adminSkillsApi.getSkillModelConfig(skillId),
+      adminPlatformSettingsApi.getReliabilitySettings()
+    ]);
+    platformLogicalRetries.value = reliabilityResult.status === 'fulfilled'
+      ? Number(reliabilityResult.value.data?.data?.settings?.maxLogicalRetries ?? 1)
+      : 1;
+    if (skillResult.status === 'fulfilled') {
+      const skill = (skillResult.value.data?.data || null) as SkillNodeConfig | null;
+      applySkill(skill ?? buildFallbackSkillConfig(skillId));
+    } else if ((skillResult.reason as { response?: { status?: number } })?.response?.status === 404) {
       applySkill(buildFallbackSkillConfig(skillId));
     } else {
       toast.error('加载 Skill 节点配置失败');
@@ -332,6 +387,20 @@ watch(() => editForm.value.thinkingMode, (mode) => {
   font-size: 12px;
   color: #64748b;
   margin-top: 4px;
+}
+
+.runtime-section-divider {
+  display: grid;
+  gap: 4px;
+  margin: 18px 0 20px;
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+  color: var(--admin-text-primary);
+}
+
+.runtime-section-divider span {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .skill-runtime-pane__footer {

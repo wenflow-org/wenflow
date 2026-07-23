@@ -32,6 +32,7 @@ jest.mock('../../utils/logger', () => ({
 }))
 
 import { getRequestContext, runWithContext } from '../../gateway/api-gateway/context'
+import { consumeUpstreamAttempt } from '../../gateway/api-gateway/retry-budget'
 import { executeSkillHandler } from '../executor'
 
 describe('统一 Skill Executor', () => {
@@ -85,6 +86,23 @@ describe('统一 Skill Executor', () => {
       where: { name: 'text-structure-analyzer' },
       data: expect.objectContaining({ callCount: 3, successRate: expect.closeTo(1 / 3) })
     }))
+  })
+
+  it('在 Skill 边界创建并共享一份 Provider 请求预算', async () => {
+    let firstBudget: ReturnType<typeof getRequestContext>['retryBudget']
+
+    await executeSkillHandler({ name: 'text-structure-analyzer' }, {}, async () => {
+      firstBudget = getRequestContext().retryBudget
+      expect(firstBudget).toBeDefined()
+      expect(consumeUpstreamAttempt(firstBudget!, false)).toBe(true)
+
+      const nestedBudget = getRequestContext().retryBudget
+      expect(nestedBudget).toBe(firstBudget)
+      expect(consumeUpstreamAttempt(nestedBudget!, false)).toBe(true)
+      return { success: true, output: 'ok' }
+    })
+
+    expect(firstBudget!.used.upstreamAttempts).toBe(2)
   })
 
   it('用户显式禁用 Skill 后在统一执行边界拒绝调用', async () => {

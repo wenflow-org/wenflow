@@ -45,6 +45,8 @@ export class APIRouter {
     return {
       ...route,
       timeoutMs: route.timeoutMs ?? timeoutInfo.requestTimeoutMs,
+      timeoutSource: route.timeoutSource
+        ?? (timeoutInfo.requestTimeoutSource === 'agent-override' ? 'agent-override' : 'environment-default'),
     };
   }
 
@@ -162,7 +164,10 @@ export class APIRouter {
         reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
         temperature: config.temperature ?? inheritedRoute.temperature,
         maxTokens: config.maxTokens ?? inheritedRoute.maxTokens,
-        timeoutMs: config.requestTimeoutMs ?? inheritedRoute.timeoutMs,
+        timeoutMs: config.requestTimeoutMs == null
+          ? inheritedRoute.timeoutMs
+          : Math.min(300_000, Math.max(10_000, config.requestTimeoutMs)),
+        timeoutSource: config.requestTimeoutMs != null ? 'skill-override' : inheritedRoute.timeoutSource,
         privateNetworkPolicy,
         source,
       };

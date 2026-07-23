@@ -6,13 +6,13 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">{{ rows.length }} 个快照</span>
       <span class="mk-status__meta">需关注 {{ riskCount }}</span>
-      <span class="mk-status__meta">快照过期 {{ staleCount }}</span>
-      <button type="button" class="mk-status__action" :disabled="recomputingAll" @click="recomputeAll">
+      <span class="mk-status__meta">低置信 {{ lowConfCount }}</span>
+      <button type="button" class="mk-status__action" :disabled="recomputingAll || !rows.length" @click="recomputeAll">
         {{ recomputingAll ? '重算中…' : '全部重算' }}
       </button>
     </div>
 
-    <div v-if="toast" class="mk-toast mk-toast--ok">✓ {{ toast }}</div>
+    <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <div class="mk-card">
       <div class="mk-card__head">
@@ -81,9 +81,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { openSubPage } from './mockStore'
+import { openSubPage, dataSource } from './mockStore'
+import { liveLearners, liveRecomputeLearner, timeAgo, errMsg } from './mockLive'
 
 const props = defineProps<{ state: 'normal' | 'risk' | 'empty' }>()
+
+const isLive = computed(() => dataSource.value === 'live')
 
 interface Row {
   id: string
@@ -95,49 +98,71 @@ interface Row {
   fatigue: '低' | '中' | '高'
   risk: string
   updated: string
+  confidence?: number
   updating?: boolean
 }
 
 const normalRows: Row[] = [
   { id: 'l1', name: '陈晓', email: 'chenxiao@…', path: 'Excel 自动化入门', task: '阶段 2 · 数据清洗练习', trend: 'up', fatigue: '低', risk: '', updated: '6 分钟前' },
-  { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '低', risk: '概念「采样偏差」挣扎', updated: '22 分钟前' },
+  { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '中', risk: '概念「采样偏差」挣扎', updated: '22 分钟前' },
   { id: 'l3', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'flat', fatigue: '低', risk: '', updated: '1 小时前' },
   { id: 'l4', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'up', fatigue: '低', risk: '', updated: '2 小时前' },
   { id: 'l5', name: '周洁', email: 'zhoujie@…', path: '职场英语', task: '阶段 1 · 邮件表达', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 22:05' },
-  { id: 'l6', name: '吴迪', email: 'wudi@…', path: '', task: '', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 18:40' }
+  { id: 'l6', name: '吴迪', email: 'wudi@…', path: '', task: '', trend: 'flat', fatigue: '低', risk: '', updated: '昨天 18:40' },
+  { id: 'l7', name: '郑爽', email: 'zhengshuang@…', path: '产品经理入门', task: '阶段 2 · 需求文档', trend: 'up', fatigue: '中', risk: '连续学习 9 天，注意节奏', updated: '40 分钟前' },
+  { id: 'l8', name: '冯远', email: 'fengyuan@…', path: '日语 N5', task: '阶段 1 · 五十音', trend: 'down', fatigue: '中', risk: '近 5 天活跃下降', updated: '3 小时前' }
 ]
 
 const riskRows: Row[] = [
   { id: 'l3', name: '赵敏', email: 'zhaomin@…', path: 'SQL 基础', task: '阶段 3 · JOIN 实战', trend: 'down', fatigue: '高', risk: '连续 3 次任务失败', updated: '4 分钟前' },
   { id: 'l4', name: '孙可', email: 'sunke@…', path: 'Python 入门', task: '阶段 2 · 函数', trend: 'down', fatigue: '中', risk: '近 7 天活跃下降 60%', updated: '13 分钟前' },
   { id: 'l1', name: '陈晓', email: 'chenxiao@…', path: 'Excel 自动化入门', task: '阶段 2 · 数据清洗练习', trend: 'up', fatigue: '低', risk: '', updated: '6 分钟前' },
-  { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '低', risk: '概念「采样偏差」挣扎', updated: '22 分钟前' }
+  { id: 'l2', name: '刘一帆', email: 'liu**@…', path: '数据分析思维', task: '阶段 1 · 提问训练', trend: 'flat', fatigue: '中', risk: '概念「采样偏差」挣扎', updated: '22 分钟前' }
 ]
 
-const rows = ref<Row[]>([])
+const pill = ref<'all' | 'risk' | 'stale'>('all')
+
+const demoRows = ref<Row[]>([])
 watch(
   () => props.state,
   (s) => {
-    rows.value = s === 'risk' ? riskRows : s === 'empty' ? [] : normalRows
+    demoRows.value = s === 'risk' ? [...riskRows] : s === 'empty' ? [] : [...normalRows]
     pill.value = s === 'risk' ? 'risk' : 'all'
   },
   { immediate: true }
 )
 
-const pill = ref<'all' | 'risk' | 'stale'>('all')
+const rows = computed<Row[]>(() => {
+  if (isLive.value) {
+    return liveLearners.value.map((m) => ({
+      id: m.userId,
+      name: m.name,
+      email: m.email,
+      path: m.pathTitle || '',
+      task: m.currentTask || m.currentMilestone || '',
+      trend: m.trend,
+      fatigue: m.fatigue as Row['fatigue'],
+      risk: m.struggling.length ? `概念「${m.struggling[0]}」挣扎` : m.fatigue === '高' ? '疲劳风险高' : '',
+      updated: timeAgo(m.generatedAt),
+      confidence: m.confidence
+    }))
+  }
+  return demoRows.value
+})
+
 const pills = [
   { id: 'all' as const, label: '全部' },
   { id: 'risk' as const, label: '需关注' },
-  { id: 'stale' as const, label: '快照过期' }
+  { id: 'stale' as const, label: '低置信' }
 ]
 
 const isRisk = (r: Row) => r.trend === 'down' || r.fatigue !== '低' || !!r.risk
 const riskCount = computed(() => rows.value.filter(isRisk).length)
-const staleCount = computed(() => rows.value.filter((r) => r.updated.includes('小时')).length)
+const lowConfCount = computed(() => rows.value.filter((r) => (r.confidence ?? 1) < 0.5).length)
 
 const filtered = computed(() => {
   if (pill.value === 'risk') return rows.value.filter(isRisk)
-  if (pill.value === 'stale') return rows.value.filter((r) => r.updated.includes('小时'))
+  if (pill.value === 'stale') return rows.value.filter((r) => (r.confidence ?? 1) < 0.5)
   return rows.value
 })
 
@@ -147,39 +172,62 @@ const statusTitle = computed(() => (!rows.value.length ? '还没有学习者快�
 const trendText = (t: string) => (t === 'up' ? '↗ 上升' : t === 'down' ? '↘ 下降' : '→ 稳定')
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
 
-/* 重算：真实状态反馈 */
+/* 重算 */
 const toast = ref('')
+const toastCls = ref('mk-toast--ok')
 const recomputingAll = ref(false)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
-function showToast(msg: string) {
+function showToast(msg: string, cls = 'mk-toast--ok') {
   toast.value = msg
+  toastCls.value = cls
   if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (toast.value = ''), 2600)
+  toastTimer = setTimeout(() => (toast.value = ''), 3000)
 }
 
-function recompute(row: Row) {
+async function recompute(row: Row) {
   if (row.updating) return
   row.updating = true
-  setTimeout(() => {
+  try {
+    if (isLive.value) {
+      await liveRecomputeLearner(row.id)
+      showToast(`「${row.name}」快照已重算（真实）`)
+    } else {
+      await new Promise((r) => setTimeout(r, 800))
+      row.updated = '刚刚'
+      showToast(`「${row.name}」快照已重算`)
+    }
+  } catch (e) {
+    showToast(`重算失败：${errMsg(e)}`, 'mk-toast--bad')
+  } finally {
     row.updating = false
-    row.updated = '刚刚'
-    showToast(`「${row.name}」快照已重算`)
-  }, 800)
+  }
 }
 
-function recomputeAll() {
+async function recomputeAll() {
   if (recomputingAll.value || !rows.value.length) return
   recomputingAll.value = true
-  rows.value.forEach((r) => (r.updating = true))
-  setTimeout(() => {
-    rows.value.forEach((r) => {
-      r.updating = false
-      r.updated = '刚刚'
-    })
-    recomputingAll.value = false
+  if (isLive.value) {
+    let ok = 0
+    let fail = 0
+    for (const r of rows.value) {
+      r.updating = true
+      try {
+        await liveRecomputeLearner(r.id)
+        ok++
+      } catch {
+        fail++
+      } finally {
+        r.updating = false
+      }
+    }
+    showToast(fail ? `重算完成：${ok} 成功 · ${fail} 失败` : `已重算 ${ok} 个快照（真实）`, fail ? 'mk-toast--bad' : 'mk-toast--ok')
+  } else {
+    await new Promise((r) => setTimeout(r, 1200))
+    demoRows.value.forEach((r) => (r.updated = '刚刚'))
     showToast(`已重算 ${rows.value.length} 个快照`)
-  }, 1200)
+  }
+  recomputingAll.value = false
 }
 </script>
 
@@ -190,4 +238,5 @@ function recomputeAll() {
 .trend--flat { color: var(--mk-muted); }
 .progress-title { font-weight: 600; }
 .risk-text { color: var(--mk-amber); font-size: 12.5px; }
+.mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 </style>

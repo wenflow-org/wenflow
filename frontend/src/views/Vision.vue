@@ -48,7 +48,6 @@
 
       <section class="vision-compare">
         <div class="vision-section-head">
-          <span class="vision-kicker">另一条路</span>
           <h2>我们不想只让旧学习变得更快。</h2>
           <p>更快找到答案并不等于真正学会。WenFlow 更关心的是：你能不能把目标说清楚，把路径走出来，并在反馈里不断调整。</p>
         </div>
@@ -100,7 +99,6 @@
 
       <section class="vision-mindset-section">
         <div class="vision-section-head">
-          <span class="vision-kicker">思维优先</span>
           <h2>真正留下来的，是思维方式。</h2>
           <p>工具会变，模型会变，界面也会变。但提出问题、组织信息、判断取舍、创造连接的能力，会一直重要。</p>
         </div>
@@ -134,7 +132,6 @@
 
       <section class="vision-capability-section">
         <div class="vision-section-head vision-section-head--capabilities">
-          <span class="vision-kicker">AI 时代的能力</span>
           <h2>AI 时代，更值得训练这 5 种能力。</h2>
         </div>
 
@@ -176,7 +173,6 @@
       <section class="vision-final-cta">
         <div class="vision-final-cta__glow"></div>
         <div class="vision-final-cta__inner">
-          <span class="vision-kicker">如果你认同这套学习观</span>
           <h2>带着一个真实问题开始。</h2>
           <p>不需要先写完整计划。说出你最近真正想解决的事，让 WenFlow 陪你把它变成下一步行动。</p>
           <router-link :to="isLoggedIn ? '/goal-conversation' : '/register'" class="vision-cta vision-cta--primary vision-cta--large">

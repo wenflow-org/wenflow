@@ -318,8 +318,22 @@
               </div>
               <div v-if="latestRefereeReport?.report?.recommendations?.length" class="referee-report__section">
                 <h4>平台建议</h4>
-                <article v-for="item in latestRefereeReport.report.recommendations" :key="`${item.priority}-${item.action}`" class="referee-recommendation">
-                  <strong>{{ item.priority }}</strong><p>{{ item.action }}</p>
+                <article
+                  v-for="(item, rIdx) in latestRefereeReport.report.recommendations"
+                  :key="`r-${item.priority}-${rIdx}`"
+                  class="referee-recommendation"
+                >
+                  <div class="referee-recommendation__head">
+                    <strong>{{ item.priority }}</strong>
+                    <span v-if="item.findingCodes?.length" class="recommendation-codes">
+                      <code v-for="code in item.findingCodes" :key="String(code)">{{ code }}</code>
+                    </span>
+                  </div>
+                  <p>{{ item.action }}</p>
+                  <details v-if="item.rationale" class="recommendation-rationale">
+                    <summary>依据</summary>
+                    <p>{{ item.rationale }}</p>
+                  </details>
                 </article>
               </div>
             </article>
@@ -360,8 +374,22 @@
               </div>
               <div v-if="latestActorAuditReport?.report?.recommendations?.length" class="referee-report__section">
                 <h4>模拟器建议</h4>
-                <article v-for="item in latestActorAuditReport.report.recommendations" :key="`${item.priority}-${item.action}`" class="referee-recommendation">
-                  <strong>{{ item.priority }}</strong><p>{{ item.action }}</p>
+                <article
+                  v-for="(item, rIdx) in latestActorAuditReport.report.recommendations"
+                  :key="`a-${item.priority}-${rIdx}`"
+                  class="referee-recommendation"
+                >
+                  <div class="referee-recommendation__head">
+                    <strong>{{ item.priority }}</strong>
+                    <span v-if="item.findingCodes?.length" class="recommendation-codes">
+                      <code v-for="code in item.findingCodes" :key="String(code)">{{ code }}</code>
+                    </span>
+                  </div>
+                  <p>{{ item.action }}</p>
+                  <details v-if="item.rationale" class="recommendation-rationale">
+                    <summary>依据</summary>
+                    <p>{{ item.rationale }}</p>
+                  </details>
                 </article>
               </div>
             </article>
@@ -369,6 +397,64 @@
           <div v-else class="stage-panel__empty">
             <p>{{ isTerminal ? '尚无终局评估' : '实验进行中' }}</p>
           </div>
+
+          <!-- 裁判旁路诊断轨迹（refereeTrace）：学习者不可见的平台诊断快照 -->
+          <details v-if="isBlackboxMode && refereeTraceItems.length" class="cockpit-trace-panel">
+            <summary>
+              <span>裁判旁路诊断</span>
+              <code>{{ refereeTraceItems.length }} 条 · trace={{ refereeTraceCount }}</code>
+            </summary>
+            <ol class="trace-list">
+              <li v-for="(item, idx) in refereeTraceItems" :key="(item.traceId || '') + idx">
+                <div class="trace-list__head">
+                  <span class="trace-list__seq">#{{ idx + 1 }}</span>
+                  <time>{{ formatTraceTime(item.timestamp) }}</time>
+                  <code v-if="item.traceId" class="trace-list__id">{{ item.traceId }}</code>
+                </div>
+                <pre v-if="item.diagnostic" class="trace-list__body">{{ summarizeDiagnostic(item.diagnostic) }}</pre>
+              </li>
+            </ol>
+          </details>
+
+          <!-- 角色私有状态轨迹（learnerPrivateStateTrace）：虚拟学习者脑子里在想什么 -->
+          <details v-if="isBlackboxMode && learnerPrivateStateTrace.length" class="cockpit-trace-panel">
+            <summary>
+              <span>角色私有状态轨迹</span>
+              <code>{{ learnerPrivateStateTraceCount }} 条 · 当前 latest 已覆盖：<template v-if="Object.keys(blackboxSnapshot?.learnerPrivateState || {}).length">{{ Object.keys(blackboxSnapshot?.learnerPrivateState || {}).join(' / ') }}</template><template v-else>无</template></code>
+            </summary>
+            <ol class="trace-list">
+              <li v-for="(item, idx) in learnerPrivateStateTrace" :key="(item.sequence ?? idx)">
+                <div class="trace-list__head">
+                  <span class="trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span>
+                  <span class="trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span>
+                  <code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code>
+                  <time v-if="item.generatedAt">{{ formatTraceTime(item.generatedAt) }}</time>
+                  <span v-if="item.emotion" class="trace-list__emotion">{{ item.emotion }}</span>
+                  <span v-if="item.degraded" class="trace-list__degraded" title="LLM/校验失败时的兜底状态">degraded</span>
+                  <span v-if="item.transition" class="trace-list__transition">{{ item.transition }}</span>
+                </div>
+                <div v-if="item.phaseFocus" class="trace-list__focus">
+                  <span class="trace-list__focus-label">聚焦：</span>{{ item.phaseFocus }}
+                </div>
+                <div v-if="item.visibleSignal" class="trace-list__signal">{{ item.visibleSignal }}</div>
+                <div v-if="item.stateChangeReason" class="trace-list__reason">
+                  <span class="trace-list__reason-label">状态变化：</span>{{ item.stateChangeReason }}
+                </div>
+                <div v-if="item.metrics && Object.keys(item.metrics).length" class="trace-list__metrics">
+                  <span v-for="(value, key) in item.metrics" :key="key">
+                    <code>{{ key }}</code><strong>{{ value }}</strong>
+                  </span>
+                </div>
+                <div v-if="item.flags && Object.keys(item.flags).length" class="trace-list__flags">
+                  <span v-for="(value, key) in item.flags" :key="key" :class="{ active: !!value }">{{ key }}</span>
+                </div>
+                <div v-if="item.blockers?.length" class="trace-list__blockers">
+                  <span class="trace-list__blockers-label">阻塞：</span>
+                  <el-tag v-for="(blocker, bIdx) in item.blockers" :key="bIdx" size="small" type="warning" effect="plain">{{ blocker }}</el-tag>
+                </div>
+              </li>
+            </ol>
+          </details>
         </div>
       </section>
 
@@ -509,7 +595,13 @@ interface EvaluationReportEnvelope {
       evidenceIds?: Array<string | number>
       [key: string]: unknown
     }>
-    recommendations?: Array<{ priority?: string; action?: string; [key: string]: unknown }>
+    recommendations?: Array<{
+      priority?: string
+      action?: string
+      rationale?: string
+      findingCodes?: Array<string | number>
+      [key: string]: unknown
+    }>
     evidence?: Array<{
       id?: string | number
       source?: string
@@ -570,6 +662,8 @@ interface SessionStageResults {
     latestRefereeReportId?: string
     latestActorAuditReportId?: string
     refereeTrace?: unknown[]
+    learnerPrivateState?: Record<string, unknown>
+    learnerPrivateStateTrace?: unknown[]
     control?: { goalCompleted?: boolean; runCompleted?: boolean; [key: string]: unknown }
     [key: string]: unknown
   }
@@ -654,16 +748,43 @@ interface VirtualSessionPathData {
   [key: string]: unknown
 }
 
+interface BlackboxRefereeTraceItem {
+  timestamp: string
+  traceId: string | null
+  diagnostic: Record<string, unknown> | null
+}
+
+interface LearnerPrivateStateTraceItem {
+  sequence: number
+  stage: 'goal' | 'learning'
+  taskId?: string | null
+  transition?: string | null
+  emotion?: string | null
+  phaseFocus?: string | null
+  degraded?: boolean
+  visibleSignal?: string | null
+  stateChangeReason?: string | null
+  metrics?: Record<string, number>
+  flags?: Record<string, boolean>
+  blockers?: string[]
+  generatedAt?: string | null
+}
+
 interface BlackboxSnapshot {
   experiment?: { experimentId?: string; runId?: string; mode?: string; [key: string]: unknown }
   observation?: BlackboxObservation
   latestRefereeReport?: EvaluationReportEnvelope
   latestActorAuditReport?: EvaluationReportEnvelope
+  refereeTrace?: BlackboxRefereeTraceItem[]
   refereeTraceCount?: number
   refereeReportCount?: number
   actorAuditReportCount?: number
   publicTrace?: BlackboxTraceEntry[]
   control?: { goalCompleted?: boolean; runCompleted?: boolean; [key: string]: unknown }
+  // 虚拟学习者的私有状态（latest 是当前阶段快照；trace 是历史轨迹，"脑子里在想啥"）
+  learnerPrivateState?: Record<string, unknown>
+  learnerPrivateStateTraceCount?: number
+  learnerPrivateStateTrace?: LearnerPrivateStateTraceItem[]
   stateTimeline?: {
     scope?: string
     actor?: {
@@ -1145,6 +1266,47 @@ const findingEvidence = (report: EvaluationReportEnvelope | null, finding: { evi
 
 const findingTagType = (severity?: string) => severity === 'critical' ? 'danger'
   : severity === 'major' ? 'warning' : severity === 'minor' ? 'info' : 'success'
+
+// 裁判旁路诊断轨迹（refereeTrace）——学习者不可见的平台诊断，只用于实验观测
+const refereeTraceItems = computed<BlackboxRefereeTraceItem[]>(() => {
+  const snap = blackboxSnapshot.value
+  if (Array.isArray(snap?.refereeTrace)) return snap.refereeTrace as BlackboxRefereeTraceItem[]
+  const raw = stageResults.value?.blackbox?.refereeTrace
+  if (Array.isArray(raw)) return raw as BlackboxRefereeTraceItem[]
+  return []
+})
+
+// 角色私有状态历史轨迹——展示"虚拟学习者脑子里在想什么"
+const learnerPrivateStateTrace = computed<LearnerPrivateStateTraceItem[]>(() => {
+  const snap = blackboxSnapshot.value
+  if (Array.isArray(snap?.learnerPrivateStateTrace)) return snap.learnerPrivateStateTrace as LearnerPrivateStateTraceItem[]
+  const raw = stageResults.value?.blackbox?.learnerPrivateStateTrace as unknown
+  if (Array.isArray(raw)) return raw as LearnerPrivateStateTraceItem[]
+  return []
+})
+
+const learnerPrivateStateTraceCount = computed(() => {
+  const snap = blackboxSnapshot.value
+  if (typeof snap?.learnerPrivateStateTraceCount === 'number') return snap.learnerPrivateStateTraceCount
+  return learnerPrivateStateTrace.value.length
+})
+
+// 把裁判 diagnostic 压成字符串展示（递归一次避免刷屏）
+const summarizeDiagnostic = (value: Record<string, unknown> | null): string => {
+  if (!value || typeof value !== 'object') return ''
+  try {
+    const text = JSON.stringify(value, null, 2)
+    return text.length > 800 ? `${text.slice(0, 800)}…` : text
+  } catch {
+    return ''
+  }
+}
+
+const formatTraceTime = (value?: string | null): string => {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+}
 
 /* ===== Data loading ===== */
 const loadSession = async () => {
@@ -2550,5 +2712,232 @@ watch(sessionId, async (next, prev) => {
   .referee-score-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ===== 裁判旁路诊断 & 角色私有状态轨迹面板 ===== */
+.cockpit-trace-panel {
+  margin-top: 14px;
+  border: 1px solid var(--border, #e3e9f0);
+  border-radius: 8px;
+  background: var(--bg-soft, #f8fafc);
+  overflow: hidden;
+}
+
+.cockpit-trace-panel > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong, #1f2d3d);
+  user-select: none;
+}
+
+.cockpit-trace-panel > summary::-webkit-details-marker { display: none; }
+.cockpit-trace-panel > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-muted, #97a8be);
+  transition: transform .15s ease;
+}
+.cockpit-trace-panel[open] > summary::before { transform: rotate(90deg); }
+.cockpit-trace-panel > summary > code {
+  font-size: 11px;
+  color: var(--text-muted, #97a8be);
+  background: transparent;
+}
+
+.trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 14px;
+  max-height: 460px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+}
+
+.trace-list > li {
+  padding: 9px 12px;
+  border: 1px solid var(--border, #e3e9f0);
+  border-radius: 6px;
+  background: var(--bg, #ffffff);
+  display: grid;
+  gap: 6px;
+}
+
+.trace-list__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-strong, #1f2d3d);
+}
+.trace-list__seq {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, #97a8be);
+  font-weight: 600;
+}
+.trace-list__head time {
+  color: var(--text-muted, #97a8be);
+  font-variant-numeric: tabular-nums;
+}
+.trace-list__id {
+  font-size: 11px;
+  color: var(--text-muted, #97a8be);
+}
+.trace-list__stage {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--stage-goal-bg, #eef2ff);
+  color: var(--stage-goal-text, #4453a1);
+}
+.trace-list__stage[data-stage='learning'] {
+  background: var(--stage-learning-bg, #ecfdf5);
+  color: var(--stage-learning-text, #0a8551);
+}
+.trace-list__emotion,
+.trace-list__transition {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--bg-soft, #f3f5f9);
+  color: var(--text-muted, #6b7a90);
+}
+.trace-list__degraded {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.trace-list__focus,
+.trace-list__reason {
+  font-size: 12px;
+  color: var(--text, #3c4858);
+}
+.trace-list__focus-label,
+.trace-list__reason-label,
+.trace-list__blockers-label {
+  color: var(--text-muted, #97a8be);
+  font-weight: 500;
+  margin-right: 4px;
+}
+.trace-list__signal {
+  font-size: 12px;
+  color: var(--text-muted, #97a8be);
+  font-style: italic;
+  line-height: 1.5;
+}
+.trace-list__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+}
+.trace-list__metrics > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-soft, #f3f5f9);
+}
+.trace-list__metrics code {
+  font-size: 11px;
+  color: var(--text-muted, #97a8be);
+}
+.trace-list__metrics strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong, #1f2d3d);
+}
+.trace-list__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+}
+.trace-list__flags > span {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--bg-soft, #f3f5f9);
+  color: var(--text-muted, #97a8be);
+  border: 1px solid transparent;
+}
+.trace-list__flags > span.active {
+  background: #e6f4ff;
+  color: #0958d9;
+  border-color: #91caff;
+}
+.trace-list__blockers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.trace-list__body {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  background: var(--bg-soft, #f8fafc);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text, #3c4858);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* recommendation 头部增强（findingCodes + rationale） */
+.referee-recommendation__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.recommendation-codes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.recommendation-codes code {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-soft, #f3f5f9);
+  color: var(--text-muted, #97a8be);
+}
+.recommendation-rationale {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted, #6b7a90);
+}
+.recommendation-rationale > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+}
+.recommendation-rationale > summary::-webkit-details-marker { display: none; }
+.recommendation-rationale > summary::before {
+  content: '▸';
+  margin-right: 4px;
+  font-size: 10px;
+}
+.recommendation-rationale[open] > summary::before { content: '▾'; }
+.recommendation-rationale > p {
+  margin: 6px 0 0;
+  line-height: 1.55;
 }
 </style>

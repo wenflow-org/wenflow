@@ -66,6 +66,19 @@
       </div>
     </div>
 
+    <!-- 会话/拉取异常横幅：真实数据不可用时不静默退回演示 -->
+    <div v-if="needLogin" class="al-notice al-notice--warn">
+      <strong>当前展示的是演示数据。</strong>
+      <span>真实数据需要管理员会话，登录后回到本页会自动接入。</span>
+      <router-link class="al-notice__link" to="/admin/login">去登录 →</router-link>
+      <button type="button" class="al-notice__retry" @click="retryLive">已登录？点此重试</button>
+    </div>
+    <div v-else-if="liveError" class="al-notice" :class="dataSource === 'live' ? 'al-notice--warn' : 'al-notice--err'">
+      <strong>{{ dataSource === 'live' ? '部分真实数据不可用。' : '真实数据接入失败，当前展示演示数据。' }}</strong>
+      <span>{{ liveError }}</span>
+      <button type="button" class="al-notice__retry" @click="retryLive">重试</button>
+    </div>
+
     <main class="al-stage" :class="{ 'al-stage--compare': compare }">
       <!-- 对比模式：左侧现有页面 iframe -->
       <div v-if="compare" class="al-pane">
@@ -84,7 +97,7 @@
           运维简报式 Admin
         </div>
         <div class="al-frame">
-          <MockShell :current="scene" :crumb="subPage?.id" @navigate="navigate">
+          <MockShell :current="scene" :crumb="subPage?.id" @navigate="navigate" @palette="paletteOpen = true">
             <component :is="detailComponent || currentComponent" :state="mappedState" />
           </MockShell>
         </div>
@@ -94,10 +107,18 @@
     <!-- 全屏预览：mock admin 以 100% 比例占满视口 -->
     <div v-if="fullscreen" class="al-fs">
       <button type="button" class="al-fs__exit" @click="fullscreen = false">✕ 退出全屏</button>
-      <MockShell :current="scene" :crumb="subPage?.id" @navigate="navigate">
+      <MockShell :current="scene" :crumb="subPage?.id" @navigate="navigate" @palette="paletteOpen = true">
         <component :is="detailComponent || currentComponent" :state="mappedState" />
       </MockShell>
     </div>
+
+    <!-- 命令面板（Ctrl/⌘K） -->
+    <MockCommandPalette
+      :open="paletteOpen"
+      @close="paletteOpen = false"
+      @navigate="navigate"
+      @fullscreen="fullscreen = !fullscreen"
+    />
 
     <!-- Skill 详情抽屉（全局） -->
     <MockSkillDrawer />
@@ -105,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MockShell from './MockShell.vue';
 import MockOverview from './MockOverview.vue';
 import MockUsers from './MockUsers.vue';
@@ -115,31 +136,40 @@ import MockSkills from './MockSkills.vue';
 import MockTopology from './MockTopology.vue';
 import MockOrchestrator from './MockOrchestrator.vue';
 import MockExecLogs from './MockExecLogs.vue';
+import MockPromptCallLogs from './MockPromptCallLogs.vue';
 import MockTraceWaterfall from './MockTraceWaterfall.vue';
 import MockApiConfig from './MockApiConfig.vue';
 import MockAddons from './MockAddons.vue';
+import MockAnnouncements from './MockAnnouncements.vue';
 import MockPromptLab from './MockPromptLab.vue';
 import MockSkillDrawer from './MockSkillDrawer.vue';
 import MockLearnerDetail from './MockLearnerDetail.vue';
+import MockTeachingSessions from './MockTeachingSessions.vue';
+import MockSessionCockpit from './MockSessionCockpit.vue';
+import MockCommandPalette from './MockCommandPalette.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
 import MockUserDetail from './MockUserDetail.vue';
 import { MOCK_SCENES, GLOBAL_STATES } from './mockManifest';
 import { labState, intent, subPage, dataSource } from './mockStore';
 import { loadLiveData, backToDemo, liveLoading, liveError } from './mockLive';
+import { hasAdminSession } from '@/api/adminApi';
 import './mock-shared.css';
 
 const components: Record<string, unknown> = {
   'overview': MockOverview,
   'users': MockUsers,
   'learner-center': MockLearnerCenter,
+  'teaching-sessions': MockTeachingSessions,
   'virtual-learners': MockVirtualLearners,
   'skills': MockSkills,
   'topology': MockTopology,
   'orchestrator': MockOrchestrator,
   'execution-logs': MockExecLogs,
+  'prompt-call-logs': MockPromptCallLogs,
   'event-center': MockTraceWaterfall,
   'api-config': MockApiConfig,
   'addons': MockAddons,
+  'announcements': MockAnnouncements,
   'prompt-lab': MockPromptLab
 };
 
@@ -147,7 +177,8 @@ const components: Record<string, unknown> = {
 const detailComponents: Record<string, unknown> = {
   learner: MockLearnerDetail,
   virtual: MockVirtualProfile,
-  user: MockUserDetail
+  user: MockUserDetail,
+  session: MockSessionCockpit
 };
 
 // 各页面把全局状态映射为自身语境（读 store 的页面无需映射）
@@ -162,6 +193,19 @@ const STATE_MAP: Record<string, Record<string, string>> = {
 const scene = ref('overview');
 const compare = ref(false);
 const fullscreen = ref(false);
+const paletteOpen = ref(false);
+
+/* Ctrl/⌘K 打开命令面板 */
+function onGlobalKey(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    paletteOpen.value = !paletteOpen.value;
+  } else if (e.key === 'Escape' && paletteOpen.value) {
+    paletteOpen.value = false;
+  }
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKey));
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey));
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === scene.value) || MOCK_SCENES[0]);
 const currentComponent = computed(() => components[scene.value]);
@@ -186,6 +230,21 @@ watch(
 
 function navigate(id: string) {
   scene.value = id;
+}
+
+/* 打开实验室即自动接真实数据；会话缺失或拉取失败时给显眼横幅，不静默退回演示 */
+onMounted(() => {
+  if (dataSource.value === 'demo' && !liveLoading.value) {
+    void loadLiveData();
+  }
+});
+
+const needLogin = computed(
+  () => dataSource.value === 'demo' && (!hasAdminSession() || liveError.value.includes('登录'))
+);
+
+function retryLive() {
+  void loadLiveData();
 }
 </script>
 
@@ -288,6 +347,46 @@ function navigate(id: string) {
 
 .al-stage { padding: 16px 20px 0; display: grid; gap: 16px; max-width: 1360px; margin: 0 auto; }
 .al-stage--compare { grid-template-columns: 1fr 1fr; align-items: start; max-width: none; }
+
+/* 数据接入异常横幅 */
+.al-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 1332px;
+  margin: 14px auto 0;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.al-notice--warn {
+  border: 1px solid rgba(180, 83, 9, 0.35);
+  background: linear-gradient(180deg, #fffdf5, #fff);
+  color: #92610a;
+}
+.al-notice--err {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: #fef5f5;
+  color: #b91c1c;
+}
+.al-notice strong { font-weight: 800; }
+.al-notice__link { color: var(--blue); font-weight: 800; text-decoration: none; }
+.al-notice__link:hover { text-decoration: underline; }
+.al-notice__retry {
+  margin-left: auto;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.al-notice__retry:hover { opacity: 1; }
 
 .al-pane { display: grid; gap: 8px; min-width: 0; }
 .al-pane__label {

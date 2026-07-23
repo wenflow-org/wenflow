@@ -1,6 +1,7 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import learningService from '../learning/learning.service';
 import aiTeachingCoordinator from './AITeachingCoordinator';
+import { classifyFinalizationError } from './FinalizationErrors';
 import {
   getSessionFinalizationState,
   type FinalizeAction,
@@ -10,6 +11,8 @@ import {
   teachingSessionRepository,
   type TeachingSessionRecord
 } from './TeachingSessionRepository';
+import { logger } from '../../utils/logger';
+import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -37,10 +40,28 @@ function finalizationState(session: TeachingSessionRecord): SessionFinalizationS
   };
 }
 
+function finalizationRequest(input: FinalizeSessionInput): Record<string, unknown> {
+  return {
+    action: input.action,
+    actualMinutes: input.actualMinutes ?? null,
+    subjectiveDifficulty: input.subjectiveDifficulty ?? null,
+    endReason: input.endReason ?? null
+  };
+}
+
+function finalizationRequestIdentity(input: FinalizeSessionInput) {
+  const requestJson = JSON.stringify(finalizationRequest(input));
+  return {
+    requestJson,
+    requestHash: createHash('sha256').update(requestJson).digest('hex')
+  };
+}
+
 export class SessionFinalizationService {
   async finalize(input: FinalizeSessionInput) {
     const session = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
     const operationId = input.operationId || randomUUID();
+    const requestIdentity = finalizationRequestIdentity(input);
 
     if (input.action === 'complete_review') {
       const error = new Error('当前版本尚未开放复习完成操作');
@@ -54,7 +75,9 @@ export class SessionFinalizationService {
         input.sessionId,
         input.endReason || 'manual-end',
         input.revision,
-        operationId
+        operationId,
+        requestIdentity.requestHash,
+        requestIdentity.requestJson
       );
       if (result.status === 'processing') {
         return {
@@ -92,6 +115,8 @@ export class SessionFinalizationService {
       input.sessionId,
       'complete_task',
       operationId,
+      requestIdentity.requestHash,
+      requestIdentity.requestJson,
       input.revision
     );
     if (claim.status === 'processing') {
@@ -103,12 +128,15 @@ export class SessionFinalizationService {
       };
     }
     if (claim.status === 'completed') {
+      const replayedTaskCompletion = claim.result?.taskCompletion;
       return this.completedResponse(claim.session, operationId, {
         status: 'completed',
-        alreadyCompleted: true
+        alreadyCompleted: replayedTaskCompletion?.alreadyCompleted !== false
       });
     }
 
+    const leaseGuard = new FinalizationLeaseGuard(input.sessionId, claim.operationId, claim.leaseOwner);
+    leaseGuard.start();
     try {
       const completion = await learningService.completeTask({
         taskId: session.taskId,
@@ -116,26 +144,44 @@ export class SessionFinalizationService {
         actualMinutes: input.actualMinutes,
         subjectiveDifficulty: input.subjectiveDifficulty
       });
+      await leaseGuard.assertOwned();
       const completedSession = await teachingSessionRepository.completeFinalizationStep(
         input.sessionId,
         claim.operationId,
+        claim.leaseOwner,
         'complete_task'
+        , {
+          taskCompletion: {
+            status: 'completed',
+            alreadyCompleted: completion.alreadyCompleted === true
+          }
+        }
       );
       return this.completedResponse(completedSession, claim.operationId, {
         status: 'completed',
         alreadyCompleted: completion.alreadyCompleted === true
       });
     } catch (error) {
-      const code = typeof (error as any)?.code === 'string'
-        ? (error as any).code
-        : 'TASK_COMPLETION_FAILED';
-      await teachingSessionRepository.failFinalization(
-        input.sessionId,
-        claim.operationId,
-        'complete_task',
-        code
-      );
+      const info = classifyFinalizationError(error);
+      try {
+        await teachingSessionRepository.failFinalization(
+          input.sessionId,
+          claim.operationId,
+          claim.leaseOwner,
+          'complete_task',
+          info.code === 'FINALIZATION_PERSISTENCE_FAILED' ? 'TASK_COMPLETION_FAILED' : info.code,
+          info.retryable
+        );
+      } catch (markError) {
+        logger.error('[Finalization] 任务完成失败状态持久化失败', {
+          sessionId: input.sessionId,
+          operationId: claim.operationId,
+          error: markError instanceof Error ? markError.message : String(markError)
+        });
+      }
       throw error;
+    } finally {
+      await leaseGuard.stop();
     }
   }
 
@@ -146,21 +192,19 @@ export class SessionFinalizationService {
       && session.operationKind?.startsWith('finalize:')
       && (!session.operationLeaseExpiresAt || session.operationLeaseExpiresAt <= new Date())
     ) {
-      const action = session.operationKind.slice('finalize:'.length) as FinalizeAction;
-      if (action === 'end_only' || action === 'complete_task' || action === 'complete_review') {
-        await teachingSessionRepository.failFinalization(
-          session.id,
-          session.operationId,
-          action,
-          'FINALIZATION_LEASE_EXPIRED'
-        );
-        session = await teachingSessionRepository.assertOwnership(sessionId, userId);
-      }
+      await teachingSessionRepository.recoverExpiredFinalizations(1, sessionId, session.operationId);
+      session = await teachingSessionRepository.assertOwnership(sessionId, userId);
     }
     const state = finalizationState(session);
+    const isProcessing = !!(
+      session.operationId
+      && session.operationKind?.startsWith('finalize:')
+      && session.operationLeaseExpiresAt
+      && session.operationLeaseExpiresAt > new Date()
+    );
     return {
-      operationId: session.operationId || state?.lastOperationId || null,
-      status: session.operationId && session.operationKind?.startsWith('finalize:')
+      operationId: state?.lastOperationId || null,
+      status: isProcessing
         ? 'processing'
         : session.status === 'finalization_failed' || state?.taskCompletion === 'failed'
           ? 'failed'

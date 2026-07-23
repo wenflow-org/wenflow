@@ -7,6 +7,12 @@ import { isExtraCapabilitySkill } from './skill-component-catalog';
 import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
 
 const SECRET_CONTEXT = 'system.skill_model_configs.apiKey';
+const MAX_SKILL_REQUEST_TIMEOUT_MS = 300_000;
+
+function normalizeRequestTimeoutMs(value: number | null | undefined): number | null | undefined {
+  if (value == null) return value;
+  return Math.min(MAX_SKILL_REQUEST_TIMEOUT_MS, Math.max(10_000, Math.round(value)));
+}
 
 export interface SkillModelConfig {
   skillId: string;
@@ -22,6 +28,7 @@ export interface SkillModelConfig {
   temperature: number;
   maxTokens: number;
   requestTimeoutMs?: number | null;
+  maxLogicalRetries?: number | null;
   enabled: boolean;
 }
 
@@ -43,6 +50,7 @@ class SkillModelConfigService {
       temperature: 0.7,
       maxTokens: 2000,
       requestTimeoutMs: null,
+      maxLogicalRetries: null,
       // 外挂能力组件默认就作为独立能力对象管理，不再落回继承态。
       enabled: isExternal,
     } satisfies SkillModelConfig;
@@ -71,6 +79,7 @@ class SkillModelConfigService {
         temperature: defaultConfig.temperature,
         maxTokens: defaultConfig.maxTokens,
         requestTimeoutMs: defaultConfig.requestTimeoutMs,
+        maxLogicalRetries: defaultConfig.maxLogicalRetries,
         enabled: defaultConfig.enabled,
         updatedAt: new Date(),
       },
@@ -78,6 +87,7 @@ class SkillModelConfigService {
 
     return {
       ...persisted,
+      requestTimeoutMs: normalizeRequestTimeoutMs(persisted.requestTimeoutMs),
       apiKey: decryptSecret(persisted.apiKey, SECRET_CONTEXT),
       displayName: defaultConfig.displayName,
       status: defaultConfig.status,
@@ -106,6 +116,7 @@ class SkillModelConfigService {
 
         return {
           ...persisted,
+          requestTimeoutMs: normalizeRequestTimeoutMs(persisted.requestTimeoutMs),
           apiKey: decryptSecret(persisted.apiKey, SECRET_CONTEXT),
           displayName,
           status,
@@ -123,6 +134,7 @@ class SkillModelConfigService {
         ...mergedConfigs,
         ...missingConfigs.map((config) => ({
           ...config,
+          requestTimeoutMs: normalizeRequestTimeoutMs(config.requestTimeoutMs),
           apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT),
           lastCalledAt: null,
           thinkingMode: config.thinkingMode || 'default',
@@ -146,6 +158,7 @@ class SkillModelConfigService {
       }
       return {
         ...config,
+        requestTimeoutMs: normalizeRequestTimeoutMs(config.requestTimeoutMs),
         apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT),
         thinkingMode: config.thinkingMode || 'default',
         reasoningEffort: config.reasoningEffort || 'default',
@@ -158,16 +171,23 @@ class SkillModelConfigService {
 
   async upsert(skillId: string, config: Partial<SkillModelConfig>): Promise<SkillModelConfig> {
     try {
-      const data = config.apiKey === undefined
+      const normalizedConfig = config.requestTimeoutMs === undefined
         ? config
-        : { ...config, apiKey: encryptSecret(config.apiKey, SECRET_CONTEXT) };
+        : { ...config, requestTimeoutMs: normalizeRequestTimeoutMs(config.requestTimeoutMs) };
+      const data = normalizedConfig.apiKey === undefined
+        ? normalizedConfig
+        : { ...normalizedConfig, apiKey: encryptSecret(normalizedConfig.apiKey, SECRET_CONTEXT) };
       const result = await systemPrisma.skill_model_configs.upsert({
         where: { skillId },
         update: { ...data, updatedAt: new Date() },
         create: { id: uuidv4(), skillId, ...data, updatedAt: new Date() },
       });
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
-      return { ...result, apiKey: decryptSecret(result.apiKey, SECRET_CONTEXT) };
+      return {
+        ...result,
+        requestTimeoutMs: normalizeRequestTimeoutMs(result.requestTimeoutMs),
+        apiKey: decryptSecret(result.apiKey, SECRET_CONTEXT)
+      };
     } catch (error) {
       logger.error(`Failed to upsert skill config: ${skillId}`, error);
       throw error;

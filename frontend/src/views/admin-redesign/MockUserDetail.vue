@@ -7,7 +7,6 @@
         <h3>{{ d.name }}</h3>
         <span class="ud-sub">{{ d.email }} · {{ d.role }} · 加入 {{ d.joined }}</span>
       </div>
-      <button type="button" class="mk-status__action" style="margin-left:auto">编辑</button>
     </div>
 
     <div class="ud-stats">
@@ -44,6 +43,7 @@
             <span>{{ a.text }}</span>
             <span class="ud-act__time">{{ a.time }}</span>
           </div>
+          <p v-if="!d.activity.length" class="ud-none">暂无动态记录</p>
         </div>
       </section>
     </div>
@@ -52,17 +52,86 @@
   <div v-else class="mk-page">
     <button type="button" class="ud-back" @click="closeSubPage">← 用户</button>
     <div class="mk-empty">
-      <strong>该用户暂无更多演示数据</strong>
-      <span>演示详情仅覆盖部分样本用户。</span>
+      <strong>{{ isLive ? '加载中…' : '该用户暂无更多演示数据' }}</strong>
+      <span>{{ isLive ? '正在拉取真实用户详情' : '演示详情仅覆盖部分样本用户。' }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { subPage, closeSubPage, userDetails } from './mockStore'
+import { computed, ref, watch } from 'vue'
+import { subPage, closeSubPage, userDetails, dataSource } from './mockStore'
+import { liveUsers, liveGetUserDetail, timeAgo } from './mockLive'
 
-const d = computed(() => userDetails.find((x) => x.id === subPage.value?.id))
+interface Detail {
+  name: string
+  email: string
+  role: string
+  joined: string
+  stats: { label: string; value: string }[]
+  recentPaths: { title: string; stage: string; pct: number; tone: 'ok' | 'warn' }[]
+  activity: { time: string; text: string }[]
+}
+
+const liveDetail = ref<Detail | null>(null)
+const isLive = computed(() => dataSource.value === 'live')
+
+watch(
+  () => [subPage.value?.id, isLive.value] as const,
+  async ([id, live]) => {
+    liveDetail.value = null
+    if (!id || !live) return
+    const base = liveUsers.value.find((u) => u.id === id)
+    try {
+      const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
+      const user = (raw.user as Record<string, unknown>) || raw
+      const paths = (raw.learning_paths || raw.learningPaths || user.learning_paths || []) as Record<string, unknown>[]
+      liveDetail.value = {
+        name: String(user.name || base?.name || id),
+        email: String(user.email || base?.email || ''),
+        role: user.isAdmin || base?.isAdmin ? '管理员' : '用户',
+        joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
+        stats: [
+          { label: '路径', value: String(base?.paths ?? (paths.length || 0)) },
+          { label: '会话', value: String(base?.sessions ?? 0) },
+          { label: 'XP', value: String(user.xp ?? 0) },
+          { label: '等级', value: String(user.currentLevel || '—') }
+        ],
+        recentPaths: paths.slice(0, 4).map((p) => ({
+          title: String(p.title || p.goal || '未命名路径'),
+          stage: String(p.status || p.current_stage || ''),
+          pct: Number(p.progress ?? p.completion_rate ?? 0),
+          tone: 'ok' as const
+        })),
+        activity: []
+      }
+    } catch {
+      // 详情接口失败：用列表数据兜底
+      if (base) {
+        liveDetail.value = {
+          name: base.name,
+          email: base.email,
+          role: base.isAdmin ? '管理员' : '用户',
+          joined: timeAgo(base.createdAt),
+          stats: [
+            { label: '路径', value: String(base.paths) },
+            { label: '会话', value: String(base.sessions) },
+            { label: 'XP', value: String(base.xp) },
+            { label: '等级', value: base.currentLevel || '—' }
+          ],
+          recentPaths: [],
+          activity: []
+        }
+      }
+    }
+  },
+  { immediate: true }
+)
+
+const d = computed<Detail | undefined>(() => {
+  if (isLive.value) return liveDetail.value || undefined
+  return userDetails.find((x) => x.id === subPage.value?.id)
+})
 </script>
 
 <style scoped>

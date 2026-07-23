@@ -21,6 +21,7 @@
       </div>
       <div class="page-header__actions">
         <el-button type="primary" @click="openProjectionDialog">投影入口</el-button>
+        <el-button type="success" plain @click="quickLearnVisible = true">快速代学</el-button>
         <el-button plain @click="openLatestSessionInspector">最近会话诊断</el-button>
         <el-dropdown trigger="click">
           <el-button>
@@ -158,6 +159,40 @@
                     <el-button size="small" type="primary" @click="openStoryOverview(story)">学情概览</el-button>
                     <el-button size="small" type="danger" plain @click="deleteStory(story, story.index)">删除</el-button>
                   </div>
+
+                  <!-- 高级诊断：来自 scenario-designer 的隐藏字段（hiddenDetails / behaviorHooks / goalSeed / disclosurePlan / misdiagnosis） -->
+                  <details
+                    v-if="hasAdvancedDiagnostic(story)"
+                    class="story-advanced-diag"
+                  >
+                    <summary>高级诊断 · hidden fields</summary>
+                    <div class="story-advanced-diag__body">
+                      <div v-if="getStoryHiddenDetails(story).length" class="adv-row">
+                        <span class="adv-row__label">隐藏细节</span>
+                        <ul>
+                          <li v-for="(item, didx) in getStoryHiddenDetails(story)" :key="`hd-${didx}`">{{ item }}</li>
+                        </ul>
+                      </div>
+                      <div v-if="getStoryBehaviorHooks(story).length" class="adv-row">
+                        <span class="adv-row__label">行为钩子</span>
+                        <ul>
+                          <li v-for="(item, hidx) in getStoryBehaviorHooks(story)" :key="`bh-${hidx}`">{{ item }}</li>
+                        </ul>
+                      </div>
+                      <div v-if="getStoryMisdiagnosis(story)" class="adv-row adv-row--text">
+                        <span class="adv-row__label">误诊假设</span>
+                        <p>{{ getStoryMisdiagnosis(story) }}</p>
+                      </div>
+                      <div v-if="getStoryGoalSeed(story)" class="adv-row adv-row--object">
+                        <span class="adv-row__label">目标种子</span>
+                        <pre>{{ JSON.stringify(getStoryGoalSeed(story), null, 2) }}</pre>
+                      </div>
+                      <div v-if="getStoryDisclosurePlan(story)" class="adv-row adv-row--object">
+                        <span class="adv-row__label">披露计划</span>
+                        <pre>{{ JSON.stringify(getStoryDisclosurePlan(story), null, 2) }}</pre>
+                      </div>
+                    </div>
+                  </details>
                 </article>
               </div>
 
@@ -381,6 +416,8 @@
         </template>
       </div>
     </el-dialog>
+
+    <QuickLearnPanel v-model:visible="quickLearnVisible" :profile-id="profileId" />
   </div>
 </template>
 
@@ -391,6 +428,7 @@ import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { adminApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
+import QuickLearnPanel from './components/virtual/QuickLearnPanel.vue'
 
 interface ProfileStory {
   storyId?: string
@@ -526,6 +564,7 @@ const storyEditDialogVisible = ref(false)
 const storySubmitting = ref(false)
 const editingStoryIndex = ref<number | null>(null)
 const projectionDialogVisible = ref(false)
+const quickLearnVisible = ref(false)
 const projectionLoading = ref(false)
 const testProjection = ref<TestProjection | null>(null)
 const activeTab = ref('overview')
@@ -814,6 +853,35 @@ const getStorySourceLabel = (sourceType?: string) => {
       return sourceType || '未知来源'
   }
 }
+
+// ===== 故事高级诊断字段（5 个来自 scenario-designer 的 hidden fields） =====
+// 后端 /stories 接口已通过 `...story` 透出这些字段；前端原本从未展示。
+const getStoryHiddenDetails = (story: ProfileStory): string[] => {
+  const value = (story as Record<string, unknown>).hiddenDetails
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : []
+}
+const getStoryBehaviorHooks = (story: ProfileStory): string[] => {
+  const value = (story as Record<string, unknown>).behaviorHooks
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : []
+}
+const getStoryMisdiagnosis = (story: ProfileStory): string => {
+  const value = (story as Record<string, unknown>).misdiagnosis
+  return typeof value === 'string' ? value : ''
+}
+const getStoryGoalSeed = (story: ProfileStory): Record<string, unknown> | null => {
+  const value = (story as Record<string, unknown>).goalSeed
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+}
+const getStoryDisclosurePlan = (story: ProfileStory): Record<string, unknown> | null => {
+  const value = (story as Record<string, unknown>).disclosurePlan
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+}
+const hasAdvancedDiagnostic = (story: ProfileStory) =>
+  getStoryHiddenDetails(story).length > 0
+  || getStoryBehaviorHooks(story).length > 0
+  || !!getStoryMisdiagnosis(story)
+  || !!getStoryGoalSeed(story)
+  || !!getStoryDisclosurePlan(story)
 
 const getStoryKey = (story: ProfileStory | null | undefined, index: number) => story?.id || `story-${index}`
 
@@ -2254,5 +2322,72 @@ watch(() => route.params.storyId, () => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* ===== 故事高级诊断折叠区 ===== */
+.story-advanced-diag {
+  margin: 8px 0 0;
+  border-top: 1px dashed #e3e9f0;
+  padding-top: 6px;
+}
+
+.story-advanced-diag > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #97a8be;
+  user-select: none;
+  padding: 4px 0;
+}
+.story-advanced-diag > summary::-webkit-details-marker { display: none; }
+.story-advanced-diag > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 10px;
+}
+.story-advanced-diag[open] > summary::before { content: '▾'; }
+
+.story-advanced-diag__body {
+  padding: 4px 0 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.adv-row {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+  color: #5f6b7d;
+  line-height: 1.5;
+}
+.adv-row--text,
+.adv-row--object {
+  grid-template-columns: 76px 1fr;
+}
+.adv-row__label {
+  color: #97a8be;
+  font-weight: 500;
+}
+.adv-row ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.adv-row ul li { color: #3c4858; }
+.adv-row--text p { margin: 0; color: #3c4858; }
+.adv-row--object pre {
+  margin: 0;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #3c4858;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
 }
 </style>

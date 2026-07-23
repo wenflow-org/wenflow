@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
+import { learningStateGuidanceService } from '../services/learner/LearningStateGuidanceService';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 
@@ -27,11 +28,29 @@ router.get('/copy', async (req: any, res) => {
     const canIncludeDebug = sourceEntry === 'test' && (req.user?.isAdmin === true || debugOperator?.isAdmin === true);
 
     // adaptive-guidance-copy 现在只作为 dashboard snapshot 对外提供。
+    // 支持 dashboard（快照）与 learning-state（按需生成 + 内存缓存）两种视图
+    if (view === 'learning-state') {
+      const forceRefresh = req.query.refresh === '1';
+      const payload = await learningStateGuidanceService.get(userId, { forceRefresh });
+      return res.json({
+        success: true,
+        data: payload
+          ? {
+              copy: payload.copy,
+              summary: payload.summary,
+              source: payload.source,
+              generatedAt: payload.generatedAt,
+              ...(canIncludeDebug && payload.debug ? { debug: payload.debug } : {}),
+            }
+          : null,
+      });
+    }
+
     if (view !== 'dashboard') {
       return res.status(400).json({
         success: false,
         error: {
-          message: 'adaptive-guidance/copy 目前仅支持 dashboard 视图',
+          message: 'adaptive-guidance/copy 目前仅支持 dashboard 与 learning-state 视图',
         },
       });
     }

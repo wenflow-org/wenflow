@@ -67,22 +67,40 @@ model achievements {
 }
 
 model agent_call_logs {
-  id          String   @id
-  agentId     String
-  userId      String
-  sourceEntry String   @default("platform")
-  traceId     String?
-  callerAgent String?
-  userRole    String   @default("user")
-  input       String?
-  output      String?
-  success     Boolean  @default(false)
-  durationMs  Int      @default(0)
-  tokensUsed  Int?
-  error       String?
-  errorCode   String?
-  calledAt    DateTime @default(now())
-  metadata    String?
+  id                String   @id
+  agentId           String
+  userId            String
+  sourceEntry       String   @default("platform")
+  traceId           String?
+  callerAgent       String?
+  userRole          String   @default("user")
+  input             String?
+  output            String?
+  success           Boolean  @default(false)
+  durationMs        Int      @default(0)
+  tokensUsed        Int?
+  error             String?
+  errorCode         String?
+  calledAt          DateTime @default(now())
+  metadata          String?
+  executionLayer    String?
+  actorType         String?
+  actorId           String?
+  parentExecutionId String?
+  rootExecutionId   String?
+  promptCallId      String?
+  providerId        String?
+  providerType      String?
+  routeSource       String?
+  model             String?
+  statusCode        Int?
+  attemptCount      Int?
+  maxAttempts       Int?
+  promptTokens      Int?
+  completionTokens  Int?
+  finishReason      String?
+  completionId      String?
+  errorCategory     String?
 
   @@index([agentId, calledAt])
   @@index([calledAt])
@@ -91,6 +109,10 @@ model agent_call_logs {
   @@index([sourceEntry])
   @@index([userId])
   @@index([agentId])
+  @@index([parentExecutionId, calledAt])
+  @@index([promptCallId, calledAt])
+  @@index([executionLayer, calledAt])
+  @@index([providerId, calledAt])
 }
 
 model agent_execution_logs {
@@ -165,6 +187,13 @@ model prompt_call_logs {
   pipelineStepIndex   Int?
   traceId             String?
   parentExecutionId   String?
+  promptAttemptCount  Int      @default(1)
+  llmRequestCount     Int      @default(0)
+  finalLlmRequestId   String?
+  failureStage        String?
+  attemptTrace        String?
+  providerId          String?
+  model               String?
   createdAt           DateTime @default(now())
 
   @@index([agentId, createdAt])
@@ -173,6 +202,64 @@ model prompt_call_logs {
   @@index([userId])
   @@index([traceId])
   @@index([parentExecutionId])
+  @@index([finalLlmRequestId])
+}
+
+model llm_execution_attempts {
+  id                  String   @id
+  llmRequestId        String
+  parentExecutionId   String?
+  promptCallId        String?
+  rootExecutionId     String?
+  traceId             String?
+  userId              String?
+  sourceEntry         String   @default("platform")
+  promptAttemptNo     Int      @default(1)
+  transportAttemptNo  Int
+  maxAttempts         Int
+  providerId          String?
+  providerType        String?
+  routeSource         String?
+  requestedModel      String?
+  resolvedModel       String?
+  responseModel       String?
+  endpointHost        String?
+  success             Boolean  @default(false)
+  retryable           Boolean?
+  willRetry           Boolean  @default(false)
+  statusCode          Int?
+  errorCategory       String?
+  errorCode           String?
+  errorMessage        String?
+  startedAt           DateTime
+  completedAt         DateTime
+  durationMs          Int
+  backoffMs           Int?
+  retryAfterMs        Int?
+  configuredTimeoutMs Int?
+  effectiveTimeoutMs  Int?
+  promptTokens        Int?
+  completionTokens    Int?
+  totalTokens         Int?
+  finishReason        String?
+  completionId        String?
+  providerRequestId   String?
+  messageCount        Int?
+  requestBytes        Int?
+  responseBytes       Int?
+  expiresAt           DateTime
+  metadata            String?
+  createdAt           DateTime @default(now())
+
+  @@unique([llmRequestId, transportAttemptNo])
+  @@index([startedAt, id])
+  @@index([traceId, startedAt])
+  @@index([parentExecutionId, startedAt])
+  @@index([promptCallId, promptAttemptNo, transportAttemptNo])
+  @@index([providerId, resolvedModel, startedAt])
+  @@index([rootExecutionId, startedAt])
+  @@index([userId, startedAt])
+  @@index([errorCategory, startedAt])
 }
 
 model arena_agent_logs {
@@ -744,6 +831,7 @@ model teaching_sessions {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @default(now())
   users                   users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  finalizationOperations  session_finalization_operations[]
 
   @@index([userId, taskId, status])
   @@index([status, updatedAt])
@@ -751,6 +839,31 @@ model teaching_sessions {
   @@index([status])
   @@index([taskId])
   @@index([userId])
+}
+
+model session_finalization_operations {
+  id              String   @id @default(uuid())
+  sessionId       String
+  idempotencyKey  String
+  action          String
+  requestHash     String
+  requestJson     String
+  status          String   @default("processing")
+  leaseOwner      String?
+  leaseExpiresAt  DateTime?
+  attemptCount    Int      @default(1)
+  resultJson      String?
+  errorCode       String?
+  retryable       Boolean?
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  session         teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([status, leaseExpiresAt])
+  @@index([sessionId, action, createdAt])
 }
 
 model domain_event_outbox {
@@ -1054,4 +1167,46 @@ model virtual_experiment_commands {
   @@unique([runId, sequence])
   @@index([sessionId, createdAt])
   @@index([runId, status])
+}
+
+model virtual_quick_learn_runs {
+  id                String    @id @default(uuid())
+  profileId         String
+  userId            String
+  pathId            String
+  taskId            String
+  fixtureOfPathId   String?
+  mode              String    @default("fast_forward")
+  status            String    @default("queued")
+  maxTurns          Int       @default(25)
+  turns             Int       @default(0)
+  teachingSessionId String?
+  progress          String?
+  transcript        String?
+  report            String?
+  error             String?
+  abortRequestedAt  DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([profileId, createdAt])
+  @@index([status])
+  @@index([userId])
+}
+
+model announcements {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  severity    String    @default("info")
+  status      String    @default("draft")
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, publishedAt])
 }

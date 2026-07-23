@@ -1,10 +1,20 @@
 /**
  * 真实数据接入层：把 mock admin 接到后端真实 API
- * 覆盖：执行日志（→ spans → 日志/瀑布/抽屉统计）、Skill 注册表（→ 矩阵）、总览统计
- * 失败时回退演示数据并给出错误提示
+ * 覆盖：执行日志、Skill 注册表、总览统计、用户、学习者模型、虚拟学习者、
+ *       API 配置、动态、Prompt Lab、拓扑
+ * 原则：每个域独立容错——单个端点失败只影响对应页面，不拖垮整个 live 模式
  */
-import { ref } from 'vue'
-import { adminAxios, adminDashboardApi, adminSkillsApi } from '@/api/adminApi'
+import { computed, ref } from 'vue'
+import {
+  adminAxios,
+  adminDashboardApi,
+  adminSkillsApi,
+  adminUsersApi,
+  adminLearnerModelsApi,
+  adminVirtualLearnersApi,
+  adminApiConfigApi,
+  adminPromptLabApi
+} from '@/api/adminApi'
 import {
   dataSource,
   liveSpans,
@@ -13,11 +23,46 @@ import {
   type TraceSpan,
   type SkillStat
 } from './mockStore'
+import { EXTRA_COMPONENT_VISIBLE_SKILLS } from '@/views/admin/capabilityCatalog'
+
+/** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */
+const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
 
 export const liveLoading = ref(false)
 export const liveError = ref('')
+/** 各域拉取失败记录（页面据此局部降级） */
+export const liveFailures = ref<Record<string, string>>({})
 
-/* ---------- 执行日志 → TraceSpan ---------- */
+/* ================= 工具 ================= */
+
+/** ISO 时间 → 相对时间 */
+export function timeAgo(iso?: string | null): string {
+  if (!iso) return '从未'
+  const t = new Date(iso).getTime()
+  if (!t || Number.isNaN(t)) return '从未'
+  const diff = Date.now() - t
+  if (diff < 0) return '刚刚'
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return '刚刚'
+  if (m < 60) return `${m} 分钟前`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} 小时前`
+  const d = Math.floor(h / 24)
+  if (d === 1) return '昨天'
+  if (d < 30) return `${d} 天前`
+  return new Date(t).toLocaleDateString('zh-CN')
+}
+
+export function errMsg(e: unknown): string {
+  const err = e as { response?: { data?: { error?: { message?: unknown } | string }; status?: number }; message?: string }
+  const raw = err?.response?.data?.error
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw.message === 'string') return raw.message
+  if (err?.response?.status === 401) return '需要 admin 登录'
+  return err?.message || '网络错误'
+}
+
+/* ================= 执行日志 → TraceSpan ================= */
 interface RawLog {
   id?: string | number
   agentName?: string
@@ -30,8 +75,8 @@ interface RawLog {
   sourceEntry?: string
   errorMessage?: string
   error?: string
-  input?: string
-  output?: string
+  input?: unknown
+  output?: unknown
 }
 
 function mapStatus(s?: string): TraceSpan['status'] {
@@ -40,14 +85,7 @@ function mapStatus(s?: string): TraceSpan['status'] {
   return 'ok'
 }
 
-async function fetchLiveSpans(): Promise<TraceSpan[]> {
-  const res = await adminAxios.get('/admin/agents/logs', {
-    params: { timeRange: 'week', limit: 60 }
-  })
-  const body = res.data?.data ?? res.data ?? {}
-  const items: RawLog[] = body.items || body.logs || body || []
-
-  // 按 traceId 分组计算相对偏移（瀑布用）
+function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
   const byTrace = new Map<string, number>()
   for (const log of items) {
     const t = log.traceId || `log:${log.id}`
@@ -60,23 +98,129 @@ async function fetchLiveSpans(): Promise<TraceSpan[]> {
     const traceId = log.traceId || `log:${log.id}`
     const ts = log.createdAt ? new Date(log.createdAt).getTime() : 0
     const errText = log.errorMessage || log.error || ''
+    // 统一去掉 skill: 前缀：与注册表 id 对齐（统计/抽屉/最近调用匹配），并缩短列显示
+    const agent = (log.agentId || log.agentName || 'unknown').replace(/^skill:/, '')
     return {
       id: String(log.id ?? i),
       traceId,
       kind: 'call' as const,
-      agent: log.agentId || log.agentName || 'unknown',
-      stage: log.agentName || log.agentId || '未知节点',
+      agent,
+      stage: (log.agentName || log.agentId || '未知节点').replace(/^skill:/, ''),
       title: errText ? `调用失败：${errText.slice(0, 40)}` : '执行完成',
       startMs: Math.max(0, ts - (byTrace.get(traceId) || ts)),
       durationMs: Number(log.durationMs || 0),
       status: mapStatus(log.status),
-      detail: [log.status === 'error' ? '失败' : log.status === 'timeout' ? '超时' : '成功', `${log.durationMs || 0}ms`, log.sourceEntry].filter(Boolean).join(' · '),
+      detail: [log.status === 'error' ? '失败' : log.status === 'timeout' ? '超时' : '成功', `${log.durationMs || 0}ms`, timeAgo(log.createdAt)].filter(Boolean).join(' · '),
       payload: errText || undefined
     }
   })
 }
 
-/* ---------- Skill 注册表 → 矩阵统计 ---------- */
+async function fetchLiveSpans(): Promise<TraceSpan[]> {
+  const res = await adminAxios.get('/admin/agents/logs', {
+    params: { timeRange: 'week', limit: 60 }
+  })
+  const body = res.data?.data ?? res.data ?? {}
+  const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
+  return mapLogsToSpans(items)
+}
+
+/** 带筛选的服务端重查（执行日志页：时间范围 / 关键词 / 节点 / 状态） */
+export interface SpanQuery {
+  timeRange?: 'today' | 'yesterday' | 'last7days' | 'week' | 'month' | 'all'
+  keyword?: string
+  agentName?: string
+  status?: 'success' | 'error' | 'timeout'
+  limit?: number
+}
+
+export async function reloadLiveSpans(query: SpanQuery): Promise<void> {
+  const res = await adminAxios.get('/admin/agents/logs', {
+    params: { limit: 100, ...query }
+  })
+  const body = res.data?.data ?? res.data ?? {}
+  const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
+  liveSpans.value = mapLogsToSpans(items)
+}
+
+/** 日志详情（展开行时拉真实 input/output + 重试尝试时间线；超长截断） */
+export interface LogAttempt {
+  promptAttemptNo: number
+  transportAttemptNo: number
+  maxAttempts: number
+  provider: string
+  routeSource: string
+  model: string
+  endpointHost: string
+  success: boolean
+  willRetry: boolean
+  backoffMs: number | null
+  statusCode: number | null
+  errorCategory: string
+  errorCode: string
+  errorMessage: string
+  durationMs: number
+  timeoutMs: number
+  promptTokens: number | null
+  completionTokens: number | null
+  finishReason: string
+}
+
+export interface LogDetail {
+  input?: string
+  output?: string
+  error?: string
+  attempts: LogAttempt[]
+  attemptCount: number
+  maxAttempts: number
+}
+
+function mapAttempt(a: Record<string, unknown>): LogAttempt {
+  return {
+    promptAttemptNo: Number(a.promptAttemptNo || 1),
+    transportAttemptNo: Number(a.transportAttemptNo || 1),
+    maxAttempts: Number(a.maxAttempts || 1),
+    provider: String(a.providerId || a.providerType || ''),
+    routeSource: String(a.routeSource || ''),
+    model: String(a.resolvedModel || a.responseModel || ''),
+    endpointHost: String(a.endpointHost || ''),
+    success: !!a.success,
+    willRetry: !!a.willRetry,
+    backoffMs: a.backoffMs != null ? Number(a.backoffMs) : null,
+    statusCode: a.statusCode != null ? Number(a.statusCode) : null,
+    errorCategory: String(a.errorCategory || ''),
+    errorCode: String(a.errorCode || ''),
+    errorMessage: String(a.errorMessage || ''),
+    durationMs: Number(a.durationMs || 0),
+    timeoutMs: Number(a.effectiveTimeoutMs || a.configuredTimeoutMs || 0),
+    promptTokens: a.promptTokens != null ? Number(a.promptTokens) : null,
+    completionTokens: a.completionTokens != null ? Number(a.completionTokens) : null,
+    finishReason: String(a.finishReason || '')
+  }
+}
+
+export async function fetchLogDetail(id: string): Promise<LogDetail> {
+  const res = await adminAxios.get(`/admin/agents/logs/${encodeURIComponent(id)}`)
+  const body = res.data?.data ?? res.data ?? {}
+  // 新结构：{ log, attempts }；兼容旧平铺
+  const d = (body.log || body) as Record<string, unknown>
+  const rawAttempts: Record<string, unknown>[] = Array.isArray(body.attempts) ? body.attempts : body.attempts ? [body.attempts] : []
+  const cap = (v: unknown): string | undefined => {
+    if (v == null) return undefined
+    const s = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+    return s.length > 4000 ? `${s.slice(0, 4000)}\n…（已截断，共 ${s.length} 字符）` : s
+  }
+  return {
+    input: cap(d.input),
+    output: cap(d.output),
+    error: cap(d.errorMessage || d.error || undefined),
+    attempts: rawAttempts.map((a) => mapAttempt(a as Record<string, unknown>)),
+    attemptCount: Number(d.attemptCount || rawAttempts.length || 1),
+    maxAttempts: Number(d.maxAttempts || rawAttempts[0]?.maxAttempts || 1)
+  }
+}
+
+/* ================= Skill 注册表 ================= */
 interface RawSkill {
   skillId?: string
   id?: string
@@ -93,9 +237,12 @@ export interface LiveSkillProfile {
   id: string
   name: string
   category: string
+  agentId: string
 }
 
 export const liveSkillProfiles = ref<LiveSkillProfile[]>([])
+/** 外挂能力 Skill 档案（主目录排除，但抽屉/外挂页需要名称等基本信息） */
+export const liveExtraProfiles = ref<LiveSkillProfile[]>([])
 
 async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
   const res = await adminSkillsApi.getSkills()
@@ -104,9 +251,9 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
 
   const statsMap: Record<string, SkillStat> = {}
   const profiles: LiveSkillProfile[] = []
+  const extras: LiveSkillProfile[] = []
 
   for (const s of items) {
-    // 真实注册表：skill 的标识在 name 字段
     const id = s.skillId || s.id || s.name || ''
     if (!id) continue
     const st = s.stats || s.runtime?.stats || {}
@@ -116,64 +263,727 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
       calls,
       errors: calls > 0 ? Math.round(calls * (1 - rate)) : 0,
       avgMs: Number(st.avgLatency || 0),
-      lastAt: st.lastCalledAt ? '近期' : '从未'
+      lastAt: st.lastCalledAt ? timeAgo(st.lastCalledAt) : '从未'
+    }
+    // 主目录档案：排除外挂能力 Skill（与生产 AgentRegistry 同口径）；外挂档案单独保留
+    if (isExtraSkill(id)) {
+      extras.push({
+        id,
+        name: s.displayName || s.description?.slice(0, 12) || id,
+        category: s.category || s.tier || 'skill',
+        agentId: ''
+      })
+      continue
     }
     profiles.push({
       id,
       name: s.displayName || s.description?.slice(0, 12) || id,
-      category: s.category || s.tier || 'skill'
+      category: s.category || s.tier || 'skill',
+      agentId: ''
     })
   }
+
+  liveExtraProfiles.value = extras
 
   liveSkillProfiles.value = profiles
   return statsMap
 }
 
-/* ---------- 总览统计 ---------- */
-async function fetchLiveOverview() {
-  const res = await adminDashboardApi.getStats()
-  const stats = res.data?.data ?? res.data ?? {}
-  const agents = stats.agents || {}
-  const users = stats.users || {}
-  const todayCalls = Number(agents.todayCalls || 0)
-  const successRate = Number(agents.successRate ?? 100)
-  const activeUsers = Number(users.activeToday || 0)
-
-  if (todayCalls === 0 && activeUsers === 0) {
-    return { tone: 'muted' as const, score: 100, headline: '系统空闲', subline: '部署完成，等待第一个真实学习者。' }
-  }
-  if (todayCalls >= 5 && successRate < 90) {
-    return { tone: 'warn' as const, score: Math.max(40, Math.round(successRate * 0.7)), headline: `需要关注：成功率 ${successRate}%`, subline: `今日 ${todayCalls} 次调用，成功率低于阈值。` }
-  }
-  return { tone: 'ok' as const, score: 92, headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
+/* ================= 总览 ================= */
+export interface LiveOverviewFull {
+  tone: 'ok' | 'warn' | 'muted'
+  score: number
+  headline: string
+  subline: string
+  funnel: { label: string; value: string; idle: boolean }[]
+  rates: string[]
+  funnelNote: string
+  pulse: { calls: number; issue: number }[]
+  totalCalls: number
+  totalIssues: number
+  peak: string
+  feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }[]
+  actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
 }
 
-/* ---------- 总入口 ---------- */
+export const liveOverviewFull = ref<LiveOverviewFull | null>(null)
+
+async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }> {
+  const [statsRes, activityRes] = await Promise.all([
+    adminDashboardApi.getStats(),
+    adminDashboardApi.getActivity(8).catch(() => null)
+  ])
+  const stats = statsRes.data?.data ?? statsRes.data ?? {}
+  const agents = stats.agents || {}
+  const users = stats.users || {}
+  const learning = stats.learning || {}
+  const conv = stats.conversations || {}
+
+  const todayCalls = Number(agents.todayCalls || 0)
+  const successRate = Number(agents.successRate ?? 100)
+  const failedCalls = Number(agents.failedCalls || 0)
+  const activeUsers = Number(users.activeToday || 0)
+
+  /* 头部结论 */
+  let head: { tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }
+  if (todayCalls === 0 && activeUsers === 0 && Number(users.total || 0) <= 2) {
+    head = { tone: 'muted', score: 100, headline: '系统空闲', subline: '部署完成，等待第一个真实学习者。' }
+  } else if (failedCalls > 0 || successRate < 90) {
+    head = { tone: 'warn', score: Math.max(40, Math.round(successRate * 0.7)), headline: `需要关注：成功率 ${successRate}%`, subline: `累计 ${agents.totalCalls || 0} 次调用，${failedCalls} 次失败。` }
+  } else {
+    head = { tone: 'ok', score: 92, headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
+  }
+
+  /* 漏斗 */
+  const funnelRaw = [
+    { label: '用户', value: Number(users.total || 0) },
+    { label: '目标', value: Number(conv.total || 0) },
+    { label: '路径', value: Number(learning.totalPaths || 0) },
+    { label: '任务', value: Number(learning.totalTasks || 0) },
+    { label: '完成', value: Number(learning.completedTasks || 0) }
+  ]
+  const funnel = funnelRaw.map((f) => ({ label: f.label, value: String(f.value), idle: f.value === 0 }))
+  const rates = funnelRaw.slice(1).map((f, i) => {
+    const prev = funnelRaw[i].value
+    if (!prev || !f.value) return '—'
+    if (f.label === '任务') return `×${(f.value / prev).toFixed(1)}`
+    return `${Math.round((f.value / prev) * 100)}%`
+  })
+  const zeroIdx = funnelRaw.findIndex((f) => f.value === 0)
+  const funnelNote = zeroIdx === -1
+    ? `目标 → 路径转化 ${rates[1]}，任务完成率 ${learning.completionRate ?? 0}%。`
+    : zeroIdx <= 1
+      ? '断点在第一步：还没有人创建目标。'
+      : `断点在「${funnelRaw[zeroIdx].label}」：上游有量、这里为零。`
+
+  /* 24h 脉搏（后端已按小时聚合） */
+  const last24h: { label?: string; total?: number; error?: number; timeout?: number }[] = agents.last24h || []
+  const pulse = last24h.length
+    ? last24h.map((b) => ({ calls: Number(b.total || 0), issue: Number(b.error || 0) + Number(b.timeout || 0) }))
+    : Array.from({ length: 24 }, () => ({ calls: 0, issue: 0 }))
+  const totalIssues = pulse.reduce((a, b) => a + b.issue, 0)
+  const peakIdx = pulse.reduce((mi, b, i) => (b.calls > (pulse[mi]?.calls || 0) ? i : mi), 0)
+  const peak = last24h[peakIdx]?.label || `${String(peakIdx).padStart(2, '0')}:00`
+
+  /* 动态 */
+  const act = activityRes?.data?.data ?? {}
+  const feed: LiveOverviewFull['feed'] = []
+  for (const u of act.recentUsers || []) {
+    feed.push({ text: `新用户注册：${u.email || u.name}`, time: timeAgo(u.createdAt), tone: 'muted' })
+  }
+  for (const s of act.recentSessions || []) {
+    feed.push({ text: `教学会话：${s.title || s.id}`, time: timeAgo(s.createdAt || s.updatedAt), tone: 'ok' })
+  }
+  for (const t of act.completedTasks || []) {
+    feed.push({ text: `任务完成：${t.title || t.id}`, time: timeAgo(t.completedAt || t.updatedAt), tone: 'ok' })
+  }
+
+  /* 待办：失败最多的节点 */
+  const byAgent = new Map<string, number>()
+  for (const s of liveSpans.value || []) {
+    if (s.status === 'err') byAgent.set(s.agent, (byAgent.get(s.agent) || 0) + 1)
+  }
+  const actions = [...byAgent.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([agentId, count]) => ({
+      text: `${agentId} 近 7 天 ${count} 次失败`,
+      link: '排查执行日志',
+      tone: 'bad' as const,
+      agentId
+    }))
+
+  liveOverviewFull.value = {
+    ...head,
+    funnel,
+    rates,
+    funnelNote,
+    pulse,
+    totalCalls: Number(agents.totalCalls || todayCalls),
+    totalIssues,
+    peak,
+    feed: feed.slice(0, 6),
+    actions
+  }
+  return head
+}
+
+/* ================= 用户 ================= */
+export interface LiveUser {
+  id: string
+  name: string
+  email: string
+  isAdmin: boolean
+  xp: number
+  currentLevel: string
+  lastLoginAt: string | null
+  createdAt: string
+  paths: number
+  sessions: number
+}
+
+export const liveUsers = ref<LiveUser[]>([])
+
+async function fetchLiveUsers(): Promise<void> {
+  const res = await adminUsersApi.getUsers({ limit: 100 })
+  const body = res.data?.data ?? res.data ?? {}
+  const items = body.users || body.items || []
+  liveUsers.value = items.map((u: Record<string, unknown>) => ({
+    id: String(u.id),
+    name: String(u.name || u.email || u.id),
+    email: String(u.email || ''),
+    isAdmin: !!u.isAdmin,
+    xp: Number(u.xp || 0),
+    currentLevel: String(u.currentLevel || ''),
+    lastLoginAt: (u.lastLoginAt as string) || null,
+    createdAt: String(u.createdAt || ''),
+    paths: Number((u._count as Record<string, number>)?.learning_paths || 0),
+    sessions: Number((u._count as Record<string, number>)?.teaching_sessions || 0)
+  }))
+}
+
+export async function liveCreateUser(data: { name: string; email: string; password: string; admin: boolean }): Promise<void> {
+  await adminUsersApi.createUser({
+    name: data.name,
+    email: data.email,
+    password: data.password,
+    role: data.admin ? 'admin' : 'user'
+  })
+  await fetchLiveUsers()
+}
+
+export async function liveDeleteUser(id: string): Promise<void> {
+  await adminUsersApi.deleteUser(id)
+  liveUsers.value = liveUsers.value.filter((u) => u.id !== id)
+}
+
+export async function liveSetUserRole(id: string, admin: boolean): Promise<void> {
+  await adminUsersApi.updateUserRole(id, admin ? 'admin' : 'user')
+  const u = liveUsers.value.find((x) => x.id === id)
+  if (u) u.isAdmin = admin
+}
+
+export async function liveGetUserDetail(id: string): Promise<Record<string, unknown>> {
+  const res = await adminUsersApi.getUser(id)
+  return res.data?.data ?? res.data ?? {}
+}
+
+/* ================= 学习者模型 ================= */
+export interface LiveLearner {
+  userId: string
+  name: string
+  email: string
+  pathTitle: string | null
+  currentTask: string | null
+  currentMilestone: string | null
+  trend: 'up' | 'down' | 'flat'
+  fatigue: string
+  confidence: number
+  generatedAt: string
+  struggling: string[]
+  fragile: string[]
+}
+
+export const liveLearners = ref<LiveLearner[]>([])
+
+function mapTrend(t?: string): 'up' | 'down' | 'flat' {
+  if (t === 'improving' || t === 'up') return 'up'
+  if (t === 'declining' || t === 'down') return 'down'
+  return 'flat'
+}
+
+function mapFatigue(f?: string): string {
+  return f === 'high' ? '高' : f === 'medium' ? '中' : '低'
+}
+
+async function fetchLiveLearners(): Promise<void> {
+  const res = await adminLearnerModelsApi.list({ limit: 100 })
+  const body = res.data?.data ?? res.data ?? {}
+  const items = body.items || []
+  liveLearners.value = items.map((m: Record<string, unknown>) => ({
+    userId: String(m.userId),
+    name: String(m.userName || m.userId),
+    email: String(m.email || ''),
+    pathTitle: (m.pathTitle as string) || null,
+    currentTask: (m.currentTask as string) || null,
+    currentMilestone: (m.currentMilestone as string) || null,
+    trend: mapTrend(m.recentTrend as string),
+    fatigue: mapFatigue(m.fatigueRisk as string),
+    confidence: Number(m.confidence || 0),
+    generatedAt: String(m.generatedAt || ''),
+    struggling: (m.strugglingConcepts as string[]) || [],
+    fragile: (m.fragileConcepts as string[]) || []
+  }))
+}
+
+export async function liveRecomputeLearner(userId: string): Promise<void> {
+  await adminLearnerModelsApi.recompute(userId)
+  await fetchLiveLearners()
+}
+
+export async function liveGetLearnerDetail(userId: string): Promise<Record<string, unknown>> {
+  const res = await adminLearnerModelsApi.getDetail(userId)
+  return res.data?.data ?? res.data ?? {}
+}
+
+export async function liveGetLearnerEvidence(userId: string): Promise<Record<string, unknown>[]> {
+  const res = await adminLearnerModelsApi.getEvidence(userId, { limit: 20 })
+  const body = res.data?.data ?? res.data ?? {}
+  return body.items || body.evidence || []
+}
+
+/* ================= 虚拟学习者 ================= */
+export interface LiveVirtual {
+  id: string
+  name: string
+  goal: string
+  level: string
+  story: string
+  sessions: number
+  createdAt: string
+  raw: Record<string, unknown>
+}
+
+export const liveVirtuals = ref<LiveVirtual[]>([])
+
+async function fetchLiveVirtuals(): Promise<void> {
+  const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 100 })
+  const body = res.data?.data ?? res.data ?? {}
+  const items = body.profiles || body.items || []
+  liveVirtuals.value = items.map((p: Record<string, unknown>) => {
+    const profile = (p.profile as Record<string, unknown>) || {}
+    return {
+      id: String(p.id),
+      name: String(profile.name || p.userName || p.id),
+      goal: String(p.learningGoal || '未设置目标'),
+      level: String(p.knowledgeLevel || ''),
+      story: String(profile.background || profile.corePersonality || p.notes || ''),
+      sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
+      createdAt: String(p.createdAt || ''),
+      raw: p
+    }
+  })
+}
+
+export async function liveCreateVirtual(data: { name: string; goal: string; story: string; personaSeed?: Record<string, unknown> }): Promise<void> {
+  // personaSeed 存在时展开为完整画像（含 learningStyle 等故事生成必需字段）
+  const profile: Record<string, unknown> = data.personaSeed
+    ? { ...data.personaSeed, background: data.story || data.personaSeed.background }
+    : { background: data.story }
+  await adminVirtualLearnersApi.createVirtualLearner({
+    name: data.name,
+    learningGoal: data.goal,
+    notes: data.story,
+    profile
+  })
+  await fetchLiveVirtuals()
+}
+
+export async function liveDeleteVirtual(id: string): Promise<void> {
+  await adminVirtualLearnersApi.deleteVirtualLearner(id)
+  liveVirtuals.value = liveVirtuals.value.filter((v) => v.id !== id)
+}
+
+export async function liveGetVirtualDetail(id: string): Promise<Record<string, unknown>> {
+  const res = await adminVirtualLearnersApi.getVirtualLearner(id)
+  return res.data?.data ?? res.data ?? {}
+}
+
+/* ================= API 配置 ================= */
+export interface LiveApiConfig {
+  apiUrl: string
+  apiKeyConfigured: boolean
+  availableModels: string[]
+  defaultModel: string
+  defaultReasoningModel: string
+  defaultEvaluationModel: string
+  connectionStatus: string
+  lastCheckedAt: string
+  networkPolicy: {
+    adminAccessMode: 'loopback' | 'private' | 'any'
+    adminAllowedIps: string[]
+    allowPrivateNetwork: boolean
+    privateNetworkHosts: string[]
+  }
+}
+
+export const liveApiConfig = ref<LiveApiConfig | null>(null)
+
+async function fetchLiveApiConfig(): Promise<void> {
+  const res = await adminApiConfigApi.getConfig()
+  const d = res.data?.data ?? res.data ?? {}
+  liveApiConfig.value = {
+    apiUrl: String(d.apiUrl || ''),
+    apiKeyConfigured: !!d.apiKeyConfigured,
+    availableModels: d.availableModels || [],
+    defaultModel: d.defaultModel || '',
+    defaultReasoningModel: d.defaultReasoningModel || '',
+    defaultEvaluationModel: d.defaultEvaluationModel || '',
+    connectionStatus: d.connectionStatus || 'unknown',
+    lastCheckedAt: d.lastCheckedAt || '',
+    networkPolicy: {
+      adminAccessMode: d.networkPolicy?.adminAccessMode || 'private',
+      adminAllowedIps: d.networkPolicy?.adminAllowedIps || [],
+      allowPrivateNetwork: d.networkPolicy?.allowPrivateNetwork !== false,
+      privateNetworkHosts: d.networkPolicy?.privateNetworkHosts || []
+    }
+  }
+}
+
+export async function liveFetchModels(apiUrl: string, apiKey: string): Promise<string[]> {
+  const res = await adminApiConfigApi.testConnection({ apiUrl, apiKey })
+  const d = res.data?.data ?? res.data ?? {}
+  const models = d.models || d.availableModels || []
+  return Array.isArray(models) ? models.map(String) : []
+}
+
+export async function liveSaveApiConfig(data: {
+  apiUrl: string
+  apiKey: string
+  availableModels: string[]
+  defaultModel: string
+  defaultReasoningModel: string
+  defaultEvaluationModel: string
+}): Promise<void> {
+  await adminApiConfigApi.updateConfig(data)
+  await fetchLiveApiConfig()
+}
+
+export async function liveRunModelTest(data: {
+  apiUrl?: string
+  apiKey?: string
+  model: string
+  prompt: string
+}): Promise<{ text: string; latencyMs?: number; usage?: string }> {
+  const res = await adminApiConfigApi.testModel({
+    ...data,
+    temperature: 0.2,
+    maxTokens: 64
+  })
+  const d = res.data?.data ?? res.data ?? {}
+  const usage = d.usage
+    ? `P ${d.usage.prompt_tokens ?? 0} / C ${d.usage.completion_tokens ?? 0} / T ${d.usage.total_tokens ?? 0}`
+    : undefined
+  return {
+    text: String(d.text || d.output || d.content || '（无文本输出）'),
+    latencyMs: d.latencyMs ?? d.durationMs,
+    usage
+  }
+}
+
+export async function liveSaveNetworkPolicy(p: LiveApiConfig['networkPolicy']): Promise<void> {
+  await adminApiConfigApi.updateNetworkPolicy(p)
+  await fetchLiveApiConfig()
+}
+
+/* ================= Prompt Lab ================= */
+export interface LivePromptSource {
+  id: string
+  name: string
+  file: string
+  existsInLab: boolean
+  hasManifest: boolean
+}
+
+export const livePromptSources = ref<LivePromptSource[]>([])
+
+async function fetchLivePromptSources(): Promise<void> {
+  const res = await adminPromptLabApi.getSources()
+  const body = res.data?.data ?? res.data ?? []
+  livePromptSources.value = (Array.isArray(body) ? body : body.sources || []).map((s: Record<string, unknown>) => ({
+    id: String(s.id || s.name),
+    name: String(s.name || s.id),
+    file: String(s.file || ''),
+    existsInLab: !!s.existsInLab,
+    hasManifest: !!s.hasManifest
+  }))
+}
+
+export async function liveGetPromptSource(skillId: string): Promise<string> {
+  const res = await adminPromptLabApi.getSource(skillId)
+  const d = res.data?.data ?? res.data ?? {}
+  return String(d.content ?? d.source ?? d ?? '')
+}
+
+export async function liveCompileSource(skillId: string): Promise<string> {
+  const res = await adminPromptLabApi.compileSource({ skillId })
+  const d = res.data?.data ?? res.data ?? {}
+  return String(d.prompt ?? d.compiled ?? d.output ?? JSON.stringify(d, null, 2))
+}
+
+/* ================= 协议视图 / 规则总览（懒加载缓存） ================= */
+export interface LiveProtocol {
+  id: string
+  title: string
+  statusLabel: string
+  summary: string
+  callSites: string
+}
+
+export interface LiveRule {
+  ruleId: string
+  prefix: string
+  text: string
+  agentId: string
+  agentDisplayName: string
+  source: string
+}
+
+export interface LiveRulesOverview {
+  totalRules: number
+  totalPrefixes: number
+  conflictPrefixCount: number
+  conflictPrefixes: string[]
+  rules: LiveRule[]
+}
+
+let protocolCache: LiveProtocol[] | null = null
+let rulesCache: LiveRulesOverview | null = null
+
+export async function fetchProtocolView(): Promise<LiveProtocol[]> {
+  if (protocolCache) return protocolCache
+  const res = await adminAxios.get('/admin/prompt-ops/protocol-view')
+  const body = res.data?.data ?? res.data ?? {}
+  const items = body.protocols || []
+  const mapped: LiveProtocol[] = items.map((p: Record<string, unknown>) => ({
+    id: String(p.id || ''),
+    title: String(p.title || p.id || ''),
+    statusLabel: String(p.statusLabel || p.status || ''),
+    summary: String(p.summary || ''),
+    callSites: String(p.callSites || '')
+  }))
+  protocolCache = mapped
+  return mapped
+}
+
+export async function fetchRulesOverview(): Promise<LiveRulesOverview> {
+  if (rulesCache) return rulesCache
+  const res = await adminAxios.get('/admin/prompt-ops/skill-rules-overview')
+  const body = res.data?.data ?? res.data ?? {}
+  const summary = body.summary || {}
+  const byPrefix = (body.byPrefix || {}) as Record<string, Record<string, unknown>[]>
+  const rules: LiveRule[] = []
+  for (const list of Object.values(byPrefix)) {
+    for (const r of list || []) {
+      rules.push({
+        ruleId: String(r.ruleId || ''),
+        prefix: String(r.prefix || ''),
+        text: String(r.text || ''),
+        agentId: String(r.agentId || ''),
+        agentDisplayName: String(r.agentDisplayName || ''),
+        source: String(r.source || '')
+      })
+    }
+  }
+  rulesCache = {
+    totalRules: Number(summary.totalRules || rules.length),
+    totalPrefixes: Number(summary.totalPrefixes || 0),
+    conflictPrefixCount: Number(summary.conflictPrefixCount || 0),
+    conflictPrefixes: (body.conflictPrefixes || []).map(String),
+    rules
+  }
+  return rulesCache
+}
+
+/* ================= 编排：Skill 字段目录（真实变量流） ================= */
+export interface LiveCatalogSkill {
+  skillId: string
+  skillName: string
+  inputFields: string[]
+  outputFields: string[]
+}
+
+export interface LiveCatalogAgent {
+  agentId: string
+  agentName: string
+  skills: LiveCatalogSkill[]
+}
+
+export const liveSkillCatalog = ref<LiveCatalogAgent[]>([])
+
+function fieldName(f: unknown): string {
+  if (f == null) return ''
+  if (typeof f === 'string') return f
+  const o = f as Record<string, unknown>
+  return String(o.name || o.fieldId || o.id || o.field || '')
+}
+
+async function fetchLiveSkillCatalog(): Promise<void> {
+  const res = await adminAxios.get('/admin/prompt-ops/skill-catalog')
+  const body = res.data?.data ?? res.data ?? {}
+  const agents = body.agents || []
+  liveSkillCatalog.value = agents.map((a: Record<string, unknown>) => ({
+    agentId: String(a.agentId || ''),
+    agentName: String(a.agentName || a.agentId || ''),
+    skills: ((a.skills as Record<string, unknown>[]) || []).map((s) => ({
+      skillId: String(s.skillId || '').replace(/^skill:/, ''),
+      skillName: String(s.skillName || s.skillId || ''),
+      inputFields: ((s.inputFields as unknown[]) || []).map(fieldName).filter(Boolean),
+      outputFields: ((s.outputFields as unknown[]) || []).map(fieldName).filter(Boolean)
+    }))
+  }))
+}
+
+/* ================= 拓扑 ================= */export interface LiveTopoNode {
+  id: string
+  type: string
+  label: string
+  parentAgentId?: string
+  memberCount?: number
+  stats: { totalCalls: number; failed: number; avgDuration: number }
+}
+
+export const liveTopoNodes = ref<LiveTopoNode[]>([])
+
+async function fetchLiveTopology(): Promise<void> {
+  const res = await adminAxios.get('/admin/agents/topology', { params: { range: '7d' } })
+  const body = res.data?.data ?? res.data ?? {}
+  const nodes = body.nodes || []
+  liveTopoNodes.value = nodes.map((n: Record<string, unknown>) => {
+    const stats = (n.stats as Record<string, unknown>) || {}
+    return {
+      id: String(n.id),
+      type: String(n.type || ''),
+      label: String(n.label || n.id),
+      parentAgentId: n.parentAgentId ? String(n.parentAgentId) : undefined,
+      memberCount: n.memberCount != null ? Number(n.memberCount) : undefined,
+      stats: {
+        totalCalls: Number(stats.totalCalls || 0),
+        failed: Number(stats.failed || 0),
+        avgDuration: Number(stats.avgDuration || 0)
+      }
+    }
+  })
+}
+
+/* ================= 平台注册开关 ================= */
+export const registrationEnabled = ref<boolean | null>(null)
+
+export async function fetchRegistrationSetting(): Promise<void> {
+  const res = await adminAxios.get('/admin/settings/registration')
+  const d = res.data?.data ?? res.data ?? {}
+  registrationEnabled.value = d.registrationEnabled !== false
+}
+
+export async function updateRegistrationSetting(enabled: boolean): Promise<void> {
+  await adminAxios.put('/admin/settings/registration', { registrationEnabled: enabled })
+  registrationEnabled.value = enabled
+}
+
+/* ================= 平台公告 ================= */
+export interface LiveAnnouncement {
+  id: string
+  title: string
+  body: string
+  severity: 'info' | 'warning' | 'critical'
+  status: 'draft' | 'published' | 'archived'
+  publishedAt: string | null
+  expiresAt: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+export const liveAnnouncements = ref<LiveAnnouncement[]>([])
+
+async function fetchLiveAnnouncements(): Promise<void> {
+  const res = await adminAxios.get('/admin/announcements')
+  const body = res.data?.data ?? res.data ?? {}
+  const items = body.items || []
+  liveAnnouncements.value = items.map((a: Record<string, unknown>) => ({
+    id: String(a.id),
+    title: String(a.title || ''),
+    body: String(a.body || ''),
+    severity: (a.severity as LiveAnnouncement['severity']) || 'info',
+    status: (a.status as LiveAnnouncement['status']) || 'draft',
+    publishedAt: (a.publishedAt as string) || null,
+    expiresAt: (a.expiresAt as string) || null,
+    createdBy: (a.createdBy as string) || null,
+    createdAt: String(a.createdAt || '')
+  }))
+}
+
+export async function liveCreateAnnouncement(data: {
+  title: string
+  body: string
+  severity: string
+  expiresAt?: string | null
+  publishNow: boolean
+}): Promise<void> {
+  await adminAxios.post('/admin/announcements', data)
+  await fetchLiveAnnouncements()
+}
+
+export async function livePublishAnnouncement(id: string): Promise<void> {
+  await adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/publish`)
+  await fetchLiveAnnouncements()
+}
+
+export async function liveArchiveAnnouncement(id: string): Promise<void> {
+  await adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/archive`)
+  await fetchLiveAnnouncements()
+}
+
+export async function liveDeleteAnnouncement(id: string): Promise<void> {
+  await adminAxios.delete(`/admin/announcements/${encodeURIComponent(id)}`)
+  liveAnnouncements.value = liveAnnouncements.value.filter((a) => a.id !== id)
+}
+
+/* ================= 总入口 ================= */
 export async function loadLiveData() {
   liveLoading.value = true
   liveError.value = ''
-  try {
-    const [spans, skills, overview] = await Promise.all([
-      fetchLiveSpans(),
-      fetchLiveSkills(),
-      fetchLiveOverview()
-    ])
-    liveSpans.value = spans
-    liveSkillStatsMap.value = skills
-    liveOverview.value = overview
-    dataSource.value = 'live'
-  } catch (e) {
-    const err = e as { response?: { status?: number }; message?: string }
-    liveError.value = err?.response?.status === 401
-      ? '需要 admin 登录'
-      : `真实数据拉取失败：${err?.message || '网络错误'}`
-    dataSource.value = 'demo'
-  } finally {
-    liveLoading.value = false
+  liveFailures.value = {}
+
+  const jobs: Record<string, () => Promise<unknown>> = {
+    spans: async () => { liveSpans.value = await fetchLiveSpans() },
+    skills: async () => { liveSkillStatsMap.value = await fetchLiveSkills() },
+    overview: async () => { liveOverview.value = await fetchLiveOverview() },
+    users: fetchLiveUsers,
+    learners: fetchLiveLearners,
+    virtuals: fetchLiveVirtuals,
+    apiConfig: fetchLiveApiConfig,
+    prompts: fetchLivePromptSources,
+    topology: fetchLiveTopology,
+    catalog: fetchLiveSkillCatalog,
+    registration: fetchRegistrationSetting,
+    announcements: fetchLiveAnnouncements
   }
+
+  // spans 先于 overview（overview 的待办从 spans 推导）
+  try {
+    await jobs.spans()
+  } catch (e) {
+    liveFailures.value.spans = errMsg(e)
+  }
+  const { spans: _s, overview, ...rest } = jobs
+  const entries = Object.entries({ overview, ...rest })
+  await Promise.all(
+    entries.map(async ([key, fn]) => {
+      try {
+        await fn()
+      } catch (e) {
+        liveFailures.value[key] = errMsg(e)
+      }
+    })
+  )
+
+  liveLoading.value = false
+
+  // 核心域（日志）失败才算整体失败；其余局部降级
+  if (liveFailures.value.spans && !liveSpans.value?.length) {
+    liveError.value = `真实数据拉取失败：${liveFailures.value.spans}`
+    dataSource.value = 'demo'
+    return
+  }
+  dataSource.value = 'live'
+  const failedKeys = Object.keys(liveFailures.value)
+  liveError.value = failedKeys.length ? `部分数据不可用：${failedKeys.join('、')}` : ''
 }
 
 export function backToDemo() {
   dataSource.value = 'demo'
   liveError.value = ''
 }
+
+/** live 模式是否可用（页面用于分支） */
+export const isLive = computed(() => dataSource.value === 'live')

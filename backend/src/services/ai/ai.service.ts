@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger';
 import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
 import { StudentStateAssessment } from './state-assessment.service';
 import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import type { RetryBudget } from '../../gateway/api-gateway/retry-budget';
 
 // AI 配置 - 主模型
 const AI_MODEL = process.env.AI_MODEL;
@@ -325,6 +326,7 @@ class AIService {
     action?: string;
     allowReasoningFallback?: boolean;
     sanitizeUserVisible?: boolean;
+    retryBudget?: RetryBudget;
   }) {
     const startTime = Date.now();
     let result: any = null;
@@ -355,7 +357,10 @@ class AIService {
           max_tokens: options?.maxTokens
         },
         caller,
-        { requestPath: '/services/ai/chat' }
+        {
+          requestPath: '/services/ai/chat',
+          retryBudget: options?.retryBudget
+        }
       );
 
 
@@ -436,12 +441,7 @@ class AIService {
       error = e;
       logger.error('AI 请求失败:', e);
 
-      // 检查网络错误
-      if (e.code === 'ECONNREFUSED') {
-        throw new Error('AI 服务连接失败，请检查服务是否启动');
-      }
-
-      throw new Error(`AI 服务错误：${e.message}`);
+      throw e;
     }
   }
 

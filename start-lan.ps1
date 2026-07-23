@@ -300,14 +300,39 @@ function Get-LocalIPAddress {
         return $PreferredIP.Trim()
     }
 
+    # 虚拟/回环网卡别名关键字（不区分大小写）。这些网卡只在主机内部使用，
+    # 不在真实局域网里，选它们会导致同局域网设备无法访问。
+    $virtualInterfacePatterns = @(
+        'Loopback*', 'vEthernet*', 'VMware*', 'VirtualBox*', 'Docker*',
+        'WSL*', 'Hyper-V*', 'Default Switch*', 'Meta*', 'TAP*', 'Tunnel*',
+        'Pseudo*'
+    )
+
     try {
-        $ip = (Get-NetIPAddress -AddressFamily IPv4 |
-               Where-Object {
-                   $_.InterfaceAlias -notlike "Loopback*" -and
-                   $_.IPAddress -notlike "169.254.*" -and
-                   ($_.IPAddress -like "192.168.*" -or $_.IPAddress -like "10.*" -or $_.IPAddress -like "172.16.*" -or $_.IPAddress -like "172.17.*" -or $_.IPAddress -like "172.18.*" -or $_.IPAddress -like "172.19.*" -or $_.IPAddress -like "172.20.*" -or $_.IPAddress -like "172.21.*" -or $_.IPAddress -like "172.22.*" -or $_.IPAddress -like "172.23.*" -or $_.IPAddress -like "172.24.*" -or $_.IPAddress -like "172.25.*" -or $_.IPAddress -like "172.26.*" -or $_.IPAddress -like "172.27.*" -or $_.IPAddress -like "172.28.*" -or $_.IPAddress -like "172.29.*" -or $_.IPAddress -like "172.30.*" -or $_.IPAddress -like "172.31.*")
-                } |
-                Select-Object -First 1 -ExpandProperty IPAddress)
+        $candidates = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.InterfaceAlias -notlike "Loopback*" -and
+                $_.IPAddress -notlike "169.254.*" -and
+                ($_.IPAddress -like "192.168.*" -or
+                 $_.IPAddress -like "10.*" -or
+                 ($_.IPAddress -like "172.*" -and
+                  $_.IPAddress -notlike "172.26.*" -and
+                  $_.IPAddress -notlike "172.27.*")) }
+
+        # 排除虚拟网卡
+        $physical = $candidates | Where-Object {
+            $alias = $_.InterfaceAlias
+            $isVirtual = $false
+            foreach ($pattern in $virtualInterfacePatterns) {
+                if ($alias -like $pattern) { $isVirtual = $true; break }
+            }
+            -not $isVirtual
+        }
+
+        $ip = ($physical | Select-Object -First 1).IPAddress
+        if ([string]::IsNullOrWhiteSpace($ip)) {
+            $ip = ($candidates | Select-Object -First 1).IPAddress
+        }
 
         if (-not [string]::IsNullOrWhiteSpace($ip)) {
             return $ip

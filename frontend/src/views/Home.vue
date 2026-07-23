@@ -134,27 +134,13 @@
         <div class="home-compare-grid">
           <article class="compare-card compare-card--muted">
             <span>常见开始方式</span>
-            <h2>先收藏课程、资料和教程。</h2>
+            <h3>先收藏课程、资料和教程。</h3>
             <p>内容越来越多，但今天该做什么仍然不清楚。</p>
           </article>
           <article class="compare-card compare-card--strong">
             <span>WenFlow 的开始方式</span>
-            <h2>先说出一个真实场景。</h2>
+            <h3>先说出一个真实场景。</h3>
             <p>系统会继续追问边界、基础和时间，再生成第一步。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="how" class="home-how">
-        <div class="section-head">
-          <span class="home-kicker">怎么开始</span>
-          <h2>不用先想完整计划，先说一句真实需求。</h2>
-        </div>
-        <div class="home-flow">
-          <article v-for="(step, idx) in flowSteps" :key="step.title" class="flow-card">
-            <span>{{ String(idx + 1).padStart(2, '0') }}</span>
-            <strong>{{ step.title }}</strong>
-            <p>{{ step.desc }}</p>
           </article>
         </div>
       </section>
@@ -237,13 +223,6 @@ const mobileActionBarVisible = ref(false);
 const productFlowRef = ref<HTMLElement | null>(null);
 const productFlowInView = ref(false);
 let productFlowObserver: IntersectionObserver | null = null;
-
-const flowSteps = [
-  { title: '先说出真实场景', desc: '不用整理成学习目标，先说最近卡在哪里、想做到什么。' },
-  { title: '一起缩小范围', desc: '确认基础、时间和限制，把目标压到今天可以开始。' },
-  { title: '生成第一版路径', desc: '先得到一条可执行路线，后面可以随着学习继续调整。' },
-  { title: '边学边确认', desc: '通过对话、练习和复盘，确认你能不能在自己的场景里用出来。' }
-];
 
 const previewCards = [
   { label: '目标规划', title: '把“我想学 Python”变成“先完成一个 Excel 自动化任务”。', desc: '把模糊目标先压缩成一个可以开始的真实任务。' },
@@ -802,7 +781,7 @@ onUnmounted(() => {
   border-color: rgba(52, 120, 246, 0.14);
 }
 
-.compare-card h2 {
+.compare-card h3 {
   margin: 0;
   font-size: 28px;
   letter-spacing: -0.035em;

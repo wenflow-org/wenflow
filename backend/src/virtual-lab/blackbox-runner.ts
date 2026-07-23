@@ -463,11 +463,21 @@ export class BlackboxVirtualLearnerRunner {
       observation: state.blackbox?.publicTrace?.slice(-1)[0]?.observation || null,
       control: state.blackbox?.control || {},
       publicTrace: state.blackbox?.publicTrace || [],
+      refereeTrace: this.compactTrace(state.blackbox?.refereeTrace, 120).map((entry: any) => ({
+        timestamp: String(entry?.timestamp || ''),
+        traceId: typeof entry?.traceId === 'string' ? entry.traceId : null,
+        diagnostic: this.sanitizeDiagnostic(entry?.diagnostic)
+      })),
       refereeTraceCount: state.blackbox?.refereeTrace?.length || 0,
       latestRefereeReport: this.latestRefereeReport(state),
       refereeReportCount: state.blackbox?.refereeReports?.length || 0,
       latestActorAuditReport: this.latestActorAuditReport(state),
       actorAuditReportCount: state.blackbox?.actorAuditReports?.length || 0,
+      // 角色私有状态（latest + trace）—— 供前端可视化"虚拟学习者脑子里在想什么"
+      learnerPrivateState: state.blackbox?.learnerPrivateState || {},
+      learnerPrivateStateTraceCount: Array.isArray(state.blackbox?.learnerPrivateStateTrace)
+        ? state.blackbox.learnerPrivateStateTrace.length : 0,
+      learnerPrivateStateTrace: this.compactLearnerPrivateStateTrace(state.blackbox?.learnerPrivateStateTrace),
       stateTimeline: {
         scope: 'current-run',
         actor: {
@@ -1702,6 +1712,53 @@ export class BlackboxVirtualLearnerRunner {
     if (items.length <= limit) return items
     const edge = Math.floor(limit / 2)
     return [...items.slice(0, edge), ...items.slice(-edge)]
+  }
+
+  // 私有状态轨迹（learnerPrivateStateTrace）的展示序列化：去掉 state 内部的大对象重影，
+  // 只保留前端"私有状态时间线"需要的索引字段与精简 metrics/flags。
+  private compactLearnerPrivateStateTrace(raw: any): Array<Record<string, unknown>> {
+    const trace = Array.isArray(raw) ? raw.slice(-120) : []
+    return trace.map((entry: any, index: number) => {
+      const stage = entry?.stage === 'learning' ? 'learning' : 'goal'
+      const actorState = entry?.state && typeof entry.state === 'object' ? entry.state : {}
+      const feedback = actorState.learnerFeedback && typeof actorState.learnerFeedback === 'object'
+        ? actorState.learnerFeedback : {}
+      const metricKeys = stage === 'goal'
+        ? ['feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance', 'executionConcern', 'goalReadiness']
+        : ['taskUnderstanding', 'conceptualMastery', 'proceduralMastery', 'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad']
+      const feedbackKeys = stage === 'learning' ? ['satisfaction', 'confidence'] : []
+      const metrics = Object.fromEntries([
+        ...metricKeys.map((key) => [key, this.displayActorMetric(actorState[key])]),
+        ...feedbackKeys.map((key) => [key, this.displayActorMetric(feedback[key])])
+      ].filter(([, value]) => value !== null))
+      const flagKeys = stage === 'goal'
+        ? ['willingToTry', 'readyToProceed', 'wantsClarification', 'readyToAdvance']
+        : ['wantsHint', 'wantsWorkedExample', 'readyForNextTask']
+      const feedbackFlagKeys = stage === 'learning' ? ['selfReportedTaskDone', 'wantsMoreHelp', 'stopAsking'] : []
+      const flags = Object.fromEntries([
+        ...flagKeys.map((key) => [key, actorState[key]]),
+        ...feedbackFlagKeys.map((key) => [key, feedback[key]])
+      ].filter(([, value]) => typeof value === 'boolean'))
+      const blockers = stage === 'goal'
+        ? actorState.remainingUnknowns
+        : Array.isArray(feedback.remainingBlockers) && feedback.remainingBlockers.length
+          ? feedback.remainingBlockers : actorState.remainingBlockers
+      return {
+        sequence: Number.isInteger(entry?.sequence) ? entry.sequence : index,
+        stage,
+        taskId: typeof entry?.taskId === 'string' ? entry.taskId : null,
+        transition: this.timelineText(entry?.transition, 64),
+        emotion: this.timelineText(entry?.emotion || actorState.emotion, 64),
+        phaseFocus: this.timelineText(actorState.phaseFocus, 64),
+        degraded: entry?.degraded === true || actorState.degraded === true,
+        visibleSignal: this.timelineText(entry?.visibleSignal, 240),
+        stateChangeReason: this.timelineText(entry?.stateChangeReason, 320),
+        metrics,
+        flags,
+        blockers: Array.isArray(blockers) ? blockers.map((item: any) => this.timelineText(item, 240)).filter(Boolean).slice(0, 5) : [],
+        generatedAt: this.timelineText(entry?.generatedAt, 64)
+      }
+    })
   }
 
   private reportFingerprint(input: unknown, evaluator: Record<string, unknown>) {

@@ -10333,12 +10333,14 @@ export namespace Prisma {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
   }
 
   export type Skill_model_configsSumAggregateOutputType = {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
   }
 
   export type Skill_model_configsMinAggregateOutputType = {
@@ -10353,6 +10355,7 @@ export namespace Prisma {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
     enabled: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -10370,6 +10373,7 @@ export namespace Prisma {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
     enabled: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -10387,6 +10391,7 @@ export namespace Prisma {
     temperature: number
     maxTokens: number
     requestTimeoutMs: number
+    maxLogicalRetries: number
     enabled: number
     createdAt: number
     updatedAt: number
@@ -10398,12 +10403,14 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
   }
 
   export type Skill_model_configsSumAggregateInputType = {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
   }
 
   export type Skill_model_configsMinAggregateInputType = {
@@ -10418,6 +10425,7 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
     enabled?: true
     createdAt?: true
     updatedAt?: true
@@ -10435,6 +10443,7 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
     enabled?: true
     createdAt?: true
     updatedAt?: true
@@ -10452,6 +10461,7 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
     enabled?: true
     createdAt?: true
     updatedAt?: true
@@ -10556,6 +10566,7 @@ export namespace Prisma {
     temperature: number
     maxTokens: number
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
     enabled: boolean
     createdAt: Date
     updatedAt: Date
@@ -10592,6 +10603,7 @@ export namespace Prisma {
     temperature?: boolean
     maxTokens?: boolean
     requestTimeoutMs?: boolean
+    maxLogicalRetries?: boolean
     enabled?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -10609,6 +10621,7 @@ export namespace Prisma {
     temperature?: boolean
     maxTokens?: boolean
     requestTimeoutMs?: boolean
+    maxLogicalRetries?: boolean
     enabled?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -10626,6 +10639,7 @@ export namespace Prisma {
     temperature?: boolean
     maxTokens?: boolean
     requestTimeoutMs?: boolean
+    maxLogicalRetries?: boolean
     enabled?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -10647,6 +10661,7 @@ export namespace Prisma {
       temperature: number
       maxTokens: number
       requestTimeoutMs: number | null
+      maxLogicalRetries: number | null
       enabled: boolean
       createdAt: Date
       updatedAt: Date
@@ -11054,6 +11069,7 @@ export namespace Prisma {
     readonly temperature: FieldRef<"skill_model_configs", 'Float'>
     readonly maxTokens: FieldRef<"skill_model_configs", 'Int'>
     readonly requestTimeoutMs: FieldRef<"skill_model_configs", 'Int'>
+    readonly maxLogicalRetries: FieldRef<"skill_model_configs", 'Int'>
     readonly enabled: FieldRef<"skill_model_configs", 'Boolean'>
     readonly createdAt: FieldRef<"skill_model_configs", 'DateTime'>
     readonly updatedAt: FieldRef<"skill_model_configs", 'DateTime'>
@@ -18489,6 +18505,7 @@ export namespace Prisma {
     temperature: 'temperature',
     maxTokens: 'maxTokens',
     requestTimeoutMs: 'requestTimeoutMs',
+    maxLogicalRetries: 'maxLogicalRetries',
     enabled: 'enabled',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -19521,6 +19538,7 @@ export namespace Prisma {
     temperature?: FloatFilter<"skill_model_configs"> | number
     maxTokens?: IntFilter<"skill_model_configs"> | number
     requestTimeoutMs?: IntNullableFilter<"skill_model_configs"> | number | null
+    maxLogicalRetries?: IntNullableFilter<"skill_model_configs"> | number | null
     enabled?: BoolFilter<"skill_model_configs"> | boolean
     createdAt?: DateTimeFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeFilter<"skill_model_configs"> | Date | string
@@ -19538,6 +19556,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrderInput | SortOrder
+    maxLogicalRetries?: SortOrderInput | SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -19558,6 +19577,7 @@ export namespace Prisma {
     temperature?: FloatFilter<"skill_model_configs"> | number
     maxTokens?: IntFilter<"skill_model_configs"> | number
     requestTimeoutMs?: IntNullableFilter<"skill_model_configs"> | number | null
+    maxLogicalRetries?: IntNullableFilter<"skill_model_configs"> | number | null
     enabled?: BoolFilter<"skill_model_configs"> | boolean
     createdAt?: DateTimeFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeFilter<"skill_model_configs"> | Date | string
@@ -19575,6 +19595,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrderInput | SortOrder
+    maxLogicalRetries?: SortOrderInput | SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -19600,6 +19621,7 @@ export namespace Prisma {
     temperature?: FloatWithAggregatesFilter<"skill_model_configs"> | number
     maxTokens?: IntWithAggregatesFilter<"skill_model_configs"> | number
     requestTimeoutMs?: IntNullableWithAggregatesFilter<"skill_model_configs"> | number | null
+    maxLogicalRetries?: IntNullableWithAggregatesFilter<"skill_model_configs"> | number | null
     enabled?: BoolWithAggregatesFilter<"skill_model_configs"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"skill_model_configs"> | Date | string
@@ -21271,6 +21293,7 @@ export namespace Prisma {
     temperature?: number
     maxTokens?: number
     requestTimeoutMs?: number | null
+    maxLogicalRetries?: number | null
     enabled?: boolean
     createdAt?: Date | string
     updatedAt: Date | string
@@ -21288,6 +21311,7 @@ export namespace Prisma {
     temperature?: number
     maxTokens?: number
     requestTimeoutMs?: number | null
+    maxLogicalRetries?: number | null
     enabled?: boolean
     createdAt?: Date | string
     updatedAt: Date | string
@@ -21305,6 +21329,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -21322,6 +21347,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -21339,6 +21365,7 @@ export namespace Prisma {
     temperature?: number
     maxTokens?: number
     requestTimeoutMs?: number | null
+    maxLogicalRetries?: number | null
     enabled?: boolean
     createdAt?: Date | string
     updatedAt: Date | string
@@ -21356,6 +21383,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -21373,6 +21401,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -22946,6 +22975,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -22955,6 +22985,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
   }
 
   export type skill_model_configsMaxOrderByAggregateInput = {
@@ -22969,6 +23000,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -22986,6 +23018,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -22995,6 +23028,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
   }
 
   export type skill_registrationsCountOrderByAggregateInput = {
