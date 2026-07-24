@@ -30,6 +30,11 @@ import {
   sanitizeUnderstanding,
   buildCollected
 } from '../../skills/goal-understanding-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import {
+  adaptGoalConversationEnvelope,
+  type RuntimeEnvelope,
+} from '../../services/prompt-lab/envelope-adapter';
 
 export interface QuickReply {
   text: string;
@@ -60,6 +65,8 @@ export interface GoalConversationInternal {
 export interface GoalConversationAgentResult {
   userVisible: string;
   internal: GoalConversationInternal;
+  /** 统一运行契约 envelope（C2 试点，不替换 agent-output-v1） */
+  runtimeEnvelope?: RuntimeEnvelope;
   debug?: {
     attemptCount?: number;
     actualRetryCount?: number;
@@ -80,6 +87,20 @@ export interface GoalConversationAgentResult {
     }>;
     structuredOutputValid?: boolean;
   };
+}
+
+const GOAL_RUNTIME_CONTRACT = buildDefaultRuntimeContract('goal-conversation', 'conversational');
+
+function buildGoalRuntimeEnvelope(
+  result: Pick<GoalConversationAgentResult, 'userVisible' | 'internal'>,
+  status: 'succeeded' | 'partial' | 'blocked' | 'failed' = 'succeeded',
+  reason: string | null = null
+): RuntimeEnvelope {
+  return adaptGoalConversationEnvelope(result, {
+    contract: GOAL_RUNTIME_CONTRACT,
+    status,
+    reason,
+  });
 }
 
 interface StageControlOptions {
@@ -596,7 +617,7 @@ function parseGoalConversationResponse(
     ];
   }
 
-  return {
+  const parsed: GoalConversationAgentResult = {
     userVisible: dialogueText,
     internal: {
       core: {
@@ -617,6 +638,8 @@ function parseGoalConversationResponse(
       }
     }
   };
+  parsed.runtimeEnvelope = buildGoalRuntimeEnvelope(parsed, 'succeeded');
+  return parsed;
 }
 
 function buildStructuredOutputErrorMessage(attemptCount: number): string {
@@ -821,6 +844,7 @@ export async function goalConversationAgentHandler(
         success: true,
         userVisible: observedResult.userVisible,
         internal: observedResult.internal,
+        runtimeEnvelope: observedResult.runtimeEnvelope || buildGoalRuntimeEnvelope(observedResult, 'partial', 'observation-mode'),
         renderHints: {
           component: 'goal-conversation',
           quickReplies: observedResult.internal.ext.goalConversation.quickReplies || []
@@ -850,26 +874,33 @@ export async function goalConversationAgentHandler(
     }
 
     if (!retryInfo.structuredOutputValid) {
+      const invalidInternal: GoalConversationInternal = {
+        core: {
+          stage: input.metadata?.previousStage === 'proposing' || input.metadata?.previousStage === 'ready'
+            ? 'proposing'
+            : 'understanding',
+          confidence: typeof previousState?.confidence === 'number' ? previousState.confidence : 0,
+          isCompleted: false
+        },
+        ext: {
+          goalConversation: {
+            understanding: previousUnderstanding || {},
+            nextQuestions: [],
+            collected: previousState?.collected || {}
+          }
+        }
+      };
+      const invalidVisible = buildStructuredOutputErrorMessage(retryInfo.attemptCount);
       return {
         success: false,
         error: 'STRUCTURED_OUTPUT_INVALID',
-        userVisible: buildStructuredOutputErrorMessage(retryInfo.attemptCount),
-        internal: {
-          core: {
-            stage: input.metadata?.previousStage === 'proposing' || input.metadata?.previousStage === 'ready'
-              ? 'proposing'
-              : 'understanding',
-            confidence: typeof previousState?.confidence === 'number' ? previousState.confidence : 0,
-            isCompleted: false
-          },
-          ext: {
-            goalConversation: {
-              understanding: previousUnderstanding || {},
-              nextQuestions: [],
-              collected: previousState?.collected || {}
-            }
-          }
-        },
+        userVisible: invalidVisible,
+        internal: invalidInternal,
+        runtimeEnvelope: buildGoalRuntimeEnvelope(
+          { userVisible: invalidVisible, internal: invalidInternal },
+          'failed',
+          'STRUCTURED_OUTPUT_INVALID'
+        ),
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
@@ -900,10 +931,12 @@ export async function goalConversationAgentHandler(
       confirmProposal: input.metadata?.confirmProposal === true
     });
 
+    const runtimeEnvelope = result.runtimeEnvelope || buildGoalRuntimeEnvelope(result, 'succeeded');
     return {
       success: true,
       userVisible: result.userVisible,
       internal: result.internal,
+      runtimeEnvelope,
       renderHints: {
         component: 'goal-conversation',
         quickReplies: result.internal.ext.goalConversation.quickReplies || []
@@ -930,24 +963,30 @@ export async function goalConversationAgentHandler(
       }
     };
   } catch (error: any) {
+    const failedInternal: GoalConversationInternal = {
+      core: {
+        stage: 'understanding',
+        confidence: 0,
+        isCompleted: false
+      },
+      ext: {
+        goalConversation: {
+          understanding: input.metadata?.previousUnderstanding || {},
+          nextQuestions: [],
+          collected: {}
+        }
+      }
+    };
     return {
       success: false,
       error: error.message || 'Unknown error',
       userVisible: '抱歉，我刚才走神了，能再说一遍吗？',
-      internal: {
-        core: {
-          stage: 'understanding',
-          confidence: 0,
-          isCompleted: false
-        },
-        ext: {
-          goalConversation: {
-            understanding: input.metadata?.previousUnderstanding || {},
-            nextQuestions: [],
-            collected: {}
-          }
-        }
-      },
+      internal: failedInternal,
+      runtimeEnvelope: buildGoalRuntimeEnvelope(
+        { userVisible: '抱歉，我刚才走神了，能再说一遍吗？', internal: failedInternal },
+        'failed',
+        error.message || 'Unknown error'
+      ),
       schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'skill:goal-conversation',
@@ -998,9 +1037,10 @@ export async function runGoalConversationAgent(params: {
   if (!result.success || !result.internal) {
     const errorMessage = typeof result.error === 'string' ? result.error : result.error?.message;
     if (errorMessage === 'STRUCTURED_OUTPUT_INVALID' && result.internal) {
-      return {
+      const invalidResult: GoalConversationAgentResult = {
         userVisible: result.userVisible || '',
         internal: result.internal as GoalConversationInternal,
+        runtimeEnvelope: result.runtimeEnvelope as RuntimeEnvelope | undefined,
         debug: {
           attemptCount: Number(result.debug?.attemptCount || 0),
           actualRetryCount: Number(result.debug?.actualRetryCount || 0),
@@ -1018,13 +1058,18 @@ export async function runGoalConversationAgent(params: {
           structuredOutputValid: false
         }
       };
+      if (!invalidResult.runtimeEnvelope) {
+        invalidResult.runtimeEnvelope = buildGoalRuntimeEnvelope(invalidResult, 'failed', 'STRUCTURED_OUTPUT_INVALID');
+      }
+      return invalidResult;
     }
     throw new Error(errorMessage || 'Goal conversation agent failed');
   }
 
-  return {
+  const successResult: GoalConversationAgentResult = {
     userVisible: result.userVisible || '',
     internal: result.internal as GoalConversationInternal,
+    runtimeEnvelope: result.runtimeEnvelope as RuntimeEnvelope | undefined,
     debug: {
       attemptCount: Number(result.debug?.attemptCount || 0),
       actualRetryCount: Number(result.debug?.actualRetryCount || 0),
@@ -1042,4 +1087,8 @@ export async function runGoalConversationAgent(params: {
       structuredOutputValid: result.debug?.structuredOutputValid === true
     }
   };
+  if (!successResult.runtimeEnvelope) {
+    successResult.runtimeEnvelope = buildGoalRuntimeEnvelope(successResult, 'succeeded');
+  }
+  return successResult;
 }

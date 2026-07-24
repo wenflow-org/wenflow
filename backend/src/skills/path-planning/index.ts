@@ -20,6 +20,8 @@ import {
 import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 type ChatMessage = { role: MessageRole; content: string };
@@ -150,8 +152,11 @@ interface PathOutput {
     rawModelOutput?: string;
     extractedJson?: string;
   };
+  runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
   milestones: MilestoneOutput[];
 }
+
+const PATH_RUNTIME_CONTRACT = buildDefaultRuntimeContract('path-planning', 'generator');
 
 /**
  * Path Agent 定义
@@ -615,6 +620,15 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
         extractedJson: '',
       }
     }),
+    mapEnvelope: (output) => adaptToRuntimeEnvelope({
+      contract: PATH_RUNTIME_CONTRACT,
+      artifact: output,
+      phase: 'core-path-generated',
+      status: 'succeeded',
+      isTerminal: true,
+      nextAction: null,
+      nextState: null,
+    }),
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });
 
   if (!result.success || !result.output) {
@@ -623,6 +637,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
 
   return {
     ...result.output,
+    runtimeEnvelope: result.runtimeEnvelope,
     _debug: {
       rawModelOutput: result.debug.rawModelOutput,
       extractedJson: result.debug.extractedJson || undefined,

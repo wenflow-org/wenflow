@@ -1,9 +1,16 @@
+import {
+  normalizeRuntimeContract,
+  renderRuntimeContractSection,
+  type RuntimeContract,
+} from './runtime-contract';
+
 interface PromptLabManifestLike {
   skillId: string;
   agentId: string;
   name: string;
   archetype: string;
   description: string;
+  runtimeContract?: unknown;
 }
 
 interface SourceSection {
@@ -256,7 +263,7 @@ function buildStateMachineSection(stages: string, stageLogic: string) {
   return joinNonEmpty(parts);
 }
 
-function buildOutputSection(outputSchema: string, outputGuidance: string, format: string) {
+function buildOutputSection(outputSchema: string, outputGuidance: string, format: string, runtimeContract?: RuntimeContract) {
   const parts: string[] = [];
 
   if (format) {
@@ -267,6 +274,10 @@ function buildOutputSection(outputSchema: string, outputGuidance: string, format
   const outputSkeleton = buildOutputSkeleton(outputSchema);
   parts.push('### 输出 JSON 结构');
   parts.push(stringifyJsonBlock(outputSkeleton));
+
+  if (runtimeContract) {
+    parts.push(renderRuntimeContractSection(runtimeContract));
+  }
 
   if (outputSchema.trim()) {
     parts.push('### 字段说明');
@@ -299,6 +310,10 @@ export function compilePromptLabSourceDeterministic(
   const examples = findSection(sections, 'Examples');
 
   const inputSkeleton = buildInputSkeleton(input);
+  const runtimeContract = normalizeRuntimeContract(manifest.runtimeContract, {
+    skillId: manifest.skillId,
+    archetype: manifest.archetype,
+  });
 
   const compiled = joinNonEmpty([
     '## 身份定义',
@@ -315,7 +330,7 @@ export function compilePromptLabSourceDeterministic(
       ? joinNonEmpty(['## 状态机', buildStateMachineSection(stages, stageLogic)])
       : '',
     '## 输出规格',
-    buildOutputSection(outputSchema, outputGuidance, format),
+    buildOutputSection(outputSchema, outputGuidance, format, runtimeContract),
     '## 边界约束',
     constraints || '无额外边界约束。',
     qualityControl ? joinNonEmpty(['## 质量控制', qualityControl]) : '',

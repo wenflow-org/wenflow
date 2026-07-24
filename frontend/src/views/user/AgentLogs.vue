@@ -1,5 +1,5 @@
 ﻿<template>
-  <CapabilityShell title="调用日志" description="查看模型调用状态、错误信息和诊断数据，用于问题排查。">
+  <CapabilityShell title="调用日志">
     <template #actions>
       <div class="actions">
         <button type="button" class="btn btn--ghost btn--sm" :disabled="exporting" @click="exportLogs('json')">
@@ -70,50 +70,23 @@
       </el-form>
     </div>
 
-    <el-alert
-      title="报错反馈建议"
-      description="遇到问题？打开失败记录并复制排查信息，发送给技术支持。"
-      type="info"
-      show-icon
-      class="feedback-alert"
-    />
-
-    <!-- 统计信息 -->
     <div v-if="!loadError" class="stats">
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">总调用次数</div>
-              <div class="value">{{ pagination.total }}</div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">当前页成功率</div>
-              <div class="value">{{ successRate }}%</div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">当前页平均耗时</div>
-              <div class="value">{{ avgDuration }}ms</div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover">
-            <div class="stat-item">
-              <div class="label">当前页 Token</div>
-              <div class="value">{{ totalTokens }}</div>
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
+      <div class="stat-card">
+        <span>总调用</span>
+        <strong>{{ pagination.total }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>成功率</span>
+        <strong>{{ successRate }}%</strong>
+      </div>
+      <div class="stat-card">
+        <span>平均耗时</span>
+        <strong>{{ avgDuration }}ms</strong>
+      </div>
+      <div class="stat-card">
+        <span>Token</span>
+        <strong>{{ totalTokens }}</strong>
+      </div>
     </div>
 
     <!-- 日志列表 -->
@@ -126,70 +99,50 @@
 
       <template v-else>
       <div class="logs-table-panel">
-        <div class="logs-table-panel__header">
-          <div>
-            <h3>详细日志</h3>
-            <p>展示完整日志记录。默认隐藏平台底层调用，避免和业务 Agent 记录混淆。</p>
-          </div>
-        </div>
-
         <div class="logs-table-panel__scroller">
       <el-table :data="displayLogs" v-loading="loading" style="width: 100%">
-        <el-table-column prop="agentId" label="Agent" width="150">
+        <el-table-column prop="agentId" label="Agent" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">
-            <span>{{ formatAgentId(row.agentId) }}</span>
+            {{ formatAgentId(row.agentId) }}
           </template>
         </el-table-column>
-        <el-table-column label="记录来源" width="120">
+        <el-table-column label="来源" width="80">
           <template #default="{ row }">
             <el-tag :type="getLogSourceType(row)" size="small" effect="plain">
               {{ getLogSourceLabel(row) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="能力类型" width="120">
+        <el-table-column label="能力" width="88">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ getCapabilityTypeLabel(row.agentId) }}</el-tag>
+            {{ getCapabilityTypeLabel(row.agentId) }}
           </template>
         </el-table-column>
-        <el-table-column prop="success" label="状态" width="100">
+        <el-table-column prop="success" label="状态" width="70">
           <template #default="{ row }">
-            <el-tag :type="row.success ? 'success' : 'danger'">
+            <el-tag :type="row.success ? 'success' : 'danger'" size="small">
               {{ row.success ? '成功' : '失败' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="durationMs" label="耗时 (ms)" width="100" />
-        <el-table-column prop="tokensUsed" label="Token" width="80" />
-        <el-table-column label="模型来源" width="160">
+        <el-table-column prop="durationMs" label="耗时" width="70" />
+        <el-table-column prop="tokensUsed" label="Token" width="70" />
+        <el-table-column label="模型" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="getModelSourceInfo(row).usesUserProvider ? 'success' : 'info'" size="small">
-              {{ getModelSourceInfo(row).label }}
-            </el-tag>
+            {{ getModelSourceInfo(row).label }}
           </template>
         </el-table-column>
-        <el-table-column label="Provider" width="180" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ getModelSourceInfo(row).providerName }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="error" label="错误信息" show-overflow-tooltip />
-        <el-table-column prop="calledAt" label="时间" width="180">
+        <el-table-column prop="error" label="错误" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="calledAt" label="时间" width="140">
           <template #default="{ row }">
             {{ formatDate(row.calledAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <div class="table-actions">
-              <el-button class="table-action-btn table-action-btn--detail" text bg @click="viewDetail(row)">
-                <el-icon><View /></el-icon>
-                查看详情
-              </el-button>
-              <el-button class="table-action-btn table-action-btn--copy" text bg @click="copyLogFeedback(row)">
-                <el-icon><CopyDocument /></el-icon>
-                复制反馈包
-              </el-button>
+              <el-button link type="primary" @click="viewDetail(row)">详情</el-button>
+              <el-button link type="primary" @click="copyLogFeedback(row)">复制</el-button>
             </div>
           </template>
         </el-table-column>
@@ -219,14 +172,6 @@
       width="min(880px, calc(100vw - 32px))"
       :fullscreen="isMobileDetail"
     >
-      <el-alert
-        title="先看状态、错误信息、模型来源；确认后可一键复制反馈包给开发者"
-        type="info"
-        show-icon
-        :closable="false"
-        class="detail-alert"
-      />
-
       <div v-loading="detailLoading" v-if="currentLog" class="detail-panel">
         <el-alert
           v-if="detailError"
@@ -285,7 +230,7 @@
         <el-button class="dialog-btn dialog-btn--close" @click="detailVisible = false">关闭</el-button>
         <el-button class="dialog-btn dialog-btn--copy" :disabled="!currentLog" @click="copyLogFeedback(currentLog)">
           <el-icon><CopyDocument /></el-icon>
-          复制反馈包
+          复制
         </el-button>
       </template>
     </el-dialog>
@@ -295,7 +240,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
-import { CopyDocument, DocumentCopy, Download, View } from '@element-plus/icons-vue';
+import { CopyDocument, DocumentCopy, Download } from '@element-plus/icons-vue';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
@@ -757,6 +702,12 @@ const copyText = async (text: string, successMessage: string) => {
   --brand-soft: #e8f4fb;
   --accent-ink: #0f766e;
   --accent-soft: #e8f7f5;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  gap: 16px;
 
   .actions {
     display: flex;
@@ -766,51 +717,74 @@ const copyText = async (text: string, successMessage: string) => {
   }
 
   .filters {
-    margin-bottom: 20px;
-    padding: 18px 20px 2px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 24px;
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(20px);
-    box-shadow: var(--shadow-md);
+    margin: 0;
+    padding: 14px 16px 4px;
+    border: 1px solid var(--line, #e3e9f4);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    min-width: 0;
   }
 
-  .feedback-alert {
-    margin-bottom: 20px;
+  :deep(.filters .el-form) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
   }
 
-  :deep(.feedback-alert .el-alert__title) {
-    color: #184a69;
-    font-weight: 700;
+  :deep(.filters .el-form-item) {
+    margin-bottom: 10px;
+    margin-right: 0;
+  }
+
+  :deep(.filters .el-select) {
+    width: 140px;
+  }
+
+  :deep(.filters .el-date-editor) {
+    width: 260px;
   }
 
   .stats {
-    margin-bottom: 20px;
+    margin: 0;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
 
-      .stat-item {
-        text-align: center;
+  .stat-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--line, #e3e9f4);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    display: grid;
+    gap: 6px;
 
-        .label {
-          font-size: 14px;
-          color: var(--text-secondary);
-          margin-bottom: 8px;
-        }
-
-        .value {
-          font-size: 24px;
-          font-weight: bold;
-          color: var(--text-primary);
-        }
-      }
+    span {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted, #5b6577);
     }
 
+    strong {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--ink, #172033);
+      line-height: 1.2;
+    }
+  }
+
   .logs-list {
-    padding: 20px;
-    border: 1px solid rgba(52, 120, 246, 0.08);
-    border-radius: 24px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 255, 0.72));
-    backdrop-filter: blur(20px);
-    box-shadow: 0 18px 34px rgba(31, 87, 204, 0.07);
+    padding: 16px;
+    border: 1px solid var(--line, #e3e9f4);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+    min-width: 0;
+    overflow: hidden;
 
     .log-card-grid {
       display: grid;
@@ -833,14 +807,6 @@ const copyText = async (text: string, successMessage: string) => {
         font-size: 13px;
         color: var(--text-secondary);
       }
-    }
-
-    :deep(.stats .el-card) {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 250, 255, 0.78));
-      border: 1px solid rgba(52, 120, 246, 0.08);
-      backdrop-filter: blur(20px);
-      border-radius: 20px;
-      box-shadow: 0 16px 30px rgba(31, 87, 204, 0.07);
     }
 
     .log-card {
@@ -941,54 +907,33 @@ const copyText = async (text: string, successMessage: string) => {
 
     .logs-table-panel {
       min-width: 0;
-
-      &__header {
-        margin-bottom: 16px;
-
-        h3 {
-          margin: 0 0 8px;
-          font-size: 18px;
-          color: var(--el-text-color-primary);
-        }
-
-        p {
-          margin: 0;
-          color: var(--el-text-color-secondary);
-          line-height: 1.6;
-          max-width: 680px;
-        }
-      }
+      width: 100%;
 
       &__scroller {
+        width: 100%;
+        max-width: 100%;
         overflow-x: auto;
       }
 
       :deep(.el-table) {
-        min-width: 1120px;
+        width: 100% !important;
+      }
+
+      :deep(.el-table__header),
+      :deep(.el-table__body) {
+        width: 100% !important;
       }
 
       .table-actions {
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 2px;
       }
 
-      .table-action-btn {
-        border-radius: 8px;
-        font-weight: 600;
-        width: 100%;
-        justify-content: flex-start;
-      }
-
-      .table-action-btn--detail {
-        color: var(--brand-ink);
-        --el-fill-color-light: var(--brand-soft);
-      }
-
-      .table-action-btn--copy {
-        color: var(--accent-ink);
-        --el-fill-color-light: var(--accent-soft);
+      .table-actions :deep(.el-button) {
+        margin-left: 0;
+        padding: 0 4px;
       }
     }
 
@@ -1042,14 +987,7 @@ const copyText = async (text: string, successMessage: string) => {
     }
 
     .stats {
-      :deep(.el-row) {
-        row-gap: 12px;
-      }
-
-      :deep(.el-col) {
-        max-width: 100%;
-        flex: 0 0 100%;
-      }
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     :deep(.filters .el-form) {

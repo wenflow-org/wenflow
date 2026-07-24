@@ -1,8 +1,5 @@
 <template>
-  <CapabilityShell
-    title="开发者接入"
-    description="以个人中心为入口，统一查看 API 调用方式、可用能力域和第三方接入路线。"
-  >
+  <CapabilityShell title="开发者接入">
     <div class="developer-access-page">
       <el-result v-if="!overviewLoading && overviewError" icon="error" title="开发者概览加载失败" :sub-title="overviewError">
         <template #extra>
@@ -11,40 +8,22 @@
       </el-result>
 
       <template v-else-if="!overviewLoading">
-      <section class="hero glass-card">
-        <div>
-      <p class="hero-eyebrow">开发者工具</p>
-          <h1>第三方接入工作台</h1>
-          <p>当前版本支持基于 JWT 的 API 调用接入，SDK / Webhook / 插件市场按阶段开放。</p>
-        </div>
-            <el-tag type="success" effect="plain">{{ overview.authMode === 'jwt-bearer' ? 'JWT Bearer Token' : (overview.authMode || '未配置') }}</el-tag>
-      </section>
-
       <section class="status-grid">
         <el-card class="glass-card">
-          <template #header>接入状态</template>
+          <template #header>状态</template>
           <div class="status-list">
-            <div class="status-item"><span>认证方式</span><strong>{{ overview.authMode === 'jwt-bearer' ? 'JWT Bearer Token' : (overview.authMode || '未配置') }}</strong></div>
+            <div class="status-item"><span>认证</span><strong>{{ overview.authMode === 'jwt-bearer' ? 'JWT Bearer' : (overview.authMode || '未配置') }}</strong></div>
             <div class="status-item"><span>SDK</span><strong>{{ overview.sdkStatus === 'planned' ? '规划中' : (overview.sdkStatus || '未配置') }}</strong></div>
             <div class="status-item"><span>Webhook</span><strong>{{ overview.webhookStatus === 'planned' ? '规划中' : (overview.webhookStatus || '未配置') }}</strong></div>
             <div class="status-item"><span>插件市场</span><strong>{{ overview.pluginMarketplaceStatus === 'planned' ? '规划中' : (overview.pluginMarketplaceStatus || '未配置') }}</strong></div>
           </div>
         </el-card>
-
-        <el-card class="glass-card">
-          <template #header>建议接入顺序</template>
-          <ol class="steps-list">
-            <li>先联调 Goal Conversation API</li>
-            <li>接 Learning Paths API 做结果闭环</li>
-            <li>最后在用户侧绑定平台已发布的 Agent 与 Skill</li>
-          </ol>
-        </el-card>
       </section>
 
       <section class="endpoints glass-card">
         <div class="section-title-row">
-          <h2>可用 API 组</h2>
-          <el-button link type="primary" @click="$router.push('/docs')">查看完整文档</el-button>
+          <h2>API 组</h2>
+          <el-button link type="primary" @click="$router.push('/docs')">文档</el-button>
         </div>
         <div class="endpoint-group" v-for="group in overview.endpointGroups || []" :key="group.name">
           <div class="group-header">
@@ -60,8 +39,8 @@
 
       <section class="quickstart glass-card">
         <div class="section-title-row">
-          <h2>快速接入（Quickstart）</h2>
-          <el-button size="small" :disabled="quickstartLoading || !quickstart" @click="copyQuickstart">复制示例</el-button>
+          <h2>Quickstart</h2>
+          <el-button size="small" :disabled="quickstartLoading || !quickstart" @click="copyQuickstart">复制</el-button>
         </div>
         <el-result v-if="!quickstartLoading && quickstartError" icon="error" title="Quickstart 加载失败" :sub-title="quickstartError">
           <template #extra>

@@ -66,6 +66,55 @@
       </table>
     </section>
 
+    <!-- Runtime Contract -->
+    <section v-if="agent.runtimeContract" class="eng-section">
+      <h4>运行时契约</h4>
+      <p v-if="agent.runtimeContractSource" class="eng-section__desc">
+        来源：
+        <code>{{ agent.runtimeContractSource === 'manifest' ? 'prompt-lab/manifests' : 'buildDefaultRuntimeContract' }}</code>
+      </p>
+      <table class="kv-table">
+        <tbody>
+          <tr>
+            <th>version</th>
+            <td><code>{{ agent.runtimeContract.version }}</code></td>
+          </tr>
+          <tr>
+            <th>contextMode</th>
+            <td><code>{{ agent.runtimeContract.contextMode }}</code></td>
+          </tr>
+          <tr v-if="agent.runtimeContract.businessState">
+            <th>domain</th>
+            <td><code>{{ agent.runtimeContract.businessState.domain }}</code></td>
+          </tr>
+          <tr v-if="agent.runtimeContract.businessState">
+            <th>phases</th>
+            <td><code>{{ agent.runtimeContract.businessState.phases?.join(', ') }}</code></td>
+          </tr>
+          <tr v-if="agent.runtimeContract.businessState">
+            <th>defaultPhase</th>
+            <td><code>{{ agent.runtimeContract.businessState.defaultPhase }}</code></td>
+          </tr>
+          <tr v-if="agent.runtimeContract.businessState">
+            <th>terminalPhases</th>
+            <td><code>{{ agent.runtimeContract.businessState.terminalPhases?.join(', ') }}</code></td>
+          </tr>
+          <tr v-if="agent.runtimeContract.contextUpdate">
+            <th>contextUpdate.mode</th>
+            <td><code>{{ agent.runtimeContract.contextUpdate.mode }}</code></td>
+          </tr>
+          <tr v-if="agent.runtimeContract.contextUpdate">
+            <th>contextUpdate.stateOwner</th>
+            <td><code>{{ agent.runtimeContract.contextUpdate.stateOwner }}</code></td>
+          </tr>
+          <tr>
+            <th>outputEnvelope</th>
+            <td><code>{{ agent.runtimeContract.outputEnvelope }}</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- .ts 兜底 -->
     <section v-if="agent.tsFallback" class="eng-section">
       <h4>.ts 兜底常量</h4>
@@ -127,6 +176,27 @@ interface Props {
     } | null;
     drift?: string | null;
     tsFallback?: { file?: string; constName?: string; [key: string]: unknown } | null;
+    runtimeContract?: {
+      version?: string;
+      contextMode?: string;
+      businessState?: {
+        domain?: string;
+        phases?: string[];
+        defaultPhase?: string;
+        terminalPhases?: string[];
+        statusValues?: string[];
+        [key: string]: unknown;
+      } | null;
+      contextUpdate?: {
+        mode?: string;
+        stateOwner?: string;
+        description?: string;
+        [key: string]: unknown;
+      } | null;
+      outputEnvelope?: string;
+      [key: string]: unknown;
+    } | null;
+    runtimeContractSource?: 'manifest' | 'default' | null;
     [key: string]: unknown;
   };
 }

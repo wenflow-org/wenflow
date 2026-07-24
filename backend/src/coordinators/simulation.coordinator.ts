@@ -699,8 +699,23 @@ class SimulationOrchestrator {
 
     return {
       success: !!output?.reply,
-      output
+      output,
+      // simulation-refresh：优先 envelope.contextUpdate.nextState，再回退 output.learnerState
+      learnerStateFromEnvelope:
+        output?.runtimeEnvelope?.contextUpdate?.nextState
+        || output?.learnerState
+        || null,
+      runtimeEnvelope: output?.runtimeEnvelope || null,
     };
+  }
+
+  private resolveSimLearnerState(skillOutput: any, fallback: any = {}) {
+    const fromEnvelope = skillOutput?.runtimeEnvelope?.contextUpdate?.nextState;
+    if (fromEnvelope && typeof fromEnvelope === 'object') return fromEnvelope;
+    if (skillOutput?.learnerState && typeof skillOutput.learnerState === 'object') {
+      return skillOutput.learnerState;
+    }
+    return fallback || {};
   }
 
   private finalizeGoalLearnerState(
@@ -1155,8 +1170,14 @@ class SimulationOrchestrator {
             output: {
               reply: openingReply,
               thoughtProcess: openingResult.output?.debug?.stateChangeReason,
-              learnerState: this.finalizeGoalLearnerState(profile, openingResult.output?.learnerState || {}, storyContext, 'understanding'),
+              learnerState: this.finalizeGoalLearnerState(
+                profile,
+                this.resolveSimLearnerState(openingResult.output, openingResult.learnerStateFromEnvelope || {}),
+                storyContext,
+                'understanding'
+              ),
               emotion: openingResult.output?.emotion,
+              runtimeEnvelope: openingResult.runtimeEnvelope || openingResult.output?.runtimeEnvelope || null,
               opening: true
             }
           }
@@ -1291,7 +1312,10 @@ class SimulationOrchestrator {
 
       const currentGoalLearnerState = this.finalizeGoalLearnerState(
         profile,
-        virtualReplyResult.output?.learnerState || {},
+        this.resolveSimLearnerState(
+          virtualReplyResult.output,
+          virtualReplyResult.learnerStateFromEnvelope || {}
+        ),
         activeStoryContext,
         existingGoalState.finalStage || existingGoalState.stage || goalState?.stage
       );
@@ -1305,7 +1329,8 @@ class SimulationOrchestrator {
               reply: virtualReplyResult.output?.reply,
             thoughtProcess: virtualReplyResult.output?.debug?.stateChangeReason,
             learnerState: currentGoalLearnerState,
-            emotion: virtualReplyResult.output?.emotion
+            emotion: virtualReplyResult.output?.emotion,
+            runtimeEnvelope: virtualReplyResult.runtimeEnvelope || virtualReplyResult.output?.runtimeEnvelope || null,
           }
         }
       });
@@ -1320,7 +1345,8 @@ class SimulationOrchestrator {
         ...existingGoalState,
         concernPool,
         disclosedConcerns: nextDisclosedConcerns,
-        learnerState: currentGoalLearnerState
+        learnerState: currentGoalLearnerState,
+        lastRuntimeEnvelope: virtualReplyResult.runtimeEnvelope || virtualReplyResult.output?.runtimeEnvelope || null,
       });
       
       const goalResponseStart = Date.now();
@@ -1809,6 +1835,9 @@ class SimulationOrchestrator {
       if (!reactionOutput?.reaction) {
         throw new Error('虚拟用户 Path 评审结果无效');
       }
+
+      // path-evaluator envelope 仅作观测；决策仍读 debug.internalDecision
+      const pathReviewEnvelope = reactionOutput?.runtimeEnvelope || null;
       
       const decision = ['accept', 'modify', 'reject'].includes(reactionOutput.debug?.internalDecision)
         ? reactionOutput.debug.internalDecision as 'accept' | 'modify' | 'reject'
@@ -1827,13 +1856,15 @@ class SimulationOrchestrator {
             confidence: reactionOutput.debug?.internalConfidence ?? null,
             visibleRequestedChanges,
             biggestConcern,
-            learningPathId: session.learningPathId
+            learningPathId: session.learningPathId,
+            runtimeEnvelope: pathReviewEnvelope,
           }
         }
       });
       
       await this.updateStageResults(sessionId, 'path_review', {
         success: true,
+        lastRuntimeEnvelope: pathReviewEnvelope,
         status: 'pending',
         decision,
         reaction: reactionOutput.reaction,
@@ -2310,14 +2341,16 @@ class SimulationOrchestrator {
         frictionBudget: this.getSessionFrictionBudget(session),
       });
 
+      const resolvedLearnState = this.resolveSimLearnerState(virtualReplyOutput);
       const virtualReplyResult = {
         success: !!virtualReplyOutput?.reply,
         userVisible: virtualReplyOutput?.reply || '',
-        learnerState: virtualReplyOutput?.learnerState,
+        learnerState: resolvedLearnState,
         learnerFeedback: virtualReplyOutput?.learnerFeedback,
+        runtimeEnvelope: virtualReplyOutput?.runtimeEnvelope || null,
         internal: {
           emotion: virtualReplyOutput?.emotion,
-          learnerState: virtualReplyOutput?.learnerState,
+          learnerState: resolvedLearnState,
           learnerFeedback: virtualReplyOutput?.learnerFeedback,
         }
       };
@@ -2337,6 +2370,7 @@ class SimulationOrchestrator {
             currentTask: currentTask.title,
             currentMilestone: currentMilestone.title,
             learnerState: virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState,
+            runtimeEnvelope: virtualReplyResult.runtimeEnvelope,
             learnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
             emotion: virtualReplyResult.internal?.emotion
           }

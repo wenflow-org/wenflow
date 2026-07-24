@@ -1257,6 +1257,7 @@ export class AITeachingOrchestrator {
       throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
     }
 
+    const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
     const rawTeachingOutput = extractTeachingOutput(turnResult);
     const promptDebug = extractTeachingPromptDebug(turnResult);
     const { teachingOutput, existingPoints } = reconcileTeachingKnowledgeState(context, rawTeachingOutput, frozenKnowledgeState);
@@ -1267,7 +1268,29 @@ export class AITeachingOrchestrator {
         teachingOutput.knowledge.points
       )
     );
+    // 知识完成度仍是 completion 的唯一硬门禁；envelope phase 仅作观测 soft 信号
     const completionReady = isKnowledgeStateComplete(mergedKnowledge);
+    const envelopeCompletionSignal =
+      turnRuntimeEnvelope?.businessState?.phase === 'completion-candidate'
+      || turnRuntimeEnvelope?.businessState?.isTerminal === true;
+    // soft-AND：双方都同意完成时记 alignment=agree；仅 envelope 喊完成时 disagree（不改变硬门禁）
+    const completionAlignment: 'agree' | 'envelope-only' | 'knowledge-only' | 'neither' =
+      completionReady && envelopeCompletionSignal
+        ? 'agree'
+        : !completionReady && envelopeCompletionSignal
+          ? 'envelope-only'
+          : completionReady && !envelopeCompletionSignal
+            ? 'knowledge-only'
+            : 'neither';
+    if (completionAlignment === 'envelope-only' || completionAlignment === 'knowledge-only') {
+      logger.info('[AITeaching] completion soft-AND 分歧', {
+        sessionId: session.id,
+        completionAlignment,
+        knowledgeComplete: completionReady,
+        envelopePhase: turnRuntimeEnvelope?.businessState?.phase || null,
+        envelopeTerminal: turnRuntimeEnvelope?.businessState?.isTerminal === true,
+      });
+    }
     const effectiveTeachingOutput: TeachingTurnOutput = {
       ...teachingOutput,
       control: {
@@ -1279,6 +1302,7 @@ export class AITeachingOrchestrator {
     const peerTriggered = peerTriggerService.shouldTrigger(session, teachingOutput, message);
     let peerMessage: string | undefined;
     let peerDebug: any = null;
+    let peerRuntimeEnvelope: any = null;
 
     if (peerTriggered) {
       const peerInput = {
@@ -1302,6 +1326,9 @@ export class AITeachingOrchestrator {
         });
         peerMessage = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
         peerDebug = extractPeerDebug(peerResult);
+        peerRuntimeEnvelope = peerResult?.runtimeEnvelope
+          || peerResult?.internal?.ext?.peer?.runtimeEnvelope
+          || null;
       } catch (e: any) {
         logger.warn('[AITeachingCoordinator] peer-reinforcement 失败', { error: e?.message || String(e) });
       }
@@ -1472,6 +1499,11 @@ export class AITeachingOrchestrator {
       classroomEventHistory: classroomEvents.slice(-40),
       stageHistory,
       teachingControlContext,
+      lastRuntimeEnvelope: turnRuntimeEnvelope,
+      lastBusinessPhase: turnRuntimeEnvelope?.businessState?.phase || null,
+      envelopeCompletionSignal: !!envelopeCompletionSignal,
+      completionAlignment,
+      lastPeerRuntimeEnvelope: peerRuntimeEnvelope,
       sessionArtifacts: {
         ...parseSessionArtifacts(session.teachingState),
         initialKnowledgeState: effectiveInitialKnowledgeState,
@@ -1531,6 +1563,11 @@ export class AITeachingOrchestrator {
       peerMessage,
       promptDebug,
       peerDebug,
+      // 统一运行契约观测（不改变 isCompletion 硬门禁）
+      runtimeEnvelope: turnRuntimeEnvelope,
+      completionAlignment,
+      envelopeCompletionSignal: !!envelopeCompletionSignal,
+      lastBusinessPhase: turnRuntimeEnvelope?.businessState?.phase || null,
       shouldConfirmEnd: completionReady || endIntent.isEndIntent,
       endReason: endIntent.isEndIntent
         ? 'learner-requested-end' as const
@@ -1666,6 +1703,9 @@ export class AITeachingOrchestrator {
 
     const wrapupResult = wrapupOutput.internal.ext.sessionWrapup.result;
     const wrapupArtifact = wrapupOutput.internal.ext.sessionWrapup.artifact;
+    const wrapupRuntimeEnvelope = wrapupOutput?.runtimeEnvelope
+      || wrapupResult?.runtimeEnvelope
+      || null;
 
     const evaluationResult = hasReliableSessionEvaluation(
       wrapupResult.evaluation,
@@ -1712,6 +1752,7 @@ export class AITeachingOrchestrator {
         stateUpdate: finalState,
         summarySource: wrapupResult.summarySource,
         evaluationSource: wrapupResult.evaluationSource,
+        runtimeEnvelope: wrapupRuntimeEnvelope,
       };
       const snapshotInput = {
         userId: session.userId,

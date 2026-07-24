@@ -5,6 +5,8 @@
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig, operationalStagePatterns } from '../../config/pedagogy.config';
 
 export const PATH_SCENE_FRAMING_MAX_TOKENS = 32000;
@@ -354,6 +356,7 @@ export async function pathSceneFraming(
   input: PathSceneFramingInput
 ): Promise<SkillExecutionResult<any>> {
   try {
+    const FRAMING_RUNTIME_CONTRACT = buildDefaultRuntimeContract('path-scene-framing', 'extractor');
     const result = await callPrompt<PathSceneFramingInput, any>({
       agentId: 'skill:path-scene-framing',
       defaultSystemPrompt: PATH_SCENE_FRAMING_PROMPT,
@@ -373,6 +376,15 @@ export async function pathSceneFraming(
         metadata: payload.metadata || {},
       }),
       normalizeOutput: (parsed, payload) => normalizeSceneFramingOutput(parsed, payload),
+      mapEnvelope: (output) => adaptToRuntimeEnvelope({
+        contract: FRAMING_RUNTIME_CONTRACT,
+        artifact: output,
+        phase: 'input-framed',
+        status: 'succeeded',
+        isTerminal: true,
+        nextAction: null,
+        nextState: null,
+      }),
     }, input);
 
     if (!result.success || !result.output) {
@@ -383,6 +395,7 @@ export async function pathSceneFraming(
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

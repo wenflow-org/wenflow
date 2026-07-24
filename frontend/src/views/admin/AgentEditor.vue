@@ -318,6 +318,27 @@ interface AgentOverviewItem {
   tsFallback: { file?: string; constName?: string; [key: string]: unknown } | null;
   drift: 'in-sync' | 'file-vs-db-mismatch' | null;
   schemaLint?: unknown;
+  runtimeContract?: {
+    version?: string;
+    contextMode?: string;
+    businessState?: {
+      domain?: string;
+      phases?: string[];
+      defaultPhase?: string;
+      terminalPhases?: string[];
+      statusValues?: string[];
+      [key: string]: unknown;
+    } | null;
+    contextUpdate?: {
+      mode?: string;
+      stateOwner?: string;
+      description?: string;
+      [key: string]: unknown;
+    } | null;
+    outputEnvelope?: string;
+    [key: string]: unknown;
+  } | null;
+  runtimeContractSource?: 'manifest' | 'default' | null;
 }
 
 interface PromptVersionItem {

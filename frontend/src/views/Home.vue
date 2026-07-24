@@ -304,7 +304,7 @@ onUnmounted(() => {
 <style scoped>
 .home-page {
   --home-ink: #172033;
-  --home-muted: #66758d;
+  --home-muted: #5b6577;
   --home-line: rgba(23, 32, 51, 0.08);
   --home-blue: #3478f6;
   --home-blue-deep: #1f57cc;
@@ -523,7 +523,6 @@ onUnmounted(() => {
 
 .home-hero,
 .home-why,
-.home-how,
 .home-preview,
 .home-product-flow,
 .home-capabilities {
@@ -576,7 +575,6 @@ onUnmounted(() => {
 .home-hero__copy p,
 .section-head p,
 .compare-card p,
-.flow-card p,
 .preview-card p,
 .home-final-cta p {
   margin: 0;
@@ -678,8 +676,7 @@ onUnmounted(() => {
 
 .demo-result__eyebrow,
 .compare-card span,
-.preview-card span,
-.flow-card span {
+.preview-card span {
   color: var(--home-muted);
   font-size: 12px;
   font-weight: 800;
@@ -738,7 +735,6 @@ onUnmounted(() => {
 }
 
 .home-why,
-.home-how,
 .home-preview,
 .home-product-flow,
 .home-capabilities {
@@ -747,10 +743,6 @@ onUnmounted(() => {
 
 .home-why__lead {
   max-width: 780px;
-}
-
-.home-why__title {
-  white-space: nowrap;
 }
 
 .home-why__lead p {
@@ -766,8 +758,7 @@ onUnmounted(() => {
 }
 
 .compare-card,
-.preview-card,
-.flow-card {
+.preview-card {
   display: grid;
   gap: 12px;
   padding: 26px;
@@ -798,13 +789,6 @@ onUnmounted(() => {
   font-size: clamp(34px, 5vw, 58px);
 }
 
-.home-flow {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.flow-card strong,
 .preview-card strong {
   font-size: 18px;
 }
@@ -939,7 +923,7 @@ onUnmounted(() => {
   position: relative;
   margin-top: 60px;
   padding: 104px 24px 118px;
-  background: #121b2d;
+  background: #172033;
   color: #fff;
   overflow: hidden;
 }
@@ -972,10 +956,6 @@ onUnmounted(() => {
   font-size: clamp(40px, 5.4vw, 68px);
   line-height: 1.08;
   letter-spacing: -0.055em;
-}
-
-.home-final-band__title {
-  white-space: nowrap;
 }
 
 .home-final-band p {
@@ -1058,7 +1038,6 @@ onUnmounted(() => {
     max-width: 620px;
   }
 
-  .home-flow,
   .home-product-flow__grid,
   .preview-grid,
   .home-compare-grid {
@@ -1089,7 +1068,6 @@ onUnmounted(() => {
   .site-nav-shell,
   .home-hero,
   .home-why,
-  .home-how,
   .home-preview,
   .home-product-flow,
   .home-capabilities {
@@ -1162,7 +1140,6 @@ onUnmounted(() => {
   }
 
   .home-why,
-  .home-how,
   .home-preview,
   .home-capabilities,
   .home-product-flow {
@@ -1238,30 +1215,17 @@ onUnmounted(() => {
 
   .compare-card,
   .preview-card,
-  .flow-card,
   .product-flow-card {
     gap: 10px;
     padding: 20px 18px;
     border-radius: 22px;
   }
 
-  .compare-card h2 {
+  .compare-card h3 {
     font-size: 23px;
     line-height: 1.18;
   }
 
-  .flow-card {
-    grid-template-columns: auto 1fr;
-    align-items: start;
-    column-gap: 14px;
-  }
-
-  .flow-card span {
-    min-width: 34px;
-    padding-top: 2px;
-  }
-
-  .flow-card strong,
   .preview-card strong,
   .product-flow-card strong {
     font-size: 17px;
@@ -1293,14 +1257,6 @@ onUnmounted(() => {
     font-size: 13px;
   }
 
-  .home-final-band__title {
-    white-space: normal;
-  }
-
-  .home-why__title {
-    white-space: normal;
-  }
-
   .btn,
   .site-cta {
     width: 100%;
@@ -1311,7 +1267,6 @@ onUnmounted(() => {
   .site-nav-shell,
   .home-hero,
   .home-why,
-  .home-how,
   .home-preview,
   .home-product-flow,
   .home-capabilities {

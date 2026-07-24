@@ -47,6 +47,36 @@
         </div>
       </section>
     </div>
+
+    <!-- 开发视角许可（仅 live） -->
+    <section v-if="isLive" class="mk-card ud-grant">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">开发视角许可</h3>
+        <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
+      </div>
+      <p class="ud-grant__copy">
+        仅当用户明确授予协助许可后，才能打开开发调试站进入该用户视角排查问题。
+      </p>
+      <div v-if="grantMessage" class="ud-grant__notice">{{ grantMessage }}</div>
+      <div class="ud-grant__grid">
+        <div><span>开放范围</span><strong>{{ grantScopeLabel }}</strong></div>
+        <div><span>到期时间</span><strong>{{ grantExpiresLabel }}</strong></div>
+        <div><span>协助说明</span><strong>{{ grantNoteLabel }}</strong></div>
+      </div>
+      <div class="ud-grant__actions">
+        <button type="button" class="mk-status__action" :disabled="grantLoading" @click="loadGrant">
+          {{ grantLoading ? '刷新中…' : '刷新许可' }}
+        </button>
+        <button
+          type="button"
+          class="mk-status__action mk-status__action--primary"
+          :disabled="grantStatus !== 'active' || grantOpening"
+          @click="openDebugStation"
+        >
+          {{ grantOpening ? '打开中…' : '打开开发调试站' }}
+        </button>
+      </div>
+    </section>
   </div>
 
   <div v-else class="mk-page">
@@ -61,7 +91,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { subPage, closeSubPage, userDetails, dataSource } from './mockStore'
-import { liveUsers, liveGetUserDetail, timeAgo } from './mockLive'
+import { liveUsers, liveGetUserDetail, timeAgo, errMsg } from './mockLive'
+import { adminUsersApi } from '@/api/adminApi'
+import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
+import { setProjectionToken } from '@/utils/projection'
 
 interface Detail {
   name: string
@@ -76,11 +109,90 @@ interface Detail {
 const liveDetail = ref<Detail | null>(null)
 const isLive = computed(() => dataSource.value === 'live')
 
+const projectionGrant = ref<ProjectionGrant | null>(null)
+const grantLoading = ref(false)
+const grantOpening = ref(false)
+const grantMessage = ref('')
+
+const grantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
+const grantStatusLabel = computed(() => {
+  if (grantStatus.value === 'active') return '已授权协助'
+  if (grantStatus.value === 'expired') return '许可已过期'
+  if (grantStatus.value === 'revoked') return '许可已撤销'
+  return '未授权'
+})
+const grantBadgeCls = computed(() =>
+  grantStatus.value === 'active' ? 'mk-badge--ok' : grantStatus.value === 'expired' ? 'mk-badge--warn' : 'mk-badge--muted'
+)
+const grantScopeLabel = computed(() =>
+  projectionGrant.value?.scope === 'full' ? '完整开发视角' : projectionGrant.value ? '学习台视角' : '—'
+)
+const grantExpiresLabel = computed(() => {
+  const t = projectionGrant.value?.expiresAt
+  if (!t) return '—'
+  const d = new Date(t)
+  return Number.isNaN(d.getTime()) ? String(t) : d.toLocaleString('zh-CN', { hour12: false })
+})
+const grantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '用户未填写协助说明')
+
+async function loadGrant() {
+  const id = subPage.value?.id
+  if (!id || !isLive.value) return
+  grantLoading.value = true
+  grantMessage.value = ''
+  try {
+    const res = await adminUsersApi.getProjectionGrant(id)
+    const body = res.data?.data ?? res.data
+    const list = Array.isArray(body) ? body : body?.items || body?.grants || (body ? [body] : [])
+    const first = list[0] || null
+    projectionGrant.value = normalizeProjectionGrant(first) || normalizeProjectionGrant(body)
+    if (!projectionGrant.value) grantMessage.value = '当前还没有生效中的协助授权。'
+  } catch (e) {
+    projectionGrant.value = null
+    grantMessage.value = `许可读取失败：${errMsg(e)}`
+  } finally {
+    grantLoading.value = false
+  }
+}
+
+async function openDebugStation() {
+  const id = subPage.value?.id
+  if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
+  grantOpening.value = true
+  try {
+    const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
+      scope: projectionGrant.value.scope === 'full' ? 'full' : 'dashboard',
+      entry: 'dashboard'
+    })
+    const body = response?.data || response
+    if (!body?.success && body?.data?.token == null) {
+      // 兼容部分封装直接返回 data
+    }
+    const token = body?.data?.token || body?.token
+    if (!token) throw new Error(body?.error?.message || body?.error || '投影 token 缺失')
+    setProjectionToken(token, {
+      userId: id,
+      userName: liveDetail.value?.name,
+      email: liveDetail.value?.email,
+      scope: projectionGrant.value.scope === 'full' ? 'full' : 'dashboard',
+      source: 'user-projection-grant'
+    })
+    window.open('/admin/test/dashboard', '_blank')
+  } catch (e) {
+    grantMessage.value = `打开失败：${errMsg(e)}`
+  } finally {
+    grantOpening.value = false
+  }
+}
+
 watch(
   () => [subPage.value?.id, isLive.value] as const,
   async ([id, live]) => {
     liveDetail.value = null
+    projectionGrant.value = null
+    grantMessage.value = ''
     if (!id || !live) return
+    void loadGrant()
     const base = liveUsers.value.find((u) => u.id === id)
     try {
       const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
@@ -215,8 +327,47 @@ const d = computed<Detail | undefined>(() => {
 .ud-act:last-child { border-bottom: none; }
 .ud-act__time { color: var(--mk-faint); font-size: 11.5px; white-space: nowrap; }
 
+.ud-grant { margin-top: 0; }
+.ud-grant__copy {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  line-height: 1.6;
+}
+.ud-grant__notice {
+  margin: 0 16px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eef5ff;
+  color: var(--mk-blue);
+  font-size: 12px;
+}
+.ud-grant__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 0 16px 12px;
+}
+.ud-grant__grid div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: 9px;
+  font-size: 12px;
+}
+.ud-grant__grid span { color: var(--mk-faint); font-weight: 700; font-size: 11px; }
+.ud-grant__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 16px 16px;
+}
+
 @media (max-width: 900px) {
   .ud-stats { grid-template-columns: repeat(2, 1fr); }
   .ud-grid { grid-template-columns: 1fr; }
+  .ud-grant__grid { grid-template-columns: 1fr; }
 }
 </style>

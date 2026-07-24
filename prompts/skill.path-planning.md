@@ -8,6 +8,27 @@ maxTokens: 32000
 acceptableAgentIds:
   - skill:path-planning
   - path-agent
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: path-generation
+    phases:
+      - core-path-generated
+      - path-generation-failed
+    defaultPhase: core-path-generated
+    terminalPhases:
+      - core-path-generated
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: none
+    stateOwner: none
+    description: snapshot-context：一次性生成核心路径骨架，无跨轮状态刷新
+  outputEnvelope: adapter
 ---
 
 ## 身份定义

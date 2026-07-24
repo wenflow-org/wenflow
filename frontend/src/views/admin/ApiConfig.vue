@@ -364,7 +364,7 @@
       </div>
     </section>
 
-    <!-- AI 能力探测开关 -->
+    <!-- AI 能力探测开关 + 间隔 -->
     <section class="config-section config-section--full">
       <div class="config-section__head">
         <h2>AI 能力探测</h2>
@@ -383,15 +383,28 @@
             :disabled="!capabilityProbe.loaded"
           />
         </div>
+        <div class="policy-panel__field" style="margin: 12px 0 8px; max-width: 280px">
+          <label style="display:block; font-size:13px; margin-bottom:6px; color:var(--el-text-color-regular)">
+            探测间隔（秒）
+          </label>
+          <el-input-number
+            v-model="capabilityProbe.intervalSec"
+            :min="Math.ceil((capabilityProbe.minIntervalMs || 10000) / 1000)"
+            :max="Math.floor((capabilityProbe.maxIntervalMs || 86400000) / 1000)"
+            :step="30"
+            :disabled="!capabilityProbe.loaded || !capabilityProbe.enabled"
+            controls-position="right"
+            style="width: 100%"
+          />
+        </div>
         <p class="policy-panel__desc">
-          开启后，后端每隔约 2 分钟向已配置的模型服务发送一次极简探活请求
+          开启后，后端按设定间隔向已配置的模型服务发送一次极简探活请求
           （单次约 15 个输入 token），用于实时判断 5 条核心学习链路（目标对话、
-          路径规划、阶段设计、教学回合、阶段收尾）的路由可用性，并在连接与安全
-          页的健康状态条上反映结果。
+          路径规划、阶段设计、教学回合、阶段收尾）的路由可用性。默认关闭。
         </p>
         <p class="policy-panel__desc policy-panel__desc--muted">
-          关闭后将完全停止周期性 LLM 探活请求，可节省少量模型调用开销；
-          但健康状态条会停留在最后一次探测结果，直到再次开启或手动刷新。
+          关闭后将完全停止周期性 LLM 探活请求；健康状态条会停留在最后一次探测结果，
+          直到再次开启或手动刷新。间隔范围 10 秒～24 小时。
         </p>
       </article>
     </section>
@@ -466,9 +479,13 @@ const reliability = reactive({
 });
 
 const capabilityProbe = reactive({
-  enabled: true,
+  enabled: false,
+  intervalSec: 120,
+  minIntervalMs: 10_000,
+  maxIntervalMs: 86_400_000,
   loaded: false,
-  lastPersistedEnabled: true
+  lastPersistedEnabled: false,
+  lastPersistedIntervalSec: 120
 });
 
 const reliabilityHardLimits = reactive({
@@ -582,7 +599,8 @@ const currentConfigSnapshot = computed(() => JSON.stringify({
   retryBaseDelayMs: reliability.retryBaseDelayMs,
   maxRetryAfterMs: reliability.maxRetryAfterMs,
   jitterEnabled: reliability.jitterEnabled,
-  capabilityProbeEnabled: capabilityProbe.enabled
+  capabilityProbeEnabled: capabilityProbe.enabled,
+  capabilityProbeIntervalSec: capabilityProbe.intervalSec
 }))
 
 const dirtyCount = computed(() => {
@@ -643,8 +661,15 @@ async function loadConfig() {
     }
     if (probeResult.status === 'fulfilled') {
       const probeData = probeResult.value.data?.data || {};
-      capabilityProbe.enabled = probeData.enabled !== false;
+      capabilityProbe.enabled = probeData.enabled === true;
       capabilityProbe.lastPersistedEnabled = capabilityProbe.enabled;
+      const intervalMs = Number(probeData.intervalMs);
+      capabilityProbe.intervalSec = Number.isFinite(intervalMs) && intervalMs > 0
+        ? Math.round(intervalMs / 1000)
+        : 120;
+      capabilityProbe.lastPersistedIntervalSec = capabilityProbe.intervalSec;
+      if (typeof probeData.minIntervalMs === 'number') capabilityProbe.minIntervalMs = probeData.minIntervalMs;
+      if (typeof probeData.maxIntervalMs === 'number') capabilityProbe.maxIntervalMs = probeData.maxIntervalMs;
       capabilityProbe.loaded = true;
     } else {
       loadError.value = loadError.value || '连接配置已加载，但 AI 能力探测设置暂时不可用';
@@ -690,11 +715,20 @@ async function saveReliabilitySettings() {
 
 async function saveCapabilityProbe() {
   if (!capabilityProbe.loaded) return false;
-  if (capabilityProbe.enabled === capabilityProbe.lastPersistedEnabled) return false;
-  const resp = await adminCapabilityProbeApi.updateSettings(capabilityProbe.enabled);
+  const enabledChanged = capabilityProbe.enabled !== capabilityProbe.lastPersistedEnabled;
+  const intervalChanged = capabilityProbe.intervalSec !== capabilityProbe.lastPersistedIntervalSec;
+  if (!enabledChanged && !intervalChanged) return false;
+  const payload: { enabled?: boolean; intervalMs?: number } = {};
+  if (enabledChanged) payload.enabled = capabilityProbe.enabled;
+  if (intervalChanged) payload.intervalMs = Math.round(capabilityProbe.intervalSec * 1000);
+  const resp = await adminCapabilityProbeApi.updateSettings(payload);
   const data = resp.data?.data;
-  if (data && typeof data.enabled === 'boolean') {
-    capabilityProbe.lastPersistedEnabled = data.enabled;
+  if (data) {
+    if (typeof data.enabled === 'boolean') capabilityProbe.lastPersistedEnabled = data.enabled;
+    if (typeof data.intervalMs === 'number') {
+      capabilityProbe.intervalSec = Math.round(data.intervalMs / 1000);
+      capabilityProbe.lastPersistedIntervalSec = capabilityProbe.intervalSec;
+    }
   }
   return true;
 }

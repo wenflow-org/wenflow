@@ -215,16 +215,83 @@ const emit = defineEmits<{
   'update:visible': [value: boolean]
 }>()
 
+type QuickLearnStatus = 'queued' | 'running' | 'completed' | 'failed' | 'aborted' | 'interrupted' | string
+
+interface QuickLearnTask {
+  taskId: string
+  title: string
+  status: string
+  learnable: boolean
+}
+
+interface QuickLearnMilestone {
+  stageNumber: number | string
+  tasks: QuickLearnTask[]
+}
+
+interface QuickLearnPath {
+  pathId: string
+  title: string
+  milestones: QuickLearnMilestone[]
+}
+
+interface QuickLearnLifecycle {
+  sessionClosed?: boolean
+  wrapupGenerated?: boolean
+  taskCompleted?: boolean
+  outboxConsumerDone?: boolean
+  warnings?: string[]
+}
+
+interface QuickLearnReport {
+  lifecycle: QuickLearnLifecycle
+  learnerDelta: {
+    metrics: {
+      changed: string[]
+      before: Record<string, number | null>
+      after: Record<string, number | null>
+    }
+    knowledge: {
+      newMastered: string[]
+      newRecurringConfusions: string[]
+    }
+  }
+  downstream: {
+    nextTask: { taskId: string; title?: string } | null
+    replan: {
+      signalChanged: boolean
+      after?: { shouldSuggest?: boolean; priority?: string | null } | null
+    }
+  }
+}
+
+interface QuickLearnRun {
+  runId: string
+  pathId: string
+  taskId: string
+  status: QuickLearnStatus
+  turns: number
+  teachingSessionId?: string | null
+  error?: string | null
+  createdAt?: string | null
+  report?: QuickLearnReport | null
+}
+
+interface ApiErrorLike {
+  response?: { data?: { error?: string } }
+  message?: string
+}
+
 const tasksLoading = ref(false)
-const taskTree = ref<any[]>([])
+const taskTree = ref<QuickLearnPath[]>([])
 const selectedTaskId = ref('')
 const maxTurns = ref(25)
 const starting = ref(false)
 const cloning = ref(false)
 const openingFrontend = ref(false)
 const fixtureSourcePathId = ref('')
-const currentRun = ref<any | null>(null)
-const historyRuns = ref<any[]>([])
+const currentRun = ref<QuickLearnRun | null>(null)
+const historyRuns = ref<QuickLearnRun[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const running = computed(() => currentRun.value && isActiveStatus(currentRun.value.status))
@@ -233,14 +300,23 @@ const lifecycle = computed(() => report.value?.lifecycle || null)
 
 const resultTitle = computed(() => {
   if (!currentRun.value) return ''
-  if (currentRun.value.status === 'completed') return '本节课已完成'
+  if (currentRun.value.status === 'completed') return '这节课已写入该账号'
   if (currentRun.value.status === 'aborted') return '本次运行已中止'
   return '本次运行未达成完成条件'
 })
 
-function flattenTasks(path: any) {
-  return path.milestones.flatMap((milestone: any) =>
-    milestone.tasks.map((task: any) => ({
+const resultDesc = computed(() => {
+  if (!currentRun.value) return ''
+  if (currentRun.value.status === 'completed') {
+    return '现在可以打开普通前台页面，看这个虚拟账号的路径、课堂结果和学习状态。'
+  }
+  if (currentRun.value.status === 'aborted') return '已停止继续驱动该账号学习，已产生的课堂记录仍保留在平台。'
+  return '系统未确认这节课完成；可以先查看课堂结果和路径状态，再决定是否重跑。'
+})
+
+function flattenTasks(path: QuickLearnPath) {
+  return path.milestones.flatMap((milestone) =>
+    milestone.tasks.map((task) => ({
       taskId: task.taskId,
       label: `${milestone.stageNumber}. ${task.title}${task.status === 'completed' ? '（已完成）' : ''}`,
       learnable: task.learnable,
@@ -284,7 +360,12 @@ function formatTime(value: string | null) {
   return new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-async function openFrontend(entry: 'evaluation' | 'path' | 'learning-state' | 'next-task' | 'dashboard') {
+function apiErrorMessage(error: unknown, fallback: string) {
+  const value = error as ApiErrorLike
+  return value.response?.data?.error || value.message || fallback
+}
+
+async function openFrontend(entry: 'evaluation' | 'path' | 'task' | 'learning-state' | 'next-task' | 'dashboard') {
   if (!currentRun.value) return
 
   let target = '/dashboard?projection=1'
@@ -296,6 +377,8 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'learning-state' | 'n
     target = `/learn/${currentRun.value.taskId}/evaluation/${currentRun.value.teachingSessionId}?pathId=${currentRun.value.pathId}&projection=1`
   } else if (entry === 'path') {
     target = `/learning-path/${currentRun.value.pathId}?projection=1`
+  } else if (entry === 'task') {
+    target = `/learn/${currentRun.value.taskId}?pathId=${currentRun.value.pathId}&projection=1`
   } else if (entry === 'learning-state') {
     target = '/learning-state?projection=1'
   } else if (entry === 'next-task') {
@@ -318,8 +401,8 @@ async function openFrontend(entry: 'evaluation' | 'path' | 'learning-state' | 'n
       runId: currentRun.value.runId,
     })
     window.open(target, '_blank')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || error?.message || '打开真实前台失败')
+  } catch (error: unknown) {
+    ElMessage.error(apiErrorMessage(error, '打开真实前台失败'))
   } finally {
     openingFrontend.value = false
   }
@@ -330,8 +413,8 @@ async function loadTasks() {
   try {
     const { data } = await adminApi.getQuickLearnTasks(props.profileId)
     taskTree.value = data.data || []
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '加载任务列表失败')
+  } catch (error: unknown) {
+    ElMessage.error(apiErrorMessage(error, '加载任务列表失败'))
   } finally {
     tasksLoading.value = false
   }
@@ -352,11 +435,12 @@ async function cloneFixture() {
     const { data } = await adminApi.cloneQuickLearnFixture(props.profileId, {
       sourcePathId: fixtureSourcePathId.value.trim(),
     })
-    ElMessage.success(`夹具已创建：${data.data.milestoneCount} 个阶段 / ${data.data.taskCount} 个任务`)
+    const result = data.data as { milestoneCount: number; taskCount: number }
+    ElMessage.success(`路径已复制到该账号：${result.milestoneCount} 个阶段 / ${result.taskCount} 个任务`)
     fixtureSourcePathId.value = ''
     await loadTasks()
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '克隆夹具失败')
+  } catch (error: unknown) {
+    ElMessage.error(apiErrorMessage(error, '克隆路径失败'))
   } finally {
     cloning.value = false
   }
@@ -369,10 +453,12 @@ async function startRun() {
       taskId: selectedTaskId.value,
       maxTurns: maxTurns.value,
     })
-    await loadRun(data.data.runId)
-    startPolling(data.data.runId)
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '启动代学失败')
+    const runId = String(data.data?.runId || '')
+    if (!runId) throw new Error('自动学习 runId 缺失')
+    await loadRun(runId)
+    startPolling(runId)
+  } catch (error: unknown) {
+    ElMessage.error(apiErrorMessage(error, '启动账号自动学习失败'))
   } finally {
     starting.value = false
   }
@@ -381,8 +467,9 @@ async function startRun() {
 async function loadRun(runId: string) {
   try {
     const { data } = await adminApi.getQuickLearnRun(runId)
-    currentRun.value = data.data
-    if (isActiveStatus(data.data.status)) {
+    const run = data.data as QuickLearnRun
+    currentRun.value = run
+    if (isActiveStatus(run.status)) {
       startPolling(runId)
     } else {
       stopPolling()
@@ -397,8 +484,8 @@ async function abortRun() {
   try {
     await adminApi.abortQuickLearnRun(currentRun.value.runId)
     ElMessage.info('已请求中止')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '中止失败')
+  } catch (error: unknown) {
+    ElMessage.error(apiErrorMessage(error, '中止失败'))
   }
 }
 
@@ -440,7 +527,33 @@ watch(
 
 <style scoped>
 .quick-learn__notice {
+  margin-bottom: 12px;
+}
+
+.ql-account-brief {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 16px;
+}
+
+.ql-account-brief__item {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--el-fill-color-extra-light);
+  display: grid;
+  gap: 3px;
+}
+
+.ql-account-brief__item span {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+
+.ql-account-brief__item strong {
+  font-size: 12px;
+  color: var(--el-text-color-primary);
 }
 
 .ql-section {
@@ -459,6 +572,14 @@ watch(
   font-size: 13px;
   color: var(--el-text-color-primary);
   margin-bottom: 8px;
+}
+
+.ql-section__hint,
+.ql-entries__hint {
+  margin: -2px 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
 }
 
 .ql-task-select {
@@ -650,5 +771,24 @@ watch(
 .ql-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .ql-account-brief {
+    grid-template-columns: 1fr;
+  }
+
+  .ql-run-config,
+  .ql-fixture__body,
+  .ql-status__main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ql-entries__actions > .el-button {
+    flex: 1 1 46%;
+    margin-left: 0;
+  }
 }
 </style>

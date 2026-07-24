@@ -240,7 +240,7 @@
       </section>
     </main>
 
-    <V2Footer />
+    <V2Footer v-if="!live.started" />
   </div>
 </template>
 
@@ -466,9 +466,8 @@ const scenes = [
 /* ---------- 初始态 / 登录门 ---------- */
 .entry {
   max-width: 860px; margin: 0 auto;
-  padding: 28px 28px 48px;
+  padding: 28px 28px 40px;
   display: flex; flex-direction: column; gap: 22px;
-  min-height: calc(100vh - 60px - 88px);
 }
 .entry .composer--entry { margin-top: auto; }
 .entry .composer__hint { text-align: center; padding-left: 0; }
@@ -589,12 +588,18 @@ const scenes = [
 /* ---------- 工作台布局 ---------- */
 .work {
   position: relative;
-  max-width: 1180px; margin: 0 auto;
-  padding: 16px 20px 20px;
+  flex: 1;
+  min-height: 0;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 12px 20px 16px;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
-  min-height: calc(100vh - 60px);
+  align-content: stretch;
+  align-items: stretch;
+  box-sizing: border-box;
 }
 
 /* ---------- 左：信息清单 ---------- */
@@ -604,9 +609,7 @@ const scenes = [
   border-radius: 16px;
   padding: 16px;
   display: flex; flex-direction: column; gap: 12px;
-  align-self: start;
-  position: sticky; top: 16px;
-  max-height: calc(100vh - 100px);
+  min-height: 0;
   overflow: auto;
 }
 .panel__head { display: flex; align-items: center; justify-content: space-between; }
@@ -656,7 +659,8 @@ const scenes = [
   border: 1px solid var(--line);
   border-radius: 16px;
   overflow: hidden;
-  max-height: calc(100vh - 100px);
+  min-height: 0;
+  height: 100%;
 }
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -764,7 +768,12 @@ const scenes = [
   display: grid; place-items: center;
   color: var(--blue-deep); background: #fff;
 }
-.chat .composer { padding: 12px 14px; border-top: 1px solid var(--line); background: #fbfdff; }
+.chat .composer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  background: #fbfdff;
+  flex: 0 0 auto;
+}
 
 /* ---------- 方案确认浮层 ---------- */
 .overlay {
@@ -890,9 +899,16 @@ const scenes = [
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
   .nav__links { display: none; }
-  .work { grid-template-columns: 1fr; min-height: auto; }
-  .panel { position: static; max-height: none; }
-  .chat { max-height: none; min-height: 480px; }
+  .work {
+    grid-template-columns: 1fr;
+    padding: 12px 14px 88px;
+    overflow: auto;
+  }
+  .panel {
+    max-height: none;
+    overflow: visible;
+  }
+  .chat { min-height: min(70vh, 560px); height: auto; }
   .msg { max-width: 96%; }
   .replies { margin-left: 0; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }

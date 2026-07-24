@@ -45,13 +45,30 @@
         </div>
         <div class="cp-controls">
           <button type="button" class="cp-btn" :disabled="busy || isTerminal" @click="act('step')">单步推进</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal" @click="act('auto')">自动到阶段末</button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="busy || isTerminal" @click="act('runFull')">一键全流程</button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('auto')">自动到阶段末</button>
+          <button type="button" class="cp-btn cp-btn--primary" :disabled="busy || isTerminal || isBlackbox" @click="act('runFull')">一键全流程</button>
           <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('advancePath')">生成 Path</button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('reviewPath')">评审 Path</button>
           <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('startLearning')">启动 Learn</button>
           <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('wrapup')">生成总结</button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('stop')">停止 Learn</button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('resetPath')">重建 Path</button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('resetLearn')">重启 Learn</button>
+          <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" @click="act('abandon')">放弃实验</button>
           <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" @click="act('referee')">生成裁判评估</button>
           <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" @click="act('rerun')">按原输入重跑</button>
+        </div>
+        <div v-if="!isBlackbox" class="cp-config">
+          <label>
+            对抗预算
+            <select v-model="frictionBudget" class="mk-filter__select" @change="saveFriction">
+              <option value="none">无</option>
+              <option value="low">低</option>
+              <option value="normal">正常</option>
+              <option value="high">高</option>
+              <option value="stress_test">压力测试</option>
+            </select>
+          </label>
         </div>
 
         <!-- 阶段摘要 -->
@@ -426,6 +443,12 @@ async function refresh() {
   try {
     const res = await adminVirtualLearnersApi.getVirtualSession(sessionId.value)
     session.value = res.data?.data ?? res.data ?? {}
+    const sr = (session.value?.stageResults || {}) as Record<string, unknown>
+    const simCfg = (sr.simulationConfig || {}) as Record<string, unknown>
+    const fb = String(simCfg.frictionBudget || '')
+    if (['none', 'low', 'normal', 'high', 'stress_test'].includes(fb)) {
+      frictionBudget.value = fb as typeof frictionBudget.value
+    }
     await loadLogs()
     parseBlackbox()
   } catch (e) {
@@ -512,6 +535,20 @@ function summarizeDiagnostic(value: Record<string, unknown> | null): string {
   }
 }
 
+const frictionBudget = ref<'none' | 'low' | 'normal' | 'high' | 'stress_test'>('normal')
+
+async function saveFriction() {
+  if (!sessionId.value || isBlackbox.value) return
+  try {
+    await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
+      frictionBudget: frictionBudget.value
+    })
+    showToast(`对抗预算已更新：${frictionBudget.value}`)
+  } catch (e) {
+    showToast(`更新失败：${errMsg(e)}`, 'mk-toast--bad')
+  }
+}
+
 /* 控制动作 */
 async function act(kind: string) {
   if (busy.value) return
@@ -527,16 +564,40 @@ async function act(kind: string) {
         await adminVirtualLearnersApi.virtualSessionAuto(id, { maxRounds: 10 })
         break
       case 'runFull':
-        await adminVirtualLearnersApi.virtualSessionRunFull(id, { maxRounds: 10, maxMilestones: 5, autoAdvanceToPath: true, autoAdvanceToLearning: true })
+        await adminVirtualLearnersApi.virtualSessionRunFull(id, {
+          maxRounds: 10,
+          maxMilestones: 5,
+          autoAdvanceToPath: true,
+          autoAdvanceToLearning: true
+        })
         break
       case 'advancePath':
         await adminVirtualLearnersApi.virtualSessionAdvancePath(id)
+        break
+      case 'reviewPath':
+        await adminVirtualLearnersApi.reviewVirtualSessionPath(id)
         break
       case 'startLearning':
         await adminVirtualLearnersApi.startVirtualLearning(id)
         break
       case 'wrapup':
         await adminVirtualLearnersApi.virtualSessionWrapup(id)
+        break
+      case 'stop':
+        await adminVirtualLearnersApi.stopVirtualLearning(id)
+        break
+      case 'resetPath':
+        await adminVirtualLearnersApi.restartVirtualSessionPath(id)
+        break
+      case 'resetLearn':
+        await adminVirtualLearnersApi.restartVirtualLearning(id)
+        break
+      case 'abandon':
+        await adminVirtualLearnersApi.executeBlackboxVirtualAction(
+          id,
+          { type: 'abandon', reason: 'operator_abandon' },
+          blackboxTraceCount.value
+        )
         break
       case 'referee':
         await adminVirtualLearnersApi.generateBlackboxEvaluations(id)
@@ -675,6 +736,22 @@ const statusText = (s?: unknown) => ({ completed: '已完成', in_progress: '进
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 .cp-btn--primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
+.cp-danger-btn { color: var(--mk-red) !important; border-color: rgba(220, 38, 38, 0.35) !important; }
+.cp-config {
+  padding: 10px 16px 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--mk-muted);
+}
+.cp-config label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+.cp-config select { min-width: 140px; }
 
 .cp-summary { padding: 12px 16px 16px; display: grid; gap: 8px; }
 .cp-summary__item {

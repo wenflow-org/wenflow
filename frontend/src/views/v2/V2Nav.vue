@@ -13,9 +13,25 @@
     </nav>
     <div class="v2nav__right">
       <router-link to="/goal-conversation" class="v2nav__cta">＋ 规划新目标</router-link>
-      <router-link to="/user/account" class="v2nav__avatar" :title="userName">
-        <i>{{ avatarLetter }}</i>{{ userName }}
-      </router-link>
+      <div class="v2nav__user" ref="userMenuRef">
+        <button
+          type="button"
+          class="v2nav__avatar"
+          :aria-expanded="menuOpen ? 'true' : 'false'"
+          aria-haspopup="menu"
+          @click="menuOpen = !menuOpen"
+        >
+          <i>{{ avatarLetter }}</i>
+          <span class="v2nav__name">{{ userName }}</span>
+          <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">▾</span>
+        </button>
+        <div v-if="menuOpen" class="v2nav__menu" role="menu">
+          <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
+          <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
+            退出登录
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -35,12 +51,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { toast } from '@/utils/toast';
 
 const route = useRoute();
+const router = useRouter();
 const userStore = useUserStore();
+
+const menuOpen = ref(false);
+const userMenuRef = ref<HTMLElement | null>(null);
 
 const icons = {
   home: '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="m12 3 9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z"/></svg>',
@@ -64,6 +85,32 @@ function isActive(item: { match: string[] }) {
 
 const userName = computed(() => userStore.user?.name || '同学');
 const avatarLetter = computed(() => (userStore.user?.name || '同').charAt(0));
+
+async function handleLogout() {
+  menuOpen.value = false;
+  userStore.logout();
+  toast.success('已退出登录');
+  await router.push('/login');
+}
+
+function onDocClick(e: MouseEvent) {
+  if (!menuOpen.value || !userMenuRef.value) return;
+  if (!userMenuRef.value.contains(e.target as Node)) menuOpen.value = false;
+}
+
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') menuOpen.value = false;
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick);
+  document.addEventListener('keydown', onKey);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick);
+  document.removeEventListener('keydown', onKey);
+});
 </script>
 
 <style scoped>
@@ -93,19 +140,75 @@ const avatarLetter = computed(() => (userStore.user?.name || '同').charAt(0));
   box-shadow: 0 8px 18px rgba(52, 120, 246, 0.28);
   cursor: pointer; text-decoration: none;
 }
+.v2nav__user { position: relative; }
 .v2nav__avatar {
   display: flex; align-items: center; gap: 7px;
   font-size: 13px; font-weight: 700;
-  color: var(--ink, #172033); text-decoration: none;
+  color: var(--ink, #172033);
+  background: transparent;
+  border: 0;
+  padding: 4px 6px 4px 4px;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
 }
+.v2nav__avatar:hover { background: #f1f5fb; }
 .v2nav__avatar i {
   width: 26px; height: 26px; border-radius: 50%;
   background: var(--blue-deep, #1f57cc); color: #fff;
   font-style: normal; font-size: 12px;
   display: grid; place-items: center;
 }
+.v2nav__caret {
+  font-size: 10px;
+  color: var(--faint, #8492ab);
+  transition: transform 0.15s ease;
+  line-height: 1;
+}
+.v2nav__caret--open { transform: rotate(180deg); }
+.v2nav__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line, #e3e9f4);
+  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.12);
+  display: grid;
+  gap: 2px;
+  z-index: 50;
+}
+.v2nav__menu a,
+.v2nav__menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink, #172033);
+  text-decoration: none;
+  cursor: pointer;
+}
+.v2nav__menu a:hover,
+.v2nav__menu button:hover {
+  background: #f1f5fb;
+}
+.v2nav__menu-danger {
+  color: #c0454a !important;
+  border-top: 1px solid var(--line, #e3e9f4) !important;
+  margin-top: 2px;
+  border-radius: 0 0 8px 8px !important;
+}
 @media (max-width: 900px) {
   .v2nav__links { display: none; }
+  .v2nav__name { display: none; }
 }
 </style>
 

@@ -44,6 +44,7 @@ import {
   updateFieldsInSource,
   type EditableField,
 } from '../../services/prompt-source-fields';
+import { resolveRuntimeContractsForAgents } from '../../services/prompt-lab/resolve-runtime-contract';
 
 const router = Router();
 router.use(rejectPromptOpsRuntimeMutation);
@@ -163,11 +164,23 @@ router.get('/agent-overview', async (_req: Request, res: Response) => {
       ...dbActives.map((r) => r.agentId),
     ]);
 
-    const items = Array.from(allAgentIds)
+    const agentIdList = Array.from(allAgentIds);
+    const archetypeByAgent = new Map<string, string>();
+    for (const agentId of agentIdList) {
+      const file = fileByAgent.get(agentId);
+      const archetype = (file as any)?.archetype;
+      if (typeof archetype === 'string' && archetype.trim()) {
+        archetypeByAgent.set(agentId, archetype.trim());
+      }
+    }
+    const runtimeContracts = await resolveRuntimeContractsForAgents(agentIdList, archetypeByAgent);
+
+    const items = agentIdList
       .map((agentId) => {
         const file = fileByAgent.get(agentId);
         const db = dbByAgent.get(agentId);
         const manifest = getAgentManifest(agentId);
+        const runtimeResolved = runtimeContracts.get(agentId);
 
         const fileHash = file ? simpleHash(file.systemPrompt) : null;
         const dbHash = db ? simpleHash(db.systemPrompt) : null;
@@ -205,6 +218,8 @@ router.get('/agent-overview', async (_req: Request, res: Response) => {
           stage: AGENT_STAGE_MAP[agentId] || null,
           sources,
           health,
+          runtimeContract: runtimeResolved?.contract || null,
+          runtimeContractSource: runtimeResolved?.source || null,
           file: file
             ? {
                 path: `prompts/${agentId.replace(/:/g, '.')}.md`,

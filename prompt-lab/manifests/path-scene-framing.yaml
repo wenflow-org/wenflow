@@ -1,14 +1,15 @@
 version: prompt-lab-manifest/v1
 
-skillId: example-skill
-agentId: skill:example-skill
+skillId: path-scene-framing
+agentId: skill:path-scene-framing
 
-name: default-skill-example-skill
-archetype: conversational
-description: 请替换为该 Skill 的简短说明
+name: default-skill-path-scene-framing
+archetype: extractor
+description: 路径场景 framing / 输入归一
 
 acceptableAgentIds:
-  - skill:example-skill
+  - skill:path-scene-framing
+  - path-scene-framing
 
 publish:
   enabled: true
@@ -17,8 +18,8 @@ publish:
 
 runtimeDefaults:
   tier: chat
-  temperature: 0.7
-  maxTokens: 8000
+  temperature: 0.3
+  maxTokens: 4000
   model: null
   thinkingMode: default
   reasoningEffort: default
@@ -27,12 +28,12 @@ runtimeContract:
   version: prompt-runtime-contract/v1
   contextMode: snapshot-context
   businessState:
-    domain: example-skill
+    domain: path-generation
     phases:
-      - completed
-    defaultPhase: completed
+      - input-framed
+    defaultPhase: input-framed
     terminalPhases:
-      - completed
+      - input-framed
     statusValues:
       - succeeded
       - partial
@@ -41,11 +42,17 @@ runtimeContract:
   contextUpdate:
     mode: none
     stateOwner: none
+    description: snapshot-context：一次性 framing，无跨轮状态
   outputEnvelope: adapter
 
 ownership:
   tier: production
   visibility: internal
 
-tags: []
-notes: ''
+tags:
+  - path-phase
+  - extractor
+  - prompt-lab-source
+
+notes: >
+  路径生成前置 framing skill。

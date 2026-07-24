@@ -1,4 +1,5 @@
 import { callPrompt } from '../../composers/prompt-composer'
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter'
 import { loadPromptFile } from '../../composers/prompt-files/loader'
 import type { SkillDefinition, SkillExecutionResult } from '../protocol'
 import type { VirtualLearnerRefereeInput, VirtualLearnerRefereeOutput } from '../../virtual-lab/contracts'
@@ -180,6 +181,10 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
       failureReason: 'missing scores/findings/evidence'
     }),
     normalizeOutput: normalizeRefereeOutput,
+    mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-referee', output, {
+      phase: 'completed',
+      isTerminal: true,
+    }),
     retryStrategy: {
       maxAttempts: 2,
       onValidationFail: () => '请只输出合法 JSON，并完整包含 scores、findings、recommendations、evidence。'
@@ -194,7 +199,11 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
     }
   }
 
-  return { success: true, output: result.output, duration: result.debug.durationMs }
+  return {
+    success: true,
+    output: { ...result.output, runtimeEnvelope: result.runtimeEnvelope } as VirtualLearnerRefereeOutput,
+    duration: result.debug.durationMs,
+  }
 }
 
 export default virtualLearnerReferee

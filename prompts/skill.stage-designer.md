@@ -5,6 +5,27 @@ archetype: generator
 description: 阶段任务设计器
 temperature: 0.3
 maxTokens: 32000
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: path-generation
+    phases:
+      - stage-designed
+      - stage-design-failed
+    defaultPhase: stage-designed
+    terminalPhases:
+      - stage-designed
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: none
+    stateOwner: none
+    description: snapshot-context：单阶段 subtasks 生成
+  outputEnvelope: adapter
 ---
 
 ## 身份定义

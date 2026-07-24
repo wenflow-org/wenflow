@@ -1,14 +1,15 @@
 version: prompt-lab-manifest/v1
 
-skillId: example-skill
-agentId: skill:example-skill
+skillId: stage-designer
+agentId: skill:stage-designer
 
-name: default-skill-example-skill
-archetype: conversational
-description: 请替换为该 Skill 的简短说明
+name: default-skill-stage-designer
+archetype: generator
+description: 阶段内 subtasks 设计
 
 acceptableAgentIds:
-  - skill:example-skill
+  - skill:stage-designer
+  - stage-designer
 
 publish:
   enabled: true
@@ -17,7 +18,7 @@ publish:
 
 runtimeDefaults:
   tier: chat
-  temperature: 0.7
+  temperature: 0.4
   maxTokens: 8000
   model: null
   thinkingMode: default
@@ -27,12 +28,13 @@ runtimeContract:
   version: prompt-runtime-contract/v1
   contextMode: snapshot-context
   businessState:
-    domain: example-skill
+    domain: path-generation
     phases:
-      - completed
-    defaultPhase: completed
+      - stage-designed
+      - stage-design-failed
+    defaultPhase: stage-designed
     terminalPhases:
-      - completed
+      - stage-designed
     statusValues:
       - succeeded
       - partial
@@ -41,11 +43,17 @@ runtimeContract:
   contextUpdate:
     mode: none
     stateOwner: none
+    description: snapshot-context：单阶段 subtasks 生成
   outputEnvelope: adapter
 
 ownership:
   tier: production
   visibility: internal
 
-tags: []
-notes: ''
+tags:
+  - path-phase
+  - generator
+  - prompt-lab-source
+
+notes: >
+  路径阶段细化 skill。

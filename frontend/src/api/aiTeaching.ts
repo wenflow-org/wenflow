@@ -82,6 +82,27 @@ export interface MessageResult {
   peerDebug?: Record<string, unknown> | null;
   checkpoint?: Checkpoint | null;
   promptDebug?: Record<string, unknown> | null;
+  /** 统一运行契约观测字段（不驱动 UI 结束逻辑） */
+  runtimeEnvelope?: {
+    artifact?: unknown;
+    businessState?: {
+      domain?: string;
+      phase?: string;
+      status?: string;
+      confidence?: number;
+      isTerminal?: boolean;
+      nextAction?: string | null;
+      reason?: string | null;
+    };
+    contextUpdate?: {
+      mode?: string;
+      stateOwner?: string;
+      nextState?: unknown | null;
+    };
+  } | null;
+  completionAlignment?: 'agree' | 'envelope-only' | 'knowledge-only' | 'neither';
+  envelopeCompletionSignal?: boolean;
+  lastBusinessPhase?: string | null;
   revision: number;
 }
 

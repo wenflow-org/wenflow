@@ -5,6 +5,26 @@ archetype: generator
 description: 学习路径输入清洗与场景构建
 temperature: 0.2
 maxTokens: 32000
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: path-generation
+    phases:
+      - input-framed
+    defaultPhase: input-framed
+    terminalPhases:
+      - input-framed
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: none
+    stateOwner: none
+    description: snapshot-context：一次性 framing，无跨轮状态
+  outputEnvelope: adapter
 ---
 
 ## 身份定义

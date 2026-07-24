@@ -1,8 +1,8 @@
 /**
  * Admin Virtual Quick Learn API
  *
- * 一键代学：开发者选定任务，虚拟学习者沿真实生产链自动学完一节课，
- * 并生成学习传播报告（前后快照对比 + 下游影响）。
+ * 账号自动学习：开发者选定虚拟学习者账号名下的任务，系统沿真实生产链
+ * 驱动该账号学完一节课，并生成学习传播报告（前后快照对比 + 下游影响）。
  *
  * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md 第 6.5 节
  */
@@ -65,7 +65,7 @@ router.post('/:id/quick-learn/fixtures', async (req: any, res) => {
 
 /**
  * GET /:id/quick-learn/tasks
- * 列出该虚拟学习者名下的可学任务树（path → milestones → subtasks）
+ * 列出该虚拟学习者绑定账号名下的可学任务树（path → milestones → subtasks）
  */
 router.get('/:id/quick-learn/tasks', async (req: any, res) => {
   try {
@@ -106,14 +106,14 @@ router.get('/:id/quick-learn/tasks', async (req: any, res) => {
 
     res.json({ success: true, data });
   } catch (error: any) {
-    logger.error('获取代学任务列表失败:', error);
-    sendError(res, error, '获取代学任务列表失败');
+    logger.error('获取自动学习任务列表失败:', error);
+    sendError(res, error, '获取自动学习任务列表失败');
   }
 });
 
 /**
  * POST /:id/quick-learn/runs
- * 启动一次代学（后台异步执行）
+ * 启动一次账号自动学习（后台异步执行）
  * body: { taskId: string, maxTurns?: number }
  */
 router.post('/:id/quick-learn/runs', async (req: any, res) => {
@@ -132,14 +132,14 @@ router.post('/:id/quick-learn/runs', async (req: any, res) => {
     });
     res.json({ success: true, data: result });
   } catch (error: any) {
-    logger.error('启动代学运行失败:', error);
-    sendError(res, error, '启动代学运行失败');
+    logger.error('启动自动学习运行失败:', error);
+    sendError(res, error, '启动自动学习运行失败');
   }
 });
 
 /**
  * GET /:id/quick-learn/runs?page=&pageSize=
- * 该虚拟学习者的历史代学运行
+ * 该虚拟学习者的历史自动学习运行
  */
 router.get('/:id/quick-learn/runs', async (req: any, res) => {
   try {
@@ -150,8 +150,8 @@ router.get('/:id/quick-learn/runs', async (req: any, res) => {
     const result = await quickLearnService.listRuns(profile.id, { page, pageSize });
     res.json({ success: true, data: result });
   } catch (error: any) {
-    logger.error('获取代学运行列表失败:', error);
-    sendError(res, error, '获取代学运行列表失败');
+    logger.error('获取自动学习运行列表失败:', error);
+    sendError(res, error, '获取自动学习运行列表失败');
   }
 });
 
@@ -164,8 +164,8 @@ router.get('/quick-learn/runs/:runId', async (req: any, res) => {
     const result = await quickLearnService.getRun(req.params.runId);
     res.json({ success: true, data: result });
   } catch (error: any) {
-    logger.error('获取代学运行详情失败:', error);
-    sendError(res, error, '获取代学运行详情失败');
+    logger.error('获取自动学习运行详情失败:', error);
+    sendError(res, error, '获取自动学习运行详情失败');
   }
 });
 
@@ -178,8 +178,8 @@ router.post('/quick-learn/runs/:runId/abort', async (req: any, res) => {
     const result = await quickLearnService.requestAbort(req.params.runId);
     res.json({ success: true, data: result });
   } catch (error: any) {
-    logger.error('中止代学运行失败:', error);
-    sendError(res, error, '中止代学运行失败');
+    logger.error('中止自动学习运行失败:', error);
+    sendError(res, error, '中止自动学习运行失败');
   }
 });
 

@@ -2,7 +2,7 @@
  * Path Fixture Service
  *
  * 把一条已有学习路径（含 milestones / subtasks 及全部教学标注字段）确定性地
- * 克隆到指定用户名下，作为虚拟学习者 Quick Learn 的测试夹具。
+ * 克隆到指定用户名下，作为虚拟学习者账号自动学习的测试路径。
  *
  * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md 第 6.1 节
  *

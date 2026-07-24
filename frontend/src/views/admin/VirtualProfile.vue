@@ -21,7 +21,7 @@
       </div>
       <div class="page-header__actions">
         <el-button type="primary" @click="openProjectionDialog">投影入口</el-button>
-        <el-button type="success" plain @click="quickLearnVisible = true">快速代学</el-button>
+        <el-button type="success" plain @click="quickLearnVisible = true">账号自动学习</el-button>
         <el-button plain @click="openLatestSessionInspector">最近会话诊断</el-button>
         <el-dropdown trigger="click">
           <el-button>

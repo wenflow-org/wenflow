@@ -1,7 +1,7 @@
 /**
- * Quick Learn Service（一键代学运行器）
+ * Quick Learn Service（虚拟账号自动学习运行器）
  *
- * 开发者选定一个已有 Task，虚拟学习者沿真实生产链自动把这一节课学完：
+ * 开发者选定虚拟学习者账号名下的 Task，系统沿真实生产链驱动这个账号学完一节课：
  *   startSession → teaching-turn × N（双重收束）→ endSession（含 wrapup）
  *   → completeTask → 等待异步投影 → 生成 Propagation Report。
  *
@@ -9,7 +9,7 @@
  *
  * 边界：
  * - 只走生产入口，不直接改业务状态；教师未认可时绝不强制完成任务。
- * - V1 仅 fast_forward 模式（frictionBudget='none' 的合作型学习者），用于功能验证，
+ * - V1 仅 fast_forward 模式（frictionBudget='none' 的合作型学习者），用于学习链路验证，
  *   不代表教育质量评测。
  * - 后台进程内执行，状态持久化到 virtual_quick_learn_runs；进程中断不续跑，
  *   启动时由 recoverInterruptedRuns() 标记 interrupted。
@@ -93,7 +93,7 @@ export class QuickLearnService {
   private runningProfiles = new Set<string>();
 
   /**
-   * 启动一次代学：校验归属与状态后创建运行记录，后台异步执行。
+   * 启动一次账号自动学习：校验归属与状态后创建运行记录，后台异步执行。
    */
   async startRun(input: { profileId: string; taskId: string; maxTurns?: number }): Promise<{ runId: string }> {
     const profile = await prisma.virtual_learner_profiles.findUnique({
@@ -121,7 +121,7 @@ export class QuickLearnService {
       throw error;
     }
     if (task.status === 'completed') {
-      const error: any = new Error('该任务已完成，不能重复代学');
+      const error: any = new Error('该任务已完成，不能重复自动学习');
       error.code = 'QUICK_LEARN_TASK_ALREADY_COMPLETED';
       throw error;
     }
@@ -137,7 +137,7 @@ export class QuickLearnService {
     );
 
     if (this.runningProfiles.has(profile.id)) {
-      const error: any = new Error('该虚拟学习者已有正在进行的代学运行');
+      const error: any = new Error('该虚拟学习者已有正在进行的自动学习');
       error.code = 'QUICK_LEARN_RUN_CONFLICT';
       throw error;
     }
@@ -146,7 +146,7 @@ export class QuickLearnService {
       select: { id: true },
     });
     if (activeRun) {
-      const error: any = new Error('该虚拟学习者已有正在进行的代学运行');
+      const error: any = new Error('该虚拟学习者已有正在进行的自动学习');
       error.code = 'QUICK_LEARN_RUN_CONFLICT';
       throw error;
     }
@@ -182,7 +182,7 @@ export class QuickLearnService {
 
   async getRun(runId: string) {
     const run = await prisma.virtual_quick_learn_runs.findUnique({ where: { id: runId } });
-    if (!run) throw new Error('代学运行不存在');
+    if (!run) throw new Error('自动学习运行不存在');
     return this.serializeRun(run);
   }
 
@@ -203,7 +203,7 @@ export class QuickLearnService {
 
   async requestAbort(runId: string) {
     const run = await prisma.virtual_quick_learn_runs.findUnique({ where: { id: runId } });
-    if (!run) throw new Error('代学运行不存在');
+    if (!run) throw new Error('自动学习运行不存在');
     if (!['queued', 'running'].includes(run.status)) {
       return { runId, status: run.status, abortAccepted: false };
     }
@@ -222,7 +222,7 @@ export class QuickLearnService {
       data: { status: 'interrupted', error: '进程重启，运行中断（V1 不支持续跑）', completedAt: new Date() },
     });
     if (result.count > 0) {
-      logger.warn('[QuickLearn] 标记中断的代学运行', { count: result.count });
+      logger.warn('[QuickLearn] 标记中断的自动学习运行', { count: result.count });
     }
     return result.count;
   }

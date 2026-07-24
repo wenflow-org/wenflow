@@ -32,6 +32,8 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
         }
       }
     },
+    // 统一运行契约 envelope（与 agent-output-v1 并存；不破坏现有前端）
+    runtimeEnvelope: result?.runtimeEnvelope || null,
     renderHints: {
       quickReplies: Array.isArray(goalExt.quickReplies) ? goalExt.quickReplies : []
     },

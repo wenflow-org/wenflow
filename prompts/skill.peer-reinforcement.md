@@ -8,6 +8,27 @@ maxTokens: 4000
 acceptableAgentIds:
   - skill:peer-reinforcement
   - peer-agent
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: thread-context
+  businessState:
+    domain: teaching
+    phases:
+      - discussion-generated
+      - discussion-completed
+    defaultPhase: discussion-generated
+    terminalPhases:
+      - discussion-completed
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: thread-state
+    stateOwner: orchestrator
+    description: thread-context：同伴讨论依赖可见对话上下文；状态由编排层推进
+  outputEnvelope: adapter
 ---
 
 ## 身份定义

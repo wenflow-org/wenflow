@@ -240,7 +240,7 @@ onUnmounted(() => {
 <style scoped>
 .vision-page {
   --vision-ink: #172033;
-  --vision-muted: #66758d;
+  --vision-muted: #5b6577;
   --vision-blue: #3478f6;
   --vision-blue-deep: #1f57cc;
   min-height: 100vh;
@@ -510,10 +510,6 @@ onUnmounted(() => {
 .vision-section-head {
   max-width: 780px;
   margin-bottom: 28px;
-}
-
-.vision-section-head--capabilities h2 {
-  white-space: nowrap;
 }
 
 .vision-section-head h2,
@@ -861,10 +857,6 @@ onUnmounted(() => {
   .vision-capability-section,
   .vision-why-section {
     padding: 52px 0;
-  }
-
-  .vision-section-head--capabilities h2 {
-    white-space: normal;
   }
 
   .vision-why-card {

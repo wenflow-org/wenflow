@@ -31,9 +31,17 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">AI 画像推断</h3>
-            <button v-if="isLive" type="button" class="mk-status__action" :disabled="projecting" @click="openProjection">
-              {{ projecting ? '生成中…' : '投影到前台' }}
-            </button>
+            <div v-if="isLive" class="vp-proj-actions">
+              <button type="button" class="mk-status__action" :disabled="projecting" @click="openProjection('dashboard')">
+                {{ projecting ? '生成中…' : '投影首页' }}
+              </button>
+              <button type="button" class="mk-link" :disabled="projecting" @click="openProjection('goal')">Goal</button>
+              <button type="button" class="mk-link" :disabled="projecting" @click="openProjection('paths')">路径</button>
+              <button type="button" class="mk-link" :disabled="projecting" @click="openProjection('state')">状态</button>
+              <button type="button" class="mk-status__action mk-status__action--primary" @click="quickLearnOpen = true">
+                账号自动学习
+              </button>
+            </div>
           </div>
           <div class="vp-profile">
             <div v-for="p in d.aiProfile" :key="p.label" class="vp-profile__row">
@@ -125,6 +133,12 @@
       </div>
     </div>
 
+    <QuickLearnPanel
+      v-if="isLive && subPage?.id"
+      v-model:visible="quickLearnOpen"
+      :profile-id="subPage.id"
+    />
+
     <!-- 编辑画像 -->
     <div v-if="editOpen" class="mk-modal" @mousedown.self="editOpen = false">
       <div class="mk-modal__panel" role="dialog" aria-label="编辑画像">
@@ -180,6 +194,7 @@ import { subPage, closeSubPage, virtualProfiles, dataSource, openSubPage } from 
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './mockLive'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { setProjectionToken } from '@/utils/projection'
+import QuickLearnPanel from '@/views/admin/components/virtual/QuickLearnPanel.vue'
 
 interface RunItem {
   time: string
@@ -260,6 +275,7 @@ const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
 const projecting = ref(false)
+const quickLearnOpen = ref(false)
 const editOpen = ref(false)
 const editForm = ref({ name: '', goal: '', level: 'beginner', notes: '' })
 const toast = ref('')
@@ -471,8 +487,8 @@ async function removeSession(sessionId: string) {
   }
 }
 
-/* 投影到前台 */
-async function openProjection() {
+/* 投影到前台（多入口） */
+async function openProjection(entry: 'dashboard' | 'goal' | 'paths' | 'state' = 'dashboard') {
   const id = subPage.value?.id
   if (!id || projecting.value) return
   projecting.value = true
@@ -482,8 +498,13 @@ async function openProjection() {
     const token = String(body.token || body.projectionToken || '')
     if (!token) throw new Error('未返回投影 token')
     setProjectionToken(token, { virtualLearnerId: id })
-    window.open('/', '_blank')
-    showToast('已在新窗口打开投影视角')
+    const href =
+      entry === 'goal' ? '/goal-conversation'
+        : entry === 'paths' ? '/learning-paths'
+          : entry === 'state' ? '/learning-state'
+            : '/dashboard'
+    window.open(href, '_blank')
+    showToast(`已在新窗口打开投影：${href}`)
   } catch (e) {
     showToast(`投影失败：${errMsg(e)}`, 'mk-toast--bad')
   } finally {
@@ -540,6 +561,12 @@ const d = computed<Detail | undefined>(() => {
 }
 .vp-goal span { font-size: 11px; color: var(--mk-faint); font-weight: 700; }
 .vp-goal strong { color: var(--mk-blue); font-size: 13.5px; }
+.vp-proj-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
 
 .vp-profile { display: grid; }
 .vp-profile__row {

@@ -213,7 +213,20 @@
                 <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
                 <button type="button" class="mk-link" @click="goPromptLab">去 Prompt Lab 检视 →</button>
               </div>
+              <div v-if="isLive && promptVersions.length" class="msk__versions">
+                <span class="msk__versions-label">历史版本</span>
+                <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
+                  <span class="mono">v{{ v.version }}</span>
+                  <span>{{ v.status }}</span>
+                  <span class="msk__version-name">{{ v.name }}</span>
+                </div>
+              </div>
             </template>
+          </section>
+
+          <section v-if="skillProfile && isLive" class="msk__section msk__section--actions">
+            <button type="button" class="msk__primary-link" @click="goFullEditor">打开完整 Skill 编辑台 →</button>
+            <p class="msk__none">版本发布、工程视图与完整预览在编辑台完成；抽屉保留运行配置与试跑。</p>
           </section>
         </div>
       </aside>
@@ -236,7 +249,7 @@ import {
   dataSource
 } from './mockStore'
 import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './mockLive'
-import { adminSkillWorkbenchApi, adminSkillsApi } from '@/api/adminApi'
+import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
 
 const isLive = computed(() => dataSource.value === 'live')
 
@@ -425,6 +438,7 @@ interface LiveMeta {
   effectivePrompt: string
 }
 const liveMeta = ref<LiveMeta | null>(null)
+const promptVersions = ref<Array<{ id: string; version: string | number; status: string; name: string }>>([])
 
 watch(
   () => intent.skillDrawerId,
@@ -435,13 +449,15 @@ watch(
     testResult.value = ''
     promptOpen.value = false
     protocolOpen.value = false
+    promptVersions.value = []
     agentRulesReset()
     if (!id || !isLive.value || !skillProfile.value) return
     void loadRuntimeCfg(id)
     try {
-      const [metaRes, promptRes] = await Promise.all([
+      const [metaRes, promptRes, versionsRes] = await Promise.all([
         adminSkillWorkbenchApi.getMeta(id).catch(() => null),
-        adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null)
+        adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null),
+        adminAgentPromptsApi.getPromptVersions({ agentId: id }).catch(() => null)
       ])
       const meta = metaRes?.data?.data ?? metaRes?.data ?? {}
       const promptBody = promptRes?.data?.data ?? promptRes?.data ?? {}
@@ -465,8 +481,16 @@ watch(
         category: String(skill.category || skillProfile.value?.category || ''),
         model: modelCfg.model ? String(modelCfg.model) : modelCfg.tier ? `档位 ${String(modelCfg.tier)}` : '',
         promptVersion: [version, promptName].filter(Boolean).join(' · '),
-        effectivePrompt: String(prompt.systemPrompt || '').slice(0, 600)
+        effectivePrompt: String(prompt.systemPrompt || '').slice(0, 1200)
       }
+      const vBody = versionsRes?.data?.data ?? versionsRes?.data ?? []
+      const vItems = Array.isArray(vBody) ? vBody : vBody.items || vBody.versions || []
+      promptVersions.value = vItems.slice(0, 8).map((v: Record<string, unknown>) => ({
+        id: String(v.id || ''),
+        version: (v.version as string | number) ?? '—',
+        status: String(v.status || '—'),
+        name: String(v.name || '')
+      }))
     } catch {
       liveMeta.value = null
     }
@@ -506,6 +530,13 @@ function goTrace(traceId: string) {
 function goPromptLab() {
   closeSkillDrawer()
   intent.scene = 'prompt-lab'
+}
+
+function goFullEditor() {
+  const id = skillProfile.value?.id
+  if (!id) return
+  closeSkillDrawer()
+  window.open(`/admin/skills/${encodeURIComponent(id)}`, '_blank')
 }
 </script>
 
@@ -775,5 +806,48 @@ function goPromptLab() {
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
+}
+.msk__versions {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.msk__versions-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8492ab;
+}
+.msk__version-row {
+  display: grid;
+  grid-template-columns: 48px 72px 1fr;
+  gap: 8px;
+  font-size: 11px;
+  color: #5b6577;
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.msk__version-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msk__section--actions {
+  padding-top: 4px;
+}
+.msk__primary-link {
+  border: 1px solid rgba(52, 120, 246, 0.35);
+  background: #eef5ff;
+  color: #3478f6;
+  font: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.msk__primary-link:hover {
+  background: #e0edff;
 }
 </style>

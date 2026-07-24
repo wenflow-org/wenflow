@@ -1,4 +1,5 @@
 import { callPrompt } from '../../composers/prompt-composer'
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter'
 import { loadPromptFile } from '../../composers/prompt-files/loader'
 import type { SkillDefinition, SkillExecutionResult } from '../protocol'
 import type {
@@ -176,6 +177,10 @@ export async function virtualLearnerActorAuditor(input: VirtualLearnerActorAudit
       failureReason: 'missing scores/findings/evidence'
     }),
     normalizeOutput: normalizeActorAuditOutput,
+    mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-actor-auditor', output, {
+      phase: 'completed',
+      isTerminal: true,
+    }),
     retryStrategy: {
       maxAttempts: 2,
       onValidationFail: () => '请只输出合法 JSON，并完整包含 scores、findings、recommendations、evidence。'
@@ -189,7 +194,11 @@ export async function virtualLearnerActorAuditor(input: VirtualLearnerActorAudit
       duration: Date.now() - startedAt
     }
   }
-  return { success: true, output: result.output, duration: result.debug.durationMs }
+  return {
+    success: true,
+    output: { ...result.output, runtimeEnvelope: result.runtimeEnvelope } as VirtualLearnerActorAuditOutput,
+    duration: result.debug.durationMs,
+  }
 }
 
 export default virtualLearnerActorAuditor

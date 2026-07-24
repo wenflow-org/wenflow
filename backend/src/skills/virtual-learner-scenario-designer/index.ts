@@ -3,6 +3,7 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { logger } from '../../utils/logger';
 
 export const VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS = 8000;
@@ -569,6 +570,10 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
       }),
       validateParsedOutput: (parsed) => validateScenarioOutput(parsed),
       normalizeOutput: (parsed) => normalizeScenarioOutput(parsed),
+      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-scenario-designer', output, {
+        phase: 'completed',
+        isTerminal: true,
+      }),
       retryStrategy: {
         maxAttempts: 2,
         onValidationFail: ({ failureReason }) => `请只输出一个合法 JSON 对象，必须同时包含完整 personaSeed 与 story。所有必填字段都要具体、非空、可观察，禁止使用模板兜底句或占位词。上次失败原因：${failureReason}`
@@ -590,6 +595,7 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

@@ -895,14 +895,14 @@ export const adminApiConfigApi = {
 };
 
 /**
- * AI 能力探测开关（控制后端是否定期向模型服务发送探活请求，约每 2 分钟一次）
+ * AI 能力探测设置（开关 + 间隔；默认关闭）
  */
 export const adminCapabilityProbeApi = {
   getSettings: async () => {
     return adminAxios.get('/admin/settings/capability-probe');
   },
-  updateSettings: async (enabled: boolean) => {
-    return adminAxios.put('/admin/settings/capability-probe', { enabled });
+  updateSettings: async (payload: { enabled?: boolean; intervalMs?: number }) => {
+    return adminAxios.put('/admin/settings/capability-probe', payload);
   }
 };
 

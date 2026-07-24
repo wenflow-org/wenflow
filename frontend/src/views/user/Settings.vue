@@ -1,22 +1,12 @@
 <template>
-  <CapabilityShell
-    title="API 接入"
-    description="配置自己的模型服务后，问流会使用它进行后续调用。"
-  >
+  <CapabilityShell title="API 接入">
     <div class="user-settings-page">
       <el-card class="settings-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <h3>AI 模型配置</h3>
-            <p>保存后，后续 AI 调用会优先使用这组配置。</p>
-          </div>
-        </template>
-
         <el-alert
           v-if="loadError"
           type="error"
           title="配置加载失败"
-          :description="loadError + '，当前表单内容可能不是服务端实际配置。'"
+          :description="loadError"
           show-icon
           :closable="false"
           class="settings-load-error"
@@ -24,8 +14,8 @@
           <el-button size="small" class="settings-load-error__retry" @click="loadApiConfig">重新加载</el-button>
         </el-alert>
 
-        <el-form v-loading="loading" label-width="140px" class="api-form">
-          <el-form-item label="启用自定义 API">
+        <el-form v-loading="loading" label-width="120px" class="api-form">
+          <el-form-item label="自定义 API">
             <el-switch
               v-model="apiConfig.enabled"
               active-text="启用"
@@ -33,33 +23,24 @@
               :disabled="busy"
               @change="handleEnabledChange"
             />
-            <div class="field-hint">
-              填写并保存配置后即可启用。启用后 AI 调用使用你的 API，禁用则使用平台默认
-            </div>
           </el-form-item>
 
-          <el-form-item label="模型端点">
+          <el-form-item label="端点">
             <el-input
               v-model="apiConfig.endpoint"
               placeholder="https://api.openai.com/v1"
               :disabled="busy"
             />
-            <div class="field-hint">
-              例如：https://api.openai.com/v1 或 https://api.deepseek.com
-            </div>
           </el-form-item>
 
           <el-form-item label="API Key">
             <el-input
               v-model="apiConfig.apiKey"
               type="password"
-              :placeholder="hasSavedApiKey ? '已保存密钥，留空表示继续使用' : 'sk-...'"
+              :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : 'sk-...'"
               show-password
               :disabled="busy"
             />
-            <div class="field-hint">
-              {{ hasSavedApiKey ? '密钥已安全保存。仅在需要替换时输入新值。' : '你的 API 密钥，仅用于身份验证。' }}
-            </div>
           </el-form-item>
 
           <el-form-item label="对话模型">
@@ -68,9 +49,6 @@
               placeholder="deepseek-v4-flash"
               :disabled="busy"
             />
-            <div class="field-hint">
-              用于常规对话和任务生成的模型
-            </div>
           </el-form-item>
 
           <el-form-item label="推理模型">
@@ -79,9 +57,6 @@
               placeholder="deepseek-v4-pro"
               :disabled="busy"
             />
-            <div class="field-hint">
-              用于复杂推理任务的模型（可选，默认同对话模型）
-            </div>
           </el-form-item>
 
           <el-form-item>

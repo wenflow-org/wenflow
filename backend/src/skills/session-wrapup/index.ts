@@ -1,6 +1,8 @@
 ﻿import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
@@ -106,6 +108,7 @@ export interface SessionWrapupResult {
   evaluation: SessionWrapupEvaluation | null;
   summarySource: 'model' | 'fallback';
   evaluationSource: 'model' | 'ai-fallback' | 'failed';
+  runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
 }
 
 export interface SessionWrapupArtifact {
@@ -440,6 +443,8 @@ function buildConservativeEvaluation(input: SessionWrapupInput): SessionWrapupEv
   };
 }
 
+const SESSION_WRAPUP_RUNTIME_CONTRACT = buildDefaultRuntimeContract('session-wrapup', 'distiller');
+
 const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string, unknown> | null> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
@@ -452,6 +457,19 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
   validateParsedOutput: (parsed) => ({
     valid: !!(parsed && typeof parsed === 'object'),
     failureReason: 'SESSION_WRAPUP_OUTPUT_INVALID',
+  }),
+  mapEnvelope: (output) => adaptToRuntimeEnvelope({
+    contract: SESSION_WRAPUP_RUNTIME_CONTRACT,
+    artifact: output,
+    phase: 'wrapup-generated',
+    status: 'succeeded',
+    isTerminal: false,
+    nextAction: 'finalize-session',
+    nextState: {
+      stage: 'wrapup-generated',
+      hasSummary: !!(output && typeof output === 'object' && (output as any).summary),
+      hasEvaluation: !!(output && typeof output === 'object' && (output as any).evaluation),
+    },
   }),
   modelDefaults: {
     temperature: 0.7,
@@ -510,17 +528,38 @@ export class SessionWrapupAgent {
         evaluation,
         summarySource: isSummary(parsedSummary) ? 'model' : 'fallback',
         evaluationSource,
+        runtimeEnvelope: promptResult.runtimeEnvelope || adaptToRuntimeEnvelope({
+          contract: SESSION_WRAPUP_RUNTIME_CONTRACT,
+          artifact: { summary, evaluation },
+          phase: evaluationSource === 'failed' ? 'wrapup-generated' : 'wrapup-generated',
+          status: evaluationSource === 'failed' ? 'partial' : 'succeeded',
+          isTerminal: false,
+          nextAction: 'finalize-session',
+          nextState: { stage: 'wrapup-generated', summarySource: isSummary(parsedSummary) ? 'model' : 'fallback', evaluationSource },
+        }),
       };
 
       return result;
     } catch (e) {
       error = e instanceof Error ? e : new Error('Unknown error');
       logger.error('[SessionWrapupAgent] 生成失败', { error });
+      const fallbackSummary = buildFallbackSummary(input);
+      const fallbackEvaluation = buildConservativeEvaluation(input);
       result = {
-        summary: buildFallbackSummary(input),
-        evaluation: buildConservativeEvaluation(input),
+        summary: fallbackSummary,
+        evaluation: fallbackEvaluation,
         summarySource: 'fallback',
         evaluationSource: 'failed',
+        runtimeEnvelope: adaptToRuntimeEnvelope({
+          contract: SESSION_WRAPUP_RUNTIME_CONTRACT,
+          artifact: { summary: fallbackSummary, evaluation: fallbackEvaluation },
+          phase: 'wrapup-generated',
+          status: 'failed',
+          isTerminal: false,
+          nextAction: 'finalize-session',
+          reason: error.message,
+          nextState: { stage: 'wrapup-generated', summarySource: 'fallback', evaluationSource: 'failed' },
+        }),
       };
       return result;
     } finally {
@@ -582,6 +621,7 @@ export async function sessionWrapupAgentHandler(input: any, context: any): Promi
     return {
       success: true,
       userVisible: result.summary.topicSummary,
+      runtimeEnvelope: result.runtimeEnvelope,
       internal: {
         core: {
           stage: 'wrapup-completed',

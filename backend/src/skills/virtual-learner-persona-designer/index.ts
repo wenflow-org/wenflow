@@ -3,6 +3,7 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 export const VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS = 8000;
 export const VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE = 0.8;
@@ -282,6 +283,10 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       }),
       validateParsedOutput: (parsed) => validatePersonaOutput(parsed),
       normalizeOutput: (parsed) => normalizePersonaOutput(parsed),
+      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-persona-designer', output, {
+        phase: 'completed',
+        isTerminal: true,
+      }),
       retryStrategy: {
         maxAttempts: 2,
         onValidationFail: ({ failureReason }) => `请只输出一个合法 JSON 对象，必须包含完整 personaSeed，所有必填字段都要具体、非空、可观察，禁止使用模板套话或占位词。上次失败原因：${failureReason}`
@@ -296,6 +301,7 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

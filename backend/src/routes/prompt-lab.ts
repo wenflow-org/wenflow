@@ -15,6 +15,11 @@ import { compilePrompt } from '../services/prompt-compiler';
 import { promptCache } from '../services/cache/prompt-cache.service';
 import { getAgentRoutings } from '../services/field-dispatcher';
 import { compilePromptLabSourceDeterministic } from '../services/prompt-lab/compiler';
+import {
+  buildDefaultRuntimeContract,
+  normalizeRuntimeContract,
+  type RuntimeContract,
+} from '../services/prompt-lab/runtime-contract';
 
 const router = Router();
 router.use(rejectPromptLabFileMutation);
@@ -46,6 +51,7 @@ type PromptLabManifest = {
     thinkingMode: string;
     reasoningEffort: string;
   };
+  runtimeContract: RuntimeContract;
   ownership: {
     tier: string;
     visibility: string;
@@ -111,12 +117,13 @@ function inferArchetype(skillId: string, sourceContent = '') {
 }
 
 function buildDefaultManifest(skillId: string, sourceContent = ''): PromptLabManifest {
+  const archetype = inferArchetype(skillId, sourceContent);
   return {
     version: 'prompt-lab-manifest/v1',
     skillId,
     agentId: `skill:${skillId}`,
     name: `default-skill-${skillId}`,
-    archetype: inferArchetype(skillId, sourceContent),
+    archetype,
     description: '',
     acceptableAgentIds: [],
     publish: {
@@ -131,6 +138,7 @@ function buildDefaultManifest(skillId: string, sourceContent = ''): PromptLabMan
       thinkingMode: 'default',
       reasoningEffort: 'default'
     },
+    runtimeContract: buildDefaultRuntimeContract(skillId, archetype),
     ownership: {
       tier: 'production',
       visibility: 'internal'
@@ -145,6 +153,9 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
   const manifest = manifestInput && typeof manifestInput === 'object' ? manifestInput : {};
   const runtimeDefaults = manifest.runtimeDefaults && typeof manifest.runtimeDefaults === 'object'
     ? manifest.runtimeDefaults
+    : {};
+  const runtimeContract = manifest.runtimeContract && typeof manifest.runtimeContract === 'object'
+    ? manifest.runtimeContract
     : {};
   const publish = manifest.publish && typeof manifest.publish === 'object'
     ? manifest.publish
@@ -175,6 +186,10 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
       thinkingMode: sanitizeString(runtimeDefaults.thinkingMode, base.runtimeDefaults.thinkingMode),
       reasoningEffort: sanitizeString(runtimeDefaults.reasoningEffort, base.runtimeDefaults.reasoningEffort)
     },
+    runtimeContract: normalizeRuntimeContract(runtimeContract, {
+      skillId,
+      archetype: sanitizeString(manifest.archetype, base.archetype),
+    }),
     ownership: {
       tier: sanitizeString(ownership.tier, base.ownership.tier),
       visibility: sanitizeString(ownership.visibility, base.ownership.visibility)
@@ -195,6 +210,7 @@ function serializeManifest(manifest: PromptLabManifest) {
     acceptableAgentIds: manifest.acceptableAgentIds,
     publish: manifest.publish,
     runtimeDefaults: manifest.runtimeDefaults,
+    runtimeContract: manifest.runtimeContract,
     ownership: manifest.ownership,
     tags: manifest.tags,
     notes: manifest.notes
@@ -241,7 +257,8 @@ function mergeManifestWithPromptFrontmatter(skillId: string, manifest: PromptLab
       model: sanitizeString(frontmatter.model, '') || manifest.runtimeDefaults.model,
       thinkingMode: sanitizeString(frontmatter.thinkingMode, manifest.runtimeDefaults.thinkingMode),
       reasoningEffort: sanitizeString(frontmatter.reasoningEffort, manifest.runtimeDefaults.reasoningEffort)
-    }
+    },
+    runtimeContract: manifest.runtimeContract
   }, sourceContent);
 }
 
@@ -523,6 +540,18 @@ router.put('/manifest/:skillId', async (req, res) => {
         ...currentManifest.runtimeDefaults,
         ...(incoming.runtimeDefaults || {})
       },
+      runtimeContract: {
+        ...currentManifest.runtimeContract,
+        ...(incoming.runtimeContract || {}),
+        businessState: {
+          ...currentManifest.runtimeContract.businessState,
+          ...(incoming.runtimeContract?.businessState || {})
+        },
+        contextUpdate: {
+          ...currentManifest.runtimeContract.contextUpdate,
+          ...(incoming.runtimeContract?.contextUpdate || {})
+        }
+      },
       ownership: {
         ...currentManifest.ownership,
         ...(incoming.ownership || {})
@@ -695,7 +724,8 @@ router.post('/compile-source', async (req, res) => {
       agentId: manifest.agentId,
       name: manifest.name,
       archetype: manifest.archetype,
-      description: manifest.description
+      description: manifest.description,
+      runtimeContract: manifest.runtimeContract,
     });
     const compiledPrompt = compileResult.prompt;
 
@@ -707,6 +737,7 @@ router.post('/compile-source', async (req, res) => {
       stats: compileResult.stats,
       manifestExists,
       manifest,
+      runtimeContract: manifest.runtimeContract,
       compiler: 'deterministic-skeleton',
       diagnostics: compileResult.diagnostics
     });
@@ -754,7 +785,8 @@ router.post('/publish', async (req, res) => {
         model: params?.model ?? currentManifest.runtimeDefaults.model,
         thinkingMode: params?.thinkingMode ?? currentManifest.runtimeDefaults.thinkingMode,
         reasoningEffort: params?.reasoningEffort ?? currentManifest.runtimeDefaults.reasoningEffort
-      }
+      },
+      runtimeContract: currentManifest.runtimeContract
     }, sourceContent);
 
     if (!nextManifest.publish.enabled) {
@@ -807,6 +839,7 @@ router.post('/publish', async (req, res) => {
       temperature,
       maxTokens
     };
+    frontmatter.runtimeContract = nextManifest.runtimeContract;
     if (nextManifest.acceptableAgentIds.length > 0) {
       frontmatter.acceptableAgentIds = nextManifest.acceptableAgentIds;
     }
@@ -855,6 +888,7 @@ router.post('/publish', async (req, res) => {
             manifestVersion: nextManifest.version,
             sourceSkillId: nextManifest.skillId,
             runtimeDefaults: nextManifest.runtimeDefaults,
+            runtimeContract: nextManifest.runtimeContract,
             exportTargets: nextManifest.publish.exportTargets,
             tags: nextManifest.tags,
             notes: nextManifest.notes

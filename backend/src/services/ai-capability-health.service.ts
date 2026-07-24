@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import systemPrisma from '../config/system-database';
 import { getAPIGateway, APIExecutor, type CallerInfo, type ResolvedRoute } from '../gateway/api-gateway';
 import { logger } from '../utils/logger';
+import { getRuntimeCapabilityProbeInterval } from './capability-probe-settings.service';
 
 export type AICapabilityStatus = 'operational' | 'degraded' | 'unavailable' | 'unknown';
 
@@ -31,7 +32,6 @@ const CAPABILITIES: Array<{ id: string; caller: CallerInfo }> = [
   { id: 'session-wrapup', caller: { agentId: 'teaching-agent', skillId: 'session-wrapup' } }
 ];
 
-const PROBE_INTERVAL_MS = 120_000;
 const STALE_AFTER_MS = 5 * 60_000;
 const DEGRADED_LATENCY_MS = 8_000;
 
@@ -90,11 +90,17 @@ export class AICapabilityHealthService {
   private streaks = new Map(CAPABILITIES.map(item => [item.id, { successes: 0, failures: 0 }]));
   private timer: NodeJS.Timeout | null = null;
   private refreshInFlight: Promise<AICapabilitySnapshot> | null = null;
-  private enabled = true;
+  /** 默认关闭；启动时由 platform_settings 覆盖 */
+  private enabled = false;
+  private intervalMs = 120_000;
 
   /** 当前探测开关状态（仅读取，不触发 IO） */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  getIntervalMs(): number {
+    return this.intervalMs;
   }
 
   /**
@@ -105,22 +111,36 @@ export class AICapabilityHealthService {
   async setEnabled(enabled: boolean): Promise<void> {
     this.enabled = enabled;
     if (enabled) {
-      this.start();
+      await this.start();
     } else {
       await this.stop();
     }
   }
 
-  start(): void {
+  /** 热更新探测间隔；若定时器已在跑则按新间隔重启 */
+  async setIntervalMs(intervalMs: number): Promise<void> {
+    this.intervalMs = intervalMs;
+    if (this.enabled && this.timer) {
+      await this.stop();
+      await this.start();
+    }
+  }
+
+  async start(): Promise<void> {
     if (!this.enabled) return;
     if (this.timer) return;
+    try {
+      this.intervalMs = await getRuntimeCapabilityProbeInterval();
+    } catch {
+      // 保留内存中的 intervalMs
+    }
     this.timer = setInterval(() => {
       void this.refresh().catch(error => {
         logger.warn('[ai-capability] 定时探测失败', {
           error: error instanceof Error ? error.message : String(error)
         });
       });
-    }, PROBE_INTERVAL_MS);
+    }, this.intervalMs);
     this.timer.unref?.();
   }
 

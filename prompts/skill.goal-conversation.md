@@ -5,6 +5,30 @@ archetype: conversational
 description: 
 temperature: 0.7
 maxTokens: 8000
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: state-refresh
+  businessState:
+    domain: goal-conversation
+    phases:
+      - understanding
+      - proposing
+      - ready
+      - completed
+    defaultPhase: understanding
+    terminalPhases:
+      - ready
+      - completed
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: state-refresh
+    stateOwner: runtime
+    description: state-refresh：以 businessState 为主记忆，每轮输入 + 可见上下文 → nextState
+  outputEnvelope: adapter
 ---
 
 ## 身份定义

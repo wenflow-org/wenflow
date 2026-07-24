@@ -1,4 +1,6 @@
 ﻿import { callPrompt } from '../../composers/prompt-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
@@ -425,6 +427,8 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   return { valid: true };
 }
 
+const TEACHING_RUNTIME_CONTRACT = buildDefaultRuntimeContract('teaching-turn', 'conversational');
+
 const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
@@ -435,6 +439,26 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   buildUserPayload: (input) => buildPromptInput(input),
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
   validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
+  mapEnvelope: (output) => {
+    const isCompletion = !!output.control?.isCompletionCandidate;
+    const phase = isCompletion ? 'completion-candidate' : 'turn-generated';
+    return adaptToRuntimeEnvelope({
+      contract: TEACHING_RUNTIME_CONTRACT,
+      artifact: output,
+      phase,
+      status: 'succeeded',
+      confidence: 0.8,
+      isTerminal: isCompletion,
+      nextAction: isCompletion ? 'finalize-or-advance' : 'continue-turn',
+      nextState: {
+        stage: phase,
+        isCompletionCandidate: isCompletion,
+        shouldTriggerPeer: !!output.control?.shouldTriggerPeer,
+        knowledge: output.knowledge,
+        pedagogy: output.pedagogy,
+      },
+    });
+  },
   modelDefaults: {
     temperature: 0.7,
     maxTokens: 4000,
@@ -468,6 +492,7 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
           promptDebug: result.debug,
         }
       },
+      runtimeEnvelope: result.runtimeEnvelope,
       renderHints: {
         component: 'teaching-turn'
       },

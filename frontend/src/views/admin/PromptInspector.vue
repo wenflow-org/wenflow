@@ -57,6 +57,13 @@
           </div>
         </div>
       </section>
+      <section class="inspector-panel inspector-panel--contract">
+        <header>
+          <strong>Runtime Contract</strong>
+          <el-button text :disabled="!runtimeContract" @click="copy(JSON.stringify(runtimeContract, null, 2))">复制</el-button>
+        </header>
+        <pre>{{ runtimeContract ? JSON.stringify(runtimeContract, null, 2) : '执行 Dry Run 后查看运行时契约' }}</pre>
+      </section>
     </div>
   </div>
 </template>
@@ -75,6 +82,7 @@ const sources = ref<Array<{ id: string; name: string }>>([])
 const selectedSkillId = ref('')
 const source = ref('')
 const compiledPrompt = ref('')
+const runtimeContract = ref<any>(null)
 const loading = ref(false)
 const compiling = ref(false)
 const viewMode = ref<'result' | 'diff'>('result')
@@ -128,6 +136,7 @@ async function compile() {
     const response = await adminPromptLabApi.compileSource({ skillId: selectedSkillId.value })
     // 后端 compile-source 响应的 prompt 在顶层（无 data 包裹），与其它接口的 data.data.* 不同
     compiledPrompt.value = response.data?.prompt || ''
+    runtimeContract.value = response.data?.runtimeContract || null
     toast.success('Dry Run 完成，未写入文件或数据库')
   } catch (error: any) {
     toast.error(error.response?.data?.error || error.message || 'Dry Run 失败')

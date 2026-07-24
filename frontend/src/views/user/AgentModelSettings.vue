@@ -1,20 +1,7 @@
 <template>
-  <CapabilityShell title="高级模型" description="为特定 AI 能力选择模型并调整生成参数。不了解参数时，建议保留系统默认值。">
+  <CapabilityShell title="高级模型">
     <div class="agent-model-settings">
-      <section class="agent-model-settings__intro glass-card">
-        <h2>AI 能力参数</h2>
-        <el-alert type="info" :closable="false">
-          自定义设置只会影响对应的 AI 能力，不会改变已完成的学习记录。
-        </el-alert>
-      </section>
-
       <section class="agent-model-settings__panel glass-card">
-        <div class="agent-model-settings__header">
-          <div>
-            <h3>模型配置</h3>
-          </div>
-        </div>
-
         <div class="agent-model-settings__table mobile-table-scroll">
           <el-result
             v-if="loadError && !loading && configs.length === 0"
@@ -26,8 +13,8 @@
               <el-button type="primary" @click="fetchConfigs">重新加载</el-button>
             </template>
           </el-result>
-          <el-table v-else :data="configs" v-loading="loading">
-            <el-table-column label="AI 能力" width="240">
+          <el-table v-else :data="configs" v-loading="loading" table-layout="fixed" style="width: 100%">
+            <el-table-column label="能力" min-width="160" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="agent-cell">
                   <strong>{{ row.displayName || row.agentId }}</strong>
@@ -35,26 +22,26 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="model" label="使用模型" width="150">
+            <el-table-column prop="model" label="模型" min-width="120" show-overflow-tooltip>
               <template #default="{ row }">
-                {{ row.model || '使用系统默认' }}
+                {{ row.model || '系统默认' }}
               </template>
             </el-table-column>
-            <el-table-column prop="temperature" label="生成随机性" width="120">
+            <el-table-column prop="temperature" label="温度" width="80">
               <template #default="{ row }">
-                {{ row.temperature ?? '系统默认' }}
+                {{ row.temperature ?? '默认' }}
               </template>
             </el-table-column>
-            <el-table-column prop="enabled" label="使用自定义设置" width="130">
+            <el-table-column prop="enabled" label="自定义" width="80">
               <template #default="{ row }">
                 <el-switch v-model="row.enabled" :loading="busyAgentId === row.agentId" :disabled="isBusy" @change="toggleOverride(row)" />
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right">
+            <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
                 <div class="table-actions">
-                    <el-button size="small" :disabled="isBusy" @click="editOverride(row)">编辑参数</el-button>
-                    <el-button size="small" type="danger" :loading="busyAgentId === row.agentId && busyAction === 'reset'" :disabled="isBusy" @click="resetOverride(row)">恢复系统默认</el-button>
+                  <el-button link type="primary" :disabled="isBusy" @click="editOverride(row)">编辑</el-button>
+                  <el-button link type="danger" :loading="busyAgentId === row.agentId && busyAction === 'reset'" :disabled="isBusy" @click="resetOverride(row)">重置</el-button>
                 </div>
               </template>
             </el-table-column>
@@ -337,9 +324,14 @@ onMounted(() => {
 
 .table-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.table-actions :deep(.el-button) {
+  margin-left: 0;
+  padding: 0 4px;
 }
 
 .dialog-actions {

@@ -607,12 +607,13 @@ export async function startServer() {
       await initializeGateway();
       assertStartupActive();
      await aiCapabilityHealthService.refresh();
-     {
-       const probeEnabled = await getRuntimeCapabilityProbeEnabled();
-       aiCapabilityHealthService.setEnabled(probeEnabled);
-       if (probeEnabled) aiCapabilityHealthService.start();
-       else logger.info('[ai-capability] 探测定时器已禁用（连接与安全开关关闭），跳过 start()');
-     }
+      {
+        const probeEnabled = await getRuntimeCapabilityProbeEnabled();
+        await aiCapabilityHealthService.setEnabled(probeEnabled);
+        if (!probeEnabled) {
+          logger.info('[ai-capability] 探测定时器已禁用（默认关闭 / 连接与安全开关关闭），跳过 start()');
+        }
+      }
       assertStartupActive();
     
      // 初始化 Agent 协作服务
@@ -652,7 +653,7 @@ export async function startServer() {
       await learningService.recoverStaleGeneratingPaths();
       assertStartupActive();
 
-      // 标记因进程中断而遗留的代学运行（V1 不续跑）
+      // 标记因进程中断而遗留的虚拟账号自动学习运行（V1 不续跑）
       await quickLearnService.recoverInterruptedRuns();
       assertStartupActive();
 

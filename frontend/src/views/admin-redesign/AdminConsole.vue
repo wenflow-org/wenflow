@@ -29,11 +29,9 @@
 
 <script setup lang="ts">
 /**
- * WenFlow Admin 控制台（待上线版）
- * 与 /admin-redesign-lab 共用同一套场景组件，但：
- * - 无实验室脚手架（状态切换 / 数据源切换 / 对比 / 全屏）
- * - 仅真实数据：挂载即 loadLiveData，失败给重试
- * - 位于 /admin/ 保护树下：无会话由路由守卫送往 /admin/login
+ * WenFlow Admin 控制台（新版，已上线）
+ * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
+ * 特点：
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MockShell from './MockShell.vue';
@@ -46,6 +44,7 @@ import MockTopology from './MockTopology.vue';
 import MockOrchestrator from './MockOrchestrator.vue';
 import MockExecLogs from './MockExecLogs.vue';
 import MockPromptCallLogs from './MockPromptCallLogs.vue';
+import MockEventCenter from './MockEventCenter.vue';
 import MockTraceWaterfall from './MockTraceWaterfall.vue';
 import MockApiConfig from './MockApiConfig.vue';
 import MockAddons from './MockAddons.vue';
@@ -58,6 +57,7 @@ import MockSessionCockpit from './MockSessionCockpit.vue';
 import MockCommandPalette from './MockCommandPalette.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
 import MockUserDetail from './MockUserDetail.vue';
+import MockDebugLab from './MockDebugLab.vue';
 import { intent, subPage } from './mockStore';
 import { loadLiveData, liveLoading } from './mockLive';
 import './mock-shared.css';
@@ -73,11 +73,13 @@ const components: Record<string, unknown> = {
   'orchestrator': MockOrchestrator,
   'execution-logs': MockExecLogs,
   'prompt-call-logs': MockPromptCallLogs,
-  'event-center': MockTraceWaterfall,
+  'event-center': MockEventCenter,
+  'trace-waterfall': MockTraceWaterfall,
   'api-config': MockApiConfig,
   'addons': MockAddons,
   'announcements': MockAnnouncements,
-  'prompt-lab': MockPromptLab
+  'prompt-lab': MockPromptLab,
+  'debug-lab': MockDebugLab
 };
 
 const detailComponents: Record<string, unknown> = {

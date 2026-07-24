@@ -109,6 +109,8 @@ class GoalConversationService {
 
 
 
+  private static readonly GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
+
   private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any } {
     const core = internal?.core || {};
     return {
@@ -145,7 +147,40 @@ class GoalConversationService {
     return aiResponse?.debug?.structuredOutputValid === true;
   }
 
+  /** 优先 runtimeEnvelope.businessState.phase，否则 internal.core.stage */
+  private resolveStageFromResponse(aiResponse: any): string {
+    const phase = aiResponse?.runtimeEnvelope?.businessState?.phase;
+    if (typeof phase === 'string' && (GoalConversationService.GOAL_STAGES as readonly string[]).includes(phase)) {
+      return phase;
+    }
+    return this.getCore(aiResponse?.internal).stage;
+  }
+
+  private resolveConfidenceFromResponse(aiResponse: any): number {
+    const envelopeConf = aiResponse?.runtimeEnvelope?.businessState?.confidence;
+    if (typeof envelopeConf === 'number' && Number.isFinite(envelopeConf)) return envelopeConf;
+    return this.getCore(aiResponse?.internal).confidence;
+  }
+
   private buildPreviousState(data: any, fallbackStage: string) {
+    const next = data?.runtimeNextState && typeof data.runtimeNextState === 'object'
+      ? data.runtimeNextState
+      : (data?.runtimeEnvelope?.contextUpdate?.nextState && typeof data.runtimeEnvelope.contextUpdate.nextState === 'object'
+        ? data.runtimeEnvelope.contextUpdate.nextState
+        : null);
+
+    if (next) {
+      return {
+        stage: next.stage || data?.stage || fallbackStage || 'understanding',
+        confidence: typeof next.confidence === 'number' ? next.confidence : (typeof data?.confidence === 'number' ? data.confidence : 0),
+        understanding: next.understanding || data?.understanding || {},
+        collected: next.collected || data?.collected || {},
+        structuredData: next.structuredData !== undefined ? next.structuredData : (data?.structuredData ?? null),
+        confirmedProposal: next.confirmedProposal !== undefined ? next.confirmedProposal : (data?.confirmedProposal ?? null),
+        confidenceScores: next.confidenceScores !== undefined ? next.confidenceScores : (data?.confidenceScores ?? null)
+      };
+    }
+
     return {
       stage: data?.stage || fallbackStage || 'understanding',
       confidence: typeof data?.confidence === 'number' ? data.confidence : 0,
@@ -160,6 +195,7 @@ class GoalConversationService {
   private withConversationId(result: any, conversationId: string) {
     return {
       ...result,
+      runtimeEnvelope: result?.runtimeEnvelope || null,
       internal: {
         ...(result?.internal || {}),
         core: {
@@ -172,6 +208,33 @@ class GoalConversationService {
             nextQuestions: [],
             collected: {}
           }
+        }
+      }
+    };
+  }
+
+  private toServiceResult(aiResponse: any, conversationId: string, overrides?: {
+    stage?: string;
+    isCompleted?: boolean;
+    learningPath?: any;
+    userVisible?: string;
+  }) {
+    const stage = overrides?.stage || this.resolveStageFromResponse(aiResponse);
+    const confidence = this.resolveConfidenceFromResponse(aiResponse);
+    const goalExt = this.getGoalExt(aiResponse?.internal);
+    return {
+      userVisible: overrides?.userVisible ?? aiResponse?.userVisible ?? '',
+      runtimeEnvelope: aiResponse?.runtimeEnvelope || null,
+      internal: {
+        core: {
+          conversationId,
+          stage,
+          confidence,
+          isCompleted: overrides?.isCompleted ?? (stage === 'ready' || stage === 'completed'),
+          ...(overrides?.learningPath !== undefined ? { learningPath: overrides.learningPath } : {})
+        },
+        ext: {
+          goalConversation: goalExt
         }
       }
     };
@@ -278,32 +341,17 @@ class GoalConversationService {
       await this.saveMessage(conversation.id, 'user', initialGoal);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
-      // 更新收集的数据
-      await this.updateCollectedData(conversation.id, aiResponse);
+      // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
+      await this.updateCollectedData(conversation.id, responseWithConversationId);
 
+      const stage = this.resolveStageFromResponse(responseWithConversationId);
       logger.info('对话会话创建成功', {
         conversationId: conversation.id,
-        stage: this.getCore(aiResponse.internal).stage,
-        confidence: this.getCore(aiResponse.internal).confidence
+        stage,
+        confidence: this.resolveConfidenceFromResponse(responseWithConversationId)
       });
 
-      const core = this.getCore(responseWithConversationId.internal);
-      const goalExt = this.getGoalExt(responseWithConversationId.internal);
-
-      return {
-        userVisible: aiResponse.userVisible,
-        internal: {
-          core: {
-            conversationId: conversation.id,
-            stage: core.stage,
-            confidence: core.confidence,
-              isCompleted: core.stage === 'ready' || core.stage === 'completed'
-          },
-          ext: {
-            goalConversation: goalExt
-          }
-        }
-      };
+      return this.toServiceResult(responseWithConversationId, conversation.id, { stage });
     } catch (error) {
       logger.error('开始对话会话失败:', error);
       throw error;
@@ -466,13 +514,14 @@ async continueConversation(
       await this.saveMessage(conversation.id, 'user', userReply);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible);
 
-      // 更新收集的数据
-      await this.updateCollectedData(conversation.id, aiResponse);
-      const core = this.getCore(responseWithConversationId.internal);
+      // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
+      await this.updateCollectedData(conversation.id, responseWithConversationId);
+      const stage = this.resolveStageFromResponse(responseWithConversationId);
+      const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
       // 如果对话完成，先生成学习路径
-      if (core.stage === 'ready' || core.stage === 'completed') {
+      if (stage === 'ready' || stage === 'completed') {
         try {
             const latestConversation = await prisma.goal_conversations.findUnique({
               where: { id: conversationId }
@@ -516,27 +565,12 @@ async continueConversation(
           );
 
           // 新格式返回：completed 状态
-          return {
+          return this.toServiceResult(responseWithConversationId, conversationId, {
+            stage: 'completed',
+            isCompleted: true,
+            learningPath: { id: placeholderPath.id, status: 'generating' },
             userVisible: `${responseWithConversationId.userVisible}\n\n⏳ 学习路径已开始生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。`,
-            internal: {
-              core: {
-                conversationId,
-                stage: 'completed',
-                confidence: core.confidence,
-                isCompleted: true,
-                learningPath: {
-                  id: placeholderPath.id,
-                  status: 'generating'
-                }
-              },
-              ext: {
-                goalConversation: {
-                  ...goalExt,
-                  quickReplies: goalExt.quickReplies || []
-                }
-              }
-            }
-          };
+          });
         } catch (pathError) {
           // 学习路径生成失败，返回错误但不标记完成
           logger.error('学习路径生成失败，对话仍保留在 proposing 状态', pathError);
@@ -547,18 +581,15 @@ async continueConversation(
               data.learningPath = null;
             }
           });
-          return {
+          const failed = this.toServiceResult(responseWithConversationId, conversationId, {
+            stage: 'proposing',
+            isCompleted: false,
             userVisible: '抱歉，生成学习路径时遇到了问题。请稍后重试，或者点击"重试"按钮。',
+          });
+          return {
+            ...failed,
             internal: {
-              core: {
-                conversationId,
-                stage: 'proposing',
-                confidence: core.confidence,
-                isCompleted: false
-              },
-              ext: {
-                goalConversation: goalExt
-              },
+              ...failed.internal,
               error: '学习路径生成失败，请重试'
             }
           };
@@ -566,20 +597,10 @@ async continueConversation(
       }
 
       // 新格式返回：正常对话状态
-      return {
-        userVisible: responseWithConversationId.userVisible,
-        internal: {
-          core: {
-            conversationId,
-            stage: core.stage,
-            confidence: core.confidence,
-            isCompleted: false
-          },
-          ext: {
-            goalConversation: goalExt
-          }
-        }
-      };
+      return this.toServiceResult(responseWithConversationId, conversationId, {
+        stage,
+        isCompleted: false,
+      });
 
     } catch (error) {
       logger.error('继续对话失败:', error);
@@ -635,8 +656,8 @@ async continueConversation(
 
       const data = JSON.parse(conversation.collectedData);
       const history = data.messages || [];
-      const previousUnderstanding = data.understanding || {};
       const previousState = this.buildPreviousState(data, conversation.stage);
+      const previousUnderstanding = previousState.understanding || data.understanding || {};
 
       // 正式链路固定使用完整可见历史 + state-first，与测试模式保持一致。
       const contextMode = 'full';
@@ -651,7 +672,7 @@ async continueConversation(
           content: msg.content
         })),
         previousUnderstanding,
-        previousStage: data.stage || conversation.stage,
+        previousStage: previousState.stage || data.stage || conversation.stage,
         previousState,
         maxFormatRetries: this.MAX_FORMAT_RETRIES,
         confirmProposal: options?.confirmProposal === true,
@@ -661,8 +682,8 @@ async continueConversation(
         logger.info('AI响应', {
         contextMode,
         historyCount: selectedHistory.length,
-        stage: this.getCore(aiResponse.internal).stage,
-        confidence: this.getCore(aiResponse.internal).confidence,
+        stage: this.resolveStageFromResponse(aiResponse),
+        confidence: this.resolveConfidenceFromResponse(aiResponse),
         responseLength: aiResponse.userVisible.length,
         promptVersion: aiResponse?.debug?.promptVersion || 'agent-managed',
         attemptCount: aiResponse?.debug?.attemptCount || 0,
@@ -711,6 +732,7 @@ async continueConversation(
   private async updateCollectedData(conversationId: string, aiResponse: {
     userVisible: string;
     internal: any;
+    runtimeEnvelope?: any;
   }) {
     const conversation = await prisma.goal_conversations.findUnique({
       where: { id: conversationId }
@@ -720,16 +742,27 @@ async continueConversation(
 
     const core = this.getCore(aiResponse.internal);
     const goalExt = this.getGoalExt(aiResponse.internal);
+    const stage = this.resolveStageFromResponse(aiResponse);
+    const confidence = this.resolveConfidenceFromResponse(aiResponse);
 
     // 合并已收集的信息（从 ext.goalConversation.collected）
     data.collected = { ...data.collected, ...goalExt.collected };
-    data.confidence = core.confidence;
+    data.confidence = confidence;
 
     // 保存 understanding 供前端展示
     data.understanding = goalExt.understanding || data.understanding || {};
 
-    // 保存 stage
-    data.stage = core.stage;
+    // 保存 stage（优先 envelope.phase）
+    data.stage = stage;
+
+    // 统一运行契约：落盘最近一次 envelope 快照（state-refresh nextState）
+    if (aiResponse.runtimeEnvelope) {
+      data.runtimeEnvelope = aiResponse.runtimeEnvelope;
+      const nextState = aiResponse.runtimeEnvelope?.contextUpdate?.nextState;
+      if (nextState && typeof nextState === 'object') {
+        data.runtimeNextState = nextState;
+      }
+    }
 
     // 保存待问问题
     if (goalExt.nextQuestions) {
@@ -759,7 +792,7 @@ async continueConversation(
         where: { id: conversationId },
         data: {
           collectedData: JSON.stringify(data),
-          stage: core.stage
+          stage
         }
       });
       await enqueueDomainEvent(tx, createDomainEvent({
@@ -770,8 +803,8 @@ async continueConversation(
         source: 'goal-conversation-service',
         data: {
           conversationId,
-          stage: core.stage,
-          confidence: core.confidence,
+          stage,
+          confidence,
           understanding: data.understanding,
           normalizedGoalState: data.normalizedGoalState,
           confirmedProposal: data.confirmedProposal || null,

@@ -3,6 +3,7 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
@@ -37,6 +38,7 @@ export interface VirtualLearnerPathEvaluatorOutput {
     internalDecision?: 'accept' | 'modify' | 'reject';
     internalConfidence?: number;
   };
+  runtimeEnvelope?: ReturnType<typeof mapSkillOutputEnvelope>;
 }
 
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT = `你是“虚拟学习者 Path 评估器”。
@@ -238,6 +240,10 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
         failureReason: 'missing reaction'
       }),
       normalizeOutput,
+      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-path-evaluator', output, {
+        phase: 'simulation-step-completed',
+        nextState: (output as any)?.learnerState ?? null,
+      }),
       retryStrategy: {
         maxAttempts: 2,
         onValidationFail: () => '请只输出一个合法 JSON 对象，必须包含 reaction。'
@@ -245,9 +251,16 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
     }, input || {} as VirtualLearnerPathEvaluatorInput);
 
     if (!result.success || !result.output) {
+      const fallback = { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true };
       return {
         success: true,
-        output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
+        output: {
+          ...fallback,
+          runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-path-evaluator', fallback, {
+            phase: 'simulation-step-completed',
+            status: 'partial',
+          }),
+        },
         duration: Date.now() - startTime,
         cached: true,
       };
@@ -257,6 +270,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         debug: {
           ...(result.output.debug || {}),
           rawModelOutput: result.debug.rawModelOutput,

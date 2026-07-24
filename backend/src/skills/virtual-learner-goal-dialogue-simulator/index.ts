@@ -3,6 +3,7 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
@@ -59,6 +60,7 @@ export interface GoalLearnerSimulationOutput {
     visibleSignal?: string;
     stateChangeReason?: string;
   };
+  runtimeEnvelope?: ReturnType<typeof mapSkillOutputEnvelope>;
 }
 
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT = `你是“Goal 阶段虚拟学习者对话模拟器”。
@@ -313,6 +315,10 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
         failureReason: 'missing reply or learnerState'
       }),
       normalizeOutput,
+      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-goal-dialogue-simulator', output, {
+        phase: 'simulation-step-completed',
+        nextState: (output as any)?.learnerState ?? null,
+      }),
       retryStrategy: {
         maxAttempts: 2,
         onValidationFail: () => '请只输出一个合法 JSON 对象，必须包含 reply 和 learnerState。'
@@ -320,9 +326,17 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
     }, input || {} as GoalLearnerSimulationInput);
 
     if (!result.success || !result.output) {
+      const fallback = { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true };
       return {
         success: true,
-        output: { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true },
+        output: {
+          ...fallback,
+          runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-goal-dialogue-simulator', fallback, {
+            phase: 'simulation-step-completed',
+            status: 'partial',
+            nextState: (fallback as any)?.learnerState ?? null,
+          }),
+        },
         duration: Date.now() - startTime,
         cached: true,
       };
@@ -332,6 +346,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         debug: {
           ...(result.output.debug || {}),
           rawModelOutput: result.debug.rawModelOutput,

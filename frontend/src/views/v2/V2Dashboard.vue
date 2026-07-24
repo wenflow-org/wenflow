@@ -373,23 +373,6 @@
       </div>
     </transition>
 
-    <!-- 数据源切换（真实 / 演示） -->
-    <div class="ds-toggle" role="group" aria-label="数据源切换">
-      <span class="ds-toggle__label">数据源</span>
-      <button
-        type="button"
-        class="ds-toggle__opt"
-        :class="{ 'ds-toggle__opt--on': dataSource === 'real' }"
-        @click="dataSource = 'real'"
-      >真实</button>
-      <button
-        type="button"
-        class="ds-toggle__opt"
-        :class="{ 'ds-toggle__opt--on': dataSource === 'demo' }"
-        @click="dataSource = 'demo'"
-      >演示</button>
-    </div>
-
     <V2Footer />
   </div>
 </template>
@@ -656,12 +639,12 @@ const pathsCountText = computed(() => {
 });
 
 const achievementsText = computed(() => {
-  const unlocked = achievementsNow.value.filter((a) => a.unlocked).length;
-  return achievementsNow.value.length ? `已解锁 ${unlocked} / ${achievementsNow.value.length}` : '完成学习即可解锁';
+  const unlocked = achievements.value.filter((a) => a.unlocked).length;
+  return achievements.value.length ? `已解锁 ${unlocked} / ${achievements.value.length}` : '完成学习即可解锁';
 });
 
 const nearestAchievement = computed(() => {
-  const locked = achievementsNow.value.filter((a) => !a.unlocked && a.progress);
+  const locked = achievements.value.filter((a) => !a.unlocked && a.progress);
   if (!locked.length) return null;
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
@@ -672,68 +655,10 @@ const nearestAchievement = computed(() => {
   };
 });
 
-/* ================= 数据源切换（真实 / 演示） ================= */
-const dataSource = ref<'real' | 'demo'>('real');
-
-function demoDay(daysAgo: number, minutes: number, title: string, withState = false): Record<string, any> {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 19, 0);
-  const base: Record<string, any> = {
-    id: `demo_${daysAgo}_${minutes}`,
-    startTime: start.toISOString(),
-    endTime: new Date(start.getTime() + minutes * 60000).toISOString(),
-    durationMinutes: minutes,
-    taskTitle: title,
-    taskStatus: 'completed',
-    status: 'completed'
-  };
-  if (withState) {
-    base.parsedState = {
-      analysis: { understanding: 0.8, engagement: 0.75, cognitiveLevel: 'apply', confusionPoints: ['read_excel 的参数记忆'] },
-      stageHistory: [{ stage: 'opening' }, { stage: 'teaching' }],
-      classroomEventHistory: [
-        { occurredAt: start.toISOString(), summary: '课堂已开始，进入开场定位' },
-        { occurredAt: new Date(start.getTime() + 5 * 60000).toISOString(), summary: '围绕焦点知识点继续推进理解与应用' },
-        { occurredAt: new Date(start.getTime() + 28 * 60000).toISOString(), summary: '完成一次练手练习，理解度良好' }
-      ]
-    };
-  }
-  return base;
-}
-
-const demoSessions: Array<Record<string, any>> = [
-  demoDay(19, 30, 'Python 安装与环境配置'),
-  demoDay(18, 15, '变量与文件路径练习'),
-  demoDay(15, 25, 'pandas 入门'),
-  demoDay(12, 40, 'read_excel 练习'),
-  demoDay(10, 20, '数据预览与筛选'),
-  demoDay(8, 35, 'pandas 读取练习'),
-  demoDay(6, 50, '写入汇总表演示'),
-  demoDay(4, 20, '追加数据练习'),
-  demoDay(2, 20, 'pandas 读取练习'),
-  demoDay(1, 65, '阶段 2 练习复盘', true),
-  demoDay(0, 45, 'pandas 读取练习')
-];
-
-const demoAchievements: Array<Record<string, any>> = [
-  { id: 'd1', name: '初学者', description: '完成第一个任务', icon: '🎯', xpReward: 10, type: 'milestone', unlocked: true, earnedAt: new Date(Date.now() - 19 * 86400000).toISOString(), progress: { current: 1, total: 1, percentage: 100 } },
-  { id: 'd2', name: '连续 2 天', description: '连续学习 2 天', icon: '🔥', xpReward: 30, type: 'streak', unlocked: true, earnedAt: new Date(Date.now() - 86400000).toISOString(), progress: { current: 2, total: 2, percentage: 100 } },
-  { id: 'd3', name: '小步快跑', description: '完成 3 次学习', icon: '⚡', xpReward: 40, type: 'completion', unlocked: false, progress: { current: 2, total: 3, percentage: 67 } },
-  { id: 'd4', name: '七日不断', description: '连续学习 7 天', icon: '🔥', xpReward: 80, type: 'streak', unlocked: false, progress: { current: 2, total: 7, percentage: 29 } },
-  { id: 'd5', name: 'KTL 达到 5.0', description: '知识趋势线达到 5.0', icon: '📈', xpReward: 100, type: 'mastery', unlocked: false, progress: { current: 4.4, total: 5, percentage: 88 } },
-  { id: 'd6', name: 'pandas 新手', description: '掌握 5 个 pandas 知识点', icon: '📚', xpReward: 60, type: 'mastery', unlocked: false, progress: { current: 3, total: 5, percentage: 60 } },
-  { id: 'd7', name: '路径开拓者', description: '创建第一条学习路径', icon: '🗺️', xpReward: 50, type: 'milestone', unlocked: false, progress: { current: 1, total: 1, percentage: 100 } },
-  { id: 'd8', name: '学以致用', description: '完成一次实战任务', icon: '🎯', xpReward: 100, type: 'mastery', unlocked: false, progress: { current: 0, total: 1, percentage: 0 } }
-];
-
-/** 当前生效的数据源（演示模式注入富数据） */
-const sessionsNow = computed(() => (dataSource.value === 'demo' ? demoSessions : sessions.value));
-const achievementsNow = computed(() => (dataSource.value === 'demo' ? demoAchievements : achievements.value));
 const todayStr = new Date().toISOString().slice(0, 10);
 const minutesByDate = computed(() => {
   const map = new Map<string, number>();
-  for (const s of sessionsNow.value) {
+  for (const s of sessions.value) {
     const date = String(s.startTime || '').slice(0, 10);
     if (!date) continue;
     map.set(date, (map.get(date) ?? 0) + (s.durationMinutes ?? 0));
@@ -839,7 +764,7 @@ const monthTotals = computed(() => {
   for (const [, m] of minutesByDate.value) {
     if (m > 0) { minutes += m; days += 1; }
   }
-  const sessionsCount = sessionsNow.value.length;
+  const sessionsCount = sessions.value.length;
   return { minutes, days, sessions: sessionsCount };
 });
 
@@ -858,7 +783,7 @@ function selectDay(date: string) {
 const selectedInfo = computed(() => {
   const date = selectedDate.value;
   const minutes = minutesByDate.value.get(date) ?? 0;
-  const daySessions = sessionsNow.value.filter((s) => String(s.startTime || '').startsWith(date));
+  const daySessions = sessions.value.filter((s) => String(s.startTime || '').startsWith(date));
   const d = new Date(date + 'T00:00:00');
   const title = `${d.getMonth() + 1}月${d.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()]}${date === todayStr ? ' · 今天' : ''}`;
   if (minutes <= 0) {
@@ -915,7 +840,7 @@ function sessionStatusLabel(s: Record<string, any>) {
 
 const daySheet = computed(() => {
   const date = selectedDate.value;
-  const daySessions = sessionsNow.value
+  const daySessions = sessions.value
     .filter((s) => String(s.startTime || '').startsWith(date))
     .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
 
@@ -1594,36 +1519,5 @@ a.btn-primary { text-decoration: none; }
   .day__cell { width: 28px; height: 28px; border-radius: 8px; font-size: 11px; }
   .month { padding: 16px 14px; }
   .month__meta { gap: 10px; }
-}
-</style>
-
-<style scoped>
-/* ---------- 数据源切换 ---------- */
-.ds-toggle {
-  position: fixed;
-  right: 18px; bottom: 18px;
-  z-index: 60;
-  display: inline-flex; align-items: center; gap: 2px;
-  padding: 4px;
-  background: rgba(23, 32, 51, 0.82);
-  backdrop-filter: blur(12px);
-  border-radius: 999px;
-  box-shadow: 0 12px 30px rgba(23, 32, 51, 0.28);
-}
-.ds-toggle__label {
-  font-size: 11px; font-weight: 700;
-  color: rgba(255, 255, 255, 0.55);
-  padding: 0 8px 0 10px;
-}
-.ds-toggle__opt {
-  border: 0; background: transparent;
-  color: rgba(255, 255, 255, 0.62);
-  font: inherit; font-size: 12px; font-weight: 700;
-  padding: 6px 14px; border-radius: 999px;
-  cursor: pointer; transition: .15s ease;
-}
-.ds-toggle__opt--on { background: #fff; color: var(--ink); }
-@media (max-width: 900px) {
-  .ds-toggle { bottom: 82px; right: 12px; }
 }
 </style>

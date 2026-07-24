@@ -236,6 +236,38 @@
       <p class="ac-rel__note">不变量：认证失败不重试 · 额度耗尽不重试 · 调用方取消不重试 · 不静默切换 Provider</p>
     </section>
 
+    <!-- AI 能力探测（live） -->
+    <section v-if="isLive && probe.loaded" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">AI 能力探测</h3>
+        <span class="mk-badge" :class="probe.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">
+          {{ probe.enabled ? '已开启' : '已关闭' }}
+        </span>
+      </div>
+      <div class="ac-probe">
+        <label class="ac-field ac-field--check">
+          <span>定期探活</span>
+          <input type="checkbox" v-model="probe.enabled" @change="markDirty('probe')" />
+        </label>
+        <label class="ac-field">
+          <span>探测间隔（秒）</span>
+          <input
+            v-model.number="probe.intervalSec"
+            type="number"
+            :min="Math.ceil(probe.minIntervalMs / 1000)"
+            :max="Math.floor(probe.maxIntervalMs / 1000)"
+            step="30"
+            class="mk-filter__input"
+            :disabled="!probe.enabled"
+            @input="markDirty('probe')"
+          />
+        </label>
+      </div>
+      <p class="ac-rel__note">
+        默认关闭。开启后按间隔向模型服务发极简探活（约 15 token），用于 5 条核心学习链路健康判断。间隔 10 秒～24 小时。
+      </p>
+    </section>
+
     <!-- 保存条 -->
     <div v-if="dirty.size > 0" class="ac-save">
       <span class="ac-save__dot"></span>
@@ -260,7 +292,7 @@ import {
   timeAgo,
   errMsg
 } from './mockLive'
-import { adminPlatformSettingsApi } from '@/api/adminApi'
+import { adminPlatformSettingsApi, adminCapabilityProbeApi } from '@/api/adminApi'
 import { registrationEnabled, updateRegistrationSetting } from './mockLive'
 
 const props = defineProps<{ state: 'ready' | 'incomplete' }>()
@@ -306,6 +338,16 @@ interface Reliability {
 }
 const reliability = ref<Reliability | null>(null)
 
+const probe = reactive({
+  enabled: false,
+  intervalSec: 120,
+  minIntervalMs: 10_000,
+  maxIntervalMs: 86_400_000,
+  loaded: false,
+  lastEnabled: false,
+  lastIntervalSec: 120
+})
+
 async function loadReliability() {
   try {
     const res = await adminPlatformSettingsApi.getReliabilitySettings()
@@ -321,6 +363,23 @@ async function loadReliability() {
     }
   } catch {
     reliability.value = null
+  }
+}
+
+async function loadProbe() {
+  try {
+    const res = await adminCapabilityProbeApi.getSettings()
+    const d = res.data?.data ?? {}
+    probe.enabled = d.enabled === true
+    probe.lastEnabled = probe.enabled
+    const ms = Number(d.intervalMs)
+    probe.intervalSec = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 1000) : 120
+    probe.lastIntervalSec = probe.intervalSec
+    if (typeof d.minIntervalMs === 'number') probe.minIntervalMs = d.minIntervalMs
+    if (typeof d.maxIntervalMs === 'number') probe.maxIntervalMs = d.maxIntervalMs
+    probe.loaded = true
+  } catch {
+    probe.loaded = false
   }
 }
 
@@ -371,6 +430,7 @@ watch(
     if (dataSource.value === 'live') {
       applyLiveConfig()
       if (!reliability.value) void loadReliability()
+      if (!probe.loaded) void loadProbe()
     } else applyDemoState(props.state)
   },
   { immediate: true, deep: true }
@@ -497,6 +557,25 @@ async function saveAll() {
       if (dirty.value.has('reliability') && reliability.value) {
         await adminPlatformSettingsApi.updateReliabilitySettings({ ...reliability.value })
       }
+      if (dirty.value.has('probe') && probe.loaded) {
+        const payload: { enabled?: boolean; intervalMs?: number } = {}
+        if (probe.enabled !== probe.lastEnabled) payload.enabled = probe.enabled
+        if (probe.intervalSec !== probe.lastIntervalSec) {
+          payload.intervalMs = Math.round(probe.intervalSec * 1000)
+        }
+        if (Object.keys(payload).length) {
+          const res = await adminCapabilityProbeApi.updateSettings(payload)
+          const d = res.data?.data ?? {}
+          if (typeof d.enabled === 'boolean') {
+            probe.enabled = d.enabled
+            probe.lastEnabled = d.enabled
+          }
+          if (typeof d.intervalMs === 'number') {
+            probe.intervalSec = Math.round(d.intervalMs / 1000)
+            probe.lastIntervalSec = probe.intervalSec
+          }
+        }
+      }
       dirty.value = new Set()
       showToast('配置已保存并生效')
     } else {
@@ -515,6 +594,7 @@ function discardAll() {
   if (isLive.value) {
     applyLiveConfig()
     void loadReliability()
+    void loadProbe()
   } else applyDemoState(props.state)
   showToast('已放弃未保存的变更', 'mk-toast--info')
 }
@@ -618,9 +698,16 @@ async function toggleRegistration() {
 .ac-textarea { resize: vertical; font-size: 12px; }
 .ac-rel {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
-  padding: 16px;
+  padding: 0 16px 8px;
+}
+.ac-probe {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px 16px;
+  padding: 0 16px 8px;
+  align-items: end;
 }
 .ac-field--check { align-content: end; }
 .ac-field--check input { width: 16px; height: 16px; }

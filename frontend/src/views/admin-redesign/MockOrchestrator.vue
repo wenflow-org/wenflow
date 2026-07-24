@@ -7,7 +7,21 @@
       <span class="mk-status__meta">{{ stages.length }} 阶段</span>
       <span class="mk-status__meta">{{ totalSkills }} Skills</span>
       <span class="mk-status__meta">接力 {{ Math.max(stages.length - 1, 0) }} 处</span>
+      <span v-if="defsLoaded" class="mk-status__meta">定义源 {{ orchCount }} 编排 / {{ agentDefCount }} Agent</span>
+      <button v-if="isLive" type="button" class="mk-status__action" :disabled="defsLoading" @click="loadDefinitions">
+        {{ defsLoading ? '拉取中…' : '刷新定义' }}
+      </button>
     </div>
+
+    <section v-if="isLive && definitionNotes.length" class="mk-card orch-defs">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">运行时定义（API 真源）</h3>
+        <span class="mk-card__meta">orchestrators + agents</span>
+      </div>
+      <ul class="orch-defs__list">
+        <li v-for="(n, i) in definitionNotes" :key="i">{{ n }}</li>
+      </ul>
+    </section>
 
     <!-- 阶段流水线 -->
     <div class="orch-flow">
@@ -69,11 +83,53 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { openSkillDrawer, dataSource } from './mockStore'
-import { liveTopoNodes, liveSkillCatalog } from './mockLive'
+import { liveTopoNodes, liveSkillCatalog, errMsg } from './mockLive'
+import { adminRuntimeDefinitionsApi } from '@/api/adminApi'
 
 defineProps<{ state: 'normal' }>()
+
+const isLive = computed(() => dataSource.value === 'live')
+const defsLoading = ref(false)
+const defsLoaded = ref(false)
+const orchCount = ref(0)
+const agentDefCount = ref(0)
+const definitionNotes = ref<string[]>([])
+
+async function loadDefinitions() {
+  if (!isLive.value) return
+  defsLoading.value = true
+  try {
+    const [orchRes, agentRes] = await Promise.all([
+      adminRuntimeDefinitionsApi.getOrchestratorDefinitions(),
+      adminRuntimeDefinitionsApi.getAgentDefinitions()
+    ])
+    const orchBody = orchRes.data?.data ?? orchRes.data ?? []
+    const agentBody = agentRes.data?.data ?? agentRes.data ?? []
+    const orchItems = Array.isArray(orchBody) ? orchBody : orchBody.items || orchBody.orchestrators || []
+    const agentItems = Array.isArray(agentBody) ? agentBody : agentBody.items || agentBody.agents || []
+    orchCount.value = orchItems.length
+    agentDefCount.value = agentItems.length
+    definitionNotes.value = [
+      ...orchItems.slice(0, 6).map((o: Record<string, unknown>) =>
+        `编排 ${String(o.id || o.name || '—')} · ${String(o.title || o.label || o.description || '').slice(0, 48)}`
+      ),
+      ...agentItems.slice(0, 6).map((a: Record<string, unknown>) =>
+        `Agent ${String(a.id || a.agentId || '—')} · ${String(a.name || a.title || '').slice(0, 40)}`
+      )
+    ]
+    defsLoaded.value = true
+  } catch (e) {
+    definitionNotes.value = [`定义拉取失败：${errMsg(e)}`]
+  } finally {
+    defsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  if (isLive.value) void loadDefinitions()
+})
 
 interface SkillNode { id: string; name: string; calls: number; produces: string[] }
 interface Stage {
@@ -188,6 +244,15 @@ const current = computed(() => stages.value.find((s) => s.id === active.value) |
 </script>
 
 <style scoped>
+.orch-defs__list {
+  margin: 0;
+  padding: 0 16px 14px 32px;
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+  line-height: 1.5;
+}
 .orch-flow {
   display: flex;
   align-items: center;

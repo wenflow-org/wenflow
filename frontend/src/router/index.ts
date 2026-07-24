@@ -27,14 +27,36 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('@/views/Home.vue'),
+    component: () => import('@/views/HomeNext.vue'),
     meta: { title: '首页' }
   },
   {
     path: '/vision',
     name: 'Vision',
-    component: () => import('@/views/Vision.vue'),
+    component: () => import('@/views/VisionNext.vue'),
     meta: { title: '愿景' }
+  },
+  // 旧版营销页归档（暂不删除文件）
+  {
+    path: '/legacy/home',
+    name: 'LegacyHome',
+    component: () => import('@/views/Home.vue'),
+    meta: { title: '首页 · 旧版' }
+  },
+  {
+    path: '/legacy/vision',
+    name: 'LegacyVision',
+    component: () => import('@/views/Vision.vue'),
+    meta: { title: '愿景 · 旧版' }
+  },
+  // 新稿预览地址 → 正式路径
+  {
+    path: '/next',
+    redirect: '/'
+  },
+  {
+    path: '/next/vision',
+    redirect: '/vision'
   },
   {
     path: '/login',
@@ -159,13 +181,13 @@ const routes: RouteRecordRaw[] = [
     path: '/user/account',
     name: 'UserAccount',
     component: () => import('@/views/Profile.vue'),
-    meta: { title: '账户概览', requiresAuth: true }
+    meta: { title: '账户', requiresAuth: true }
   },
   {
     path: '/user/skills',
     name: 'UserSkills',
     component: () => import('@/views/user/Skills.vue'),
-    meta: { title: 'Skill 管理', requiresAuth: true }
+    meta: { title: 'Skill', requiresAuth: true }
   },
   {
     path: '/user/agent-logs',
@@ -239,14 +261,8 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '开发者文档' }
   },
   {
-    path: '/design-lab',
-    name: 'DesignLab',
-    component: () => import('@/views/DesignLab.vue'),
-    meta: { title: '设计实验室' }
-  },
-  {
     path: '/redesign-lab',
-    redirect: '/v2/dashboard'
+    redirect: '/dashboard'
   },
   // ===== /v2 已上线：旧地址全部重定向到正式路径 =====
   {
@@ -286,17 +302,11 @@ const routes: RouteRecordRaw[] = [
     redirect: '/dashboard'
   },
   {
-    path: '/admin-redesign-lab',
-    name: 'AdminRedesignLab',
-    component: () => import('@/views/admin-redesign/AdminRedesignLab.vue'),
-    meta: { title: '重设计稿 · Admin 风格探索' }
-  },
-  {
-    // 新版管理控制台（待上线版）：顶层路由，不嵌入旧后台壳
+    // 管理控制台（新版，已上线）：顶层路由，不嵌入旧后台壳
     path: '/admin/console',
     name: 'AdminConsole',
     component: () => import('@/views/admin-redesign/AdminConsole.vue'),
-    meta: { title: '管理控制台' }
+    meta: { title: '管理控制台', requiresAdminAuth: true }
   },
   // 管理平台路由
   {
@@ -306,11 +316,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '管理员登录' }
   },
   {
+    // 旧版管理后台（已归档）：/admin 重定向到新版控制台，子路由保留可访问
     path: '/admin',
     name: 'AdminLayout',
     component: () => import('@/views/admin/Dashboard.vue'),
     meta: { title: '管理平台', requiresAdminAuth: true },
-    redirect: '/admin/dashboard',
+    redirect: '/admin/console',
     children: [
       {
         path: 'dashboard',

@@ -3,6 +3,7 @@ import {
   SkillExecutionResult,
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
@@ -386,6 +387,10 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         }
       },
       normalizeOutput,
+      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-learn-turn-simulator', output, {
+        phase: 'simulation-step-completed',
+        nextState: output?.learnerState ?? null,
+      }),
       retryStrategy: {
         maxAttempts: 2,
         onValidationFail: ({ failureReason }) => `上一次输出失败：${failureReason}。请只返回一个完整、可解析的 JSON 对象；不要 markdown，不要代码块，不要解释；所有字符串必须闭合。`
@@ -399,6 +404,11 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         output: {
           ...fallback,
           degraded: true,
+          runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-learn-turn-simulator', fallback, {
+            phase: 'simulation-step-completed',
+            status: 'partial',
+            nextState: fallback?.learnerState ?? null,
+          }),
           _debug: {
             rawModelOutput: result.debug.rawModelOutput,
             extractedJson: result.debug.extractedJson,
@@ -415,6 +425,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
       success: true,
       output: {
         ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

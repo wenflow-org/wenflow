@@ -64,6 +64,17 @@ function nowTime(): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatMsgTime(raw?: string): string {
+  if (!raw) return nowTime();
+  // 后端可能回 ISO；统一成 HH:mm
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime()) && (raw.includes('T') || raw.includes('-'))) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  if (/^\d{1,2}:\d{2}/.test(raw)) return raw.slice(0, 5);
+  return raw;
+}
+
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);
 const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>('');
@@ -157,9 +168,19 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
 
   // 消息：优先使用后端返回的完整历史
   if (Array.isArray(env.meta?.messages) && env.meta.messages.length > 0) {
-    messages.value = env.meta.messages.map((m) => ({ role: m.role, content: m.content, time: m.time }));
+    messages.value = env.meta.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      time: formatMsgTime(m.time)
+    }));
   } else {
-    if (opts.userText) messages.value.push({ role: 'user', content: opts.userText, time: nowTime() });
+    // 乐观插入后可能已有用户气泡，避免重复
+    if (opts.userText) {
+      const last = messages.value[messages.value.length - 1];
+      if (!(last?.role === 'user' && last.content === opts.userText)) {
+        messages.value.push({ role: 'user', content: opts.userText, time: nowTime() });
+      }
+    }
     if (env.userVisible) messages.value.push({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
   localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
@@ -196,6 +217,10 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
 async function send(text: string) {
   const t = text.trim();
   if (!t || sending.value) return;
+  // 先上屏，再等 AI（与 supplement 一致）
+  messages.value.push({ role: 'user', content: t, time: nowTime() });
+  started.value = true;
+  localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
   if (!conversationId.value) {
     await run('start', t);
   } else {
@@ -205,7 +230,10 @@ async function send(text: string) {
 
 async function confirm() {
   if (!conversationId.value || sending.value) return;
-  await run('confirm', '确认并生成路径');
+  const label = '确认并生成路径';
+  messages.value.push({ role: 'user', content: label, time: nowTime() });
+  localStorage.setItem(MSG_KEY, JSON.stringify(messages.value.slice(-60)));
+  await run('confirm', label);
 }
 
 async function supplement(text: string) {

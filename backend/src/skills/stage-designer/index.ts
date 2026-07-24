@@ -5,6 +5,8 @@ import {
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 const STAGE_DESIGNER_MAX_TOKENS = 32000;
 const STAGE_DESIGNER_TEMPERATURE = 0.3;
@@ -148,6 +150,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       throw new Error('STAGE_DESIGNER_INVALID_INPUT: milestone is required');
     }
     const fallbackConcept = normalizeString(milestone?.coreConcept);
+    const STAGE_RUNTIME_CONTRACT = buildDefaultRuntimeContract('stage-designer', 'generator');
     const result = await callPrompt<any, { subtasks: any[] }>({
       agentId: 'skill:stage-designer',
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
@@ -166,6 +169,15 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       normalizeOutput: (parsed, payload) => ({
         subtasks: normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
       }),
+      mapEnvelope: (output) => adaptToRuntimeEnvelope({
+        contract: STAGE_RUNTIME_CONTRACT,
+        artifact: output,
+        phase: 'stage-designed',
+        status: 'succeeded',
+        isTerminal: true,
+        nextAction: null,
+        nextState: null,
+      }),
     }, input);
 
     if (!result.success || !result.output) {
@@ -176,6 +188,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       success: true,
       output: {
         subtasks: result.output.subtasks,
+        runtimeEnvelope: result.runtimeEnvelope,
         _debug: {
           rawModelOutput: result.debug.rawModelOutput,
           extractedJson: result.debug.extractedJson,

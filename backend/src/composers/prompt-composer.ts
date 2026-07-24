@@ -15,7 +15,14 @@ import {
   PromptCallResult,
   PromptCallSpec,
   PromptAttemptTrace,
+  PromptRuntimeEnvelope,
 } from './types';
+import { resolveRuntimeContract } from '../services/prompt-lab/resolve-runtime-contract';
+import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
+import {
+  normalizeRuntimeContract,
+  type RuntimeContract,
+} from '../services/prompt-lab/runtime-contract';
 
 function stringifyPayload(payload: string | object): string {
   return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
@@ -50,6 +57,71 @@ function compactAttemptTrace(attempts: PromptAttemptTrace[]): string {
     transportAttemptCount: item.transportAttemptCount,
     failureReason: item.failureReason
   })));
+}
+
+function resolvePromptModel(
+  runtimeModelOverride?: string | null,
+  promptModel?: string | null,
+  defaultModel?: string | null
+): string | undefined {
+  const candidates = [runtimeModelOverride, promptModel, defaultModel];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return undefined;
+}
+
+function extractContractFromPromptMetadata(
+  metadata: unknown,
+  agentId: string
+): RuntimeContract | null {
+  if (metadata == null) return null;
+  let parsed: any = metadata;
+  if (typeof metadata === 'string') {
+    try {
+      parsed = JSON.parse(metadata);
+    } catch {
+      return null;
+    }
+  }
+  const candidate = parsed?.promptLab?.runtimeContract;
+  if (!candidate || typeof candidate !== 'object') return null;
+  return normalizeRuntimeContract(candidate, {
+    skillId: String(agentId || '').replace(/^skill:/, ''),
+  });
+}
+
+async function resolveContractForPrompt(
+  agentId: string,
+  promptConfig: { metadata?: unknown } | null | undefined
+): Promise<RuntimeContract> {
+  // 优先 ACTIVE prompt metadata（publish / merge 脚本写入），否则 manifest/default
+  const fromMeta = extractContractFromPromptMetadata(promptConfig?.metadata, agentId);
+  if (fromMeta) return fromMeta;
+  const resolved = await resolveRuntimeContract(agentId);
+  return resolved.contract;
+}
+
+async function buildDefaultEnvelope<TInput, TOutput>(
+  spec: PromptCallSpec<TInput, TOutput>,
+  output: TOutput,
+  input: TInput,
+  promptConfig?: { metadata?: unknown } | null
+): Promise<PromptRuntimeEnvelope> {
+  if (spec.mapEnvelope) {
+    return spec.mapEnvelope(output, input);
+  }
+  const contract = await resolveContractForPrompt(spec.agentId, promptConfig);
+  return adaptToRuntimeEnvelope({
+    contract,
+    artifact: output,
+    phase: contract.businessState.defaultPhase,
+    status: 'succeeded',
+    isTerminal: contract.businessState.terminalPhases.includes(
+      contract.businessState.defaultPhase
+    ),
+    nextState: contract.contextUpdate.mode === 'none' ? null : null,
+  });
 }
 
 export async function callPrompt<TInput, TOutput>(
@@ -161,7 +233,12 @@ export async function callPrompt<TInput, TOutput>(
       llmRequestCount += 1;
       response = await gateway.execute({
         messages,
-        model: runtimeOverride.modelOverride,
+        // P1: 尊重 agent_prompts.model / modelDefaults.model（此前只吃 runtimeOverride）
+        model: resolvePromptModel(
+          runtimeOverride.modelOverride,
+          promptConfig?.model,
+          spec.modelDefaults?.model
+        ),
         max_tokens: runtimeOverride.maxTokensOverride
           ?? resolveMaxTokens(promptConfig?.maxTokens, spec.modelDefaults?.maxTokens, spec.modelDefaults?.minMaxTokens),
         temperature: runtimeOverride.temperatureOverride
@@ -260,6 +337,7 @@ export async function callPrompt<TInput, TOutput>(
     }
 
     const normalizedOutput = spec.normalizeOutput(extracted.parsed, input);
+    const runtimeEnvelope = await buildDefaultEnvelope(spec, normalizedOutput, input, promptConfig);
     const durationMs = Date.now() - startTime;
     const tokenUsage = normalizeTokenUsage(response.usage);
     attempts.push({
@@ -300,6 +378,7 @@ export async function callPrompt<TInput, TOutput>(
     return {
       success: true,
       output: normalizedOutput,
+      runtimeEnvelope,
       debug: {
         agentId: spec.agentId, systemPrompt,
         systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,

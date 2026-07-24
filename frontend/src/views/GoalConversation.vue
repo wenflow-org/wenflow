@@ -971,14 +971,31 @@ const mapStoredMessage = (message: StoredConversationMessage, index: number): Me
   };
 };
 
+const GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
+
 const syncConversationState = (response: GoalConversationEnvelope) => {
   const core = response.internal.core;
   const goalExt = response.internal.ext.goalConversation;
+  const envelope = response.runtimeEnvelope?.businessState;
 
   conversationId.value = core.conversationId || conversationId.value;
-  currentStage.value = core.stage || currentStage.value;
-  confidence.value = typeof core.confidence === 'number' ? core.confidence : confidence.value;
-  isCompleted.value = !!core.isCompleted;
+
+  // 优先统一契约 phase / confidence / isTerminal，缺省回退 agent-output-v1 core
+  const phase = envelope?.phase;
+  currentStage.value =
+    typeof phase === 'string' && (GOAL_STAGES as readonly string[]).includes(phase)
+      ? (phase as typeof GOAL_STAGES[number])
+      : core.stage || currentStage.value;
+  confidence.value =
+    typeof envelope?.confidence === 'number'
+      ? envelope.confidence
+      : typeof core.confidence === 'number'
+        ? core.confidence
+        : confidence.value;
+  isCompleted.value =
+    typeof envelope?.isTerminal === 'boolean'
+      ? envelope.isTerminal || !!core.isCompleted
+      : !!core.isCompleted;
 
   nextQuestions.value = Array.isArray(goalExt.nextQuestions)
     ? goalExt.nextQuestions.filter((item) => typeof item === 'string' && item.trim().length > 0)
@@ -994,7 +1011,7 @@ const syncConversationState = (response: GoalConversationEnvelope) => {
 
   if (goalExt.confirmedProposal) {
     confirmedProposal.value = goalExt.confirmedProposal;
-  } else if (core.stage === 'understanding') {
+  } else if (currentStage.value === 'understanding') {
     confirmedProposal.value = null;
   }
 
@@ -1003,8 +1020,14 @@ const syncConversationState = (response: GoalConversationEnvelope) => {
     generatedPathStatus.value = core.learningPath.status || null;
   }
 
-  if (isTestMode.value && response.meta?.debug) {
-    debugStore.captureGoalDebug(response.meta.debug, route.fullPath);
+  if (isTestMode.value && (response.meta?.debug || response.runtimeEnvelope)) {
+    debugStore.captureGoalDebug(
+      {
+        ...(response.meta?.debug || {}),
+        runtimeEnvelope: response.runtimeEnvelope || null
+      },
+      route.fullPath
+    );
   }
 
   if (conversationId.value) {

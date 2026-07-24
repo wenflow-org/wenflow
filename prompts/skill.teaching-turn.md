@@ -8,6 +8,29 @@ maxTokens: 4000
 acceptableAgentIds:
   - skill:teaching-turn
   - teaching-turn-agent
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: thread-context
+  businessState:
+    domain: teaching
+    phases:
+      - turn-generated
+      - checkpoint-pending
+      - completion-candidate
+      - turn-blocked
+    defaultPhase: turn-generated
+    terminalPhases:
+      - completion-candidate
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: thread-state
+    stateOwner: orchestrator
+    description: thread-context：完整消息历史为主上下文；teachingState 由 AITeachingCoordinator 维护
+  outputEnvelope: adapter
 ---
 
 ## 身份定义

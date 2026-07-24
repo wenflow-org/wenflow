@@ -8,6 +8,8 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../../agents/protocol';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 interface ChatMessage { role: MessageRole; content: string }
@@ -103,6 +105,7 @@ export interface PeerDiscussionOutput {
   followUpQuestions?: string[];
   promptDebug?: any;
   inputEcho?: PeerDiscussionInput;
+  runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
 }
 
 function getStrategyInstruction(strategy: PeerDiscussionInput['strategy']): string {
@@ -149,6 +152,8 @@ function validatePeerParsedOutput(parsed: any) {
   return { valid: true as const };
 }
 
+const PEER_RUNTIME_CONTRACT = buildDefaultRuntimeContract('peer-reinforcement', 'copywriter');
+
 const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
@@ -169,6 +174,19 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
 
     return '';
   },
+  mapEnvelope: (output, input) => adaptToRuntimeEnvelope({
+    contract: PEER_RUNTIME_CONTRACT,
+    artifact: { message: output, strategy: input.strategy },
+    phase: 'discussion-generated',
+    status: 'succeeded',
+    isTerminal: false,
+    nextAction: 'continue-discussion',
+    nextState: {
+      stage: 'discussion-generated',
+      strategy: input.strategy,
+      topic: input.topic,
+    },
+  }),
   modelDefaults: {
     temperature: 0.7,
     maxTokens: 4000,
@@ -210,6 +228,7 @@ export class PeerAgent {
         followUpQuestions: this.extractFollowUpQuestions(message),
         promptDebug: promptResult.debug || null,
         inputEcho: input,
+        runtimeEnvelope: promptResult.runtimeEnvelope,
       };
       return result;
     } catch (e: any) {
@@ -220,11 +239,22 @@ export class PeerAgent {
         logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
       }
       
+      const fallbackMessage = this.getFallbackMessage(input.strategy, input.topic);
       result = {
-        message: this.getFallbackMessage(input.strategy, input.topic),
+        message: fallbackMessage,
         strategy: input.strategy,
         promptDebug: null,
         inputEcho: input,
+        runtimeEnvelope: adaptToRuntimeEnvelope({
+          contract: PEER_RUNTIME_CONTRACT,
+          artifact: { message: fallbackMessage, strategy: input.strategy },
+          phase: 'discussion-generated',
+          status: 'partial',
+          isTerminal: false,
+          nextAction: 'continue-discussion',
+          reason: error.message,
+          nextState: { stage: 'discussion-generated', strategy: input.strategy, topic: input.topic, fallback: true },
+        }),
       };
       return result;
     } finally {
@@ -287,6 +317,7 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
     return {
       success: true,
       userVisible: result.message,
+      runtimeEnvelope: result.runtimeEnvelope,
       internal: {
         core: {
           stage: 'discussion-completed',
@@ -300,6 +331,7 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
             followUpQuestions: result.followUpQuestions || [],
             promptDebug: result.promptDebug || null,
             input: result.inputEcho || input,
+            runtimeEnvelope: result.runtimeEnvelope,
           }
         },
         strategy: result.strategy,

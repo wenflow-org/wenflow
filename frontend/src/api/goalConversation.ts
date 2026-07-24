@@ -30,6 +30,25 @@ export interface GoalUnderstanding {
   constraints_and_boundaries?: string[];
 }
 
+/** 统一运行契约 envelope（与后端 RuntimeEnvelope 对齐） */
+export interface GoalRuntimeEnvelope {
+  artifact?: unknown;
+  businessState?: {
+    domain?: string;
+    phase?: string;
+    status?: string;
+    confidence?: number;
+    isTerminal?: boolean;
+    nextAction?: string | null;
+    reason?: string | null;
+  };
+  contextUpdate?: {
+    mode?: string;
+    stateOwner?: string;
+    nextState?: unknown | null;
+  };
+}
+
 export interface GoalConversationEnvelope {
   userVisible: string;
   internal: {
@@ -55,6 +74,8 @@ export interface GoalConversationEnvelope {
       };
     };
   };
+  /** 后端透传；存在时 stage/confidence 可优先取 businessState */
+  runtimeEnvelope?: GoalRuntimeEnvelope | null;
   renderHints: {
     quickReplies?: Array<{ text: string; icon?: string }>;
   };
