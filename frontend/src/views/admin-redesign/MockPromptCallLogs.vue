@@ -58,7 +58,7 @@
               <td class="mk-num">v{{ r.version }}</td>
               <td class="mk-num">{{ fmtMs(r.durationMs) }}</td>
               <td class="mk-num">{{ r.tokens || '—' }}</td>
-              <td class="pcl-digest" :class="{ 'mk-na': !r.digest }">{{ r.digest || '—' }}</td>
+              <td class="pcl-digest" :class="{ 'mk-na': !r.digest }" :title="r.digest || ''">{{ r.digest || '—' }}</td>
               <td style="text-align:right"><span class="pcl-go">→</span></td>
             </tr>
           </tbody>
@@ -358,7 +358,14 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 .pcl-go { color: var(--mk-faint); font-weight: 700; }
 .pcl-row:hover .pcl-go { color: var(--mk-blue); }
 .pcl-agent { font-size: 11px; color: var(--mk-blue); }
-.pcl-digest { font-size: 12px; color: var(--mk-amber); max-width: 260px; }
+.pcl-digest {
+  font-size: 12px;
+  color: var(--mk-amber);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .mono { font-family: var(--mk-mono); }
 
 .pcl-mask {

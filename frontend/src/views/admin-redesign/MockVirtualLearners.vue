@@ -82,14 +82,21 @@
             <span v-if="errors.goal" class="mk-field__err">{{ errors.goal }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.story }">
-            <span class="mk-field__label">她的故事</span>
-            <textarea v-model="form.story" class="mk-field__textarea" placeholder="她是谁、卡在哪、为什么现在要学？越具体，模拟越真实。"></textarea>
-            <span class="mk-field__hint">{{ form.story.length }} 字 · 建议 ≥ 40 字</span>
+            <span class="mk-field__label">人物背景</span>
+            <textarea
+              v-model="form.story"
+              class="mk-field__textarea"
+              placeholder="她是谁、长期处境、学习相关底色。这里写「稳定身份」，不是某次具体事件故事。"
+            ></textarea>
+            <span class="mk-field__hint">{{ form.story.length }} 字 · 建议 ≥ 40 字 · 会话故事请在画像页另生成</span>
             <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
           </label>
           <button v-if="isLive" type="button" class="mk-link vl-ai" :disabled="personaBusy" @click="generatePersona">
-            {{ personaBusy ? '生成中…' : '✦ AI 生成身份（回填故事）' }}
+            {{ personaBusy ? '生成身份中…' : '✦ AI 生成身份（人设设计）' }}
           </button>
+          <p v-if="isLive" class="vl-ai-hint">
+            调用 Skill：virtual-learner-persona-designer · 只生成稳定人设，不生成故事/情境
+          </p>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
@@ -223,7 +230,7 @@ async function createSample() {
   errors.value = {}
   if (!form.value.name.trim()) errors.value.name = '请输入样本名'
   if (!form.value.goal.trim()) errors.value.goal = '请输入学习目标'
-  if (form.value.story.trim().length < 20) errors.value.story = '故事至少 20 字，模拟才有依据'
+  if (form.value.story.trim().length < 20) errors.value.story = '人物背景至少 20 字，模拟才有依据'
   if (Object.keys(errors.value).length) return
 
   creating.value = true
@@ -235,7 +242,7 @@ async function createSample() {
         story: form.value.story.trim(),
         personaSeed: personaSeed.value || undefined
       })
-      showToast('样本已创建（真实写入），可在画像页生成故事')
+      showToast('样本已创建。会话故事请到画像页生成')
     } else {
       demoSamples.value.unshift({
         id: `vl-${String(demoSamples.value.length + 1).padStart(3, '0')}`,
@@ -268,26 +275,41 @@ async function removeSample(s: Sample) {
   }
 }
 
-/* AI 生成身份：回填名称与故事，并保留完整 personaSeed 供创建时写入 */
+/* AI 生成身份：skill:virtual-learner-persona-designer（只做人设，不写故事） */
 const personaBusy = ref(false)
 const personaSeed = ref<Record<string, unknown> | null>(null)
 async function generatePersona() {
   if (personaBusy.value) return
+  // 有学习目标时再调 skill，否则生成结果漂
+  if (!form.value.goal.trim() && !form.value.name.trim() && !form.value.story.trim()) {
+    errors.value = { goal: '先填学习目标，或至少写一点背景，再生成身份' }
+    return
+  }
   personaBusy.value = true
   try {
     const res = await adminVirtualLearnersApi.generatePersona({
-      existingPersonaSeed: form.value.story
-        ? { name: form.value.name, learningGoal: form.value.goal, notes: form.value.story }
-        : undefined
+      existingPersonaSeed: {
+        name: form.value.name.trim() || undefined,
+        learningGoal: form.value.goal.trim() || undefined,
+        notes: form.value.story.trim() || undefined,
+        background: form.value.story.trim() || undefined
+      }
     })
     const d = res.data?.data ?? res.data ?? {}
     const seed = (d.personaSeed || d.profile || d) as Record<string, unknown>
+    if (!seed || typeof seed !== 'object') {
+      showToast('生成失败：未返回 personaSeed', 'mk-toast--bad')
+      return
+    }
     personaSeed.value = seed
-    if (!form.value.name && (seed.name || seed.nameHint)) form.value.name = String(seed.name || seed.nameHint)
-    if (!form.value.goal && seed.learningGoal) form.value.goal = String(seed.learningGoal)
-    const story = String(seed.background || seed.corePersonality || '')
-    if (story) form.value.story = story
-    showToast('AI 身份已生成并回填，可继续修改')
+    // 人设 skill 产出 nameHint/occupation/background，不产出「故事」
+    const nameFromSeed = String(seed.name || seed.nameHint || seed.occupation || '').trim()
+    if (nameFromSeed) form.value.name = nameFromSeed
+    const goalFromSeed = String(seed.learningGoal || '').trim()
+    if (goalFromSeed) form.value.goal = goalFromSeed
+    const background = String(seed.background || seed.corePersonality || seed.behavioralProfileSummary || '').trim()
+    if (background) form.value.story = background
+    showToast('人设已生成并回填（背景≠故事），可继续改')
   } catch (e) {
     showToast(`生成失败：${errMsg(e)}`, 'mk-toast--bad')
   } finally {
@@ -344,4 +366,10 @@ const totalSessions = computed(() => samples.value.reduce((a, s) => a + s.sessio
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .vl-ai { justify-self: start; }
+.vl-ai-hint {
+  margin: -4px 0 0;
+  font-size: 11px;
+  color: var(--mk-faint, #8492ab);
+  line-height: 1.45;
+}
 </style>

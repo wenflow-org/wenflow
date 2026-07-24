@@ -14,73 +14,108 @@
 <script setup lang="ts">
 /**
  * 平台公告横幅（用户端）
- * - 登录后拉取 /announcements/active，展示最新一条未关闭公告
- * - 按公告 id 记忆关闭；过期由服务端过滤
+ * 位置：全站最顶部（导航栏上方）
+ * 数据：GET /api/announcements/active（需登录）
  */
-import { computed, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
-import axios from 'axios';
-import { useUserStore } from '@/stores/user';
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import api from '@/utils/api'
+import { useUserStore } from '@/stores/user'
 
 interface ActiveAnnouncement {
-  id: string;
-  title: string;
-  body: string;
-  severity: 'info' | 'warning' | 'critical';
+  id: string
+  title: string
+  body: string
+  severity: 'info' | 'warning' | 'critical'
 }
 
-const DISMISS_KEY = 'wenflow_announcement_dismissed';
+const DISMISS_KEY = 'wenflow_announcement_dismissed'
 
-const route = useRoute();
-const userStore = useUserStore();
-const items = ref<ActiveAnnouncement[]>([]);
+const route = useRoute()
+const userStore = useUserStore()
+const items = ref<ActiveAnnouncement[]>([])
+const dismissedIds = ref<string[]>(loadDismissed())
+const loading = ref(false)
 
-const dismissed = computed<Set<string>>(() => {
+function loadDismissed(): string[] {
   try {
-    return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]'));
+    const raw = JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')
+    return Array.isArray(raw) ? raw.map(String) : []
   } catch {
-    return new Set();
+    return []
   }
-});
+}
 
-/** 管理页/登录页不展示 */
-const isUserPage = computed(() => !route.path.startsWith('/admin') && route.path !== '/login');
+/** 管理页 / 登录注册 / 营销落地页不展示 */
+const isUserAppPage = computed(() => {
+  const p = route.path
+  if (p.startsWith('/admin')) return false
+  if (p === '/login' || p === '/register' || p === '/' || p === '/vision') return false
+  if (p.startsWith('/legacy/login') || p.startsWith('/legacy/register')) return false
+  return true
+})
 
 const current = computed(() => {
-  if (!userStore.isLoggedIn || !isUserPage.value) return null;
-  return items.value.find((a) => !dismissed.value.has(a.id)) || null;
-});
+  if (!userStore.isLoggedIn || !isUserAppPage.value) return null
+  const dismissed = new Set(dismissedIds.value)
+  return items.value.find((a) => !dismissed.has(a.id)) || null
+})
 
 function dismiss() {
-  if (!current.value) return;
-  const next = new Set(dismissed.value);
-  next.add(current.value.id);
-  localStorage.setItem(DISMISS_KEY, JSON.stringify([...next]));
-  items.value = items.value.filter((a) => a.id !== current.value?.id);
+  if (!current.value) return
+  const id = current.value.id
+  const next = [...new Set([...dismissedIds.value, id])]
+  dismissedIds.value = next
+  localStorage.setItem(DISMISS_KEY, JSON.stringify(next))
 }
 
-onMounted(async () => {
-  if (!userStore.isLoggedIn) return;
-  try {
-    const res = await axios.get('/api/announcements/active', { withCredentials: true, timeout: 10000 });
-    items.value = res.data?.data?.items || [];
-  } catch {
-    items.value = [];
+async function fetchActive() {
+  if (!userStore.isLoggedIn) {
+    items.value = []
+    return
   }
-});
+  loading.value = true
+  try {
+    const res = await api.get('/announcements/active', { timeout: 10000 })
+    const list = res.data?.data?.items || res.data?.items || []
+    items.value = Array.isArray(list)
+      ? list.map((a: Record<string, unknown>) => ({
+          id: String(a.id || ''),
+          title: String(a.title || ''),
+          body: String(a.body || ''),
+          severity: (a.severity as ActiveAnnouncement['severity']) || 'info'
+        })).filter((a) => a.id && a.title)
+      : []
+  } catch {
+    items.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+// 登录态恢复 / 路由进入学习应用后拉取（避免 onMounted 时 isLoggedIn 仍为 false）
+watch(
+  () => [userStore.isLoggedIn, isUserAppPage.value] as const,
+  ([loggedIn, onApp]) => {
+    if (loggedIn && onApp) void fetchActive()
+    if (!loggedIn) items.value = []
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
 .anb {
   position: sticky;
   top: 0;
-  z-index: 90;
+  z-index: 200;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 16px;
+  padding: 10px 20px;
   font-size: 13px;
   border-bottom: 1px solid;
+  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.06);
 }
 .anb--info {
   background: #eef5ff;
@@ -105,17 +140,25 @@ onMounted(async () => {
   flex-shrink: 0;
   background: currentColor;
 }
-.anb__main { flex: 1; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; min-width: 0; }
+.anb__main {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+}
 .anb__title { font-weight: 700; }
-.anb__body { opacity: 0.9; line-height: 1.5; }
+.anb__body { opacity: 0.92; line-height: 1.5; }
 .anb__close {
   border: 0;
   background: transparent;
   color: inherit;
-  font-size: 15px;
+  font-size: 16px;
   cursor: pointer;
   padding: 0 4px;
   opacity: 0.7;
+  line-height: 1;
 }
 .anb__close:hover { opacity: 1; }
 

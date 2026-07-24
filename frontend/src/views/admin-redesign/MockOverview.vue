@@ -19,7 +19,9 @@
         <li v-for="(a, i) in data.actions" :key="i">
           <span class="brief-actions__dot" :class="`brief-actions__dot--${a.tone}`"></span>
           <span class="brief-actions__text">{{ a.text }}</span>
-          <button type="button" class="brief-actions__link" @click="investigateAgent(a.agentId)">{{ a.link }} →</button>
+          <button type="button" class="brief-actions__btn" @click="investigateAgent(a.agentId)">
+            去排查
+          </button>
         </li>
       </ul>
       <p v-else class="brief-actions__clear">没有需要立即处理的事项。</p>
@@ -307,8 +309,31 @@ const barTitle = (hour: number, b: { calls: number; issue: number }) =>
 .brief-actions__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .brief-actions__dot--bad { background: var(--red); }
 .brief-actions__dot--warn { background: var(--amber); }
-.brief-actions__text { font-weight: 600; }
-.brief-actions__link { margin-left: auto; color: var(--blue); font-weight: 700; white-space: nowrap; }
+.brief-actions__text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.brief-actions__btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid rgba(52, 120, 246, 0.28);
+  border-radius: 999px;
+  background: #eef5ff;
+  color: var(--blue);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: 0.12s ease;
+}
+.brief-actions__btn:hover {
+  background: #dbeafe;
+  border-color: rgba(52, 120, 246, 0.45);
+}
 .brief-actions__clear {
   margin: 0;
   padding-top: 10px;

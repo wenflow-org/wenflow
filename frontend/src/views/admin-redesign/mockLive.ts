@@ -324,14 +324,21 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
   const failedCalls = Number(agents.failedCalls || 0)
   const activeUsers = Number(users.activeToday || 0)
 
-  /* 头部结论 */
+  /* 头部结论：健康分贴近成功率，少量失败只轻扣分 */
   let head: { tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }
+  const rateScore = Math.max(0, Math.min(100, Math.round(successRate)))
   if (todayCalls === 0 && activeUsers === 0 && Number(users.total || 0) <= 2) {
     head = { tone: 'muted', score: 100, headline: '系统空闲', subline: '部署完成，等待第一个真实学习者。' }
   } else if (failedCalls > 0 || successRate < 90) {
-    head = { tone: 'warn', score: Math.max(40, Math.round(successRate * 0.7)), headline: `需要关注：成功率 ${successRate}%`, subline: `累计 ${agents.totalCalls || 0} 次调用，${failedCalls} 次失败。` }
+    const failPenalty = Math.min(12, Math.floor(failedCalls / 5))
+    head = {
+      tone: 'warn',
+      score: Math.max(50, rateScore - failPenalty),
+      headline: `需要关注：成功率 ${successRate}%`,
+      subline: `累计 ${agents.totalCalls || 0} 次调用，${failedCalls} 次失败。`
+    }
   } else {
-    head = { tone: 'ok', score: 92, headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
+    head = { tone: 'ok', score: Math.max(90, rateScore), headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
   }
 
   /* 漏斗 */
@@ -346,7 +353,8 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
   const rates = funnelRaw.slice(1).map((f, i) => {
     const prev = funnelRaw[i].value
     if (!prev || !f.value) return '—'
-    if (f.label === '任务') return `×${(f.value / prev).toFixed(1)}`
+    // 下游可大于上游（一人多目标/多路径），超过 100% 用倍数展示，避免 517% 这种误导
+    if (f.label === '任务' || f.value > prev) return `×${(f.value / prev).toFixed(1)}`
     return `${Math.round((f.value / prev) * 100)}%`
   })
   const zeroIdx = funnelRaw.findIndex((f) => f.value === 0)
@@ -363,7 +371,11 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     : Array.from({ length: 24 }, () => ({ calls: 0, issue: 0 }))
   const totalIssues = pulse.reduce((a, b) => a + b.issue, 0)
   const peakIdx = pulse.reduce((mi, b, i) => (b.calls > (pulse[mi]?.calls || 0) ? i : mi), 0)
-  const peak = last24h[peakIdx]?.label || `${String(peakIdx).padStart(2, '0')}:00`
+  // 与柱图 title（按 0–23 下标）一致，不用后端 label（易错位成「高峰 12:00」）
+  const peak = pulse[peakIdx]?.calls
+    ? `${String(peakIdx).padStart(2, '0')}:00`
+    : '—'
+  const pulseCalls24h = pulse.reduce((a, b) => a + b.calls, 0)
 
   /* 动态 */
   const act = activityRes?.data?.data ?? {}
@@ -399,7 +411,8 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     rates,
     funnelNote,
     pulse,
-    totalCalls: Number(agents.totalCalls || todayCalls),
+    // 脉搏卡展示 24h 汇总；累计全量调用见健康分副文案，避免「24h 图 + 累计 389」错位
+    totalCalls: pulseCalls24h || Number(agents.totalCalls || todayCalls),
     totalIssues,
     peak,
     feed: feed.slice(0, 6),
@@ -884,6 +897,20 @@ export interface LiveAnnouncement {
 }
 
 export const liveAnnouncements = ref<LiveAnnouncement[]>([])
+
+/** 侧栏导航徽章：live 真实计数（无数据时不显示） */
+export const liveNavBadges = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  const virtuals = liveVirtuals.value.length
+  if (virtuals > 0) out['virtual-learners'] = String(virtuals)
+  const skills = liveSkillProfiles.value.length
+  if (skills > 0) out.skills = String(skills)
+  const addons = liveExtraProfiles.value.length || EXTRA_COMPONENT_VISIBLE_SKILLS.size
+  if (addons > 0) out.addons = String(addons)
+  const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
+  if (published > 0) out.announcements = String(published)
+  return out
+})
 
 async function fetchLiveAnnouncements(): Promise<void> {
   const res = await adminAxios.get('/admin/announcements')

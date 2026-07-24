@@ -25,10 +25,8 @@ import AnnouncementBanner from './components/AnnouncementBanner.vue';
 const DevOverlay = defineAsyncComponent(() => import('./components/dev/DevOverlay.vue'));
 
 const userStore = useUserStore();
-
-onMounted(() => {
-  userStore.initFromStorage();
-});
+// 同步恢复登录态，避免子组件 onMounted/watch 时 isLoggedIn 仍为 false
+userStore.initFromStorage();
 </script>
 
 <style scoped>

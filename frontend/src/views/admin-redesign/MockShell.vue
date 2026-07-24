@@ -20,7 +20,7 @@
             @click="$emit('navigate', item.id)"
           >
             <span class="mshell__item-label">{{ item.label }}</span>
-            <span v-if="item.badge" class="mshell__item-badge">{{ item.badge }}</span>
+            <span v-if="badgeOf(item)" class="mshell__item-badge">{{ badgeOf(item) }}</span>
           </button>
         </section>
       </nav>
@@ -43,11 +43,11 @@
           </template>
         </div>
         <div class="mshell__topbar-right">
-          <div class="mshell__search" @click="$emit('palette')">
+          <button type="button" class="mshell__search" @click="$emit('palette')">
             <span class="mshell__search-icon">⌕</span>
-            <span class="mshell__search-hint">搜索页面、Skill、Trace ID…</span>
+            <span class="mshell__search-hint">命令面板</span>
             <span class="mshell__kbd">⌘K</span>
-          </div>
+          </button>
           <template v-if="release">
             <span class="mshell__admin">{{ adminName }}</span>
             <button type="button" class="mshell__logout" @click="logout">退出</button>
@@ -72,12 +72,20 @@
 import { computed } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
 import { dataSource } from './mockStore'
+import { liveNavBadges } from './mockLive'
 import { adminAuthApi } from '@/api/adminApi'
 
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
 defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
 
 const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实（API）' : '演示（mock）'))
+
+function badgeOf(item: MockSceneDef): string {
+  if (dataSource.value === 'live') {
+    return liveNavBadges.value[item.id] || ''
+  }
+  return item.badge || ''
+}
 
 /* release 模式：管理员信息与退出登录 */
 const adminName = computed(() => {
@@ -247,8 +255,9 @@ const groupedScenes = computed(() => {
   border-radius: 8px;
   background: #fafbfc;
   color: #8492ab;
+  font: inherit;
   font-size: 12px;
-  cursor: text;
+  cursor: pointer;
 }
 .mshell__search-hint { white-space: nowrap; }
 .mshell__content { min-width: 0; }

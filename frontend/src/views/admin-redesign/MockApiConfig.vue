@@ -1,12 +1,12 @@
 <template>
   <div class="mk-page">
     <!-- 单行健康条 -->
-    <div class="mk-status" :class="ready ? 'mk-status--ok' : 'mk-status--warn'">
+    <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">{{ ready ? '模型服务已就绪' : '配置尚未完成' }}</strong>
+      <strong class="mk-status__title">{{ statusTitle }}</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">密钥 {{ keySet ? '已配置' : '未配置' }}</span>
-      <span class="mk-status__meta">模型 {{ models.length }}</span>
+      <span class="mk-status__meta">模型 {{ models.length || '待拉取' }}</span>
       <span class="mk-status__meta">路由 {{ routeCount }}/3</span>
       <span v-if="isLive && cfg?.lastCheckedAt" class="mk-status__meta">上次检查 {{ timeAgo(cfg.lastCheckedAt) }}</span>
       <button type="button" class="mk-status__action" :disabled="fetching || !form.apiUrl" @click="fetchModels">
@@ -439,6 +439,17 @@ watch(
 const models = computed(() => fetchedModels.value)
 const ready = computed(() => keySet.value && models.value.length > 0 && !!form.defaultModel)
 const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
+const statusTitle = computed(() => {
+  if (ready.value) return '模型服务已就绪'
+  if (keySet.value && !models.value.length) return '密钥已配置 · 待拉取模型列表'
+  if (keySet.value) return '密钥已配置 · 待补齐默认模型'
+  return '待配置模型接入'
+})
+const statusTone = computed(() => {
+  if (ready.value) return 'mk-status--ok'
+  if (keySet.value) return 'mk-status--muted'
+  return 'mk-status--warn'
+})
 const connBadge = computed(() => {
   if (connectionStatus.value === 'connected') return { cls: 'mk-badge--ok', text: '连接正常' }
   if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }

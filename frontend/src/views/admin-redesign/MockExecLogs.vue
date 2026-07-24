@@ -60,7 +60,10 @@
         <button type="button" class="tline__main" @click="openId = openId === log.id ? '' : log.id">
           <span class="tline__kind">{{ log.kind === 'flow' ? '流程' : '调用' }}</span>
           <span class="tline__agent mono" @click.stop="openSkillDrawer(log.agent)">{{ log.agent }}</span>
-          <span class="tline__msg">{{ log.title }}<em>{{ log.detail }}</em></span>
+          <span class="tline__msg" :title="[log.title, log.detail].filter(Boolean).join(' · ')">
+            <b>{{ log.title }}</b>
+            <em v-if="log.detail">{{ log.detail }}</em>
+          </span>
           <span class="tline__dur mono">{{ fmtMs(log.durationMs) }}</span>
           <span class="tline__trace mono" @click.stop="openTrace(log.traceId)">{{ log.traceId }}</span>
         </button>
@@ -368,12 +371,31 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 }
 .tline__agent:hover { text-decoration: underline; }
 .tline__msg {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   font-size: 12.5px;
+  overflow: hidden;
+}
+.tline__msg b {
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 42%;
+  flex: 0 1 auto;
 }
-.tline__msg em { font-style: normal; color: var(--mk-faint); margin-left: 8px; font-size: 11.5px; }
+.tline__msg em {
+  font-style: normal;
+  color: var(--mk-faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+}
 .tline__dur { font-size: 11px; color: var(--mk-muted); text-align: right; }
 .tline__trace { font-size: 11px; color: #b45309; text-align: right; }
 .tline__trace:hover { text-decoration: underline; }
