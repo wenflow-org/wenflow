@@ -357,9 +357,18 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       duration: result.debug.durationMs,
     };
   } catch (error: any) {
+    const fallback = { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true };
     return {
       success: true,
-      output: { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true },
+      output: {
+        ...fallback,
+        runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-goal-dialogue-simulator', fallback, {
+          phase: 'simulation-step-completed',
+          status: 'partial',
+          reason: error?.message || 'goal-dialogue-simulator-failed',
+          nextState: (fallback as any)?.learnerState ?? null,
+        }),
+      },
       duration: Date.now() - startTime,
       cached: true,
     };
