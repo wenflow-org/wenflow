@@ -112,7 +112,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { dataSource } from './mockStore'
+import { dataSource, intent } from './mockStore'
 import {
   liveAnnouncements,
   liveCreateAnnouncement,
@@ -122,6 +122,7 @@ import {
   timeAgo,
   errMsg
 } from './mockLive'
+import { useEscape } from './useEscape'
 
 defineProps<{ state: string }>()
 
@@ -245,6 +246,19 @@ async function remove(r: Row) {
 
 /* 新建 */
 const createOpen = ref(false)
+useEscape(() => createOpen.value, () => { createOpen.value = false })
+
+/* 命令面板快捷动作：直达并打开新建弹窗 */
+watch(
+  () => intent.quickAction,
+  (a) => {
+    if (a === 'create-announcement') {
+      intent.quickAction = ''
+      createOpen.value = true
+    }
+  },
+  { immediate: true }
+)
 const creating = ref(false)
 const form = ref({ title: '', body: '', severity: 'info' as 'info' | 'warning' | 'critical', expiresAt: '', publishNow: true })
 const errors = ref<{ title?: string; body?: string }>({})

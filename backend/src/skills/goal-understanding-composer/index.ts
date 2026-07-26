@@ -120,7 +120,7 @@ export function buildCollected(understanding: any, parsedJson: any): any {
     level: understanding.background?.current_level || null,
     timePerDay: understanding.background?.available_time || understanding.background?.expected_time || null,
     expected_time: understanding.background?.expected_time || null,
-    questions_to_ask: parsedJson?.next_questions || []
+    questions_to_ask: parsedJson?.nextQuestions || parsedJson?.next_questions || []
   }
 }
 

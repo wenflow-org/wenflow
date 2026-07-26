@@ -20,6 +20,11 @@ import {
   normalizeRuntimeContract,
   type RuntimeContract,
 } from '../services/prompt-lab/runtime-contract';
+import {
+  buildDefaultSkillPromptContract,
+  normalizeSkillPromptContract,
+  type SkillPromptContract,
+} from '../services/skill-prompt-contract';
 
 const router = Router();
 router.use(rejectPromptLabFileMutation);
@@ -52,6 +57,7 @@ type PromptLabManifest = {
     reasoningEffort: string;
   };
   runtimeContract: RuntimeContract;
+  promptContract: SkillPromptContract;
   ownership: {
     tier: string;
     visibility: string;
@@ -139,6 +145,7 @@ function buildDefaultManifest(skillId: string, sourceContent = ''): PromptLabMan
       reasoningEffort: 'default'
     },
     runtimeContract: buildDefaultRuntimeContract(skillId, archetype),
+    promptContract: buildDefaultSkillPromptContract({ skillId, archetype }),
     ownership: {
       tier: 'production',
       visibility: 'internal'
@@ -157,6 +164,9 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
   const runtimeContract = manifest.runtimeContract && typeof manifest.runtimeContract === 'object'
     ? manifest.runtimeContract
     : {};
+  const promptContract = manifest.promptContract && typeof manifest.promptContract === 'object'
+    ? manifest.promptContract
+    : {};
   const publish = manifest.publish && typeof manifest.publish === 'object'
     ? manifest.publish
     : {};
@@ -164,6 +174,10 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
     ? manifest.ownership
     : {};
 
+  const normalizedRuntimeContract = normalizeRuntimeContract(runtimeContract, {
+    skillId,
+    archetype: sanitizeString(manifest.archetype, base.archetype),
+  });
   return {
     version: sanitizeString(manifest.version, base.version),
     skillId,
@@ -186,9 +200,11 @@ function normalizeManifest(skillId: string, manifestInput: any, sourceContent = 
       thinkingMode: sanitizeString(runtimeDefaults.thinkingMode, base.runtimeDefaults.thinkingMode),
       reasoningEffort: sanitizeString(runtimeDefaults.reasoningEffort, base.runtimeDefaults.reasoningEffort)
     },
-    runtimeContract: normalizeRuntimeContract(runtimeContract, {
+    runtimeContract: normalizedRuntimeContract,
+    promptContract: normalizeSkillPromptContract(promptContract, {
       skillId,
       archetype: sanitizeString(manifest.archetype, base.archetype),
+      runtimeContract: normalizedRuntimeContract,
     }),
     ownership: {
       tier: sanitizeString(ownership.tier, base.ownership.tier),
@@ -211,6 +227,7 @@ function serializeManifest(manifest: PromptLabManifest) {
     publish: manifest.publish,
     runtimeDefaults: manifest.runtimeDefaults,
     runtimeContract: manifest.runtimeContract,
+    promptContract: manifest.promptContract,
     ownership: manifest.ownership,
     tags: manifest.tags,
     notes: manifest.notes
@@ -258,7 +275,12 @@ function mergeManifestWithPromptFrontmatter(skillId: string, manifest: PromptLab
       thinkingMode: sanitizeString(frontmatter.thinkingMode, manifest.runtimeDefaults.thinkingMode),
       reasoningEffort: sanitizeString(frontmatter.reasoningEffort, manifest.runtimeDefaults.reasoningEffort)
     },
-    runtimeContract: manifest.runtimeContract
+    runtimeContract: frontmatter.runtimeContract && typeof frontmatter.runtimeContract === 'object'
+      ? frontmatter.runtimeContract
+      : manifest.runtimeContract,
+    promptContract: frontmatter.promptContract && typeof frontmatter.promptContract === 'object'
+      ? frontmatter.promptContract
+      : manifest.promptContract
   }, sourceContent);
 }
 
@@ -552,6 +574,22 @@ router.put('/manifest/:skillId', async (req, res) => {
           ...(incoming.runtimeContract?.contextUpdate || {})
         }
       },
+      promptContract: {
+        ...currentManifest.promptContract,
+        ...(incoming.promptContract || {}),
+        input: {
+          ...currentManifest.promptContract.input,
+          ...(incoming.promptContract?.input || {})
+        },
+        output: {
+          ...currentManifest.promptContract.output,
+          ...(incoming.promptContract?.output || {})
+        },
+        context: {
+          ...currentManifest.promptContract.context,
+          ...(incoming.promptContract?.context || {})
+        }
+      },
       ownership: {
         ...currentManifest.ownership,
         ...(incoming.ownership || {})
@@ -738,6 +776,7 @@ router.post('/compile-source', async (req, res) => {
       manifestExists,
       manifest,
       runtimeContract: manifest.runtimeContract,
+      promptContract: manifest.promptContract,
       compiler: 'deterministic-skeleton',
       diagnostics: compileResult.diagnostics
     });
@@ -786,7 +825,8 @@ router.post('/publish', async (req, res) => {
         thinkingMode: params?.thinkingMode ?? currentManifest.runtimeDefaults.thinkingMode,
         reasoningEffort: params?.reasoningEffort ?? currentManifest.runtimeDefaults.reasoningEffort
       },
-      runtimeContract: currentManifest.runtimeContract
+      runtimeContract: currentManifest.runtimeContract,
+      promptContract: currentManifest.promptContract
     }, sourceContent);
 
     if (!nextManifest.publish.enabled) {
@@ -840,6 +880,7 @@ router.post('/publish', async (req, res) => {
       maxTokens
     };
     frontmatter.runtimeContract = nextManifest.runtimeContract;
+    frontmatter.promptContract = nextManifest.promptContract;
     if (nextManifest.acceptableAgentIds.length > 0) {
       frontmatter.acceptableAgentIds = nextManifest.acceptableAgentIds;
     }
@@ -889,6 +930,7 @@ router.post('/publish', async (req, res) => {
             sourceSkillId: nextManifest.skillId,
             runtimeDefaults: nextManifest.runtimeDefaults,
             runtimeContract: nextManifest.runtimeContract,
+            promptContract: nextManifest.promptContract,
             exportTargets: nextManifest.publish.exportTargets,
             tags: nextManifest.tags,
             notes: nextManifest.notes
@@ -915,7 +957,8 @@ router.post('/publish', async (req, res) => {
       data: { status: 'ARCHIVED' }
     });
 
-    // 6. 同步到 skill_model_configs（agent-registry 看到的参数）
+    // 6. 仅同步路由/运维字段到 skill_model_configs。
+    // 生成参数 temperature/maxTokens 的唯一真相源是 prompts/*.md → agent_prompts ACTIVE，禁止双写。
     const existingCfg = await systemPrisma.skill_model_configs.findFirst({
       where: { skillId }
     });
@@ -924,8 +967,6 @@ router.post('/publish', async (req, res) => {
         where: { id: existingCfg.id },
         data: {
           tier,
-          temperature,
-          maxTokens,
           model: effectiveModel || null,
           thinkingMode,
           reasoningEffort,
@@ -939,8 +980,9 @@ router.post('/publish', async (req, res) => {
           id: uuidv4(),
           skillId,
           tier,
-          temperature,
-          maxTokens,
+          // schema 仍有 T/maxTokens 列；新建时用占位默认，运行时不作为生成参数权威源
+          temperature: 0.7,
+          maxTokens: 2000,
           model: effectiveModel || null,
           thinkingMode,
           reasoningEffort,

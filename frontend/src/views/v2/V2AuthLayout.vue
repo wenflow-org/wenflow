@@ -70,13 +70,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import V2Footer from './V2Footer.vue';
 import './v2.css';
 
 defineProps<{ mode: 'login' | 'register' }>();
 
-const year = computed(() => new Date().getFullYear());
 </script>
 
 <style scoped>

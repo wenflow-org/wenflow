@@ -18,11 +18,21 @@ publish:
 
 runtimeDefaults:
   tier: chat
-  temperature: 0.4
-  maxTokens: 8000
+  temperature: 0.3
+  maxTokens: 32000
   model: null
   thinkingMode: default
   reasoningEffort: default
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 
 runtimeContract:
   version: prompt-runtime-contract/v1

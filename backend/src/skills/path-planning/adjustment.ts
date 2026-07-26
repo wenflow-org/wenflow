@@ -126,7 +126,10 @@ export class PathAdjustmentEngine {
     const existingTopics = milestones.map((m, i) => `${i + 1}. ${m.title}`).join('\n');
     const systemPrompt = `你是一位课程设计专家。需要在现有学习路径中插入一个新的里程碑。现有里程碑主题：${existingTopics}插入位置：第 ${adjustment.position} 个里程碑之前插入原因：${ADJUSTMENT_PROMPTS[adjustment.reason]}请生成一个合适的新里程碑，返回JSON格式。{ "title": "里程碑标题", "description": "里程碑描述", "goal": "里程碑目标", "estimatedHours": 4, "subtasks": [{ "title": "子任务标题", "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate", "estimatedMinutes": 30, "description": "任务描述" }] }`;
     try {
-      const response = await gateway.execute({ messages: [{ role: 'system', content: systemPrompt }] }, caller, { temperature: 0.7 });
+      const response = await gateway.execute({
+        messages: [{ role: 'system', content: systemPrompt }],
+        temperature: 0.7,
+      }, caller);
       const content = response.choices[0]?.message.content || '';
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -149,7 +152,10 @@ export class PathAdjustmentEngine {
     const existingSubtasksList = existingSubtasks.map((t, i) => `${i + 1}. ${t.title} (${t.type})`).join('\n');
     const systemPrompt = `你是一位课程设计专家。需要在现有里程碑中插入一个新的子任务。里程碑主题：${milestone.title}里程碑描述：${milestone.description || '无'}现有子任务：${existingSubtasksList}插入原因：${ADJUSTMENT_PROMPTS[adjustment.reason]}请生成一个合适的新子任务，返回JSON格式。{ "title": "子任务标题", "type": "acquire|deconstruct|model|execute|diagnose|refine|consolidate", "estimatedMinutes": 30, "description": "任务描述" }`;
     try {
-      const response = await gateway.execute({ messages: [{ role: 'system', content: systemPrompt }] }, caller, { temperature: 0.7 });
+      const response = await gateway.execute({
+        messages: [{ role: 'system', content: systemPrompt }],
+        temperature: 0.7,
+      }, caller);
       const content = response.choices[0]?.message.content || '';
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {

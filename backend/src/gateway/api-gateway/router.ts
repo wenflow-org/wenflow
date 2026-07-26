@@ -162,8 +162,10 @@ export class APIRouter {
         model,
         thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
         reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
-        temperature: config.temperature ?? inheritedRoute.temperature,
-        maxTokens: config.maxTokens ?? inheritedRoute.maxTokens,
+        // Phase 2：生成参数 T/maxTokens 不由 skill_model_configs 覆盖（File-as-Truth / resolveLlmGenerationParams）
+        // 路由仅继承上层 temperature/maxTokens，供未声明 prompt 的调用回退
+        temperature: inheritedRoute.temperature,
+        maxTokens: inheritedRoute.maxTokens,
         timeoutMs: config.requestTimeoutMs == null
           ? inheritedRoute.timeoutMs
           : Math.min(300_000, Math.max(10_000, config.requestTimeoutMs)),

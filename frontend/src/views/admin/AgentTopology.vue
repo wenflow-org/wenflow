@@ -418,8 +418,8 @@ onMounted(() => {
 
 .vf-agent-node__kind {
   font-size: var(--admin-text-micro);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   background: rgba(52, 120, 246, 0.08);
   padding: 3px 8px;
   border-radius: 999px;
@@ -443,7 +443,7 @@ onMounted(() => {
 
 .vf-agent-node__title {
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--admin-text-primary);
 }
 
@@ -477,7 +477,7 @@ onMounted(() => {
 
 .vf-agent-node__stats .num {
   font-size: var(--admin-text-title-sm);
-  font-weight: 800;
+  font-weight: 700;
   font-family: 'JetBrains Mono', Consolas, monospace;
   color: var(--admin-text-primary);
 }
@@ -533,8 +533,8 @@ onMounted(() => {
 
 .vf-skill-node__kind {
   font-size: var(--admin-text-micro);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   background: rgba(52, 120, 246, 0.08);
   color: var(--admin-text-brand);
   padding: 3px 8px;
@@ -547,12 +547,12 @@ onMounted(() => {
   color: var(--admin-color-warning);
   padding: 2px 6px;
   border-radius: 999px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .vf-skill-node__title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--admin-text-primary);
   display: block;
   line-height: 1.5;
@@ -579,7 +579,7 @@ onMounted(() => {
 
 .vf-skill-node__stats .num {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--admin-text-primary);
   font-family: 'JetBrains Mono', Consolas, monospace;
 }

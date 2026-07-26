@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-referee
 name: default-virtual-learner-referee
 archetype: extractor
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: batch
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: Blackbox 虚拟学习者实验旁路裁判
 temperature: 0.2
 maxTokens: 2400

@@ -194,6 +194,14 @@ watch(
     if (!id || !live) return
     void loadGrant()
     const base = liveUsers.value.find((u) => u.id === id)
+    // 活跃明细无接口：用列表数据的最后登录/会话数合成，保证卡片有真实内容
+    const activityOf = (b: typeof base) =>
+      b
+        ? [
+            { text: b.online ? '当前在线' : `最后登录：${b.lastLogin}`, time: '' },
+            ...(b.sessions ? [{ text: `累计会话 ${b.sessions} 次`, time: '' }] : [])
+          ]
+        : []
     try {
       const raw = (await liveGetUserDetail(id)) as Record<string, unknown>
       const user = (raw.user as Record<string, unknown>) || raw
@@ -215,7 +223,7 @@ watch(
           pct: Number(p.progress ?? p.completion_rate ?? 0),
           tone: 'ok' as const
         })),
-        activity: []
+        activity: activityOf(base)
       }
     } catch {
       // 详情接口失败：用列表数据兜底
@@ -232,7 +240,7 @@ watch(
             { label: '等级', value: base.currentLevel || '—' }
           ],
           recentPaths: [],
-          activity: []
+          activity: activityOf(base)
         }
       }
     }
@@ -269,7 +277,7 @@ const d = computed<Detail | undefined>(() => {
   display: grid;
   place-content: center;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .ud-id h3 { margin: 0; font-size: 18px; }
 .ud-sub { color: var(--mk-faint); font-size: 12px; }

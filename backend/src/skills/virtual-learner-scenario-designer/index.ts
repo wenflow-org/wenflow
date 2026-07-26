@@ -570,7 +570,7 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
       }),
       validateParsedOutput: (parsed) => validateScenarioOutput(parsed),
       normalizeOutput: (parsed) => normalizeScenarioOutput(parsed),
-      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-scenario-designer', output, {
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
         phase: 'completed',
         isTerminal: true,
       }),

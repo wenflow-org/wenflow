@@ -24,6 +24,16 @@ runtimeDefaults:
   thinkingMode: default
   reasoningEffort: default
 
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
+
 runtimeContract:
   version: prompt-runtime-contract/v1
   contextMode: snapshot-context

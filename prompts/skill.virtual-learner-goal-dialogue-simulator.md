@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-goal-dialogue-simulator
 name: default-virtual-learner-goal-dialogue-simulator
 archetype: conversational
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: conversation
+  interactionMode: turn
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: Goal 阶段虚拟学习者对话模拟器
 temperature: 0.8
 maxTokens: 1200

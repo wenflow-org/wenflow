@@ -15,14 +15,18 @@ import {
   PromptCallResult,
   PromptCallSpec,
   PromptAttemptTrace,
+  PromptRawParseResult,
   PromptRuntimeEnvelope,
 } from './types';
-import { resolveRuntimeContract } from '../services/prompt-lab/resolve-runtime-contract';
+import { resolveEffectiveRuntimeContract } from '../services/prompt-lab/resolve-runtime-contract';
 import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
+import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
+import { resolveLlmGenerationParams } from '../services/resolve-llm-call-params';
 import {
-  normalizeRuntimeContract,
-  type RuntimeContract,
-} from '../services/prompt-lab/runtime-contract';
+  mergeContextEnvelopes,
+  normalizeContextEnvelope,
+  withContextMode,
+} from '../skills/context-envelope';
 
 function stringifyPayload(payload: string | object): string {
   return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
@@ -41,13 +45,6 @@ function hashPrompt(prompt: string): string {
   return createHash('sha256').update(prompt || '').digest('hex');
 }
 
-function resolveMaxTokens(promptMaxTokens?: number | null, defaultMaxTokens?: number, minMaxTokens?: number): number | undefined {
-  const configured = Number(promptMaxTokens || defaultMaxTokens || 0);
-  const minimum = Number(minMaxTokens || 0);
-  const resolved = Math.max(configured, minimum);
-  return resolved > 0 ? resolved : undefined;
-}
-
 function compactAttemptTrace(attempts: PromptAttemptTrace[]): string {
   return JSON.stringify(attempts.map(item => ({
     attempt: item.attempt,
@@ -55,63 +52,20 @@ function compactAttemptTrace(attempts: PromptAttemptTrace[]): string {
     durationMs: item.durationMs,
     llmRequestId: item.llmRequestId,
     transportAttemptCount: item.transportAttemptCount,
-    failureReason: item.failureReason
+    failureReason: item.failureReason,
+    violations: item.violations
   })));
-}
-
-function resolvePromptModel(
-  runtimeModelOverride?: string | null,
-  promptModel?: string | null,
-  defaultModel?: string | null
-): string | undefined {
-  const candidates = [runtimeModelOverride, promptModel, defaultModel];
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-  }
-  return undefined;
-}
-
-function extractContractFromPromptMetadata(
-  metadata: unknown,
-  agentId: string
-): RuntimeContract | null {
-  if (metadata == null) return null;
-  let parsed: any = metadata;
-  if (typeof metadata === 'string') {
-    try {
-      parsed = JSON.parse(metadata);
-    } catch {
-      return null;
-    }
-  }
-  const candidate = parsed?.promptLab?.runtimeContract;
-  if (!candidate || typeof candidate !== 'object') return null;
-  return normalizeRuntimeContract(candidate, {
-    skillId: String(agentId || '').replace(/^skill:/, ''),
-  });
-}
-
-async function resolveContractForPrompt(
-  agentId: string,
-  promptConfig: { metadata?: unknown } | null | undefined
-): Promise<RuntimeContract> {
-  // 优先 ACTIVE prompt metadata（publish / merge 脚本写入），否则 manifest/default
-  const fromMeta = extractContractFromPromptMetadata(promptConfig?.metadata, agentId);
-  if (fromMeta) return fromMeta;
-  const resolved = await resolveRuntimeContract(agentId);
-  return resolved.contract;
 }
 
 async function buildDefaultEnvelope<TInput, TOutput>(
   spec: PromptCallSpec<TInput, TOutput>,
   output: TOutput,
   input: TInput,
-  promptConfig?: { metadata?: unknown } | null
+  contract: RuntimeContract
 ): Promise<PromptRuntimeEnvelope> {
   if (spec.mapEnvelope) {
-    return spec.mapEnvelope(output, input);
+    return spec.mapEnvelope(output, input, contract);
   }
-  const contract = await resolveContractForPrompt(spec.agentId, promptConfig);
   return adaptToRuntimeEnvelope({
     contract,
     artifact: output,
@@ -134,7 +88,35 @@ export async function callPrompt<TInput, TOutput>(
   const runtimeOverride = requestContext.promptRuntimeOverride || {};
   const systemPromptOverride = runtimeOverride.systemPromptOverride || context.systemPromptOverride;
   const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
-  const userPayload = stringifyPayload(spec.buildUserPayload(input));
+  const { contract: runtimeContract } = await resolveEffectiveRuntimeContract(spec.agentId, promptConfig);
+  const contextEnvelope = withContextMode(
+    mergeContextEnvelopes(
+      requestContext.contextEnvelope,
+      context.contextEnvelope,
+      normalizeContextEnvelope({
+        principal: { userId: context.userId || requestContext.userId },
+        session: {
+          sessionId: context.sessionId || requestContext.sessionId,
+          conversationId: context.conversationId || requestContext.conversationId,
+          pathId: context.pathId || requestContext.pathId,
+          taskId: context.taskId || requestContext.taskId,
+        },
+        locale: context.locale || requestContext.locale,
+      })
+    ),
+    runtimeContract.contextMode
+  );
+  const userPayload = stringifyPayload(spec.buildUserPayload(input, {
+    contextEnvelope,
+    runtimeContract,
+  }));
+  const sessionId = context.sessionId || contextEnvelope.session?.sessionId || requestContext.sessionId || null;
+  const pathId = context.pathId || contextEnvelope.session?.pathId || requestContext.pathId || null;
+  const conversationId = context.conversationId
+    || contextEnvelope.session?.conversationId
+    || requestContext.conversationId
+    || null;
+  const taskId = context.taskId || contextEnvelope.session?.taskId || requestContext.taskId || null;
   const traceId = context.traceId || requestContext.traceId || null;
   const parentExecutionId = context.parentExecutionId || requestContext.executionLogId || null;
   const retryBudget = requestContext.retryBudget
@@ -166,9 +148,9 @@ export async function callPrompt<TInput, TOutput>(
       errorMessage: `Missing active prompt for ${spec.agentId}`,
       promptDrift: false,
       durationMs: 0,
-      pathId: context.pathId || null,
+       pathId,
       userId: context.userId || requestContext.userId || null,
-      conversationId: context.conversationId || null,
+       conversationId,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
       traceId,
@@ -189,7 +171,10 @@ export async function callPrompt<TInput, TOutput>(
     };
   }
 
-  const systemPrompt = systemPromptOverride || promptConfig?.systemPrompt || spec.defaultSystemPrompt;
+  let systemPrompt = systemPromptOverride || promptConfig?.systemPrompt || spec.defaultSystemPrompt;
+  if (spec.prepareSystemPrompt) {
+    systemPrompt = await spec.prepareSystemPrompt(systemPrompt, input, context);
+  }
   const promptDrift = detectPromptDrift(spec.defaultSystemPrompt, promptConfig?.systemPrompt || null);
   const systemPromptHash = hashPrompt(systemPrompt);
   const attempts: PromptAttemptTrace[] = [];
@@ -199,10 +184,13 @@ export async function callPrompt<TInput, TOutput>(
   let lastRaw = '';
   let lastExtractedJson: string | null = null;
   let lastFailureReason = 'Unknown failure';
+  let lastViolations: string[] | undefined;
   let lastLlmRequestId: string | null = null;
   let lastProviderId: string | null = null;
   let lastModel: string | null = null;
   let llmRequestCount = 0;
+  let currentMaxTokens = spec.modelDefaults?.maxTokens;
+  const tokenCeiling = Math.max(currentMaxTokens || 8000, 16000);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -220,35 +208,53 @@ export async function callPrompt<TInput, TOutput>(
     const attemptStartedAt = Date.now();
     const retryNotice = attempt > 1 && spec.retryStrategy?.onValidationFail
       ? spec.retryStrategy.onValidationFail({
-          input, attempt, rawOutput: lastRaw, extractedJson: lastExtractedJson, failureReason: lastFailureReason,
+          input,
+          attempt,
+          rawOutput: lastRaw,
+          extractedJson: lastExtractedJson,
+          failureReason: lastFailureReason,
+          violations: lastViolations,
         })
       : null;
+    const retryMessage = retryNotice && lastViolations?.length
+      ? `${retryNotice}\n\n校验问题：\n${lastViolations.map(violation => `- ${violation}`).join('\n')}`
+      : retryNotice;
     const messages = [
       { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: retryNotice ? `${userPayload}\n\n${retryNotice}` : userPayload },
+      { role: 'user' as const, content: retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload },
     ];
 
     let response: any;
     try {
       llmRequestCount += 1;
+      // 单一读路径：override → ACTIVE prompt → codeDefaults（route 仅在 executor 回退）
+      const llmParams = resolveLlmGenerationParams({
+        runtimeOverride: {
+          model: runtimeOverride.modelOverride,
+          temperature: runtimeOverride.temperatureOverride,
+          maxTokens: runtimeOverride.maxTokensOverride ?? currentMaxTokens,
+        },
+        promptConfig,
+        codeDefaults: {
+          model: spec.modelDefaults?.model,
+          temperature: spec.modelDefaults?.temperature,
+          maxTokens: currentMaxTokens ?? spec.modelDefaults?.maxTokens,
+          minMaxTokens: spec.modelDefaults?.minMaxTokens,
+        },
+      });
       response = await gateway.execute({
         messages,
-        // P1: 尊重 agent_prompts.model / modelDefaults.model（此前只吃 runtimeOverride）
-        model: resolvePromptModel(
-          runtimeOverride.modelOverride,
-          promptConfig?.model,
-          spec.modelDefaults?.model
-        ),
-        max_tokens: runtimeOverride.maxTokensOverride
-          ?? resolveMaxTokens(promptConfig?.maxTokens, spec.modelDefaults?.maxTokens, spec.modelDefaults?.minMaxTokens),
-        temperature: runtimeOverride.temperatureOverride
-          ?? promptConfig?.temperature
-          ?? spec.modelDefaults?.temperature,
+        ...llmParams.request,
       }, spec.caller, {
         userId: runtimeOverride.routingUserIdOverride || context.userId,
         traceId: traceId || undefined,
         parentExecutionId: parentExecutionId || undefined,
-        rootExecutionId: requestContext.rootExecutionId,
+         rootExecutionId: requestContext.rootExecutionId,
+         sessionId: sessionId || undefined,
+         conversationId: conversationId || undefined,
+         pathId: pathId || undefined,
+         taskId: taskId || undefined,
+         locale: contextEnvelope.locale,
         promptCallId,
         promptAttemptNo: attempt,
         retryBudget
@@ -284,9 +290,9 @@ export async function callPrompt<TInput, TOutput>(
         errorMessage: failureReason,
         promptDrift: !!promptDrift?.driftDetected,
         durationMs: Date.now() - startTime,
-        pathId: context.pathId || null,
+         pathId,
         userId: context.userId || requestContext.userId || null,
-        conversationId: context.conversationId || null,
+         conversationId,
         pipelineRunId: context.pipelineRunId || null,
         pipelineStepIndex: context.pipelineStepIndex ?? null,
         traceId,
@@ -307,18 +313,40 @@ export async function callPrompt<TInput, TOutput>(
     lastProviderId = gatewayMetadata?.providerId || null;
     lastModel = gatewayMetadata?.resolvedModel || response.model || null;
     const rawModelOutput = response.choices?.[0]?.message?.content || '';
-    const extracted = extractJsonObject(rawModelOutput);
+    const extracted: PromptRawParseResult = spec.parseRawOutput
+      ? spec.parseRawOutput(rawModelOutput, input)
+      : (() => {
+          const basic = extractJsonObject(rawModelOutput);
+          return {
+            parsed: basic.parsed,
+            extractedJson: basic.extractedJson,
+            failureReason: basic.parsed == null
+              ? 'response does not contain valid JSON object'
+              : undefined,
+          };
+        })();
     lastRaw = rawModelOutput;
     lastExtractedJson = extracted.extractedJson;
 
     if (!extracted.extractedJson || extracted.parsed === null) {
-      lastFailureReason = 'response does not contain valid JSON object';
+      lastFailureReason = extracted.failureReason || 'response does not contain valid JSON object';
+      lastViolations = Array.isArray(extracted.violations) && extracted.violations.length
+        ? [...extracted.violations]
+        : [lastFailureReason];
       attempts.push({
         attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
+        violations: lastViolations,
         status: 'validation_failed', durationMs: Date.now() - attemptStartedAt,
         llmRequestId: lastLlmRequestId || undefined,
         transportAttemptCount: gatewayMetadata?.attemptCount
       });
+      // 长度截断时抬高后续 attempt 的 maxTokens（goal 原行为）
+      const finishReason = response.choices?.[0]?.finish_reason || response.finishReason;
+      const wasTruncated = finishReason === 'length'
+        || /[",:][^"]*$/.test(rawModelOutput.trim().slice(-50));
+      if (wasTruncated && typeof currentMaxTokens === 'number') {
+        currentMaxTokens = Math.min(tokenCeiling, currentMaxTokens * 2);
+      }
       continue;
     }
 
@@ -327,8 +355,12 @@ export async function callPrompt<TInput, TOutput>(
       : { valid: true as const };
     if (!validation.valid) {
       lastFailureReason = validation.failureReason || 'parsed output validation failed';
+      lastViolations = Array.isArray(validation.violations)
+        ? [...validation.violations]
+        : [lastFailureReason];
       attempts.push({
         attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
+        violations: lastViolations,
         status: 'validation_failed', durationMs: Date.now() - attemptStartedAt,
         llmRequestId: lastLlmRequestId || undefined,
         transportAttemptCount: gatewayMetadata?.attemptCount
@@ -337,7 +369,7 @@ export async function callPrompt<TInput, TOutput>(
     }
 
     const normalizedOutput = spec.normalizeOutput(extracted.parsed, input);
-    const runtimeEnvelope = await buildDefaultEnvelope(spec, normalizedOutput, input, promptConfig);
+    const runtimeEnvelope = await buildDefaultEnvelope(spec, normalizedOutput, input, runtimeContract);
     const durationMs = Date.now() - startTime;
     const tokenUsage = normalizeTokenUsage(response.usage);
     attempts.push({
@@ -359,9 +391,9 @@ export async function callPrompt<TInput, TOutput>(
       promptDrift: !!promptDrift?.driftDetected,
       durationMs,
       tokenUsage: JSON.stringify(tokenUsage),
-      pathId: context.pathId || null,
+       pathId,
       userId: context.userId || requestContext.userId || null,
-      conversationId: context.conversationId || null,
+       conversationId,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
       traceId,
@@ -404,9 +436,9 @@ export async function callPrompt<TInput, TOutput>(
     errorMessage: lastFailureReason,
     promptDrift: !!promptDrift?.driftDetected,
     durationMs,
-    pathId: context.pathId || null,
+     pathId,
     userId: context.userId || requestContext.userId || null,
-    conversationId: context.conversationId || null,
+     conversationId,
     pipelineRunId: context.pipelineRunId || null,
     pipelineStepIndex: context.pipelineStepIndex ?? null,
     traceId,

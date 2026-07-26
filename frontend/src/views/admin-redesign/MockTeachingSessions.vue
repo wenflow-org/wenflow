@@ -152,6 +152,7 @@ import { computed, ref, watch } from 'vue'
 import { dataSource } from './mockStore'
 import { timeAgo } from './mockLive'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
+import { useEscape } from './useEscape'
 
 defineProps<{ state: string }>()
 
@@ -331,6 +332,7 @@ const statusTitle = computed(() =>
 
 /* 详情 */
 const detail = ref<Row | null>(null)
+useEscape(() => !!detail.value, () => { detail.value = null })
 const openCards = ref<Set<string>>(new Set())
 
 function openDetail(r: Row) {
@@ -409,7 +411,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 .ts-section h4 {
   margin: 0;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #8492ab;
@@ -451,7 +453,7 @@ const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)} 分�
 .ts-raw summary {
   cursor: pointer;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #8492ab;

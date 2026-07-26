@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-actor-auditor
 name: default-virtual-learner-actor-auditor
 archetype: extractor
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: batch
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: Blackbox 合成学习者角色保真度审计
 temperature: 0.2
 maxTokens: 5000

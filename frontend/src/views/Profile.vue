@@ -165,7 +165,6 @@ const paceLabel = computed(() => {
 
 const currentPathId = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.learningPathId || '')
 const currentPathTitle = computed(() => learnerCenter.value?.knowledgeMemory?.currentPath?.pathTitle || '暂无进行中的路径')
-const currentPathMeta = computed(() => (currentPathId.value ? '进行中' : '无'))
 const projectionGrantStatus = computed(() => getProjectionGrantStatus(projectionGrant.value))
 const projectionGrantStatusLabel = computed(() => {
   if (projectionGrantLoadError.value) return '读取失败'
@@ -173,16 +172,6 @@ const projectionGrantStatusLabel = computed(() => {
   if (projectionGrantStatus.value === 'expired') return '已过期'
   if (projectionGrantStatus.value === 'revoked') return '已撤销'
   return '未授权'
-})
-const projectionGrantStatusTagType = computed(() => {
-  if (projectionGrantStatus.value === 'active') return 'success'
-  if (projectionGrantStatus.value === 'expired') return 'warning'
-  if (projectionGrantStatus.value === 'revoked') return 'info'
-  return 'info'
-})
-const projectionGrantScopeLabel = computed(() => {
-  const scope = projectionGrant.value?.scope || projectionGrantForm.scope
-  return scope === 'full' ? '全部学习页' : '仅学习台'
 })
 const projectionGrantExpiresAtLabel = computed(() => formatDateTime(projectionGrant.value?.expiresAt))
 const projectionGrantActionLabel = computed(() => (projectionGrantStatus.value === 'active' ? '更新授权' : `授权 ${projectionGrantForm.expiresInHours} 小时`))

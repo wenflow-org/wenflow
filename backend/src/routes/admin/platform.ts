@@ -1076,29 +1076,52 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       });
     }
 
-    const range = String(req.query.range || '7d');
-    const sinceMs = range === '24h' ? 24 * 3600 * 1000
-      : range === '30d' ? 30 * 24 * 3600 * 1000
-      : 7 * 24 * 3600 * 1000;
-    const since = new Date(Date.now() - sinceMs);
+    const range = String(req.query.range || 'all');
+    const statsRange = range === '24h' || range === '7d' || range === '30d' || range === 'all'
+      ? range
+      : 'all';
 
     const { listTopLevelAgents, listAgentManifest, getCanonicalAgentId } = await import('../../services/agent-manifest.service');
+    const {
+      getUnifiedSkillStats,
+      resolveEffectiveSkillRuntimeConfig,
+    } = await import('../../services/skill-runtime-contract.service');
     const topAgents = listTopLevelAgents();
     const allManifest = listAgentManifest();
     const manifestMap = new Map(allManifest.map(m => [m.id, m]));
 
-    // 拉取窗口内的调用统计
-    const callGroups = await prisma.agent_call_logs.groupBy({
-      by: ['agentId'],
-      where: { calledAt: { gte: since } },
-      _count: { _all: true },
-      _avg: { durationMs: true }
-    });
-    const successGroups = await prisma.agent_call_logs.groupBy({
-      by: ['agentId', 'success'],
-      where: { calledAt: { gte: since } },
-      _count: { _all: true }
-    });
+    const skillIds: string[] = [];
+    for (const agent of topAgents) {
+      for (const memberId of agent.agentMembers || []) {
+        const canonical = getCanonicalAgentId(memberId);
+        if (canonical.startsWith('skill:')) {
+          skillIds.push(canonical.replace(/^skill:/, ''));
+        }
+      }
+    }
+
+    // Skill 统计与列表/抽屉统一；Agent 节点仍用 agent_call_logs（编排层）
+    const sinceMs = statsRange === '24h' ? 24 * 3600 * 1000
+      : statsRange === '30d' ? 30 * 24 * 3600 * 1000
+        : statsRange === '7d' ? 7 * 24 * 3600 * 1000
+          : null;
+    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
+    const agentCallWhere = since ? { calledAt: { gte: since } } : {};
+
+    const [skillStatsMap, callGroups, successGroups] = await Promise.all([
+      getUnifiedSkillStats(skillIds, statsRange as any),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId'],
+        where: agentCallWhere,
+        _count: { _all: true },
+        _avg: { durationMs: true }
+      }),
+      prisma.agent_call_logs.groupBy({
+        by: ['agentId', 'success'],
+        where: agentCallWhere,
+        _count: { _all: true }
+      }),
+    ]);
 
     const callMap = new Map<string, { total: number; avgDuration: number }>();
     for (const g of callGroups) {
@@ -1111,19 +1134,20 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
       successMap.set(g.agentId, cur);
     }
 
-    const getStats = (id: string) => {
+    const getAgentStats = (id: string) => {
       const c = callMap.get(id);
       const s = successMap.get(id) || { success: 0, failed: 0 };
       const total = c?.total ?? 0;
       const successRate = total > 0 ? Number(((s.success / total) * 100).toFixed(1)) : null;
-      return { totalCalls: total, successRate, avgDuration: c?.avgDuration ?? 0, failed: s.failed };
+      return { totalCalls: total, successRate, avgDuration: c?.avgDuration ?? 0, failed: s.failed, source: 'agent_call_logs', range: statsRange };
     };
 
     const nodes: any[] = [];
     const edges: any[] = [];
+    const effectiveConfigCache = new Map<string, any>();
 
     for (const agent of topAgents) {
-      const agentStats = getStats(agent.id);
+      const agentStats = getAgentStats(agent.id);
 
       nodes.push({
         id: agent.id,
@@ -1140,7 +1164,37 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
         const skill = manifestMap.get(canonical);
         if (!skill) continue;
 
-        const skillStats = getStats(canonical);
+        const shortId = canonical.replace(/^skill:/, '');
+        const unified = skillStatsMap.get(shortId);
+        const skillStats = {
+          totalCalls: unified?.callCount || 0,
+          successRate: unified?.successRate ?? null,
+          avgDuration: unified?.avgDurationMs || 0,
+          failed: unified?.failureCount || 0,
+          source: unified?.source || 'none',
+          range: statsRange,
+        };
+
+        let modelConfig: Record<string, unknown> | null = skill.defaultModelConfig
+          ? { ...skill.defaultModelConfig, source: 'manifest-default' }
+          : null;
+        try {
+          let effective = effectiveConfigCache.get(shortId);
+          if (!effective) {
+            effective = await resolveEffectiveSkillRuntimeConfig(shortId);
+            effectiveConfigCache.set(shortId, effective);
+          }
+          modelConfig = {
+            model: effective.llmRequest.model,
+            temperature: effective.llmRequest.temperature,
+            maxTokens: effective.llmRequest.maxTokens,
+            source: effective.llmRequest.source,
+            routeSource: effective.route.source,
+          };
+        } catch {
+          // keep manifest default as last resort
+        }
+
         nodes.push({
           id: skill.id,
           type: 'skill',
@@ -1150,7 +1204,7 @@ router.get('/agents/topology', async (req: Request, res: Response) => {
           parentAgentId: agent.id,
           ioContractVersion: skill.ioContractVersion,
           noPromptFile: !!skill.noPromptFile,
-          modelConfig: skill.defaultModelConfig || null,
+          modelConfig,
           stats: skillStats
         });
 

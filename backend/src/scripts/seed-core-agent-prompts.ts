@@ -9,7 +9,15 @@
  */
 
 import type { PrismaClient } from '../generated/system-client';
-import { loadAllPromptFiles } from '../composers/prompt-files/loader';
+import { loadAllPromptFiles, type PromptFile } from '../composers/prompt-files/loader';
+import {
+  normalizeRuntimeContract,
+  type RuntimeContract,
+} from '../services/prompt-lab/runtime-contract';
+import {
+  lintDeclaredSkillPromptContract,
+  type SkillPromptContract,
+} from '../services/skill-prompt-contract';
 
 export interface CoreAgentPromptSeed {
   agentId: string;
@@ -19,6 +27,8 @@ export interface CoreAgentPromptSeed {
   temperature: number;
   maxTokens: number;
   acceptableAgentIds?: string[];
+  /** 来自 prompt 文件 frontmatter 的运行时契约快照 */
+  metadata?: string;
 }
 
 export interface CoreAgentPromptSeedResult {
@@ -39,14 +49,180 @@ export interface CoreAgentPromptEnsureResult {
   reason: 'seeded-empty-table' | 'table-not-empty' | 'backfilled-missing' | 'no-missing-prompts' | 'synced-from-code' | 'already-in-sync';
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function runtimeContractError(agentId: string, field: string, detail: string): Error {
+  const fieldPath = field ? `.${field}` : '';
+  return new Error(`Prompt ${agentId} has an invalid runtimeContract${fieldPath}: ${detail}`);
+}
+
+function requireNonBlankString(value: unknown, agentId: string, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw runtimeContractError(agentId, field, 'expected a non-empty string');
+  }
+  return value.trim();
+}
+
+function requireStringArray(value: unknown, agentId: string, field: string): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw runtimeContractError(agentId, field, 'expected a non-empty string array');
+  }
+  return value.map((item, index) => requireNonBlankString(item, agentId, `${field}[${index}]`));
+}
+
+function requireOneOf<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  agentId: string,
+  field: string
+): T {
+  const normalized = requireNonBlankString(value, agentId, field);
+  if (!allowed.includes(normalized as T)) {
+    throw runtimeContractError(agentId, field, `expected one of: ${allowed.join(', ')}`);
+  }
+  return normalized as T;
+}
+
 /**
- * 从 prompts/ 目录动态加载 prompt 文件
- * 替代原先硬编码的 CORE_AGENT_PROMPT_SEEDS 数组
+ * 明确声明的契约必须完整有效。normalizeRuntimeContract 会为缺失字段推断默认值，
+ * 因此前置校验以避免错误的文件声明在同步时被悄悄改写为默认契约。
  */
-export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
-  const promptFiles = loadAllPromptFiles();
-  
-  return promptFiles.map((file) => ({
+function validateDeclaredRuntimeContract(value: unknown, agentId: string): void {
+  if (!isRecord(value)) {
+    throw runtimeContractError(agentId, '', 'expected an object');
+  }
+
+  requireOneOf(value.version, ['prompt-runtime-contract/v1'] as const, agentId, 'version');
+  requireOneOf(
+    value.contextMode,
+    ['state-refresh', 'thread-context', 'snapshot-context', 'simulation-refresh'] as const,
+    agentId,
+    'contextMode'
+  );
+
+  if (!isRecord(value.businessState)) {
+    throw runtimeContractError(agentId, 'businessState', 'expected an object');
+  }
+  const businessState = value.businessState;
+  requireNonBlankString(businessState.domain, agentId, 'businessState.domain');
+  const phases = requireStringArray(businessState.phases, agentId, 'businessState.phases');
+  const defaultPhase = requireNonBlankString(businessState.defaultPhase, agentId, 'businessState.defaultPhase');
+  if (!phases.includes(defaultPhase)) {
+    throw runtimeContractError(agentId, 'businessState.defaultPhase', 'must be included in businessState.phases');
+  }
+  const terminalPhases = requireStringArray(
+    businessState.terminalPhases,
+    agentId,
+    'businessState.terminalPhases'
+  );
+  if (terminalPhases.some((phase) => !phases.includes(phase))) {
+    throw runtimeContractError(agentId, 'businessState.terminalPhases', 'must only contain businessState.phases values');
+  }
+  const statusValues = requireStringArray(businessState.statusValues, agentId, 'businessState.statusValues');
+  const allowedStatusValues = ['succeeded', 'partial', 'blocked', 'failed'];
+  if (statusValues.some((status) => !allowedStatusValues.includes(status))) {
+    throw runtimeContractError(
+      agentId,
+      'businessState.statusValues',
+      `must only contain: ${allowedStatusValues.join(', ')}`
+    );
+  }
+
+  if (!isRecord(value.contextUpdate)) {
+    throw runtimeContractError(agentId, 'contextUpdate', 'expected an object');
+  }
+  const contextUpdate = value.contextUpdate;
+  requireOneOf(
+    contextUpdate.mode,
+    ['none', 'state-refresh', 'thread-state', 'simulation-refresh'] as const,
+    agentId,
+    'contextUpdate.mode'
+  );
+  requireOneOf(
+    contextUpdate.stateOwner,
+    ['runtime', 'model', 'orchestrator', 'none'] as const,
+    agentId,
+    'contextUpdate.stateOwner'
+  );
+  if (contextUpdate.description !== undefined) {
+    requireNonBlankString(contextUpdate.description, agentId, 'contextUpdate.description');
+  }
+
+  requireOneOf(value.outputEnvelope, ['adapter', 'model'] as const, agentId, 'outputEnvelope');
+}
+
+export interface DeclaredPromptRuntimeContractIdentity {
+  agentId: string;
+  archetype?: string;
+}
+
+function normalizeDeclaredPromptContract(
+  file: Pick<PromptFile, 'agentId' | 'archetype' | 'promptContract'>,
+  runtimeContract?: RuntimeContract
+): SkillPromptContract | undefined {
+  if (file.promptContract === undefined) return undefined;
+  const result = lintDeclaredSkillPromptContract(file.promptContract, {
+    skillId: file.agentId,
+    archetype: file.archetype,
+    runtimeContract,
+  });
+  const errors = result.issues.filter((issue) => issue.level === 'error');
+  if (errors.length > 0) {
+    throw new Error(`Prompt ${file.agentId} has an invalid promptContract: ${errors.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}`);
+  }
+  return result.contract;
+}
+
+/**
+ * 仅供已经显式声明的 runtimeContract 使用。先拒绝不完整或错误的声明，
+ * 再复用运行时标准化逻辑生成稳定快照，不能让默认推断掩盖声明错误。
+ */
+export function normalizeDeclaredPromptRuntimeContract(
+  value: unknown,
+  identity: DeclaredPromptRuntimeContractIdentity
+): RuntimeContract {
+  validateDeclaredRuntimeContract(value, identity.agentId);
+  return normalizeRuntimeContract(value, {
+    skillId: identity.agentId.replace(/^skill:/, ''),
+    archetype: identity.archetype || '',
+  });
+}
+
+/** 由 prompt frontmatter 生成新版本使用的 metadata 快照；没有声明时保持 metadata 缺失。 */
+export function buildPromptFileRuntimeContractMetadata(
+  file: Pick<PromptFile, 'agentId' | 'archetype' | 'promptContract' | 'runtimeContract'>
+): string | undefined {
+  if (file.runtimeContract === undefined && file.promptContract === undefined) return undefined;
+
+  const runtimeContract = file.runtimeContract === undefined
+    ? undefined
+    : normalizeDeclaredPromptRuntimeContract(file.runtimeContract, file);
+  const promptContract = normalizeDeclaredPromptContract(file, runtimeContract);
+  return JSON.stringify({
+    promptLab: {
+      source: 'prompt-file',
+      ...(runtimeContract
+        ? {
+            runtimeContractSource: 'prompt-frontmatter',
+            runtimeContract,
+          }
+        : {}),
+      ...(promptContract
+        ? {
+            promptContractSource: 'prompt-frontmatter',
+            promptContract,
+          }
+        : {}),
+    },
+  });
+}
+
+/** 将 File-as-Truth prompt 文件映射为可写入数据库的种子定义。 */
+export function mapPromptFileToCoreAgentPromptSeed(file: PromptFile): CoreAgentPromptSeed {
+  const metadata = buildPromptFileRuntimeContractMetadata(file);
+  return {
     agentId: file.agentId,
     name: file.name,
     description: file.description || `从文件 ${file.agentId}.md 加载`,
@@ -54,7 +230,18 @@ export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
     temperature: file.temperature ?? 0.7,
     maxTokens: file.maxTokens ?? 4000,
     acceptableAgentIds: file.acceptableAgentIds,
-  }));
+    ...(metadata === undefined ? {} : { metadata }),
+  };
+}
+
+/**
+ * 从 prompts/ 目录动态加载 prompt 文件
+ * 替代原先硬编码的 CORE_AGENT_PROMPT_SEEDS 数组
+ */
+export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
+  return loadAllPromptFiles()
+    .filter((file) => file.archetype !== 'code-only')
+    .map(mapPromptFileToCoreAgentPromptSeed);
 }
 
 /**
@@ -103,6 +290,7 @@ async function createPromptSeedRecord(
       status: 'ACTIVE',
       createdBy,
       publishedAt: new Date(),
+      ...(seed.metadata === undefined ? {} : { metadata: seed.metadata }),
     },
   });
 }
@@ -215,6 +403,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
           status: 'ACTIVE',
           createdBy: 'system-sync',
           publishedAt: new Date(),
+          ...(seed.metadata === undefined ? {} : { metadata: seed.metadata }),
         },
       });
     });

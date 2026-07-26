@@ -2,6 +2,15 @@
 agentId: skill:goal-conversation
 name: default-skill-goal-conversation
 archetype: conversational
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: conversation
+  interactionMode: turn
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 
 temperature: 0.7
 maxTokens: 8000
@@ -96,6 +105,41 @@ runtimeContract:
 - 只输出一个合法 JSON 对象，JSON 前后不得有任何前言、解释、总结、markdown 包装。
 - 禁止输出以下平台字段：`success`、`schemaVersion`、`metadata`、`internal`、`renderHints`、`error`、`output`、`goalConversation`。
 - 不要使用 `goalConversation` 包装层，`quickReplies` 直接放在顶层。
+
+### JSON 示例（字段真相源）
+
+```json
+{
+  "reply": "我理解你现在卡在具体场景里。你最近一次真正做这件事时，卡在哪一步？",
+  "state": {
+    "stage": "understanding|proposing|ready",
+    "confidence": 0-0.99,
+    "done": false
+  },
+  "understanding": {
+    "surface_goal": "string",
+    "real_problem": "string",
+    "current_baseline": { "level": "string", "evidence": "string" },
+    "background_experience": "string",
+    "learning_signal": "string",
+    "available_resources": { "time_horizon": "string", "time_budget": "string" },
+    "success_criteria": { "observable_result": "string", "acceptance_check": "string" },
+    "constraints_and_boundaries": ["string"],
+    "motivation": "string",
+    "urgency": "string",
+    "pain_points": ["string"]
+  },
+  "nextQuestions": ["string"],
+  "quickReplies": ["string"],
+  "confirmedProposal": {
+    "learning_direction": "string",
+    "first_deliverable": "string",
+    "key_stages": ["string"],
+    "out_of_scope": ["string"]
+  },
+  "confidenceScores": {}
+}
+```
 
 ### 字段定义
 

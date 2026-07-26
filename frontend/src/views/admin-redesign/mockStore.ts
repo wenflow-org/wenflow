@@ -122,7 +122,7 @@ export const agentProfiles: AgentProfile[] = [
   { id: 'path-agent', name: '路径 Agent', description: '规划学习路径与阶段拆解。' },
   { id: 'teaching-agent', name: '教学 Agent', description: 'AI 教学会话编排：单轮教学、伴学补强、课后产出。' },
   { id: 'learner-agent', name: '学习者 Agent', description: '画像、状态聚合、知识沉淀与快照刷新。' },
-  { id: 'virtual-agent', name: '虚拟学习者 Agent', description: '黑盒模拟：故事 → Goal → Path → Learn 运行。' }
+  { id: 'virtual-agent', name: '虚拟学习者 Agent', description: '人设 + 故事驱动：产生学习需求后与平台交互（Goal / Path / Learn）。' }
 ]
 
 export function skillsOfAgent(agentId: string): SkillProfile[] {
@@ -182,6 +182,10 @@ export interface InvestigationIntent {
   statusFilter: string
   traceId: string
   skillDrawerId: string
+  /** Prompt Lab 预选 Skill（抽屉「在 Prompt Lab 中编辑」直达） */
+  promptLabSkill: string
+  /** 页面级快捷动作（命令面板「新建用户」等直达并触发页面动作） */
+  quickAction: string
 }
 
 export const intent = reactive<InvestigationIntent>({
@@ -189,8 +193,23 @@ export const intent = reactive<InvestigationIntent>({
   agentFilter: '',
   statusFilter: '',
   traceId: '',
-  skillDrawerId: ''
+  skillDrawerId: '',
+  promptLabSkill: '',
+  quickAction: ''
 })
+
+/** Skill 抽屉 → Prompt Lab 编辑（预选该 Skill） */
+export function editSkillInPromptLab(skillId: string) {
+  intent.promptLabSkill = skillId
+  intent.skillDrawerId = ''
+  intent.scene = 'prompt-lab'
+}
+
+/** 命令面板 → 页面快捷动作（如打开新建弹窗），页面消费后需清空 */
+export function queueQuickAction(sceneId: string, action: string) {
+  intent.quickAction = action
+  intent.scene = sceneId
+}
 
 /** 总览事故卡 → 执行日志（已过滤该节点 + 失败） */
 export function investigateAgent(agentId: string) {

@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css';
 
 import App from './App.vue';
 import router from './router';
+import { vReveal } from './directives/reveal';
 import {
   ADMIN_SESSION_CLEAR_EVENT_KEY,
   adminAuthApi,
@@ -195,6 +196,7 @@ app.use(router);
 // Element Plus 组件由 unplugin-vue-components 按需自动引入；
 // 此处仅注册全局指令与语言包（locale 通过 App.vue 的 el-config-provider 下发）
 app.use(ElLoading);
+app.directive('reveal', vReveal);
 
 // 渲染期未捕获错误的最后防线：至少落盘，避免静默丢失
 app.config.errorHandler = (err, _instance, info) => {

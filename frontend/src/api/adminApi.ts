@@ -846,7 +846,7 @@ export const adminSkillWorkbenchApi = {
  * 返回 5 Agent + 22 Skill 的节点图数据（含调用统计 + 隶属边）
  */
 export const adminAgentTopologyApi = {
-  getTopology: async (range: '24h' | '7d' | '30d' = '7d') =>
+  getTopology: async (range: '24h' | '7d' | '30d' | 'all' = '7d') =>
     adminAxios.get('/admin/agents/topology', { params: { range } }),
 };
 
@@ -903,6 +903,95 @@ export const adminCapabilityProbeApi = {
   },
   updateSettings: async (payload: { enabled?: boolean; intervalMs?: number }) => {
     return adminAxios.put('/admin/settings/capability-probe', payload);
+  }
+};
+
+/**
+ * AI 能力健康快照（5 个核心能力 + 主动探测）
+ */
+export const adminSystemApi = {
+  getCapabilities: async () => {
+    return adminAxios.get('/admin/system/capabilities');
+  },
+  probeCapabilities: async () => {
+    return adminAxios.post('/admin/system/capabilities/probe');
+  }
+};
+
+/**
+ * 用户反馈中心（前台教学反馈的收集与处理）
+ */
+export const adminFeedbackApi = {
+  list: async (params?: {
+    page?: number;
+    limit?: number;
+    maxRating?: number;
+    status?: 'new' | 'triaged' | 'resolved' | 'dismissed';
+    userId?: string;
+    taskId?: string;
+  }) => {
+    return adminAxios.get('/admin/feedback', { params });
+  },
+  getDetail: async (feedbackId: string) => {
+    return adminAxios.get(`/admin/feedback/${encodeURIComponent(feedbackId)}`);
+  },
+  update: async (
+    feedbackId: string,
+    payload: {
+      status?: 'new' | 'triaged' | 'resolved' | 'dismissed';
+      assigneeAdminId?: string | null;
+      internalNote?: string | null;
+    }
+  ) => {
+    return adminAxios.patch(`/admin/feedback/${encodeURIComponent(feedbackId)}`, payload);
+  },
+  getTrend: async (days = 30) => {
+    return adminAxios.get('/admin/feedback/trend', { params: { days } });
+  }
+};
+
+/**
+ * Goal 会话管理（目标对话 → 路径生成源头）
+ */
+export const adminGoalConversationsApi = {
+  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string }) => {
+    return adminAxios.get('/admin/goal-conversations', { params });
+  },
+  getDetail: async (id: string) => {
+    return adminAxios.get(`/admin/goal-conversations/${encodeURIComponent(id)}`);
+  },
+  update: async (id: string, payload: { status?: string; collectedData?: string }) => {
+    return adminAxios.patch(`/admin/goal-conversations/${encodeURIComponent(id)}`, payload);
+  },
+  remove: async (id: string) => {
+    return adminAxios.delete(`/admin/goal-conversations/${encodeURIComponent(id)}`);
+  },
+  regeneratePath: async (id: string) => {
+    return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`);
+  },
+  getStats: async () => {
+    return adminAxios.get('/admin/goal-conversations/stats/overview');
+  }
+};
+
+/**
+ * 平台公告管理
+ */
+export const adminAnnouncementsApi = {
+  list: async () => {
+    return adminAxios.get('/admin/announcements');
+  },
+  create: async (data: Record<string, unknown>) => {
+    return adminAxios.post('/admin/announcements', data);
+  },
+  publish: async (id: string) => {
+    return adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/publish`);
+  },
+  archive: async (id: string) => {
+    return adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/archive`);
+  },
+  remove: async (id: string) => {
+    return adminAxios.delete(`/admin/announcements/${encodeURIComponent(id)}`);
   }
 };
 
@@ -1005,13 +1094,21 @@ export const adminSkillsApi = {
     model?: string | null;
     thinkingMode?: string;
     reasoningEffort?: string;
+    /** @deprecated 生成参数已收敛到 ACTIVE Prompt，后端会忽略 */
     temperature?: number;
+    /** @deprecated 生成参数已收敛到 ACTIVE Prompt，后端会忽略 */
     maxTokens?: number;
     requestTimeoutMs?: number | null;
     maxLogicalRetries?: number | null;
     enabled?: boolean;
   }) => {
-    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, data);
+    // Phase 2：不提交 temperature/maxTokens，避免旧调用方误写
+    const {
+      temperature: _t,
+      maxTokens: _m,
+      ...routingOnly
+    } = data;
+    return adminAxios.put(`/admin/skill-model-configs/${skillId}`, routingOnly);
   },
 
   deleteSkillModelConfig: async (skillId: string) => {
@@ -1565,6 +1662,7 @@ export const adminApi = {
   getAgentRelations: adminSkillsApi.getAgentRelations,
   // getPromptVersions: adminAgentPromptsApi 版本签名为 (params?: { agentId?, status? })，
   // adminTestApi 版本签名为 (agentId: string)（端点、签名均不同）；
-  // 此处保留后展开的 test 版本，prompts 版本请用 adminAgentPromptsApi.getPromptVersions()
-  getPromptVersions: adminTestApi.getPromptVersions,
+  // 扁平键无现存调用方，绑定语义更通用的 prompts 版本，
+  // test 版本请用 adminTestApi.getPromptVersions()
+  getPromptVersions: adminAgentPromptsApi.getPromptVersions,
 };

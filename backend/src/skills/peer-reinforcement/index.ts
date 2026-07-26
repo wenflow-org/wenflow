@@ -3,18 +3,19 @@
  * 在教学主链判断学生需要强化时，提供同伴式讨论补强能力
  */
 
-import { ExecutionContext } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition } from '../../agents/protocol';
 import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { buildSkillOutcome, noneTransition, type SkillOutcome } from '../outcome';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 interface ChatMessage { role: MessageRole; content: string }
 
 const AGENT_ID = 'skill:peer-reinforcement';
+const PEER_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract('peer-reinforcement', 'copywriter');
 
 
 
@@ -99,6 +100,18 @@ export interface PeerDiscussionInput {
   understanding?: number;
 }
 
+export interface PeerModelArtifact {
+  message: string;
+  followUpQuestions: string[];
+}
+
+/** 伴学独立 canonical artifact（无 durable 状态迁移） */
+export interface PeerCanonicalArtifact {
+  message: string;
+  strategy: string;
+  followUpQuestions: string[];
+}
+
 export interface PeerDiscussionOutput {
   message: string;
   strategy: string;
@@ -106,6 +119,31 @@ export interface PeerDiscussionOutput {
   promptDebug?: any;
   inputEcho?: PeerDiscussionInput;
   runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope>;
+  /** model 主路径 vs 本地 fallback */
+  source?: 'model' | 'fallback';
+}
+
+export function toPeerCanonicalArtifact(result: PeerDiscussionOutput): PeerCanonicalArtifact {
+  return {
+    message: result.message,
+    strategy: result.strategy,
+    followUpQuestions: Array.isArray(result.followUpQuestions) ? result.followUpQuestions : [],
+  };
+}
+
+/** peer 无 durable transition；公开仍是 { message, strategy, followUpQuestions } */
+export function toPeerSkillOutcome(
+  result: PeerDiscussionOutput,
+  options?: { quality?: 'model' | 'fallback' | 'partial' | 'failed'; reason?: string | null }
+): SkillOutcome<PeerCanonicalArtifact> {
+  return buildSkillOutcome({
+    skillId: AGENT_ID,
+    artifact: toPeerCanonicalArtifact(result),
+    quality: options?.quality ?? (result.source === 'fallback' ? 'fallback' : 'model'),
+    reason: options?.reason ?? null,
+    runtimeEnvelope: result.runtimeEnvelope || null,
+    transition: noneTransition('discussion-generated'),
+  });
 }
 
 function getStrategyInstruction(strategy: PeerDiscussionInput['strategy']): string {
@@ -140,43 +178,64 @@ function buildPeerUserPayload(input: PeerDiscussionInput) {
 【学生认知层级】${input.cognitiveLevel || 'understand'}${understandingSection}${contextSection}${studentMessageSection}`;
 }
 
-function validatePeerParsedOutput(parsed: any) {
-  if (!parsed || typeof parsed !== 'object') {
+export function validatePeerParsedOutput(parsed: unknown) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'PEER_OUTPUT_NOT_OBJECT' };
   }
 
-  if (typeof parsed.message !== 'string' || !parsed.message.trim()) {
+  const artifact = parsed as Record<string, unknown>;
+  if (typeof artifact.message !== 'string' || !artifact.message.trim()) {
     return { valid: false as const, failureReason: 'PEER_MESSAGE_MISSING' };
+  }
+
+  if (Object.prototype.hasOwnProperty.call(artifact, 'followUpQuestions')) {
+    if (!Array.isArray(artifact.followUpQuestions)) {
+      return { valid: false as const, failureReason: 'PEER_FOLLOW_UP_QUESTIONS_NOT_ARRAY' };
+    }
+
+    if (artifact.followUpQuestions.some(question => typeof question !== 'string' || !question.trim())) {
+      return { valid: false as const, failureReason: 'PEER_FOLLOW_UP_QUESTION_INVALID' };
+    }
   }
 
   return { valid: true as const };
 }
 
-const PEER_RUNTIME_CONTRACT = buildDefaultRuntimeContract('peer-reinforcement', 'copywriter');
+export function normalizePeerParsedOutput(parsed: unknown): PeerModelArtifact {
+  const artifact = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {};
+  const followUpQuestions = Array.isArray(artifact.followUpQuestions)
+    ? artifact.followUpQuestions
+      .filter((question): question is string => typeof question === 'string' && !!question.trim())
+      .slice(0, 3)
+      .map(question => question.trim().slice(0, 100))
+    : [];
 
-const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, string> = {
+  return {
+    message: typeof artifact.message === 'string' ? artifact.message.trim() : '',
+    followUpQuestions,
+  };
+}
+
+const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
+  requireActivePrompt: true,
   caller: {
     agentId: 'teaching-agent',
     skillId: 'peer-reinforcement',
   },
   buildUserPayload: (input) => buildPeerUserPayload(input),
   validateParsedOutput: (parsed) => validatePeerParsedOutput(parsed),
-  normalizeOutput: (parsed, input) => {
-    if (typeof parsed === 'string' && parsed.trim()) {
-      return parsed.trim();
-    }
-
-    if (parsed && typeof parsed === 'object' && typeof (parsed as any).message === 'string' && (parsed as any).message.trim()) {
-      return (parsed as any).message.trim();
-    }
-
-    return '';
-  },
-  mapEnvelope: (output, input) => adaptToRuntimeEnvelope({
-    contract: PEER_RUNTIME_CONTRACT,
-    artifact: { message: output, strategy: input.strategy },
+  normalizeOutput: (parsed) => normalizePeerParsedOutput(parsed),
+  mapEnvelope: (output, input, runtimeContract) => adaptToRuntimeEnvelope({
+    contract: runtimeContract,
+    artifact: {
+      message: output.message,
+      strategy: input.strategy,
+      followUpQuestions: output.followUpQuestions,
+    },
     phase: 'discussion-generated',
     status: 'succeeded',
     isTerminal: false,
@@ -214,7 +273,8 @@ export class PeerAgent {
         throw new Error(promptResult.error?.message || 'PEER_PROMPT_FAILED');
       }
 
-      const message = promptResult.output || '';
+      const modelArtifact = promptResult.output;
+      const message = modelArtifact?.message || '';
 
       if (!message.trim()) {
         throw new Error('PEER_RESPONSE_EMPTY');
@@ -225,10 +285,11 @@ export class PeerAgent {
       result = {
         message,
         strategy: input.strategy,
-        followUpQuestions: this.extractFollowUpQuestions(message),
+        followUpQuestions: modelArtifact.followUpQuestions,
         promptDebug: promptResult.debug || null,
         inputEcho: input,
         runtimeEnvelope: promptResult.runtimeEnvelope,
+        source: 'model',
       };
       return result;
     } catch (e: any) {
@@ -240,14 +301,20 @@ export class PeerAgent {
       }
       
       const fallbackMessage = this.getFallbackMessage(input.strategy, input.topic);
+      const fallbackFollowUpQuestions: string[] = [];
       result = {
         message: fallbackMessage,
         strategy: input.strategy,
+        followUpQuestions: fallbackFollowUpQuestions,
         promptDebug: null,
         inputEcho: input,
         runtimeEnvelope: adaptToRuntimeEnvelope({
-          contract: PEER_RUNTIME_CONTRACT,
-          artifact: { message: fallbackMessage, strategy: input.strategy },
+          contract: PEER_FALLBACK_RUNTIME_CONTRACT,
+          artifact: {
+            message: fallbackMessage,
+            strategy: input.strategy,
+            followUpQuestions: fallbackFollowUpQuestions,
+          },
           phase: 'discussion-generated',
           status: 'partial',
           isTerminal: false,
@@ -255,6 +322,7 @@ export class PeerAgent {
           reason: error.message,
           nextState: { stage: 'discussion-generated', strategy: input.strategy, topic: input.topic, fallback: true },
         }),
+        source: 'fallback',
       };
       return result;
     } finally {
@@ -265,23 +333,6 @@ export class PeerAgent {
         error: error?.message || null,
       });
     }
-  }
-
-  private extractFollowUpQuestions(message: string): string[] {
-    const questions: string[] = [];
-    const questionPatterns = [
-      /([^\?]+\?)/g,
-      /([^)？]+[?？])/g,
-    ];
-
-    for (const pattern of questionPatterns) {
-      const matches = message.match(pattern);
-      if (matches) {
-        questions.push(...matches.map(q => q.trim()).filter(q => q.length > 5 && q.length < 100));
-      }
-    }
-
-    return questions.slice(0, 3);
   }
 
   private getFallbackMessage(strategy: string, topic: string): string {
@@ -314,6 +365,11 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
       (peerAgentDefinition.stats.successRate * (peerAgentDefinition.stats.callCount - 1) + 1) 
       / peerAgentDefinition.stats.callCount;
     
+    const skillOutcome = toPeerSkillOutcome(result, {
+      quality: result.source === 'fallback' ? 'fallback' : 'model',
+      reason: result.runtimeEnvelope?.businessState?.reason || null,
+    });
+
     return {
       success: true,
       userVisible: result.message,
@@ -332,6 +388,8 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
             promptDebug: result.promptDebug || null,
             input: result.inputEcho || input,
             runtimeEnvelope: result.runtimeEnvelope,
+            // 内部协议 sidecar；coordinator 继续读 message 等公开字段
+            skillOutcome,
           }
         },
         strategy: result.strategy,

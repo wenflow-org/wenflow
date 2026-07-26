@@ -128,6 +128,7 @@ import { computed, ref, watch } from 'vue'
 import { dataSource } from './mockStore'
 import { timeAgo } from './mockLive'
 import { adminRuntimeDefinitionsApi } from '@/api/adminApi'
+import { useEscape } from './useEscape'
 
 defineProps<{ state: string }>()
 
@@ -321,6 +322,7 @@ const statusTitle = computed(() =>
 
 /* 详情 */
 const detail = ref<Row | null>(null)
+useEscape(() => !!detail.value, () => { detail.value = null })
 const tab = ref('input')
 const tabs = [
   { id: 'input', label: '输入载荷' },
@@ -360,7 +362,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 .pcl-agent { font-size: 11px; color: var(--mk-blue); }
 .pcl-digest {
   font-size: 12px;
-  color: var(--mk-amber);
+  color: var(--mk-muted);
   max-width: 220px;
   white-space: nowrap;
   overflow: hidden;
@@ -418,7 +420,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   display: grid;
   gap: 4px;
 }
-.pcl-error span { font-size: 11px; font-weight: 800; color: var(--mk-red); }
+.pcl-error span { font-size: 11px; font-weight: 700; color: var(--mk-red); }
 .pcl-error p { margin: 0; font-size: 12.5px; color: var(--mk-muted); white-space: pre-wrap; }
 
 .pcl-tabs { display: flex; gap: 6px; flex-wrap: wrap; }

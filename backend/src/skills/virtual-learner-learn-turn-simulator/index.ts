@@ -4,6 +4,7 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
@@ -15,6 +16,9 @@ import {
 
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
+const LEARN_TURN_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
+  'virtual-learner-learn-turn-simulator'
+);
 
 export type LearnLearnerPhase = 'trying' | 'blocked' | 'verifying' | 'ready_to_close';
 
@@ -387,7 +391,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         }
       },
       normalizeOutput,
-      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-learn-turn-simulator', output, {
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
         phase: 'simulation-step-completed',
         nextState: output?.learnerState ?? null,
       }),
@@ -404,7 +408,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         output: {
           ...fallback,
           degraded: true,
-          runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-learn-turn-simulator', fallback, {
+          runtimeEnvelope: mapSkillOutputEnvelope(LEARN_TURN_FALLBACK_RUNTIME_CONTRACT, fallback, {
             phase: 'simulation-step-completed',
             status: 'partial',
             nextState: fallback?.learnerState ?? null,

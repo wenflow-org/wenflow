@@ -43,14 +43,13 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { MOCK_SCENES } from './mockManifest'
-import { dataSource, openTrace } from './mockStore'
+import { dataSource, openTrace, queueQuickAction } from './mockStore'
 import { loadLiveData, backToDemo } from './mockLive'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'navigate', id: string): void
-  (e: 'fullscreen'): void
 }>()
 
 interface Item {
@@ -93,12 +92,28 @@ const items = computed<Item[]>(() => {
       run: () => backToDemo()
     },
     {
-      key: 'action:fullscreen',
-      icon: '⛶',
-      label: '切换全屏预览',
-      hint: '视图',
+      key: 'action:create-user',
+      icon: '＋',
+      label: '新建用户',
+      hint: '用户',
       group: '操作',
-      run: () => emit('fullscreen')
+      run: () => queueQuickAction('users', 'create-user')
+    },
+    {
+      key: 'action:create-announcement',
+      icon: '＋',
+      label: '新建公告',
+      hint: '公告',
+      group: '操作',
+      run: () => queueQuickAction('announcements', 'create-announcement')
+    },
+    {
+      key: 'action:create-virtual',
+      icon: '＋',
+      label: '新建虚拟学习者样本',
+      hint: '虚拟学习者',
+      group: '操作',
+      run: () => queueQuickAction('virtual-learners', 'create-virtual')
     }
   )
   // Trace ID 直接跳转
@@ -220,7 +235,7 @@ function close() {
 .pal__group {
   padding: 8px 10px 4px;
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   color: #8492ab;
 }

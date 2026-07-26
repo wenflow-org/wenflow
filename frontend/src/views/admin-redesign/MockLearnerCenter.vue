@@ -8,7 +8,7 @@
       <span class="mk-status__meta">需关注 {{ riskCount }}</span>
       <span class="mk-status__meta">低置信 {{ lowConfCount }}</span>
       <button type="button" class="mk-status__action" :disabled="recomputingAll || !rows.length" @click="recomputeAll">
-        {{ recomputingAll ? '重算中…' : '全部重算' }}
+        {{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}
       </button>
     </div>
 
@@ -176,6 +176,7 @@ const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中'
 const toast = ref('')
 const toastCls = ref('mk-toast--ok')
 const recomputingAll = ref(false)
+const recomputeProgress = ref(0)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 function showToast(msg: string, cls = 'mk-toast--ok') {
@@ -207,6 +208,7 @@ async function recompute(row: Row) {
 async function recomputeAll() {
   if (recomputingAll.value || !rows.value.length) return
   recomputingAll.value = true
+  recomputeProgress.value = 0
   if (isLive.value) {
     let ok = 0
     let fail = 0
@@ -219,6 +221,7 @@ async function recomputeAll() {
         fail++
       } finally {
         r.updating = false
+        recomputeProgress.value++
       }
     }
     showToast(fail ? `重算完成：${ok} 成功 · ${fail} 失败` : `已重算 ${ok} 个快照（真实）`, fail ? 'mk-toast--bad' : 'mk-toast--ok')

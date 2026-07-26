@@ -13,6 +13,73 @@ function toSkillId(agentId: string): string {
   return String(agentId || '').replace(/^skill:/, '').trim();
 }
 
+export type EffectiveRuntimeContractSource = 'active-metadata' | 'manifest' | 'default';
+
+export interface EffectiveRuntimeContractResolution {
+  skillId: string;
+  source: EffectiveRuntimeContractSource;
+  contract: RuntimeContract;
+}
+
+/**
+ * 从 ACTIVE prompt metadata 提取 runtimeContract。
+ * metadata 可能是对象或 JSON 字符串；解析失败或未声明时返回 null。
+ */
+export function extractRuntimeContractFromPromptMetadata(
+  metadata: unknown,
+  agentId: string,
+  options: { archetype?: string } = {}
+): RuntimeContract | null {
+  if (metadata == null) return null;
+  let parsed: any = metadata;
+  if (typeof metadata === 'string') {
+    try {
+      parsed = JSON.parse(metadata);
+    } catch {
+      return null;
+    }
+  }
+  const candidate = parsed?.promptLab?.runtimeContract;
+  if (!candidate || typeof candidate !== 'object') return null;
+  return normalizeRuntimeContract(candidate, {
+    skillId: toSkillId(agentId),
+    archetype: options.archetype || '',
+  });
+}
+
+/**
+ * 有效 runtimeContract 解析：
+ * 1) ACTIVE prompt metadata.promptLab.runtimeContract
+ * 2) prompt-lab manifest
+ * 3) buildDefaultRuntimeContract
+ *
+ * 接受已加载的 promptConfig，不额外查询 DB。
+ */
+export async function resolveEffectiveRuntimeContract(
+  agentId: string,
+  promptConfig?: { metadata?: unknown } | null,
+  options: { archetype?: string } = {}
+): Promise<EffectiveRuntimeContractResolution> {
+  const fromMeta = extractRuntimeContractFromPromptMetadata(
+    promptConfig?.metadata,
+    agentId,
+    options
+  );
+  if (fromMeta) {
+    return {
+      skillId: toSkillId(agentId),
+      source: 'active-metadata',
+      contract: fromMeta,
+    };
+  }
+  const resolved = await resolveRuntimeContract(agentId, options);
+  return {
+    skillId: resolved.skillId,
+    source: resolved.source,
+    contract: resolved.contract,
+  };
+}
+
 /**
  * 解析 skill 的 runtimeContract：
  * 1) 有 prompt-lab/manifests/<skillId>.yaml 则读其中 runtimeContract 并 normalize

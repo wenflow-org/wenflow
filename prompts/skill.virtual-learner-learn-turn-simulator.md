@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-learn-turn-simulator
 name: default-virtual-learner-learn-turn-simulator
 archetype: conversational
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: conversation
+  interactionMode: turn
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: Learn 阶段虚拟学习者回合模拟器
 temperature: 0.7
 maxTokens: 800

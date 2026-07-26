@@ -4,7 +4,7 @@ skillId: path-scene-framing
 agentId: skill:path-scene-framing
 
 name: default-skill-path-scene-framing
-archetype: extractor
+archetype: generator
 description: 路径场景 framing / 输入归一
 
 acceptableAgentIds:
@@ -18,11 +18,21 @@ publish:
 
 runtimeDefaults:
   tier: chat
-  temperature: 0.3
-  maxTokens: 4000
+  temperature: 0.2
+  maxTokens: 32000
   model: null
   thinkingMode: default
   reasoningEffort: default
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: normalization
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 
 runtimeContract:
   version: prompt-runtime-contract/v1
@@ -51,7 +61,7 @@ ownership:
 
 tags:
   - path-phase
-  - extractor
+  - normalization
   - prompt-lab-source
 
 notes: >

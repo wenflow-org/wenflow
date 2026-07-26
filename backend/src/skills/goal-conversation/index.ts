@@ -1,15 +1,10 @@
-﻿import { agentConfigService } from '../../services/agentConfig.service';
-import aiService from '../../services/ai/ai.service';
-import { logger } from '../../utils/logger';
-import { getRequestContext } from '../../gateway/api-gateway/context';
-import {
-  consumeLogicalRetry,
-  createRetryBudget
-} from '../../gateway/api-gateway/retry-budget';
+﻿import { logger } from '../../utils/logger';
 import {
   composePromptFromAgentRouting,
   isPromptSupplementEnabled,
 } from '../../services/prompt-composer';
+import { callPrompt } from '../../composers/prompt-composer';
+import type { PromptCallSpec } from '../../composers/types';
 import {
   AgentContext,
   AgentDefinition,
@@ -18,9 +13,7 @@ import {
 } from '../../agents/protocol';
 import {
   extractStructuredPayload,
-  hasValidStructuredPayload,
   type GoalStructuredFailureType,
-  type GoalStructuredParseMode,
   type StructuredParseResult,
   validateGoalConversationStructuredOutput
 } from './structured-validator';
@@ -30,7 +23,10 @@ import {
   sanitizeUnderstanding,
   buildCollected
 } from '../../skills/goal-understanding-composer';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import {
+  buildDefaultRuntimeContract,
+  type RuntimeContract,
+} from '../../services/prompt-lab/runtime-contract';
 import {
   adaptGoalConversationEnvelope,
   type RuntimeEnvelope,
@@ -89,17 +85,20 @@ export interface GoalConversationAgentResult {
   };
 }
 
-const GOAL_RUNTIME_CONTRACT = buildDefaultRuntimeContract('goal-conversation', 'conversational');
+const DEFAULT_GOAL_RUNTIME_CONTRACT = buildDefaultRuntimeContract('goal-conversation', 'conversational');
 
 function buildGoalRuntimeEnvelope(
   result: Pick<GoalConversationAgentResult, 'userVisible' | 'internal'>,
-  status: 'succeeded' | 'partial' | 'blocked' | 'failed' = 'succeeded',
-  reason: string | null = null
+  options: {
+    contract: RuntimeContract;
+    status?: 'succeeded' | 'partial' | 'blocked' | 'failed';
+    reason?: string | null;
+  }
 ): RuntimeEnvelope {
   return adaptGoalConversationEnvelope(result, {
-    contract: GOAL_RUNTIME_CONTRACT,
-    status,
-    reason,
+    contract: options.contract,
+    status: options.status || 'succeeded',
+    reason: options.reason ?? null,
   });
 }
 
@@ -129,34 +128,13 @@ interface RetryAttemptInfo {
   rawContent: string;
 }
 
-interface CallAIResult {
-  content: string;
-  attemptCount: number;
-  actualRetryCount: number;
-  formatFailureCount: number;
-  parseMode: StructuredParseResult['parseMode'];
-  structuredOutputValid: boolean;
-  failureType: GoalStructuredFailureType;
-  violations: string[];
-  attempts: RetryAttemptInfo[];
-}
-
-
-
-
-
-function buildEffectivePrompt(configPrompt?: string | null, overridePrompt?: string | null): string {
-  const normalizedOverridePrompt = typeof overridePrompt === 'string' ? overridePrompt.trim() : '';
-  if (normalizedOverridePrompt) {
-    return normalizedOverridePrompt;
-  }
-
-  const normalizedConfigPrompt = typeof configPrompt === 'string' ? configPrompt.trim() : '';
-  if (normalizedConfigPrompt) {
-    return normalizedConfigPrompt;
-  }
-
-  return '';
+interface GoalPromptInput {
+  goal: string;
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+  previousState?: GoalConversationStateSnapshot;
+  previousUnderstanding?: any;
+  previousStage?: string;
+  confirmProposal?: boolean;
 }
 
 function buildGoalConversationUserPayload(input: {
@@ -324,11 +302,11 @@ function enforceSingleQuestionForUnderstanding(text: string, stage: 'understandi
 }
 
 function inferQuickRepliesFromList(content: string): QuickReply[] {
-  const listItems = content.match(/(?:^|\n)\s*(?:\d+[.、]|[•\-])\s*(.+?)(?=\n|$)/g);
+  const listItems = content.match(/(?:^|\n)\s*(?:\d+[.、]|[•-])\s*(.+?)(?=\n|$)/g);
   if (!listItems || listItems.length < 2 || listItems.length > 5) return [];
 
   return listItems.map((item) => ({
-    text: item.replace(/^\s*(?:\d+[.、]|[•\-])\s*/, '').trim()
+    text: item.replace(/^\s*(?:\d+[.、]|[•-])\s*/, '').trim()
   }));
 }
 
@@ -523,9 +501,10 @@ function parseGoalConversationResponse(
   let confidenceScores: any = undefined;
   let nextQuestions: string[] = [];
   let understanding = { ...(previousUnderstanding || {}) };
+  let normalizedPayload: Record<string, any> = {};
 
   if (parsedJson) {
-    const normalizedPayload = parsedJson.goalConversation || parsedJson;
+    normalizedPayload = normalizeGoalConversationModelPayload(parsedJson);
     understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
     const validStages = ['understanding', 'proposing', 'ready', 'completed'];
     const stageFromPayload = parsedJson.stage || parsedJson.state?.stage;
@@ -630,7 +609,7 @@ function parseGoalConversationResponse(
           understanding,
           nextQuestions,
           quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-          collected: buildCollected(understanding, parsedJson),
+          collected: buildCollected(understanding, normalizedPayload),
           structuredData,
           confirmedProposal,
           confidenceScores
@@ -638,139 +617,144 @@ function parseGoalConversationResponse(
       }
     }
   };
-  parsed.runtimeEnvelope = buildGoalRuntimeEnvelope(parsed, 'succeeded');
   return parsed;
+}
+
+/**
+ * Accept legacy wrapper and input-shaped state fields, then give the parser one
+ * canonical raw payload. The preferred model shape remains top-level fields.
+ */
+export function normalizeGoalConversationModelPayload(parsedJson: any): Record<string, any> {
+  const topLevel = parsedJson && typeof parsedJson === 'object' ? parsedJson : {};
+  const legacy = topLevel.goalConversation && typeof topLevel.goalConversation === 'object'
+    ? topLevel.goalConversation
+    : {};
+  const state = topLevel.state && typeof topLevel.state === 'object' ? topLevel.state : {};
+
+  return {
+    ...state,
+    ...legacy,
+    ...topLevel,
+    understanding: topLevel.understanding ?? legacy.understanding ?? state.understanding,
+    nextQuestions: topLevel.nextQuestions ?? legacy.nextQuestions ?? state.nextQuestions,
+    quickReplies: topLevel.quickReplies ?? legacy.quickReplies ?? state.quickReplies,
+    confirmedProposal: topLevel.confirmedProposal ?? legacy.confirmedProposal ?? state.confirmedProposal,
+    structuredData: topLevel.structuredData ?? legacy.structuredData ?? state.structuredData,
+    confidenceScores: topLevel.confidenceScores ?? legacy.confidenceScores ?? state.confidenceScores,
+  };
 }
 
 function buildStructuredOutputErrorMessage(attemptCount: number): string {
   return `本轮结构化输出连续 ${attemptCount} 次未通过校验，状态未更新。请点击重试，再尝试一次。`;
 }
 
-async function callAIWithRetry(
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  options: { temperature?: number; maxTokens?: number; model?: string },
-  userId?: string,
-  maxRetries: number = 2
-): Promise<CallAIResult> {
-  let lastContent = '';
-  let lastParseMode: StructuredParseResult['parseMode'] = 'none';
-  const attempts: RetryAttemptInfo[] = [];
-  let currentMaxTokens = options.maxTokens ?? 8000;
-  const tokenCeiling = 16000;
-  const retryBudget = getRequestContext().retryBudget || createRetryBudget();
-  const logicalRetryLimit = Math.min(
-    retryBudget.limits.maxLogicalRetries,
-    getRequestContext().logicalRetryLimit ?? retryBudget.limits.maxLogicalRetries
-  );
-  let localLogicalRetries = 0;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (attempt > 0) {
-      if (localLogicalRetries >= logicalRetryLimit) {
-        retryBudget.exhaustedBy = 'logical-retries';
-        logger.warn('[GoalConversation] 结构化输出重试预算已耗尽', {
-          attempt: attempt + 1,
-          maxRetries,
-          retryBudgetId: retryBudget.id,
-          exhaustedBy: retryBudget.exhaustedBy
-        });
-        break;
-      }
-      if (!consumeLogicalRetry(retryBudget)) {
-        logger.warn('[GoalConversation] 结构化输出重试预算已耗尽', {
-          attempt: attempt + 1,
-          maxRetries,
-          retryBudgetId: retryBudget.id,
-          exhaustedBy: retryBudget.exhaustedBy
-        });
-        break;
-      }
-      localLogicalRetries += 1;
-    }
-    const response = await aiService.chat(messages, {
-      temperature: options.temperature,
-      maxTokens: currentMaxTokens,
-      model: options.model,
-      agentId: 'goal-agent',
-      skillId: 'goal-conversation',
-      userId,
-      action: 'goal-conversation:dialogue',
-      sanitizeUserVisible: false,
-      retryBudget
-    });
-
-    lastContent = response.content;
-    const validation = validateGoalConversationStructuredOutput(response.content);
-    lastParseMode = validation.parseMode;
-    const structuredOutputValid = validation.valid;
-    attempts.push({
-      attemptIndex: attempt + 1,
-      parseMode: validation.parseMode,
-      structuredOutputValid,
-      failureType: validation.failureType,
-      violations: validation.violations,
-      rawContent: response.content
-    });
-
-    if (structuredOutputValid) {
-      return {
-        content: response.content,
-        attemptCount: attempts.length,
-        actualRetryCount: Math.max(0, attempts.length - 1),
-        formatFailureCount: attempts.filter((item) => !item.structuredOutputValid).length,
-        parseMode: validation.parseMode,
-        structuredOutputValid: true,
-        failureType: 'none',
-        violations: [],
-        attempts
-      };
-    }
-
-    // 检测长度截断: finish_reason='length' 或 JSON 末尾被截断
-    const wasTruncatedByLength = (response as any).finishReason === 'length'
-      || /[",:][^"]*$/.test(response.content.trim().slice(-50));
-
-    logger.warn('GoalConversationAgent 输出不完整，准备重试', {
-      attempt: attempt + 1,
-      maxRetries,
-      parseMode: validation.parseMode,
-      failureType: validation.failureType,
-      violations: validation.violations,
-      finishReason: (response as any).finishReason,
-      wasTruncatedByLength,
-      currentMaxTokens,
-      contentPreview: response.content.substring(0, 200)
-    });
-
-    // 长度截断 → 下一次重试时把 maxTokens 翻倍 (最多到 tokenCeiling)
-    if (wasTruncatedByLength && attempt < maxRetries) {
-      const nextMaxTokens = Math.min(tokenCeiling, currentMaxTokens * 2);
-      if (nextMaxTokens > currentMaxTokens) {
-        logger.info('[GoalConversation] 检测到长度截断，重试时扩大 maxTokens', {
-          from: currentMaxTokens,
-          to: nextMaxTokens
-        });
-        currentMaxTokens = nextMaxTokens;
-      }
-    }
-
-    if (attempt < maxRetries) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+/**
+ * 统一协议 v2：把上一次校验失败的 violations 注入下一次重试的 user message，
+ * 让模型知道哪里错了，下次怎么调整。原版只是原样重发同一份 messages，
+ * 模型反复用同一错误形状回写。注入点：user content 尾部追加 retry notice。
+ */
+function buildRetryNotice(prevFailureType: string, prevViolations: string[]): string {
+  const lines: string[] = [];
+  lines.push('[上一轮结构化输出校验失败 — 请修正后重新输出]');
+  lines.push(`失败类型: ${prevFailureType}`);
+  if (prevViolations.length > 0) {
+    lines.push('违规格条目:');
+    for (const v of prevViolations) {
+      lines.push(`- ${v}`);
     }
   }
+  lines.push('');
+  lines.push('请基于上述反馈修正输出 JSON 形态。常见修正点:');
+  lines.push('- 若把 understanding 嵌进 state.understanding，请改为放到顶层（与 state 同级）');
+  lines.push('- 若把 nextQuestions 嵌进 state.nextQuestions，请改为放到顶层');
+  lines.push('- 不要使用 goalConversation 包装层；quickReplies / understanding / nextQuestions 等字段直接放在顶层');
+  lines.push('- state 必须包含 stage / confidence / done 三个字段，不要把 understanding 塞进 state');
+  lines.push('- 起草时严格按 system prompt 的输出规格，参考但不要照搬输入 payload 的嵌套形态');
+  return lines.join('\n');
+}
 
-  logger.warn(`GoalConversationAgent 重试 ${maxRetries} 次后仍不完整，使用最后一次响应`);
+function buildGoalPromptSpec(maxAttempts: number): PromptCallSpec<GoalPromptInput, GoalConversationAgentResult> {
   return {
-    content: lastContent,
-    attemptCount: attempts.length,
-    actualRetryCount: Math.max(0, attempts.length - 1),
-    formatFailureCount: attempts.filter((item) => !item.structuredOutputValid).length,
-    parseMode: lastParseMode,
-    structuredOutputValid: false,
-    failureType: attempts[attempts.length - 1]?.failureType || 'missing_json_block',
-    violations: attempts[attempts.length - 1]?.violations || ['结构化输出校验失败'],
-    attempts
+    agentId: 'skill:goal-conversation',
+    defaultSystemPrompt: '',
+    requireActivePrompt: true,
+    caller: {
+      agentId: 'goal-agent',
+      skillId: 'goal-conversation',
+    },
+    modelDefaults: {
+      temperature: 0.7,
+      maxTokens: 8000,
+    },
+    buildUserPayload: (payload) => buildGoalConversationUserPayload({
+      userInput: payload.goal,
+      conversationHistory: payload.conversationHistory,
+      previousState: payload.previousState,
+      previousUnderstanding: payload.previousUnderstanding,
+      previousStage: payload.previousStage,
+    }),
+    prepareSystemPrompt: async (systemPrompt) => {
+      if (!isPromptSupplementEnabled()) return systemPrompt;
+      const { finalPrompt, supplementApplied, fieldsCovered } =
+        await composePromptFromAgentRouting('goal-conversation', systemPrompt);
+      if (supplementApplied) {
+        logger.debug('[skill:goal-conversation] field routing supplement applied', { fieldsCovered });
+        return finalPrompt;
+      }
+      return systemPrompt;
+    },
+    parseRawOutput: (rawOutput) => {
+      const validation = validateGoalConversationStructuredOutput(rawOutput);
+      if (!validation.valid || !validation.parsedJson) {
+        return {
+          parsed: null,
+          extractedJson: null,
+          failureReason: validation.failureType || 'missing_json_block',
+          violations: validation.violations?.length
+            ? validation.violations
+            : ['结构化输出校验失败'],
+        };
+      }
+      return {
+        parsed: validation.parsedJson,
+        extractedJson: JSON.stringify(validation.parsedJson),
+      };
+    },
+    validateParsedOutput: () => ({ valid: true }),
+    normalizeOutput: (_parsed, payload) => parseGoalConversationResponse(
+      // parseGoalConversationResponse 需要原始 content 以保留 dialogue 抽取路径；
+      // callPrompt 成功时 parsed 已校验，这里用 JSON 回放等价 raw。
+      JSON.stringify(_parsed),
+      payload.previousUnderstanding,
+      {
+        latestUserInput: payload.goal,
+        previousStage: payload.previousStage,
+        previousConfidence: payload.previousUnderstanding?.confidence || 0.2,
+        confirmProposal: payload.confirmProposal === true,
+      }
+    ),
+    mapEnvelope: (output, _input, runtimeContract) => adaptGoalConversationEnvelope(output, {
+      contract: runtimeContract,
+      status: 'succeeded',
+      reason: null,
+    }),
+    retryStrategy: {
+      maxAttempts,
+      onValidationFail: ({ failureReason, violations }) =>
+        buildRetryNotice(failureReason || 'validation_failed', violations || []),
+    },
   };
+}
+
+function mapAttemptsFromPromptDebug(debug: { attempts?: Array<{ attempt: number; status?: string; failureReason?: string; violations?: string[]; rawOutput?: string }> }): RetryAttemptInfo[] {
+  return (debug.attempts || []).map((item) => ({
+    attemptIndex: item.attempt,
+    parseMode: 'none' as StructuredParseResult['parseMode'],
+    structuredOutputValid: item.status === 'success',
+    failureType: (item.failureReason || 'missing_json_block') as GoalStructuredFailureType,
+    violations: item.violations || [],
+    rawContent: item.rawOutput || '',
+  }));
 }
 
 interface GoalConversationAgentOptions {
@@ -785,69 +769,134 @@ export async function goalConversationAgentHandler(
   options: GoalConversationAgentOptions = {}
 ): Promise<AgentOutput> {
   const userId = context.userId;
+  let runtimeContract: RuntimeContract = DEFAULT_GOAL_RUNTIME_CONTRACT;
 
   try {
-    const config =
-      await agentConfigService.getActivePrompt('skill:goal-conversation')
-      || await agentConfigService.getActivePrompt('goal-conversation');
-    let systemPrompt = buildEffectivePrompt(config?.systemPrompt, options.systemPromptOverride);
-
-    // V3 §6 P1.5: 字段路由 supplement
-    if (isPromptSupplementEnabled()) {
-      const { finalPrompt, supplementApplied, fieldsCovered } =
-        await composePromptFromAgentRouting('goal-conversation', systemPrompt);
-      if (supplementApplied) {
-        systemPrompt = finalPrompt;
-        logger.debug('[skill:goal-conversation] field routing supplement applied', {
-          fieldsCovered,
-        });
-      }
-    }
     const history = (context.conversationHistory || [])
       .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
       .map((msg) => ({ role: msg.role as 'user' | 'assistant', content: msg.content }));
     const previousState = input.metadata?.previousState as GoalConversationStateSnapshot | undefined;
     const previousUnderstanding = input.metadata?.previousUnderstanding;
 
-    const structuredUserPayload = buildGoalConversationUserPayload({
-      userInput: input.goal,
+    const promptInput: GoalPromptInput = {
+      goal: input.goal,
       conversationHistory: history,
       previousState,
       previousUnderstanding,
-      previousStage: input.metadata?.previousStage
-    });
+      previousStage: input.metadata?.previousStage,
+      confirmProposal: input.metadata?.confirmProposal === true,
+    };
 
-    const chatMessages = [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: structuredUserPayload }
-    ];
-
-    const retryInfo = await callAIWithRetry(
-      chatMessages,
+    // 旧语义：maxFormatRetries=2 → 最多 3 次尝试（含首次）
+    const maxAttempts = Math.max(1, (options.maxFormatRetries ?? 2) + 1);
+    const promptResult = await callPrompt(
+      buildGoalPromptSpec(maxAttempts),
+      promptInput,
       {
-        temperature: config?.temperature ?? 0.7,
-        maxTokens: config?.maxTokens ?? 8000
-      },
-      userId,
-      options.maxFormatRetries ?? 2
+        userId,
+        systemPromptOverride: options.systemPromptOverride,
+      }
     );
 
-    if (!retryInfo.structuredOutputValid && options.allowInvalidStructuredOutput) {
-      const observedResult = parseGoalConversationResponse(retryInfo.content, previousUnderstanding, {
-        latestUserInput: input.goal,
-        previousStage: input.metadata?.previousStage,
-        previousConfidence: previousUnderstanding?.confidence || 0.2,
-        confirmProposal: input.metadata?.confirmProposal === true
-      });
+    const attempts = mapAttemptsFromPromptDebug(promptResult.debug);
+    const attemptCount = attempts.length || promptResult.debug.attempts?.length || 0;
+    const actualRetryCount = Math.max(0, attemptCount - 1);
+    const formatFailureCount = attempts.filter((item) => !item.structuredOutputValid).length;
+    runtimeContract = promptResult.runtimeEnvelope
+      ? {
+          ...DEFAULT_GOAL_RUNTIME_CONTRACT,
+          businessState: {
+            ...DEFAULT_GOAL_RUNTIME_CONTRACT.businessState,
+            ...(promptResult.runtimeEnvelope.businessState
+              ? {
+                  domain: promptResult.runtimeEnvelope.businessState.domain
+                    || DEFAULT_GOAL_RUNTIME_CONTRACT.businessState.domain,
+                }
+              : {}),
+          },
+          contextUpdate: promptResult.runtimeEnvelope.contextUpdate
+            ? {
+                ...DEFAULT_GOAL_RUNTIME_CONTRACT.contextUpdate,
+                mode: promptResult.runtimeEnvelope.contextUpdate.mode as any,
+                stateOwner: promptResult.runtimeEnvelope.contextUpdate.stateOwner as any,
+              }
+            : DEFAULT_GOAL_RUNTIME_CONTRACT.contextUpdate,
+        }
+      : runtimeContract;
 
+    if (promptResult.success && promptResult.output) {
+      const result = promptResult.output;
+      return {
+        success: true,
+        userVisible: result.userVisible,
+        internal: result.internal,
+        runtimeEnvelope: promptResult.runtimeEnvelope || buildGoalRuntimeEnvelope(result, {
+          contract: runtimeContract,
+          status: 'succeeded',
+        }),
+        renderHints: {
+          component: 'goal-conversation',
+          quickReplies: result.internal.ext.goalConversation.quickReplies || [],
+        },
+        schemaVersion: 'agent-output-v1',
+        metadata: {
+          agentId: 'skill:goal-conversation',
+          agentName: '目标对话 Skill',
+          agentType: 'custom',
+          confidence: result.internal.core.confidence,
+          generatedAt: new Date().toISOString(),
+        },
+        debug: {
+          attemptCount,
+          actualRetryCount,
+          formatFailureCount,
+          parseMode: attempts[attempts.length - 1]?.parseMode || 'raw-json',
+          failureType: 'none',
+          violations: [],
+          promptVersion: promptResult.debug.systemPromptVersion || 0,
+          requestMessages: [
+            { role: 'system', content: promptResult.debug.systemPrompt },
+            { role: 'user', content: promptResult.debug.userPayload },
+          ],
+          attempts,
+          structuredOutputValid: true,
+        },
+      };
+    }
+
+    if (options.allowInvalidStructuredOutput) {
+      const { resolveEffectiveRuntimeContract } = await import('../../services/prompt-lab/resolve-runtime-contract');
+      const { agentConfigService } = await import('../../services/agentConfig.service');
+      const activePrompt = await agentConfigService.getActivePrompt('skill:goal-conversation')
+        || await agentConfigService.getActivePrompt('goal-conversation');
+      runtimeContract = (
+        await resolveEffectiveRuntimeContract('skill:goal-conversation', activePrompt, {
+          archetype: 'conversational',
+        })
+      ).contract;
+
+      const observedResult = parseGoalConversationResponse(
+        promptResult.debug.rawModelOutput || '',
+        previousUnderstanding,
+        {
+          latestUserInput: input.goal,
+          previousStage: input.metadata?.previousStage,
+          previousConfidence: previousUnderstanding?.confidence || 0.2,
+          confirmProposal: input.metadata?.confirmProposal === true,
+        }
+      );
       return {
         success: true,
         userVisible: observedResult.userVisible,
         internal: observedResult.internal,
-        runtimeEnvelope: observedResult.runtimeEnvelope || buildGoalRuntimeEnvelope(observedResult, 'partial', 'observation-mode'),
+        runtimeEnvelope: buildGoalRuntimeEnvelope(observedResult, {
+          contract: runtimeContract,
+          status: 'partial',
+          reason: 'observation-mode',
+        }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: observedResult.internal.ext.goalConversation.quickReplies || []
+          quickReplies: observedResult.internal.ext.goalConversation.quickReplies || [],
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
@@ -855,127 +904,108 @@ export async function goalConversationAgentHandler(
           agentName: '目标对话 Skill',
           agentType: 'custom',
           confidence: observedResult.internal.core.confidence,
-          generatedAt: new Date().toISOString()
+          generatedAt: new Date().toISOString(),
         },
         debug: {
-          attemptCount: retryInfo.attemptCount,
-          actualRetryCount: retryInfo.actualRetryCount,
-          formatFailureCount: retryInfo.formatFailureCount,
-          parseMode: retryInfo.parseMode,
-          failureType: retryInfo.failureType,
-          violations: retryInfo.violations,
-          promptVersion: config?.version || 0,
-          requestMessages: chatMessages,
-          attempts: retryInfo.attempts,
+          attemptCount,
+          actualRetryCount,
+          formatFailureCount,
+          parseMode: attempts[attempts.length - 1]?.parseMode || 'none',
+          failureType: (attempts[attempts.length - 1]?.failureType || 'missing_json_block') as GoalStructuredFailureType,
+          violations: attempts[attempts.length - 1]?.violations || [],
+          promptVersion: promptResult.debug.systemPromptVersion || 0,
+          requestMessages: [
+            { role: 'system', content: promptResult.debug.systemPrompt },
+            { role: 'user', content: promptResult.debug.userPayload },
+          ],
+          attempts,
           structuredOutputValid: false,
-          observationMode: true
-        }
+          observationMode: true,
+        },
       };
     }
 
-    if (!retryInfo.structuredOutputValid) {
-      const invalidInternal: GoalConversationInternal = {
-        core: {
-          stage: input.metadata?.previousStage === 'proposing' || input.metadata?.previousStage === 'ready'
-            ? 'proposing'
-            : 'understanding',
-          confidence: typeof previousState?.confidence === 'number' ? previousState.confidence : 0,
-          isCompleted: false
-        },
-        ext: {
-          goalConversation: {
-            understanding: previousUnderstanding || {},
-            nextQuestions: [],
-            collected: previousState?.collected || {}
-          }
-        }
-      };
-      const invalidVisible = buildStructuredOutputErrorMessage(retryInfo.attemptCount);
-      return {
-        success: false,
-        error: 'STRUCTURED_OUTPUT_INVALID',
-        userVisible: invalidVisible,
-        internal: invalidInternal,
-        runtimeEnvelope: buildGoalRuntimeEnvelope(
-          { userVisible: invalidVisible, internal: invalidInternal },
-          'failed',
-          'STRUCTURED_OUTPUT_INVALID'
-        ),
-        schemaVersion: 'agent-output-v1',
-        metadata: {
-          agentId: 'skill:goal-conversation',
-          agentName: '目标对话 Skill',
-          agentType: 'custom',
-          confidence: typeof previousState?.confidence === 'number' ? previousState.confidence : 0,
-          generatedAt: new Date().toISOString()
-        },
-        debug: {
-          attemptCount: retryInfo.attemptCount,
-          actualRetryCount: retryInfo.actualRetryCount,
-          formatFailureCount: retryInfo.formatFailureCount,
-          parseMode: retryInfo.parseMode,
-          failureType: retryInfo.failureType,
-          violations: retryInfo.violations,
-          promptVersion: config?.version || 0,
-          requestMessages: chatMessages,
-          attempts: retryInfo.attempts,
-          structuredOutputValid: false
-        }
-      };
-    }
-
-    const result = parseGoalConversationResponse(retryInfo.content, previousUnderstanding, {
-      latestUserInput: input.goal,
-      previousStage: input.metadata?.previousStage,
-      previousConfidence: previousUnderstanding?.confidence || 0.2,
-      confirmProposal: input.metadata?.confirmProposal === true
-    });
-
-    const runtimeEnvelope = result.runtimeEnvelope || buildGoalRuntimeEnvelope(result, 'succeeded');
-    return {
-      success: true,
-      userVisible: result.userVisible,
-      internal: result.internal,
-      runtimeEnvelope,
-      renderHints: {
-        component: 'goal-conversation',
-        quickReplies: result.internal.ext.goalConversation.quickReplies || []
+    const invalidInternal: GoalConversationInternal = {
+      core: {
+        stage: input.metadata?.previousStage === 'proposing' || input.metadata?.previousStage === 'ready'
+          ? 'proposing'
+          : 'understanding',
+        confidence: typeof previousState?.confidence === 'number' ? previousState.confidence : 0,
+        isCompleted: false,
       },
+      ext: {
+        goalConversation: {
+          understanding: previousUnderstanding || {},
+          nextQuestions: [],
+          collected: previousState?.collected || {},
+        },
+      },
+    };
+    const invalidVisible = buildStructuredOutputErrorMessage(attemptCount || 1);
+    // 失败路径 mapEnvelope 未跑；显式 resolve ACTIVE metadata contract（测试/观测依赖）
+    const { resolveEffectiveRuntimeContract } = await import('../../services/prompt-lab/resolve-runtime-contract');
+    const { agentConfigService } = await import('../../services/agentConfig.service');
+    const activePrompt = await agentConfigService.getActivePrompt('skill:goal-conversation')
+      || await agentConfigService.getActivePrompt('goal-conversation');
+    const resolved = await resolveEffectiveRuntimeContract('skill:goal-conversation', activePrompt, {
+      archetype: 'conversational',
+    });
+    runtimeContract = resolved.contract;
+
+    return {
+      success: false,
+      error: 'STRUCTURED_OUTPUT_INVALID',
+      userVisible: invalidVisible,
+      internal: invalidInternal,
+      runtimeEnvelope: buildGoalRuntimeEnvelope(
+        { userVisible: invalidVisible, internal: invalidInternal },
+        {
+          contract: runtimeContract,
+          status: 'failed',
+          reason: 'STRUCTURED_OUTPUT_INVALID',
+        }
+      ),
       schemaVersion: 'agent-output-v1',
       metadata: {
         agentId: 'skill:goal-conversation',
         agentName: '目标对话 Skill',
         agentType: 'custom',
-        confidence: result.internal.core.confidence,
-        generatedAt: new Date().toISOString()
+        confidence: typeof previousState?.confidence === 'number' ? previousState.confidence : 0,
+        generatedAt: new Date().toISOString(),
       },
       debug: {
-        attemptCount: retryInfo.attemptCount,
-        actualRetryCount: retryInfo.actualRetryCount,
-        formatFailureCount: retryInfo.formatFailureCount,
-        parseMode: retryInfo.parseMode,
-        failureType: retryInfo.failureType,
-        violations: retryInfo.violations,
-        promptVersion: config?.version || 0,
-        requestMessages: chatMessages,
-        attempts: retryInfo.attempts,
-        structuredOutputValid: true
-      }
+        attemptCount,
+        actualRetryCount,
+        formatFailureCount,
+        parseMode: attempts[attempts.length - 1]?.parseMode || 'none',
+        failureType: (attempts[attempts.length - 1]?.failureType
+          || promptResult.error?.message
+          || 'missing_json_block') as GoalStructuredFailureType,
+        violations: attempts[attempts.length - 1]?.violations
+          || [promptResult.error?.message || '结构化输出校验失败'],
+        promptVersion: promptResult.debug.systemPromptVersion || 0,
+        requestMessages: [
+          { role: 'system', content: promptResult.debug.systemPrompt },
+          { role: 'user', content: promptResult.debug.userPayload },
+        ],
+        attempts,
+        structuredOutputValid: false,
+      },
     };
   } catch (error: any) {
     const failedInternal: GoalConversationInternal = {
       core: {
         stage: 'understanding',
         confidence: 0,
-        isCompleted: false
+        isCompleted: false,
       },
       ext: {
         goalConversation: {
           understanding: input.metadata?.previousUnderstanding || {},
           nextQuestions: [],
-          collected: {}
-        }
-      }
+          collected: {},
+        },
+      },
     };
     return {
       success: false,
@@ -984,8 +1014,11 @@ export async function goalConversationAgentHandler(
       internal: failedInternal,
       runtimeEnvelope: buildGoalRuntimeEnvelope(
         { userVisible: '抱歉，我刚才走神了，能再说一遍吗？', internal: failedInternal },
-        'failed',
-        error.message || 'Unknown error'
+        {
+          contract: runtimeContract,
+          status: 'failed',
+          reason: error.message || 'Unknown error',
+        }
       ),
       schemaVersion: 'agent-output-v1',
       metadata: {
@@ -993,8 +1026,8 @@ export async function goalConversationAgentHandler(
         agentName: '目标对话 Skill',
         agentType: 'custom',
         confidence: 0,
-        generatedAt: new Date().toISOString()
-      }
+        generatedAt: new Date().toISOString(),
+      },
     };
   }
 }
@@ -1059,7 +1092,11 @@ export async function runGoalConversationAgent(params: {
         }
       };
       if (!invalidResult.runtimeEnvelope) {
-        invalidResult.runtimeEnvelope = buildGoalRuntimeEnvelope(invalidResult, 'failed', 'STRUCTURED_OUTPUT_INVALID');
+        invalidResult.runtimeEnvelope = buildGoalRuntimeEnvelope(invalidResult, {
+          contract: DEFAULT_GOAL_RUNTIME_CONTRACT,
+          status: 'failed',
+          reason: 'STRUCTURED_OUTPUT_INVALID',
+        });
       }
       return invalidResult;
     }
@@ -1088,7 +1125,10 @@ export async function runGoalConversationAgent(params: {
     }
   };
   if (!successResult.runtimeEnvelope) {
-    successResult.runtimeEnvelope = buildGoalRuntimeEnvelope(successResult, 'succeeded');
+    successResult.runtimeEnvelope = buildGoalRuntimeEnvelope(successResult, {
+      contract: DEFAULT_GOAL_RUNTIME_CONTRACT,
+      status: 'succeeded',
+    });
   }
   return successResult;
 }

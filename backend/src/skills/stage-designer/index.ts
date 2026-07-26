@@ -5,7 +5,6 @@ import {
 import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 const STAGE_DESIGNER_MAX_TOKENS = 32000;
@@ -143,6 +142,18 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
     .filter((item) => !!item.title);
 }
 
+export function validateStageDesignerOutput(parsed: any) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { valid: false as const, failureReason: 'STAGE_DESIGNER_OUTPUT_NOT_OBJECT' };
+  }
+
+  if (!Array.isArray(parsed.subtasks)) {
+    return { valid: false as const, failureReason: 'STAGE_DESIGNER_SUBTASKS_MISSING' };
+  }
+
+  return { valid: true as const };
+}
+
 export async function stageDesigner(input: any): Promise<SkillExecutionResult<any>> {
   try {
     const milestone = input?.milestone && typeof input.milestone === 'object' ? input.milestone : null;
@@ -150,7 +161,6 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       throw new Error('STAGE_DESIGNER_INVALID_INPUT: milestone is required');
     }
     const fallbackConcept = normalizeString(milestone?.coreConcept);
-    const STAGE_RUNTIME_CONTRACT = buildDefaultRuntimeContract('stage-designer', 'generator');
     const result = await callPrompt<any, { subtasks: any[] }>({
       agentId: 'skill:stage-designer',
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
@@ -169,8 +179,9 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       normalizeOutput: (parsed, payload) => ({
         subtasks: normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
       }),
-      mapEnvelope: (output) => adaptToRuntimeEnvelope({
-        contract: STAGE_RUNTIME_CONTRACT,
+      validateParsedOutput: (parsed) => validateStageDesignerOutput(parsed),
+      mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
+        contract: runtimeContract,
         artifact: output,
         phase: 'stage-designed',
         status: 'succeeded',
@@ -178,6 +189,10 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         nextAction: null,
         nextState: null,
       }),
+      retryStrategy: {
+        maxAttempts: 2,
+        onValidationFail: ({ failureReason }) => `请只输出一个阶段任务 JSON 对象，必须包含 subtasks 数组。上次失败原因：${failureReason}`,
+      },
     }, input);
 
     if (!result.success || !result.output) {

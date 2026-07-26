@@ -359,7 +359,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 
 .tline__kind {
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--mk-faint);
 }
 .tline__agent {
@@ -423,7 +423,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 }
 .tline__none { margin: 0; font-size: 11.5px; color: var(--mk-faint); }
 .tline__section { display: grid; gap: 4px; }
-.tline__label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--mk-faint); }
+.tline__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 .tline__label--err { color: var(--mk-red); }
 
 /* 重试时间线 */

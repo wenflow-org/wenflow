@@ -1727,23 +1727,31 @@ router.get('/', async (req: any, res) => {
             },
             orderBy: { createdAt: 'desc' },
             take: 5
+          },
+          _count: {
+            select: { sessions: true }
           }
         }
       }),
       prisma.virtual_learner_profiles.count()
     ]);
     
-    const formattedProfiles = profiles.map(p => ({
-      ...p,
-      email: p.users.email,
-      userName: p.users.name,
-      profile: JSON.parse(p.profile || '{}'),
-      knownConcepts: p.knownConcepts ? JSON.parse(p.knownConcepts) : [],
-      struggleConcepts: p.struggleConcepts ? JSON.parse(p.struggleConcepts) : [],
-      personalityTraits: p.personalityTraits ? JSON.parse(p.personalityTraits) : {},
-      tags: p.tags ? JSON.parse(p.tags) : [],
-      sessionCount: p.sessions.length
-    }));
+    const formattedProfiles = profiles.map(p => {
+      const profileData = JSON.parse(p.profile || '{}');
+      const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
+      return {
+        ...p,
+        email: p.users.email,
+        userName: p.users.name,
+        profile: profileData,
+        knownConcepts: p.knownConcepts ? JSON.parse(p.knownConcepts) : [],
+        struggleConcepts: p.struggleConcepts ? JSON.parse(p.struggleConcepts) : [],
+        personalityTraits: p.personalityTraits ? JSON.parse(p.personalityTraits) : {},
+        tags: p.tags ? JSON.parse(p.tags) : [],
+        sessionCount: p._count?.sessions ?? p.sessions.length,
+        storyCount: storyPool.length
+      };
+    });
     
     res.json({
       success: true,
@@ -1976,16 +1984,25 @@ router.post('/:id/start-session', async (req: any, res) => {
     }
     res.json({ success: true, data: session });
   } catch (error: any) {
-    logger.error('启动模拟会话失败:', error);
-    res.status(500).json({
+    const status = Number(error?.status) || 500;
+    if (status >= 500) logger.error('启动模拟会话失败:', error);
+    res.status(status).json({
       success: false,
-      error: error.message || '启动模拟会话失败'
+      error: error.message || '启动模拟会话失败',
+      ...(error?.code ? { code: error.code } : {})
     });
   }
 });
 
 const SIMULATION_FRICTION_BUDGETS = ['none', 'low', 'normal', 'high', 'stress_test'] as const;
 type SimulationFrictionBudget = typeof SIMULATION_FRICTION_BUDGETS[number];
+
+function createStorySelectionError(message: string, code: string) {
+  const error: any = new Error(message);
+  error.status = 400;
+  error.code = code;
+  return error;
+}
 
 async function createSessionForProfile(
   profileId: string,
@@ -2012,14 +2029,50 @@ async function createSessionForProfile(
   }
 
   const hasStoryOverride = options.hasStoryContextOverride === true;
-  const story = hasStoryOverride ? options.storyContextOverride : pickStoryFromPool(profile, options.storyId, options.storyIndex);
+  let selectedStoryId = typeof options.storyId === 'string' && options.storyId.trim()
+    ? options.storyId.trim()
+    : undefined;
+  let selectedStoryIndex = Number.isFinite(options.storyIndex) ? Number(options.storyIndex) : undefined;
+
+  // 顶层模型：虚拟人 → 多故事；每个故事产生学习需求后才与平台交互，并对应一套 Path。
+  // 启动会话必须绑定明确故事；仅当故事池只有 1 条时允许自动选中。
+  if (!hasStoryOverride) {
+    const stories = getStoryPool(profile);
+    if (!stories.length) {
+      throw createStorySelectionError(
+        '请先为该虚拟人生成故事；故事产生学习需求后才能与平台交互',
+        'STORY_REQUIRED'
+      );
+    }
+    if (!selectedStoryId && selectedStoryIndex === undefined) {
+      if (stories.length === 1) {
+        selectedStoryId = stories[0]?.id || undefined;
+        selectedStoryIndex = 0;
+      } else {
+        throw createStorySelectionError(
+          '一人多故事时必须指定 storyId：每个故事对应一套学习路径（Path）',
+          'STORY_SELECTION_REQUIRED'
+        );
+      }
+    }
+  }
+
+  const story = hasStoryOverride
+    ? options.storyContextOverride
+    : pickStoryFromPool(profile, selectedStoryId, selectedStoryIndex);
+  if (!hasStoryOverride && !story) {
+    throw createStorySelectionError(
+      '指定的故事不存在，请从该虚拟人的故事池中选择',
+      'STORY_NOT_FOUND'
+    );
+  }
   const storyContext = hasStoryOverride ? options.storyContextOverride : (story
     ? {
         storyId: story.id || null,
         title: story.title || '故事',
         sourceType: story.sourceType || null,
         outline: story.storyOutline || story.outline || '',
-        triggerEvent: story.triggerEvent || '',
+        triggerEvent: story.triggerEvent || story.storyTriggerEvent || '',
         visibleOpening: story.visibleOpening || '',
         hiddenDetails: Array.isArray(story.hiddenDetails) ? story.hiddenDetails : [],
         misdiagnosis: story.misdiagnosis || '',
@@ -2484,8 +2537,13 @@ router.post('/:id/start-blackbox-session', async (req: any, res) => {
     if (!session) return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     res.json({ success: true, data: session });
   } catch (error: any) {
-    logger.error('启动黑盒模拟会话失败:', error);
-    res.status(500).json({ success: false, error: error.message || '启动黑盒模拟会话失败' });
+    const status = Number(error?.status) || 500;
+    if (status >= 500) logger.error('启动黑盒模拟会话失败:', error);
+    res.status(status).json({
+      success: false,
+      error: error.message || '启动黑盒模拟会话失败',
+      ...(error?.code ? { code: error.code } : {})
+    });
   }
 });
 

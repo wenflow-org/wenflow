@@ -38,14 +38,8 @@ const stripPathGenerationInternals = (path: any) => {
     ...safePath
   } = path;
   if (safePath.generationStatus && typeof safePath.generationStatus === 'object') {
-    const {
-      error: _error,
-      errorCode: _errorCode,
-      errorMessage: _errorMessage,
-      lastError: _lastError,
-      ...safeGenerationStatus
-    } = safePath.generationStatus;
-    safePath.generationStatus = safeGenerationStatus;
+    const { core, stageDesign, updatedAt } = safePath.generationStatus;
+    safePath.generationStatus = { core, stageDesign, updatedAt };
   }
   return safePath;
 };

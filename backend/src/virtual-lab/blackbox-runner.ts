@@ -16,6 +16,7 @@ import type {
 } from './contracts'
 import { PlatformUserAdapter } from './platform-user-adapter'
 import { assertBlackboxSessionMode, VirtualSessionModeError } from './session-mode'
+import { resolveStorySessionDemand } from './story-demand'
 import {
   executeSkill,
   VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS,
@@ -699,9 +700,13 @@ export class BlackboxVirtualLearnerRunner {
       let action: LearnerAction
 
       if (!latest) {
-        const opening = (story as any)?.visibleOpening || (learner as any).learningGoal
-        if (!opening) throw new Error('虚拟学习者缺少 Goal 开场信息')
-        action = { type: 'chat', text: opening }
+        // 故事当次需求经 Goal 开场传入正式链路；不在此改 Path
+        const demand = resolveStorySessionDemand({
+          story,
+          profileLearningGoal: (learner as any)?.learningGoal,
+        })
+        if (!demand.text) throw new Error('虚拟学习者缺少 Goal 开场信息：请绑定故事诉求或画像长期倾向')
+        action = { type: 'chat', text: demand.text }
       } else if (latest.stage === 'goal') {
         const history = this.visibleHistory(state).map((item: any) => ({
           role: item.role === 'platform' ? 'goal_agent' : 'learner',

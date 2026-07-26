@@ -814,7 +814,10 @@ function reconcileTeachingKnowledgeState(
 }
 
 function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
-  return agentOutput?.internal?.ext?.teaching as TeachingTurnOutput;
+  return (
+    agentOutput?.internal?.ext?.teachingTurnOutcome?.artifact
+    || agentOutput?.internal?.ext?.teaching
+  ) as TeachingTurnOutput;
 }
 
 function extractPeerDebug(agentOutput: any) {
@@ -1252,7 +1255,13 @@ export class AITeachingOrchestrator {
       messages: updatedMessages,
       knowledgeState: frozenKnowledgeState,
     }, context);
-    const turnResult = await executeSkill(teachingTurnAgentDefinition, turnInput);
+    const turnResult = await executeSkill(teachingTurnAgentDefinition, turnInput, {
+      contextEnvelope: {
+        schemaVersion: 'context-envelope/v1',
+        principal: { userId: session.userId },
+        session: { sessionId: session.id, taskId: session.taskId },
+      },
+    });
     if (!turnResult.success) {
       throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
     }
@@ -1322,6 +1331,12 @@ export class AITeachingOrchestrator {
           context: {
             userId: session.userId,
             sessionId: session.id,
+          },
+        }, {
+          contextEnvelope: {
+            schemaVersion: 'context-envelope/v1',
+            principal: { userId: session.userId },
+            session: { sessionId: session.id, taskId: session.taskId },
           },
         });
         peerMessage = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';
@@ -1698,6 +1713,12 @@ export class AITeachingOrchestrator {
       context: {
         userId: session.userId,
         sessionId,
+      },
+    }, {
+      contextEnvelope: {
+        schemaVersion: 'context-envelope/v1',
+        principal: { userId: session.userId },
+        session: { sessionId: session.id, taskId: session.taskId },
       },
     });
 
@@ -2257,6 +2278,12 @@ export class AITeachingOrchestrator {
       context: {
         userId: session.userId,
         sessionId: session.id,
+      },
+    }, {
+      contextEnvelope: {
+        schemaVersion: 'context-envelope/v1',
+        principal: { userId: session.userId },
+        session: { sessionId: session.id, taskId: session.taskId },
       },
     });
 

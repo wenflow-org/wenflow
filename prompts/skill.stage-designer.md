@@ -2,6 +2,15 @@
 agentId: skill:stage-designer
 name: default-stage-designer
 archetype: generator
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 阶段任务设计器
 temperature: 0.3
 maxTokens: 32000

@@ -2,6 +2,15 @@
 agentId: skill:label-generator
 name: default-label-generator
 archetype: copywriter
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: snapshot
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 教育标签设计师
 temperature: 0.5
 maxTokens: 2000

@@ -227,7 +227,15 @@ onMounted(() => {
 
 const flowCount = computed(() => flowEvents.value.length)
 const callCount = computed(() => callEvents.value.length)
-const waterfallCount = computed(() => '·')
+/** 瀑布 Tab 计数 = 两事件流合并后的去重 Trace 数 */
+const waterfallCount = computed(() => {
+  const traces = new Set(
+    [...flowEvents.value, ...callEvents.value]
+      .map((e) => e.trace)
+      .filter((t) => t && t !== '—')
+  )
+  return traces.size || '·'
+})
 
 const filtered = computed(() => {
   const src = tab.value === 'flow' ? flowEvents.value : callEvents.value

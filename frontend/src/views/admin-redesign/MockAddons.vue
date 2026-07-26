@@ -20,7 +20,7 @@
               <th>组件</th>
               <th>档位</th>
               <th>模型</th>
-              <th>温度</th>
+              <th>超时</th>
               <th>Thinking</th>
               <th>状态</th>
               <th>最近调用</th>
@@ -37,7 +37,7 @@
               </td>
               <td><span class="mk-badge mk-badge--muted">{{ r.mount }}</span></td>
               <td class="mono">{{ r.model }}</td>
-              <td class="mk-num">{{ r.temp }}</td>
+              <td class="mk-num">{{ r.timeout }}</td>
               <td class="mono">{{ r.thinking }}</td>
               <td><span class="mk-badge" :class="r.custom ? 'mk-badge--ok' : 'mk-badge--muted'">{{ r.custom ? '独立配置' : '继承默认' }}</span></td>
               <td :class="{ 'mk-na': r.last === '从未' }">{{ r.last }}</td>
@@ -74,20 +74,26 @@ interface Row {
   name: string
   mount: string
   model: string
-  temp: string
+  timeout: string
   thinking: string
   custom: boolean
   last: string
 }
 
+function formatTimeout(ms: unknown): string {
+  const n = Number(ms)
+  if (!ms || Number.isNaN(n)) return '继承'
+  return `${Math.round(n / 1000)}s`
+}
+
 /* demo 数据 */
 const all: Row[] = [
-  { id: 'text-structure-analyzer', name: '文本结构分析器', mount: 'chat', model: '继承全局', temp: '0.7', thinking: '—', custom: false, last: '从未' },
-  { id: 'retrieval', name: '内容检索器', mount: 'chat', model: '继承全局', temp: '0.7', thinking: '—', custom: false, last: '从未' },
-  { id: 'web-extractor', name: '网页内容提取器', mount: 'chat', model: '继承全局', temp: '0.7', thinking: '—', custom: false, last: '从未' },
-  { id: 'image-analyzer', name: '图片分析器', mount: 'chat', model: '继承全局', temp: '0.7', thinking: '—', custom: false, last: '从未' },
-  { id: 'memory-search', name: '学习记忆搜索器', mount: 'chat', model: '继承全局', temp: '0.7', thinking: '—', custom: false, last: '从未' },
-  { id: 'smart-search', name: '智能搜索器', mount: 'chat', model: '继承全局', temp: '0.7', thinking: '—', custom: false, last: '从未' }
+  { id: 'text-structure-analyzer', name: '文本结构分析器', mount: 'chat', model: '继承全局', timeout: '继承', thinking: '—', custom: false, last: '从未' },
+  { id: 'retrieval', name: '内容检索器', mount: 'chat', model: '继承全局', timeout: '继承', thinking: '—', custom: false, last: '从未' },
+  { id: 'web-extractor', name: '网页内容提取器', mount: 'chat', model: '继承全局', timeout: '继承', thinking: '—', custom: false, last: '从未' },
+  { id: 'image-analyzer', name: '图片分析器', mount: 'chat', model: '继承全局', timeout: '继承', thinking: '—', custom: false, last: '从未' },
+  { id: 'memory-search', name: '学习记忆搜索器', mount: 'chat', model: '继承全局', timeout: '继承', thinking: '—', custom: false, last: '从未' },
+  { id: 'smart-search', name: '智能搜索器', mount: 'chat', model: '继承全局', timeout: '继承', thinking: '—', custom: false, last: '从未' }
 ]
 
 const rows = ref<Row[]>([])
@@ -107,7 +113,8 @@ async function loadRows() {
         name: String(c.displayName || c.skillId || c.id),
         mount: String(c.tier || 'chat'),
         model: c.model ? String(c.model) : '继承全局',
-        temp: Number(c.temperature ?? 0.7).toFixed(1),
+        // 列表只展示路由/可靠性；T/maxTokens 真相源是 ACTIVE Prompt（抽屉 generationParams）
+        timeout: formatTimeout(c.requestTimeoutMs),
         thinking: c.thinkingMode
           ? `${String(c.thinkingMode)}${c.reasoningEffort ? ` · ${String(c.reasoningEffort)}` : ''}`
           : '—',

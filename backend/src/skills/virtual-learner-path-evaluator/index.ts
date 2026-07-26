@@ -4,6 +4,7 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
@@ -15,6 +16,9 @@ import {
 
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE = 0.5;
+const PATH_EVALUATOR_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
+  'virtual-learner-path-evaluator'
+);
 
 export interface VirtualLearnerPathEvaluatorInput {
   learner: VirtualLearnerPersona | Record<string, any>;
@@ -240,7 +244,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
         failureReason: 'missing reaction'
       }),
       normalizeOutput,
-      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-path-evaluator', output, {
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
         phase: 'simulation-step-completed',
         nextState: (output as any)?.learnerState ?? null,
       }),
@@ -256,7 +260,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
         success: true,
         output: {
           ...fallback,
-          runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-path-evaluator', fallback, {
+          runtimeEnvelope: mapSkillOutputEnvelope(PATH_EVALUATOR_FALLBACK_RUNTIME_CONTRACT, fallback, {
             phase: 'simulation-step-completed',
             status: 'partial',
           }),

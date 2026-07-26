@@ -8,9 +8,14 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
-import { getAPIGateway } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
+import {
+  getUnifiedSkillStats,
+  resolveEffectiveSkillRuntimeConfig,
+  toLegacySkillRuntimeStats,
+  type SkillStatsRange,
+} from '../../services/skill-runtime-contract.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
 import { SESSION_KNOWLEDGE_DISTILLER_PROMPT } from '../../skills/session-knowledge-distiller';
@@ -69,119 +74,16 @@ function emptyRuntimeStats(): SkillRuntimeStats {
   };
 }
 
-function buildStats(total: number, successCount: number, avgLatency: number | null | undefined, lastCalledAt: Date | null | undefined): SkillRuntimeStats {
-  return {
-    callCount: total,
-    successRate: total > 0 ? successCount / total : 1,
-    avgLatency: Math.round(avgLatency || 0),
-    lastCalledAt: lastCalledAt || null,
-  };
-}
-
-async function getSkillRuntimeStats(skillNames: string[]): Promise<Map<string, SkillRuntimeStats>> {
+async function getSkillRuntimeStats(
+  skillNames: string[],
+  range: SkillStatsRange = 'all'
+): Promise<Map<string, SkillRuntimeStats>> {
+  const unified = await getUnifiedSkillStats(skillNames, range);
   const result = new Map<string, SkillRuntimeStats>();
-  if (!skillNames.length) return result;
-
-  const promptAgentIds = skillNames.map((name) => `skill:${name}`);
-  const [registrations, promptGroups, promptSuccessGroups, agentLogs] = await Promise.all([
-    systemPrisma.skill_registrations.findMany({
-      where: { name: { in: skillNames } },
-      select: { name: true, callCount: true, successRate: true, updatedAt: true },
-    }),
-    prisma.prompt_call_logs.groupBy({
-      by: ['agentId'],
-      where: { agentId: { in: promptAgentIds } },
-      _count: { _all: true },
-      _avg: { durationMs: true },
-      _max: { createdAt: true },
-    }),
-    prisma.prompt_call_logs.groupBy({
-      by: ['agentId', 'success'],
-      where: { agentId: { in: promptAgentIds } },
-      _count: { _all: true },
-    }),
-    prisma.agent_call_logs.findMany({
-      where: {
-        AND: [
-          {
-            OR: [
-              { executionLayer: null },
-              { executionLayer: { not: 'api-gateway' } }
-            ]
-          },
-          {
-            OR: skillNames.flatMap((name) => [
-              { metadata: { contains: `"skillId":"${name}"` } },
-              { metadata: { contains: `"skillId":"skill:${name}"` } },
-            ])
-          }
-        ]
-      },
-      select: { metadata: true, success: true, durationMs: true, calledAt: true },
-    }),
-  ]);
-
-  for (const registration of registrations) {
-    result.set(registration.name, {
-      callCount: registration.callCount,
-      successRate: registration.callCount > 0 ? registration.successRate : 1,
-      avgLatency: 0,
-      lastCalledAt: registration.callCount > 0 ? registration.updatedAt : null,
-    });
+  for (const name of skillNames) {
+    const stats = unified.get(name);
+    result.set(name, stats ? toLegacySkillRuntimeStats(stats) : emptyRuntimeStats());
   }
-
-  const promptSuccessMap = new Map<string, number>();
-  const promptBackedSkills = new Set<string>();
-  for (const group of promptSuccessGroups) {
-    if (group.success) {
-      promptSuccessMap.set(group.agentId, group._count._all);
-    }
-  }
-
-  for (const group of promptGroups) {
-    const skillName = group.agentId.replace(/^skill:/, '');
-    promptBackedSkills.add(skillName);
-    result.set(skillName, buildStats(
-      group._count._all,
-      promptSuccessMap.get(group.agentId) || 0,
-      group._avg.durationMs,
-      group._max.createdAt,
-    ));
-  }
-
-  const agentLogMap = new Map<string, { total: number; success: number; durationTotal: number; lastCalledAt: Date | null }>();
-  for (const log of agentLogs) {
-    let metadata: any = null;
-    try {
-      metadata = log.metadata ? JSON.parse(log.metadata) : null;
-    } catch {
-      metadata = null;
-    }
-
-    const rawSkillId = typeof metadata?.skillId === 'string' ? metadata.skillId : '';
-    const skillName = rawSkillId.replace(/^skill:/, '');
-    if (!skillNames.includes(skillName)) continue;
-
-    const current = agentLogMap.get(skillName) || { total: 0, success: 0, durationTotal: 0, lastCalledAt: null };
-    current.total += 1;
-    current.success += log.success ? 1 : 0;
-    current.durationTotal += log.durationMs || 0;
-    if (!current.lastCalledAt || log.calledAt > current.lastCalledAt) {
-      current.lastCalledAt = log.calledAt;
-    }
-    agentLogMap.set(skillName, current);
-  }
-
-  for (const [skillName, stats] of agentLogMap.entries()) {
-    if (promptBackedSkills.has(skillName)) continue;
-    result.set(skillName, buildStats(
-      stats.total,
-      stats.success,
-      stats.total > 0 ? stats.durationTotal / stats.total : 0,
-      stats.lastCalledAt,
-    ));
-  }
-
   return result;
 }
 
@@ -869,11 +771,14 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     }
 
     const parentAgent = getAgentOfSkill(canonicalId);
+    const shortSkillId = canonicalId.replace(/^skill:/, '');
+    const statsRange = String(req.query.range || 'all') as SkillStatsRange;
+    const normalizedRange: SkillStatsRange =
+      statsRange === '24h' || statsRange === '7d' || statsRange === '30d' || statsRange === 'all'
+        ? statsRange
+        : 'all';
 
-    // 并发拉取
-    const { getPlatformReliabilitySettings } = await import('../../services/reliability-settings.service');
-    const [skillConfig, promptVersions, contract, callStats, resolvedRoute, reliabilitySettings] = await Promise.all([
-      systemPrisma.skill_model_configs.findFirst({ where: { skillId: canonicalId.replace(/^skill:/, '') } }),
+    const [promptVersions, contract, effective, unifiedStats] = await Promise.all([
       systemPrisma.agent_prompts.findMany({
         where: { agentId: canonicalId },
         orderBy: { version: 'desc' },
@@ -892,29 +797,11 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         }
       }),
       systemPrisma.agent_contracts.findUnique({ where: { agentId: canonicalId } }),
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: { agentId: canonicalId },
-        _count: { _all: true },
-        _avg: { durationMs: true },
-        _max: { calledAt: true }
-      }),
-      getAPIGateway().resolveRoute({ agentId: parentAgent?.id, skillId: canonicalId.replace(/^skill:/, '') }).catch(() => null),
-      getPlatformReliabilitySettings()
+      resolveEffectiveSkillRuntimeConfig(shortSkillId),
+      getUnifiedSkillStats([shortSkillId], normalizedRange),
     ]);
 
-    const totalCalls = callStats.reduce((s, g) => s + g._count._all, 0);
-    const successCalls = callStats.find(g => g.success)?._count._all || 0;
-    const successRate = totalCalls > 0 ? Number(((successCalls / totalCalls) * 100).toFixed(1)) : null;
-    const avgDuration = callStats.length > 0
-      ? Math.round(callStats.reduce((s, g) => s + (g._avg.durationMs || 0) * g._count._all, 0) / totalCalls || 0)
-      : 0;
-    const lastCalledAt = callStats.reduce<Date | null>((latest, g) => {
-      if (!g._max.calledAt) return latest;
-      if (!latest) return g._max.calledAt;
-      return g._max.calledAt > latest ? g._max.calledAt : latest;
-    }, null);
-
+    const stats = unifiedStats.get(shortSkillId);
     const activePrompt = promptVersions.find(p => p.status === 'ACTIVE' || p.status === 'published') || null;
 
     res.json({
@@ -935,26 +822,32 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
           monitoringGroup: parentAgent.monitoringGroup
         } : null,
         modelConfig: {
-          enabled: !!skillConfig?.enabled,
-          tier: skillConfig?.tier || (resolvedRoute?.thinkingMode === 'enabled' || resolvedRoute?.reasoningEffort === 'high' || resolvedRoute?.reasoningEffort === 'max' ? 'reasoning' : 'chat'),
-          model: resolvedRoute?.model || skillConfig?.model || null,
-          thinkingMode: resolvedRoute?.thinkingMode || skillConfig?.thinkingMode || 'default',
-          reasoningEffort: resolvedRoute?.reasoningEffort || skillConfig?.reasoningEffort || 'default',
-          temperature: resolvedRoute?.temperature ?? skillConfig?.temperature ?? manifest.defaultModelConfig?.temperature ?? null,
-          maxTokens: resolvedRoute?.maxTokens ?? skillConfig?.maxTokens ?? manifest.defaultModelConfig?.maxTokens ?? null,
-          timeoutMs: resolvedRoute?.timeoutMs ?? skillConfig?.requestTimeoutMs ?? null,
-          source: skillConfig?.enabled ? 'skill-override' : parentAgent ? 'agent-or-platform' : 'platform-default',
-          inheritedFromAgent: !!parentAgent && !skillConfig?.enabled,
-          hasSkillOverride: !!skillConfig?.enabled,
+          enabled: effective.route.hasSkillOverride,
+          tier: effective.route.thinkingMode === 'enabled'
+            || effective.route.reasoningEffort === 'high'
+            || effective.route.reasoningEffort === 'max'
+            ? 'reasoning'
+            : 'chat',
+          // 头部展示真实 LLM 生效模型（prompt 优先）
+          model: effective.llmRequest.model,
+          thinkingMode: effective.route.thinkingMode || 'default',
+          reasoningEffort: effective.route.reasoningEffort || 'default',
+          temperature: effective.llmRequest.temperature,
+          maxTokens: effective.llmRequest.maxTokens,
+          timeoutMs: effective.route.timeoutMs,
+          source: effective.route.source,
+          inheritedFromAgent: !!parentAgent && !effective.route.hasSkillOverride,
+          hasSkillOverride: effective.route.hasSkillOverride,
           manifestDefault: manifest.defaultModelConfig || null,
+          route: effective.route,
+          llmRequest: effective.llmRequest,
+          override: effective.override,
           reliability: {
-            maxUpstreamAttempts: reliabilitySettings.maxUpstreamAttempts,
-            maxTransportRetries: reliabilitySettings.maxTransportRetries,
-            maxLogicalRetries: Math.min(
-              skillConfig?.maxLogicalRetries ?? reliabilitySettings.maxLogicalRetries,
-              reliabilitySettings.maxLogicalRetries
-            ),
-            logicalRetrySource: skillConfig?.maxLogicalRetries == null ? 'platform-default' : 'skill-override',
+            maxUpstreamAttempts: effective.reliability.maxUpstreamAttempts,
+            maxTransportRetries: effective.reliability.maxTransportRetries,
+            maxLogicalRetries: effective.reliability.maxLogicalRetries,
+            logicalRetrySource: effective.reliability.logicalRetrySource,
+            platformMaxLogicalRetries: effective.reliability.platformMaxLogicalRetries,
             businessFallback: 'code-defined'
           }
         },
@@ -982,11 +875,13 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         })),
         activePromptId: activePrompt?.id || null,
         stats: {
-          totalCalls,
-          successCalls,
-          successRate,
-          avgDuration,
-          lastCalledAt
+          totalCalls: stats?.callCount || 0,
+          successCalls: stats?.successCount || 0,
+          successRate: stats?.successRate ?? null,
+          avgDuration: stats?.avgDurationMs || 0,
+          lastCalledAt: stats?.lastCalledAt || null,
+          source: stats?.source || 'none',
+          range: normalizedRange,
         }
       }
     });

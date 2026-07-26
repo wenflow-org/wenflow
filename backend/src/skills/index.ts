@@ -6,6 +6,7 @@
 
 // 协议
 export * from './protocol';
+export * from './context-envelope';
 
 // 文本结构分析
 export { textStructureAnalyzerDefinition } from './text-structure-analyzer';
@@ -125,12 +126,15 @@ export { goalConversationAgentDefinition } from './goal-conversation';
 import { runGoalConversationAgent } from './goal-conversation';
 export { pathAgentDefinition, replanPath } from './path-planning';
 import { pathAgentHandler } from './path-planning';
-export { teachingTurnAgentDefinition } from './teaching-turn';
+export { teachingTurnAgentDefinition, toTeachingTurnSkillOutcome } from './teaching-turn';
+export type { TeachingTurnArtifact, TeachingTurnInput, TeachingTurnOutput } from './teaching-turn';
 import { teachingTurnAgentHandler } from './teaching-turn';
-export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact } from './session-wrapup';
+export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './session-wrapup';
 import { sessionWrapupAgentHandler } from './session-wrapup';
-export { peerAgentDefinition } from './peer-reinforcement';
+export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './peer-reinforcement';
 import { peerAgentHandler } from './peer-reinforcement';
+export { buildSkillOutcome, noneTransition } from './outcome';
+export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outcome';
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
@@ -291,6 +295,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
 };
 
 import { executeSkillHandler } from './executor';
+import type { SkillExecutionOptions } from './protocol';
 
 /**
  * 执行 Skill
@@ -300,7 +305,8 @@ import { executeSkillHandler } from './executor';
  */
 export async function executeSkill(
   definition: SkillDefinition | { id?: string; name?: string },
-  input: any
+  input: any,
+  options: SkillExecutionOptions = {}
 ): Promise<any> {
   const rawId = (definition.id || definition.name) as string;
   // 兼容核心能力单元：AgentDefinition 的 id 形如 'skill:goal-conversation'，
@@ -310,7 +316,7 @@ export async function executeSkill(
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);
   }
-  const result = await executeSkillHandler(definition, input, handler);
+  const result = await executeSkillHandler(definition, input, handler, options);
   return result.output;
 }
 

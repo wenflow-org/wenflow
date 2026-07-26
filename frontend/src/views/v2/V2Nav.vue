@@ -25,12 +25,14 @@
           <span class="v2nav__name">{{ userName }}</span>
           <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">▾</span>
         </button>
-        <div v-if="menuOpen" class="v2nav__menu" role="menu">
-          <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
-          <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
-            退出登录
-          </button>
-        </div>
+        <Transition name="v2menu">
+          <div v-if="menuOpen" class="v2nav__menu" role="menu">
+            <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
+            <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
+              退出登录
+            </button>
+          </div>
+        </Transition>
       </div>
     </div>
   </header>
@@ -139,6 +141,14 @@ onUnmounted(() => {
   color: #fff; font-size: 13px; font-weight: 700;
   box-shadow: 0 8px 18px rgba(52, 120, 246, 0.28);
   cursor: pointer; text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.v2nav__cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(52, 120, 246, 0.34);
+}
+.v2nav__cta:active {
+  transform: translateY(0) scale(0.97);
 }
 .v2nav__user { position: relative; }
 .v2nav__avatar {
@@ -179,6 +189,16 @@ onUnmounted(() => {
   display: grid;
   gap: 2px;
   z-index: 50;
+  transform-origin: top right;
+}
+.v2menu-enter-active,
+.v2menu-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.v2menu-enter-from,
+.v2menu-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
 }
 .v2nav__menu a,
 .v2nav__menu button {

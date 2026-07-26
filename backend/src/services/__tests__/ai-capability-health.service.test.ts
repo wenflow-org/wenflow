@@ -53,7 +53,7 @@ describe('AICapabilityHealthService', () => {
     expect(mockExecute).toHaveBeenCalledTimes(1)
     expect(mockExecute).toHaveBeenCalledWith(
       expect.objectContaining({ endpoint: route.endpoint, model: route.model, timeoutMs: 10_000 }),
-      expect.objectContaining({ max_tokens: 4, temperature: 0 }),
+      expect.objectContaining({ max_tokens: 64, temperature: 0 }),
       expect.objectContaining({ sourceEntry: 'system-canary', callerAgent: 'system-canary' })
     )
     expect(snapshot.overall).toBe('operational')

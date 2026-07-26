@@ -12,8 +12,7 @@ import {
   SkillDefinition,
   SkillExecutionResult
 } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 import { logger } from '../../utils/logger';
 
 export const labelGeneratorDefinition: SkillDefinition = {
@@ -141,17 +140,36 @@ export const LABEL_GENERATOR_PROMPT = `你是教育标签设计师，负责将�
 - evaluate: ⭐ star, #F1C40F (黄色 - 评估)
 - metacognitive: 🧠 brain, #1ABC9C (青色 - 元认知)`;
 
-const promptConfigService = new AgentConfigService();
+function normalizeLabelOutput(parsed: any, input: LabelGeneratorInput): LabelGeneratorOutput {
+  const knowledgeType = input.knowledgeType;
+  const cognitiveLevel = input.cognitiveLevel;
+  const obj = parsed && typeof parsed === 'object' ? parsed : {};
+  return {
+    displayLabel: obj.displayLabel || generateDisplayLabel(knowledgeType, cognitiveLevel),
+    shortLabel: obj.shortLabel || generateShortLabel(cognitiveLevel),
+    icon: obj.icon || getDefaultIcon(knowledgeType, cognitiveLevel),
+    color: obj.color || getDefaultColor(cognitiveLevel),
+  };
+}
 
 export async function labelGenerator(
   input: LabelGeneratorInput
 ): Promise<SkillExecutionResult<LabelGeneratorOutput>> {
   const startTime = Date.now();
-  
-  try {
-    const { knowledgeType, cognitiveLevel, goalType, taskTitle, domain } = input;
 
-    const contextPrompt = `请为以下任务生成用户友好的标签：
+  try {
+    const result = await callPrompt<LabelGeneratorInput, LabelGeneratorOutput>({
+      agentId: 'skill:label-generator',
+      defaultSystemPrompt: '',
+      requireActivePrompt: true,
+      caller: { skillId: 'label-generator' },
+      modelDefaults: {
+        temperature: 0.5,
+        maxTokens: LABEL_GENERATOR_MAX_TOKENS,
+      },
+      buildUserPayload: (payload) => {
+        const { knowledgeType, cognitiveLevel, goalType, taskTitle, domain } = payload;
+        return `请为以下任务生成用户友好的标签：
 
 【知识类型】${knowledgeType}
 【认知层级】${cognitiveLevel}
@@ -160,33 +178,22 @@ ${taskTitle ? `【任务标题】${taskTitle}` : ''}
 ${domain ? `【领域】${domain}` : ''}
 
 请生成白话标签。`;
+      },
+      normalizeOutput: (parsed, payload) => normalizeLabelOutput(parsed, payload),
+      validateParsedOutput: (parsed) =>
+        parsed && typeof parsed === 'object'
+          ? { valid: true }
+          : { valid: false, failureReason: 'LABEL_GENERATOR_OUTPUT_NOT_OBJECT' },
+    }, input);
 
-    const promptConfig = await promptConfigService.getActivePrompt('skill:label-generator');
-    if (!promptConfig?.systemPrompt?.trim()) {
-      throw new Error('SKILL_PROMPT_MISSING: label-generator');
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'LABEL_GENERATOR_FAILED');
     }
 
-    const messages: ChatMessage[] = [
-      { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: contextPrompt }
-    ];
-    
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'label-generator' };
-    const response = await gateway.execute({
-      messages,
-      max_tokens: promptConfig.maxTokens || LABEL_GENERATOR_MAX_TOKENS,
-      temperature: promptConfig.temperature,
-      model: promptConfig.model,
-    }, caller, {});
-    const content = response.choices[0]?.message.content || '';
-    
-    const result = parseLabelResult(content, knowledgeType, cognitiveLevel);
-    
     return {
       success: true,
-      output: result,
-      duration: Date.now() - startTime
+      output: result.output,
+      duration: Date.now() - startTime,
     };
   } catch (error: any) {
     logger.error('[label-generator] generation failed, using fallback', {
@@ -194,37 +201,12 @@ ${domain ? `【领域】${domain}` : ''}
       cognitiveLevel: input.cognitiveLevel,
       errorMessage: error?.message || String(error),
     });
-    
-    const fallback = generateFallbackLabel(input.knowledgeType, input.cognitiveLevel);
+
     return {
       success: true,
-      output: fallback,
-      duration: Date.now() - startTime
+      output: generateFallbackLabel(input.knowledgeType, input.cognitiveLevel),
+      duration: Date.now() - startTime,
     };
-  }
-}
-
-function parseLabelResult(
-  content: string, 
-  knowledgeType: string, 
-  cognitiveLevel: string
-): LabelGeneratorOutput {
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return generateFallbackLabel(knowledgeType, cognitiveLevel);
-    }
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    
-    return {
-      displayLabel: parsed.displayLabel || generateDisplayLabel(knowledgeType, cognitiveLevel),
-      shortLabel: parsed.shortLabel || generateShortLabel(cognitiveLevel),
-      icon: parsed.icon || getDefaultIcon(knowledgeType, cognitiveLevel),
-      color: parsed.color || getDefaultColor(cognitiveLevel)
-    };
-  } catch {
-    return generateFallbackLabel(knowledgeType, cognitiveLevel);
   }
 }
 

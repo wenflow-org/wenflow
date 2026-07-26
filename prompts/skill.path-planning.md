@@ -2,9 +2,18 @@
 agentId: skill:path-planning
 name: default-skill-path-planning
 archetype: generator
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 学习路径规划
 temperature: 0.5
-maxTokens: 32000
+maxTokens: 12000
 acceptableAgentIds:
   - skill:path-planning
   - path-agent

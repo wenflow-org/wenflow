@@ -4,6 +4,7 @@ import {
 } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
@@ -15,6 +16,9 @@ import {
 
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE = 0.8;
+const GOAL_DIALOGUE_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
+  'virtual-learner-goal-dialogue-simulator'
+);
 
 export type GoalLearnerPhase = 'opening' | 'understanding' | 'proposal_evaluation';
 
@@ -315,7 +319,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
         failureReason: 'missing reply or learnerState'
       }),
       normalizeOutput,
-      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-goal-dialogue-simulator', output, {
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
         phase: 'simulation-step-completed',
         nextState: (output as any)?.learnerState ?? null,
       }),
@@ -331,7 +335,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
         success: true,
         output: {
           ...fallback,
-          runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-goal-dialogue-simulator', fallback, {
+          runtimeEnvelope: mapSkillOutputEnvelope(GOAL_DIALOGUE_FALLBACK_RUNTIME_CONTRACT, fallback, {
             phase: 'simulation-step-completed',
             status: 'partial',
             nextState: (fallback as any)?.learnerState ?? null,
@@ -362,7 +366,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       success: true,
       output: {
         ...fallback,
-        runtimeEnvelope: mapSkillOutputEnvelope('virtual-learner-goal-dialogue-simulator', fallback, {
+        runtimeEnvelope: mapSkillOutputEnvelope(GOAL_DIALOGUE_FALLBACK_RUNTIME_CONTRACT, fallback, {
           phase: 'simulation-step-completed',
           status: 'partial',
           reason: error?.message || 'goal-dialogue-simulator-failed',

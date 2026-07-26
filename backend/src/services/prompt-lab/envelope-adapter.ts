@@ -3,7 +3,6 @@ import {
   type RuntimeContract,
   type RuntimeContextUpdateMode,
   type RuntimeStateOwner,
-  buildDefaultRuntimeContract,
   normalizeRuntimeContract,
 } from './runtime-contract';
 
@@ -186,10 +185,9 @@ function inferGoalNextAction(phase: string): string {
  * 通用 skill 输出 → RuntimeEnvelope（virtual-learner / path 链等可复用）
  */
 export function mapSkillOutputEnvelope(
-  skillId: string,
+  contract: RuntimeContract,
   output: unknown,
   options: {
-    archetype?: string;
     phase?: string;
     status?: RuntimeBusinessStatus;
     nextState?: unknown | null;
@@ -199,10 +197,6 @@ export function mapSkillOutputEnvelope(
     confidence?: number;
   } = {}
 ): RuntimeEnvelope {
-  const contract = buildDefaultRuntimeContract(
-    skillId.replace(/^skill:/, ''),
-    options.archetype || ''
-  );
   const phase = options.phase || contract.businessState.defaultPhase;
   const nextState =
     options.nextState !== undefined

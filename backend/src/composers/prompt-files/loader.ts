@@ -28,6 +28,10 @@ export interface PromptFileMeta {
   acceptableAgentIds?: string[];
   /** 协议模式（PROMPT_AUTHORING_PROTOCOL）：conversational/generator/extractor/distiller/copywriter/code-only */
   archetype?: string;
+  /** Skill Prompt Contract v2；描述执行、I/O、上下文暴露与失败策略。 */
+  promptContract?: unknown;
+  /** 运行时契约声明，由种子同步时校验并快照到 ACTIVE prompt metadata */
+  runtimeContract?: unknown;
 }
 
 export interface PromptFile extends PromptFileMeta {
@@ -35,6 +39,17 @@ export interface PromptFile extends PromptFileMeta {
   systemPrompt: string;
   /** 文件绝对路径 */
   filePath: string;
+}
+
+export interface PromptFileScanDiagnostic {
+  filePath: string;
+  code: 'read-error' | 'frontmatter-parse-error';
+  message: string;
+}
+
+export interface PromptFileScanResult {
+  files: PromptFile[];
+  diagnostics: PromptFileScanDiagnostic[];
 }
 
 /**
@@ -74,8 +89,7 @@ function toNumberOrUndefined(value: any): number | undefined {
 
 function toStringArrayOrUndefined(value: any): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const arr = value.map((v) => String(v).trim()).filter(Boolean);
-  return arr.length > 0 ? arr : undefined;
+  return value.map((v) => String(v).trim()).filter(Boolean);
 }
 
 /** 解析单个文件内容为 PromptFile */
@@ -100,26 +114,72 @@ export function parsePromptFile(filePath: string, raw: string): PromptFile {
     maxTokens: toNumberOrUndefined(meta.maxTokens),
     acceptableAgentIds: toStringArrayOrUndefined(meta.acceptableAgentIds),
     archetype: typeof meta.archetype === 'string' ? meta.archetype.trim() : undefined,
+    promptContract: meta.promptContract,
+    runtimeContract: meta.runtimeContract,
     systemPrompt: body,
     filePath,
   };
 }
 
-/** 加载所有 prompt 文件 */
-export function loadAllPromptFiles(): PromptFile[] {
-  if (!fs.existsSync(PROMPTS_DIR)) {
-    return [];
+/** 与 File-as-Truth 加载器共用的顶层候选规则。 */
+function getPromptFilePaths(promptsDir: string): string[] {
+  if (!fs.existsSync(promptsDir)) return [];
+
+  return fs.readdirSync(promptsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile()
+      && /\.md$/i.test(entry.name)
+      && !entry.name.startsWith('_'))
+    .map((entry) => path.join(promptsDir, entry.name));
+}
+
+function sortPromptFiles(files: PromptFile[]): PromptFile[] {
+  return files.sort((a, b) => a.agentId.localeCompare(b.agentId));
+}
+
+/**
+ * 容错扫描 prompt 文件。单个文件的读取或 YAML frontmatter 错误会记录诊断，
+ * 不会阻断其他文件，适合只读审计脚本使用。
+ */
+export function scanPromptFiles(promptsDir = PROMPTS_DIR): PromptFileScanResult {
+  const files: PromptFile[] = [];
+  const diagnostics: PromptFileScanDiagnostic[] = [];
+
+  for (const filePath of getPromptFilePaths(promptsDir)) {
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'read-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+
+    try {
+      const parsed = parsePromptFile(filePath, raw);
+      if (parsed.systemPrompt) files.push(parsed);
+    } catch (error) {
+      diagnostics.push({
+        filePath,
+        code: 'frontmatter-parse-error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  const entries = fs.readdirSync(PROMPTS_DIR, { withFileTypes: true });
+  return {
+    files: sortPromptFiles(files),
+    diagnostics: diagnostics.sort((a, b) => a.filePath.localeCompare(b.filePath)),
+  };
+}
+
+/** 加载所有 prompt 文件 */
+export function loadAllPromptFiles(): PromptFile[] {
   const files: PromptFile[] = [];
 
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!/\.md$/i.test(entry.name)) continue;
-    if (entry.name.startsWith('_')) continue; // 约定：下划线开头为非 prompt 辅助文件
-
-    const filePath = path.join(PROMPTS_DIR, entry.name);
+  for (const filePath of getPromptFilePaths(PROMPTS_DIR)) {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = parsePromptFile(filePath, raw);
 
@@ -130,7 +190,7 @@ export function loadAllPromptFiles(): PromptFile[] {
     files.push(parsed);
   }
 
-  return files.sort((a, b) => a.agentId.localeCompare(b.agentId));
+  return sortPromptFiles(files);
 }
 
 /** 按 agentId 加载单个 prompt 文件（找不到返回 null） */
@@ -150,11 +210,13 @@ export function serializePromptFile(file: Omit<PromptFile, 'filePath'>): string 
   };
   if (file.description) meta.description = file.description;
   if (file.archetype) meta.archetype = file.archetype;
+  if (file.promptContract !== undefined) meta.promptContract = file.promptContract;
   if (file.temperature !== undefined) meta.temperature = file.temperature;
   if (file.maxTokens !== undefined) meta.maxTokens = file.maxTokens;
-  if (file.acceptableAgentIds && file.acceptableAgentIds.length > 0) {
+  if (file.acceptableAgentIds !== undefined) {
     meta.acceptableAgentIds = file.acceptableAgentIds;
   }
+  if (file.runtimeContract !== undefined) meta.runtimeContract = file.runtimeContract;
 
   const frontmatter = yaml.dump(meta, { lineWidth: -1 }).trimEnd();
   return `---\n${frontmatter}\n---\n\n${file.systemPrompt.trim()}\n`;

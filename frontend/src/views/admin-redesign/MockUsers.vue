@@ -133,9 +133,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { openSubPage, dataSource } from './mockStore'
+import { openSubPage, dataSource, intent } from './mockStore'
 import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, timeAgo, errMsg, registrationEnabled } from './mockLive'
 import { adminUsersApi } from '@/api/adminApi'
+import { useEscape } from './useEscape'
 
 const props = defineProps<{ state: 'normal' | 'empty' }>()
 
@@ -203,6 +204,19 @@ const pills = [
 
 /* 新建 / 编辑用户 */
 const createOpen = ref(false)
+useEscape(() => createOpen.value, () => { createOpen.value = false })
+
+/* 命令面板快捷动作：直达并打开新建弹窗 */
+watch(
+  () => intent.quickAction,
+  (a) => {
+    if (a === 'create-user') {
+      intent.quickAction = ''
+      createOpen.value = true
+    }
+  },
+  { immediate: true }
+)
 const creating = ref(false)
 const editTarget = ref<UserRow | null>(null)
 const form = ref({ name: '', email: '', password: '', admin: false })

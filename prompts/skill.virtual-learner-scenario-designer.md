@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-scenario-designer
 name: default-virtual-learner-scenario-designer
 archetype: generator
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 虚拟学习者实验样本设计师
 temperature: 0.9
 maxTokens: 8000

@@ -283,7 +283,7 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       }),
       validateParsedOutput: (parsed) => validatePersonaOutput(parsed),
       normalizeOutput: (parsed) => normalizePersonaOutput(parsed),
-      mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-persona-designer', output, {
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
         phase: 'completed',
         isTerminal: true,
       }),

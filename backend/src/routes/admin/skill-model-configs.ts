@@ -6,6 +6,10 @@ import { getPlatformReliabilitySettings } from '../../services/reliability-setti
 
 const router = Router();
 
+/**
+ * Phase 2：skill_model_configs 只承载路由/可靠性。
+ * temperature / maxTokens 由 File-as-Truth（agent_prompts ACTIVE）独占，写入时剥离。
+ */
 function pickEditableConfig(body: any) {
   return {
     tier: body?.tier,
@@ -14,8 +18,6 @@ function pickEditableConfig(body: any) {
     reasoningEffort: body?.reasoningEffort,
     endpoint: body?.endpoint,
     apiKey: body?.apiKey,
-    temperature: body?.temperature,
-    maxTokens: body?.maxTokens,
     requestTimeoutMs: body?.requestTimeoutMs,
     maxLogicalRetries: body?.maxLogicalRetries,
     enabled: body?.enabled,
@@ -37,7 +39,27 @@ router.get('/:skillId', async (req, res) => {
     if (!config) {
       return res.status(404).json({ success: false, error: '配置不存在' });
     }
-    res.json({ success: true, data: toSecretSafeResponse(config) });
+    const { resolveLlmCallParams } = await import('../../services/resolve-llm-call-params');
+    const llm = await resolveLlmCallParams({
+      skillId: req.params.skillId,
+      includeRouteFallback: true,
+    }).catch(() => null);
+    res.json({
+      success: true,
+      data: {
+        ...toSecretSafeResponse(config),
+        generationParams: llm
+          ? {
+              model: llm.model ?? null,
+              temperature: llm.temperature ?? null,
+              maxTokens: llm.maxTokens ?? null,
+              sources: llm.sources,
+              owner: 'agent_prompts.ACTIVE (File-as-Truth)',
+            }
+          : null,
+        routingOnly: true,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -47,6 +69,10 @@ router.put('/:skillId', async (req, res) => {
   try {
     const existing = await skillModelConfigService.get(req.params.skillId);
     const body = req.body || {};
+    if (body.temperature !== undefined || body.maxTokens !== undefined) {
+      // 兼容旧客户端：忽略生成参数写入，不报 400，避免阻断保存路由字段
+      // 权威源：prompts/*.md → agent_prompts ACTIVE（见 resolveLlmGenerationParams）
+    }
     if (
       body.requestTimeoutMs !== undefined
       && body.requestTimeoutMs !== null
@@ -95,7 +121,29 @@ router.put('/:skillId', async (req, res) => {
       input.apiKey = null;
     }
     const config = await skillModelConfigService.upsert(req.params.skillId, input);
-    res.json({ success: true, data: toSecretSafeResponse(config), message: '配置已更新' });
+    const { resolveLlmCallParams } = await import('../../services/resolve-llm-call-params');
+    const llm = await resolveLlmCallParams({
+      skillId: req.params.skillId,
+      includeRouteFallback: true,
+    }).catch(() => null);
+    res.json({
+      success: true,
+      data: {
+        ...toSecretSafeResponse(config),
+        // 生成参数只读投影（不回写本表）
+        generationParams: llm
+          ? {
+              model: llm.model ?? null,
+              temperature: llm.temperature ?? null,
+              maxTokens: llm.maxTokens ?? null,
+              sources: llm.sources,
+              owner: 'agent_prompts.ACTIVE (File-as-Truth)',
+            }
+          : null,
+        routingOnly: true,
+      },
+      message: '路由/可靠性配置已更新（temperature/maxTokens 由 ACTIVE Prompt 管理，未写入节点覆盖表）',
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

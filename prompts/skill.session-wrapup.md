@@ -2,6 +2,15 @@
 agentId: skill:session-wrapup
 name: default-skill-session-wrapup
 archetype: distiller
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: batch
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 课后总结与评估
 temperature: 0.7
 maxTokens: 4000

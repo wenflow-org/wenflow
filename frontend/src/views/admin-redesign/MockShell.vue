@@ -43,6 +43,16 @@
           </template>
         </div>
         <div class="mshell__topbar-right">
+          <button
+            type="button"
+            class="mshell__refresh"
+            :disabled="liveLoading"
+            title="刷新真实数据"
+            @click="refreshData"
+          >
+            <span class="mshell__refresh-icon" :class="{ 'is-spinning': liveLoading }">↻</span>
+            <span class="mshell__refresh-label">{{ liveLoading ? '刷新中' : '刷新' }}</span>
+          </button>
           <button type="button" class="mshell__search" @click="$emit('palette')">
             <span class="mshell__search-icon">⌕</span>
             <span class="mshell__search-hint">命令面板</span>
@@ -72,13 +82,18 @@
 import { computed } from 'vue'
 import { MOCK_SCENES, type MockSceneDef } from './mockManifest'
 import { dataSource } from './mockStore'
-import { liveNavBadges } from './mockLive'
+import { liveNavBadges, loadLiveData, liveLoading } from './mockLive'
 import { adminAuthApi } from '@/api/adminApi'
 
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
 defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
 
 const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实（API）' : '演示（mock）'))
+
+function refreshData() {
+  if (liveLoading.value) return
+  void loadLiveData()
+}
 
 function badgeOf(item: MockSceneDef): string {
   if (dataSource.value === 'live') {
@@ -245,7 +260,16 @@ const groupedScenes = computed(() => {
 .mshell__crumbs { display: flex; align-items: center; gap: 8px; }
 .mshell__crumb-group { color: #8492ab; font-size: 12px; font-weight: 600; }
 .mshell__crumb-sep { color: #c3cede; margin: 0 2px; }
-.mshell__crumb-sub { color: #3478f6; font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.mshell__crumb-sub {
+  color: #3478f6;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .mshell__search {
   display: flex;
   align-items: center;
@@ -264,6 +288,26 @@ const groupedScenes = computed(() => {
 
 /* release 模式：顶栏右侧管理员区 */
 .mshell__topbar-right { display: flex; align-items: center; gap: 12px; }
+.mshell__refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #5b6577;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.mshell__refresh:hover:not(:disabled) { color: #3478f6; border-color: rgba(52, 120, 246, 0.4); }
+.mshell__refresh:disabled { cursor: default; color: #8492ab; }
+.mshell__refresh-icon { display: inline-block; font-size: 13px; line-height: 1; }
+.mshell__refresh-icon.is-spinning { animation: mshell-spin 0.9s linear infinite; }
+@keyframes mshell-spin { to { transform: rotate(360deg); } }
 .mshell__admin { font-size: 12px; font-weight: 700; color: #1a2a44; }
 .mshell__logout {
   border: 1px solid #e1e8f2;

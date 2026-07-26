@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-path-evaluator
 name: default-virtual-learner-path-evaluator
 archetype: extractor
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 虚拟学习者 Path 评估器
 temperature: 0.5
 maxTokens: 1200

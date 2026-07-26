@@ -2,6 +2,15 @@
 agentId: skill:learning-pattern-distiller
 name: default-learning-pattern-distiller
 archetype: distiller
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 学习模式蒸馏器
 temperature: 0.5
 maxTokens: 3000

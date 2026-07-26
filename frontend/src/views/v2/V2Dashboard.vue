@@ -442,7 +442,7 @@ async function fetchSessions(cursor: { year: number; month: number }) {
   const lastDate = new Date(cursor.year, cursor.month + 1, 0).getDate();
   const last = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(lastDate).padStart(2, '0')}`;
   const response = await request.get('/users/me/sessions', { params: { startDate: first, endDate: last, limit: 500 } });
-  const raw: unknown = (response as Record<string, unknown>)?.data ?? response;
+  const raw: unknown = response.data ?? response;
   return (Array.isArray(raw) ? raw : []) as Array<Record<string, any>>;
 }
 

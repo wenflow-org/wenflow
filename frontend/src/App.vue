@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted } from 'vue';
+import { defineAsyncComponent } from 'vue';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { useUserStore } from './stores/user';
 import { isTestMode } from '@/utils/debugMode';

@@ -510,7 +510,7 @@ export default MyAgent;</code></pre>
           <h3>6. 验证 Agent</h3>
           <p>访问管理平台查看 Agent 是否已注册：</p>
           <div class="code-block">
-            <pre><code>http://localhost:5173/admin/skills</code></pre>
+            <pre><code>http://localhost:5173/admin/console</code></pre>
           </div>
         </section>
 

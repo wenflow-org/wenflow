@@ -1,11 +1,10 @@
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-with-at-least-thirty-two-characters'
 
-const chatMock = jest.fn()
+const executeMock = jest.fn()
 const getActivePromptMock = jest.fn()
 
-jest.mock('../../../services/ai/ai.service', () => ({
-  __esModule: true,
-  default: { chat: chatMock }
+jest.mock('../../../gateway/api-gateway', () => ({
+  getAPIGateway: () => ({ execute: executeMock })
 }))
 
 jest.mock('../../../services/agentConfig.service', () => ({
@@ -17,13 +16,22 @@ jest.mock('../../../services/prompt-composer', () => ({
   isPromptSupplementEnabled: () => false
 }))
 
+jest.mock('../../../services/telemetry-writer.service', () => ({
+  telemetryWriter: {
+    createPromptCall: jest.fn().mockResolvedValue(true),
+  },
+}))
+
 import { runWithContext } from '../../../gateway/api-gateway/context'
 import { createRetryBudget } from '../../../gateway/api-gateway/retry-budget'
 import { goalConversationAgentHandler } from '../index'
 
 describe('Goal Conversation retry budget', () => {
   beforeEach(() => {
-    chatMock.mockReset().mockResolvedValue({ content: '没有结构化输出', finishReason: 'stop' })
+    executeMock.mockReset().mockResolvedValue({
+      choices: [{ message: { content: '没有结构化输出' }, finish_reason: 'stop' }],
+      _gatewayMetadata: { attemptCount: 1 }
+    })
     getActivePromptMock.mockReset().mockResolvedValue(null)
   })
 
@@ -36,9 +44,9 @@ describe('Goal Conversation retry budget', () => {
       { maxFormatRetries: 2, systemPromptOverride: '测试提示词' }
     ))
 
-    expect(chatMock).toHaveBeenCalledTimes(2)
-    expect(chatMock.mock.calls[0][1].retryBudget).toBe(retryBudget)
-    expect(chatMock.mock.calls[1][1].retryBudget).toBe(retryBudget)
+    expect(executeMock).toHaveBeenCalledTimes(2)
+    expect(executeMock.mock.calls[0][2].retryBudget).toBe(retryBudget)
+    expect(executeMock.mock.calls[1][2].retryBudget).toBe(retryBudget)
     expect(retryBudget.used.logicalRetries).toBe(1)
     expect(retryBudget.exhaustedBy).toBe('logical-retries')
     expect(result).toMatchObject({

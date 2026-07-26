@@ -9,6 +9,7 @@ import { isEncryptedSecret } from '../../utils/secret-crypto';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
 import { GatewayExecutionError, parseRetryAfterMs } from './failure-classification';
 import { consumeUpstreamAttempt, createRetryBudget } from './retry-budget';
+import { hoistLlmParamsFromContext } from '../../services/resolve-llm-call-params';
 
 const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = 300_000;
 
@@ -289,11 +290,13 @@ export class APIExecutor {
       : route.timeoutMs ?? this.defaultTimeoutMs;
     const effectiveTimeoutMs = Math.min(configuredTimeoutMs, MAX_SINGLE_ATTEMPT_TIMEOUT_MS);
     const requestUrl = this.resolveChatCompletionsUrl(route.endpoint);
+    // 兼容历史误把 temperature/maxTokens/model 放进 ExecutionContext 的调用点
+    const hoisted = hoistLlmParamsFromContext(request, context);
     const requestBody = {
       ...request,
-      model: request.model || route.model,
-      temperature: request.temperature ?? route.temperature,
-      max_tokens: request.max_tokens ?? route.maxTokens
+      model: hoisted.model || route.model,
+      temperature: hoisted.temperature ?? route.temperature,
+      max_tokens: hoisted.max_tokens ?? route.maxTokens
     };
     this.applyThinkingMode(route, requestBody);
 
@@ -584,6 +587,12 @@ export class APIExecutor {
       metadata: JSON.stringify({
         layer: 'api-gateway-v2', executionLayer: 'api-gateway',
         skillId: context.skillId || null, agentId: context.agentId || null,
+        sessionId: context.sessionId || null,
+        conversationId: context.conversationId || null,
+        pathId: context.pathId || null,
+        taskId: context.taskId || null,
+        language: context.locale?.language || null,
+        timeZone: context.locale?.timeZone || null,
         providerId: route.providerId, providerType: route.providerType,
         routeSource: route.source, model: request.model || route.model,
         statusCode, attempts: attemptsMade, maxAttempts,

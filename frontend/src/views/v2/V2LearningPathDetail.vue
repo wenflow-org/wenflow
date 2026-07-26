@@ -438,7 +438,7 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
   cursor: pointer;
 }
 .hero__ring { position: relative; width: 120px; height: 120px; }
-.hero__ring circle[stroke="url(#ringGrad)"] { transition: stroke-dashoffset .6s ease; }
+.hero__ring circle[stroke="url(#v2ringGrad)"] { transition: stroke-dashoffset .6s ease; }
 .hero__ring-text {
   position: absolute; inset: 0;
   display: grid; place-content: center; text-align: center; gap: 2px;

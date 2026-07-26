@@ -80,7 +80,8 @@
       </div>
 
       <div class="ld-col">
-        <section class="mk-card">
+        <!-- 活跃柱图暂无真实数据源：live 且全 0 时隐藏，避免展示假趋势 -->
+        <section v-if="!isLive || d.trend7d.some((v) => v > 0)" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">7 天活跃趋势</h3>
             <span class="mk-card__meta">{{ trendHint }}</span>
@@ -605,7 +606,7 @@ const trendHint = computed(() => (d.value.trend === 'down' ? '连续走低，建
   display: grid;
   place-content: center;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .ld-id h3 { margin: 0; font-size: 18px; }
 .ld-sub { color: var(--mk-faint); font-size: 12px; }
@@ -638,7 +639,7 @@ const trendHint = computed(() => (d.value.trend === 'down' ? '连续走低，建
 
 .ld-concepts { padding: 16px; display: grid; gap: 14px; }
 .ld-concept-group { display: grid; gap: 7px; }
-.ld-concept-label { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }
+.ld-concept-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
 .ld-concept-label--ok { color: var(--mk-green); }
 .ld-concept-label--warn { color: var(--mk-amber); }
 .ld-concept-label--bad { color: var(--mk-red); }

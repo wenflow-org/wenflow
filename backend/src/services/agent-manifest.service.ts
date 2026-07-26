@@ -62,7 +62,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: true,
     monitoringGroup: 'Goal',
-    aliases: ['requirement-agent', 'goal-conversation'],
+    // Phase 3：裸名 goal-conversation 归 skill，不再作为 goal-agent 别名（避免与 skill 冲突）
+    aliases: ['requirement-agent'],
     agentMembers: [
       'skill:goal-conversation',
       'skill:goal-profile-inference',
@@ -150,9 +151,10 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Goal',
-    aliases: ['goal-conversation-agent'],
+    aliases: ['goal-conversation-agent', 'goal-conversation'],
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.7, maxTokens: 1800 }
+    // 与 prompts/skill.goal-conversation.md 及 handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）
+    defaultModelConfig: { temperature: 0.7, maxTokens: 8000 }
   },
   {
     id: 'skill:goal-profile-inference',

@@ -2,6 +2,15 @@
 agentId: skill:path-scene-framing
 name: default-path-scene-framing
 archetype: generator
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: normalization
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 学习路径输入清洗与场景构建
 temperature: 0.2
 maxTokens: 32000
@@ -75,14 +84,7 @@ RULE-05: 不要在 normalizedInput 中输出 source、mode 这类编排控制字
 RULE-06: confirmedProposal.keyStages 只保留高层阶段提示，不要原样回声任务步骤句。
   - RULE-06.1: 如果上游 keyStages 更像执行步骤、检查清单、动作链、梳理/提炼/整合式操作语句，留空数组即可。
   - RULE-06.2: keyStages 是给 path 提供阶段方向提示，不是给隐藏概念层提供命名素材。
-  - RULE-06.3: 根据 timeHorizon、timeBudget、timeBudgetCadence、timePerSession、keyStages 推算 planningHints。
-  - RULE-06.4: planningHints 的推算目标是让不同时间窗口下的阶段数、概念数、每阶段任务数更匹配。
-  - RULE-06.5: planningHints.paceSignal 只能是 compact|standard|extended：
-    - compact：通常对应 半天 / 1天 / 2天
-    - standard：通常对应 3-7天 / 1-2周
-    - extended：通常对应 1个月+ / 未明确 / 更长周期
-  - RULE-06.6: milestoneRange、conceptRange、subtasksPerStageRange、subtaskMinutesRange 都是建议范围。
-  - RULE-06.7: timeBudget/timeBudgetCadence 表示学习预算；timeHorizon/deadlineText 表示完成窗口。不要混淆。
+  - RULE-06.3: 保留 timeHorizon、timeBudget、timeBudgetCadence、timePerSession 与 keyStages 等已提供的事实字段。timeBudget/timeBudgetCadence 表示学习预算；timeHorizon/deadlineText 表示完成窗口。不要混淆。
 
 RULE-07: 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解释。
 
@@ -111,14 +113,6 @@ RULE-07: 只输出 1 个 JSON 对象，不要输出 markdown，不要输出解�
     "confirmedProposal": {
       "learningDirection": null, "firstDeliverable": null,
       "keyStages": [], "outOfScope": []
-    },
-    "planningHints": {
-      "paceSignal": "standard",
-      "milestoneRange": [3, 5],
-      "conceptRange": [2, 4],
-      "subtasksPerStageRange": [3, 5],
-      "subtaskMinutesRange": [30, 90],
-      "maxWeeks": 8
     }
   }
 }

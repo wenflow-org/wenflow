@@ -23,6 +23,10 @@ import { executeSkill, virtualLearnerGoalDialogueSimulatorDefinition, virtualLea
 import { normalizeFrictionBudget, type FrictionBudget } from '../skills/virtual-learner-shared';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
+import {
+  resolvePathRawGoalFromSession,
+  resolveStorySessionDemand,
+} from '../virtual-lab/story-demand';
 import type { 
   SimulationContext,
   SimulationStepResult,
@@ -1147,6 +1151,17 @@ class SimulationOrchestrator {
       const storyContext = this.parseStoryContextFromStageResults(initialStageResults);
       
       if (!session.goalConversationId) {
+        // 故事当次需求 → Goal 开场（写入 conversation.description）→ 正式 Path 只吃 Goal，不读 story
+        // description 固定用 storyDemand.text，保证传递链不被模拟者改写；模拟者只负责后续轮次。
+        const storyDemand = resolveStorySessionDemand({
+          story: storyContext,
+          profileLearningGoal: profile.learningGoal,
+        });
+        const openingReply = storyDemand.text;
+        if (!openingReply) {
+          throw new Error('缺少 Goal 开场诉求：请绑定故事（visibleOpening / goalSeed）或填写画像长期倾向');
+        }
+
         const openingStart = Date.now();
         const openingResult = await this.simulateGoalLearnerReply({
           profile,
@@ -1158,9 +1173,6 @@ class SimulationOrchestrator {
           goalState: undefined,
           frictionBudget: this.getSessionFrictionBudget(session)
         });
-        const openingReply = openingResult.success && openingResult.output?.reply
-          ? openingResult.output.reply
-          : profile.learningGoal;
 
         logs.push({
           timestamp: new Date().toISOString(),
@@ -1178,7 +1190,11 @@ class SimulationOrchestrator {
               ),
               emotion: openingResult.output?.emotion,
               runtimeEnvelope: openingResult.runtimeEnvelope || openingResult.output?.runtimeEnvelope || null,
-              opening: true
+              opening: true,
+              storyDemandSource: storyDemand.source,
+              storyId: storyDemand.storyId,
+              // 模拟者开场仅作旁路观测，不进入 description
+              simulatorOpeningReply: openingResult.output?.reply || null,
             }
           }
         });
@@ -1688,7 +1704,6 @@ class SimulationOrchestrator {
   }> {
     try {
       const session = await this.getVirtualSession(sessionId);
-      const stageResults = session.stageResults || {};
       
       if (!session.goalConversationId) {
         throw new Error('Goal对话不存在');
@@ -1712,11 +1727,24 @@ class SimulationOrchestrator {
         return { success: true, learningPathId: session.learningPathId };
       }
 
+      // Path 不读 story、不特判虚拟人：只消费 Goal 对话产物。
+      // rawGoal 优先 conversation.description（= 故事需求经开场传入的正式链路）。
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      const storyForDemand = stageResults.story || stageResults.storyContext || null;
+      const pathRawGoal = resolvePathRawGoalFromSession({
+        goalConversationDescription: conversation.description,
+        story: storyForDemand,
+        profileLearningGoal: session.virtual_learner_profiles?.learningGoal,
+      });
+      if (!pathRawGoal.rawGoal) {
+        throw new Error('无法推进 Path：Goal 对话缺少 description，且故事未提供当次学习需求');
+      }
+
       const pathRequest: GoalPathRequest = {
         userId: session.userId,
         sourceConversationId: session.goalConversationId,
         source: 'goal',
-        rawGoal: session.virtual_learner_profiles.learningGoal,
+        rawGoal: pathRawGoal.rawGoal,
         visibleSummary: buildGoalPathVisibleSummary({
           understanding: collectedData.understanding || {},
           confirmedProposal: collectedData.confirmedProposal || null,
@@ -1730,7 +1758,8 @@ class SimulationOrchestrator {
       
       logger.info('[simulation-coordinator] 开始路径生成', {
         sessionId,
-        userId: session.userId
+        userId: session.userId,
+        rawGoalSource: pathRawGoal.source,
       });
       
       const pathResult = await pathCoordinator.generateFromGoal(pathRequest);

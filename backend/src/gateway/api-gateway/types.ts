@@ -78,6 +78,13 @@ export interface ChatResponse {
 export interface ExecutionContext {
   userId?: string;
   sessionId?: string;
+  conversationId?: string;
+  pathId?: string;
+  taskId?: string;
+  locale?: {
+    language?: string;
+    timeZone?: string;
+  };
   traceId?: string;
   executionLogId?: string;
   parentExecutionId?: string;

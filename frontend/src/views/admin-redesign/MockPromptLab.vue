@@ -147,7 +147,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { dataSource } from './mockStore'
+import { dataSource, intent } from './mockStore'
 import { livePromptSources, liveGetPromptSource, liveCompileSource, errMsg } from './mockLive'
 import { adminPromptOpsApi, adminSkillsApi } from '@/api/adminApi'
 
@@ -297,7 +297,13 @@ watch(
   () => {
     if (isLive.value) {
       if (!activeSkill.value && livePromptSources.value.length) {
-        const preferred = livePromptSources.value.find((s) => s.hasManifest) || livePromptSources.value[0]
+        // 抽屉「在 Prompt Lab 中编辑」直达：优先消费预选 Skill
+        const wanted = intent.promptLabSkill
+        intent.promptLabSkill = ''
+        const preferred =
+          (wanted && livePromptSources.value.find((s) => s.id === wanted)) ||
+          livePromptSources.value.find((s) => s.hasManifest) ||
+          livePromptSources.value[0]
         activeSkill.value = preferred.id
       }
       if (activeSkill.value) void loadSkill()

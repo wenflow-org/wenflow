@@ -1,6 +1,6 @@
 <template>
   <div class="hn">
-    <header class="hn-nav" :class="{ 'hn-nav--on': scrolled }">
+    <header class="hn-nav" :class="{ 'hn-nav--on': scrolled || menuOpen }">
       <div class="hn-shell hn-nav__in">
         <router-link to="/" class="hn-logo" @click="closeMenu">
           <img src="/logo.png" alt="问流 WenFlow" />
@@ -19,17 +19,21 @@
           class="hn-burger"
           :class="{ 'hn-burger--open': menuOpen }"
           :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
+          :aria-expanded="menuOpen"
           @click="menuOpen = !menuOpen"
         >
           <span /><span /><span />
         </button>
       </div>
-      <div v-if="menuOpen" class="hn-drawer hn-shell">
-        <a href="#top" @click="closeMenu">首页</a>
-        <router-link to="/vision" @click="closeMenu">愿景</router-link>
-        <router-link :to="secondaryPath" class="hn-btn hn-btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
-        <router-link :to="primaryPath" class="hn-btn hn-btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
-      </div>
+      <Transition name="hn-drawer">
+        <div v-if="menuOpen" class="hn-drawer hn-shell">
+          <a href="#top" @click="closeMenu">首页</a>
+          <router-link to="/vision" @click="closeMenu">愿景</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" @click="closeMenu">GitHub</a>
+          <router-link :to="secondaryPath" class="hn-btn hn-btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
+          <router-link :to="primaryPath" class="hn-btn hn-btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
+        </div>
+      </Transition>
     </header>
 
     <main id="top">
@@ -59,18 +63,19 @@
               <span>目标规划</span>
               <span class="hn-chip">澄清问题</span>
             </div>
-            <div class="hn-bubble hn-bubble--user">每周 Excel 周报太花时间，想用 Python 自动化</div>
-            <div class="hn-bubble hn-bubble--ai">
+            <div class="hn-bubble hn-bubble--user" :class="{ 'hn-demo--off': phase < 1 }">每周 Excel 周报太花时间，想用 Python 自动化</div>
+            <div class="hn-bubble hn-bubble--ai" :class="{ 'hn-demo--off': phase < 2 }">
               <img src="/favicon.png" alt="" />
-              <div>
+              <div v-if="phase < 3" class="hn-typing__dots" aria-label="正在输入"><i /><i /><i /></div>
+              <div v-else>
                 <p>好，我们先把问题说小一点。你更想先节省哪一段时间？</p>
                 <div class="hn-tags">
-                  <span class="hn-tag hn-tag--on">清洗与合并数据</span>
+                  <span class="hn-tag" :class="{ 'hn-tag--on': phase >= 4 }">清洗与合并数据</span>
                   <span class="hn-tag">出图与汇报</span>
                 </div>
               </div>
             </div>
-            <div class="hn-stage__result">
+            <div class="hn-stage__result" :class="{ 'hn-demo--off': phase < 5, 'is-hot': phase === 5 }">
               <small>下一步</small>
               <strong>生成可执行的学习路径</strong>
               <em>约 2 分钟</em>
@@ -87,7 +92,7 @@
               <span>阶段 2 / 5</span>
               <span>约 25 分钟</span>
             </div>
-            <div class="hn-stage__prog"><i style="width: 42%" /></div>
+            <div class="hn-stage__prog"><i style="--w: 42%" /></div>
             <span class="hn-stage__go">开始学习</span>
           </div>
         </aside>
@@ -96,13 +101,13 @@
       <!-- 痛点：全宽对比带 -->
       <section class="hn-band">
         <div class="hn-shell hn-band__in">
-          <div class="hn-band__side">
+          <div class="hn-band__side" v-reveal>
             <span>常见开始</span>
             <h2>先囤课、囤资料、囤清单。</h2>
             <p>内容越来越多，今天仍不知道做哪一步。</p>
           </div>
-          <div class="hn-band__arrow" aria-hidden="true">→</div>
-          <div class="hn-band__side hn-band__side--on">
+          <div class="hn-band__arrow" aria-hidden="true"><span>→</span></div>
+          <div class="hn-band__side hn-band__side--on" v-reveal="{ delay: 120 }">
             <span>问流的开始</span>
             <h2>先说出真实场景。</h2>
             <p>追问边界、基础与时间，再落到今天能动手的任务。</p>
@@ -112,20 +117,21 @@
 
       <!-- 怎么走：曲线 + 五步（旧版 product-flow 气质） -->
       <section id="how" class="hn-flow hn-shell">
-          <div class="hn-section">
+          <div class="hn-section" v-reveal>
           <span class="hn-pill">怎么开始</span>
           <h2>从一句话，到今天能做的一步。</h2>
           <p>不用先写完整计划。先说清楚，再生成路径，再开始学。</p>
         </div>
         <div class="hn-flow__canvas">
-          <svg class="hn-flow__svg" viewBox="0 0 1200 160" fill="none" preserveAspectRatio="none" aria-hidden="true">
+          <svg class="hn-flow__svg" viewBox="0 0 1200 160" fill="none" preserveAspectRatio="none" aria-hidden="true" v-reveal>
             <path
               class="hn-flow__path"
+              pathLength="1"
               d="M 40 90 C 180 30, 320 140, 480 90 C 640 40, 780 140, 940 90 C 1040 55, 1120 90, 1160 90"
             />
           </svg>
           <ol class="hn-flow__grid">
-            <li v-for="(s, i) in steps" :key="s.t">
+            <li v-for="(s, i) in steps" :key="s.t" v-reveal="{ delay: i * 70 }">
               <span>{{ i + 1 }}</span>
               <strong>{{ s.t }}</strong>
               <p>{{ s.d }}</p>
@@ -138,7 +144,7 @@
       <!-- 独特理念：一大块说明 + 四条要点（非对称） -->
       <section class="hn-idea">
         <div class="hn-shell hn-idea__in">
-          <div class="hn-idea__lead">
+          <div class="hn-idea__lead" v-reveal>
             <span class="hn-pill">和常见开始方式不同</span>
             <h2>先把问题说小，再开始学。</h2>
             <p>
@@ -146,7 +152,7 @@
             </p>
           </div>
           <div class="hn-idea__list">
-            <article v-for="item in modes" :key="item.t">
+            <article v-for="(item, i) in modes" :key="item.t" v-reveal="{ delay: i * 70 }">
               <strong>{{ item.t }}</strong>
               <p>{{ item.d }}</p>
             </article>
@@ -156,13 +162,13 @@
 
       <!-- 对照：与正文同宽 -->
       <section class="hn-vs hn-shell">
-        <div class="hn-vs__col hn-vs__col--off">
+        <div class="hn-vs__col hn-vs__col--off" v-reveal>
           <h3>常见做法</h3>
           <ul>
             <li v-for="item in commonWay" :key="item">{{ item }}</li>
           </ul>
         </div>
-        <div class="hn-vs__col hn-vs__col--on">
+        <div class="hn-vs__col hn-vs__col--on" v-reveal="{ delay: 120 }">
           <h3>问流怎么做</h3>
           <ul>
             <li v-for="item in wenflowWay" :key="item">{{ item }}</li>
@@ -172,7 +178,7 @@
 
       <!-- 学习台：错位分栏 -->
       <section class="hn-desk hn-shell">
-        <div class="hn-desk__copy">
+        <div class="hn-desk__copy" v-reveal>
           <h2>每天打开学习台，只盯今天这一步。</h2>
           <p>路径生成后，「今日行动」告诉你来自哪条路径、大概多久；也可以随时规划新目标。</p>
           <ul>
@@ -181,7 +187,7 @@
             <li>学习状态 · 看节奏再决定推进或放缓</li>
           </ul>
         </div>
-        <div class="hn-desk__card">
+        <div class="hn-desk__card" v-reveal="{ delay: 140 }">
           <div class="hn-panel">
             <div class="hn-stage__bar">
               <span>学习台</span>
@@ -193,7 +199,7 @@
               <span>阶段 2 / 5</span>
               <span>约 25 分钟</span>
             </div>
-            <div class="hn-stage__prog"><i style="width: 40%" /></div>
+            <div class="hn-stage__prog"><i style="--w: 40%" /></div>
             <span class="hn-stage__go">开始学习</span>
           </div>
         </div>
@@ -202,7 +208,7 @@
       <!-- 全宽收尾 -->
       <section class="hn-end">
         <div class="hn-end__glow" />
-        <div class="hn-end__in">
+        <div class="hn-end__in" v-reveal>
           <h2>用 2 分钟，聊出一条能执行的路径。</h2>
           <p>注册后进入学习台；已登录可直接规划新目标。</p>
           <div class="hn-end__acts">
@@ -231,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { hasUserSession } from '@/utils/api'
 
 const scrolled = ref(false)
@@ -273,24 +279,60 @@ const secondaryLabel = computed(() => (loggedIn.value ? '回到学习台' : '登
 
 function closeMenu() {
   menuOpen.value = false
-  document.body.style.overflow = ''
 }
+
+watch(menuOpen, (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
 
 function onScroll() {
   scrolled.value = window.scrollY > 20
 }
 
-onMounted(() => {
+function syncAuthState() {
   loggedIn.value = hasUserSession()
-  window.addEventListener('storage', () => {
-    loggedIn.value = hasUserSession()
-  })
+}
+
+/* Hero 对话演示：用户提问 → 正在输入 → AI 回复 → 选中标签 → 高亮结果 → 淡出重播。
+   phase 99 = 全部静态可见（reduced-motion 时的兜底，不跑时间轴）。 */
+const phase = ref(
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 99
+    : 0
+)
+
+const demoTimeline: Array<[number, number]> = [
+  [1, 900],   // 用户气泡出现
+  [2, 1100],  // 输入中
+  [3, 1200],  // AI 回复
+  [4, 1100],  // 选中标签
+  [5, 900],   // 高亮结果
+  [6, 3400],  // 停留后整体淡出
+  [0, 800]    // 回到起点，循环
+]
+
+let demoTimer: ReturnType<typeof setTimeout> | null = null
+
+function runDemoStep(index: number) {
+  const [nextPhase, delay] = demoTimeline[index % demoTimeline.length]
+  demoTimer = setTimeout(() => {
+    phase.value = nextPhase
+    runDemoStep(index + 1)
+  }, delay)
+}
+
+onMounted(() => {
+  syncAuthState()
+  window.addEventListener('storage', syncAuthState)
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
+  if (phase.value !== 99) runDemoStep(0)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('storage', syncAuthState)
   window.removeEventListener('scroll', onScroll)
+  if (demoTimer) clearTimeout(demoTimer)
   document.body.style.overflow = ''
 })
 </script>
@@ -308,6 +350,7 @@ onUnmounted(() => {
   --cyan: #43b0d8;
   --green: #31b16f;
   --accent: #8d6bff;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
@@ -361,6 +404,7 @@ onUnmounted(() => {
   font-weight: 700;
   color: color-mix(in srgb, var(--ink) 72%, #fff);
   text-decoration: none;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 .hn-nav__links a:hover {
   background: rgba(52, 120, 246, 0.08);
@@ -382,10 +426,13 @@ onUnmounted(() => {
   font-weight: 800;
   text-decoration: none;
   border: 1px solid transparent;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
 .hn-btn:hover {
   transform: translateY(-2px);
+}
+.hn-btn:active {
+  transform: translateY(0) scale(0.98);
 }
 .hn-btn--primary {
   color: #fff;
@@ -412,6 +459,7 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
 }
 .hn-burger span {
   display: block;
@@ -420,9 +468,28 @@ onUnmounted(() => {
   margin: 4px auto;
   background: var(--ink);
   border-radius: 99px;
+  transition: transform 0.28s var(--ease), opacity 0.2s var(--ease);
+}
+.hn-burger--open span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+.hn-burger--open span:nth-child(2) {
+  opacity: 0;
+}
+.hn-burger--open span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
 }
 .hn-drawer {
   display: none;
+}
+.hn-drawer-enter-active,
+.hn-drawer-leave-active {
+  transition: opacity 0.24s var(--ease), transform 0.24s var(--ease);
+}
+.hn-drawer-enter-from,
+.hn-drawer-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 /* BG */
@@ -453,6 +520,23 @@ onUnmounted(() => {
   top: 480px;
   left: -140px;
   background: radial-gradient(circle, rgba(141, 107, 255, 0.22), transparent 70%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hn-orb--a {
+    animation: hn-drift-a 24s ease-in-out infinite;
+  }
+  .hn-orb--b {
+    animation: hn-drift-b 28s ease-in-out infinite;
+  }
+}
+@keyframes hn-drift-a {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-36px, 28px); }
+}
+@keyframes hn-drift-b {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(30px, -24px); }
 }
 .hn-grid {
   position: absolute;
@@ -511,6 +595,34 @@ main {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 6px;
+}
+
+/* Hero 入场编排：依次上浮，舞台卡从更大倾角回正 */
+@media (prefers-reduced-motion: no-preference) {
+  .hn-hero .hn-pill { animation: hn-rise 0.7s var(--ease) 0.05s both; }
+  .hn-hero h1 { animation: hn-rise 0.8s var(--ease) 0.14s both; }
+  .hn-hero__copy > p { animation: hn-rise 0.8s var(--ease) 0.24s both; }
+  .hn-hero__cta { animation: hn-rise 0.8s var(--ease) 0.34s both; }
+  .hn-stage__chat { animation: hn-settle-chat 0.9s var(--ease) 0.42s both; }
+  .hn-stage__desk { animation: hn-settle-desk 0.9s var(--ease) 0.54s both; }
+}
+@keyframes hn-rise {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes hn-settle-chat {
+  from { opacity: 0; transform: rotate(-5deg) translateY(34px); }
+  to { opacity: 1; transform: rotate(-1deg) translateY(0); }
+}
+@keyframes hn-settle-desk {
+  from { opacity: 0; transform: rotate(4.4deg) translateY(38px); }
+  to { opacity: 1; transform: rotate(1.2deg) translateX(18px); }
+}
+@media (max-width: 980px) and (prefers-reduced-motion: no-preference) {
+  .hn-stage__chat,
+  .hn-stage__desk {
+    animation-name: hn-rise;
+  }
 }
 
 /* Stage */
@@ -635,6 +747,52 @@ main {
   color: var(--faint);
   font-weight: 700;
 }
+
+/* 对话演示：相位切换由 script 时间轴驱动，这里只负责过渡 */
+.hn-bubble--user,
+.hn-bubble--ai,
+.hn-stage__result {
+  transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
+}
+.hn-demo--off {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+.hn-typing__dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 20px;
+  min-width: 44px;
+}
+.hn-typing__dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hn-typing__dots i {
+    animation: hn-dot 1s ease-in-out infinite;
+  }
+  .hn-typing__dots i:nth-child(2) { animation-delay: 0.15s; }
+  .hn-typing__dots i:nth-child(3) { animation-delay: 0.3s; }
+}
+@keyframes hn-dot {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+.hn-tag {
+  transition: color 0.3s var(--ease), border-color 0.3s var(--ease), background 0.3s var(--ease);
+}
+.hn-stage__result.is-hot {
+  animation: hn-glow 1.8s var(--ease) 1;
+}
+@keyframes hn-glow {
+  0% { box-shadow: 0 0 0 0 rgba(52, 120, 246, 0.35); }
+  100% { box-shadow: 0 0 0 18px rgba(52, 120, 246, 0); }
+}
 .hn-stage__from {
   margin: 0 0 6px;
   font-size: 12px;
@@ -664,8 +822,26 @@ main {
 .hn-stage__prog i {
   display: block;
   height: 100%;
+  width: var(--w, 0);
   border-radius: 99px;
   background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+/* hero 进度条随入场充能；desk 卡片的进度条随 v-reveal 充能 */
+@media (prefers-reduced-motion: no-preference) {
+  .hn-stage .hn-stage__prog i {
+    animation: hn-prog 1.2s var(--ease) 1.15s both;
+  }
+}
+@keyframes hn-prog {
+  from { width: 0; }
+  to { width: var(--w, 0); }
+}
+.rv .hn-stage__prog i {
+  width: 0;
+  transition: width 1.1s var(--ease) 0.25s;
+}
+.rv-in .hn-stage__prog i {
+  width: var(--w, 0);
 }
 .hn-stage__go {
   display: inline-flex;
@@ -698,6 +874,11 @@ main {
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid var(--line);
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+.hn-band__side:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
 }
 .hn-band__side--on {
   background: linear-gradient(180deg, rgba(52, 120, 246, 0.1), rgba(255, 255, 255, 0.92));
@@ -734,10 +915,23 @@ main {
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));
   box-shadow: 0 14px 30px rgba(52, 120, 246, 0.25);
 }
+.hn-band__arrow span {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hn-band__arrow span {
+    animation: hn-nudge 2.4s var(--ease) infinite;
+  }
+}
+@keyframes hn-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(7px); }
+}
 
 /* Flow */
 .hn-flow {
   padding: 40px 0 80px;
+  scroll-margin-top: 96px;
 }
 .hn-section {
   max-width: 36em;
@@ -767,12 +961,17 @@ main {
   margin-bottom: -28px;
 }
 .hn-flow__path {
-  stroke: url(#none);
   stroke: #3478f6;
   stroke-width: 3;
   stroke-linecap: round;
   opacity: 0.35;
   fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 1.6s var(--ease) 0.25s;
+}
+.hn-flow__svg.rv-in .hn-flow__path {
+  stroke-dashoffset: 0;
 }
 .hn-flow__grid {
   list-style: none;
@@ -795,6 +994,11 @@ main {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--line);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+.hn-flow__grid li:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.09);
 }
 .hn-flow__grid span {
   width: 42px;
@@ -867,6 +1071,11 @@ main {
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--line);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+.hn-idea__list article:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
 }
 .hn-idea__list strong {
   display: block;
@@ -896,6 +1105,11 @@ main {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.88);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+.hn-vs__col:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 }
 .hn-vs__col--off {
   background: rgba(255, 255, 255, 0.72);
@@ -971,10 +1185,15 @@ main {
   font-weight: 700;
 }
 .hn-desk__card {
-  transform: translateY(12px);
+  margin-top: 12px;
 }
 .hn-panel {
   padding: 26px;
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+.hn-panel:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 34px 88px rgba(58, 101, 197, 0.18);
 }
 
 /* End full bleed — light band */

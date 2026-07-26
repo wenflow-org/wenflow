@@ -177,7 +177,7 @@ export async function virtualLearnerActorAuditor(input: VirtualLearnerActorAudit
       failureReason: 'missing scores/findings/evidence'
     }),
     normalizeOutput: normalizeActorAuditOutput,
-    mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-actor-auditor', output, {
+    mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
       phase: 'completed',
       isTerminal: true,
     }),

@@ -6,6 +6,11 @@ import { logger } from '../utils/logger';
 import { redactLogValue } from '../utils/secret-redaction';
 import { telemetryWriter } from '../services/telemetry-writer.service';
 import { SkillDefinition, SkillExecutionResult } from './protocol';
+import type { SkillExecutionOptions } from './protocol';
+import {
+  buildSkillContextEnvelope,
+  normalizeContextEnvelope,
+} from './context-envelope';
 import {
   createRuntimeRetryBudget,
   getEffectiveLogicalRetryLimit
@@ -89,6 +94,8 @@ function normalizeHandlerResult(result: any, durationMs: number): SkillExecution
         output: result.output,
         duration: durationMs,
         cached: result.cached,
+        runtimeEnvelope: result.runtimeEnvelope,
+        quality: result.quality,
       };
     }
   }
@@ -100,8 +107,14 @@ function normalizeHandlerResult(result: any, durationMs: number): SkillExecution
   };
 }
 
-function resolveExecutionUserId(input: any, inheritedUserId?: string): string | undefined {
+function resolveExecutionUserId(
+  input: any,
+  inheritedUserId?: string,
+  explicitContextEnvelope?: unknown
+): string | undefined {
   if (inheritedUserId) return inheritedUserId;
+  const explicitUserId = normalizeContextEnvelope(explicitContextEnvelope)?.principal?.userId;
+  if (explicitUserId) return explicitUserId;
   const candidates = [
     input?.context?.userId,
     input?.input?.context?.userId,
@@ -128,31 +141,54 @@ async function assertSkillEnabledForUser(skillId: string, userId?: string): Prom
 export async function executeSkillHandler(
   definition: SkillDefinition | { id?: string; name?: string },
   input: any,
-  handler: SkillHandler
+  handler: SkillHandler,
+  options: SkillExecutionOptions = {}
 ): Promise<SkillExecutionResult> {
   const skillId = normalizeSkillId(definition);
   const startedAt = Date.now();
   const parentContext = getRequestContext();
   const executionLogId = `acl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const parentAgent = getAgentOfSkill(`skill:${skillId}`)?.id;
-  const userId = resolveExecutionUserId(input, parentContext.userId);
+  const userId = resolveExecutionUserId(input, parentContext.userId, options.contextEnvelope);
   const inheritedRetryBudget = parentContext.retryBudget;
   const retryBudget = inheritedRetryBudget || await createRuntimeRetryBudget();
   const logicalRetryLimit = await getEffectiveLogicalRetryLimit(
     skillId,
     retryBudget.limits.maxLogicalRetries
   );
+  const agentId = parentContext.agentId || parentAgent;
+  const callerAgent = parentContext.callerAgent || parentAgent;
+  const parentExecutionId = parentContext.executionLogId;
+  const rootExecutionId = parentContext.rootExecutionId || parentContext.executionLogId || executionLogId;
+  const contextEnvelope = buildSkillContextEnvelope({
+    parent: { ...parentContext, userId },
+    input,
+    explicit: options.contextEnvelope,
+    skillId,
+    agentId,
+    callerAgent,
+    executionLogId,
+    parentExecutionId,
+    rootExecutionId,
+    retryBudget,
+  });
   const executionContext = {
     ...parentContext,
     userId,
-    agentId: parentContext.agentId || parentAgent,
-    callerAgent: parentContext.callerAgent || parentAgent,
+    agentId,
+    callerAgent,
     skillId,
     executionLogId,
-    parentExecutionId: parentContext.executionLogId,
-    rootExecutionId: parentContext.rootExecutionId || parentContext.executionLogId || executionLogId,
+    parentExecutionId,
+    rootExecutionId,
     retryBudget,
     logicalRetryLimit,
+    sessionId: contextEnvelope.session?.sessionId,
+    conversationId: contextEnvelope.session?.conversationId,
+    pathId: contextEnvelope.session?.pathId,
+    taskId: contextEnvelope.session?.taskId,
+    locale: contextEnvelope.locale,
+    contextEnvelope,
   };
 
   return runWithContext(executionContext, async () => {
@@ -300,6 +336,13 @@ async function recordSkillSpan(
         parentSkillId: parentSkillId || null,
         actorType: 'skill',
         actorId: skillId,
+        contextEnvelopeVersion: ctx.contextEnvelope?.schemaVersion || null,
+        sessionId: ctx.contextEnvelope?.session?.sessionId || null,
+        conversationId: ctx.contextEnvelope?.session?.conversationId || null,
+        pathId: ctx.contextEnvelope?.session?.pathId || null,
+        taskId: ctx.contextEnvelope?.session?.taskId || null,
+        language: ctx.contextEnvelope?.locale?.language || null,
+        timeZone: ctx.contextEnvelope?.locale?.timeZone || null,
         experimentId: ctx.experimentId || null,
         runId: ctx.runId || null,
       }),

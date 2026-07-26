@@ -165,6 +165,8 @@ model skill_model_configs {
   reasoningEffort  String?
   endpoint         String?
   apiKey           String?
+  // DEPRECATED (Phase 2/3): 生成参数权威源为 prompts/*.md → agent_prompts ACTIVE。
+  // 本列仅 schema 兼容占位；运行时 resolveRoute / resolveLlmGenerationParams 不再读取。
   temperature      Float    @default(0.7)
   maxTokens        Int      @default(2000)
   requestTimeoutMs Int?

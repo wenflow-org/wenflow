@@ -210,10 +210,16 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
     };
   }
 
-  // 兼容新旧两版结构：新版 understanding 等字段在顶层；旧版在 goalConversation 包装层
+  // 兼容新旧两版结构：新版 understanding 等字段在顶层；旧版在 goalConversation 包装层；
+  // 同时兼容模型按输入 shape 回写、把 understanding/nextQuestions 嵌进 state 的情况（统一协议 v2 止血）。
+  // 优先级：顶层 > goalConversation 包装 > state.xxx
   const payload: any = goalConversation || parsedJson;
-  const hasUnderstanding = payload.understanding && typeof payload.understanding === 'object';
-  const hasNextQuestions = Array.isArray(payload.nextQuestions);
+  const hasUnderstanding =
+    (payload.understanding && typeof payload.understanding === 'object')
+    || (parsedJson.state?.understanding && typeof parsedJson.state.understanding === 'object');
+  const hasNextQuestions =
+    Array.isArray(payload.nextQuestions)
+    || Array.isArray(parsedJson.state?.nextQuestions);
 
   if (!hasUnderstanding) {
     return {
@@ -222,7 +228,7 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
       parsedJson,
       dialogueText,
       failureType: 'missing_required_fields',
-      violations: ['缺少 understanding 对象']
+      violations: ['缺少 understanding 对象 (查找位置：顶层 | goalConversation.understanding | state.understanding)']
     };
   }
   if (!hasNextQuestions) {
@@ -232,7 +238,7 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
       parsedJson,
       dialogueText,
       failureType: 'missing_required_fields',
-      violations: ['缺少 nextQuestions 数组']
+      violations: ['缺少 nextQuestions 数组 (查找位置：顶层 | goalConversation.nextQuestions | state.nextQuestions)']
     };
   }
 

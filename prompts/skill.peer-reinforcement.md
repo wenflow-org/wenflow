@@ -2,6 +2,15 @@
 agentId: skill:peer-reinforcement
 name: default-skill-peer-reinforcement
 archetype: copywriter
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: turn
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 同伴学习与 Feynman 技巧辅助
 temperature: 0.7
 maxTokens: 4000

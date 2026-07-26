@@ -44,8 +44,12 @@
           <span class="mk-card__meta">{{ isBlackbox ? '黑盒 API' : '辅助模拟' }}</span>
         </div>
         <div class="cp-controls">
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal" @click="act('step')">单步推进</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('auto')">自动到阶段末</button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal" @click="act('step')">
+            {{ currentStage === 'learning' && !isBlackbox ? 'Learn 单步' : '单步推进' }}
+          </button>
+          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('auto')">
+            {{ currentStage === 'learning' ? '自动完成本课' : '自动到阶段末' }}
+          </button>
           <button type="button" class="cp-btn cp-btn--primary" :disabled="busy || isTerminal || isBlackbox" @click="act('runFull')">一键全流程</button>
           <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('advancePath')">生成 Path</button>
           <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('reviewPath')">评审 Path</button>
@@ -393,47 +397,122 @@ const statusTitle = computed(() =>
   !session.value ? '加载中…' : isTerminal.value ? '会话已终态' : '会话进行中'
 )
 
-/* 阶段流 */
-const stageFlow = ['goal', 'path', 'learn', 'wrapup'] as const
-const currentStage = computed(() =>
-  String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
-)
+/* 阶段流：与后端 currentStage 对齐（learning，不是 learn） */
+const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
+type StageKey = (typeof stageFlow)[number]
+
+const bindings = computed(() => {
+  const fromRuntime = (runtime.value.bindings || {}) as Record<string, unknown>
+  const fromSession = (session.value?.bindings || {}) as Record<string, unknown>
+  return {
+    goalConversationId:
+      fromRuntime.goalConversationId ||
+      fromSession.goalConversationId ||
+      session.value?.goalConversationId ||
+      stageStatus.value.goal?.conversationId ||
+      null,
+    learningPathId:
+      fromRuntime.learningPathId ||
+      fromSession.learningPathId ||
+      session.value?.learningPathId ||
+      null,
+    teachingSessionId:
+      fromRuntime.teachingSessionId ||
+      fromSession.teachingSessionId ||
+      stageStatus.value.learning?.teachingSessionId ||
+      null,
+    currentTaskId:
+      fromRuntime.currentTaskId ||
+      fromSession.currentTaskId ||
+      session.value?.currentTaskId ||
+      stageStatus.value.learning?.currentTaskId ||
+      null
+  }
+})
+
+const currentStage = computed(() => {
+  const raw = String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
+  // 兼容旧 UI / 日志里的 learn 别名
+  if (raw === 'learn' || raw === 'teach') return 'learning'
+  if (raw === 'summary') return 'wrapup'
+  return raw
+})
+
+/** 进度条索引：优先 currentStage，并用 bindings 兜底（避免 key 不一致时全「未开始」） */
+const effectiveStageIndex = computed(() => {
+  const raw = currentStage.value
+  let idx = stageFlow.indexOf(raw as StageKey)
+  if (idx >= 0) return idx
+
+  // 后端偶发非标准 stage 时，用绑定证据推断
+  if (bindings.value.teachingSessionId || bindings.value.currentTaskId) return 2
+  if (bindings.value.learningPathId || stageStatus.value.path?.generated) return 1
+  if (bindings.value.goalConversationId) return 0
+  return 0
+})
 
 function stageLabel(st: string) {
-  return { goal: 'Goal 对话', path: 'Path 生成', learn: 'Learn 学习', wrapup: 'Wrapup 总结' }[st] || st
-}
-function stageCls(st: string) {
-  const idx = stageFlow.indexOf(st as (typeof stageFlow)[number])
-  const cur = stageFlow.indexOf(currentStage.value as (typeof stageFlow)[number])
-  const curIdx = cur === -1 ? 0 : cur
   return {
-    'cp-stage--done': idx < curIdx || (isTerminal.value && st === 'wrapup'),
-    'cp-stage--active': idx === curIdx && !isTerminal.value
+    goal: 'Goal 对话',
+    path: 'Path 生成',
+    learning: 'Learn 学习',
+    wrapup: 'Wrapup 总结'
+  }[st] || st
+}
+
+function stageDone(st: StageKey) {
+  const idx = stageFlow.indexOf(st)
+  const cur = effectiveStageIndex.value
+  if (isTerminal.value && (st === 'wrapup' || idx <= cur)) return true
+  if (idx < cur) return true
+  // 同阶段但已有下游证据时，也标完成（如 learning 时 Goal/Path 已完成）
+  if (st === 'goal' && (bindings.value.learningPathId || bindings.value.teachingSessionId || cur >= 1)) return true
+  if (st === 'path' && (bindings.value.teachingSessionId || cur >= 2)) return true
+  if (st === 'learning' && (isTerminal.value || stageStatus.value.learning?.wrapup)) return true
+  return false
+}
+
+function stageActive(st: StageKey) {
+  if (isTerminal.value) return st === 'wrapup' || stageFlow.indexOf(st) === effectiveStageIndex.value
+  if (stageDone(st) && stageFlow.indexOf(st) !== effectiveStageIndex.value) return false
+  return stageFlow.indexOf(st) === effectiveStageIndex.value
+}
+
+function stageCls(st: string) {
+  const key = st as StageKey
+  return {
+    'cp-stage--done': stageDone(key),
+    'cp-stage--active': stageActive(key) && !isTerminal.value
   }
 }
+
 function stageState(st: string) {
-  const idx = stageFlow.indexOf(st as (typeof stageFlow)[number])
-  const cur = stageFlow.indexOf(currentStage.value as (typeof stageFlow)[number])
-  if (idx < cur) return '已完成'
-  if (idx === cur) return isTerminal.value ? '已完成' : '进行中'
+  const key = st as StageKey
+  if (stageDone(key) && !stageActive(key)) return '已完成'
+  if (stageActive(key)) return isTerminal.value ? '已完成' : '进行中'
+  if (stageDone(key)) return '已完成'
   return '未开始'
 }
 
-/* 阶段摘要（读 runtime.stageStatus 真实结构） */
+/* 阶段摘要（读 runtime.stageStatus + bindings） */
 const goalInfo = computed(() => {
   const g = stageStatus.value.goal || {}
-  if (g.conversationId) return `对话已创建 · ${g.ready ? '就绪' : '进行中'}`
-  return ''
+  const id = bindings.value.goalConversationId || g.conversationId
+  if (!id) return ''
+  if (g.ready || effectiveStageIndex.value >= 1) return `对话已创建 · 已收敛/可生成 Path`
+  return `对话已创建 · 进行中`
 })
 const pathInfo = computed(() => {
   const p = stageStatus.value.path || {}
-  if (p.generated) return p.totalMilestones ? `${p.totalMilestones} 个里程碑已生成` : '路径已生成'
+  if (bindings.value.learningPathId || p.generated) {
+    return p.totalMilestones ? `${p.totalMilestones} 个里程碑已生成` : '路径已生成'
+  }
   return ''
 })
 const learnInfo = computed(() => {
   const l = stageStatus.value.learning || {}
   if (l.currentTaskTitle) return `当前任务：${String(l.currentTaskTitle)}`
-  if (l.teachingSessionId) return '教学会话进行中'
+  if (bindings.value.teachingSessionId || l.teachingSessionId) return '教学会话进行中'
   return ''
 })
 
@@ -549,19 +628,29 @@ async function saveFriction() {
   }
 }
 
-/* 控制动作 */
+/* 控制动作：按阶段路由（learning 走 learning-step / auto-learning） */
 async function act(kind: string) {
   if (busy.value) return
   busy.value = true
   const id = sessionId.value
+  const stage = currentStage.value
   try {
     switch (kind) {
       case 'step':
-        if (isBlackbox.value) await adminVirtualLearnersApi.blackboxVirtualSessionStep(id, blackboxTraceCount.value)
-        else await adminVirtualLearnersApi.virtualSessionStep(id)
+        if (isBlackbox.value) {
+          await adminVirtualLearnersApi.blackboxVirtualSessionStep(id, blackboxTraceCount.value)
+        } else if (stage === 'learning') {
+          await adminVirtualLearnersApi.virtualSessionLearningStep(id)
+        } else {
+          await adminVirtualLearnersApi.virtualSessionStep(id)
+        }
         break
       case 'auto':
-        await adminVirtualLearnersApi.virtualSessionAuto(id, { maxRounds: 10 })
+        if (stage === 'learning') {
+          await adminVirtualLearnersApi.virtualSessionAutoLearning(id, { maxMilestones: 1 })
+        } else {
+          await adminVirtualLearnersApi.virtualSessionAuto(id, { maxRounds: 10 })
+        }
         break
       case 'runFull':
         await adminVirtualLearnersApi.virtualSessionRunFull(id, {
@@ -666,7 +755,18 @@ onBeforeUnmount(() => {
 })
 
 const rawJson = computed(() => JSON.stringify(session.value, null, 2)?.slice(0, 4000) || '')
-const statusText = (s?: unknown) => ({ completed: '已完成', in_progress: '进行中', active: '进行中', error: '错误', failed: '失败', abandoned: '已放弃' }[String(s)] || String(s || '未知'))
+const statusText = (s?: unknown) =>
+  ({
+    completed: '已完成',
+    running: '进行中',
+    in_progress: '进行中',
+    active: '进行中',
+    created: '已创建',
+    error: '错误',
+    failed: '失败',
+    abandoned: '已放弃',
+    timeout: '超时'
+  }[String(s)] || String(s || '未知'))
 </script>
 
 <style scoped>

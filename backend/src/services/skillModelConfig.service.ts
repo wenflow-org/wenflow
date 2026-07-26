@@ -171,16 +171,29 @@ class SkillModelConfigService {
 
   async upsert(skillId: string, config: Partial<SkillModelConfig>): Promise<SkillModelConfig> {
     try {
-      const normalizedConfig = config.requestTimeoutMs === undefined
-        ? config
-        : { ...config, requestTimeoutMs: normalizeRequestTimeoutMs(config.requestTimeoutMs) };
+      // Phase 2：禁止通过本表写入生成参数；保留列仅为 schema 兼容
+      const {
+        temperature: _dropTemperature,
+        maxTokens: _dropMaxTokens,
+        ...routingConfig
+      } = config as Partial<SkillModelConfig> & { temperature?: unknown; maxTokens?: unknown };
+      const normalizedConfig = routingConfig.requestTimeoutMs === undefined
+        ? routingConfig
+        : { ...routingConfig, requestTimeoutMs: normalizeRequestTimeoutMs(routingConfig.requestTimeoutMs) };
       const data = normalizedConfig.apiKey === undefined
         ? normalizedConfig
         : { ...normalizedConfig, apiKey: encryptSecret(normalizedConfig.apiKey, SECRET_CONTEXT) };
       const result = await systemPrisma.skill_model_configs.upsert({
         where: { skillId },
         update: { ...data, updatedAt: new Date() },
-        create: { id: uuidv4(), skillId, ...data, updatedAt: new Date() },
+        create: {
+          id: uuidv4(),
+          skillId,
+          temperature: 0.7,
+          maxTokens: 2000,
+          ...data,
+          updatedAt: new Date(),
+        },
       });
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
       return {

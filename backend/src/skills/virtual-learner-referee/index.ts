@@ -181,7 +181,7 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
       failureReason: 'missing scores/findings/evidence'
     }),
     normalizeOutput: normalizeRefereeOutput,
-    mapEnvelope: (output) => mapSkillOutputEnvelope('virtual-learner-referee', output, {
+    mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
       phase: 'completed',
       isTerminal: true,
     }),

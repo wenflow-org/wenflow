@@ -25,7 +25,7 @@
         >
           {{ compare ? '退出对比' : '对比现有页面' }}
         </button>
-        <router-link to="/admin/dashboard" class="al-back">返回后台</router-link>
+        <router-link to="/admin/console" class="al-back">返回后台</router-link>
       </div>
     </header>
 

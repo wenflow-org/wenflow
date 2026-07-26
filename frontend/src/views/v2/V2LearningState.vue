@@ -68,12 +68,12 @@
                   </template>
                 </svg>
               </div>
-              <div class="ff-info">
-                <b>{{ (hoverDay || latestDay).label }}</b>
-                <span>负荷 {{ (hoverDay || latestDay).load }} 分</span>
-                <span class="ff-info__fitness">健康度 {{ (hoverDay || latestDay).fitness }}</span>
-                <span class="ff-info__fatigue">疲劳度 {{ (hoverDay || latestDay).fatigue }}</span>
-                <span>状态 {{ (hoverDay || latestDay).form }}（{{ (hoverDay || latestDay).zone.label }}）</span>
+              <div v-if="displayDay" class="ff-info">
+                <b>{{ displayDay.label }}</b>
+                <span>负荷 {{ displayDay.load }} 分</span>
+                <span class="ff-info__fitness">健康度 {{ displayDay.fitness }}</span>
+                <span class="ff-info__fatigue">疲劳度 {{ displayDay.fatigue }}</span>
+                <span>状态 {{ displayDay.form }}（{{ displayDay.zone.label }}）</span>
               </div>
               <div class="ff-zones">
                 <span><i class="ff-dot ff-dot--fresh"></i>精力充沛（状态 ≥ -5）</span>
@@ -367,6 +367,7 @@ const fitnessAreaD = computed(() => {
 
 const latestDay = computed<DayPoint | null>(() => points.value[points.value.length - 1] ?? null);
 const hoverDay = ref<DayPoint | null>(null);
+const displayDay = computed<DayPoint | null>(() => hoverDay.value ?? latestDay.value);
 
 function onChartHover(e: MouseEvent) {
   const el = e.currentTarget as HTMLElement;
@@ -398,7 +399,8 @@ async function loadTrends() {
     for (const s of list) {
       const key = String(s.startTime || '').slice(0, 10);
       if (!key) continue;
-      map.set(key, (map.get(key) ?? 0) + (s.durationMinutes ?? 0));
+      const duration = typeof s.durationMinutes === 'number' ? s.durationMinutes : 0;
+      map.set(key, (map.get(key) ?? 0) + duration);
     }
     dailyLoad.value = [...map.entries()].map(([date, minutes]) => ({ date, minutes }));
   } catch {

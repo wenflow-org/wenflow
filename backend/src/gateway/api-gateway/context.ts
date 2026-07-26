@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import type { RouteExecutionOverride } from './types';
 import type { RetryBudget } from './retry-budget';
+import type { ContextEnvelopeV1 } from '../../skills/context-envelope';
 
 export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
 
@@ -16,6 +17,15 @@ export interface RequestContext {
   promptAttemptNo?: number;
   retryBudget?: RetryBudget;
   logicalRetryLimit?: number;
+  sessionId?: string;
+  conversationId?: string;
+  pathId?: string;
+  taskId?: string;
+  locale?: {
+    language?: string;
+    timeZone?: string;
+  };
+  contextEnvelope?: ContextEnvelopeV1;
   sourceEntry?: SourceEntry;
   traceId?: string;
   callerAgent?: string;

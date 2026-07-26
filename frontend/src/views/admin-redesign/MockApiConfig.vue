@@ -268,6 +268,31 @@
       </p>
     </section>
 
+    <!-- AI 能力健康快照（live） -->
+    <section v-if="isLive" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">能力健康</h3>
+        <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
+      </div>
+      <div v-if="health" class="ac-health">
+        <div v-for="c in health.capabilities" :key="c.id" class="ac-health__row">
+          <span class="ac-health__dot" :class="`is-${c.status}`"></span>
+          <span class="ac-health__id mono">{{ c.id }}</span>
+          <span class="ac-health__msg">{{ c.message }}</span>
+          <span class="ac-health__lat mono">{{ c.latencyMs != null ? `${c.latencyMs}ms` : '—' }}</span>
+          <span class="ac-health__time">{{ c.checkedAt ? timeAgo(c.checkedAt) : '未探测' }}</span>
+        </div>
+      </div>
+      <p v-else class="ac-rel__note">健康快照加载中…</p>
+      <div class="ac-health__foot">
+        <span v-if="health?.stale" class="ac-health__stale">快照已过期（超过 5 分钟未探测）</span>
+        <span v-else-if="health?.checkedAt" class="ac-health__stale">最近探测 {{ timeAgo(health.checkedAt) }}</span>
+        <button type="button" class="mk-status__action" :disabled="healthProbing" @click="probeHealth">
+          {{ healthProbing ? '探测中…' : '立即探测' }}
+        </button>
+      </div>
+    </section>
+
     <!-- 保存条 -->
     <div v-if="dirty.size > 0" class="ac-save">
       <span class="ac-save__dot"></span>
@@ -292,12 +317,62 @@ import {
   timeAgo,
   errMsg
 } from './mockLive'
-import { adminPlatformSettingsApi, adminCapabilityProbeApi } from '@/api/adminApi'
+import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
 import { registrationEnabled, updateRegistrationSetting } from './mockLive'
 
 const props = defineProps<{ state: 'ready' | 'incomplete' }>()
 
 const isLive = computed(() => dataSource.value === 'live')
+
+/* ---------- AI 能力健康快照 ---------- */
+interface CapHealth {
+  id: string
+  status: 'operational' | 'degraded' | 'unavailable' | 'unknown'
+  checkedAt: string | null
+  latencyMs: number | null
+  message: string
+}
+interface CapSnapshot {
+  overall: CapHealth['status']
+  checkedAt: string | null
+  stale: boolean
+  capabilities: CapHealth[]
+}
+const health = ref<CapSnapshot | null>(null)
+const healthProbing = ref(false)
+
+const healthLabel = computed(
+  () =>
+    ({ operational: '全部正常', degraded: '部分降级', unavailable: '存在不可用', unknown: '状态确认中' })[
+      health.value?.overall || 'unknown'
+    ]
+)
+const healthBadgeCls = computed(
+  () =>
+    ({ operational: 'mk-badge--ok', degraded: 'mk-badge--warn', unavailable: 'mk-badge--bad' })[
+      health.value?.overall || ''
+    ] || 'mk-badge--muted'
+)
+
+async function loadHealth() {
+  try {
+    const res = await adminSystemApi.getCapabilities()
+    health.value = res.data?.data ?? res.data ?? null
+  } catch {
+    health.value = null
+  }
+}
+
+async function probeHealth() {
+  if (healthProbing.value) return
+  healthProbing.value = true
+  try {
+    const res = await adminSystemApi.probeCapabilities()
+    health.value = res.data?.data ?? res.data ?? null
+  } finally {
+    healthProbing.value = false
+  }
+}
 
 /* ---------- 表单状态（demo / live 共用一套交互） ---------- */
 const form = reactive({
@@ -431,6 +506,7 @@ watch(
       applyLiveConfig()
       if (!reliability.value) void loadReliability()
       if (!probe.loaded) void loadProbe()
+      void loadHealth()
     } else applyDemoState(props.state)
   },
   { immediate: true, deep: true }
@@ -720,6 +796,36 @@ async function toggleRegistration() {
   padding: 0 16px 8px;
   align-items: end;
 }
+
+/* 能力健康 */
+.ac-health { display: grid; padding: 2px 16px 8px; }
+.ac-health__row {
+  display: grid;
+  grid-template-columns: 10px 168px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 12px;
+}
+.ac-health__row:last-child { border-bottom: none; }
+.ac-health__dot { width: 8px; height: 8px; border-radius: 50%; }
+.ac-health__dot.is-operational { background: var(--mk-green); }
+.ac-health__dot.is-degraded { background: var(--mk-amber); }
+.ac-health__dot.is-unavailable { background: var(--mk-red); }
+.ac-health__dot.is-unknown { background: var(--mk-faint); }
+.ac-health__id { font-size: 11px; color: var(--mk-ink); }
+.ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-health__lat { font-size: 11px; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.ac-health__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
+.ac-health__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 16px 14px;
+}
+.ac-health__stale { font-size: 11px; color: var(--mk-faint); }
 .ac-field--check { align-content: end; }
 .ac-field--check input { width: 16px; height: 16px; }
 .ac-rel__note {

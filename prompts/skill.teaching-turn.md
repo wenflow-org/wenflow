@@ -2,6 +2,15 @@
 agentId: skill:teaching-turn
 name: default-skill-teaching-turn
 archetype: conversational
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: conversation
+  interactionMode: turn
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 结构化教学回合生成器
 temperature: 0.7
 maxTokens: 4000

@@ -9,7 +9,7 @@
       </div>
     </div>
 
-    <MockShell :current="scene" :crumb="subPage?.id" release @navigate="navigate" @palette="paletteOpen = true">
+    <MockShell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true">
       <div v-if="booting" class="ac-boot">
         <span class="ac-boot__spinner"></span>
         正在接入真实数据…
@@ -21,7 +21,6 @@
       :open="paletteOpen"
       @close="paletteOpen = false"
       @navigate="navigate"
-      @fullscreen="() => undefined"
     />
     <MockSkillDrawer />
   </section>
@@ -53,6 +52,7 @@ import MockPromptLab from './MockPromptLab.vue';
 import MockSkillDrawer from './MockSkillDrawer.vue';
 import MockLearnerDetail from './MockLearnerDetail.vue';
 import MockTeachingSessions from './MockTeachingSessions.vue';
+import MockGoalConversations from './MockGoalConversations.vue';
 import MockSessionCockpit from './MockSessionCockpit.vue';
 import MockCommandPalette from './MockCommandPalette.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
@@ -67,6 +67,7 @@ const components: Record<string, unknown> = {
   'users': MockUsers,
   'learner-center': MockLearnerCenter,
   'teaching-sessions': MockTeachingSessions,
+  'goal-conversations': MockGoalConversations,
   'virtual-learners': MockVirtualLearners,
   'skills': MockSkills,
   'topology': MockTopology,
@@ -96,6 +97,12 @@ const bootError = ref('');
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
+const crumbLabel = computed(() => {
+  const id = subPage.value?.id
+  if (!id) return ''
+  if (id.length <= 12) return id
+  return `${id.slice(0, 8)}…${id.slice(-4)}`
+})
 
 watch(scene, () => {
   subPage.value = null;

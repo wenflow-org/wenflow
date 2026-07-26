@@ -1,37 +1,59 @@
-import * as fs from 'fs'
 import * as path from 'path'
 import { parsePromptSchema, lintPromptSchema, Archetype } from '../services/prompt-schema'
+import { scanPromptFiles } from '../composers/prompt-files/loader'
+import { lintDeclaredSkillPromptContract } from '../services/skill-prompt-contract'
+import { normalizeRuntimeContract } from '../services/prompt-lab/runtime-contract'
 
 const PROMPTS_DIR = path.resolve(__dirname, '../../../prompts')
-
-function readFrontmatter(raw: string): { archetype: Archetype | null; body: string } {
-  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
-  if (!m) return { archetype: null, body: raw }
-  const fm = m[1]
-  const am = fm.match(/^archetype:\s*(.+)$/m)
-  const archetype = am ? (am[1].trim() as Archetype) : null
-  return { archetype, body: raw.slice(m[0].length) }
-}
-
-const files = fs.readdirSync(PROMPTS_DIR).filter((f) => /^skill\..*\.md$/.test(f))
+const scan = scanPromptFiles(PROMPTS_DIR)
 let compliantCount = 0
 let errorFiles = 0
 
-for (const f of files) {
-  const raw = fs.readFileSync(path.join(PROMPTS_DIR, f), 'utf8')
-  const { archetype, body } = readFrontmatter(raw)
-  const schema = parsePromptSchema(body)
-  const result = lintPromptSchema(schema, archetype)
-  const errs = result.issues.filter((i) => i.level === 'error')
-  const warns = result.issues.filter((i) => i.level === 'warning')
-  if (result.compliant) compliantCount++
+for (const file of scan.files.filter((item) => /^skill\..*\.md$/.test(path.basename(item.filePath)))) {
+  const f = path.basename(file.filePath)
+  const archetype = (file.archetype || null) as Archetype | null
+  const schema = parsePromptSchema(file.systemPrompt)
+  const runtimeContract = file.runtimeContract === undefined
+    ? undefined
+    : normalizeRuntimeContract(file.runtimeContract, {
+        skillId: file.agentId,
+        archetype: file.archetype,
+      })
+  const contractLint = lintDeclaredSkillPromptContract(file.promptContract, {
+    skillId: file.agentId,
+    archetype: file.archetype,
+    runtimeContract,
+  })
+  const result = lintPromptSchema(schema, archetype, {
+    inputTransport: contractLint.contract.input.transport,
+    outputMedia: contractLint.contract.output.media,
+  })
+  const issues = [
+    ...result.issues,
+    ...(archetype === 'code-only' ? [] : schema.warnings.map((message) => ({
+      level: 'warning' as const,
+      code: 'SCHEMA_WARNING',
+      message,
+    }))),
+    ...contractLint.issues,
+  ]
+  const errs = issues.filter((i) => i.level === 'error')
+  const warns = issues.filter((i) => i.level === 'warning')
+  const compliant = errs.length === 0
+  if (compliant) compliantCount++
   if (errs.length > 0) errorFiles++
 
-  const tag = result.compliant ? 'OK ' : 'BAD'
+  const tag = compliant ? 'OK ' : 'BAD'
   console.log(`[${tag}] ${f}  (archetype=${archetype ?? '-'})  err=${errs.length} warn=${warns.length}`)
-  for (const i of result.issues) {
+  for (const i of issues) {
     console.log(`      ${i.level === 'error' ? 'E' : 'w'} [${i.code}] ${i.message}`)
   }
 }
 
-console.log(`\n合规(无 error): ${compliantCount}/${files.length}   有 error 的文件: ${errorFiles}`)
+for (const diagnostic of scan.diagnostics) {
+  errorFiles++
+  console.log(`[BAD] ${path.basename(diagnostic.filePath)}  E [${diagnostic.code}] ${diagnostic.message}`)
+}
+
+const total = scan.files.filter((item) => /^skill\..*\.md$/.test(path.basename(item.filePath))).length + scan.diagnostics.length
+console.log(`\n合规(无 error): ${compliantCount}/${total}   有 error 的文件: ${errorFiles}`)

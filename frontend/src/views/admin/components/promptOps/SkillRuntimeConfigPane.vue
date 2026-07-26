@@ -1,11 +1,8 @@
 <!--
   SkillRuntimeConfigPane
   ============================================================
-  Skill 节点级模型运行时参数（skill_model_configs 表）。
-  与 Prompt 内 temperature/maxTokens 是两套字段：
-    - Prompt 版本里的 T/MaxTokens 跟着 prompt 版本走（agent_prompts 表）
-    - 此处的 T/MaxTokens 是节点级覆盖（skill_model_configs 表）
-  仅在 agent.kind === 'skill' 时使用。
+  Phase 2：skill_model_configs 仅路由/可靠性。
+  生成参数 T/maxTokens 唯一真相源：prompts/*.md → agent_prompts ACTIVE。
 -->
 <template>
   <div class="skill-runtime-pane" v-loading="loading">
@@ -15,9 +12,9 @@
       show-icon
       class="skill-runtime-pane__notice"
     >
-      <template #title>运行参数</template>
+      <template #title>路由与可靠性</template>
       <div style="font-size: var(--admin-text-caption); line-height: 1.7">
-        独立配置会覆盖上层默认值；关闭后恢复继承。
+        本页只配置 endpoint / model 路由 / 超时 / 逻辑重试。温度与 Max Tokens 由 ACTIVE Prompt（File-as-Truth）管理，保存时不会写入节点覆盖表。
       </div>
     </el-alert>
 
@@ -26,16 +23,21 @@
     <template v-if="currentSkill">
       <div class="chip-section">
         <div class="chip-row">
-          <span class="chip-label">当前生效</span>
+          <span class="chip-label">路由层</span>
           <el-tag size="small" :type="currentSkill.enabled ? 'success' : 'info'">
-            {{ currentSkill.enabled ? '独立配置' : '继承上层 / 平台默认' }}
+            {{ currentSkill.enabled ? '独立路由' : '继承上层 / 平台默认' }}
           </el-tag>
-          <el-tag size="small" effect="plain">T={{ currentSkill.temperature ?? '--' }}</el-tag>
-          <el-tag size="small" effect="plain">Max={{ currentSkill.maxTokens ?? '--' }}</el-tag>
           <el-tag size="small" effect="plain">{{ formatTimeout(currentSkill.requestTimeoutMs) }}</el-tag>
           <el-tag size="small" effect="plain">Logical 预算 {{ effectiveLogicalRetries }} 次</el-tag>
           <el-tag size="small" effect="plain" :type="thinkingTagType(currentSkill.thinkingMode)">{{ formatThinkingMode(currentSkill.thinkingMode) }}</el-tag>
           <el-tag size="small" effect="plain" :type="effortTagType(currentSkill.reasoningEffort)">{{ formatReasoningEffort(currentSkill.reasoningEffort) }}</el-tag>
+        </div>
+        <div class="chip-row" style="margin-top: 8px">
+          <span class="chip-label">生成参数（只读）</span>
+          <el-tag size="small" type="warning" effect="plain">T={{ generationParams?.temperature ?? '--' }}</el-tag>
+          <el-tag size="small" type="warning" effect="plain">Max={{ generationParams?.maxTokens ?? '--' }}</el-tag>
+          <el-tag size="small" type="warning" effect="plain">{{ generationParams?.model || '继承路由模型' }}</el-tag>
+          <el-tag size="small" effect="plain">来源={{ generationParams?.sources?.temperature || generationParams?.owner || 'ACTIVE Prompt' }}</el-tag>
         </div>
       </div>
 
@@ -77,12 +79,6 @@
             <el-option label="high" value="high" />
             <el-option label="max" value="max" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="温度">
-          <el-slider v-model="editForm.temperature" :min="0" :max="1" :step="0.1" show-input :disabled="!editForm.enabled" />
-        </el-form-item>
-        <el-form-item label="Max Tokens">
-          <el-input-number v-model="editForm.maxTokens" :min="100" :max="20000" :disabled="!editForm.enabled" />
         </el-form-item>
         <el-form-item label="请求超时(ms)">
           <el-input-number v-model="editForm.requestTimeoutMs" :min="10000" :max="300000" :step="10000" :disabled="!editForm.enabled" />
@@ -160,15 +156,17 @@ const editForm = ref<SkillNodeConfig>({
   tier: 'chat',
   thinkingMode: 'default',
   reasoningEffort: 'default',
-  temperature: 0.7,
-  maxTokens: 2000,
   requestTimeoutMs: null,
   enabled: false,
 });
-const editRules = {
-  temperature: [{ required: true, message: '请设置温度', trigger: 'change' }],
-  maxTokens: [{ required: true, message: '请输入最大 Token 数', trigger: 'blur' }],
-};
+const generationParams = ref<{
+  model?: string | null
+  temperature?: number | null
+  maxTokens?: number | null
+  sources?: Record<string, string>
+  owner?: string
+} | null>(null)
+const editRules = {};
 
 const SKILL_CN_NAMES: Record<string, string> = {
   'text-structure-analyzer': '文本结构分析器',
@@ -213,8 +211,6 @@ const buildFallbackSkillConfig = (skillId: string): SkillNodeConfig => ({
   tier: 'chat',
   thinkingMode: 'default',
   reasoningEffort: 'default',
-  temperature: 0.7,
-  maxTokens: 2000,
   requestTimeoutMs: null,
   enabled: false,
   maxLogicalRetries: null,
@@ -239,8 +235,6 @@ const toEditablePayload = (config: SkillNodeConfig) => ({
   model: config.model,
   thinkingMode: config.thinkingMode || 'default',
   reasoningEffort: config.thinkingMode === 'disabled' ? 'default' : (config.reasoningEffort || 'default'),
-  temperature: config.temperature,
-  maxTokens: config.maxTokens,
   requestTimeoutMs: config.enabled ? config.requestTimeoutMs : null,
   maxLogicalRetries: logicalRetryMode.value === 'inherit'
     ? null
@@ -279,9 +273,13 @@ const loadSkill = async () => {
       ? Number(reliabilityResult.value.data?.data?.settings?.maxLogicalRetries ?? 1)
       : 1;
     if (skillResult.status === 'fulfilled') {
-      const skill = (skillResult.value.data?.data || null) as SkillNodeConfig | null;
-      applySkill(skill ?? buildFallbackSkillConfig(skillId));
+      const raw = (skillResult.value.data?.data || null) as (SkillNodeConfig & {
+        generationParams?: typeof generationParams.value
+      }) | null;
+      generationParams.value = raw?.generationParams || null;
+      applySkill(raw ?? buildFallbackSkillConfig(skillId));
     } else if ((skillResult.reason as { response?: { status?: number } })?.response?.status === 404) {
+      generationParams.value = null;
       applySkill(buildFallbackSkillConfig(skillId));
     } else {
       toast.error('加载 Skill 节点配置失败');
@@ -297,7 +295,7 @@ const onSave = async () => {
   saving.value = true;
   try {
     await adminSkillsApi.updateSkillModelConfig(editForm.value.skillId, toEditablePayload(editForm.value));
-    toast.success('Skill 配置已更新');
+    toast.success('路由/可靠性已更新（生成参数仍由 ACTIVE Prompt 管理）');
     emit('changed');
     await loadSkill();
   } catch {

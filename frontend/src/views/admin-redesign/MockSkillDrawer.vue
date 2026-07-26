@@ -2,33 +2,57 @@
   <Teleport to="body">
     <div v-if="entity" class="msk" @mousedown.self="closeSkillDrawer">
       <aside class="msk__panel" role="dialog" aria-label="详情">
-        <header class="msk__head">
-          <div class="msk__title">
-            <span class="mk-badge" :class="stat.errors ? 'mk-badge--bad' : 'mk-badge--ok'">
-              {{ stat.errors ? `${stat.errors} 次失败` : '健康' }}
+        <!-- 头部：身份区（阶段色 + 类别图标 + 状态 chips） -->
+        <header class="msk__head" :style="{ '--hue': tone.hue, '--soft': tone.soft }">
+          <div class="msk__id-row">
+            <span class="msk__icon" aria-hidden="true">
+              <svg v-if="iconKey === 'analysis'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+                <circle cx="7" cy="7" r="4.2" />
+                <path d="M10.2 10.2 13.8 13.8" />
+              </svg>
+              <svg v-else-if="iconKey === 'generation'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+                <path d="M8 1.6 9.7 6.1 14.4 8 9.7 9.9 8 14.4 6.3 9.9 1.6 8 6.3 6.1Z" />
+              </svg>
+              <svg v-else-if="iconKey === 'teaching'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.2 3h9.6A1.7 1.7 0 0 1 14.5 4.7v4.6a1.7 1.7 0 0 1-1.7 1.7H8L4.9 13v-2H3.2A1.7 1.7 0 0 1 1.5 9.3V4.7A1.7 1.7 0 0 1 3.2 3Z" />
+              </svg>
+              <svg v-else-if="iconKey === 'simulation'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6.2 2h3.6M7 2v4.2L3.6 12A1.6 1.6 0 0 0 5 14.2h6A1.6 1.6 0 0 0 12.4 12L9 6.2V2" />
+                <path d="M5.4 10.5h5.2" />
+              </svg>
+              <svg v-else-if="iconKey === 'agent'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 1.8 14.2 5.2 8 8.6 1.8 5.2Z" />
+                <path d="m2.6 8.2 5.4 3 5.4-3M2.6 11l5.4 3 5.4-3" />
+              </svg>
+              <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 1.8 13.8 5v6L8 14.2 2.2 11V5Z" />
+                <path d="M8 8 13.8 5M8 8 2.2 5M8 8v6.2" />
+              </svg>
             </span>
-            <h3>{{ entity.name }}</h3>
-            <span class="msk__id">{{ entity.id }}</span>
+            <div class="msk__titlebox">
+              <h3 class="msk__name">{{ entity.name }}</h3>
+              <span class="msk__id mono">{{ entity.id }}</span>
+            </div>
+            <button type="button" class="msk__close" aria-label="关闭" @click="closeSkillDrawer">✕</button>
           </div>
-          <button type="button" class="msk__close" aria-label="关闭" @click="closeSkillDrawer">✕</button>
+          <div class="msk__chips">
+            <span class="msk__status" :class="stat.errors ? 'is-bad' : 'is-ok'">
+              <i></i>{{ stat.errors ? `${stat.errors} 次失败` : '健康' }}
+            </span>
+            <template v-if="skillProfile">
+              <span class="msk__chip mono">{{ categoryLabel }}</span>
+              <span class="msk__chip">{{ liveMeta?.agentName || skillProfile.agentName || '—' }}</span>
+            </template>
+            <template v-else>
+              <span class="msk__chip mono">AGENT</span>
+              <span class="msk__chip">{{ memberSkills.length }} Skill<template v-if="memberErrors"> · {{ memberErrors }} 异常</template></span>
+            </template>
+          </div>
+          <p v-if="entity.description" class="msk__desc">{{ entity.description }}</p>
         </header>
 
         <div class="msk__body">
-          <p class="msk__desc">{{ entity.description }}</p>
-
-          <div class="msk__meta">
-            <template v-if="skillProfile">
-              <div><span>所属</span><strong>{{ liveMeta?.agentName || skillProfile.agentName || '—' }}</strong></div>
-              <div><span>类别</span><strong>{{ liveMeta?.category || skillProfile.category || '—' }}</strong></div>
-              <div><span>模型</span><strong class="mono">{{ liveMeta?.model || skillProfile.promptVersion || '默认' }}</strong></div>
-            </template>
-            <template v-else>
-              <div><span>类型</span><strong>Agent</strong></div>
-              <div><span>下辖 Skill</span><strong>{{ memberSkills.length }} 个</strong></div>
-              <div><span>异常 Skill</span><strong :class="{ 'is-bad-text': memberErrors > 0 }">{{ memberErrors }}</strong></div>
-            </template>
-          </div>
-
+          <!-- 指标条 -->
           <div class="msk__stats">
             <div class="msk__stat">
               <span>调用</span>
@@ -40,47 +64,61 @@
             </div>
             <div class="msk__stat">
               <span>成功率</span>
-              <strong>{{ successRate }}</strong>
+              <strong :class="`is-${rateTone}`">{{ successRate }}</strong>
             </div>
             <div class="msk__stat">
               <span>平均耗时</span>
               <strong>{{ stat.calls ? fmtMs(stat.avgMs) : '—' }}</strong>
             </div>
           </div>
+          <p v-if="skillProfile && isLive && statsSourceNote" class="msk__note">{{ statsSourceNote }}</p>
+
+          <!-- 生效模型（skill 模式）：所属/类别已进头部 chips -->
+          <div v-if="skillProfile" class="msk__kv">
+            <span>生效模型</span>
+            <strong class="mono">{{ liveMeta?.model || skillProfile.promptVersion || '默认' }}</strong>
+            <em v-if="liveMeta?.modelSource" class="msk__src">{{ liveMeta.modelSource }}</em>
+          </div>
 
           <!-- Agent 视图：下辖 Skill 清单 -->
           <section v-if="!skillProfile && memberSkills.length" class="msk__section">
-            <h4>下辖 Skill</h4>
-            <div class="msk__spans">
+            <header class="msk__sec-head">
+              <h4>下辖 Skill</h4>
+              <span class="msk__sec-meta mono">{{ memberSkills.length }}</span>
+            </header>
+            <div class="msk__list">
               <button
                 v-for="s in memberSkills"
                 :key="s.id"
                 type="button"
-                class="msk__span"
+                class="msk__row"
                 @click="openSkillDrawer(s.id)"
               >
-                <span class="msk__span-dot" :class="skillStatOf(s.id).errors ? 'is-err' : skillStatOf(s.id).calls ? 'is-ok' : 'is-idle'"></span>
-                <span class="msk__span-title">{{ s.name }}</span>
-                <span class="msk__span-dur mono">{{ skillStatOf(s.id).calls || '—' }}</span>
-                <span class="msk__span-trace mono">{{ s.id }}</span>
+                <span class="msk__dot" :class="skillStatOf(s.id).errors ? 'is-err' : skillStatOf(s.id).calls ? 'is-ok' : 'is-idle'"></span>
+                <span class="msk__row-title">{{ s.name }}</span>
+                <span class="msk__row-num mono">{{ skillStatOf(s.id).calls || '—' }}</span>
+                <span class="msk__row-id mono">{{ s.id }}</span>
               </button>
             </div>
           </section>
 
           <section class="msk__section">
-            <h4>最近调用</h4>
-            <div v-if="recent.length" class="msk__spans">
+            <header class="msk__sec-head">
+              <h4>最近调用</h4>
+              <span v-if="recent.length" class="msk__sec-meta mono">{{ recent.length }}</span>
+            </header>
+            <div v-if="recent.length" class="msk__list">
               <button
                 v-for="s in recent"
                 :key="s.id"
                 type="button"
-                class="msk__span"
+                class="msk__row"
                 @click="goTrace(s.traceId)"
               >
-                <span class="msk__span-dot" :class="`is-${s.status}`"></span>
-                <span class="msk__span-title">{{ s.title }}</span>
-                <span class="msk__span-dur mono">{{ fmtMs(s.durationMs) }}</span>
-                <span class="msk__span-trace mono">{{ s.traceId }}</span>
+                <span class="msk__dot" :class="`is-${s.status}`"></span>
+                <span class="msk__row-title">{{ s.title }}</span>
+                <span class="msk__row-num mono">{{ fmtMs(s.durationMs) }}</span>
+                <span class="msk__row-id mono">{{ s.traceId }}</span>
               </button>
             </div>
             <p v-else class="msk__none">近 60 条日志窗口内无调用（统计为全量口径）。</p>
@@ -88,87 +126,79 @@
 
           <!-- 运行配置（live 可编辑：对齐生产 AgentEditor 运行时 tab） -->
           <section v-if="skillProfile && isLive" class="msk__section">
-            <h4>
-              运行配置
-              <span class="msk__cfg-src" :class="{ 'msk__cfg-src--custom': runtimeCfg?.hasSkillOverride }">
+            <header class="msk__sec-head">
+              <h4>运行配置</h4>
+              <span class="msk__src-chip" :class="{ 'msk__src-chip--custom': runtimeCfg?.hasSkillOverride }">
                 {{ runtimeCfg?.hasSkillOverride ? '独立配置' : '继承 Agent/平台' }}
               </span>
-            </h4>
-            <div v-if="runtimeCfg" class="msk__cfg">
-              <label class="msk__cfg-field">
+            </header>
+            <div v-if="runtimeCfg" class="msk__card">
+              <label class="msk__field">
                 <span>模型（留空 = 继承）</span>
-                <input v-model="runtimeCfg.model" class="msk__cfg-input mono" list="msk-models" placeholder="继承" />
+                <input v-model="runtimeCfg.model" class="msk__input mono" list="msk-models" placeholder="继承" />
                 <datalist id="msk-models">
                   <option v-for="m in modelOptions" :key="m" :value="m" />
                 </datalist>
               </label>
-              <div class="msk__cfg-row">
-                <label class="msk__cfg-field">
-                  <span>温度</span>
-                  <input v-model.number="runtimeCfg.temperature" type="number" min="0" max="2" step="0.1" class="msk__cfg-input" />
-                </label>
-                <label class="msk__cfg-field">
-                  <span>最大 Tokens</span>
-                  <input v-model.number="runtimeCfg.maxTokens" type="number" min="32" step="32" class="msk__cfg-input" />
-                </label>
-                <label class="msk__cfg-field msk__cfg-field--check">
-                  <span>启用</span>
-                  <input v-model="runtimeCfg.enabled" type="checkbox" />
-                </label>
-              </div>
+              <label class="msk__field msk__field--check">
+                <input v-model="runtimeCfg.enabled" type="checkbox" />
+                <span>启用路由覆盖</span>
+              </label>
+              <p v-if="effectiveLlmNote" class="msk__effective">{{ effectiveLlmNote }}</p>
               <!-- 重试与超时（网关三层预算的 Skill 级覆盖） -->
-              <div class="msk__cfg-row">
-                <label class="msk__cfg-field">
+              <div class="msk__field-grid">
+                <label class="msk__field">
                   <span>逻辑重试（0-2）</span>
-                  <input v-model.number="runtimeCfg.maxLogicalRetries" type="number" min="0" max="2" step="1" class="msk__cfg-input" placeholder="继承平台" />
+                  <input v-model.number="runtimeCfg.maxLogicalRetries" type="number" min="0" max="2" step="1" class="msk__input" placeholder="继承平台" />
                 </label>
-                <label class="msk__cfg-field">
+                <label class="msk__field">
                   <span>超时秒（10-300）</span>
-                  <input v-model.number="runtimeCfg.timeoutSec" type="number" min="10" max="300" step="10" class="msk__cfg-input" placeholder="继承平台" />
+                  <input v-model.number="runtimeCfg.timeoutSec" type="number" min="10" max="300" step="10" class="msk__input" placeholder="继承平台" />
                 </label>
-                <div class="msk__cfg-budget">
-                  <span>平台预算</span>
-                  <em>{{ platformBudget }}</em>
-                </div>
               </div>
-              <div class="msk__cfg-actions">
-                <button type="button" class="msk__cfg-save" :disabled="cfgBusy" @click="saveCfg">
+              <p class="msk__budget">平台预算 <em class="mono">{{ platformBudget }}</em></p>
+              <div class="msk__actions">
+                <button type="button" class="msk__btn-primary" :disabled="cfgBusy" @click="saveCfg">
                   {{ cfgBusy ? '保存中…' : '保存配置' }}
                 </button>
                 <button
                   v-if="runtimeCfg.hasSkillOverride"
                   type="button"
-                  class="msk__cfg-del"
+                  class="msk__btn-danger"
                   :disabled="cfgBusy"
                   @click="deleteCfg"
                 >
                   删除独立配置
                 </button>
               </div>
-              <p v-if="cfgMsg" class="msk__cfg-msg" :class="{ 'msk__cfg-msg--err': cfgErr }">{{ cfgMsg }}</p>
+              <p v-if="cfgMsg" class="msk__msg" :class="{ 'msk__msg--err': cfgErr }">{{ cfgMsg }}</p>
             </div>
             <p v-else class="msk__none">配置加载中…</p>
           </section>
 
           <!-- 试跑（live：对齐生产 testSkill 预览） -->
           <section v-if="skillProfile && isLive" class="msk__section">
-            <h4>试跑</h4>
+            <header class="msk__sec-head">
+              <h4>试跑</h4>
+            </header>
             <textarea v-model="testInput" class="msk__test-input mono" rows="3" placeholder='{"input": "测试输入"}'></textarea>
-            <div class="msk__cfg-actions">
-              <button type="button" class="msk__cfg-save" :disabled="testBusy" @click="runTest">
+            <div class="msk__actions">
+              <button type="button" class="msk__btn-primary" :disabled="testBusy" @click="runTest">
                 {{ testBusy ? '运行中…' : '运行测试' }}
               </button>
             </div>
-            <pre v-if="testResult" class="msk__prompt-preview" :class="{ 'msk__prompt-preview--err': testError }">{{ testResult }}</pre>
+            <pre v-if="testResult" class="msk__code" :class="{ 'msk__code--err': testError }">{{ testResult }}</pre>
           </section>
 
           <!-- 协议规则（对齐生产 AgentEditor 第 4 tab）：默认折叠，展开懒加载 -->
           <section v-if="isLive" class="msk__section">
-            <button type="button" class="msk__fold" @click="toggleProtocol">
+            <button type="button" class="msk__sec-head msk__sec-head--btn" @click="toggleProtocol">
               <h4>协议规则</h4>
-              <span class="msk__fold-hint">
-                <span v-if="agentRules.length" class="mono">{{ agentRules.length }} 条本节点规则</span>
-                {{ protocolOpen ? '收起 ▲' : '展开 ▼' }}
+              <span class="msk__sec-meta">
+                <span v-if="agentRules.length" class="mono">{{ agentRules.length }} 条</span>
+                <svg class="msk__chev" :class="{ 'is-open': protocolOpen }" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3.2 1.8 6.4 5 3.2 8.2" />
+                </svg>
               </span>
             </button>
             <template v-if="protocolOpen">
@@ -200,15 +230,17 @@
 
           <!-- 生效 Prompt：参考内容置后，默认折叠 -->
           <section v-if="skillProfile" class="msk__section">
-            <button type="button" class="msk__fold" @click="promptOpen = !promptOpen">
+            <button type="button" class="msk__sec-head msk__sec-head--btn" @click="promptOpen = !promptOpen">
               <h4>{{ isLive ? '生效 Prompt' : 'Prompt 版本' }}</h4>
-              <span class="msk__fold-hint">
+              <span class="msk__sec-meta">
                 <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
-                {{ promptOpen ? '收起 ▲' : '展开 ▼' }}
+                <svg class="msk__chev" :class="{ 'is-open': promptOpen }" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3.2 1.8 6.4 5 3.2 8.2" />
+                </svg>
               </span>
             </button>
             <template v-if="promptOpen">
-              <pre v-if="liveMeta?.effectivePrompt" class="msk__prompt-preview msk__prompt-preview--cap">{{ liveMeta.effectivePrompt }}</pre>
+              <pre v-if="liveMeta?.effectivePrompt" class="msk__code msk__code--cap">{{ liveMeta.effectivePrompt }}</pre>
               <div class="msk__prompt">
                 <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
                 <button type="button" class="mk-link" @click="goPromptLab">去 Prompt Lab 检视 →</button>
@@ -216,8 +248,8 @@
               <div v-if="isLive && promptVersions.length" class="msk__versions">
                 <span class="msk__versions-label">历史版本</span>
                 <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
-                  <span class="mono">v{{ v.version }}</span>
-                  <span>{{ v.status }}</span>
+                  <span class="msk__version-tag mono">v{{ v.version }}</span>
+                  <span class="msk__version-status">{{ v.status }}</span>
                   <span class="msk__version-name">{{ v.name }}</span>
                 </div>
               </div>
@@ -225,8 +257,8 @@
           </section>
 
           <section v-if="skillProfile && isLive" class="msk__section msk__section--actions">
-            <button type="button" class="msk__primary-link" @click="goFullEditor">打开完整 Skill 编辑台 →</button>
-            <p class="msk__none">版本发布、工程视图与完整预览在编辑台完成；抽屉保留运行配置与试跑。</p>
+            <button type="button" class="msk__primary-link" @click="goFullEditor">在 Prompt Lab 中编辑该 Skill →</button>
+            <p class="msk__none">源文件编辑、字段契约与 Dry Run 在 Prompt Lab 完成；抽屉保留运行配置与试跑。</p>
           </section>
         </div>
       </aside>
@@ -246,10 +278,14 @@ import {
   openTrace,
   openSkillDrawer,
   closeSkillDrawer,
-  dataSource
+  dataSource,
+  editSkillInPromptLab
 } from './mockStore'
 import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './mockLive'
 import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
+import { useEscape } from './useEscape'
+
+useEscape(() => !!intent.skillDrawerId, closeSkillDrawer)
 
 const isLive = computed(() => dataSource.value === 'live')
 
@@ -271,11 +307,39 @@ const skillProfile = computed(() => {
 const agentProfile = computed(() => agentProfiles.find((p) => p.id === intent.skillDrawerId) || null)
 const entity = computed(() => skillProfile.value || agentProfile.value)
 
+/* 身份色：与 Agent 拓扑同套阶段色（按所属 Agent 取色） */
+const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
+  'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
+  'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
+  'teaching-agent': { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' },
+  'learner-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
+  'virtual-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' }
+}
+const tone = computed(() => {
+  const key = skillProfile.value ? skillProfile.value.agentId : intent.skillDrawerId
+  return AGENT_TONES[key || ''] || { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' }
+})
+
+/** 头部图标：skill 按类别，agent 用层叠形 */
+const iconKey = computed(() => {
+  if (!skillProfile.value) return 'agent'
+  const c = skillProfile.value.category
+  return ['analysis', 'generation', 'teaching', 'simulation'].includes(c) ? c : 'default'
+})
+
+const categoryLabel = computed(() => liveMeta.value?.category || skillProfile.value?.category || '—')
+
+/** 成功率色阶：无数据灰、零失败绿、≥95 琥珀、其余红 */
+const rateTone = computed(() => {
+  if (!stat.value.calls) return 'na'
+  if (stat.value.errors === 0) return 'ok'
+  const r = ((stat.value.calls - stat.value.errors) / stat.value.calls) * 100
+  return r >= 95 ? 'warn' : 'bad'
+})
+
 /* live：运行配置（读写，对齐生产 SkillRuntimeConfigPane） */
 interface RuntimeCfg {
   model: string
-  temperature: number
-  maxTokens: number
   enabled: boolean
   hasSkillOverride: boolean
   maxLogicalRetries: number | null
@@ -304,8 +368,6 @@ async function loadRuntimeCfg(id: string) {
     const c = res.data?.data ?? res.data ?? {}
     runtimeCfg.value = {
       model: c.model || '',
-      temperature: Number(c.temperature ?? 0.7),
-      maxTokens: Number(c.maxTokens || 2048),
       enabled: c.enabled !== false,
       hasSkillOverride: !!(c.hasSkillOverride ?? c.id),
       maxLogicalRetries: c.maxLogicalRetries != null ? Number(c.maxLogicalRetries) : null,
@@ -313,7 +375,7 @@ async function loadRuntimeCfg(id: string) {
     }
   } catch {
     // 无独立配置：以继承默认值起步，保存即创建覆盖
-    runtimeCfg.value = { model: '', temperature: 0.7, maxTokens: 2048, enabled: true, hasSkillOverride: false, maxLogicalRetries: null, timeoutSec: null }
+    runtimeCfg.value = { model: '', enabled: true, hasSkillOverride: false, maxLogicalRetries: null, timeoutSec: null }
   }
 }
 
@@ -325,15 +387,13 @@ async function saveCfg() {
   try {
     await adminSkillsApi.updateSkillModelConfig(id, {
       model: runtimeCfg.value.model || null,
-      temperature: runtimeCfg.value.temperature,
-      maxTokens: runtimeCfg.value.maxTokens,
       enabled: runtimeCfg.value.enabled,
       maxLogicalRetries: runtimeCfg.value.maxLogicalRetries,
       requestTimeoutMs: runtimeCfg.value.timeoutSec != null ? runtimeCfg.value.timeoutSec * 1000 : null
     })
     runtimeCfg.value.hasSkillOverride = true
     cfgErr.value = false
-    cfgMsg.value = '已保存（真实写入）'
+    cfgMsg.value = '已保存路由/可靠性（T/maxTokens 由 ACTIVE Prompt 管理）'
   } catch (e) {
     cfgErr.value = true
     cfgMsg.value = `保存失败：${errMsg(e)}`
@@ -434,11 +494,42 @@ interface LiveMeta {
   agentName: string
   category: string
   model: string
+  modelSource: string
   promptVersion: string
   effectivePrompt: string
+  llmTemperature: number | null
+  llmMaxTokens: number | null
+  statsSource: string
+  statsRange: string
 }
 const liveMeta = ref<LiveMeta | null>(null)
 const promptVersions = ref<Array<{ id: string; version: string | number; status: string; name: string }>>([])
+
+const statsSourceNote = computed(() => {
+  if (!liveMeta.value?.statsSource) return ''
+  const src =
+    liveMeta.value.statsSource === 'prompt_call_logs'
+      ? 'Prompt 调用日志'
+      : liveMeta.value.statsSource === 'agent_call_logs'
+        ? 'Skill 执行日志'
+        : '无调用'
+  const range = liveMeta.value.statsRange === 'all' ? '全量' : liveMeta.value.statsRange
+  return `统计口径：${src} · ${range}（与列表/拓扑统一）`
+})
+
+const effectiveLlmNote = computed(() => {
+  const m = liveMeta.value
+  if (!m) return ''
+  const t = m.llmTemperature != null ? m.llmTemperature : '—'
+  const tok = m.llmMaxTokens != null ? m.llmMaxTokens : '—'
+  const src =
+    m.modelSource === 'active-prompt'
+      ? 'ACTIVE Prompt（File-as-Truth）'
+      : m.modelSource === 'route'
+        ? '路由回退'
+        : '未解析'
+  return `生成参数（只读）：model=${m.model || '—'} · T=${t} · maxTokens=${tok} · 来源=${src}。改 T/maxTokens 请编辑 prompts/*.md 后同步，不在此表写入。`
+})
 
 watch(
   () => intent.skillDrawerId,
@@ -462,8 +553,10 @@ watch(
       const meta = metaRes?.data?.data ?? metaRes?.data ?? {}
       const promptBody = promptRes?.data?.data ?? promptRes?.data ?? {}
       const modelCfg = (meta.modelConfig || {}) as Record<string, unknown>
+      const llmRequest = (modelCfg.llmRequest || {}) as Record<string, unknown>
       const parent = (meta.parentAgent || {}) as Record<string, unknown>
       const skill = (meta.skill || {}) as Record<string, unknown>
+      const stats = (meta.stats || {}) as Record<string, unknown>
       // 平台重试预算（workbench meta reliability，只读展示）
       const rel = (modelCfg.reliability || {}) as Record<string, unknown>
       platformReliability.value = {
@@ -476,12 +569,18 @@ watch(
       const prompt = (promptBody.prompt || {}) as Record<string, unknown>
       const version = prompt.version ? `v${String(prompt.version)}` : ''
       const promptName = prompt.name ? String(prompt.name) : ''
+      const llmModel = llmRequest.model != null ? String(llmRequest.model) : modelCfg.model ? String(modelCfg.model) : ''
       liveMeta.value = {
         agentName: String(parent.name || parent.id || ''),
         category: String(skill.category || skillProfile.value?.category || ''),
-        model: modelCfg.model ? String(modelCfg.model) : modelCfg.tier ? `档位 ${String(modelCfg.tier)}` : '',
+        model: llmModel || (modelCfg.tier ? `档位 ${String(modelCfg.tier)}` : ''),
+        modelSource: String(llmRequest.source || modelCfg.source || ''),
         promptVersion: [version, promptName].filter(Boolean).join(' · '),
-        effectivePrompt: String(prompt.systemPrompt || '').slice(0, 1200)
+        effectivePrompt: String(prompt.systemPrompt || '').slice(0, 1200),
+        llmTemperature: llmRequest.temperature != null ? Number(llmRequest.temperature) : null,
+        llmMaxTokens: llmRequest.maxTokens != null ? Number(llmRequest.maxTokens) : null,
+        statsSource: String(stats.source || ''),
+        statsRange: String(stats.range || 'all')
       }
       const vBody = versionsRes?.data?.data ?? versionsRes?.data ?? []
       const vItems = Array.isArray(vBody) ? vBody : vBody.items || vBody.versions || []
@@ -528,19 +627,16 @@ function goTrace(traceId: string) {
 }
 
 function goPromptLab() {
-  closeSkillDrawer()
-  intent.scene = 'prompt-lab'
+  editSkillInPromptLab(intent.skillDrawerId)
 }
 
 function goFullEditor() {
-  const id = skillProfile.value?.id
-  if (!id) return
-  closeSkillDrawer()
-  window.open(`/admin/skills/${encodeURIComponent(id)}`, '_blank')
+  editSkillInPromptLab(intent.skillDrawerId)
 }
 </script>
 
 <style scoped>
+/* ========== 遮罩与面板 ========== */
 .msk {
   position: fixed;
   inset: 0;
@@ -550,7 +646,7 @@ function goFullEditor() {
   justify-content: flex-end;
 }
 .msk__panel {
-  width: min(440px, 100vw);
+  width: min(460px, 100vw);
   height: 100%;
   background: #fff;
   box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
@@ -562,107 +658,274 @@ function goFullEditor() {
   from { transform: translateX(30px); opacity: 0; }
 }
 
+/* ========== 头部身份区 ========== */
 .msk__head {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid #e1e8f2;
+  background: linear-gradient(180deg, var(--soft, rgba(52, 120, 246, 0.06)), rgba(255, 255, 255, 0) 90%);
+  display: grid;
+  gap: 10px;
+}
+.msk__id-row {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 16px 18px;
-  border-bottom: 1px solid #e1e8f2;
+  gap: 11px;
 }
-.msk__title { display: grid; gap: 6px; justify-items: start; }
-.msk__title h3 { margin: 0; font-size: 18px; }
-.msk__id { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8492ab; }
+.msk__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--hue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.msk__icon svg { width: 19px; height: 19px; }
+.msk__titlebox { min-width: 0; flex: 1; padding-top: 1px; }
+.msk__name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #16233c;
+  line-height: 1.3;
+}
+.msk__id {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: #8492ab;
+  word-break: break-all;
+}
 .msk__close {
   border: 0;
-  background: #f0f2f5;
-  width: 30px;
-  height: 30px;
+  background: rgba(240, 242, 245, 0.8);
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   cursor: pointer;
   color: #5b6577;
-  font-size: 13px;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.msk__close:hover { background: #e6eaf2; }
+
+.msk__chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-left: 49px;
+}
+.msk__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.msk__status i { width: 6px; height: 6px; border-radius: 50%; }
+.msk__status.is-ok { background: #ecfdf5; color: #15803d; }
+.msk__status.is-ok i { background: #16a34a; }
+.msk__status.is-bad { background: #fef2f2; color: #dc2626; }
+.msk__status.is-bad i { background: #dc2626; }
+.msk__chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(240, 244, 250, 0.9);
+  color: #5b6577;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.msk__chip.mono { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+.msk__desc {
+  margin: 0;
+  padding-left: 49px;
+  color: #5b6577;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
-.msk__body { padding: 16px 18px; display: grid; gap: 16px; align-content: start; overflow-y: auto; }
-.msk__desc { margin: 0; color: #5b6577; font-size: 13px; line-height: 1.6; }
-
-.msk__meta {
+/* ========== 正文 ========== */
+.msk__body {
+  padding: 14px 18px 20px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 16px;
+  align-content: start;
+  overflow-y: auto;
 }
-.msk__meta > div { display: grid; gap: 2px; }
-.msk__meta span { font-size: 11px; color: #8492ab; font-weight: 600; }
-.msk__meta strong { font-size: 12.5px; }
 
+/* 指标条 */
 .msk__stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  border: 1px solid #e1e8f2;
+  border-radius: 12px;
+  overflow: hidden;
 }
 .msk__stat {
   display: grid;
-  gap: 2px;
-  padding: 10px;
-  border: 1px solid #e1e8f2;
-  border-radius: 10px;
-  text-align: center;
+  gap: 1px;
+  padding: 9px 12px 10px;
 }
-.msk__stat span { font-size: 10.5px; color: #8492ab; font-weight: 600; }
-.msk__stat strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.msk__stat + .msk__stat { border-left: 1px solid #eef2f8; }
+.msk__stat span { font-size: 10px; color: #8492ab; font-weight: 600; }
+.msk__stat strong {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2a44;
+  font-variant-numeric: tabular-nums;
+}
 .msk__stat strong.is-bad { color: #dc2626; }
+.msk__stat strong.is-ok { color: #15803d; }
+.msk__stat strong.is-warn { color: #b45309; }
+.msk__stat strong.is-na { color: #8492ab; }
+.msk__note { margin: -8px 0 0; font-size: 10.5px; color: #8492ab; }
 
+/* 生效模型 kv 行 */
+.msk__kv {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px dashed #e1e8f2;
+  border-radius: 10px;
+}
+.msk__kv span { font-size: 11px; color: #8492ab; font-weight: 600; }
+.msk__kv strong { font-size: 12px; color: #1a2a44; font-weight: 600; }
+.msk__src {
+  margin-left: auto;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  color: #8492ab;
+}
+
+/* 小节系统 */
 .msk__section { display: grid; gap: 8px; }
-.msk__section h4 {
+.msk__sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.msk__sec-head h4 {
   margin: 0;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #8492ab;
 }
+.msk__sec-head--btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 6px;
+}
+.msk__sec-head--btn:hover h4 { color: #5b6577; }
+.msk__sec-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  color: #8492ab;
+  font-weight: 600;
+}
+.msk__chev {
+  width: 9px;
+  height: 9px;
+  transition: transform 0.15s ease;
+}
+.msk__chev.is-open { transform: rotate(90deg); }
+.msk__src-chip {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8492ab;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f0f2f5;
+}
+.msk__src-chip--custom { color: #3478f6; background: #eff6ff; }
 
-.msk__spans { display: grid; gap: 4px; }
-.msk__span {
+/* 行列表（下辖 Skill / 最近调用） */
+.msk__list { display: grid; gap: 4px; }
+.msk__row {
   display: grid;
-  grid-template-columns: 10px 1fr auto auto;
+  grid-template-columns: 8px 1fr auto auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
+  border: 1px solid #e6ecf6;
+  border-radius: 9px;
   background: #fff;
   font: inherit;
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
-.msk__span:hover { border-color: rgba(52, 120, 246, 0.35); }
-.msk__span-dot { width: 8px; height: 8px; border-radius: 50%; }
-.msk__span-dot.is-ok { background: #15803d; }
-.msk__span-dot.is-warn { background: #b45309; }
-.msk__span-dot.is-err { background: #dc2626; }
-.msk__span-dot.is-idle { background: #c3cede; }
-.is-bad-text { color: #dc2626; }
-.msk__span-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.msk__span-dur { color: #5b6577; font-size: 11px; }
-.msk__span-trace { color: #b45309; font-size: 11px; }
+.msk__row:hover { border-color: rgba(52, 120, 246, 0.35); background: #f8fbff; }
+.msk__dot { width: 7px; height: 7px; border-radius: 50%; }
+.msk__dot.is-ok { background: #15803d; }
+.msk__dot.is-warn { background: #b45309; }
+.msk__dot.is-err { background: #dc2626; }
+.msk__dot.is-idle { background: #c3cede; }
+.msk__row-title {
+  font-weight: 500;
+  color: #223252;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msk__row-num { color: #5b6577; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.msk__row-id {
+  color: #8492ab;
+  font-size: 10px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msk__none { margin: 0; color: #8492ab; font-size: 12px; }
 .mono { font-family: 'JetBrains Mono', monospace; }
-.msk__none { margin: 0; color: #8492ab; font-size: 12.5px; }
 
-/* 运行配置 */
-.msk__cfg-src { font-size: 10px; font-weight: 700; color: #8492ab; text-transform: none; letter-spacing: 0; }
-.msk__cfg-src--custom { color: var(--mk-blue, #3478f6); }
-.msk__cfg { display: grid; gap: 10px; }
-.msk__cfg-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; }
-.msk__cfg-field { display: grid; gap: 4px; }
-.msk__cfg-field span { font-size: 11px; color: #8492ab; font-weight: 600; }
-.msk__cfg-field--check { align-content: end; justify-items: start; }
-.msk__cfg-field--check input { width: 16px; height: 16px; }
-.msk__cfg-input {
-  padding: 7px 10px;
+/* 运行配置卡片 */
+.msk__card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid #e1e8f2;
+  border-radius: 12px;
+  background: #f8fafd;
+}
+.msk__field { display: grid; gap: 4px; }
+.msk__field > span { font-size: 11px; color: #8492ab; font-weight: 600; }
+.msk__field--check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.msk__field--check span { font-size: 12px; color: #5b6577; font-weight: 600; }
+.msk__field--check input { width: 15px; height: 15px; accent-color: #3478f6; }
+.msk__field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.msk__input {
+  padding: 7px 10px;
+  border: 1px solid #dbe3ef;
   border-radius: 8px;
   font: inherit;
   font-size: 12px;
@@ -670,9 +933,26 @@ function goFullEditor() {
   background: #fff;
   width: 100%;
 }
-.msk__cfg-input:focus { outline: none; border-color: #3478f6; }
-.msk__cfg-actions { display: flex; gap: 8px; align-items: center; }
-.msk__cfg-save {
+.msk__input:focus { outline: none; border-color: #3478f6; }
+.msk__effective {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eef4fc;
+  border: 1px solid #dbe7f6;
+  font-size: 11px;
+  color: #5b6577;
+  line-height: 1.5;
+}
+.msk__budget {
+  margin: 0;
+  font-size: 10.5px;
+  color: #8492ab;
+  font-weight: 600;
+}
+.msk__budget em { font-style: normal; font-weight: 400; color: #5b6577; }
+.msk__actions { display: flex; gap: 8px; align-items: center; }
+.msk__btn-primary {
   padding: 7px 14px;
   border-radius: 8px;
   border: 0;
@@ -683,8 +963,9 @@ function goFullEditor() {
   font-weight: 700;
   cursor: pointer;
 }
-.msk__cfg-save:disabled { opacity: 0.6; cursor: not-allowed; }
-.msk__cfg-del {
+.msk__btn-primary:hover { background: #2b64d8; }
+.msk__btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.msk__btn-danger {
   padding: 7px 12px;
   border-radius: 8px;
   border: 1px solid rgba(220, 38, 38, 0.35);
@@ -695,60 +976,47 @@ function goFullEditor() {
   font-weight: 700;
   cursor: pointer;
 }
-.msk__cfg-msg { margin: 0; font-size: 12px; color: #15803d; font-weight: 600; }
-.msk__cfg-msg--err { color: #dc2626; }
-.msk__cfg-budget {
-  display: grid;
-  gap: 3px;
-  align-content: end;
-  padding-bottom: 2px;
-}
-.msk__cfg-budget span { font-size: 10.5px; color: #8492ab; font-weight: 700; }
-.msk__cfg-budget em { font-style: normal; font-size: 10.5px; color: #5b6577; font-family: 'JetBrains Mono', monospace; }
+.msk__msg { margin: 0; font-size: 11.5px; color: #15803d; font-weight: 600; }
+.msk__msg--err { color: #dc2626; }
+
+/* 试跑 */
 .msk__test-input {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
+  border: 1px solid #dbe3ef;
+  border-radius: 9px;
   font-size: 11px;
   resize: vertical;
+  line-height: 1.55;
 }
-.msk__prompt-preview--err { color: #fca5a5; }
+.msk__test-input:focus { outline: none; border-color: #3478f6; }
 
-/* 生效 Prompt 折叠 */
-.msk__fold {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
+/* 代码井（Prompt 预览 / 试跑输出） */
+.msk__code {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #101826;
+  border: 1px solid #1c2a40;
+  color: #9db8dc;
+  font: 10.5px/1.65 'JetBrains Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
 }
-.msk__fold h4 { margin: 0; }
-.msk__fold-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #8492ab;
-  font-weight: 600;
-}
-.msk__prompt-preview--cap { max-height: 140px; }
+.msk__code--cap { max-height: 140px; }
+.msk__code--err { color: #fca5a5; border-color: rgba(220, 38, 38, 0.4); }
 
 /* 协议规则 */
 .msk__rules { display: grid; gap: 6px; }
 .msk__rule {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 7px 10px;
-  border: 1px solid #e1e8f2;
-  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 7px 10px 7px 12px;
+  border-left: 2px solid rgba(141, 107, 255, 0.45);
+  background: #faf9ff;
+  border-radius: 0 8px 8px 0;
   font-size: 12px;
 }
 .msk__rule-id { color: #8d6bff; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
@@ -765,37 +1033,28 @@ function goFullEditor() {
 }
 .msk__protocols { display: grid; gap: 6px; margin-top: 4px; }
 .msk__protocol {
-  border: 1px dashed #e1e8f2;
-  border-radius: 8px;
-  padding: 8px 10px;
+  border: 1px solid #e6ecf6;
+  border-radius: 10px;
+  padding: 9px 12px;
   display: grid;
   gap: 4px;
 }
 .msk__protocol-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.msk__protocol-head strong { font-size: 12px; }
+.msk__protocol-head strong { font-size: 12px; font-weight: 600; color: #223252; }
 .msk__protocol p { margin: 0; font-size: 11.5px; color: #5b6577; line-height: 1.6; }
 .msk__protocol-sites { font-size: 10px; color: #8492ab; word-break: break-all; }
 
+/* Prompt 版本 */
 .msk__prompt {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border: 1px dashed #e1e8f2;
-  border-radius: 8px;
-}
-.msk__prompt-preview {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #0d1420;
-  color: #8ba3c7;
-  font: 10.5px/1.6 'JetBrains Mono', monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 180px;
-  overflow-y: auto;
+  border-radius: 9px;
+  font-size: 11.5px;
+  color: #5b6577;
 }
 .mk-link {
   border: 0;
@@ -809,31 +1068,44 @@ function goFullEditor() {
 }
 .msk__versions {
   display: grid;
-  gap: 4px;
-  margin-top: 8px;
+  gap: 2px;
+  margin-top: 4px;
 }
 .msk__versions-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #8492ab;
+  padding-bottom: 2px;
 }
 .msk__version-row {
   display: grid;
-  grid-template-columns: 48px 72px 1fr;
+  grid-template-columns: 52px 64px 1fr;
   gap: 8px;
+  align-items: center;
   font-size: 11px;
   color: #5b6577;
   padding: 4px 0;
   border-bottom: 1px solid #f0f2f5;
 }
+.msk__version-row:last-child { border-bottom: none; }
+.msk__version-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #eef2fa;
+  color: #41516e;
+  font-size: 10px;
+  width: fit-content;
+}
+.msk__version-status { color: #8492ab; }
 .msk__version-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.msk__section--actions {
-  padding-top: 4px;
-}
+
+/* 底部主操作 */
+.msk__section--actions { padding-top: 2px; }
 .msk__primary-link {
   border: 1px solid rgba(52, 120, 246, 0.35);
   background: #eef5ff;
@@ -841,13 +1113,11 @@ function goFullEditor() {
   font: inherit;
   font-weight: 700;
   font-size: 12.5px;
-  padding: 9px 12px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
   width: 100%;
   text-align: left;
 }
-.msk__primary-link:hover {
-  background: #e0edff;
-}
+.msk__primary-link:hover { background: #e0edff; }
 </style>

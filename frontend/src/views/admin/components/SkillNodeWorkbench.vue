@@ -58,11 +58,11 @@
               <dd>{{ formatReasoningEffort(meta.modelConfig?.reasoningEffort) }}</dd>
             </div>
             <div class="quickview-spec-row">
-              <dt>温度</dt>
+              <dt>温度 (ACTIVE)</dt>
               <dd>{{ formatNumber(meta.modelConfig?.temperature) }}</dd>
             </div>
             <div class="quickview-spec-row">
-              <dt>Max Tokens</dt>
+              <dt>Max Tokens (ACTIVE)</dt>
               <dd>{{ formatMaxTokens(meta.modelConfig?.maxTokens) }}</dd>
             </div>
             <div class="quickview-spec-row">

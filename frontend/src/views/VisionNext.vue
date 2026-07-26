@@ -1,8 +1,8 @@
 <template>
   <div class="vn">
-    <header class="vn-nav" :class="{ 'vn-nav--on': scrolled }">
+    <header class="vn-nav" :class="{ 'vn-nav--on': scrolled || menuOpen }">
       <div class="vn-shell vn-nav__in">
-        <router-link to="/" class="vn-logo">
+        <router-link to="/" class="vn-logo" @click="closeMenu">
           <img src="/logo.png" alt="问流 WenFlow" />
         </router-link>
         <nav class="vn-nav__links" aria-label="页面导航">
@@ -14,7 +14,26 @@
           <router-link :to="secondaryPath" class="vn-btn vn-btn--ghost">{{ secondaryLabel }}</router-link>
           <router-link :to="primaryPath" class="vn-btn vn-btn--primary">{{ primaryLabel }}</router-link>
         </div>
+        <button
+          type="button"
+          class="vn-burger"
+          :class="{ 'vn-burger--open': menuOpen }"
+          :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
+          :aria-expanded="menuOpen"
+          @click="menuOpen = !menuOpen"
+        >
+          <span /><span /><span />
+        </button>
       </div>
+      <Transition name="vn-drawer">
+        <div v-if="menuOpen" class="vn-drawer vn-shell">
+          <router-link to="/" @click="closeMenu">首页</router-link>
+          <router-link to="/vision" @click="closeMenu">愿景</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" @click="closeMenu">GitHub</a>
+          <router-link :to="secondaryPath" class="vn-btn vn-btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
+          <router-link :to="primaryPath" class="vn-btn vn-btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
+        </div>
+      </Transition>
     </header>
 
     <main>
@@ -41,18 +60,18 @@
 
       <!-- 信念对照：少细节 -->
       <section class="vn-stand vn-shell">
-        <div class="vn-stand__head">
+        <div class="vn-stand__head" v-reveal>
           <h2>我们不想只让旧学习变得更快。</h2>
           <p>更快找到答案，不等于真正学会。问流更关心：你能不能把目标说清楚，把路径走出来，并在反馈里调整方向。</p>
         </div>
         <div class="vn-stand__grid">
-          <article>
+          <article v-reveal>
             <h3>我们坚持</h3>
             <ul>
               <li v-for="item in holds" :key="item">{{ item }}</li>
             </ul>
           </article>
-          <article>
+          <article v-reveal="{ delay: 120 }">
             <h3>我们不这样做</h3>
             <ul>
               <li v-for="item in avoids" :key="item">{{ item }}</li>
@@ -63,12 +82,12 @@
 
       <!-- 五种能力：理念层，不绑产品字段 -->
       <section class="vn-cap vn-shell">
-        <div class="vn-cap__head">
+        <div class="vn-cap__head" v-reveal>
           <h2>更值得训练的 5 种能力</h2>
           <p>比记住答案更值得练的，是这些。</p>
         </div>
         <ol class="vn-cap__list">
-          <li v-for="item in caps" :key="item.t">
+          <li v-for="(item, i) in caps" :key="item.t" v-reveal="{ delay: i * 60 }">
             <span>{{ item.n }}</span>
             <div>
               <strong>{{ item.t }}</strong>
@@ -80,7 +99,7 @@
 
       <!-- 与产品的关系：只一句桥，不展开实现 -->
       <section class="vn-bridge vn-shell">
-        <div class="vn-bridge__box">
+        <div class="vn-bridge__box" v-reveal>
           <h2>愿景停在「为什么」。</h2>
           <p>
             产品怎么走——目标规划、路径、今日行动、学习状态——在首页能看见。
@@ -91,7 +110,7 @@
       </section>
 
       <!-- 现状：诚实、短 -->
-      <section class="vn-status vn-shell">
+      <section class="vn-status vn-shell" v-reveal>
         <h2>它是什么阶段</h2>
         <p>
           WenFlow 目前是<strong>实验型原型</strong>：主链路已经能跑通，方向也相对清楚，但离成熟、稳定的产品还有一段路。
@@ -107,7 +126,7 @@
 
       <section class="vn-end">
         <div class="vn-end__glow" />
-        <div class="vn-end__in">
+        <div class="vn-end__in" v-reveal>
           <h2>带着一个真实问题开始。</h2>
           <p>不需要先写完整计划。说出最近真正想解决的事。</p>
           <router-link :to="primaryPath" class="vn-btn vn-btn--primary vn-btn--lg">{{ primaryLabel }}</router-link>
@@ -129,10 +148,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { hasUserSession } from '@/utils/api'
 
 const scrolled = ref(false)
+const menuOpen = ref(false)
 const loggedIn = ref(false)
 
 const holds = [
@@ -160,21 +180,33 @@ const secondaryPath = computed(() => (loggedIn.value ? '/dashboard' : '/login'))
 const primaryLabel = computed(() => (loggedIn.value ? '规划新目标' : '从一个问题开始'))
 const secondaryLabel = computed(() => (loggedIn.value ? '回到学习台' : '登录'))
 
+function closeMenu() {
+  menuOpen.value = false
+}
+
+watch(menuOpen, (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+
 function onScroll() {
   scrolled.value = window.scrollY > 20
 }
 
-onMounted(() => {
+function syncAuthState() {
   loggedIn.value = hasUserSession()
-  window.addEventListener('storage', () => {
-    loggedIn.value = hasUserSession()
-  })
+}
+
+onMounted(() => {
+  syncAuthState()
+  window.addEventListener('storage', syncAuthState)
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 })
 
 onUnmounted(() => {
+  window.removeEventListener('storage', syncAuthState)
   window.removeEventListener('scroll', onScroll)
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -187,6 +219,7 @@ onUnmounted(() => {
   --canvas: #f3f6fb;
   --blue: #3478f6;
   --blue-deep: #1f57cc;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
@@ -239,6 +272,7 @@ onUnmounted(() => {
   font-weight: 700;
   color: color-mix(in srgb, var(--ink) 72%, #fff);
   text-decoration: none;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 .vn-nav__links a.is-on,
 .vn-nav__links a:hover {
@@ -261,6 +295,14 @@ onUnmounted(() => {
   font-weight: 800;
   text-decoration: none;
   border: 1px solid transparent;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  width: fit-content;
+}
+.vn-btn:hover {
+  transform: translateY(-2px);
+}
+.vn-btn:active {
+  transform: translateY(0) scale(0.98);
 }
 .vn-btn--primary {
   color: #fff;
@@ -275,6 +317,45 @@ onUnmounted(() => {
 .vn-btn--lg {
   min-height: 50px;
   padding: 0 24px;
+}
+.vn-burger {
+  display: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+.vn-burger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin: 4px auto;
+  background: var(--ink);
+  border-radius: 99px;
+  transition: transform 0.28s var(--ease), opacity 0.2s var(--ease);
+}
+.vn-burger--open span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+.vn-burger--open span:nth-child(2) {
+  opacity: 0;
+}
+.vn-burger--open span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+.vn-drawer {
+  display: none;
+}
+.vn-drawer-enter-active,
+.vn-drawer-leave-active {
+  transition: opacity 0.24s var(--ease), transform 0.24s var(--ease);
+}
+.vn-drawer-enter-from,
+.vn-drawer-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 .vn-bg {
@@ -304,6 +385,23 @@ onUnmounted(() => {
   top: 380px;
   left: -120px;
   background: radial-gradient(circle, rgba(141, 107, 255, 0.2), transparent 70%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .vn-orb--a {
+    animation: vn-drift-a 24s ease-in-out infinite;
+  }
+  .vn-orb--b {
+    animation: vn-drift-b 28s ease-in-out infinite;
+  }
+}
+@keyframes vn-drift-a {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-32px, 26px); }
+}
+@keyframes vn-drift-b {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(28px, -22px); }
 }
 .vn-grid {
   position: absolute;
@@ -378,6 +476,18 @@ main {
   letter-spacing: -0.025em;
 }
 
+/* Hero 入场编排 */
+@media (prefers-reduced-motion: no-preference) {
+  .vn-hero .vn-pill { animation: vn-rise 0.7s var(--ease) 0.05s both; }
+  .vn-hero h1 { animation: vn-rise 0.8s var(--ease) 0.14s both; }
+  .vn-hero__copy > p { animation: vn-rise 0.8s var(--ease) 0.24s both; }
+  .vn-hero__aside { animation: vn-rise 0.9s var(--ease) 0.36s both; }
+}
+@keyframes vn-rise {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .vn-stand {
   padding: 24px 0 72px;
 }
@@ -409,6 +519,11 @@ main {
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--line);
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+.vn-stand__grid article:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 }
 .vn-stand__grid h3 {
   margin: 0 0 14px;
@@ -454,9 +569,15 @@ main {
   display: grid;
   grid-template-columns: 56px 1fr;
   gap: 16px;
-  padding: 20px 0;
+  padding: 20px 12px;
+  margin: 0 -12px;
   border-top: 1px solid var(--line);
   align-items: start;
+  border-radius: 12px;
+  transition: background 0.25s var(--ease);
+}
+.vn-cap__list li:hover {
+  background: rgba(255, 255, 255, 0.7);
 }
 .vn-cap__list li:last-child {
   border-bottom: 1px solid var(--line);
@@ -622,17 +743,40 @@ main {
     min-height: auto;
     padding-top: 110px;
   }
+  .vn-nav__links,
   .vn-nav__acts {
     display: none;
+  }
+  .vn-burger {
+    display: block;
+    margin-left: auto;
+  }
+  .vn-drawer {
+    display: grid;
+    gap: 8px;
+    margin: 0 auto 14px;
+    padding: 16px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
+  }
+  .vn-drawer a {
+    padding: 12px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 700;
+    background: #f7faff;
+  }
+  .vn-drawer .vn-btn {
+    width: 100%;
   }
 }
 
 @media (max-width: 640px) {
   .vn-shell {
     width: min(100% - 28px, 1180px);
-  }
-  .vn-nav__links {
-    display: none;
   }
 }
 </style>

@@ -20,7 +20,6 @@ import {
 import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
 type MessageRole = 'user' | 'assistant' | 'system';
@@ -156,7 +155,25 @@ interface PathOutput {
   milestones: MilestoneOutput[];
 }
 
-const PATH_RUNTIME_CONTRACT = buildDefaultRuntimeContract('path-planning', 'generator');
+export function validatePathPlanningOutput(parsed: any) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
+  }
+
+  if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_NAME_MISSING' };
+  }
+
+  if (!Array.isArray(parsed.milestones) || parsed.milestones.length === 0) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONES_MISSING' };
+  }
+
+  if (!parsed.cognitiveCore || typeof parsed.cognitiveCore !== 'object' || Array.isArray(parsed.cognitiveCore)) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_MISSING' };
+  }
+
+  return { valid: true as const };
+}
 
 /**
  * Path Agent 定义
@@ -394,18 +411,12 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
       focus: framingPainPoints.length > 0 ? framingPainPoints : (structuredData.end_user?.pain_points || []),
       context: framingContext || structuredData.end_user?.identity || '',
       confidence: input.confidenceScores?.understanding || 0.8,
-      // @ts-ignore
       scenario,
-      // @ts-ignore
       structuredData,
-      // @ts-ignore
       confirmedProposal,
-      // @ts-ignore
       conversationHistory,
-      // @ts-ignore
       replan,
-      // @ts-ignore
-      pathSceneFraming
+      pathSceneFraming,
     };
   }
   
@@ -599,6 +610,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
     defaultSystemPrompt: '',
+    requireActivePrompt: true,
     caller: { agentId: 'path-agent', skillId: 'path-planning' },
     modelDefaults: {
       maxTokens: PATH_AGENT_MAX_TOKENS,
@@ -620,8 +632,9 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
         extractedJson: '',
       }
     }),
-    mapEnvelope: (output) => adaptToRuntimeEnvelope({
-      contract: PATH_RUNTIME_CONTRACT,
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed),
+    mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
+      contract: runtimeContract,
       artifact: output,
       phase: 'core-path-generated',
       status: 'succeeded',
@@ -629,6 +642,10 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
       nextAction: null,
       nextState: null,
     }),
+    retryStrategy: {
+      maxAttempts: 2,
+      onValidationFail: ({ failureReason }) => `请只输出一个学习路径 JSON 对象，必须包含非空 name、非空 milestones 数组和 cognitiveCore 对象。上次失败原因：${failureReason}`,
+    },
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });
 
   if (!result.success || !result.output) {

@@ -2,6 +2,15 @@
 agentId: skill:goal-profile-inference
 name: default-goal-profile-inference
 archetype: distiller
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 学习者画像推断器
 temperature: 0.7
 maxTokens: 2000

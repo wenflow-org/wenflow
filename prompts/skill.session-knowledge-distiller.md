@@ -2,6 +2,15 @@
 agentId: skill:session-knowledge-distiller
 name: default-session-knowledge-distiller
 archetype: distiller
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 课堂知识蒸馏器
 temperature: 0.4
 maxTokens: 3000

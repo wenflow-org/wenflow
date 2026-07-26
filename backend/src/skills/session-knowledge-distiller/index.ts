@@ -1,6 +1,5 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 export const sessionKnowledgeDistillerDefinition: SkillDefinition = {
   name: 'session-knowledge-distiller',
@@ -86,7 +85,6 @@ export const SESSION_KNOWLEDGE_DISTILLER_PROMPT = `你是课堂知识蒸馏器�
 7. blockedFoundations 关注“仍不稳定、会阻塞后续学习的前置”。
 8. 如果输入证据不足，就保守输出，不要脑补。`;
 
-const promptConfigService = new AgentConfigService();
 
 function normalizeText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -205,44 +203,48 @@ function buildFallback(input: SessionKnowledgeDistillerInput): SessionKnowledgeD
 export async function sessionKnowledgeDistiller(input: SessionKnowledgeDistillerInput): Promise<SkillExecutionResult<SessionKnowledgeDistillerOutput>> {
   const startTime = Date.now();
   try {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'session-knowledge-distiller' };
-    const promptConfig = await promptConfigService.getActivePrompt('skill:session-knowledge-distiller');
-    if (!promptConfig?.systemPrompt?.trim()) {
-      throw new Error('SKILL_PROMPT_MISSING: session-knowledge-distiller');
+    const result = await callPrompt<SessionKnowledgeDistillerInput, SessionKnowledgeDistillerOutput>({
+      agentId: 'skill:session-knowledge-distiller',
+      defaultSystemPrompt: '',
+      requireActivePrompt: true,
+      caller: { skillId: 'session-knowledge-distiller' },
+      modelDefaults: { temperature: 0.4, maxTokens: 3000 },
+      buildUserPayload: (payload) => payload,
+      normalizeOutput: (parsed, payload) => {
+        const fallback = buildFallback(payload);
+        const obj = parsed && typeof parsed === 'object' ? parsed : {};
+        const ledger = safeArray(obj.conceptLedger)
+          .map(normalizeLedgerItem)
+          .filter((item) => item.conceptKey && item.label);
+        const transferSignals = safeArray(obj.transferSignals)
+          .map(normalizeTransferSignal)
+          .filter((item) => item.conceptKey && item.label);
+        return {
+          conceptLedger: ledger.length > 0 ? ledger : fallback.conceptLedger,
+          reusableFoundations:
+            uniqueStrings(safeArray(obj.reusableFoundations)).length > 0
+              ? uniqueStrings(safeArray(obj.reusableFoundations)).slice(0, 16)
+              : fallback.reusableFoundations,
+          blockedFoundations:
+            uniqueStrings(safeArray(obj.blockedFoundations)).length > 0
+              ? uniqueStrings(safeArray(obj.blockedFoundations)).slice(0, 16)
+              : fallback.blockedFoundations,
+          transferSignals: transferSignals.length > 0 ? transferSignals : fallback.transferSignals,
+        };
+      },
+      validateParsedOutput: (parsed) =>
+        parsed && typeof parsed === 'object'
+          ? { valid: true }
+          : { valid: false, failureReason: 'SESSION_KNOWLEDGE_OUTPUT_NOT_OBJECT' },
+    }, input);
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'SESSION_KNOWLEDGE_DISTILLER_FAILED');
     }
-
-    const messages: ChatMessage[] = [
-      { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: JSON.stringify(input, null, 2) },
-    ];
-
-    const response = await gateway.execute({
-      messages,
-      temperature: promptConfig.temperature,
-      max_tokens: promptConfig.maxTokens,
-      model: promptConfig.model,
-    }, caller, {});
-
-    const content = response.choices[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-    const fallback = buildFallback(input);
-    const ledger = safeArray(parsed.conceptLedger).map(normalizeLedgerItem).filter((item) => item.conceptKey && item.label);
-    const transferSignals = safeArray(parsed.transferSignals).map(normalizeTransferSignal).filter((item) => item.conceptKey && item.label);
 
     return {
       success: true,
-      output: {
-        conceptLedger: ledger.length > 0 ? ledger : fallback.conceptLedger,
-        reusableFoundations: uniqueStrings(safeArray(parsed.reusableFoundations)).length > 0
-          ? uniqueStrings(safeArray(parsed.reusableFoundations)).slice(0, 16)
-          : fallback.reusableFoundations,
-        blockedFoundations: uniqueStrings(safeArray(parsed.blockedFoundations)).length > 0
-          ? uniqueStrings(safeArray(parsed.blockedFoundations)).slice(0, 16)
-          : fallback.blockedFoundations,
-        transferSignals: transferSignals.length > 0 ? transferSignals : fallback.transferSignals,
-      },
+      output: result.output,
       duration: Date.now() - startTime,
     };
   } catch {

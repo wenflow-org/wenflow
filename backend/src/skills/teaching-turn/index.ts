@@ -1,5 +1,4 @@
 ﻿import { callPrompt } from '../../composers/prompt-composer';
-import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
@@ -9,6 +8,7 @@ import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '.
 import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';
 import { labelGeneratorDefinition } from '../../skills/label-generator';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
+import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -133,6 +133,29 @@ export interface TeachingTurnOutput {
       reason: string;
     };
   };
+}
+
+/**
+ * 已通过 raw validator 与 normalizer 的单轮教学领域产物。
+ * 保留独立别名，避免将 legacy agent-output-v1 的 internal 包装误作领域模型。
+ */
+export type TeachingTurnArtifact = TeachingTurnOutput;
+
+/**
+ * Phase 2 internal canonical sidecar.
+ * Coordinator 仍负责知识状态合并和持久化，所以不在此阶段声明 transition。
+ */
+export function toTeachingTurnSkillOutcome(
+  artifact: TeachingTurnArtifact,
+  runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope> | null,
+): SkillOutcome<TeachingTurnArtifact> {
+  return buildSkillOutcome({
+    skillId: AGENT_ID,
+    artifact,
+    quality: 'model',
+    runtimeEnvelope: runtimeEnvelope || null,
+    transition: null,
+  });
 }
 
 export const teachingTurnAgentDefinition: AgentDefinition = {
@@ -427,11 +450,10 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   return { valid: true };
 }
 
-const TEACHING_RUNTIME_CONTRACT = buildDefaultRuntimeContract('teaching-turn', 'conversational');
-
 const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
+  requireActivePrompt: true,
   caller: {
     agentId: 'teaching-agent',
     skillId: 'teaching-turn',
@@ -439,11 +461,11 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   buildUserPayload: (input) => buildPromptInput(input),
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
   validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
-  mapEnvelope: (output) => {
+  mapEnvelope: (output, _input, runtimeContract) => {
     const isCompletion = !!output.control?.isCompletionCandidate;
     const phase = isCompletion ? 'completion-candidate' : 'turn-generated';
     return adaptToRuntimeEnvelope({
-      contract: TEACHING_RUNTIME_CONTRACT,
+      contract: runtimeContract,
       artifact: output,
       phase,
       status: 'succeeded',
@@ -478,6 +500,7 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
     }
 
     const output = result.output;
+    const skillOutcome = toTeachingTurnSkillOutcome(output, result.runtimeEnvelope);
     return {
       success: true,
       userVisible: output.reply,
@@ -489,6 +512,8 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
         },
         ext: {
           teaching: output,
+          // Internal canonical sidecar. Keep `teaching` unchanged for legacy consumers.
+          teachingTurnOutcome: skillOutcome,
           promptDebug: result.debug,
         }
       },

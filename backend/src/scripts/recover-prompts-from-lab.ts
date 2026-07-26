@@ -122,12 +122,11 @@ async function publishDbVersion(config: RecoverConfig, promptBody: string) {
     where: { skillId: config.skillId }
   })
 
+  // Phase 3：只同步路由/运维字段；T/maxTokens 由 agent_prompts ACTIVE 独占，禁止双写
   if (existingCfg) {
     await systemPrisma.skill_model_configs.update({
       where: { id: existingCfg.id },
       data: {
-        temperature: config.temperature ?? 0.7,
-        maxTokens: config.maxTokens ?? 8000,
         model: config.model || null,
         thinkingMode: config.thinkingMode || 'default',
         reasoningEffort: config.reasoningEffort || 'default',
@@ -139,8 +138,8 @@ async function publishDbVersion(config: RecoverConfig, promptBody: string) {
       data: {
         id: uuidv4(),
         skillId: config.skillId,
-        temperature: config.temperature ?? 0.7,
-        maxTokens: config.maxTokens ?? 8000,
+        temperature: 0.7,
+        maxTokens: 2000,
         model: config.model || null,
         thinkingMode: config.thinkingMode || 'default',
         reasoningEffort: config.reasoningEffort || 'default',

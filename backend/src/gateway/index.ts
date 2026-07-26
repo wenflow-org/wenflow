@@ -301,7 +301,7 @@ export class EduClawGateway {
   /**
    * 执行 Skill
    */
-  async executeSkill(skillName: string, input: any): Promise<any> {
+  async executeSkill(skillName: string, input: any, options?: import('../skills/protocol').SkillExecutionOptions): Promise<any> {
     const registration = this.skillRegistry.get(skillName);
 
     if (!registration) {
@@ -313,7 +313,9 @@ export class EduClawGateway {
     }
 
     try {
-      const result = await executeSkillHandler(registration.definition, input, registration.handler);
+      const result = options
+        ? await executeSkillHandler(registration.definition, input, registration.handler, options)
+        : await executeSkillHandler(registration.definition, input, registration.handler);
       this.skillRegistry.recordExecution(skillName, true, result.duration);
       return result;
     } catch (error: any) {

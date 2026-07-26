@@ -1,4 +1,10 @@
-import { toWrapupArtifact } from '../index'
+import {
+  sessionWrapupAgent,
+  sessionWrapupAgentHandler,
+  toWrapupArtifact,
+  toWrapupSkillOutcome,
+  validateSessionWrapupParsedOutput,
+} from '../index'
 
 const input: any = {
   messages: [],
@@ -27,6 +33,26 @@ const summary: any = {
 }
 
 describe('toWrapupArtifact', () => {
+  it('primary raw output requires both a complete summary and evaluation', () => {
+    const evaluation = {
+      sessionLss: 4,
+      sessionKtl: 7,
+      sessionLf: 3,
+      confidence: 0.8,
+      reasoning: '学生能够结合例子说明本节关键概念。'
+    }
+
+    expect(validateSessionWrapupParsedOutput({ summary, evaluation })).toEqual({ valid: true })
+    expect(validateSessionWrapupParsedOutput({ summary })).toEqual({
+      valid: false,
+      failureReason: 'SESSION_WRAPUP_EVALUATION_INVALID'
+    })
+    expect(validateSessionWrapupParsedOutput({ evaluation })).toEqual({
+      valid: false,
+      failureReason: 'SESSION_WRAPUP_SUMMARY_INVALID'
+    })
+  })
+
   it('失败来源的保守评估只作为内部降级结果，不暴露为完整评估', () => {
     const artifact = toWrapupArtifact({
       summary,
@@ -61,5 +87,65 @@ describe('toWrapupArtifact', () => {
 
     expect(artifact.status).toBe('complete')
     expect(artifact.evaluation).toEqual(evaluation)
+  })
+
+  it('toWrapupSkillOutcome 产出 skill-outcome/v1 且不改变 artifact 语义', () => {
+    const evaluation = {
+      sessionLss: 4,
+      sessionKtl: 7,
+      sessionLf: 3,
+      confidence: 0.8,
+      reasoning: 'ok',
+    }
+    const result = {
+      summary,
+      evaluation,
+      summarySource: 'model' as const,
+      evaluationSource: 'model' as const,
+    }
+    const outcome = toWrapupSkillOutcome(result as any, input)
+
+    expect(outcome.schemaVersion).toBe('skill-outcome/v1')
+    expect(outcome.meta.skillId).toBe('skill:session-wrapup')
+    expect(outcome.meta.quality).toBe('model')
+    expect(outcome.artifact.status).toBe('complete')
+    expect(outcome.transition).toBeNull()
+  })
+
+  it('仅在 legacy internal sidecar 附加 canonical outcome，不改变 agent-output-v1 展示字段', async () => {
+    const evaluation = {
+      sessionLss: 4,
+      sessionKtl: 7,
+      sessionLf: 3,
+      confidence: 0.8,
+      reasoning: 'ok',
+    }
+    const generate = jest.spyOn(sessionWrapupAgent, 'generate').mockResolvedValue({
+      summary,
+      evaluation,
+      summarySource: 'model',
+      evaluationSource: 'model',
+    })
+
+    try {
+      const output = await sessionWrapupAgentHandler(input, {})
+
+      expect(output).toMatchObject({
+        success: true,
+        userVisible: summary.topicSummary,
+        schemaVersion: 'agent-output-v1',
+        renderHints: { component: 'session-wrapup' },
+      })
+      expect(output.internal.ext.sessionWrapup).toEqual(expect.objectContaining({
+        result: expect.objectContaining({ summary, evaluation }),
+        artifact: expect.objectContaining({ status: 'complete' }),
+        skillOutcome: expect.objectContaining({
+          schemaVersion: 'skill-outcome/v1',
+          transition: null,
+        }),
+      }))
+    } finally {
+      generate.mockRestore()
+    }
   })
 })

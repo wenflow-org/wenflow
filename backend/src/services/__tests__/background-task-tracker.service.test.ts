@@ -1,7 +1,9 @@
 import {
   BackgroundTaskRejectedError,
-  BackgroundTaskTracker
+  BackgroundTaskTracker,
+  runBackgroundTask
 } from '../background-task-tracker.service'
+import { requestContextStorage } from '../../gateway/api-gateway/context'
 
 describe('BackgroundTaskTracker', () => {
   it('drain 等待现有任务并拒绝启动新任务', async () => {
@@ -32,5 +34,33 @@ describe('BackgroundTaskTracker', () => {
     })
     await expect(operation).rejects.toThrow('task failed')
     await expect(tracker.drain()).resolves.toBeUndefined()
+  })
+})
+
+describe('runBackgroundTask', () => {
+  it('脱离请求级 abortSignal，保留 traceId 等溯源字段', async () => {
+    const controller = new AbortController()
+    let seen: { abortSignal?: AbortSignal; traceId?: string; userId?: string } = {}
+    let markDone!: () => void
+    const finished = new Promise<void>(resolve => { markDone = resolve })
+
+    requestContextStorage.run(
+      { abortSignal: controller.signal, traceId: 'trace-detach-1', userId: 'u-1' },
+      () => {
+        runBackgroundTask('test.detach-abort', async () => {
+          const ctx = requestContextStorage.getStore() || {}
+          seen = { abortSignal: ctx.abortSignal, traceId: ctx.traceId, userId: ctx.userId }
+          markDone()
+        })
+      }
+    )
+
+    // 模拟 HTTP 连接关闭触发的 abort：后台任务不应感知
+    controller.abort()
+    await finished
+
+    expect(seen.traceId).toBe('trace-detach-1')
+    expect(seen.userId).toBe('u-1')
+    expect(seen.abortSignal).toBeUndefined()
   })
 })

@@ -66,7 +66,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     })
   })
 
-  it('先解析父 Agent，再叠加 Skill 模型配置', async () => {
+  it('先解析父 Agent，再叠加 Skill 路由配置（T/maxTokens 不由 skill 表覆盖）', async () => {
     const resolved = await new APIRouter().resolve({
       agentId: 'path-agent',
       skillId: 'path-planning'
@@ -78,13 +78,15 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     expect(skillConfigFindFirst).toHaveBeenCalledWith({
       where: { skillId: 'path-planning', enabled: true }
     })
+    // Phase 2/3：skill 只覆盖 model/timeout 等路由字段；T/maxTokens 继承 agent/platform
+    // 生成参数权威源为 ACTIVE prompt（resolveLlmGenerationParams）
     expect(resolved).toEqual(expect.objectContaining({
       providerId: 'skill:path-planning',
       endpoint: 'https://agent.example/v1',
       apiKey: 'agent-key',
       model: 'skill-model',
-      temperature: 0.2,
-      maxTokens: 5000,
+      temperature: 0.4,
+      maxTokens: 3000,
       timeoutMs: 45000,
       privateNetworkPolicy: 'runtime'
     }))

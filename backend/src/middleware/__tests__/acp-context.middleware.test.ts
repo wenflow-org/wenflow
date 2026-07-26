@@ -43,4 +43,28 @@ describe('acpContextMiddleware userRole', () => {
       userRole: 'user'
     }))
   })
+
+  it('把语言和时区请求头放入 Context Envelope locale', () => {
+    let captured: ReturnType<typeof getRequestContext> | undefined
+    const req: any = {
+      headers: {
+        'accept-language': 'zh-CN,zh;q=0.9',
+        'x-time-zone': 'Asia/Shanghai'
+      },
+      user: { userId: 'user-1', isAdmin: false, sessionType: 'user' }
+    }
+    const res: any = { setHeader: jest.fn() }
+
+    acpContextMiddleware('user')(req, res, () => {
+      captured = getRequestContext()
+    })
+
+    expect(captured).toEqual(expect.objectContaining({
+      locale: { language: 'zh-CN', timeZone: 'Asia/Shanghai' },
+      contextEnvelope: {
+        schemaVersion: 'context-envelope/v1',
+        locale: { language: 'zh-CN', timeZone: 'Asia/Shanghai' }
+      }
+    }))
+  })
 })

@@ -2,6 +2,15 @@
 agentId: skill:virtual-learner-persona-designer
 name: default-virtual-learner-persona-designer
 archetype: generator
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
 description: 虚拟学习者身份设计师
 temperature: 0.8
 maxTokens: 8000

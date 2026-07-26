@@ -2,6 +2,15 @@
 agentId: skill:dialogue-concept-extractor
 name: default-dialogue-concept-extractor
 archetype: extractor
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 对话概念抽取器
 temperature: 0.5
 maxTokens: 2500

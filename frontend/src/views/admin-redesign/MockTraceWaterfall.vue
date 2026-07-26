@@ -216,7 +216,7 @@ const verdictText = computed(() => {
 .wf-ruler__label {
   padding: 8px 14px;
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mk-faint);
@@ -277,7 +277,7 @@ const verdictText = computed(() => {
   padding: 1px 6px;
   border-radius: 5px;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .wf-row__kind--flow { background: #eff6ff; color: var(--mk-blue); }
 .wf-row__kind--call { background: #f0f2f5; color: var(--mk-muted); }
@@ -327,7 +327,7 @@ const verdictText = computed(() => {
 .wf-detail-label {
   display: block;
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--mk-faint);
   margin-bottom: 3px;

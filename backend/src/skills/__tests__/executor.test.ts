@@ -105,6 +105,41 @@ describe('统一 Skill Executor', () => {
     expect(firstBudget!.used.upstreamAttempts).toBe(2)
   })
 
+  it('构建 Context Envelope sidecar 且不改写业务 input', async () => {
+    const input = { goal: 'test', metadata: { sessionId: 'legacy-session' } }
+
+    await runWithContext({
+      userId: 'trusted-user',
+      traceId: 'trace-ctx',
+      sourceEntry: 'user'
+    }, () => executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      input,
+      async (received) => {
+        expect(received).toBe(input)
+        expect(getRequestContext().contextEnvelope).toEqual(expect.objectContaining({
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: 'trusted-user' },
+          session: expect.objectContaining({ sessionId: 'explicit-session' }),
+          trace: expect.objectContaining({ traceId: 'trace-ctx' }),
+          execution: expect.objectContaining({
+            skillId: 'text-structure-analyzer',
+            retry: expect.objectContaining({ budgetId: expect.stringMatching(/^rb_/) })
+          })
+        }))
+        return { success: true, output: 'ok' }
+      },
+      {
+        contextEnvelope: {
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: 'untrusted-override' },
+          session: { sessionId: 'explicit-session' },
+          locale: { language: 'zh-CN', timeZone: 'Asia/Shanghai' }
+        }
+      }
+    ))
+  })
+
   it('用户显式禁用 Skill 后在统一执行边界拒绝调用', async () => {
     userSkillFindUnique.mockResolvedValue({ enabled: false })
     const handler = jest.fn()

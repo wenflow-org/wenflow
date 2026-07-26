@@ -50,6 +50,15 @@ export const acpContextMiddleware = (defaultSourceEntry: SourceEntry) => {
         ? req.user.projection.runId || undefined
         : undefined,
     };
+    const language = String(req.headers['accept-language'] || '').split(',')[0]?.trim() || undefined;
+    const timeZone = String(req.headers['x-time-zone'] || '').trim() || undefined;
+    if (language || timeZone) {
+      context.locale = { language, timeZone };
+      context.contextEnvelope = {
+        schemaVersion: 'context-envelope/v1',
+        locale: context.locale,
+      };
+    }
     
     requestContextStorage.run(context, () => {
       res.setHeader('X-Trace-Id', context.traceId);

@@ -1,6 +1,5 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 export const dialogueConceptExtractorDefinition: SkillDefinition = {
   name: 'dialogue-concept-extractor',
@@ -59,8 +58,6 @@ export const DIALOGUE_CONCEPT_EXTRACTOR_PROMPT = `你是课堂对话概念抽取
 4. transferSignals 关注“学习者已经显示出可以迁移或复用”的概念，不要夸大。
 5. 每条都要稳健，confidence 范围 0-1。`;
 
-const promptConfigService = new AgentConfigService();
-
 function fallback(input: DialogueConceptExtractorInput): DialogueConceptExtractorOutput {
   const currentKnowledgeState = Array.isArray(input.currentKnowledgeState) ? input.currentKnowledgeState : [];
   return {
@@ -93,31 +90,36 @@ function safeArray<T>(value: T[] | undefined | null): T[] {
 export async function dialogueConceptExtractor(input: DialogueConceptExtractorInput): Promise<SkillExecutionResult<DialogueConceptExtractorOutput>> {
   const startTime = Date.now();
   try {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'dialogue-concept-extractor' };
-    const promptConfig = await promptConfigService.getActivePrompt('skill:dialogue-concept-extractor');
-    if (!promptConfig?.systemPrompt?.trim()) {
-      throw new Error('SKILL_PROMPT_MISSING: dialogue-concept-extractor');
+    const result = await callPrompt<DialogueConceptExtractorInput, DialogueConceptExtractorOutput>({
+      agentId: 'skill:dialogue-concept-extractor',
+      defaultSystemPrompt: '',
+      requireActivePrompt: true,
+      caller: { skillId: 'dialogue-concept-extractor' },
+      modelDefaults: { temperature: 0.5, maxTokens: 2500 },
+      buildUserPayload: (payload) => payload,
+      normalizeOutput: (parsed, payload) => {
+        const base = fallback(payload);
+        const obj = parsed && typeof parsed === 'object' ? parsed : {};
+        return {
+          recurringConfusions:
+            safeArray(obj.recurringConfusions).length > 0 ? obj.recurringConfusions : base.recurringConfusions,
+          transferSignals:
+            safeArray(obj.transferSignals).length > 0 ? obj.transferSignals : base.transferSignals,
+        };
+      },
+      validateParsedOutput: (parsed) =>
+        parsed && typeof parsed === 'object'
+          ? { valid: true }
+          : { valid: false, failureReason: 'DIALOGUE_CONCEPT_OUTPUT_NOT_OBJECT' },
+    }, input);
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'DIALOGUE_CONCEPT_EXTRACTOR_FAILED');
     }
-    const messages: ChatMessage[] = [
-      { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: JSON.stringify(input, null, 2) }
-    ];
-    const response = await gateway.execute({ messages }, caller, {
-      temperature: promptConfig.temperature,
-      maxTokens: promptConfig.maxTokens,
-      model: promptConfig.model,
-    });
-    const content = response.choices[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-    const result = fallback(input);
+
     return {
       success: true,
-      output: {
-        recurringConfusions: safeArray(parsed.recurringConfusions).length > 0 ? parsed.recurringConfusions : result.recurringConfusions,
-        transferSignals: safeArray(parsed.transferSignals).length > 0 ? parsed.transferSignals : result.transferSignals,
-      },
+      output: result.output,
       duration: Date.now() - startTime,
     };
   } catch {

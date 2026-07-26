@@ -72,15 +72,15 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="参数摘要" min-width="180">
+        <el-table-column label="可靠性摘要" min-width="180">
           <template #default="{ row }">
             <div class="params-cell">
               <div class="params-cell__row">
-                <span>温度 {{ row.temperature ?? '--' }}</span>
-                <span>最大输出 {{ row.maxTokens ?? '--' }}</span>
+                <span>超时 {{ formatTimeout(row.requestTimeoutMs) }}</span>
+                <span>逻辑重试 {{ row.maxLogicalRetries ?? '继承' }}</span>
               </div>
               <div class="params-cell__row params-cell__row--sub">
-                <el-tag size="small" type="info">{{ formatTimeout(row.requestTimeoutMs) }}</el-tag>
+                <el-tag size="small" type="warning" effect="plain">T/Max 见 ACTIVE Prompt</el-tag>
               </div>
             </div>
           </template>
@@ -110,8 +110,8 @@
         </div>
         <div class="admin-mobile-card__tags">
           <el-tag :type="config.enabled ? 'success' : 'info'" size="small">{{ config.enabled ? '独立配置' : '继承' }}</el-tag>
-          <el-tag size="small" type="info">温度 {{ config.temperature ?? '--' }}</el-tag>
-          <el-tag size="small" type="info">最大输出 {{ config.maxTokens ?? '--' }}</el-tag>
+          <el-tag size="small" type="info">{{ formatTimeout(config.requestTimeoutMs) }}</el-tag>
+          <el-tag size="small" type="warning" effect="plain">T/Max→Prompt</el-tag>
         </div>
         <div class="admin-mobile-card__footer">
           <span>{{ formatLastCalledRelative(config.lastCalledAt) }}</span>
@@ -154,9 +154,8 @@ interface SkillModelConfig {
   model?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'high' | 'max';
-  temperature?: number;
-  maxTokens?: number;
   requestTimeoutMs?: number | null;
+  maxLogicalRetries?: number | null;
   enabled: boolean;
 }
 

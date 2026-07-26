@@ -220,7 +220,7 @@
   padding: 16px 18px 12px;
   border-bottom: 1px solid var(--mk-line, #e1e8f2);
 }
-.mk-modal__title { margin: 0; font-size: 15px; font-weight: 800; }
+.mk-modal__title { margin: 0; font-size: 15px; font-weight: 700; }
 .mk-modal__close {
   border: 0;
   background: #f0f2f5;

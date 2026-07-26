@@ -2,6 +2,15 @@
 agentId: skill:adaptive-guidance-copy
 name: default-adaptive-guidance-copy
 archetype: copywriter
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
 description: 动态引导文案生成器
 temperature: 0.6
 maxTokens: 2000

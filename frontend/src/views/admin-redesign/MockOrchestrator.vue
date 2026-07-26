@@ -312,7 +312,7 @@ const current = computed(() => stages.value.find((s) => s.id === active.value) |
   border: 1px dashed var(--mk-line);
 }
 .orch-vars__group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.orch-vars__label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--mk-faint); }
+.orch-vars__label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 .orch-vars__arrow { color: var(--mk-faint); }
 .orch-var {
   padding: 2px 8px;

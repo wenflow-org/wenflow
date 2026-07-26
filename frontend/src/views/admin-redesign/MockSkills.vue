@@ -242,7 +242,7 @@ const successRate = (s: { calls: number; errors: number }) =>
 .sk-card--error .sk-card__dot { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
 @keyframes sk-blink { 50% { opacity: 0.3; } }
 .sk-card__cat { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mk-faint); }
-.sk-card__flag { margin-left: auto; font-size: 10.5px; font-weight: 800; color: var(--mk-red); }
+.sk-card__flag { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--mk-red); }
 .sk-card--idle .sk-card__flag { color: var(--mk-faint); }
 
 .sk-card__name { font-size: 13.5px; font-weight: 700; }

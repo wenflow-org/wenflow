@@ -6,14 +6,18 @@
  */
 import { computed, ref } from 'vue'
 import {
-  adminAxios,
   adminDashboardApi,
   adminSkillsApi,
   adminUsersApi,
   adminLearnerModelsApi,
   adminVirtualLearnersApi,
   adminApiConfigApi,
-  adminPromptLabApi
+  adminPromptLabApi,
+  adminAgentsApi,
+  adminPromptOpsApi,
+  adminAgentTopologyApi,
+  adminPlatformSettingsApi,
+  adminAnnouncementsApi
 } from '@/api/adminApi'
 import {
   dataSource,
@@ -117,9 +121,7 @@ function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
 }
 
 async function fetchLiveSpans(): Promise<TraceSpan[]> {
-  const res = await adminAxios.get('/admin/agents/logs', {
-    params: { timeRange: 'week', limit: 60 }
-  })
+  const res = await adminAgentsApi.getLogs({ timeRange: 'week', limit: 60 })
   const body = res.data?.data ?? res.data ?? {}
   const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
   return mapLogsToSpans(items)
@@ -135,9 +137,7 @@ export interface SpanQuery {
 }
 
 export async function reloadLiveSpans(query: SpanQuery): Promise<void> {
-  const res = await adminAxios.get('/admin/agents/logs', {
-    params: { limit: 100, ...query }
-  })
+  const res = await adminAgentsApi.getLogs({ limit: 100, ...query })
   const body = res.data?.data ?? res.data ?? {}
   const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
   liveSpans.value = mapLogsToSpans(items)
@@ -200,7 +200,7 @@ function mapAttempt(a: Record<string, unknown>): LogAttempt {
 }
 
 export async function fetchLogDetail(id: string): Promise<LogDetail> {
-  const res = await adminAxios.get(`/admin/agents/logs/${encodeURIComponent(id)}`)
+  const res = await adminAgentsApi.getLogDetail(id)
   const body = res.data?.data ?? res.data ?? {}
   // 新结构：{ log, attempts }；兼容旧平铺
   const d = (body.log || body) as Record<string, unknown>
@@ -553,6 +553,8 @@ export interface LiveVirtual {
   level: string
   story: string
   sessions: number
+  /** 故事池条数（会话故事，不是人物背景字数） */
+  storyCount: number
   createdAt: string
   raw: Record<string, unknown>
 }
@@ -565,27 +567,36 @@ async function fetchLiveVirtuals(): Promise<void> {
   const items = body.profiles || body.items || []
   liveVirtuals.value = items.map((p: Record<string, unknown>) => {
     const profile = (p.profile as Record<string, unknown>) || {}
+    const pool = Array.isArray(profile.storyPool) ? profile.storyPool : []
+    const storyCount = Number(p.storyCount ?? pool.length ?? 0)
     return {
       id: String(p.id),
-      name: String(profile.name || p.userName || p.id),
+      name: String(profile.name || profile.nameHint || p.userName || p.id),
       goal: String(p.learningGoal || '未设置目标'),
       level: String(p.knowledgeLevel || ''),
       story: String(profile.background || profile.corePersonality || p.notes || ''),
       sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
+      storyCount,
       createdAt: String(p.createdAt || ''),
       raw: p
     }
   })
 }
 
-export async function liveCreateVirtual(data: { name: string; goal: string; story: string; personaSeed?: Record<string, unknown> }): Promise<void> {
+export async function liveCreateVirtual(data: {
+  name: string
+  /** 可选长期倾向；真正的当次学习需求来自故事 goalSeed */
+  goal?: string
+  story: string
+  personaSeed?: Record<string, unknown>
+}): Promise<void> {
   // personaSeed 存在时展开为完整画像（含 learningStyle 等故事生成必需字段）
   const profile: Record<string, unknown> = data.personaSeed
     ? { ...data.personaSeed, background: data.story || data.personaSeed.background }
     : { background: data.story }
   await adminVirtualLearnersApi.createVirtualLearner({
     name: data.name,
-    learningGoal: data.goal,
+    learningGoal: (data.goal || '').trim(),
     notes: data.story,
     profile
   })
@@ -755,7 +766,7 @@ let rulesCache: LiveRulesOverview | null = null
 
 export async function fetchProtocolView(): Promise<LiveProtocol[]> {
   if (protocolCache) return protocolCache
-  const res = await adminAxios.get('/admin/prompt-ops/protocol-view')
+  const res = await adminPromptOpsApi.getProtocolView()
   const body = res.data?.data ?? res.data ?? {}
   const items = body.protocols || []
   const mapped: LiveProtocol[] = items.map((p: Record<string, unknown>) => ({
@@ -771,7 +782,7 @@ export async function fetchProtocolView(): Promise<LiveProtocol[]> {
 
 export async function fetchRulesOverview(): Promise<LiveRulesOverview> {
   if (rulesCache) return rulesCache
-  const res = await adminAxios.get('/admin/prompt-ops/skill-rules-overview')
+  const res = await adminPromptOpsApi.getSkillRulesOverview()
   const body = res.data?.data ?? res.data ?? {}
   const summary = body.summary || {}
   const byPrefix = (body.byPrefix || {}) as Record<string, Record<string, unknown>[]>
@@ -822,7 +833,7 @@ function fieldName(f: unknown): string {
 }
 
 async function fetchLiveSkillCatalog(): Promise<void> {
-  const res = await adminAxios.get('/admin/prompt-ops/skill-catalog')
+  const res = await adminPromptOpsApi.getSkillCatalog()
   const body = res.data?.data ?? res.data ?? {}
   const agents = body.agents || []
   liveSkillCatalog.value = agents.map((a: Record<string, unknown>) => ({
@@ -849,7 +860,7 @@ async function fetchLiveSkillCatalog(): Promise<void> {
 export const liveTopoNodes = ref<LiveTopoNode[]>([])
 
 async function fetchLiveTopology(): Promise<void> {
-  const res = await adminAxios.get('/admin/agents/topology', { params: { range: '7d' } })
+  const res = await adminAgentTopologyApi.getTopology('all')
   const body = res.data?.data ?? res.data ?? {}
   const nodes = body.nodes || []
   liveTopoNodes.value = nodes.map((n: Record<string, unknown>) => {
@@ -873,13 +884,13 @@ async function fetchLiveTopology(): Promise<void> {
 export const registrationEnabled = ref<boolean | null>(null)
 
 export async function fetchRegistrationSetting(): Promise<void> {
-  const res = await adminAxios.get('/admin/settings/registration')
+  const res = await adminPlatformSettingsApi.getRegistrationSetting()
   const d = res.data?.data ?? res.data ?? {}
   registrationEnabled.value = d.registrationEnabled !== false
 }
 
 export async function updateRegistrationSetting(enabled: boolean): Promise<void> {
-  await adminAxios.put('/admin/settings/registration', { registrationEnabled: enabled })
+  await adminPlatformSettingsApi.updateRegistrationSetting(enabled)
   registrationEnabled.value = enabled
 }
 
@@ -913,7 +924,7 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
 })
 
 async function fetchLiveAnnouncements(): Promise<void> {
-  const res = await adminAxios.get('/admin/announcements')
+  const res = await adminAnnouncementsApi.list()
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   liveAnnouncements.value = items.map((a: Record<string, unknown>) => ({
@@ -936,22 +947,22 @@ export async function liveCreateAnnouncement(data: {
   expiresAt?: string | null
   publishNow: boolean
 }): Promise<void> {
-  await adminAxios.post('/admin/announcements', data)
+  await adminAnnouncementsApi.create(data as unknown as Record<string, unknown>)
   await fetchLiveAnnouncements()
 }
 
 export async function livePublishAnnouncement(id: string): Promise<void> {
-  await adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/publish`)
+  await adminAnnouncementsApi.publish(id)
   await fetchLiveAnnouncements()
 }
 
 export async function liveArchiveAnnouncement(id: string): Promise<void> {
-  await adminAxios.put(`/admin/announcements/${encodeURIComponent(id)}/archive`)
+  await adminAnnouncementsApi.archive(id)
   await fetchLiveAnnouncements()
 }
 
 export async function liveDeleteAnnouncement(id: string): Promise<void> {
-  await adminAxios.delete(`/admin/announcements/${encodeURIComponent(id)}`)
+  await adminAnnouncementsApi.remove(id)
   liveAnnouncements.value = liveAnnouncements.value.filter((a) => a.id !== id)
 }
 

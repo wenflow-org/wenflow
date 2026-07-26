@@ -153,6 +153,32 @@ describe('APIGateway route overrides', () => {
     )
   })
 
+  it('从 Context Envelope 继承 session 与 locale telemetry', async () => {
+    const gateway = new APIGateway() as any
+    gateway.cache = { getRoute: jest.fn().mockReturnValue(route()), setRoute: jest.fn() }
+    gateway.executor = { execute: jest.fn().mockResolvedValue({ id: 'ok' }) }
+
+    await runWithContext({
+      contextEnvelope: {
+        schemaVersion: 'context-envelope/v1',
+        session: { sessionId: 'session-1', conversationId: 'conversation-1', pathId: 'path-1', taskId: 'task-1' },
+        locale: { language: 'zh-CN', timeZone: 'Asia/Shanghai' }
+      }
+    }, () => gateway.execute({ messages: [] }, { skillId: 'skill-1' }))
+
+    expect(gateway.executor.execute).toHaveBeenCalledWith(
+      expect.anything(),
+      { messages: [] },
+      expect.objectContaining({
+        sessionId: 'session-1',
+        conversationId: 'conversation-1',
+        pathId: 'path-1',
+        taskId: 'task-1',
+        locale: { language: 'zh-CN', timeZone: 'Asia/Shanghai' }
+      })
+    )
+  })
+
   it('resolveRoute 与 execute 使用相同的父 Agent 归一化', async () => {
     const gateway = new APIGateway() as any
     gateway.cache = { getRoute: jest.fn().mockReturnValue(null), setRoute: jest.fn() }
