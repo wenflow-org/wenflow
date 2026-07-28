@@ -18,6 +18,7 @@
           <span class="kicker">路径总览</span>
           <h1>继续你的学习计划</h1>
           <p>查看当前任务、路径进度和需要处理的问题。</p>
+          <AiContentNote />
         </div>
         <router-link to="/goal-conversation" class="btn-primary">＋ 规划新目标</router-link>
       </div>
@@ -154,6 +155,7 @@ import { useRoute } from 'vue-router';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { learningAPI } from '@/api/learning';
 import V2Nav from './V2Nav.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import './v2.css';
 
@@ -412,7 +414,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line); background: #fff;
   border-radius: 999px; padding: 8px 15px;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
-  cursor: pointer; transition: .14s ease;
+  cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 .filter b { margin-left: 4px; color: var(--faint); }
 .filter--active { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.07); color: var(--blue-deep); }
@@ -426,7 +428,7 @@ onBeforeUnmount(() => {
   padding: 18px 20px;
   display: flex; flex-direction: column; gap: 12px;
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
-  transition: .16s ease;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 .pcard:hover { border-color: rgba(52, 120, 246, 0.3); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); }
 .pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }

@@ -198,7 +198,7 @@ watch(
     const activityOf = (b: typeof base) =>
       b
         ? [
-            { text: b.online ? '当前在线' : `最后登录：${b.lastLogin}`, time: '' },
+            { text: `最后登录：${b.lastLoginAt || '—'}`, time: '' },
             ...(b.sessions ? [{ text: `累计会话 ${b.sessions} 次`, time: '' }] : [])
           ]
         : []

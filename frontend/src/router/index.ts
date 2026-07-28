@@ -344,8 +344,11 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/console'
   },
   {
+    // Prompt 二级设计页（Skill 级编辑台：检视/试运行/运行时/工程，重设计版）
     path: '/admin/skills/:agentId?',
-    redirect: '/admin/console'
+    name: 'AdminSkillEditor',
+    component: () => import('@/views/admin-redesign/SkillDesignPage.vue'),
+    meta: { title: 'Prompt 设计', requiresAdminAuth: true }
   },
   {
     path: '/admin/agents/topology',

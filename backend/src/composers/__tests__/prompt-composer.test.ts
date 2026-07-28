@@ -444,4 +444,81 @@ describe('callPrompt runtime overrides', () => {
       })
     }))
   })
+
+  it('promptContract output.media=markdown 时默认解析直接透传文本而非抽取 JSON', async () => {
+    mockGetActivePrompt.mockResolvedValue({
+      systemPrompt: 'compiler system prompt',
+      version: 2,
+      metadata: {
+        promptLab: {
+          runtimeContract: ACTIVE_METADATA_RUNTIME_CONTRACT,
+          promptContract: {
+            version: 'skill-prompt-contract/v2',
+            executionMode: 'llm',
+            artifactKind: 'compilation',
+            interactionMode: 'snapshot',
+            input: { transport: 'yaml', schemaSource: 'external-spec' },
+            output: { media: 'markdown', schemaSource: 'external-spec', envelope: 'adapter' },
+            context: { envelope: 'context-envelope/v1', delivery: 'sidecar', modelExposure: 'projected' },
+            failurePolicy: 'retry'
+          }
+        }
+      }
+    })
+    mockGatewayExecute.mockResolvedValue({
+      id: 'completion-md',
+      model: 'frozen-model',
+      choices: [{ index: 0, message: { role: 'assistant', content: '## 身份定义\n\n你是一个编译器。\n' }, finish_reason: 'stop' }]
+    })
+
+    const result = await callPrompt<{ config: string }, string>({
+      agentId: 'skill:test',
+      defaultSystemPrompt: 'default prompt',
+      caller: { skillId: 'test' },
+      buildUserPayload: () => 'yaml payload',
+      normalizeOutput: parsed => String(parsed)
+    }, { config: 'meta: {}' })
+
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('## 身份定义\n\n你是一个编译器。')
+    expect(result.debug.extractedJson).toBe('## 身份定义\n\n你是一个编译器。')
+  })
+
+  it('promptContract executionMode=code-only 时拒绝进入 LLM 调用链', async () => {
+    mockGetActivePrompt.mockResolvedValue({
+      systemPrompt: 'should not run',
+      metadata: {
+        promptLab: {
+          promptContract: {
+            version: 'skill-prompt-contract/v2',
+            executionMode: 'code-only',
+            artifactKind: 'code',
+            interactionMode: 'none',
+            input: { transport: 'none', schemaSource: 'none' },
+            output: { media: 'none', schemaSource: 'none', envelope: 'none' },
+            context: { envelope: 'none', delivery: 'none', modelExposure: 'none' },
+            failurePolicy: 'none'
+          }
+        }
+      }
+    })
+
+    const result = await callPrompt({
+      agentId: 'skill:test',
+      defaultSystemPrompt: 'default prompt',
+      caller: { skillId: 'test' },
+      buildUserPayload: () => 'payload',
+      normalizeOutput: parsed => parsed
+    }, {})
+
+    expect(result.success).toBe(false)
+    expect(result.error?.code).toBe('SKILL_TEST_CODE_ONLY_SKILL')
+    expect(mockGatewayExecute).not.toHaveBeenCalled()
+    expect(mockPromptCallCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        errorCode: 'SKILL_TEST_CODE_ONLY_SKILL',
+        failureStage: 'prompt_resolution'
+      })
+    }))
+  })
 })

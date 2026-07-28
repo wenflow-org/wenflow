@@ -343,6 +343,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
         },
         duration: Date.now() - startTime,
         cached: true,
+        quality: 'fallback',
       };
     }
 
@@ -359,6 +360,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
         } as any,
       },
       duration: result.debug.durationMs,
+      quality: 'model',
     };
   } catch (error: any) {
     const fallback = { ...buildFallback(input || {} as GoalLearnerSimulationInput), degraded: true };
@@ -375,6 +377,7 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       },
       duration: Date.now() - startTime,
       cached: true,
+      quality: 'fallback',
     };
   }
 }

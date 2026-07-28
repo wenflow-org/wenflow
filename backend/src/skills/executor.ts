@@ -89,13 +89,17 @@ function normalizeHandlerResult(result: any, durationMs: number): SkillExecution
     }
 
     if (Object.prototype.hasOwnProperty.call(result, 'output')) {
+      // quality 是 canonical 降级标记；cached 为兼容派生字段，双向桥接
+      const quality = result.quality ?? (result.cached === true ? 'fallback' : undefined);
+      const cached = result.cached ?? (quality === 'fallback' || quality === 'failed' ? true : undefined);
       return {
         success: true,
         output: result.output,
         duration: durationMs,
-        cached: result.cached,
+        cached,
         runtimeEnvelope: result.runtimeEnvelope,
-        quality: result.quality,
+        quality,
+        ...(result.debug !== undefined ? { debug: result.debug } : {}),
       };
     }
   }
@@ -121,6 +125,7 @@ function resolveExecutionUserId(
     input?.pluginContext?.userId,
     input?.metadata?.userId,
     input?.input?.metadata?.userId,
+    input?.userId,
   ];
   return candidates.find((value) => typeof value === 'string' && value.trim())?.trim();
 }

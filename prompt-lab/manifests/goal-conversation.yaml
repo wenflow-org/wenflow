@@ -33,6 +33,18 @@ promptContract:
   output: { media: json, schemaSource: runtime-validator, envelope: adapter }
   context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
   failurePolicy: retry
+  fields:
+    userInput: { direction: input, visibility: user-visible }
+    conversationContext: { direction: input, visibility: internal }
+    task: { direction: input, visibility: internal }
+    state: { direction: state, visibility: handoff, owner: runtime }
+    reply: { direction: output, visibility: user-visible }
+    understanding: { direction: state, visibility: handoff, owner: runtime }
+    nextQuestions: { direction: output, visibility: internal }
+    quickReplies: { direction: output, visibility: user-visible, export: renderHints }
+    confirmedProposal: { direction: state, visibility: handoff, owner: runtime }
+    confidenceScores: { direction: output, visibility: debug }
+    structuredData: { direction: state, visibility: handoff, owner: runtime }
 
 runtimeContract:
   version: prompt-runtime-contract/v1

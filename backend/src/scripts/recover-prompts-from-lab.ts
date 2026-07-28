@@ -2,8 +2,8 @@ import 'dotenv/config'
 import fs from 'fs/promises'
 import path from 'path'
 import { randomUUID as uuidv4 } from 'crypto'
-import yaml from 'js-yaml'
 import systemPrisma from '../config/system-database'
+import { parsePromptFrontmatterMeta } from '../composers/prompt-files/loader'
 
 type RecoverConfig = {
   skillId: string
@@ -54,8 +54,7 @@ async function backupCurrentProdFile(skillId: string, prodPath: string) {
 async function readExistingFrontmatter(prodPath: string) {
   try {
     const raw = await fs.readFile(prodPath, 'utf-8')
-    const match = raw.match(/^---\n([\s\S]*?)\n---/)
-    return match ? (yaml.load(match[1]) as Record<string, unknown>) || {} : {}
+    return parsePromptFrontmatterMeta(raw) as Record<string, unknown>
   } catch {
     return {}
   }

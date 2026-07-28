@@ -4,6 +4,7 @@ import { z } from 'zod';
 import authService, { InvalidCredentialsError } from '../services/auth/auth.service';
 import { getPlatformSettings } from '../services/platform-settings.service';
 import { loginRateLimitMiddleware, recordLoginAttempt } from '../middleware/login-rate-limit.middleware';
+import { authMiddleware } from '../middleware/auth.middleware';
 import { setAuthCookie, clearAuthCookie } from '../utils/auth-cookie';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 
@@ -145,6 +146,55 @@ router.post('/logout', (req, res) => {
     success: true,
     data: { message: '已退出登录' }
   });
+});
+
+// 修改密码（登录态，需验证当前密码）
+const changePasswordSchema = z.object({
+  oldPassword: z.string().min(1, '当前密码不能为空'),
+  newPassword: z.string()
+    .min(8, '新密码至少 8 位')
+    .regex(/[a-zA-Z]/, '新密码必须包含字母')
+    .regex(/[0-9]/, '新密码必须包含数字'),
+});
+
+router.post('/change-password', authMiddleware, async (req: any, res, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: { message: '未登录' } });
+    }
+
+    const data = changePasswordSchema.parse(req.body);
+    await authService.changePassword(userId, data.oldPassword, data.newPassword);
+
+    res.status(200).json({
+      success: true,
+      data: { message: '密码已更新' }
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: '数据验证失败',
+          details: error.errors
+        }
+      });
+    }
+    if (error instanceof InvalidCredentialsError) {
+      // 注意：这里不能返回 401——前端拦截器会把任何 401 当作会话失效强制登出。
+      // 当前密码错误是业务校验失败，用 400 表达。
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: '当前密码不正确',
+          code: 'PASSWORD_MISMATCH',
+          status: 400
+        }
+      });
+    }
+    next(error);
+  }
 });
 
 // 验证 Token (protected endpoint)

@@ -38,6 +38,7 @@ router.get('/copy', async (req: any, res) => {
           ? {
               copy: payload.copy,
               summary: payload.summary,
+              decisions: payload.decisions || [],
               source: payload.source,
               generatedAt: payload.generatedAt,
               ...(canIncludeDebug && payload.debug ? { debug: payload.debug } : {}),

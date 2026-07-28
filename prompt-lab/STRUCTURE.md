@@ -1,5 +1,10 @@
 # Prompt Lab 目录结构
 
+> **v4 现状注记（2026-07-28）**：本文描述 v2 目录模型。v4 落地后：
+> - 业务 SSOT = `wenflow/prompts/core/<skillId>.yaml`（核心文件），不在本目录
+> - `sources/`、`compiler-skill/`、`compiled/` 及 docs/ 过程稿已移至 `archive/`（v2 端点已移除）
+> - `manifests/` 保留（契约 + 执行参数）；`backups/` 保留（回滚材料）；`field-lineage.yaml` 为字段血缘注册表
+
 本文件描述的是 Prompt Lab 当前正式目录模型，而不是早期 blueprint / YAML 实验目录。
 
 ## 当前目录树

@@ -4159,6 +4159,7 @@ export namespace Prisma {
 
   export type Agent_promptsAvgAggregateOutputType = {
     version: number | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     useCount: number | null
@@ -4168,6 +4169,7 @@ export namespace Prisma {
 
   export type Agent_promptsSumAggregateOutputType = {
     version: number | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     useCount: number | null
@@ -4188,6 +4190,8 @@ export namespace Prisma {
     sourceHash: string | null
     compileContextHash: string | null
     compiledAt: Date | null
+    coreHash: string | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4215,6 +4219,8 @@ export namespace Prisma {
     sourceHash: string | null
     compileContextHash: string | null
     compiledAt: Date | null
+    coreHash: string | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4242,6 +4248,8 @@ export namespace Prisma {
     sourceHash: number
     compileContextHash: number
     compiledAt: number
+    coreHash: number
+    coreVersion: number
     temperature: number
     maxTokens: number
     model: number
@@ -4260,6 +4268,7 @@ export namespace Prisma {
 
   export type Agent_promptsAvgAggregateInputType = {
     version?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     useCount?: true
@@ -4269,6 +4278,7 @@ export namespace Prisma {
 
   export type Agent_promptsSumAggregateInputType = {
     version?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     useCount?: true
@@ -4289,6 +4299,8 @@ export namespace Prisma {
     sourceHash?: true
     compileContextHash?: true
     compiledAt?: true
+    coreHash?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4316,6 +4328,8 @@ export namespace Prisma {
     sourceHash?: true
     compileContextHash?: true
     compiledAt?: true
+    coreHash?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4343,6 +4357,8 @@ export namespace Prisma {
     sourceHash?: true
     compileContextHash?: true
     compiledAt?: true
+    coreHash?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4457,6 +4473,8 @@ export namespace Prisma {
     sourceHash: string | null
     compileContextHash: string | null
     compiledAt: Date | null
+    coreHash: string | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4503,6 +4521,8 @@ export namespace Prisma {
     sourceHash?: boolean
     compileContextHash?: boolean
     compiledAt?: boolean
+    coreHash?: boolean
+    coreVersion?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4530,6 +4550,8 @@ export namespace Prisma {
     sourceHash?: boolean
     compileContextHash?: boolean
     compiledAt?: boolean
+    coreHash?: boolean
+    coreVersion?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4557,6 +4579,8 @@ export namespace Prisma {
     sourceHash?: boolean
     compileContextHash?: boolean
     compiledAt?: boolean
+    coreHash?: boolean
+    coreVersion?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4588,6 +4612,14 @@ export namespace Prisma {
       sourceHash: string | null
       compileContextHash: string | null
       compiledAt: Date | null
+      /**
+       * v4：编译自核心文件的内容哈希（漂移检测锚点）
+       */
+      coreHash: string | null
+      /**
+       * v4：编译自核心文件的版本号
+       */
+      coreVersion: number | null
       temperature: number | null
       maxTokens: number | null
       model: string | null
@@ -5005,6 +5037,8 @@ export namespace Prisma {
     readonly sourceHash: FieldRef<"agent_prompts", 'String'>
     readonly compileContextHash: FieldRef<"agent_prompts", 'String'>
     readonly compiledAt: FieldRef<"agent_prompts", 'DateTime'>
+    readonly coreHash: FieldRef<"agent_prompts", 'String'>
+    readonly coreVersion: FieldRef<"agent_prompts", 'Int'>
     readonly temperature: FieldRef<"agent_prompts", 'Float'>
     readonly maxTokens: FieldRef<"agent_prompts", 'Int'>
     readonly model: FieldRef<"agent_prompts", 'String'>
@@ -18378,6 +18412,8 @@ export namespace Prisma {
     sourceHash: 'sourceHash',
     compileContextHash: 'compileContextHash',
     compiledAt: 'compiledAt',
+    coreHash: 'coreHash',
+    coreVersion: 'coreVersion',
     temperature: 'temperature',
     maxTokens: 'maxTokens',
     model: 'model',
@@ -18908,6 +18944,8 @@ export namespace Prisma {
     sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
     compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
     compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
+    coreHash?: StringNullableFilter<"agent_prompts"> | string | null
+    coreVersion?: IntNullableFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
@@ -18935,6 +18973,8 @@ export namespace Prisma {
     sourceHash?: SortOrderInput | SortOrder
     compileContextHash?: SortOrderInput | SortOrder
     compiledAt?: SortOrderInput | SortOrder
+    coreHash?: SortOrderInput | SortOrder
+    coreVersion?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
@@ -18966,6 +19006,8 @@ export namespace Prisma {
     sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
     compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
     compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
+    coreHash?: StringNullableFilter<"agent_prompts"> | string | null
+    coreVersion?: IntNullableFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
@@ -18993,6 +19035,8 @@ export namespace Prisma {
     sourceHash?: SortOrderInput | SortOrder
     compileContextHash?: SortOrderInput | SortOrder
     compiledAt?: SortOrderInput | SortOrder
+    coreHash?: SortOrderInput | SortOrder
+    coreVersion?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
@@ -19028,6 +19072,8 @@ export namespace Prisma {
     sourceHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     compileContextHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     compiledAt?: DateTimeNullableWithAggregatesFilter<"agent_prompts"> | Date | string | null
+    coreHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    coreVersion?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableWithAggregatesFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     model?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
@@ -20524,6 +20570,8 @@ export namespace Prisma {
     sourceHash?: string | null
     compileContextHash?: string | null
     compiledAt?: Date | string | null
+    coreHash?: string | null
+    coreVersion?: number | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -20551,6 +20599,8 @@ export namespace Prisma {
     sourceHash?: string | null
     compileContextHash?: string | null
     compiledAt?: Date | string | null
+    coreHash?: string | null
+    coreVersion?: number | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -20578,6 +20628,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -20605,6 +20657,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -20632,6 +20686,8 @@ export namespace Prisma {
     sourceHash?: string | null
     compileContextHash?: string | null
     compiledAt?: Date | string | null
+    coreHash?: string | null
+    coreVersion?: number | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -20659,6 +20715,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -20686,6 +20744,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -22569,6 +22629,8 @@ export namespace Prisma {
     sourceHash?: SortOrder
     compileContextHash?: SortOrder
     compiledAt?: SortOrder
+    coreHash?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -22585,6 +22647,7 @@ export namespace Prisma {
 
   export type agent_promptsAvgOrderByAggregateInput = {
     version?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     useCount?: SortOrder
@@ -22605,6 +22668,8 @@ export namespace Prisma {
     sourceHash?: SortOrder
     compileContextHash?: SortOrder
     compiledAt?: SortOrder
+    coreHash?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -22632,6 +22697,8 @@ export namespace Prisma {
     sourceHash?: SortOrder
     compileContextHash?: SortOrder
     compiledAt?: SortOrder
+    coreHash?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -22648,6 +22715,7 @@ export namespace Prisma {
 
   export type agent_promptsSumOrderByAggregateInput = {
     version?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     useCount?: SortOrder

@@ -107,6 +107,7 @@ export async function goalProfileInference(input: GoalProfileInferenceInput): Pr
       success: true,
       output: result.output,
       duration: Date.now() - startTime,
+      quality: 'model',
     };
   } catch {
     return {
@@ -114,6 +115,7 @@ export async function goalProfileInference(input: GoalProfileInferenceInput): Pr
       output: buildFallback(input),
       duration: Date.now() - startTime,
       cached: true,
+      quality: 'fallback',
     };
   }
 }

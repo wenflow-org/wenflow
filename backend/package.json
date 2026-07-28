@@ -26,6 +26,7 @@
     "prompts:backfill-core": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --backfill",
     "prompts:sync-core": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "prompts:lint": "ts-node src/scripts/lint-prompts.ts",
+    "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
     "prisma:generate": "npm run prisma:generate:all",
     "prisma:generate:main": "prisma generate",

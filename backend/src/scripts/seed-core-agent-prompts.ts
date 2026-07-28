@@ -29,6 +29,10 @@ export interface CoreAgentPromptSeed {
   acceptableAgentIds?: string[];
   /** 来自 prompt 文件 frontmatter 的运行时契约快照 */
   metadata?: string;
+  /** v4 编译产物锚点：核心文件内容哈希 */
+  coreHash?: string;
+  /** v4 编译产物锚点：核心文件版本号 */
+  coreVersion?: number;
 }
 
 export interface CoreAgentPromptSeedResult {
@@ -192,9 +196,9 @@ export function normalizeDeclaredPromptRuntimeContract(
 
 /** 由 prompt frontmatter 生成新版本使用的 metadata 快照；没有声明时保持 metadata 缺失。 */
 export function buildPromptFileRuntimeContractMetadata(
-  file: Pick<PromptFile, 'agentId' | 'archetype' | 'promptContract' | 'runtimeContract'>
+  file: Pick<PromptFile, 'agentId' | 'archetype' | 'promptContract' | 'runtimeContract' | 'coreHash' | 'coreVersion' | 'deltaOutput'>
 ): string | undefined {
-  if (file.runtimeContract === undefined && file.promptContract === undefined) return undefined;
+  if (file.runtimeContract === undefined && file.promptContract === undefined && file.coreHash === undefined) return undefined;
 
   const runtimeContract = file.runtimeContract === undefined
     ? undefined
@@ -203,6 +207,10 @@ export function buildPromptFileRuntimeContractMetadata(
   return JSON.stringify({
     promptLab: {
       source: 'prompt-file',
+      // v4 锚点快照：漂移检测以 DB ACTIVE 与文件 frontmatter 一致为前提
+      ...(file.coreHash !== undefined ? { coreHash: file.coreHash } : {}),
+      ...(file.coreVersion !== undefined ? { coreVersion: file.coreVersion } : {}),
+      ...(file.deltaOutput === true ? { deltaOutput: true } : {}),
       ...(runtimeContract
         ? {
             runtimeContractSource: 'prompt-frontmatter',
@@ -231,6 +239,8 @@ export function mapPromptFileToCoreAgentPromptSeed(file: PromptFile): CoreAgentP
     maxTokens: file.maxTokens ?? 4000,
     acceptableAgentIds: file.acceptableAgentIds,
     ...(metadata === undefined ? {} : { metadata }),
+    ...(file.coreHash === undefined ? {} : { coreHash: file.coreHash }),
+    ...(file.coreVersion === undefined ? {} : { coreVersion: file.coreVersion }),
   };
 }
 
@@ -291,6 +301,8 @@ async function createPromptSeedRecord(
       createdBy,
       publishedAt: new Date(),
       ...(seed.metadata === undefined ? {} : { metadata: seed.metadata }),
+      ...(seed.coreHash === undefined ? {} : { coreHash: seed.coreHash }),
+      ...(seed.coreVersion === undefined ? {} : { coreVersion: seed.coreVersion }),
     },
   });
 }
@@ -299,16 +311,44 @@ function normalizePromptText(value: string | null | undefined): string {
   return (value || '').replace(/\r\n/g, '\n').trim();
 }
 
-function matchesSeedConfig(activePrompt: {
+function stableStringifyForCompare(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringifyForCompare(item)).join(',')}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringifyForCompare(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * metadata 是契约快照（JSON 字符串）。键序可能因写入路径不同而漂移，
+ * 结构化比较避免误报；无法解析时按原文比较，宁可触发同步也不放过漂移。
+ */
+function normalizeMetadataForCompare(value: string | null | undefined): string {
+  if (!value) return '';
+  try {
+    return stableStringifyForCompare(JSON.parse(value));
+  } catch {
+    return value;
+  }
+}
+
+export function matchesSeedConfig(activePrompt: {
   systemPrompt: string | null;
   temperature: number | null;
   maxTokens: number | null;
   model: string | null;
+  metadata?: string | null;
 }, seed: CoreAgentPromptSeed, defaultModel: string): boolean {
   return normalizePromptText(activePrompt.systemPrompt) === normalizePromptText(seed.systemPrompt)
     && Number(activePrompt.temperature ?? seed.temperature) === Number(seed.temperature)
     && Number(activePrompt.maxTokens ?? seed.maxTokens) === Number(seed.maxTokens)
-    && (!defaultModel || String(activePrompt.model || '') === defaultModel);
+    && (!defaultModel || String(activePrompt.model || '') === defaultModel)
+    && normalizeMetadataForCompare(activePrompt.metadata) === normalizeMetadataForCompare(seed.metadata);
 }
 
 async function resolveDefaultModel(prisma: PrismaClient): Promise<string> {
@@ -350,6 +390,7 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
         temperature: true,
         maxTokens: true,
         model: true,
+        metadata: true,
       }
     });
 
@@ -404,6 +445,8 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
           createdBy: 'system-sync',
           publishedAt: new Date(),
           ...(seed.metadata === undefined ? {} : { metadata: seed.metadata }),
+          ...(seed.coreHash === undefined ? {} : { coreHash: seed.coreHash }),
+          ...(seed.coreVersion === undefined ? {} : { coreVersion: seed.coreVersion }),
         },
       });
     });

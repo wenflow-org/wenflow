@@ -61,6 +61,38 @@
       </section>
 
       <section>
+        <article class="glass-card profile-card">
+          <div class="profile-card__head">
+            <div>
+              <span class="section-kicker">账号安全</span>
+              <h3>修改密码</h3>
+            </div>
+          </div>
+
+          <div class="grant-form-grid">
+            <label class="grant-form-field">
+              <span>当前密码</span>
+              <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="输入当前密码" />
+            </label>
+            <label class="grant-form-field">
+              <span>新密码</span>
+              <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="至少 8 位，含字母和数字" />
+            </label>
+            <label class="grant-form-field">
+              <span>确认新密码</span>
+              <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="再输入一次新密码" />
+            </label>
+          </div>
+
+          <div class="action-row">
+            <el-button type="primary" :loading="pwdSubmitting" :disabled="!pwdCanSubmit" @click="handleChangePassword">
+              更新密码
+            </el-button>
+          </div>
+        </article>
+      </section>
+
+      <section>
         <article v-loading="projectionGrantLoading" class="glass-card profile-card grant-card">
           <div class="profile-card__head profile-card__head--spread">
             <div>
@@ -127,11 +159,45 @@ import {
   type ProjectionGrantScope
 } from '@/api/userCustom'
 import { toast } from '@/utils/toast'
+import request from '@/utils/api'
 import { useUserStore } from '../stores/user'
 import { userAPI, type LearnerCenterSnapshot } from '../api/user'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+/* ---------- 修改密码 ---------- */
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const pwdSubmitting = ref(false)
+const pwdCanSubmit = computed(() =>
+  pwdForm.oldPassword.length > 0 && pwdForm.newPassword.length >= 8 && pwdForm.confirmPassword.length > 0
+)
+
+async function handleChangePassword() {
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+    toast.error('两次输入的新密码不一致')
+    return
+  }
+  if (!/[a-zA-Z]/.test(pwdForm.newPassword) || !/[0-9]/.test(pwdForm.newPassword)) {
+    toast.error('新密码需同时包含字母和数字')
+    return
+  }
+  pwdSubmitting.value = true
+  try {
+    await request.post('/auth/change-password', {
+      oldPassword: pwdForm.oldPassword,
+      newPassword: pwdForm.newPassword
+    })
+    toast.success('密码已更新，下次登录请使用新密码')
+    pwdForm.oldPassword = ''
+    pwdForm.newPassword = ''
+    pwdForm.confirmPassword = ''
+  } catch (e: any) {
+    toast.error(e?.response?.data?.error?.message || e?.message || '修改失败，请稍后再试')
+  } finally {
+    pwdSubmitting.value = false
+  }
+}
 
 const user = ref({
   name: '',

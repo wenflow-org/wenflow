@@ -77,6 +77,7 @@
               <span class="msg__avatar"><img src="/favicon.png" alt="问流" /></span>
               <div class="msg__content">
                 <div class="msg__bubble msg__bubble--html" v-html="formatMessage(m.text)"></div>
+                <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
                   <span v-if="m.failed" class="msg__retry" @click="retryLast">重试</span>
@@ -150,7 +151,10 @@
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
             </span>
           </div>
-          <div class="composer__hint">Enter 发送 · Shift+Enter 换行</div>
+          <div class="composer__hint">
+            <span>Enter 发送 · Shift+Enter 换行</span>
+            <AiContentNote />
+          </div>
         </div>
 
         <!-- 完成浮层 -->
@@ -172,6 +176,49 @@
         </div>
       </section>
     </div>
+
+    <!-- 伴学浮动窗：不占主对话区，可回复、可收起成悬浮球 -->
+    <Transition name="peer-pop">
+      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="伴学伙伴">
+        <div class="peerdock__head">
+          <span class="peerdock__avatar"><img src="/favicon.png" alt="" /></span>
+          <div class="peerdock__title">
+            <strong>伴学伙伴</strong>
+            <small>看到你在当前知识点卡了一下，来帮一把 · 内容由 AI 生成</small>
+          </div>
+          <span class="peerdock__min" title="收起" @click="peerOpen = false">−</span>
+        </div>
+        <div ref="peerScrollEl" class="peerdock__scroll">
+          <div v-for="(p, i) in peerItems" :key="i" class="peerdock__msg" :class="`peerdock__msg--${p.role}`">
+            <div class="peerdock__bubble" v-html="formatMessage(p.text)"></div>
+            <small>{{ p.role === 'peer' ? '伴学伙伴' : '你' }} · {{ p.time }}</small>
+          </div>
+          <div v-if="peerSending" class="peerdock__msg peerdock__msg--peer">
+            <div class="peerdock__bubble peerdock__bubble--typing"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <div class="peerdock__input">
+          <input
+            v-model="peerInput"
+            type="text"
+            maxlength="500"
+            placeholder="回复伴学…"
+            @keydown.enter.exact.prevent="sendPeer"
+          />
+          <button type="button" :disabled="!peerInput.trim() || peerSending" @click="sendPeer">发送</button>
+        </div>
+      </div>
+    </Transition>
+    <button
+      v-if="!peerOpen && peerItems.length"
+      type="button"
+      class="peerfab"
+      aria-label="打开伴学伙伴"
+      @click="openPeer"
+    >
+      <img src="/favicon.png" alt="" />
+      <i v-if="peerUnread" class="peerfab__dot"></i>
+    </button>
   </div>
 </template>
 
@@ -182,6 +229,7 @@ import MarkdownIt from 'markdown-it';
 import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import request from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
+import AiContentNote from '@/components/AiContentNote.vue';
 import './v2.css';
 import { unwrap } from './unwrap';
 
@@ -210,7 +258,7 @@ const friendlyError = computed(() => {
   return raw || '开课失败，请重试。';
 });
 
-interface ChatMsg { role: 'ai' | 'user'; text: string; time: string; failed?: boolean }
+interface ChatMsg { role: 'ai' | 'user'; text: string; time: string; failed?: boolean; confusion?: string[] }
 const msgs = ref<ChatMsg[]>([]);
 const quickReplies = ref<string[]>([]);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
@@ -229,6 +277,46 @@ const evaluationUrl = ref('');
 
 const input = ref('');
 const scrollEl = ref<HTMLElement | null>(null);
+
+/* ---------- 伴学浮动窗（不占主对话区，dock 式小窗） ---------- */
+interface PeerChatItem { role: 'peer' | 'me'; text: string; time: string }
+const peerOpen = ref(false);
+const peerUnread = ref(false);
+const peerItems = ref<PeerChatItem[]>([]);
+const peerInput = ref('');
+const peerSending = ref(false);
+const peerScrollEl = ref<HTMLElement | null>(null);
+
+async function scrollPeerDown() {
+  await nextTick();
+  if (peerScrollEl.value) peerScrollEl.value.scrollTop = peerScrollEl.value.scrollHeight;
+}
+
+function openPeer() {
+  peerOpen.value = true;
+  peerUnread.value = false;
+  scrollPeerDown();
+}
+
+async function sendPeer() {
+  const t = peerInput.value.trim();
+  if (!t || peerSending.value || !session.value) return;
+  peerInput.value = '';
+  peerItems.value.push({ role: 'me', text: t, time: nowTime() });
+  scrollPeerDown();
+  peerSending.value = true;
+  try {
+    const r = await aiTeachingAPI.sendPeerMessage(session.value.sessionId, t) as unknown as Record<string, any>;
+    if (r?.peerResponse) {
+      peerItems.value.push({ role: 'peer', text: String(r.peerResponse), time: nowTime() });
+    }
+  } catch {
+    peerItems.value.push({ role: 'peer', text: '这次没接上，等下再跟我说一句试试。', time: nowTime() });
+  } finally {
+    peerSending.value = false;
+    scrollPeerDown();
+  }
+}
 
 const md = new MarkdownIt({ html: true, linkify: true, breaks: true });
 const SANITIZE: DOMPurifyConfig = {
@@ -301,7 +389,18 @@ async function doSend(text: string) {
   try {
     const r = await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision) as unknown as Record<string, any>;
     session.value.revision = r.revision ?? session.value.revision + 1;
-    if (r.aiResponse) msgs.value.push({ role: 'ai', text: r.aiResponse, time: nowTime() });
+    // 导师回复（附带本轮捕获到的卡点，作为气泡下方的依据 chip）
+    const confusion = Array.isArray(r.analysis?.confusionPoints)
+      ? r.analysis.confusionPoints.map((p: unknown) => String(p || '').trim()).filter(Boolean).slice(0, 2)
+      : [];
+    if (r.aiResponse) msgs.value.push({ role: 'ai', text: r.aiResponse, time: nowTime(), confusion });
+    // 伴学触发：进独立浮动窗，不占主对话区
+    if (r.peerTriggered && r.peerMessage) {
+      peerItems.value.push({ role: 'peer', text: String(r.peerMessage), time: nowTime() });
+      peerUnread.value = true;
+      peerOpen.value = true;
+      scrollPeerDown();
+    }
     if (Array.isArray(r.knowledgePoints) && r.knowledgePoints.length) {
       knowledgePoints.value = r.knowledgePoints;
       showKpActions.value = true;
@@ -448,8 +547,21 @@ function goEvaluation() {
   if (evaluationUrl.value) router.push(evaluationUrl.value);
 }
 
-onMounted(boot);
+/* 关闭标签页/整页刷新时 Vue 不会走 onBeforeUnmount，
+   用 pagehide + sendBeacon 兜底记暂停，避免时长统计把闲置时间算进去。 */
+function onPageHide() {
+  if (!session.value || completed.value) return;
+  const payload = JSON.stringify({ reason: 'pagehide', revision: session.value.revision });
+  const blob = new Blob([payload], { type: 'application/json' });
+  navigator.sendBeacon?.(`/api/ai-teaching/sessions/${session.value.sessionId}/pause`, blob);
+}
+
+onMounted(() => {
+  boot();
+  window.addEventListener('pagehide', onPageHide);
+});
 onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', onPageHide);
   if (session.value && !completed.value) {
     aiTeachingAPI.pauseSession(session.value.sessionId, 'pagehide', session.value.revision).catch(() => {});
   }
@@ -574,6 +686,126 @@ onBeforeUnmount(() => {
   flex: 0 0 auto; margin-top: 2px;
 }
 .msg__meta { font-size: 11px; color: var(--faint); }
+
+/* 消息入场：新气泡浮出（typing 圆点除外） */
+@media (prefers-reduced-motion: no-preference) {
+  .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 卡点依据 chip */
+.msg__chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  width: fit-content; padding: 4px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; line-height: 1.5;
+}
+.msg__chip--confuse { color: #b3540a; background: rgba(244, 170, 70, 0.12); border: 1px solid rgba(244, 170, 70, 0.2); margin-top: 6px; }
+
+/* ---------- 伴学浮动窗（dock 式，不占主对话区） ---------- */
+.peerdock {
+  position: fixed; right: 22px; bottom: 22px; z-index: 60;
+  width: min(340px, calc(100vw - 32px));
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: 440px;
+  background: #fff; border: 1px solid rgba(141, 107, 255, 0.22);
+  border-radius: 18px; box-shadow: 0 24px 60px rgba(76, 58, 158, 0.18);
+  overflow: hidden;
+}
+.peer-pop-enter-active { transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.peer-pop-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.peer-pop-enter-from,
+.peer-pop-leave-to { opacity: 0; transform: translateY(16px) scale(0.96); }
+.peerdock__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(141, 107, 255, 0.1), rgba(52, 120, 246, 0.06));
+  border-bottom: 1px solid rgba(141, 107, 255, 0.14);
+}
+.peerdock__avatar {
+  width: 30px; height: 30px; border-radius: 10px; flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--accent, #8d6bff), var(--blue, #3478f6));
+  display: grid; place-items: center;
+}
+.peerdock__avatar img { width: 20px; height: 20px; border-radius: 6px; }
+.peerdock__title { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.peerdock__title strong { font-size: 13px; color: var(--ink); }
+.peerdock__title small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.peerdock__min {
+  width: 24px; height: 24px; border-radius: 8px;
+  display: grid; place-items: center;
+  font-size: 16px; color: var(--muted); cursor: pointer;
+}
+.peerdock__min:hover { background: rgba(141, 107, 255, 0.12); color: var(--ink); }
+.peerdock__scroll {
+  overflow-y: auto; padding: 12px;
+  display: grid; gap: 10px; align-content: start;
+  background: #fafbff;
+}
+.peerdock__msg { display: grid; gap: 3px; justify-items: start; }
+.peerdock__msg--me { justify-items: end; }
+.peerdock__bubble {
+  max-width: 88%; padding: 9px 12px;
+  font-size: 13px; line-height: 1.6;
+  border-radius: 4px 14px 14px 14px;
+  background: rgba(141, 107, 255, 0.08); color: var(--ink);
+  border: 1px solid rgba(141, 107, 255, 0.14);
+}
+.peerdock__msg--me .peerdock__bubble {
+  border-radius: 14px 14px 4px 14px;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  color: #fff; border: 0;
+}
+.peerdock__bubble :deep(p) { margin: 0 0 6px; }
+.peerdock__bubble :deep(p:last-child) { margin-bottom: 0; }
+.peerdock__msg small { font-size: 10.5px; color: var(--faint); padding: 0 2px; }
+.peerdock__bubble--typing { display: inline-flex; gap: 4px; align-items: center; }
+.peerdock__bubble--typing i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--faint);
+  animation: learn-typing 1.2s ease-in-out infinite;
+}
+.peerdock__bubble--typing i:nth-child(2) { animation-delay: 0.15s; }
+.peerdock__bubble--typing i:nth-child(3) { animation-delay: 0.3s; }
+.peerdock__input {
+  display: flex; gap: 8px; padding: 10px 12px;
+  border-top: 1px solid var(--line, rgba(23, 32, 51, 0.08));
+  background: #fff;
+}
+.peerdock__input input {
+  flex: 1; min-width: 0; padding: 8px 12px;
+  font: inherit; font-size: 13px;
+  border: 1px solid var(--line, rgba(23, 32, 51, 0.08)); border-radius: 999px;
+  outline: none;
+}
+.peerdock__input input:focus { border-color: rgba(141, 107, 255, 0.45); }
+.peerdock__input button {
+  padding: 8px 14px; border: 0; border-radius: 999px;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: #fff; background: linear-gradient(135deg, var(--accent, #8d6bff), #6b4ae0);
+  cursor: pointer;
+}
+.peerdock__input button:disabled { opacity: 0.45; cursor: default; }
+.peerfab {
+  position: fixed; right: 22px; bottom: 22px; z-index: 59;
+  width: 52px; height: 52px; border: 0; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent, #8d6bff), #6b4ae0);
+  box-shadow: 0 14px 32px rgba(107, 74, 224, 0.35);
+  display: grid; place-items: center; cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.peerfab:hover { transform: translateY(-2px); box-shadow: 0 18px 38px rgba(107, 74, 224, 0.42); }
+.peerfab img { width: 28px; height: 28px; border-radius: 8px; }
+.peerfab__dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #ef7578; border: 2px solid #fff;
+}
+@media (max-width: 640px) {
+  .peerdock { right: 12px; left: 12px; bottom: 12px; width: auto; max-height: 60dvh; }
+  .peerfab { right: 14px; bottom: 14px; width: 46px; height: 46px; }
+}
 .msg__code {
   margin: 8px 0 0;
   background: #182338;
@@ -792,7 +1024,7 @@ onBeforeUnmount(() => {
   background: rgba(52, 120, 246, 0.06);
   color: var(--blue-deep);
   font: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: .15s ease;
+  cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 .reply:hover { background: rgba(52, 120, 246, 0.12); }
 </style>

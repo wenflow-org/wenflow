@@ -246,19 +246,78 @@
                 <button type="button" class="mk-link" @click="goPromptLab">去 Prompt Lab 检视 →</button>
               </div>
               <div v-if="isLive && promptVersions.length" class="msk__versions">
-                <span class="msk__versions-label">历史版本</span>
+                <span class="msk__versions-label">历史版本（可与生效版对比、发布草稿）</span>
+                <p v-if="versionMsg" class="msk__versions-msg">{{ versionMsg }}</p>
                 <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
                   <span class="msk__version-tag mono">v{{ v.version }}</span>
-                  <span class="msk__version-status">{{ v.status }}</span>
-                  <span class="msk__version-name">{{ v.name }}</span>
+                  <span class="msk__version-status">
+                    <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">
+                      {{ v.status }}
+                    </span>
+                  </span>
+                  <span class="msk__version-name" :title="v.name">{{ v.name }}</span>
+                  <span class="msk__version-ops">
+                    <button
+                      v-if="v.status !== 'ACTIVE'"
+                      type="button"
+                      class="msk__op"
+                      :disabled="versionBusy === v.id"
+                      @click="compareWithActive(v)"
+                    >
+                      {{ compareLoading === v.id ? '…' : '对比' }}
+                    </button>
+                    <button
+                      v-if="v.status !== 'ACTIVE'"
+                      type="button"
+                      class="msk__op msk__op--primary"
+                      :disabled="versionBusy === v.id"
+                      @click="publishVersion(v)"
+                    >
+                      发布
+                    </button>
+                    <button
+                      v-if="v.status === 'DRAFT'"
+                      type="button"
+                      class="msk__op msk__op--danger"
+                      :disabled="versionBusy === v.id"
+                      @click="deleteVersion(v)"
+                    >
+                      删
+                    </button>
+                  </span>
+                </div>
+
+                <!-- 与生效版对比结果 -->
+                <div v-if="compareResult" class="msk__diff">
+                  <div class="msk__diff-head">
+                    <span class="mono">{{ compareResult.aLabel }} ↔ {{ compareResult.bLabel }}</span>
+                    <span class="msk__diff-count" :class="{ 'is-clean': compareResult.changedLines === 0 }">
+                      {{ compareResult.changedLines ? `${compareResult.changedLines} 行变更` : '内容一致' }}
+                    </span>
+                    <button type="button" class="msk__op" @click="compareResult = null">收起</button>
+                  </div>
+                  <div class="msk__diff-body mono">
+                    <template v-for="(grp, gi) in compareResult.groups" :key="gi">
+                      <div v-if="grp.gap" class="msk__diff-gap">…</div>
+                      <div
+                        v-for="(line, li) in grp.lines"
+                        :key="li"
+                        class="msk__diff-line"
+                        :class="`is-${line.type}`"
+                      >
+                        <span class="msk__diff-no">{{ line.no }}</span>
+                        <span class="msk__diff-text">{{ line.text }}</span>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
             </template>
           </section>
 
           <section v-if="skillProfile && isLive" class="msk__section msk__section--actions">
-            <button type="button" class="msk__primary-link" @click="goFullEditor">在 Prompt Lab 中编辑该 Skill →</button>
-            <p class="msk__none">源文件编辑、字段契约与 Dry Run 在 Prompt Lab 完成；抽屉保留运行配置与试跑。</p>
+            <button type="button" class="msk__primary-link" @click="goFullEditor">打开 Prompt 设计页 →</button>
+            <p class="msk__none">设计页含 Prompt 检视、预览、运行时与工程视图；抽屉保留运行配置与试跑。</p>
           </section>
         </div>
       </aside>
@@ -268,6 +327,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   intent,
   skillProfiles,
@@ -286,6 +346,8 @@ import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/
 import { useEscape } from './useEscape'
 
 useEscape(() => !!intent.skillDrawerId, closeSkillDrawer)
+
+const router = useRouter()
 
 const isLive = computed(() => dataSource.value === 'live')
 
@@ -505,6 +567,129 @@ interface LiveMeta {
 const liveMeta = ref<LiveMeta | null>(null)
 const promptVersions = ref<Array<{ id: string; version: string | number; status: string; name: string }>>([])
 
+/* Prompt 版本管理（发布/删除/与生效版对比） */
+const versionBusy = ref('')
+const compareLoading = ref('')
+const versionMsg = ref('')
+interface DiffLine { type: 'added' | 'removed'; no: number | string; text: string }
+interface DiffGroup { gap: boolean; lines: DiffLine[] }
+const compareResult = ref<{ aLabel: string; bLabel: string; changedLines: number; groups: DiffGroup[] } | null>(null)
+
+/** 发布/删除后刷新版本列表与生效 Prompt 摘要 */
+async function reloadPromptData(id: string) {
+  const [versionsRes, promptRes] = await Promise.all([
+    adminAgentPromptsApi.getPromptVersions({ agentId: id }).catch(() => null),
+    adminSkillsApi.getEffectiveSkillPrompt(id).catch(() => null)
+  ])
+  const vBody = versionsRes?.data?.data ?? versionsRes?.data ?? []
+  const vItems = Array.isArray(vBody) ? vBody : vBody.items || vBody.versions || []
+  promptVersions.value = vItems.slice(0, 8).map((v: Record<string, unknown>) => ({
+    id: String(v.id || ''),
+    version: (v.version as string | number) ?? '—',
+    status: String(v.status || '—'),
+    name: String(v.name || '')
+  }))
+  const promptBody = promptRes?.data?.data ?? promptRes?.data ?? {}
+  const prompt = (promptBody.prompt || {}) as Record<string, unknown>
+  if (liveMeta.value && prompt.id) {
+    const version = prompt.version ? `v${String(prompt.version)}` : ''
+    const promptName = prompt.name ? String(prompt.name) : ''
+    liveMeta.value.promptVersion = [version, promptName].filter(Boolean).join(' · ')
+    liveMeta.value.effectivePrompt = String(prompt.systemPrompt || '').slice(0, 1200)
+  }
+}
+
+async function publishVersion(v: { id: string; version: string | number; name: string }) {
+  const id = intent.skillDrawerId
+  if (!id || versionBusy.value) return
+  if (!window.confirm(`发布 v${v.version}「${v.name}」为生效版本？当前生效版本将下线。`)) return
+  versionBusy.value = v.id
+  versionMsg.value = ''
+  try {
+    await adminAgentPromptsApi.publishPrompt(v.id)
+    await reloadPromptData(id)
+    compareResult.value = null
+    versionMsg.value = `已发布 v${v.version}`
+  } catch (e) {
+    versionMsg.value = `发布失败：${errMsg(e)}`
+  } finally {
+    versionBusy.value = ''
+  }
+}
+
+async function deleteVersion(v: { id: string; version: string | number; name: string }) {
+  const id = intent.skillDrawerId
+  if (!id || versionBusy.value) return
+  if (!window.confirm(`删除草稿 v${v.version}「${v.name}」？该操作不可撤销。`)) return
+  versionBusy.value = v.id
+  versionMsg.value = ''
+  try {
+    await adminAgentPromptsApi.deletePrompt(v.id)
+    await reloadPromptData(id)
+    compareResult.value = null
+    versionMsg.value = `已删除草稿 v${v.version}`
+  } catch (e) {
+    versionMsg.value = `删除失败：${errMsg(e)}`
+  } finally {
+    versionBusy.value = ''
+  }
+}
+
+/** 与当前 ACTIVE 版本做行级对比：modified 拆成删+增两行，连续变更分组，长同文段折叠为 … */
+async function compareWithActive(v: { id: string; version: string | number; name: string }) {
+  const active = promptVersions.value.find((x) => x.status === 'ACTIVE')
+  if (!active) {
+    versionMsg.value = '当前没有生效版本可作对比基准'
+    return
+  }
+  if (compareLoading.value) return
+  compareLoading.value = v.id
+  versionMsg.value = ''
+  try {
+    const res = await adminAgentPromptsApi.comparePrompts(active.id, v.id)
+    const d = res.data?.data ?? res.data ?? {}
+    const diffs = (d.diffs || []) as Array<Record<string, unknown>>
+    const groups: DiffGroup[] = []
+    let current: DiffLine[] = []
+    const flush = () => {
+      if (current.length) {
+        groups.push({ gap: groups.length > 0, lines: current })
+        current = []
+      }
+    }
+    for (const row of diffs) {
+      const type = String(row.type)
+      if (type === 'same') {
+        flush()
+        continue
+      }
+      if (type === 'added') {
+        current.push({ type: 'added', no: Number(row.bLine || 0), text: String(row.bText ?? '') })
+      } else if (type === 'removed') {
+        current.push({ type: 'removed', no: Number(row.aLine || 0), text: String(row.aText ?? '') })
+      } else if (type === 'modified') {
+        current.push({ type: 'removed', no: Number(row.aLine || 0), text: String(row.aText ?? '') })
+        current.push({ type: 'added', no: Number(row.bLine || 0), text: String(row.bText ?? '') })
+      }
+      if (current.length >= 240) {
+        flush()
+        break
+      }
+    }
+    flush()
+    compareResult.value = {
+      aLabel: `v${active.version}（生效）`,
+      bLabel: `v${v.version}`,
+      changedLines: Number(d.changedLines || 0),
+      groups
+    }
+  } catch (e) {
+    versionMsg.value = `对比失败：${errMsg(e)}`
+  } finally {
+    compareLoading.value = ''
+  }
+}
+
 const statsSourceNote = computed(() => {
   if (!liveMeta.value?.statsSource) return ''
   const src =
@@ -541,6 +726,9 @@ watch(
     promptOpen.value = false
     protocolOpen.value = false
     promptVersions.value = []
+    compareResult.value = null
+    versionMsg.value = ''
+    versionBusy.value = ''
     agentRulesReset()
     if (!id || !isLive.value || !skillProfile.value) return
     void loadRuntimeCfg(id)
@@ -630,8 +818,11 @@ function goPromptLab() {
   editSkillInPromptLab(intent.skillDrawerId)
 }
 
+/** 二级 Prompt 设计页（/admin/skills/:id，Skill 级编辑台） */
 function goFullEditor() {
-  editSkillInPromptLab(intent.skillDrawerId)
+  const id = intent.skillDrawerId
+  closeSkillDrawer()
+  void router.push(`/admin/skills/${id}`)
 }
 </script>
 
@@ -1079,7 +1270,7 @@ function goFullEditor() {
 }
 .msk__version-row {
   display: grid;
-  grid-template-columns: 52px 64px 1fr;
+  grid-template-columns: 44px 64px 1fr auto;
   gap: 8px;
   align-items: center;
   font-size: 11px;
@@ -1097,11 +1288,76 @@ function goFullEditor() {
   font-size: 10px;
   width: fit-content;
 }
-.msk__version-status { color: #8492ab; }
 .msk__version-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.msk__version-ops { display: flex; gap: 4px; }
+.msk__op {
+  border: 0;
+  background: transparent;
+  color: #3478f6;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.msk__op:hover { background: #eff6ff; }
+.msk__op:disabled { opacity: 0.5; cursor: not-allowed; }
+.msk__op--danger { color: #dc2626; }
+.msk__op--danger:hover { background: #fef2f2; }
+.msk__versions-msg { margin: 0; font-size: 11px; color: #15803d; font-weight: 600; }
+
+/* 版本对比 */
+.msk__diff {
+  margin-top: 8px;
+  border: 1px solid #e1e8f2;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.msk__diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: #f8fafd;
+  border-bottom: 1px solid #eef2f8;
+  font-size: 10.5px;
+  color: #5b6577;
+}
+.msk__diff-head .mono { font-size: 10px; }
+.msk__diff-count { font-weight: 700; color: #b45309; }
+.msk__diff-count.is-clean { color: #15803d; }
+.msk__diff-head .msk__op { margin-left: auto; }
+.msk__diff-body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+.msk__diff-line {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px;
+  padding: 1px 10px;
+}
+.msk__diff-line.is-added { background: #ecfdf5; }
+.msk__diff-line.is-added .msk__diff-text { color: #15803d; }
+.msk__diff-line.is-added .msk__diff-no::after { content: '+'; color: #15803d; margin-left: 3px; }
+.msk__diff-line.is-removed { background: #fef2f2; }
+.msk__diff-line.is-removed .msk__diff-text { color: #b91c1c; }
+.msk__diff-line.is-removed .msk__diff-no::after { content: '−'; color: #b91c1c; margin-left: 3px; }
+.msk__diff-no { color: #8492ab; text-align: right; user-select: none; }
+.msk__diff-text { white-space: pre-wrap; word-break: break-word; color: #41516e; }
+.msk__diff-gap {
+  padding: 2px 10px;
+  color: #c3cede;
+  user-select: none;
 }
 
 /* 底部主操作 */

@@ -8,9 +8,11 @@
  */
 
 import prisma from '../../config/database';
-import { adaptiveGuidanceCopy, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
+import { executeSkill } from '../../skills';
+import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
+import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
 import stateTrackingService from '../learning/state-tracking.service';
 import { logger } from '../../utils/logger';
 
@@ -23,6 +25,8 @@ export interface LearningStateGuidancePayload {
   source: 'model' | 'fallback';
   copy: AdaptiveGuidanceCopyOutput;
   summary: LearnerStateSummaryOutput;
+  /** AI 决策记录：捕获 → 判断 → 动作（LearningDecisionFeedService 组装） */
+  decisions: LearningDecisionCard[];
   debug?: {
     skillId: string;
     model: string | null;
@@ -98,7 +102,7 @@ class LearningStateGuidanceService {
         prisma.teaching_sessions.findMany({
           where: { userId },
           orderBy: { updatedAt: 'desc' },
-          select: { duration: true, startTime: true, endTime: true, wrapup: true },
+          select: { duration: true, startTime: true, endTime: true, wrapup: true, advisory: true, updatedAt: true, status: true },
           take: 10,
         }),
       ]);
@@ -167,12 +171,21 @@ class LearningStateGuidanceService {
         warningCount: warnings.length,
       });
 
-      const result = await adaptiveGuidanceCopy({
+      // v4 §5.2：统一经 executeSkill 入口（遥测/用户级开关/归一化），禁止直连 handler
+      const result = await executeSkill(adaptiveGuidanceCopyDefinition, {
         view: 'learning-state',
         learnerSnapshot,
         learningState,
         path: primaryPath ?? undefined,
         sessionWrapup: sessionWrapup ?? undefined,
+        userId,
+      });
+
+      const decisions = learningDecisionFeedService.build({
+        paths,
+        sessions,
+        learnerSnapshot,
+        summary,
       });
 
       const generatedAt = new Date().toISOString();
@@ -180,9 +193,12 @@ class LearningStateGuidanceService {
         schemaVersion: 'learning-state-guidance-v1',
         view: 'learning-state',
         generatedAt,
-        source: result.cached ? 'fallback' : 'model',
+        source: result.quality
+          ? (result.quality === 'model' || result.quality === 'cache' ? 'model' : 'fallback')
+          : result.cached ? 'fallback' : 'model',
         copy: result.output,
         summary,
+        decisions,
         debug: {
           skillId: result.debug?.skillId || 'adaptive-guidance-copy',
           model: result.debug?.model || null,

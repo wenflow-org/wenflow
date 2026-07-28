@@ -1,879 +1,358 @@
 ﻿<template>
-  <div class="developer-docs">
-    <!-- 导航栏 -->
-    <header class="docs-navbar">
-      <div class="container">
-        <div class="navbar-brand">
-          <router-link to="/" class="brand-link">
-            <img src="/logo.png" alt="WenFlow Logo" class="brand-logo-img" />
-            <span class="brand-text">问流 WenFlow</span>
-          </router-link>
-        </div>
-        <nav class="docs-nav">
-          <a href="#quickstart" class="nav-link">快速开始</a>
-          <a href="#architecture" class="nav-link">架构</a>
-          <a href="#agent-development" class="nav-link">Skill 开发</a>
-          <a href="#api-reference" class="nav-link">API 参考</a>
-          <a href="#examples" class="nav-link">示例</a>
+  <div class="docs v2-page">
+    <!-- 顶栏 -->
+    <header class="docs-nav">
+      <div class="docs-nav__inner">
+        <router-link to="/" class="docs-brand">
+          <img src="/logo.png" alt="问流" class="docs-brand__logo" />
+          <span class="docs-brand__name">问流</span>
+          <span class="docs-brand__tag">开发者</span>
+        </router-link>
+        <nav class="docs-nav__links">
+          <a href="#quickstart">快速开始</a>
+          <a href="#architecture">架构</a>
+          <a href="#skill-dev">Skill 开发</a>
+          <a href="#console">控制台</a>
+          <a href="#api">API</a>
         </nav>
-        <div class="navbar-actions">
-          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="btn btn-primary">查看源码</a>
-          <router-link to="/" class="btn btn-secondary">返回首页</router-link>
-        </div>
+        <router-link to="/" class="docs-nav__back">返回首页</router-link>
       </div>
     </header>
 
-    <!-- Hero 区域 -->
+    <!-- 标题区 -->
     <section class="docs-hero">
-      <div class="container">
-        <div class="hero-content">
-          <h1 class="hero-title">开发者文档</h1>
-          <p class="hero-subtitle">
-            了解本地运行、环境配置、API 调用和 Skill 扩展方式。
-          </p>
-          <div class="hero-cta">
-            <a href="#quickstart" class="btn btn-primary btn-lg">
-              本地运行项目
-            </a>
-            <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="btn btn-outline btn-lg">
-              查看源码
-            </a>
-          </div>
-        </div>
+      <span class="kicker">WENFLOW DEVELOPER DOCS</span>
+      <h1>开发者文档</h1>
+      <p>本地运行、架构与 Skill 体系、Prompt 工程、控制台与 API。</p>
+      <div class="docs-hero__chips">
+        <span class="hero-chip">Node.js ≥ 18</span>
+        <span class="hero-chip">后端 3001 · 前端 5173</span>
+        <span class="hero-chip">Prompt = File-as-Truth</span>
       </div>
     </section>
 
-    <!-- 主体内容 -->
-    <div class="docs-container">
-      <!-- 侧边栏导航 -->
-      <aside class="docs-sidebar" :class="{ collapsed: sidebarCollapsed }">
-        <button class="sidebar-toggle" @click="toggleSidebar" :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'">
-          <span class="toggle-icon">{{ sidebarCollapsed ? '→' : '←' }}</span>
-        </button>
-        
-        <div class="sidebar-section">
-          <h3 class="sidebar-title" v-show="!sidebarCollapsed">入门指南</h3>
-          <ul class="sidebar-menu">
-            <li>
-              <a href="#quickstart" :class="{ active: activeSection === 'quickstart' }" :title="sidebarCollapsed ? '快速开始' : ''">
-                <span class="menu-icon">🚀</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">快速开始</span>
-              </a>
-            </li>
-            <li>
-              <a href="#architecture" :class="{ active: activeSection === 'architecture' }" :title="sidebarCollapsed ? '技术架构' : ''">
-                <span class="menu-icon">🏗️</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">技术架构</span>
-              </a>
-            </li>
-            <li>
-              <a href="#setup" :class="{ active: activeSection === 'setup' }" :title="sidebarCollapsed ? '环境配置' : ''">
-                <span class="menu-icon">⚙️</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">环境配置</span>
-              </a>
-            </li>
-          </ul>
+    <div class="docs-body">
+      <!-- 侧边栏 -->
+      <aside class="docs-side">
+        <div class="docs-side__group">
+          <span class="docs-side__title">入门</span>
+          <a href="#quickstart" :class="{ on: active === 'quickstart' }">快速开始</a>
+          <a href="#architecture" :class="{ on: active === 'architecture' }">架构总览</a>
+          <a href="#env" :class="{ on: active === 'env' }">环境变量</a>
         </div>
-
-        <div class="sidebar-section">
-          <h3 class="sidebar-title" v-show="!sidebarCollapsed">核心开发</h3>
-          <ul class="sidebar-menu">
-            <li>
-              <a href="#agent-development" :class="{ active: activeSection === 'agent-development' }" :title="sidebarCollapsed ? 'Skill 开发' : ''">
-                <span class="menu-icon">🤖</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">Skill 开发</span>
-              </a>
-            </li>
-            <li>
-              <a href="#agent-registration" :class="{ active: activeSection === 'agent-registration' }" :title="sidebarCollapsed ? 'Agent 注册流程' : ''">
-                <span class="menu-icon">📝</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">Skill 注册流程</span>
-              </a>
-            </li>
-            <li>
-              <a href="#api-reference" :class="{ active: activeSection === 'api-reference' }" :title="sidebarCollapsed ? 'API 参考' : ''">
-                <span class="menu-icon">📡</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">API 参考</span>
-              </a>
-            </li>
-          </ul>
+        <div class="docs-side__group">
+          <span class="docs-side__title">核心</span>
+          <a href="#skills" :class="{ on: active === 'skills' }">Skill 体系</a>
+          <a href="#prompts" :class="{ on: active === 'prompts' }">Prompt 工程</a>
+          <a href="#skill-dev" :class="{ on: active === 'skill-dev' }">开发一个 Skill</a>
         </div>
-
-        <div class="sidebar-section">
-          <h3 class="sidebar-title" v-show="!sidebarCollapsed">进阶主题</h3>
-          <ul class="sidebar-menu">
-            <li>
-              <a href="#mcp-integration" :class="{ active: activeSection === 'mcp-integration' }" :title="sidebarCollapsed ? 'MCP 集成' : ''">
-                <span class="menu-icon">🔌</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">MCP 集成</span>
-              </a>
-            </li>
-            <li>
-              <a href="#examples" :class="{ active: activeSection === 'examples' }" :title="sidebarCollapsed ? '示例代码' : ''">
-                <span class="menu-icon">💡</span>
-                <span class="menu-text" v-show="!sidebarCollapsed">示例代码</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        <div class="sidebar-section" v-show="!sidebarCollapsed">
-          <h3 class="sidebar-title">外部链接</h3>
-          <ul class="sidebar-menu">
-            <li><a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">项目源码</a></li>
-          </ul>
+        <div class="docs-side__group">
+          <span class="docs-side__title">工具</span>
+          <a href="#console" :class="{ on: active === 'console' }">控制台</a>
+          <a href="#api" :class="{ on: active === 'api' }">API 参考</a>
+          <a href="#testing" :class="{ on: active === 'testing' }">测试与质量</a>
         </div>
       </aside>
 
-      <!-- 主内容区 -->
-      <main class="docs-content" :class="{ expanded: sidebarCollapsed }">
-        <!-- 快速开始 -->
-        <section id="quickstart" class="content-section">
-          <h2 class="section-title">🚀 快速开始</h2>
-          
-          <div class="info-box">
-            <p><strong>本指南将帮助你：</strong></p>
-            <ul>
-              <li>了解平台架构和技术栈</li>
-              <li>配置开发环境</li>
-              <li>编写和注册 Skill</li>
-              <li>了解 Prompt 与运行时配置</li>
-            </ul>
-          </div>
+      <!-- 内容 -->
+      <main class="docs-main">
+        <!-- ================= 快速开始 ================= -->
+        <section id="quickstart" class="docs-sec">
+          <h2>快速开始</h2>
+          <p class="docs-lead">Windows + PowerShell 是一等开发环境；Node.js ≥ 18。全部命令在项目根目录执行。</p>
 
-          <h3>前置要求</h3>
-          <div class="requirement-grid">
-            <div class="requirement-card">
-              <div class="requirement-icon">📦</div>
-              <h4>Node.js</h4>
-              <p>版本 >= 18.x</p>
-            </div>
-            <div class="requirement-card">
-              <div class="requirement-icon">🐍</div>
-              <h4>Python</h4>
-              <p>版本 3.12+（可选）</p>
-            </div>
-            <div class="requirement-card">
-              <div class="requirement-icon">🗄️</div>
-              <h4>数据库</h4>
-              <p>SQLite（开发）或 PostgreSQL（生产）</p>
-            </div>
-            <div class="requirement-card">
-              <div class="requirement-icon">🤖</div>
-              <h4>AI 服务</h4>
-              <p>NewAPI + DeepSeek</p>
-            </div>
-          </div>
-
-          <h3>安装步骤</h3>
-          <div id="code-install" class="code-block">
-            <div class="code-header">
-              <span class="code-title">终端命令</span>
-              <button class="copy-btn" @click="copyCode('install')">复制</button>
-            </div>
-            <pre><code># 克隆项目
-git clone https://github.com/wenflow-org/wenflow.git
+          <div class="code">
+            <div class="code__head"><span>终端</span><button @click="copy($event)">复制</button></div>
+            <pre><code>git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 
-# 安装依赖并配置环境变量
+# 安装依赖（根目录脚本会处理后端的 prisma generate）
 npm install
+
+# 交互式生成 backend/.env（JWT 密钥 / 数据库 / AI 服务）
 npm run env:setup
 
-# 生成 Prisma 客户端并启动前后端
+# 启动后端 3001 + 前端 5173
 npm run dev</code></pre>
           </div>
 
-          <div class="tip-box">
-            <span class="tip-icon">💡</span>
-            <div class="tip-content">
-              <strong>提示：</strong> Windows 环境建议直接使用项目根目录的 <code>npm run dev</code>。
+          <div class="callout">
+            <strong>启动即崩？</strong> 后端启动时校验 <code>JWT_SECRET</code>，缺失或弱于 32 字符会直接退出——先跑 <code>npm run env:setup</code>。
+          </div>
+
+          <div class="mini-grid">
+            <div class="mini">
+              <span class="mini__k mono">5173</span>
+              <strong>前端 Vite</strong>
+              <p>开发服务器，<code>/api</code> 代理到后端，免 CORS 配置。</p>
+            </div>
+            <div class="mini">
+              <span class="mini__k mono">3001</span>
+              <strong>后端 Express</strong>
+              <p>ts-node-dev 热重启，<code>/readyz</code> 提供健康检查。</p>
+            </div>
+            <div class="mini">
+              <span class="mini__k mono">SQLite</span>
+              <strong>数据库</strong>
+              <p>首次运行由 Prisma 自动建库；<code>npm run prisma:studio</code> 可视浏览。</p>
             </div>
           </div>
         </section>
 
-        <!-- 技术架构 -->
-        <section id="architecture" class="content-section">
-          <h2 class="section-title">🏗️ 技术架构</h2>
-          
-          <h3>后端架构</h3>
-          <div class="tech-stack">
-            <div class="tech-item">
-              <span class="tech-icon">🌐</span>
-              <div>
-                <h4>Node.js + Express</h4>
-                <p>Web 框架，TypeScript 开发</p>
-              </div>
+        <!-- ================= 架构总览 ================= -->
+        <section id="architecture" class="docs-sec">
+          <h2>架构总览</h2>
+          <p class="docs-lead">一次 LLM 调用的真实链路：</p>
+
+          <div class="flow">
+            <div class="flow__node">routes</div>
+            <span class="flow__arrow">→</span>
+            <div class="flow__node">services / orchestrators</div>
+            <span class="flow__arrow">→</span>
+            <div class="flow__node flow__node--hot">skills.executeSkill</div>
+            <span class="flow__arrow">→</span>
+            <div class="flow__node">LLM（DeepSeek 兼容）</div>
+          </div>
+
+          <div class="mini-grid">
+            <div class="mini">
+              <span class="mini__k">前端</span>
+              <strong>Vue 3 + TS + Vite 5</strong>
+              <p>Element Plus + Pinia；学习者前台（v2）与 Admin 控制台（admin-redesign）两套界面。</p>
             </div>
-            <div class="tech-item">
-              <span class="tech-icon">🗄️</span>
-              <div>
-                <h4>Prisma ORM</h4>
-                <p>数据库操作，支持 SQLite/PostgreSQL</p>
-              </div>
+            <div class="mini">
+              <span class="mini__k">后端</span>
+              <strong>Express + Prisma</strong>
+              <p>TypeScript；业务库 + 系统库双 SQLite；strict 模式关闭，注意可空性。</p>
             </div>
-            <div class="tech-item">
-              <span class="tech-icon">🤖</span>
-              <div>
-                <h4>Agent 系统</h4>
-                <p>多 Agent 协作，插件化扩展</p>
-              </div>
+            <div class="mini">
+              <span class="mini__k">网关</span>
+              <strong>EduClaw Gateway</strong>
+              <p><code>executeSkill(definition, input)</code> 统一入口：日志、统计、上下文包装、可靠性预算。</p>
             </div>
-            <div class="tech-item">
-              <span class="tech-icon">🔐</span>
-              <div>
-                <h4>JWT 认证</h4>
-                <p>安全的用户认证机制</p>
-              </div>
+            <div class="mini">
+              <span class="mini__k">AI</span>
+              <strong>OpenAI SDK</strong>
+              <p>指向 DeepSeek 兼容 API；模型与密钥走后台「连接与安全」，不入库源码。</p>
             </div>
           </div>
 
-          <h3>前端架构</h3>
-          <div class="tech-stack">
-            <div class="tech-item">
-              <span class="tech-icon">⚡</span>
-              <div>
-                <h4>Vue 3 + TypeScript</h4>
-                <p>现代化前端框架</p>
-              </div>
+          <div class="callout callout--warn">
+            <strong>「Agent」已是历史概念。</strong> 现在的 LLM 能力单元是 <strong>Skill</strong>，全部位于 <code>backend/src/skills/</code>；<code>agents/</code> 仅余事件驱动的 <code>learner-model-agent</code>、仿真编排与 plugins 等遗留目录。文档与旧代码中的 Agent 字样大多指 Skill。
+          </div>
+        </section>
+
+        <!-- ================= 环境变量 ================= -->
+        <section id="env" class="docs-sec">
+          <h2>环境变量</h2>
+          <p class="docs-lead">后端 <code>backend/.env</code> 最小集（<code>npm run env:setup</code> 交互生成）：</p>
+
+          <div class="table">
+            <div class="table__row table__row--head">
+              <span>变量</span><span>说明</span>
             </div>
-            <div class="tech-item">
-              <span class="tech-icon">🎨</span>
-              <div>
-                <h4>Element Plus</h4>
-                <p>UI 组件库</p>
-              </div>
-            </div>
-            <div class="tech-item">
-              <span class="tech-icon">📊</span>
-              <div>
-                <h4>Chart.js</h4>
-                <p>数据可视化</p>
-              </div>
-            </div>
-            <div class="tech-item">
-              <span class="tech-icon">🔄</span>
-              <div>
-                <h4>Pinia</h4>
-                <p>状态管理</p>
-              </div>
-            </div>
+            <div class="table__row"><code class="mono">JWT_SECRET</code><span>≥ 32 字符，启动校验，缺失即崩</span></div>
+            <div class="table__row"><code class="mono">DATABASE_URL</code><span>开发默认 <code>file:./dev.db</code></span></div>
+            <div class="table__row"><code class="mono">AI_API_URL / AI_API_KEY / AI_MODEL</code><span>DeepSeek 兼容服务；也可在控制台「连接与安全」页在线改</span></div>
+            <div class="table__row"><code class="mono">INIT_ADMIN_PASSWORD</code><span>首次启动播种管理员（≥12 位强密码）</span></div>
+          </div>
+        </section>
+
+        <!-- ================= Skill 体系 ================= -->
+        <section id="skills" class="docs-sec">
+          <h2>Skill 体系</h2>
+          <p class="docs-lead">Skill 是平台唯一的 LLM 能力单元：一个 TS handler + 一份 Prompt 资产。</p>
+
+          <div class="code">
+            <div class="code__head"><span>backend/src/skills/ 结构（简化）</span><button @click="copy($event)">复制</button></div>
+            <pre><code>backend/src/skills/
+├── index.ts                 # skillHandlers 注册表（全部 handler 在此登记）
+├── goal-conversation/       # 目标对话（conversational）
+├── path-planning/           # 路径规划（generator）
+├── teaching-turn/           # 教学回合（conversational）
+├── session-wrapup/          # 课后产出（distiller）
+└── …                        # 共 30+ 个 Skill 目录（含检索、网页、图片等外挂能力）
+
+prompts/                     # 仓库根，与 backend/ 同级
+├── skill.&lt;skillId&gt;.md      # Prompt 源文件（File-as-Truth）
+└── core/&lt;skillId&gt;.yaml      # v4 核心定义（业务 SSOT）</code></pre>
           </div>
 
-          <h3>核心系统</h3>
-          <div class="system-grid">
-            <div class="system-card">
-              <h4>🎯 学习目标分解系统</h4>
-              <p>将模糊的学习目标分解为具体可执行的任务</p>
+          <div class="mini-grid">
+            <div class="mini">
+              <span class="mini__k mono">executeSkill</span>
+              <strong>统一执行入口</strong>
+              <p>所有调用必须经 <code>skills.executeSkill(definition, input)</code>：自动获得日志、统计、上下文包装与可靠性预算，禁止绕开直连 LLM。</p>
             </div>
-            <div class="system-card">
-              <h4>📚 学习执行系统</h4>
-              <p>学习路径管理、任务完成追踪、时间记录</p>
-            </div>
-            <div class="system-card">
-              <h4>📊 学习状态追踪系统</h4>
-              <p>LSS/KTL/LF/LSB 科学量化学习状态</p>
-            </div>
-            <div class="system-card">
-              <h4>🤖 ZPD 分层 AI 辅导</h4>
-              <p>基于最近发展区理论的个性化辅导</p>
-            </div>
-            <div class="system-card">
-              <h4>🏆 成就系统</h4>
-              <p>14 个预定义成就，XP 奖励机制</p>
-            </div>
-            <div class="system-card">
-              <h4>📈 学习报告系统</h4>
-              <p>周报/月报生成，智能建议</p>
+            <div class="mini">
+              <span class="mini__k mono">skillHandlers</span>
+              <strong>注册表</strong>
+              <p><code>skills/index.ts</code> 的 <code>skillHandlers</code> map 把 skillId 映射到 handler；未注册即不存在。</p>
             </div>
           </div>
         </section>
 
-        <!-- 环境配置 -->
-        <section id="setup" class="content-section">
-          <h2 class="section-title">⚙️ 环境配置</h2>
-          
-          <h3>后端环境变量</h3>
-          <div id="code-backend-env" class="code-block">
-            <div class="code-header">
-              <span class="code-title">backend/.env</span>
-              <button class="copy-btn" @click="copyCode('backend-env')">复制</button>
-            </div>
-            <pre><code># 服务器配置
-NODE_ENV=development
-PORT=3001
+        <!-- ================= Prompt 工程 ================= -->
+        <section id="prompts" class="docs-sec">
+          <h2>Prompt 工程</h2>
+          <p class="docs-lead">Prompt 是一等工程资产，不是配置：源文件进 Git，DB 存生效版本。</p>
 
-# 数据库配置（开发用 SQLite）
-DATABASE_URL="file:./dev.db"
-
-# JWT 配置
-JWT_SECRET=your-super-secret-jwt-key
-JWT_EXPIRES_IN=7d
-
-# AI 服务配置
-AI_API_URL=http://localhost:3000
-AI_API_KEY=sk-your-api-key
-AI_MODEL=deepseek-v4-flash
-
-# 日志配置
-LOG_LEVEL=debug</code></pre>
+          <div class="flow">
+            <div class="flow__node">prompts/skill.*.md<br /><span class="flow__sub">Git 审核</span></div>
+            <span class="flow__arrow">→</span>
+            <div class="flow__node">同步<br /><span class="flow__sub">seed / 部署</span></div>
+            <span class="flow__arrow">→</span>
+            <div class="flow__node flow__node--hot">DB agent_prompts<br /><span class="flow__sub">ACTIVE 版本</span></div>
+            <span class="flow__arrow">→</span>
+            <div class="flow__node">运行时生效</div>
           </div>
 
-          <h3>前端环境变量</h3>
-          <div id="code-frontend-env" class="code-block">
-            <div class="code-header">
-              <span class="code-title">frontend/.env</span>
-              <button class="copy-btn" @click="copyCode('frontend-env')">复制</button>
+          <div class="mini-grid">
+            <div class="mini">
+              <span class="mini__k">五块结构</span>
+              <strong>编译产物</strong>
+              <p>v4 协议：<code>prompts/core/&lt;skillId&gt;.yaml</code> 是业务 SSOT，经 core-compiler 编译为五块 Prompt；frontmatter 携带 <code>coreHash</code> 防漂移。</p>
             </div>
-            <pre><code>VITE_API_BASE_URL=/api</code></pre>
-          </div>
-
-          <h3>AI 服务配置</h3>
-          <div class="info-box">
-            <p><strong>生产环境模型：</strong> DeepSeek（通过 NewAPI 服务）</p>
-            <ul>
-              <li>地址：由部署环境配置，不写入源码</li>
-              <li>模型：deepseek-v4-flash / deepseek-v4-pro</li>
-              <li>兼容 OpenAI API 格式</li>
-            </ul>
+            <div class="mini">
+              <span class="mini__k">archetype</span>
+              <strong>六种原型</strong>
+              <p>conversational / generator / extractor / distiller / copywriter / code-only，决定块结构与运行时契约。</p>
+            </div>
+            <div class="mini">
+              <span class="mini__k mono">prompts:lint</span>
+              <strong>静态检查</strong>
+              <p>v2/v4 双轨校验；<code>prompts:core:check</code> 检测 core 与产物漂移，发布前必过。</p>
+            </div>
+            <div class="mini">
+              <span class="mini__k">只读线上</span>
+              <strong>线上不可编辑</strong>
+              <p>生效内容只能改文件、走同步。后台版本管理仅支持查看、对比、发布与删除草稿。</p>
+            </div>
           </div>
         </section>
 
-        <!-- Skill 开发 -->
-        <section id="agent-development" class="content-section">
-          <h2 class="section-title">Skill 开发指南</h2>
-          
-          <div class="info-box info-primary">
-            <p><strong>Agent 系统</strong> 是平台的核心，支持插件化扩展和多 Agent 协作。</p>
-          </div>
+        <!-- ================= 开发一个 Skill ================= -->
+        <section id="skill-dev" class="docs-sec">
+          <h2>开发一个 Skill</h2>
+          <p class="docs-lead">六步，从空目录到控制台可见可试跑：</p>
 
-          <h3>1. 创建 Agent 文件</h3>
-          <p>在 <code>backend/src/agents/standard/</code> 目录下创建新文件：</p>
-          
-          <div id="code-agent-template" class="code-block">
-            <div class="code-header">
-              <span class="code-title">MyAgent.ts</span>
-              <button class="copy-btn" @click="copyCode('agent-template')">复制</button>
-            </div>
-            <pre><code>// MyAgent.ts
-import { BaseAgent } from '../../core/agent/BaseAgent';
-import { IAgentInput, IAgentOutput, IAgentCapabilities } from '../../core/agent/ILearningAgent';
-
-export class MyAgent extends BaseAgent {
-  readonly id = 'my-agent';
-  readonly name = 'MyAgent';
-  readonly version = '1.0.0';
-  readonly description = '我的自定义 Agent';
-  readonly subject = '综合';
-
-  readonly capabilities: IAgentCapabilities = {
-    tags: ['my-tag'],
-    subjects: ['编程', '英语'],
-    inputSchema: {
-      type: 'object',
-      properties: {
-        prompt: { type: 'string' }
-      }
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        result: { type: 'string' }
-      }
-    }
-  };
-
-  protected async execute(input: IAgentInput): Promise&lt;IAgentOutput&gt; {
-    // 实现核心逻辑
-    return {
-      success: true,
-      data: { result: 'Hello World' }
-    };
-  }
-}
-
-export default MyAgent;</code></pre>
-          </div>
-
-          <h3>2. ILearningAgent 接口详解</h3>
-          <div class="table-container">
-            <table class="docs-table">
-              <thead>
-                <tr>
-                  <th>属性</th>
-                  <th>类型</th>
-                  <th>说明</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>id</code></td>
-                  <td>string</td>
-                  <td>唯一标识符（kebab-case）</td>
-                </tr>
-                <tr>
-                  <td><code>name</code></td>
-                  <td>string</td>
-                  <td>显示名称</td>
-                </tr>
-                <tr>
-                  <td><code>version</code></td>
-                  <td>string</td>
-                  <td>版本号</td>
-                </tr>
-                <tr>
-                  <td><code>description</code></td>
-                  <td>string</td>
-                  <td>功能描述</td>
-                </tr>
-                <tr>
-                  <td><code>subject</code></td>
-                  <td>string</td>
-                  <td>所属学科</td>
-                </tr>
-                <tr>
-                  <td><code>capabilities</code></td>
-                  <td>IAgentCapabilities</td>
-                  <td>能力定义</td>
-                </tr>
-                <tr>
-                  <td><code>run</code></td>
-                  <td>method</td>
-                  <td>执行方法</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <h3>3. BaseAgent 基类功能</h3>
-          <ul class="feature-list">
+          <ol class="steps">
             <li>
-              <span class="feature-icon">✅</span>
+              <span class="steps__no">1</span>
               <div>
-                <strong>输入验证</strong>
-                <p>自动调用 <code>validate()</code> 方法</p>
+                <strong>写 Prompt 源文件</strong>
+                <p>新建 <code>prompts/skill.my-skill.md</code>（v4：先写 <code>prompts/core/my-skill.yaml</code> 再编译）。跑 <code>npm run prompts:lint</code> 校验。</p>
               </div>
             </li>
             <li>
-              <span class="feature-icon">🔄</span>
+              <span class="steps__no">2</span>
               <div>
-                <strong>预处理/后处理</strong>
-                <p><code>preprocess()</code> / <code>postprocess()</code></p>
+                <strong>写 handler</strong>
+                <p>在 <code>backend/src/skills/</code> 建模块，导出符合 <code>SkillHandler</code> 签名的函数；LLM 调用走 <code>executeSkill</code>。</p>
               </div>
             </li>
             <li>
-              <span class="feature-icon">🤖</span>
+              <span class="steps__no">3</span>
               <div>
-                <strong>AI 调用</strong>
-                <p><code>callAI()</code> 便捷方法</p>
+                <strong>注册</strong>
+                <p>在 <code>skills/index.ts</code> 的 <code>skillHandlers</code> map 中登记 <code>'my-skill': handler</code>。</p>
               </div>
             </li>
             <li>
-              <span class="feature-icon">📝</span>
+              <span class="steps__no">4</span>
               <div>
-                <strong>JSON 解析</strong>
-                <p><code>parseJSON()</code> 带错误处理</p>
+                <strong>同步 Prompt 到 DB</strong>
+                <p>通过部署同步或 <code>POST /api/admin/agent-prompts/seed-core</code> 让源文件成为 ACTIVE 版本。</p>
               </div>
             </li>
             <li>
-              <span class="feature-icon">⚙️</span>
+              <span class="steps__no">5</span>
               <div>
-                <strong>配置管理</strong>
-                <p><code>this.config</code> 访问配置</p>
+                <strong>接入业务链</strong>
+                <p>在 routes / services / orchestrators 中调用；保持 <code>routes → services → executeSkill → LLM</code> 链路。</p>
               </div>
             </li>
-          </ul>
-
-          <h3>4. 生命周期</h3>
-          <div class="flow-diagram">
-            <div class="flow-step">
-              <span class="step-label">run(input)</span>
-              <div class="step-content">
-                <div class="step-box">validate(input)</div>
-                <div class="step-arrow">↓</div>
-                <div class="step-box">preprocess(input)</div>
-                <div class="step-arrow">↓</div>
-                <div class="step-box highlight">execute(input)</div>
-                <div class="step-arrow">↓</div>
-                <div class="step-box">postprocess(output)</div>
+            <li>
+              <span class="steps__no">6</span>
+              <div>
+                <strong>控制台验证</strong>
+                <p><a href="/admin/console" target="_blank">/admin/console</a>：拓扑看注册与调用量 → Skill 抽屉试跑 → <code>/admin/skills/my-skill</code> 设计页看生效 Prompt 与版本。</p>
               </div>
-            </div>
-          </div>
+            </li>
+          </ol>
+        </section>
 
-          <h3>5. 自动加载</h3>
-          <div class="tip-box">
-            <span class="tip-icon">✨</span>
-            <div class="tip-content">
-              <strong>自动加载：</strong> Agent 文件创建后，<code>AgentLoader</code> 会自动扫描并加载，无需修改核心代码。
-            </div>
-          </div>
+        <!-- ================= 控制台 ================= -->
+        <section id="console" class="docs-sec">
+          <h2>控制台</h2>
+          <p class="docs-lead"><a href="/admin/console" target="_blank">/admin/console</a> 是运维与调试主入口（管理员登录）：</p>
 
-          <h3>6. 验证 Agent</h3>
-          <p>访问管理平台查看 Agent 是否已注册：</p>
-          <div class="code-block">
-            <pre><code>http://localhost:5173/admin/console</code></pre>
+          <div class="mini-grid">
+            <div class="mini"><strong>平台总览</strong><p>健康简报、24h 调用脉搏、待办。</p></div>
+            <div class="mini"><strong>Agent 拓扑</strong><p>五阶段流水线图：数据流动画、调用量边宽、hover 联动、时间范围切换；Skill 卡 ↗ 直达设计页。</p></div>
+            <div class="mini"><strong>Skill 目录 / 抽屉</strong><p>统计排序、运行配置（路由/重试/超时）、试跑、协议规则、生效 Prompt。</p></div>
+            <div class="mini"><strong>Prompt 设计页</strong><p><code>/admin/skills/:id</code>：工作台（Prompt + 试跑 + 最近调用一键重跑）、版本对比与发布、运行时、工程信息。</p></div>
+            <div class="mini"><strong>Prompt Dry Run</strong><p>候选编译三视图（产物/候选/diff）+ 字段契约编辑。</p></div>
+            <div class="mini"><strong>日志三件套</strong><p>执行日志（重试时间线/导出）、Prompt 调用、事件中心 + Trace 瀑布。</p></div>
+            <div class="mini"><strong>虚拟学习者</strong><p>白盒/黑盒仿真、Quick Learn 一键代学、传播报告。</p></div>
+            <div class="mini"><strong>连接与安全</strong><p>模型接入、网络策略、可靠性预算、能力健康探测。</p></div>
           </div>
         </section>
 
-        <!-- Agent 注册流程 -->
-        <section id="agent-registration" class="content-section">
-          <h2 class="section-title">📝 Agent 注册流程</h2>
-          
-          <div class="info-box">
-            <p><strong>注册方式：</strong> 平台支持自动注册和手动注册两种方式</p>
+        <!-- ================= API 参考 ================= -->
+        <section id="api" class="docs-sec">
+          <h2>API 参考</h2>
+          <p class="docs-lead">以 <code>backend/src/routes/</code> 为最终口径；以下为高频端点。Admin 端点需要管理员会话。</p>
+
+          <h3>用户态</h3>
+          <div class="api">
+            <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/api/auth/register · /api/auth/login</code><span>注册与登录（HttpOnly Cookie）</span></div>
+            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/api/users/me</code><span>当前用户</span></div>
+            <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/api/goal-conversation/start · /:id/reply</code><span>目标对话（路径生成入口）</span></div>
+            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/api/learning/paths · /paths/:id</code><span>学习路径</span></div>
+            <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/api/learning/tasks/:taskId/complete</code><span>完成任务</span></div>
+            <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/api/feedback/submit</code><span>教学反馈提交</span></div>
           </div>
 
-          <h3>方式一：自动注册（推荐）</h3>
-          <p>将 Agent 文件放在 <code>backend/src/agents/standard/</code> 目录下，系统启动时会自动加载：</p>
-          
-          <div class="code-block">
-            <div class="code-header">
-              <span class="code-title">backend/src/agents/index.ts</span>
-            </div>
-            <pre><code>import { AgentLoader } from '../core/agent/AgentLoader';
-
-// 自动扫描并加载所有 Agent
-const loader = new AgentLoader();
-await loader.loadAll();</code></pre>
+          <h3>管理态（/api/admin）</h3>
+          <div class="api">
+            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/agents/logs · /agents/topology</code><span>执行日志与拓扑统计</span></div>
+            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/skills · /skills/:name/effective-prompt</code><span>Skill 注册表与生效 Prompt</span></div>
+            <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/skills/:name/test</code><span>Skill 在线试跑</span></div>
+            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/agent-prompts · /agent-prompts/compare</code><span>Prompt 版本与对比</span></div>
+            <div class="api__row"><span class="api__m api__m--put">PUT</span><code class="mono">/agent-prompts/:id/publish</code><span>发布版本为 ACTIVE</span></div>
+            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/system/capabilities</code><span>AI 能力健康快照</span></div>
           </div>
 
-          <h3>方式二：手动注册</h3>
-          <p>通过 API 手动注册 Agent：</p>
-          
-          <div id="code-register-agent-api" class="code-block">
-            <div class="code-header">
-              <span class="code-title">使用 API 注册</span>
-              <button class="copy-btn" @click="copyCode('register-agent-api')">复制</button>
-            </div>
-            <pre><code>// API 端点
-POST /api/agents/register
-
-// 请求体
-{
-  "id": "my-agent",
-  "name": "MyAgent",
-  "version": "1.0.0",
-  "description": "我的自定义 Agent",
-  "subject": "综合",
-  "capabilities": {
-    "tags": ["my-tag"],
-    "subjects": ["编程", "英语"],
-    "inputSchema": {...},
-    "outputSchema": {...}
-  }
-}</code></pre>
-          </div>
-
-          <h3>方式三：通过 Gateway 注册</h3>
-          <div id="code-gateway-register" class="code-block">
-            <div class="code-header">
-              <span class="code-title">使用 MCP Gateway</span>
-              <button class="copy-btn" @click="copyCode('gateway-register')">复制</button>
-            </div>
-            <pre><code>import { mcpGateway } from '../../core/mcp/McpGateway';
-
-const agentId = await mcpGateway.registerAgent({
-  id: 'my-agent',
-  name: 'MyAgent',
-  version: '1.0.0',
-  description: '我的自定义 Agent',
-  capabilities: {...}
-}, handler);
-
-console.log(`Agent 已注册：${agentId}`);</code></pre>
-          </div>
-
-          <h3>Agent 类型</h3>
-          <div class="agent-types">
-            <div class="agent-type-card">
-              <h4>🎓 ai-teaching-agent</h4>
-              <p>AI 授课编排 Agent</p>
-              <span class="agent-version">v2.0</span>
-            </div>
-            <div class="agent-type-card">
-              <h4>🗺️ skill:path-planning</h4>
-              <p>路径生成 Agent</p>
-              <span class="agent-version">v1.0</span>
-            </div>
-            <div class="agent-type-card">
-              <h4>🧠 learner-model-agent</h4>
-              <p>学习者画像与状态中心</p>
-              <span class="agent-version">v1.0</span>
-            </div>
-            <div class="agent-type-card">
-              <h4>🔄 coordinator</h4>
-              <p>协调 Agent</p>
-              <span class="agent-version">v1.0</span>
-            </div>
+          <div class="callout">
+            <strong>提示：</strong> 健康检查 <code>GET /readyz</code> 无需认证，可用于部署探活。
           </div>
         </section>
 
-        <!-- API 参考 -->
-        <section id="api-reference" class="content-section">
-          <h2 class="section-title">📡 API 参考</h2>
-          
-          <h3>认证相关</h3>
-          <div class="api-list">
-            <div class="api-item">
-              <div class="api-method method-post">POST</div>
-              <div class="api-endpoint">/api/auth/register</div>
-              <div class="api-description">用户注册</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-post">POST</div>
-              <div class="api-endpoint">/api/auth/login</div>
-              <div class="api-description">用户登录</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-get">GET</div>
-              <div class="api-endpoint">/api/users/me</div>
-              <div class="api-description">获取当前用户信息</div>
-            </div>
-          </div>
+        <!-- ================= 测试与质量 ================= -->
+        <section id="testing" class="docs-sec">
+          <h2>测试与质量</h2>
+          <div class="code">
+            <div class="code__head"><span>常用命令</span><button @click="copy($event)">复制</button></div>
+            <pre><code># 后端（backend/）
+npm test                 # Jest（__tests__/**/*.test.ts，超时 10s）
+npm run lint             # ESLint
+npm run prompts:lint     # Prompt 双轨校验（v2 文件 / v4 core）
 
-          <h3>Agent 相关</h3>
-          <div class="api-list">
-            <div class="api-item">
-              <div class="api-method method-get">GET</div>
-              <div class="api-endpoint">/api/agents</div>
-              <div class="api-description">获取 Agent 列表</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-post">POST</div>
-              <div class="api-endpoint">/api/agents/register</div>
-              <div class="api-description">注册 Agent</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-post">POST</div>
-              <div class="api-endpoint">/api/agents/:id/call</div>
-              <div class="api-description">调用 Agent</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-get">GET</div>
-              <div class="api-endpoint">/api/agents/logs</div>
-              <div class="api-description">获取 Agent 日志</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-get">GET</div>
-              <div class="api-endpoint">/api/admin/agent-monitoring</div>
-              <div class="api-description">Agent 监控</div>
-            </div>
-          </div>
+# 前端（frontend/）
+npm run build            # 类型 + 产物
+npm run lint             # ESLint --fix
 
-          <h3>学习相关</h3>
-          <div class="api-list">
-            <div class="api-item">
-              <div class="api-method method-post">POST</div>
-              <div class="api-endpoint">/api/learning/goals</div>
-              <div class="api-description">创建学习目标</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-get">GET</div>
-              <div class="api-endpoint">/api/learning/paths</div>
-              <div class="api-description">获取学习路径列表</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-get">GET</div>
-              <div class="api-endpoint">/api/learning/paths/:id</div>
-              <div class="api-description">获取学习路径详情</div>
-            </div>
-            <div class="api-item">
-              <div class="api-method method-patch">PATCH</div>
-              <div class="api-endpoint">/api/learning/tasks/:id</div>
-              <div class="api-description">更新任务状态</div>
-            </div>
+# E2E：Playwright（两包均有 @playwright/test）</code></pre>
           </div>
-
-          <div class="tip-box">
-            <span class="tip-icon">📖</span>
-            <div class="tip-content">
-              <strong>API 参考：</strong> 请以当前仓库中的后端路由定义为准。
-            </div>
+          <div class="callout callout--warn">
+            <strong>提交前本地跑测试。</strong> 仓库没有 CI，质量门禁在你手里。
           </div>
         </section>
 
-        <!-- MCP 集成 -->
-        <section id="mcp-integration" class="content-section">
-          <h2 class="section-title">🔌 MCP 集成</h2>
-          
-          <div class="info-box">
-            <p><strong>MCP (Model Context Protocol)</strong> 是平台的核心通信协议，用于 Agent 与 AI 模型之间的交互。</p>
-          </div>
-
-          <h3>使用 MCP Gateway</h3>
-          <div id="code-mcp-gateway" class="code-block">
-            <div class="code-header">
-              <span class="code-title">调用 AI 模型</span>
-              <button class="copy-btn" @click="copyCode('mcp-gateway')">复制</button>
-            </div>
-            <pre><code>import { mcpGateway } from '../../core/mcp/McpGateway';
-
-const response = await mcpGateway.chatCompletion({
-  model: process.env.AI_MODEL || 'deepseek-v4-flash',
-  messages: [
-    { role: 'system', content: '你是一个专业的 AI 辅导老师' },
-    { role: 'user', content: '请解释什么是递归' }
-  ],
-  temperature: 0.7,
-  max_tokens: 4000
-}, 'newapi');  // 指定 MCP 服务器
-
-console.log(response.content);</code></pre>
-          </div>
-
-          <h3>MCP 服务器配置</h3>
-          <div class="table-container">
-            <table class="docs-table">
-              <thead>
-                <tr>
-                  <th>服务器</th>
-                  <th>地址</th>
-                  <th>模型</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>newapi</td>
-                  <td>http://localhost:3000</td>
-                  <td>deepseek-v4-flash</td>
-                </tr>
-                <tr>
-                  <td>production</td>
-                  <td>由部署环境配置</td>
-                  <td>deepseek-v4-flash / deepseek-v4-pro</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- 示例代码 -->
-        <section id="examples" class="content-section">
-          <h2 class="section-title">💡 示例代码</h2>
-          
-          <h3>示例 1：简单的问答 Agent</h3>
-          <div id="code-qna-agent" class="code-block">
-            <div class="code-header">
-              <span class="code-title">QnaAgent.ts</span>
-              <button class="copy-btn" @click="copyCode('qna-agent')">复制</button>
-            </div>
-            <pre><code>import { BaseAgent } from '../../core/agent/BaseAgent';
-
-export class QnaAgent extends BaseAgent {
-  readonly id = 'qna-agent';
-  readonly name = '问答 Agent';
-  readonly version = '1.0.0';
-  readonly description = '简单的问答 Agent';
-  readonly subject = '综合';
-
-  protected async execute(input: any): Promise&lt;any&gt; {
-    const response = await this.callAI([
-      { role: 'system', content: '你是一个 helpful 的助手' },
-      { role: 'user', content: input.question }
-    ]);
-
-    return {
-      success: true,
-      data: { answer: response.content }
-    };
-  }
-}</code></pre>
-          </div>
-
-          <h3>示例 2：带验证的 Agent</h3>
-          <div id="code-math-agent" class="code-block">
-            <div class="code-header">
-              <span class="code-title">MathAgent.ts（片段）</span>
-              <button class="copy-btn" @click="copyCode('math-agent')">复制</button>
-            </div>
-            <pre><code>export class MathAgent extends BaseAgent {
-  validate(input: any): boolean {
-    if (!input.problem || input.problem.length &lt; 5) {
-      return false;
-    }
-    return true;
-  }
-
-  protected async execute(input: any): Promise&lt;any&gt; {
-    try {
-      const response = await this.callAI([
-        { role: 'system', content: '你是一个数学专家' },
-        { role: 'user', content: `请解答：${input.problem}` }
-      ]);
-
-      return {
-        success: true,
-        data: { solution: response.content }
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        data: null,
-        error: {
-          code: 'MATH_ERROR',
-          message: error.message
-        }
-      };
-    }
-  }
-}</code></pre>
-          </div>
-
-          <h3>示例 3：使用 MCP Gateway</h3>
-          <div id="code-mcp-example" class="code-block">
-            <div class="code-header">
-              <span class="code-title">使用 MCP 调用 AI</span>
-              <button class="copy-btn" @click="copyCode('mcp-example')">复制</button>
-            </div>
-            <pre><code>import { mcpGateway } from '../../core/mcp/McpGateway';
-import { logger } from '../../utils/logger';
-
-async function generateContent(prompt: string) {
-  try {
-    logger.info('开始生成内容...');
-    
-    const response = await mcpGateway.chatCompletion({
-  model: process.env.AI_MODEL || 'deepseek-v4-flash',
-      messages: [
-        { role: 'system', content: '你是一个专业的内容生成器' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.8,
-      max_tokens: 2000
-    }, 'newapi');
-
-    logger.info('内容生成完成');
-    
-    return {
-      success: true,
-      data: { content: response.content }
-    };
-  } catch (error) {
-    logger.error('生成失败:', error);
-    return {
-      success: false,
-      error: { message: '生成失败' }
-    };
-  }
-}</code></pre>
-          </div>
-
-          <h3>更多示例</h3>
-          <p>参考现有标准化 Agent 获取灵感：</p>
-          <ul class="simple-list">
-            <li><code>backend/src/agents/path-planning/</code> - 路径生成 Agent</li>
-            <li><code>backend/src/services/ai-teaching/</code> - AI 授课编排</li>
-          </ul>
-        </section>
-
-        <!-- 页脚 -->
-        <footer class="docs-footer">
-          <div class="footer-content">
-            <p>© 2026 问流 WenFlow · 开发者文档</p>
-            <div class="footer-links">
-              <router-link to="/">返回首页</router-link>
-              <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">项目源码</a>
-            </div>
-          </div>
+        <footer class="docs-foot">
+          <span>© 2026 问流 WenFlow · 开发者文档</span>
+          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">项目源码</a>
         </footer>
       </main>
     </div>
@@ -881,1061 +360,392 @@ async function generateContent(prompt: string) {
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { toast } from '../utils/toast';
+import { onMounted, onUnmounted, ref } from 'vue'
+import { toast } from '../utils/toast'
 
-const activeSection = ref('quickstart');
-const sidebarCollapsed = ref(false);
-const isMobile = ref(false);
+const active = ref('quickstart')
 
-const toggleSidebar = () => {
-  sidebarCollapsed.value = !sidebarCollapsed.value;
-  localStorage.setItem(
-    isMobile.value ? 'docs-sidebar-collapsed-mobile' : 'docs-sidebar-collapsed-desktop',
-    String(sidebarCollapsed.value)
-  );
-};
-
-const copyCode = async (codeId: string) => {
-  const block = document.getElementById(`code-${codeId}`);
-  const text = block?.querySelector('pre')?.textContent || '';
-
+async function copy(e: MouseEvent) {
+  const block = (e.currentTarget as HTMLElement).closest('.code')
+  const text = block?.querySelector('pre')?.textContent || ''
   if (!text) {
-    toast.error('没有可复制的代码');
-    return;
+    toast.error('没有可复制的内容')
+    return
   }
-
   try {
-    await navigator.clipboard.writeText(text);
-    toast.success('代码已复制');
+    await navigator.clipboard.writeText(text)
+    toast.success('已复制')
   } catch {
-    toast.error('复制失败，请手动选择代码');
+    toast.error('复制失败，请手动选择')
   }
-};
+}
 
-const restoreSidebarState = () => {
-  isMobile.value = window.innerWidth <= 968;
-  const key = isMobile.value ? 'docs-sidebar-collapsed-mobile' : 'docs-sidebar-collapsed-desktop';
-  const saved = localStorage.getItem(key);
-  sidebarCollapsed.value = saved !== null ? saved === 'true' : isMobile.value;
-};
+function onScroll() {
+  const secs = document.querySelectorAll('.docs-sec')
+  const y = window.scrollY + 120
+  let current = 'quickstart'
+  secs.forEach((s) => {
+    if (y >= (s as HTMLElement).offsetTop) current = s.id
+  })
+  active.value = current
+}
 
-const handleResize = () => {
-  const wasMobile = isMobile.value;
-  const nextMobile = window.innerWidth <= 968;
-  if (wasMobile !== nextMobile) restoreSidebarState();
-};
-
-const handleScroll = () => {
-  const sections = document.querySelectorAll('.content-section');
-  const scrollPosition = window.scrollY + 100;
-
-  sections.forEach((section) => {
-    const sectionTop = (section as HTMLElement).offsetTop;
-    const sectionHeight = (section as HTMLElement).offsetHeight;
-    const sectionId = section.getAttribute('id');
-
-    if (scrollPosition >= sectionTop && scrollPosition < sectionTop + sectionHeight) {
-      activeSection.value = sectionId || '';
-    }
-  });
-};
-
-onMounted(() => {
-  window.addEventListener('scroll', handleScroll, { passive: true });
-  window.addEventListener('resize', handleResize);
-  handleScroll(); // 初始化
-  restoreSidebarState();
-});
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll);
-  window.removeEventListener('resize', handleResize);
-});
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+onUnmounted(() => window.removeEventListener('scroll', onScroll))
 </script>
 
 <style scoped>
-/* ========== 基础变量 ========== */
-.developer-docs {
-  min-height: 100vh;
-  background: var(--bg-body);
-  color: var(--text-primary);
-}
+@import './v2/v2.css';
 
-.container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
+.docs { min-height: 100vh; }
 
-/* ========== 导航栏 ========== */
-.docs-navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border-light);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.docs-navbar .container {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 64px;
-}
-
-.navbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.brand-link {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  text-decoration: none;
-  color: var(--text-primary);
-  font-weight: 700;
-  font-size: 1.25rem;
-  transition: opacity 0.2s ease;
-}
-
-.brand-link:hover {
-  opacity: 0.8;
-}
-
-.brand-logo {
-  font-size: 1.75rem;
-}
-
+/* ---------- 顶栏 ---------- */
 .docs-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.docs-nav__inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 58px;
   display: flex;
-  gap: 2rem;
-}
-
-.nav-link {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-weight: 500;
-  font-size: 0.95rem;
-  transition: color 0.2s ease;
-}
-
-.nav-link:hover {
-  color: var(--color-primary);
-}
-
-.navbar-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-.btn {
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.5rem;
-  font-weight: 600;
-  font-size: 0.95rem;
-  border-radius: var(--radius-lg);
+  gap: 28px;
+}
+.docs-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--ink); }
+.docs-brand__logo { height: 28px; }
+.docs-brand__name { font-size: 16px; font-weight: 700; }
+.docs-brand__tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2fa;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.docs-nav__links { display: flex; gap: 22px; flex: 1; }
+.docs-nav__links a {
+  color: var(--muted);
   text-decoration: none;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.docs-nav__links a:hover { color: var(--blue); }
+.docs-nav__back {
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.docs-nav__back:hover { color: var(--blue); border-color: rgba(52, 120, 246, 0.4); }
+@media (max-width: 860px) {
+  .docs-nav__links { display: none; }
 }
 
-.btn-primary {
-  background: var(--gradient-primary);
-  color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-  transform: translateY(-2px);
-}
-
-.btn-secondary {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-default);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-muted);
-  color: var(--text-primary);
-}
-
-/* ========== Hero 区域 ========== */
+/* ---------- 标题区 ---------- */
 .docs-hero {
-  padding: 120px 0 60px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  text-align: center;
-}
-
-.hero-content {
-  max-width: 800px;
+  max-width: 1180px;
   margin: 0 auto;
+  padding: 52px 24px 30px;
+}
+.docs-hero h1 {
+  margin: 10px 0 12px;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.docs-hero p { margin: 0; font-size: 15px; color: var(--muted); }
+.docs-hero__chips { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.hero-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.hero-title {
-  font-size: clamp(2.5rem, 5vw, 4rem);
-  font-weight: 800;
-  color: var(--text-primary);
-  margin-bottom: 1.5rem;
-  letter-spacing: -0.02em;
-}
-
-.hero-subtitle {
-  font-size: clamp(1.1rem, 2vw, 1.35rem);
-  color: var(--text-secondary);
-  line-height: 1.8;
-  margin-bottom: 2.5rem;
-}
-
-.hero-cta {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.btn-lg {
-  padding: 1rem 2rem;
-  font-size: 1.05rem;
-}
-
-.btn-outline {
-  background: transparent;
-  border: 2px solid var(--color-primary);
-  color: var(--color-primary);
-}
-
-.btn-outline:hover {
-  background: var(--color-primary);
-  color: white;
-}
-
-/* ========== 文档布局 ========== */
-.docs-container {
+/* ---------- 布局 ---------- */
+.docs-body {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 10px 24px 60px;
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 3rem;
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: 3rem 2rem;
-  transition: grid-template-columns 0.3s ease;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 48px;
 }
-
-.docs-container:has(.docs-sidebar.collapsed) {
-  grid-template-columns: 70px 1fr;
+@media (max-width: 860px) {
+  .docs-body { grid-template-columns: 1fr; gap: 20px; }
 }
 
 /* 侧边栏 */
-.docs-sidebar {
+.docs-side {
   position: sticky;
-  top: 100px;
-  height: calc(100vh - 120px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 1rem;
-  transition: all 0.3s ease;
-  width: 280px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-default) transparent;
+  top: 82px;
+  align-self: start;
+  display: grid;
+  gap: 20px;
 }
-
-.docs-sidebar::-webkit-scrollbar {
-  width: 6px;
+@media (max-width: 860px) {
+  .docs-side { display: none; }
 }
-
-.docs-sidebar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.docs-sidebar::-webkit-scrollbar-thumb {
-  background: var(--border-default);
-  border-radius: 3px;
-}
-
-.docs-sidebar::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
-
-.docs-sidebar.collapsed {
-  width: 70px;
-  padding-right: 0;
-}
-
-/* 折叠按钮 */
-.sidebar-toggle {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  width: 100%;
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sidebar-toggle:hover {
-  background: var(--bg-muted);
-  border-color: var(--color-primary);
-}
-
-.toggle-icon {
-  font-size: 1.25rem;
-  color: var(--text-secondary);
-  transition: color 0.2s ease;
-}
-
-.sidebar-toggle:hover .toggle-icon {
-  color: var(--color-primary);
-}
-
-.sidebar-section {
-  margin-bottom: 2rem;
-}
-
-.sidebar-title {
-  font-size: 0.875rem;
+.docs-side__group { display: grid; gap: 2px; }
+.docs-side__title {
+  padding: 0 10px 6px;
+  font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--faint);
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 1rem;
-  letter-spacing: 0.05em;
-  padding: 0 1rem;
-  transition: opacity 0.3s ease;
 }
-
-.docs-sidebar.collapsed .sidebar-title {
-  opacity: 0;
-  height: 0;
-  margin: 0;
-  overflow: hidden;
-}
-
-.sidebar-menu {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.sidebar-menu li {
-  margin-bottom: 0.5rem;
-}
-
-.sidebar-menu a {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  color: var(--text-secondary);
+.docs-side__group a {
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
   text-decoration: none;
-  border-radius: var(--radius-lg);
-  transition: all 0.2s ease;
-  font-size: 0.95rem;
-  white-space: nowrap;
-}
-
-.docs-sidebar.collapsed .sidebar-menu a {
-  padding: 0.75rem;
-  justify-content: center;
-}
-
-.menu-icon {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-}
-
-.menu-text {
-  transition: opacity 0.3s ease;
-}
-
-.docs-sidebar.collapsed .menu-text {
-  opacity: 0;
-  width: 0;
-  overflow: hidden;
-}
-
-.sidebar-menu a:hover {
-  background: var(--bg-muted);
-  color: var(--color-primary);
-}
-
-.sidebar-menu a:hover .menu-icon {
-  transform: scale(1.1);
-}
-
-.sidebar-menu a.active {
-  background: rgba(102, 126, 234, 0.1);
-  color: var(--color-primary);
+  font-size: 13px;
   font-weight: 600;
+  border-left: 2px solid transparent;
+}
+.docs-side__group a:hover { background: #eef2fa; color: var(--ink); }
+.docs-side__group a.on {
+  color: var(--blue-deep);
+  background: #eef5ff;
+  border-left-color: var(--blue);
 }
 
-.docs-sidebar.collapsed .sidebar-menu a.active {
-  background: var(--color-primary);
-}
-
-.docs-sidebar.collapsed .sidebar-menu a.active .menu-icon {
-  filter: brightness(0) invert(1);
-}
-
-/* 主内容区 */
-.docs-content {
-  min-width: 0;
-  max-width: 900px;
-  margin: 0 auto;
-  transition: max-width 0.3s ease;
-}
-
-.docs-content.expanded {
-  max-width: 1100px;
-}
-
-.content-section {
-  margin-bottom: 4rem;
-  scroll-margin-top: 100px;
-}
-
-.section-title {
-  font-size: 2rem;
+/* ---------- 内容 ---------- */
+.docs-main { min-width: 0; max-width: 780px; }
+.docs-sec { margin-bottom: 56px; scroll-margin-top: 80px; }
+.docs-sec h2 {
+  margin: 0 0 14px;
+  font-size: 22px;
   font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid var(--border-default);
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--line);
 }
-
-.content-section h3 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 2.5rem 0 1.5rem;
+.docs-sec h3 {
+  margin: 26px 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
 }
-
-.content-section h4 {
-  font-size: 1.15rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 1.5rem 0 1rem;
+.docs-lead { margin: 0 0 16px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+.docs-main p { font-size: 13.5px; line-height: 1.8; color: var(--muted); }
+.docs-main code:not(.mono) {
+  background: #eef2fa;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--blue-deep);
+  font-family: 'JetBrains Mono', Consolas, monospace;
 }
+.mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+.docs-main a { color: var(--blue); text-decoration: none; }
+.docs-main a:hover { text-decoration: underline; }
 
-.content-section p {
-  font-size: 1rem;
+/* 迷你卡网格 */
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.mini {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 5px;
+  align-content: start;
+}
+.mini__k {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  letter-spacing: 0.04em;
+}
+.mini strong { font-size: 13.5px; }
+.mini p { margin: 0; font-size: 12px; line-height: 1.7; }
+
+/* 调用条 */
+.callout {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #dbe7f6;
+  color: #41516e;
+  font-size: 13px;
   line-height: 1.7;
-  color: var(--text-secondary);
-  margin-bottom: 1rem;
+}
+.callout--warn {
+  background: #fffbeb;
+  border-color: rgba(180, 83, 9, 0.25);
+  color: #7c5a1e;
 }
 
-.content-section ul {
-  margin-bottom: 1rem;
-  padding-left: 1.5rem;
-}
-
-.content-section li {
-  margin-bottom: 0.5rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.content-section code {
-  background: var(--bg-muted);
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  color: var(--color-primary);
-  font-family: 'Consolas', 'Monaco', monospace;
-}
-
-.content-section pre {
-  background: var(--bg-muted);
-  padding: 1.5rem;
-  border-radius: var(--radius-xl);
-  overflow-x: auto;
-  margin: 1rem 0;
-}
-
-.content-section pre code {
-  background: none;
-  padding: 0;
-  color: var(--text-primary);
-}
-
-/* 信息框 */
-.info-box {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
-  margin: 1.5rem 0;
-}
-
-.info-box ul {
-  margin: 1rem 0 0;
-  padding-left: 1.5rem;
-}
-
-.info-primary {
-  background: rgba(102, 126, 234, 0.05);
-  border-color: var(--color-primary);
-}
-
-/* 提示框 */
-.tip-box {
+/* 链路图 */
+.flow {
   display: flex;
-  gap: 1rem;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.5rem;
-  margin: 1.5rem 0;
+  align-items: stretch;
+  gap: 8px;
+  margin: 18px 0;
+  flex-wrap: wrap;
 }
-
-.tip-icon {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
-
-.tip-content {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-/* 要求网格 */
-.requirement-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
-  margin: 1.5rem 0;
-}
-
-.requirement-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
+.flow__node {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
   text-align: center;
-  transition: all 0.3s ease;
-}
-
-.requirement-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-  transform: translateY(-4px);
-}
-
-.requirement-icon {
-  font-size: 2.5rem;
-  margin-bottom: 1rem;
-}
-
-.requirement-card h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.requirement-card p {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-/* 技术栈 */
-.tech-stack {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  margin: 1.5rem 0;
+  align-content: center;
+  gap: 3px;
 }
-
-.tech-item {
-  display: flex;
-  gap: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
-  transition: all 0.3s ease;
-}
-
-.tech-item:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-}
-
-.tech-icon {
-  font-size: 2rem;
-  flex-shrink: 0;
-}
-
-.tech-item h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.tech-item p {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-/* 系统网格 */
-.system-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin: 1.5rem 0;
-}
-
-.system-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
-  transition: all 0.3s ease;
-}
-
-.system-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-  transform: translateY(-4px);
-}
-
-.system-card h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.75rem;
-}
-
-.system-card p {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
-}
+.flow__node--hot { border-color: rgba(52, 120, 246, 0.45); background: #eef5ff; color: var(--blue-deep); }
+.flow__sub { font-size: 10.5px; font-weight: 600; color: var(--faint); }
+.flow__arrow { align-self: center; color: var(--faint); font-weight: 700; }
 
 /* 代码块 */
-.code-block {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
+.code {
+  margin: 16px 0;
+  border-radius: 12px;
   overflow: hidden;
-  margin: 1.5rem 0;
+  border: 1px solid #1c2a40;
+  background: #101826;
 }
-
-.code-header {
+.code__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  background: var(--bg-muted);
-  border-bottom: 1px solid var(--border-default);
+  padding: 8px 14px;
+  border-bottom: 1px solid #1c2a40;
 }
-
-.code-title {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.copy-btn {
+.code__head span { font-size: 11px; color: #7d93b8; font-weight: 600; }
+.code__head button {
+  border: 1px solid #2a3c58;
   background: transparent;
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  padding: 0.375rem 0.75rem;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  color: #9db8dc;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
-
-.copy-btn:hover {
-  background: var(--bg-body);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.code-block pre {
+.code__head button:hover { border-color: #3f5a82; color: #cfe1f7; }
+.code pre {
   margin: 0;
-  padding: 1.5rem;
-  background: var(--bg-surface);
+  padding: 14px 16px;
   overflow-x: auto;
-}
-
-.code-block code {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  color: var(--text-primary);
+  font: 12px/1.7 'JetBrains Mono', Consolas, monospace;
+  color: #b8cbe4;
+  white-space: pre;
 }
 
 /* 表格 */
-.table-container {
-  overflow-x: auto;
-  margin: 1.5rem 0;
-}
-
-.docs-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--bg-surface);
-  border-radius: var(--radius-xl);
+.table {
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   overflow: hidden;
+  background: #fff;
 }
+.table__row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 2fr;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+.table__row:last-child { border-bottom: none; }
+.table__row--head {
+  background: #fafbfc;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  letter-spacing: 0.05em;
+}
+.table__row span:last-child { color: var(--muted); line-height: 1.6; }
 
-.docs-table thead {
-  background: var(--bg-muted);
+/* 步骤 */
+.steps { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 10px; }
+.steps li {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
-
-.docs-table th {
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--text-primary);
-  border-bottom: 2px solid var(--border-default);
+.steps__no {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: #eef5ff;
+  color: var(--blue-deep);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-content: center;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
 }
-
-.docs-table td {
-  padding: 1rem;
-  border-bottom: 1px solid var(--border-light);
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-}
-
-.docs-table tr:last-child td {
-  border-bottom: none;
-}
-
-.docs-table code {
-  background: var(--bg-muted);
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  color: var(--color-primary);
-}
+.steps strong { font-size: 13.5px; display: block; margin-bottom: 3px; }
+.steps p { margin: 0; font-size: 12.5px; }
 
 /* API 列表 */
-.api-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin: 1.5rem 0;
-}
-
-.api-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.5rem;
-  transition: all 0.3s ease;
-}
-
-.api-item:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-}
-
-.api-method {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-md);
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.method-get {
-  background: rgba(34, 197, 94, 0.1);
-  color: var(--color-success);
-}
-
-.method-post {
-  background: rgba(102, 126, 234, 0.1);
-  color: var(--color-primary);
-}
-
-.method-patch {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-}
-
-.api-endpoint {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-  min-width: 250px;
-}
-
-.api-description {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  flex: 1;
-}
-
-/* Agent 类型 */
-.agent-types {
+.api { display: grid; gap: 6px; margin: 12px 0; }
+.api__row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0;
-}
-
-.agent-type-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  text-align: center;
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.agent-type-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-}
-
-.agent-type-card h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.agent-type-card p {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.agent-version {
-  display: inline-block;
-  margin-top: 0.75rem;
-  font-size: 0.75rem;
-  background: var(--bg-muted);
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-}
-
-/* 特性列表 */
-.feature-list {
-  list-style: none;
-  padding: 0;
-  margin: 1.5rem 0;
-}
-
-.feature-list li {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  transition: all 0.3s ease;
-}
-
-.feature-list li:hover {
-  border-color: var(--color-primary);
-}
-
-.feature-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.feature-list li strong {
-  display: block;
-  color: var(--text-primary);
-  margin-bottom: 0.25rem;
-}
-
-.feature-list li p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
-/* 流程图 */
-.flow-diagram {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 2rem;
-  margin: 1.5rem 0;
-}
-
-.flow-step {
-  text-align: center;
-}
-
-.step-label {
-  display: block;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 1.5rem;
-}
-
-.step-content {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: 46px minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  gap: 1rem;
+  padding: 9px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
 }
-
-.step-box {
-  background: var(--bg-body);
-  border: 2px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 1rem 2rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  min-width: 200px;
+.api__row code { font-size: 11.5px; color: var(--ink); }
+.api__row span:last-child { color: var(--muted); }
+.api__m {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 0;
+  text-align: center;
+  border-radius: 5px;
+  letter-spacing: 0.04em;
 }
-
-.step-box.highlight {
-  background: rgba(102, 126, 234, 0.1);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.step-arrow {
-  font-size: 1.5rem;
-  color: var(--text-muted);
-}
-
-/* 简单列表 */
-.simple-list {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0;
-}
-
-.simple-list li {
-  padding: 0.75rem 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  margin-bottom: 0.5rem;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
+.api__m--get { background: #ecfdf5; color: #15803d; }
+.api__m--post { background: #eff6ff; color: var(--blue-deep); }
+.api__m--patch { background: #fffbeb; color: #b45309; }
 
 /* 页脚 */
-.docs-footer {
-  margin-top: 4rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--border-light);
-}
-
-.footer-content {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.footer-links {
+.docs-foot {
   display: flex;
-  justify-content: center;
-  gap: 2rem;
-  margin-top: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 12px;
 }
-
-.footer-links a {
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.footer-links a:hover {
-  color: var(--color-primary);
-}
-
-/* ========== 响应式 ========== */
-@media (max-width: 968px) {
-  .docs-container {
-    grid-template-columns: 1fr;
-    gap: 2rem;
-  }
-  
-  .docs-container:has(.docs-sidebar.collapsed) {
-    grid-template-columns: 1fr;
-  }
-
-  .docs-sidebar {
-    position: static;
-    height: auto;
-    padding-right: 0;
-    width: 100%;
-    margin-bottom: 2rem;
-  }
-  
-  .sidebar-toggle {
-    display: flex;
-  }
-
-  .docs-sidebar.collapsed {
-    width: 100%;
-    height: 48px;
-    margin-bottom: 0;
-    overflow: hidden;
-  }
-
-  .docs-sidebar.collapsed .sidebar-toggle {
-    margin-bottom: 0;
-  }
-  
-  .docs-content {
-    max-width: 100%;
-  }
-  
-  .docs-content.expanded {
-    max-width: 100%;
-  }
-
-  .docs-nav {
-    display: none;
-  }
-
-  .docs-hero {
-    padding: 100px 0 40px;
-  }
-
-  .hero-title {
-    font-size: clamp(2rem, 8vw, 3rem);
-  }
-
-  .hero-cta {
-    flex-direction: column;
-    align-items: center;
-  }
-}
+.docs-foot a { color: var(--muted); text-decoration: none; }
+.docs-foot a:hover { color: var(--blue); }
 </style>

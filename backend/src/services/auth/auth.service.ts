@@ -134,6 +134,30 @@ class AuthService {
     }
   }
 
+  // 修改密码（需验证当前密码）
+  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+    const user = await prisma.users.findUnique({
+      where: { id: userId }
+    });
+
+    // 与登录同等的常量时间比较，避免通过响应时序探测
+    const isValidPassword = await bcrypt.compare(
+      oldPassword,
+      user?.password || INVALID_LOGIN_PASSWORD_HASH
+    );
+    if (!user || !isValidPassword) {
+      throw new InvalidCredentialsError();
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.users.update({
+      where: { id: user.id },
+      data: { password: hashedPassword, updatedAt: new Date() }
+    });
+
+    logger.info(`用户修改密码：${user.name}`);
+  }
+
   // 验证 Token
   async verifyToken(token: string) {
     try {

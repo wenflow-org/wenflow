@@ -1,4 +1,6 @@
 ﻿import { logger } from '../../utils/logger';
+import { agentConfigService } from '../../services/agentConfig.service';
+import { mergeStateDelta } from './delta-merge';
 import {
   composePromptFromAgentRouting,
   isPromptSupplementEnabled,
@@ -63,6 +65,18 @@ export interface GoalConversationAgentResult {
   internal: GoalConversationInternal;
   /** 统一运行契约 envelope（C2 试点，不替换 agent-output-v1） */
   runtimeEnvelope?: RuntimeEnvelope;
+  /** Delta 试验（§5.4）量测：漏报率观测数据 */
+  deltaStats?: {
+    mode: true;
+    /** 模型本轮实际产出的 understanding 键数 */
+    emittedUnderstandingKeys: number;
+    /** 合并后完整 understanding 键数 */
+    mergedUnderstandingKeys: number;
+    /** 本轮 understanding 增量为空（漏报候选信号） */
+    emptyDelta: boolean;
+    /** 本轮是否产出了 state 对象 */
+    stateEmitted: boolean;
+  };
   debug?: {
     attemptCount?: number;
     actualRetryCount?: number;
@@ -486,10 +500,25 @@ async function refreshHardRequiredCache(): Promise<void> {
 // 启动时预热一次（不 await）
 void refreshHardRequiredCache();
 
+/**
+ * 从 ACTIVE prompt metadata 解析 Delta 开关（§5.4）。
+ * 锚点链：core.yaml deltaOutput → 编译产物 frontmatter → seed metadata.promptLab.deltaOutput。
+ */
+function extractDeltaOutputMode(metadata: unknown): boolean {
+  if (!metadata) return false;
+  try {
+    const parsed = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+    return parsed?.promptLab?.deltaOutput === true;
+  } catch {
+    return false;
+  }
+}
+
 function parseGoalConversationResponse(
   content: string,
   previousUnderstanding?: any,
-  stageControlOptions?: StageControlOptions
+  stageControlOptions?: StageControlOptions,
+  deltaOptions?: { deltaMode?: boolean }
 ): GoalConversationAgentResult {
   const { parsedJson, dialogueText: extractedDialogueText } = extractStructuredPayload(content);
   let dialogueText = extractedDialogueText;
@@ -505,10 +534,22 @@ function parseGoalConversationResponse(
 
   if (parsedJson) {
     normalizedPayload = normalizeGoalConversationModelPayload(parsedJson);
-    understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
+    if (deltaOptions?.deltaMode) {
+      // Delta 试验（§5.4）：模型只产出变动字段，平台合并回完整状态
+      understanding = mergeStateDelta(previousUnderstanding, normalizedPayload.understanding);
+    } else {
+      understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
+    }
     const validStages = ['understanding', 'proposing', 'ready', 'completed'];
     const stageFromPayload = parsedJson.stage || parsedJson.state?.stage;
-    stage = validStages.includes(stageFromPayload) ? stageFromPayload : 'understanding';
+    if (validStages.includes(stageFromPayload)) {
+      stage = stageFromPayload;
+    } else if (deltaOptions?.deltaMode && validStages.includes(stageControlOptions?.previousStage as string)) {
+      // Delta：stage 缺席=不变，回填上一轮阶段
+      stage = stageControlOptions!.previousStage as typeof stage;
+    } else {
+      stage = 'understanding';
+    }
 
     const payloadNextQuestions = normalizedPayload.nextQuestions;
     nextQuestions = Array.isArray(payloadNextQuestions) ? payloadNextQuestions : [];
@@ -555,10 +596,12 @@ function parseGoalConversationResponse(
     }
   }
 
-  // 直接使用 AI 返回的 confidence
+  // 直接使用 AI 返回的 confidence；Delta 模式下缺席=不变，回填上一轮置信度
   let confidence = typeof (parsedJson?.confidence ?? parsedJson?.state?.confidence) === 'number'
     ? (parsedJson?.confidence ?? parsedJson?.state?.confidence)
-    : 0.2;
+    : (deltaOptions?.deltaMode && typeof stageControlOptions?.previousConfidence === 'number'
+        ? stageControlOptions.previousConfidence
+        : 0.2);
 
   const stageControl = normalizeStageAndConfidence(stage, confidence, stageControlOptions);
   stage = stageControl.stage;
@@ -617,6 +660,18 @@ function parseGoalConversationResponse(
       }
     }
   };
+
+  // Delta 试验（§5.4）量测：漏报率观测（emitted=模型本轮产出，merged=合并后全量）
+  if (deltaOptions?.deltaMode) {
+    const emittedKeys = Object.keys(normalizedPayload.understanding || {}).length;
+    parsed.deltaStats = {
+      mode: true,
+      emittedUnderstandingKeys: emittedKeys,
+      mergedUnderstandingKeys: Object.keys(understanding || {}).length,
+      emptyDelta: emittedKeys === 0,
+      stateEmitted: Boolean(parsedJson?.state),
+    };
+  }
   return parsed;
 }
 
@@ -673,7 +728,10 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
   return lines.join('\n');
 }
 
-function buildGoalPromptSpec(maxAttempts: number): PromptCallSpec<GoalPromptInput, GoalConversationAgentResult> {
+function buildGoalPromptSpec(
+  maxAttempts: number,
+  deltaMode = false
+): PromptCallSpec<GoalPromptInput, GoalConversationAgentResult> {
   return {
     agentId: 'skill:goal-conversation',
     defaultSystemPrompt: '',
@@ -704,7 +762,8 @@ function buildGoalPromptSpec(maxAttempts: number): PromptCallSpec<GoalPromptInpu
       return systemPrompt;
     },
     parseRawOutput: (rawOutput) => {
-      const validation = validateGoalConversationStructuredOutput(rawOutput);
+      // Delta 模式（§5.4）：state/understanding 缺席合法（缺席=不变）
+      const validation = validateGoalConversationStructuredOutput(rawOutput, { deltaMode });
       if (!validation.valid || !validation.parsedJson) {
         return {
           parsed: null,
@@ -729,9 +788,10 @@ function buildGoalPromptSpec(maxAttempts: number): PromptCallSpec<GoalPromptInpu
       {
         latestUserInput: payload.goal,
         previousStage: payload.previousStage,
-        previousConfidence: payload.previousUnderstanding?.confidence || 0.2,
+        previousConfidence: payload.previousState?.confidence ?? payload.previousUnderstanding?.confidence ?? 0.2,
         confirmProposal: payload.confirmProposal === true,
-      }
+      },
+      { deltaMode }
     ),
     mapEnvelope: (output, _input, runtimeContract) => adaptGoalConversationEnvelope(output, {
       contract: runtimeContract,
@@ -789,8 +849,16 @@ export async function goalConversationAgentHandler(
 
     // 旧语义：maxFormatRetries=2 → 最多 3 次尝试（含首次）
     const maxAttempts = Math.max(1, (options.maxFormatRetries ?? 2) + 1);
+    // Delta 试验（§5.4）：ACTIVE metadata 锚点决定是否启用增量合并
+    let deltaMode = false;
+    try {
+      const promptConfig = await agentConfigService.getActivePrompt('skill:goal-conversation');
+      deltaMode = extractDeltaOutputMode(promptConfig?.metadata);
+    } catch {
+      deltaMode = false;
+    }
     const promptResult = await callPrompt(
-      buildGoalPromptSpec(maxAttempts),
+      buildGoalPromptSpec(maxAttempts, deltaMode),
       promptInput,
       {
         userId,
@@ -860,13 +928,13 @@ export async function goalConversationAgentHandler(
           ],
           attempts,
           structuredOutputValid: true,
+          ...(result.deltaStats ? { delta: result.deltaStats } : {}),
         },
       };
     }
 
     if (options.allowInvalidStructuredOutput) {
       const { resolveEffectiveRuntimeContract } = await import('../../services/prompt-lab/resolve-runtime-contract');
-      const { agentConfigService } = await import('../../services/agentConfig.service');
       const activePrompt = await agentConfigService.getActivePrompt('skill:goal-conversation')
         || await agentConfigService.getActivePrompt('goal-conversation');
       runtimeContract = (
@@ -944,7 +1012,6 @@ export async function goalConversationAgentHandler(
     const invalidVisible = buildStructuredOutputErrorMessage(attemptCount || 1);
     // 失败路径 mapEnvelope 未跑；显式 resolve ACTIVE metadata contract（测试/观测依赖）
     const { resolveEffectiveRuntimeContract } = await import('../../services/prompt-lab/resolve-runtime-contract');
-    const { agentConfigService } = await import('../../services/agentConfig.service');
     const activePrompt = await agentConfigService.getActivePrompt('skill:goal-conversation')
       || await agentConfigService.getActivePrompt('goal-conversation');
     const resolved = await resolveEffectiveRuntimeContract('skill:goal-conversation', activePrompt, {

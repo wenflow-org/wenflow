@@ -48,11 +48,12 @@ import MockTraceWaterfall from './MockTraceWaterfall.vue';
 import MockApiConfig from './MockApiConfig.vue';
 import MockAddons from './MockAddons.vue';
 import MockAnnouncements from './MockAnnouncements.vue';
-import MockPromptLab from './MockPromptLab.vue';
+import MockPromptWorkbench from './MockPromptWorkbench.vue';
 import MockSkillDrawer from './MockSkillDrawer.vue';
 import MockLearnerDetail from './MockLearnerDetail.vue';
 import MockTeachingSessions from './MockTeachingSessions.vue';
 import MockGoalConversations from './MockGoalConversations.vue';
+import MockFeedback from './MockFeedback.vue';
 import MockSessionCockpit from './MockSessionCockpit.vue';
 import MockCommandPalette from './MockCommandPalette.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
@@ -68,6 +69,7 @@ const components: Record<string, unknown> = {
   'learner-center': MockLearnerCenter,
   'teaching-sessions': MockTeachingSessions,
   'goal-conversations': MockGoalConversations,
+  feedback: MockFeedback,
   'virtual-learners': MockVirtualLearners,
   'skills': MockSkills,
   'topology': MockTopology,
@@ -79,7 +81,7 @@ const components: Record<string, unknown> = {
   'api-config': MockApiConfig,
   'addons': MockAddons,
   'announcements': MockAnnouncements,
-  'prompt-lab': MockPromptLab,
+  'prompt-workbench': MockPromptWorkbench,
   'debug-lab': MockDebugLab
 };
 

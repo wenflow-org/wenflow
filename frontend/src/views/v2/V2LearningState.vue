@@ -113,6 +113,7 @@
               <div class="guide__foot">
                 <span v-if="skillCopy.nextStep"><b>下一步</b>{{ skillCopy.nextStep }}</span>
                 <span v-if="skillCopy.paceHint"><b>节奏</b>{{ skillCopy.paceHint }}</span>
+                <AiContentNote />
               </div>
             </template>
 
@@ -141,6 +142,26 @@
                 </div>
               </article>
             </div>
+          </section>
+
+          <!-- AI 决策记录：捕获了什么 → 怎么判断 → 参与了什么决策 -->
+          <section class="card decisions">
+            <div class="card-head">
+              <strong>AI 决策记录</strong>
+              <span class="muted">AI 捕获了什么 · 怎么参与下一步</span>
+            </div>
+            <div v-if="!decisions.length" class="chart__empty">
+              还没有决策记录。上完一节课后，这里会记下 AI 捕获的点与下一步调整。
+            </div>
+            <article v-for="d in decisions" :key="d.id" class="dec">
+              <span class="dec__tag" :class="decisionKindMeta[d.kind]?.cls">{{ decisionKindMeta[d.kind]?.label || '调控' }}</span>
+              <div class="dec__body">
+                <p><b>捕获</b><span>{{ d.captured }}</span></p>
+                <p><b>判断</b><span>{{ d.judgment }}</span></p>
+                <p><b>动作</b><span>{{ d.action }}</span></p>
+              </div>
+              <time v-if="decisionTime(d.at)">{{ decisionTime(d.at) }}</time>
+            </article>
           </section>
         </div>
 
@@ -174,6 +195,7 @@ import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
 import { metricsAPI } from '@/api/metrics';
 import V2Nav from './V2Nav.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import './v2.css';
 import { unwrap, unwrapArray } from './unwrap';
@@ -420,6 +442,36 @@ const guidance = ref<Record<string, any> | null>(null);
 
 const skillCopy = computed(() => guidance.value?.copy || null);
 
+/* ---------- AI 决策记录（同一接口返回，LearningDecisionFeedService 组装） ---------- */
+interface DecisionCard {
+  id: string;
+  kind: 'path-adjust' | 'path-replanned' | 'kp-carryover' | 'concept-watch' | 'pace';
+  captured: string;
+  judgment: string;
+  action: string;
+  priority: 'high' | 'medium' | 'low' | 'info';
+  at: string | null;
+}
+
+const decisions = computed<DecisionCard[]>(() =>
+  Array.isArray(guidance.value?.decisions) ? guidance.value.decisions : []
+);
+
+const decisionKindMeta: Record<string, { label: string; cls: string }> = {
+  'path-adjust': { label: '路径调整', cls: 'dec__tag--blue' },
+  'path-replanned': { label: '路径版本', cls: 'dec__tag--purple' },
+  'kp-carryover': { label: '课程延续', cls: 'dec__tag--cyan' },
+  'concept-watch': { label: '持续关注', cls: 'dec__tag--amber' },
+  'pace': { label: '节奏调控', cls: 'dec__tag--green' }
+};
+
+function decisionTime(at: string | null): string {
+  if (!at) return '';
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 const suggestSource = computed(() => {
   if (!guidance.value) return '规则兜底';
   if (guidance.value.source === 'model') return 'skill 生成';
@@ -647,7 +699,7 @@ onMounted(() => {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 13px;
-  transition: .15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .sug--done { opacity: .66; background: #fafcff; }
 .sug__icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
@@ -733,6 +785,27 @@ onMounted(() => {
   letter-spacing: 0.05em;
 }
 .suggest__list--warnings { border-top: 1px dashed var(--line); padding-top: 12px; }
+
+/* ---------- AI 决策记录 ---------- */
+.decisions { padding: 20px 22px; display: grid; gap: 12px; }
+.dec {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #fbfcff;
+}
+.dec__tag { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.dec__tag--blue { color: #1f57cc; background: rgba(52, 120, 246, 0.1); }
+.dec__tag--purple { color: #6b4ae0; background: rgba(141, 107, 255, 0.12); }
+.dec__tag--cyan { color: #3593b5; background: rgba(67, 176, 216, 0.12); }
+.dec__tag--amber { color: #b3540a; background: rgba(244, 170, 70, 0.14); }
+.dec__tag--green { color: #1d7a4c; background: rgba(49, 177, 111, 0.12); }
+.dec__body { display: grid; gap: 6px; }
+.dec__body p { margin: 0; display: grid; grid-template-columns: 34px 1fr; gap: 10px; font-size: 13px; line-height: 1.65; color: var(--ink); }
+.dec__body b { font-size: 11px; font-weight: 800; color: var(--faint); padding-top: 2.5px; }
+.dec time { font-size: 11.5px; color: var(--faint); white-space: nowrap; padding-top: 2px; }
+@media (max-width: 640px) {
+  .dec { grid-template-columns: 1fr; gap: 8px; }
+  .dec time { justify-self: end; }
+}
 </style>
 
 <style scoped>

@@ -237,6 +237,7 @@ export async function adaptiveGuidanceCopy(
       success: true,
       output: result.output,
       duration,
+      quality: 'model',
       debug: {
         skillId: 'adaptive-guidance-copy',
         model: null,
@@ -256,6 +257,7 @@ export async function adaptiveGuidanceCopy(
       output: fallback,
       duration,
       cached: true,
+      quality: 'fallback',
       debug: {
         skillId: 'adaptive-guidance-copy',
         model: null,

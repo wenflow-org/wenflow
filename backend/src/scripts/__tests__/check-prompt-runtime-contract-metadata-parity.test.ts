@@ -24,6 +24,19 @@ function validRuntimeContract() {
   }
 }
 
+function validPromptContract() {
+  return {
+    version: 'skill-prompt-contract/v2',
+    executionMode: 'llm',
+    artifactKind: 'conversation',
+    interactionMode: 'turn',
+    input: { transport: 'json', schemaSource: 'skill-definition' },
+    output: { media: 'json', schemaSource: 'runtime-validator', envelope: 'adapter' },
+    context: { envelope: 'context-envelope/v1', delivery: 'sidecar', modelExposure: 'projected' },
+    failurePolicy: 'retry',
+  }
+}
+
 function makeFile(overrides: Partial<PromptFile> = {}): PromptFile {
   return {
     agentId: 'skill:teaching-turn',
@@ -186,6 +199,135 @@ describe('prompt runtime-contract metadata parity checker', () => {
         sourceIssues: expect.arrayContaining(['duplicate-canonical-agent-id', 'alias-collision']),
       }),
     ])
+  })
+
+  it('reports an in-sync promptContract for a prompt-only declaration', () => {
+    const report = analyze([
+      makeFile({ runtimeContract: undefined, promptContract: validPromptContract() }),
+    ], [makeRow({
+      metadata: JSON.stringify({ promptLab: { promptContract: validPromptContract() } }),
+    })])
+
+    expect(report.hasErrors).toBe(false)
+    expect(report.results[0]).toMatchObject({
+      status: 'in-sync',
+      runtimeContractStatus: 'not-declared',
+      promptContractStatus: 'in-sync',
+    })
+    expect(report.summary).toMatchObject({
+      declaredRuntimeContractFiles: 0,
+      declaredPromptContractFiles: 1,
+      skippedFilesWithoutRuntimeContract: 1,
+      skippedFilesWithoutAnyContract: 0,
+    })
+  })
+
+  it('reports both dimensions in-sync when both are declared and matching', () => {
+    const report = analyze([
+      makeFile({ promptContract: validPromptContract() }),
+    ], [makeRow({
+      metadata: JSON.stringify({
+        promptLab: {
+          runtimeContract: validRuntimeContract(),
+          promptContract: validPromptContract(),
+        },
+      }),
+    })])
+
+    expect(report.hasErrors).toBe(false)
+    expect(report.results[0]).toMatchObject({
+      status: 'in-sync',
+      runtimeContractStatus: 'in-sync',
+      promptContractStatus: 'in-sync',
+    })
+  })
+
+  it('reports a promptContract mismatch with a per-dimension detail', () => {
+    const drifted = { ...validPromptContract(), failurePolicy: 'blocking' }
+    const report = analyze([
+      makeFile({ runtimeContract: undefined, promptContract: validPromptContract() }),
+    ], [makeRow({
+      metadata: JSON.stringify({ promptLab: { promptContract: drifted } }),
+    })])
+
+    expect(report.results[0]).toMatchObject({
+      status: 'mismatch',
+      runtimeContractStatus: 'not-declared',
+      promptContractStatus: 'mismatch',
+      detail: 'promptContract: mismatch',
+    })
+    expect(report.hasErrors).toBe(true)
+  })
+
+  it('reports a missing nested promptContract without touching the runtime dimension', () => {
+    const report = analyze([
+      makeFile({ promptContract: validPromptContract() }),
+    ], [makeRow()])
+
+    expect(report.results[0]).toMatchObject({
+      status: 'missing-nested-contract',
+      runtimeContractStatus: 'in-sync',
+      promptContractStatus: 'missing-nested-contract',
+    })
+    expect(report.hasErrors).toBe(true)
+  })
+
+  it('reports a malformed nested promptContract', () => {
+    const report = analyze([
+      makeFile({ runtimeContract: undefined, promptContract: validPromptContract() }),
+    ], [makeRow({
+      metadata: JSON.stringify({ promptLab: { promptContract: { executionMode: 'llm' } } }),
+    })])
+
+    expect(report.results[0]).toMatchObject({
+      status: 'malformed-nested-contract',
+      promptContractStatus: 'malformed-nested-contract',
+    })
+  })
+
+  it('rejects an invalid declared promptContract instead of normalizing it', () => {
+    const invalid = { ...validPromptContract(), failurePolicy: 'not-a-policy' }
+    const report = analyze([
+      makeFile({ runtimeContract: undefined, promptContract: invalid }),
+    ], [makeRow()])
+
+    expect(report.results[0]).toMatchObject({
+      status: 'invalid-file-declaration',
+      promptContractStatus: 'invalid-file-declaration',
+      detail: expect.stringContaining('invalid promptContract'),
+    })
+  })
+
+  it('excludes code-only files from the DB sync comparison scope', () => {
+    const report = analyze([
+      makeFile(),
+      makeFile({
+        agentId: 'skill:code-only-skill',
+        filePath: 'D:/prompts/skill.code-only-skill.md',
+        archetype: 'code-only',
+        runtimeContract: undefined,
+        promptContract: {
+          ...validPromptContract(),
+          executionMode: 'code-only',
+          artifactKind: 'code',
+          interactionMode: 'none',
+          input: { transport: 'none', schemaSource: 'none' },
+          output: { media: 'none', schemaSource: 'none', envelope: 'none' },
+          context: { envelope: 'none', delivery: 'none', modelExposure: 'none' },
+          failurePolicy: 'none',
+        },
+      }),
+    ], [makeRow()])
+
+    expect(report.results).toHaveLength(1)
+    expect(report.summary).toMatchObject({
+      scannedFiles: 2,
+      declaredRuntimeContractFiles: 1,
+      declaredPromptContractFiles: 0,
+      skippedFilesWithoutRuntimeContract: 0,
+      skippedFilesWithoutAnyContract: 0,
+      skippedCodeOnlyFiles: 1,
+    })
   })
 
   it('uses one exact ACTIVE-only read query and exposes no write path', async () => {

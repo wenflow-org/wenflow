@@ -139,6 +139,41 @@
   min-width: 0;
 }
 
+/* ================= 页面内容入场（轻量，各块依次出现） ================= */
+@media (prefers-reduced-motion: no-preference) {
+  .v2-page.dash .dash__main > *,
+  .v2-page.paths .paths__main > *,
+  .v2-page.detail .detail__main > *,
+  .v2-page.state .state__main > *,
+  .v2-page.ach .ach__main > * {
+    animation: v2-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .v2-page.dash .dash__main > *:nth-child(2),
+  .v2-page.paths .paths__main > *:nth-child(2),
+  .v2-page.detail .detail__main > *:nth-child(2),
+  .v2-page.state .state__main > *:nth-child(2),
+  .v2-page.ach .ach__main > *:nth-child(2) { animation-delay: 0.05s; }
+  .v2-page.dash .dash__main > *:nth-child(3),
+  .v2-page.paths .paths__main > *:nth-child(3),
+  .v2-page.detail .detail__main > *:nth-child(3),
+  .v2-page.state .state__main > *:nth-child(3),
+  .v2-page.ach .ach__main > *:nth-child(3) { animation-delay: 0.11s; }
+  .v2-page.dash .dash__main > *:nth-child(4),
+  .v2-page.paths .paths__main > *:nth-child(4),
+  .v2-page.detail .detail__main > *:nth-child(4),
+  .v2-page.state .state__main > *:nth-child(4),
+  .v2-page.ach .ach__main > *:nth-child(4) { animation-delay: 0.17s; }
+  .v2-page.dash .dash__main > *:nth-child(n + 5),
+  .v2-page.paths .paths__main > *:nth-child(n + 5),
+  .v2-page.detail .detail__main > *:nth-child(n + 5),
+  .v2-page.state .state__main > *:nth-child(n + 5),
+  .v2-page.ach .ach__main > *:nth-child(n + 5) { animation-delay: 0.23s; }
+}
+@keyframes v2-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ================= 高分屏 / 超宽屏适配 ================= */
 /* 1680+：加宽容器，减少两侧留白（选择器加权到 3 类，压过组件内 max-width） */
 @media (min-width: 1680px) {

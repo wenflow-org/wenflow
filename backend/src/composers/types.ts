@@ -61,6 +61,7 @@ export interface PromptCallError {
 export type { RuntimeEnvelope as PromptRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import type { RuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
+import type { SkillPromptContract } from '../services/skill-prompt-contract';
 
 export interface PromptCallResult<TOutput> {
   success: boolean;
@@ -109,6 +110,7 @@ export interface PromptCallSpec<TInput, TOutput> {
     runtime: {
       contextEnvelope: import('../skills/context-envelope').ContextEnvelopeV1;
       runtimeContract: RuntimeContract;
+      promptContract: SkillPromptContract;
     }
   ) => string | object;
   normalizeOutput: (parsed: any, input: TInput) => TOutput;

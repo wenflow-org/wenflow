@@ -19,14 +19,38 @@ import {
   PromptRuntimeEnvelope,
 } from './types';
 import { resolveEffectiveRuntimeContract } from '../services/prompt-lab/resolve-runtime-contract';
+import { resolveEffectivePromptContract } from '../services/prompt-lab/resolve-prompt-contract';
 import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import { resolveLlmGenerationParams } from '../services/resolve-llm-call-params';
+import type { SkillPromptOutputMedia } from '../services/skill-prompt-contract';
 import {
   mergeContextEnvelopes,
   normalizeContextEnvelope,
   withContextMode,
 } from '../skills/context-envelope';
+
+/**
+ * 默认原始输出解析。JSON media 走 extractJsonObject；
+ * markdown/text media 按契约直接透传原始文本（extractedJson 字段复用为提取负载）。
+ */
+function defaultParseRawOutput(rawOutput: string, media: SkillPromptOutputMedia): PromptRawParseResult {
+  if (media === 'markdown' || media === 'text') {
+    const cleaned = rawOutput.trim();
+    if (!cleaned) {
+      return { parsed: null, extractedJson: null, failureReason: 'response is empty' };
+    }
+    return { parsed: cleaned, extractedJson: cleaned };
+  }
+  const basic = extractJsonObject(rawOutput);
+  return {
+    parsed: basic.parsed,
+    extractedJson: basic.extractedJson,
+    failureReason: basic.parsed == null
+      ? 'response does not contain valid JSON object'
+      : undefined,
+  };
+}
 
 function stringifyPayload(payload: string | object): string {
   return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
@@ -89,6 +113,60 @@ export async function callPrompt<TInput, TOutput>(
   const systemPromptOverride = runtimeOverride.systemPromptOverride || context.systemPromptOverride;
   const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
   const { contract: runtimeContract } = await resolveEffectiveRuntimeContract(spec.agentId, promptConfig);
+  const { contract: promptContract } = await resolveEffectivePromptContract(
+    spec.agentId,
+    promptConfig,
+    { runtimeContract }
+  );
+
+  // code-only skill 不允许进入 LLM 调用链；lint/seed 已拦截，此处为运行时防线
+  if (promptContract.executionMode === 'code-only') {
+    const errorCode = `${spec.agentId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_CODE_ONLY_SKILL`;
+    const message = `Skill ${spec.agentId} declares executionMode=code-only and must not enter the LLM prompt chain`;
+    await telemetryWriter.createPromptCall({
+      id: promptCallId,
+      agentId: spec.agentId,
+      systemPromptVersion: null,
+      systemPromptHash: hashPrompt(''),
+      userPayload: '',
+      rawModelOutput: null,
+      extractedJson: null,
+      normalizedOutput: null,
+      success: false,
+      errorCode,
+      errorMessage: message,
+      promptDrift: false,
+      durationMs: 0,
+      pathId: context.pathId || requestContext.pathId || null,
+      userId: context.userId || requestContext.userId || null,
+      conversationId: context.conversationId || requestContext.conversationId || null,
+      pipelineRunId: context.pipelineRunId || null,
+      pipelineStepIndex: context.pipelineStepIndex ?? null,
+      traceId: context.traceId || requestContext.traceId || null,
+      parentExecutionId: context.parentExecutionId || requestContext.executionLogId || null,
+      promptAttemptCount: 0,
+      llmRequestCount: 0,
+      failureStage: 'prompt_resolution',
+      attemptTrace: '[]'
+    });
+    return {
+      success: false,
+      error: { code: errorCode, message },
+      debug: {
+        agentId: spec.agentId, systemPrompt: '', systemPromptVersion: null, userPayload: '',
+        rawModelOutput: '', extractedJson: null, normalizedOutput: null,
+        promptDrift: null, attempts: [], durationMs: 0, tokenUsage: null,
+      },
+    };
+  }
+
+  // envelope 不一致时以 runtimeContract 为权威映射基准；lint/seed 已硬失败，运行时降级为告警
+  if (promptContract.output.envelope !== runtimeContract.outputEnvelope) {
+    console.warn(
+      `[callPrompt] ${spec.agentId} promptContract.output.envelope=${promptContract.output.envelope} 与 runtimeContract.outputEnvelope=${runtimeContract.outputEnvelope} 不一致，以 runtimeContract 为准`
+    );
+  }
+
   const contextEnvelope = withContextMode(
     mergeContextEnvelopes(
       requestContext.contextEnvelope,
@@ -109,6 +187,7 @@ export async function callPrompt<TInput, TOutput>(
   const userPayload = stringifyPayload(spec.buildUserPayload(input, {
     contextEnvelope,
     runtimeContract,
+    promptContract,
   }));
   const sessionId = context.sessionId || contextEnvelope.session?.sessionId || requestContext.sessionId || null;
   const pathId = context.pathId || contextEnvelope.session?.pathId || requestContext.pathId || null;
@@ -315,16 +394,7 @@ export async function callPrompt<TInput, TOutput>(
     const rawModelOutput = response.choices?.[0]?.message?.content || '';
     const extracted: PromptRawParseResult = spec.parseRawOutput
       ? spec.parseRawOutput(rawModelOutput, input)
-      : (() => {
-          const basic = extractJsonObject(rawModelOutput);
-          return {
-            parsed: basic.parsed,
-            extractedJson: basic.extractedJson,
-            failureReason: basic.parsed == null
-              ? 'response does not contain valid JSON object'
-              : undefined,
-          };
-        })();
+      : defaultParseRawOutput(rawModelOutput, promptContract.output.media);
     lastRaw = rawModelOutput;
     lastExtractedJson = extracted.extractedJson;
 

@@ -120,6 +120,7 @@ export async function learningPatternDistiller(input: LearningPatternDistillerIn
       success: true,
       output: result.output,
       duration: Date.now() - startTime,
+      quality: 'model',
     };
   } catch {
     return {
@@ -127,6 +128,7 @@ export async function learningPatternDistiller(input: LearningPatternDistillerIn
       output: buildFallback(input),
       duration: Date.now() - startTime,
       cached: true,
+      quality: 'fallback',
     };
   }
 }

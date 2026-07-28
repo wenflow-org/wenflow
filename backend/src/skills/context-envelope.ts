@@ -195,13 +195,14 @@ function readLegacyContainer(input: any): Record<string, any>[] {
 
 export function contextEnvelopeFromLegacyInput(input: unknown): ContextEnvelopeV1 | undefined {
   const containers = readLegacyContainer(input);
-  if (containers.length === 0) return undefined;
+  const topLevelUserId = isRecord(input) && typeof input.userId === 'string' ? input.userId : undefined;
+  if (containers.length === 0 && !topLevelUserId) return undefined;
   const combined = Object.assign({}, ...containers);
   const locale = isRecord(combined.locale) ? combined.locale : {};
   const memory = isRecord(combined.memory) ? combined.memory : {};
   return normalizeContextEnvelope({
     principal: {
-      userId: combined.userId,
+      userId: combined.userId || topLevelUserId,
       role: combined.userRole || combined.role,
     },
     session: {

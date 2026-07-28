@@ -31,6 +31,7 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'learner-center', label: '学习者中心', group: '学习', realRoute: '/admin/console' },
   { id: 'teaching-sessions', label: '教学会话', group: '学习', realRoute: '/admin/console' },
   { id: 'goal-conversations', label: 'Goal 会话', group: '学习', realRoute: '/admin/console' },
+  { id: 'feedback', label: '反馈中心', group: '学习', realRoute: '/admin/console' },
   { id: 'virtual-learners', label: '虚拟学习者', group: '学习', realRoute: '/admin/console' },
   { id: 'skills', label: 'Skill 目录', group: '运行', realRoute: '/admin/console' },
   { id: 'topology', label: 'Agent 拓扑', group: '运行', realRoute: '/admin/console' },
@@ -42,6 +43,6 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'api-config', label: '连接与安全', group: '配置', realRoute: '/admin/console' },
   { id: 'announcements', label: '公告', group: '配置', realRoute: '/admin/console' },
   { id: 'addons', label: '外挂组件', group: '配置', realRoute: '/admin/console' },
-  { id: 'prompt-lab', label: 'Prompt Dry Run', group: '调试', realRoute: '/admin/console' },
+  { id: 'prompt-workbench', label: 'Prompt 工作台', group: '调试', realRoute: '/admin/console' },
   { id: 'debug-lab', label: '前台测试台', group: '调试', realRoute: '/admin/test/dashboard' }
 ]

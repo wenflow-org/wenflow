@@ -349,9 +349,13 @@ const healthLabel = computed(
 )
 const healthBadgeCls = computed(
   () =>
-    ({ operational: 'mk-badge--ok', degraded: 'mk-badge--warn', unavailable: 'mk-badge--bad' })[
-      health.value?.overall || ''
-    ] || 'mk-badge--muted'
+    ({
+      operational: 'mk-badge--ok',
+      degraded: 'mk-badge--warn',
+      unavailable: 'mk-badge--bad',
+      unknown: 'mk-badge--muted',
+      '': 'mk-badge--muted',
+    } as Record<string, string>)[health.value?.overall || '']
 )
 
 async function loadHealth() {

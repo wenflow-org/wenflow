@@ -32,6 +32,12 @@ export interface PromptFileMeta {
   promptContract?: unknown;
   /** 运行时契约声明，由种子同步时校验并快照到 ACTIVE prompt metadata */
   runtimeContract?: unknown;
+  /** v4 编译产物锚点：核心文件内容哈希（存在即按 v4 五块结构校验） */
+  coreHash?: string;
+  /** v4 编译产物锚点：核心文件版本号 */
+  coreVersion?: number;
+  /** v4 §5.4 Delta 试验锚点（仅编译产物且为 JSON 输出时存在） */
+  deltaOutput?: boolean;
 }
 
 export interface PromptFile extends PromptFileMeta {
@@ -81,6 +87,15 @@ function parseFrontmatter(raw: string): ParsedFrontmatter {
   return { meta, body: match[2].trim() };
 }
 
+/**
+ * 只读提取 frontmatter 原始 meta（BOM/CRLF 感知，与 File-as-Truth 加载器同一实现）。
+ * 供 prompt-lab 镜像合并、恢复脚本等只需要 meta 的场景复用；
+ * 无 frontmatter 时返回空对象。
+ */
+export function parsePromptFrontmatterMeta(raw: string): Record<string, any> {
+  return parseFrontmatter(raw).meta;
+}
+
 function toNumberOrUndefined(value: any): number | undefined {
   if (value === null || value === undefined || value === '') return undefined;
   const num = Number(value);
@@ -116,6 +131,9 @@ export function parsePromptFile(filePath: string, raw: string): PromptFile {
     archetype: typeof meta.archetype === 'string' ? meta.archetype.trim() : undefined,
     promptContract: meta.promptContract,
     runtimeContract: meta.runtimeContract,
+    coreHash: typeof meta.coreHash === 'string' && meta.coreHash.trim() ? meta.coreHash.trim() : undefined,
+    coreVersion: toNumberOrUndefined(meta.coreVersion),
+    deltaOutput: meta.deltaOutput === true ? true : undefined,
     systemPrompt: body,
     filePath,
   };
@@ -217,6 +235,9 @@ export function serializePromptFile(file: Omit<PromptFile, 'filePath'>): string 
     meta.acceptableAgentIds = file.acceptableAgentIds;
   }
   if (file.runtimeContract !== undefined) meta.runtimeContract = file.runtimeContract;
+  if (file.coreHash !== undefined) meta.coreHash = file.coreHash;
+  if (file.coreVersion !== undefined) meta.coreVersion = file.coreVersion;
+  if (file.deltaOutput) meta.deltaOutput = true;
 
   const frontmatter = yaml.dump(meta, { lineWidth: -1 }).trimEnd();
   return `---\n${frontmatter}\n---\n\n${file.systemPrompt.trim()}\n`;

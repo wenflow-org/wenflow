@@ -87,6 +87,42 @@ function safeArray<T>(value: T[] | undefined | null): T[] {
   return Array.isArray(value) ? value : [];
 }
 
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function clampConfidence(value: unknown): number {
+  return Number.isFinite(Number(value)) ? Math.max(0, Math.min(1, Number(value))) : 0.5;
+}
+
+/**
+ * 元素级归一化。下游 LearnerKnowledgeMemoryService 按 conceptKey 合并，
+ * 缺 conceptKey 的条目会在下游被静默丢弃；此处先尝试 label 回补，
+ * 仍无键则丢弃并交由空数组 fallback 兜底，避免脏数据穿透边界。
+ */
+function normalizeConfusionItem(item: any): DialogueConceptExtractorOutput['recurringConfusions'][number] | null {
+  const conceptKey = normalizeText(item?.conceptKey) || normalizeText(item?.label);
+  if (!conceptKey) return null;
+  return {
+    conceptKey,
+    label: normalizeText(item?.label) || conceptKey,
+    pattern: normalizeText(item?.pattern) || normalizeText(item?.evidence),
+    confidence: clampConfidence(item?.confidence),
+    count: Math.max(1, Number.isFinite(Number(item?.count)) ? Math.round(Number(item.count)) : 1),
+  };
+}
+
+function normalizeTransferSignalItem(item: any): DialogueConceptExtractorOutput['transferSignals'][number] | null {
+  const conceptKey = normalizeText(item?.conceptKey) || normalizeText(item?.label);
+  if (!conceptKey) return null;
+  return {
+    conceptKey,
+    label: normalizeText(item?.label) || conceptKey,
+    readiness: ['low', 'medium', 'high'].includes(item?.readiness) ? item.readiness : 'low',
+    confidence: clampConfidence(item?.confidence),
+  };
+}
+
 export async function dialogueConceptExtractor(input: DialogueConceptExtractorInput): Promise<SkillExecutionResult<DialogueConceptExtractorOutput>> {
   const startTime = Date.now();
   try {
@@ -100,11 +136,15 @@ export async function dialogueConceptExtractor(input: DialogueConceptExtractorIn
       normalizeOutput: (parsed, payload) => {
         const base = fallback(payload);
         const obj = parsed && typeof parsed === 'object' ? parsed : {};
+        const confusions = safeArray(obj.recurringConfusions)
+          .map(normalizeConfusionItem)
+          .filter((item): item is NonNullable<typeof item> => item !== null);
+        const signals = safeArray(obj.transferSignals)
+          .map(normalizeTransferSignalItem)
+          .filter((item): item is NonNullable<typeof item> => item !== null);
         return {
-          recurringConfusions:
-            safeArray(obj.recurringConfusions).length > 0 ? obj.recurringConfusions : base.recurringConfusions,
-          transferSignals:
-            safeArray(obj.transferSignals).length > 0 ? obj.transferSignals : base.transferSignals,
+          recurringConfusions: confusions.length > 0 ? confusions : base.recurringConfusions,
+          transferSignals: signals.length > 0 ? signals : base.transferSignals,
         };
       },
       validateParsedOutput: (parsed) =>
@@ -121,6 +161,7 @@ export async function dialogueConceptExtractor(input: DialogueConceptExtractorIn
       success: true,
       output: result.output,
       duration: Date.now() - startTime,
+      quality: 'model',
     };
   } catch {
     return {
@@ -128,6 +169,7 @@ export async function dialogueConceptExtractor(input: DialogueConceptExtractorIn
       output: fallback(input),
       duration: Date.now() - startTime,
       cached: true,
+      quality: 'fallback',
     };
   }
 }

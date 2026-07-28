@@ -33,6 +33,21 @@ promptContract:
   output: { media: json, schemaSource: runtime-validator, envelope: adapter }
   context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
   failurePolicy: retry
+  fields:
+    latestLearnerMessage: { direction: input, visibility: user-visible }
+    scenario: { direction: input, visibility: internal }
+    learner: { direction: state, visibility: handoff, owner: orchestrator }
+    classroomContext: { direction: state, visibility: handoff, owner: orchestrator }
+    classroomEventContext: { direction: state, visibility: handoff, owner: orchestrator }
+    knowledge: { direction: state, visibility: handoff, owner: orchestrator }
+    controls: { direction: input, visibility: internal }
+    visibleDialogueContext: { direction: input, visibility: internal }
+    recentDialogueContext: { direction: input, visibility: internal }
+    promptDirectives: { direction: input, visibility: internal }
+    reply: { direction: output, visibility: user-visible }
+    analysis: { direction: output, visibility: internal }
+    pedagogy: { direction: output, visibility: internal }
+    control: { direction: output, visibility: handoff }
 
 runtimeContract:
   version: prompt-runtime-contract/v1

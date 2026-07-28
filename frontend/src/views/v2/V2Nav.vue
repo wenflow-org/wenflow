@@ -28,6 +28,8 @@
         <Transition name="v2menu">
           <div v-if="menuOpen" class="v2nav__menu" role="menu">
             <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
+            <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
+            <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
             <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
               退出登录
             </button>
@@ -126,15 +128,19 @@ onUnmounted(() => {
 }
 .v2nav__brand { display: flex; align-items: center; cursor: pointer; }
 .v2nav__logo { height: 38px; width: auto; object-fit: contain; display: block; }
-.v2nav__links { display: flex; gap: 4px; flex: 1; }
+/* 链接在导航条中视觉居中（绝对定位，与左右两侧宽度解耦） */
+.v2nav__links {
+  display: flex; gap: 4px;
+  position: absolute; left: 50%; transform: translateX(-50%);
+}
 .v2nav__links a {
   padding: 7px 12px; border-radius: 9px;
   font-size: 13px; font-weight: 600; color: var(--muted, #5b6577);
-  cursor: pointer; text-decoration: none; transition: .14s ease;
+  cursor: pointer; text-decoration: none; transition: color 0.14s ease, background 0.14s ease;
 }
 .v2nav__links a:hover { color: var(--ink, #172033); background: #f1f5fb; }
 .v2nav__links a.active { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.09); }
-.v2nav__right { display: flex; align-items: center; gap: 12px; }
+.v2nav__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .v2nav__cta {
   padding: 8px 16px; border-radius: 999px;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
@@ -226,7 +232,7 @@ onUnmounted(() => {
   margin-top: 2px;
   border-radius: 0 0 8px 8px !important;
 }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .v2nav__links { display: none; }
   .v2nav__name { display: none; }
 }
@@ -236,7 +242,7 @@ onUnmounted(() => {
 /* ---------- 移动端底部导航 ---------- */
 .v2nav__tabs { display: none; }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .v2nav__tabs {
     display: grid;
     grid-template-columns: repeat(5, 1fr);

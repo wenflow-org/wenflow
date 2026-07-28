@@ -163,6 +163,8 @@ exports.Prisma.Agent_promptsScalarFieldEnum = {
   sourceHash: 'sourceHash',
   compileContextHash: 'compileContextHash',
   compiledAt: 'compiledAt',
+  coreHash: 'coreHash',
+  coreVersion: 'coreVersion',
   temperature: 'temperature',
   maxTokens: 'maxTokens',
   model: 'model',

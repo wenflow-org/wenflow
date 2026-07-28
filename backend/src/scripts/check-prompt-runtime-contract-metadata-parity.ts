@@ -8,6 +8,10 @@ import {
 } from '../composers/prompt-files/loader';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import {
+  lintDeclaredSkillPromptContract,
+  type SkillPromptContract,
+} from '../services/skill-prompt-contract';
+import {
   normalizeDeclaredPromptRuntimeContract,
   type DeclaredPromptRuntimeContractIdentity,
 } from './seed-core-agent-prompts';
@@ -52,6 +56,15 @@ export type PromptRuntimeContractMetadataParityStatus =
   | 'missing-nested-contract'
   | 'malformed-nested-contract';
 
+/** 单个契约维度（runtimeContract / promptContract）的比对状态。 */
+export type PromptContractDimensionParityStatus =
+  | 'in-sync'
+  | 'mismatch'
+  | 'invalid-file-declaration'
+  | 'missing-nested-contract'
+  | 'malformed-nested-contract'
+  | 'not-declared';
+
 export interface PromptRuntimeContractMetadataParityResult {
   agentId: string;
   filePath: string;
@@ -63,6 +76,10 @@ export interface PromptRuntimeContractMetadataParityResult {
   activePrompts?: Array<Pick<ActivePromptRuntimeContractMetadataRow, 'id' | 'agentId' | 'version'>>;
   declaredContract?: RuntimeContract;
   activeContract?: RuntimeContract;
+  runtimeContractStatus?: PromptContractDimensionParityStatus;
+  declaredPromptContract?: SkillPromptContract;
+  activePromptContract?: SkillPromptContract;
+  promptContractStatus?: PromptContractDimensionParityStatus;
 }
 
 export interface PromptRuntimeContractMetadataParityReport {
@@ -71,7 +88,10 @@ export interface PromptRuntimeContractMetadataParityReport {
   summary: {
     scannedFiles: number;
     declaredRuntimeContractFiles: number;
+    declaredPromptContractFiles: number;
     skippedFilesWithoutRuntimeContract: number;
+    skippedFilesWithoutAnyContract: number;
+    skippedCodeOnlyFiles: number;
     diagnosticCount: number;
     resultCount: number;
     inSyncCount: number;
@@ -104,6 +124,8 @@ interface DeclaredPromptSource {
   agentId: string;
   acceptableAgentIds: string[];
   acceptedAgentIds: string[];
+  declaresRuntimeContract: boolean;
+  declaresPromptContract: boolean;
   sourceIssues: Array<'duplicate-canonical-agent-id' | 'alias-collision'>;
 }
 
@@ -145,10 +167,14 @@ function promptReference(row: ActivePromptRuntimeContractMetadataRow) {
   return { id: row.id, agentId: row.agentId, version: row.version };
 }
 
-/** Collects only File-as-Truth sources which explicitly declare a runtime contract. */
+/**
+ * Collects File-as-Truth sources which declare at least one contract dimension.
+ * code-only 文件不进入 File→DB ACTIVE 同步环（seed 过滤），其契约由 prompts:lint 把关。
+ */
 export function collectDeclaredPromptRuntimeContractAgentIdCandidates(files: PromptFile[]): string[] {
   return dedupeAndSort(files
-    .filter((file) => file.runtimeContract !== undefined)
+    .filter((file) => file.archetype !== 'code-only')
+    .filter((file) => file.runtimeContract !== undefined || file.promptContract !== undefined)
     .flatMap((file) => acceptedAgentIdsForFile(file)));
 }
 
@@ -180,11 +206,15 @@ export async function queryActivePromptRuntimeContractMetadataRows(
   return prisma.agent_prompts.findMany(buildActivePromptRuntimeContractMetadataQuery(agentIdCandidates));
 }
 
-/** Parses metadata without correcting or persisting any malformed value. */
-export function parseActivePromptRuntimeContractMetadata(
-  metadata: unknown,
-  identity: DeclaredPromptRuntimeContractIdentity
-): RuntimeContractMetadataParseResult {
+type MetadataEnvelopeParseResult =
+  | { status: 'valid'; promptLab: Record<string, unknown> }
+  | {
+    status: 'missing-metadata' | 'malformed-metadata-json' | 'metadata-non-object' | 'missing-nested-contract' | 'malformed-nested-contract';
+    detail?: string;
+  };
+
+/** Parses only the outer metadata envelope; nested contract dimensions are checked separately. */
+function parseActivePromptMetadataEnvelope(metadata: unknown): MetadataEnvelopeParseResult {
   if (metadata === null || metadata === undefined) {
     return { status: 'missing-metadata' };
   }
@@ -206,19 +236,29 @@ export function parseActivePromptRuntimeContractMetadata(
   }
 
   if (!Object.prototype.hasOwnProperty.call(parsed, 'promptLab')) {
-    return { status: 'missing-nested-contract', detail: 'metadata.promptLab.runtimeContract is missing' };
+    return { status: 'missing-nested-contract', detail: 'metadata.promptLab is missing' };
   }
   if (!isRecord(parsed.promptLab)) {
     return { status: 'malformed-nested-contract', detail: 'metadata.promptLab must be an object' };
   }
-  if (!Object.prototype.hasOwnProperty.call(parsed.promptLab, 'runtimeContract')) {
+  return { status: 'valid', promptLab: parsed.promptLab };
+}
+
+type NestedRuntimeContractParseResult =
+  | { status: 'valid'; contract: RuntimeContract }
+  | { status: 'missing-nested-contract' | 'malformed-nested-contract'; detail?: string };
+
+function parseNestedRuntimeContract(
+  promptLab: Record<string, unknown>,
+  identity: DeclaredPromptRuntimeContractIdentity
+): NestedRuntimeContractParseResult {
+  if (!Object.prototype.hasOwnProperty.call(promptLab, 'runtimeContract')) {
     return { status: 'missing-nested-contract', detail: 'metadata.promptLab.runtimeContract is missing' };
   }
-
   try {
     return {
       status: 'valid',
-      contract: normalizeDeclaredPromptRuntimeContract(parsed.promptLab.runtimeContract, identity),
+      contract: normalizeDeclaredPromptRuntimeContract(promptLab.runtimeContract, identity),
     };
   } catch (error) {
     return {
@@ -226,6 +266,44 @@ export function parseActivePromptRuntimeContractMetadata(
       detail: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+type NestedPromptContractParseResult =
+  | { status: 'valid'; contract: SkillPromptContract }
+  | { status: 'missing-nested-contract' | 'malformed-nested-contract'; detail?: string };
+
+function parseNestedPromptContract(
+  promptLab: Record<string, unknown>,
+  identity: DeclaredPromptRuntimeContractIdentity & { runtimeContract?: RuntimeContract | null }
+): NestedPromptContractParseResult {
+  if (!Object.prototype.hasOwnProperty.call(promptLab, 'promptContract')) {
+    return { status: 'missing-nested-contract', detail: 'metadata.promptLab.promptContract is missing' };
+  }
+  const { contract, issues } = lintDeclaredSkillPromptContract(promptLab.promptContract, {
+    skillId: identity.agentId.replace(/^skill:/, ''),
+    archetype: identity.archetype,
+    runtimeContract: identity.runtimeContract ?? null,
+  });
+  const errors = issues.filter((issue) => issue.level === 'error');
+  if (errors.length > 0) {
+    return {
+      status: 'malformed-nested-contract',
+      detail: errors.map((issue) => `${issue.field}: ${issue.message}`).join('; '),
+    };
+  }
+  return { status: 'valid', contract };
+}
+
+/** Parses metadata without correcting or persisting any malformed value. */
+export function parseActivePromptRuntimeContractMetadata(
+  metadata: unknown,
+  identity: DeclaredPromptRuntimeContractIdentity
+): RuntimeContractMetadataParseResult {
+  const envelope = parseActivePromptMetadataEnvelope(metadata);
+  if (envelope.status !== 'valid') {
+    return { status: envelope.status, ...(envelope.detail ? { detail: envelope.detail } : {}) };
+  }
+  return parseNestedRuntimeContract(envelope.promptLab, identity);
 }
 
 /** Structural comparison keeps object-key ordering irrelevant and array ordering significant. */
@@ -248,7 +326,8 @@ export function structurallyEqualRuntimeContracts(left: unknown, right: unknown)
 
 function buildDeclaredSources(files: PromptFile[]): DeclaredPromptSource[] {
   const sources = files
-    .filter((file) => file.runtimeContract !== undefined)
+    .filter((file) => file.archetype !== 'code-only')
+    .filter((file) => file.runtimeContract !== undefined || file.promptContract !== undefined)
     .map((file) => {
       const acceptedAgentIds = acceptedAgentIdsForFile(file);
       return {
@@ -256,6 +335,8 @@ function buildDeclaredSources(files: PromptFile[]): DeclaredPromptSource[] {
         agentId: file.agentId,
         acceptableAgentIds: acceptedAgentIds.filter((agentId) => agentId !== file.agentId),
         acceptedAgentIds,
+        declaresRuntimeContract: file.runtimeContract !== undefined,
+        declaresPromptContract: file.promptContract !== undefined,
         sourceIssues: [],
       };
     });
@@ -298,8 +379,27 @@ function primarySourceIssue(source: DeclaredPromptSource): PromptRuntimeContract
   return null;
 }
 
+const DIMENSION_ERROR_PRIORITY: Array<Exclude<PromptContractDimensionParityStatus, 'in-sync' | 'not-declared'>> = [
+  'invalid-file-declaration',
+  'missing-nested-contract',
+  'malformed-nested-contract',
+  'mismatch',
+];
+
+/** 聚合各契约维度状态为结果主状态；任一已声明维度出错即整体出错。 */
+function aggregateDimensionStatus(
+  statuses: PromptContractDimensionParityStatus[]
+): PromptRuntimeContractMetadataParityStatus {
+  const declared = statuses.filter((status) => status !== 'not-declared');
+  for (const errorStatus of DIMENSION_ERROR_PRIORITY) {
+    if (declared.includes(errorStatus)) return errorStatus;
+  }
+  return 'in-sync';
+}
+
 /**
  * Pure parity analysis. It never fills defaults for invalid declarations and never mutates input rows.
+ * 每个 File-as-Truth 源按声明的维度分别比对 runtimeContract 与 promptContract。
  */
 export function analyzePromptRuntimeContractMetadataParity(
   input: PromptRuntimeContractMetadataParityAnalysisInput
@@ -309,19 +409,49 @@ export function analyzePromptRuntimeContractMetadataParity(
   const results: PromptRuntimeContractMetadataParityResult[] = [];
 
   for (const source of sources) {
-    let declaredContract: RuntimeContract;
-    try {
-      declaredContract = normalizeDeclaredPromptRuntimeContract(source.file.runtimeContract, toIdentity(source.file));
-    } catch (error) {
-      results.push({
-        agentId: source.agentId,
-        filePath: source.file.filePath,
-        acceptableAgentIds: source.acceptableAgentIds,
-        status: 'invalid-file-declaration',
-        ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
-        detail: error instanceof Error ? error.message : String(error),
+    const identity = toIdentity(source.file);
+    let declaredContract: RuntimeContract | undefined;
+    if (source.declaresRuntimeContract) {
+      try {
+        declaredContract = normalizeDeclaredPromptRuntimeContract(source.file.runtimeContract, identity);
+      } catch (error) {
+        results.push({
+          agentId: source.agentId,
+          filePath: source.file.filePath,
+          acceptableAgentIds: source.acceptableAgentIds,
+          status: 'invalid-file-declaration',
+          ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
+          detail: error instanceof Error ? error.message : String(error),
+          runtimeContractStatus: 'invalid-file-declaration',
+          ...(source.declaresPromptContract ? { promptContractStatus: 'not-declared' as const } : {}),
+        });
+        continue;
+      }
+    }
+
+    let declaredPromptContract: SkillPromptContract | undefined;
+    if (source.declaresPromptContract) {
+      const lint = lintDeclaredSkillPromptContract(source.file.promptContract, {
+        skillId: source.agentId.replace(/^skill:/, ''),
+        archetype: source.file.archetype,
+        runtimeContract: declaredContract ?? null,
       });
-      continue;
+      const errors = lint.issues.filter((issue) => issue.level === 'error');
+      if (errors.length > 0) {
+        results.push({
+          agentId: source.agentId,
+          filePath: source.file.filePath,
+          acceptableAgentIds: source.acceptableAgentIds,
+          status: 'invalid-file-declaration',
+          ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
+          detail: `Prompt ${source.agentId} has an invalid promptContract: ${errors.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}`,
+          ...(declaredContract ? { declaredContract } : {}),
+          ...(declaredContract ? { runtimeContractStatus: 'in-sync' as const } : {}),
+          promptContractStatus: 'invalid-file-declaration',
+        });
+        continue;
+      }
+      declaredPromptContract = lint.contract;
     }
 
     const sourceIssue = primarySourceIssue(source);
@@ -332,7 +462,8 @@ export function analyzePromptRuntimeContractMetadataParity(
         acceptableAgentIds: source.acceptableAgentIds,
         status: sourceIssue,
         sourceIssues: source.sourceIssues,
-        declaredContract,
+        ...(declaredContract ? { declaredContract } : {}),
+        ...(declaredPromptContract ? { declaredPromptContract } : {}),
       });
       continue;
     }
@@ -344,7 +475,8 @@ export function analyzePromptRuntimeContractMetadataParity(
         filePath: source.file.filePath,
         acceptableAgentIds: source.acceptableAgentIds,
         status: 'missing-active',
-        declaredContract,
+        ...(declaredContract ? { declaredContract } : {}),
+        ...(declaredPromptContract ? { declaredPromptContract } : {}),
       });
       continue;
     }
@@ -355,7 +487,8 @@ export function analyzePromptRuntimeContractMetadataParity(
         acceptableAgentIds: source.acceptableAgentIds,
         status: 'ambiguous-active',
         activePrompts: activeRows.map(promptReference),
-        declaredContract,
+        ...(declaredContract ? { declaredContract } : {}),
+        ...(declaredPromptContract ? { declaredPromptContract } : {}),
       });
       continue;
     }
@@ -368,33 +501,80 @@ export function analyzePromptRuntimeContractMetadataParity(
         acceptableAgentIds: source.acceptableAgentIds,
         status: 'active-alias-not-canonical',
         activePrompt: promptReference(active),
-        declaredContract,
+        ...(declaredContract ? { declaredContract } : {}),
+        ...(declaredPromptContract ? { declaredPromptContract } : {}),
       });
       continue;
     }
 
-    const activeMetadata = parseActivePromptRuntimeContractMetadata(active.metadata, toIdentity(source.file));
-    if (activeMetadata.status !== 'valid') {
+    const envelope = parseActivePromptMetadataEnvelope(active.metadata);
+    if (envelope.status !== 'valid') {
       results.push({
         agentId: source.agentId,
         filePath: source.file.filePath,
         acceptableAgentIds: source.acceptableAgentIds,
-        status: activeMetadata.status,
-        ...(activeMetadata.detail ? { detail: activeMetadata.detail } : {}),
+        status: envelope.status,
+        ...(envelope.detail ? { detail: envelope.detail } : {}),
         activePrompt: promptReference(active),
-        declaredContract,
+        ...(declaredContract ? { declaredContract } : {}),
+        ...(declaredPromptContract ? { declaredPromptContract } : {}),
       });
       continue;
     }
+
+    let runtimeContractStatus: PromptContractDimensionParityStatus = 'not-declared';
+    let activeContract: RuntimeContract | undefined;
+    if (source.declaresRuntimeContract) {
+      const nested = parseNestedRuntimeContract(envelope.promptLab, identity);
+      if (nested.status === 'valid') {
+        activeContract = nested.contract;
+        runtimeContractStatus = structurallyEqualRuntimeContracts(declaredContract, activeContract)
+          ? 'in-sync'
+          : 'mismatch';
+      } else {
+        runtimeContractStatus = nested.status;
+      }
+    }
+
+    let promptContractStatus: PromptContractDimensionParityStatus = 'not-declared';
+    let activePromptContract: SkillPromptContract | undefined;
+    if (source.declaresPromptContract) {
+      const nested = parseNestedPromptContract(envelope.promptLab, {
+        ...identity,
+        runtimeContract: activeContract ?? declaredContract ?? null,
+      });
+      if (nested.status === 'valid') {
+        activePromptContract = nested.contract;
+        promptContractStatus = structurallyEqualRuntimeContracts(declaredPromptContract, activePromptContract)
+          ? 'in-sync'
+          : 'mismatch';
+      } else {
+        promptContractStatus = nested.status;
+      }
+    }
+
+    const dimensionDetail = [
+      runtimeContractStatus !== 'in-sync' && runtimeContractStatus !== 'not-declared'
+        ? `runtimeContract: ${runtimeContractStatus}`
+        : null,
+      promptContractStatus !== 'in-sync' && promptContractStatus !== 'not-declared'
+        ? `promptContract: ${promptContractStatus}`
+        : null,
+    ].filter(Boolean).join(', ') || undefined;
 
     results.push({
       agentId: source.agentId,
       filePath: source.file.filePath,
       acceptableAgentIds: source.acceptableAgentIds,
-      status: structurallyEqualRuntimeContracts(declaredContract, activeMetadata.contract) ? 'in-sync' : 'mismatch',
+      status: aggregateDimensionStatus([runtimeContractStatus, promptContractStatus]),
+      ...(dimensionDetail ? { detail: dimensionDetail } : {}),
       activePrompt: promptReference(active),
-      declaredContract,
-      activeContract: activeMetadata.contract,
+      ...(declaredContract ? { declaredContract } : {}),
+      ...(activeContract ? { activeContract } : {}),
+      runtimeContractStatus,
+      ...(declaredPromptContract ? { declaredPromptContract } : {}),
+      ...(activePromptContract ? { activePromptContract } : {}),
+      promptContractStatus,
     });
   }
 
@@ -411,14 +591,21 @@ export function analyzePromptRuntimeContractMetadataParity(
   const sortedStatuses = Object.fromEntries(Object.entries(statuses).sort(([left], [right]) => compareText(left, right)));
   const inSyncCount = sortedResults.filter((result) => result.status === 'in-sync').length;
   const errorCount = diagnostics.length + sortedResults.length - inSyncCount;
+  const codeOnlyFileCount = input.files.filter((file) => file.archetype === 'code-only').length;
+  const syncableFileCount = input.files.length - codeOnlyFileCount;
+  const declaredRuntimeContractFiles = sources.filter((source) => source.declaresRuntimeContract).length;
+  const declaredPromptContractFiles = sources.filter((source) => source.declaresPromptContract).length;
 
   return {
     diagnostics,
     results: sortedResults,
     summary: {
       scannedFiles: input.files.length,
-      declaredRuntimeContractFiles: sources.length,
-      skippedFilesWithoutRuntimeContract: input.files.length - sources.length,
+      declaredRuntimeContractFiles,
+      declaredPromptContractFiles,
+      skippedFilesWithoutRuntimeContract: syncableFileCount - declaredRuntimeContractFiles,
+      skippedFilesWithoutAnyContract: syncableFileCount - sources.length,
+      skippedCodeOnlyFiles: codeOnlyFileCount,
       diagnosticCount: diagnostics.length,
       resultCount: sortedResults.length,
       inSyncCount,

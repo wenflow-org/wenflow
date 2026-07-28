@@ -267,6 +267,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
         },
         duration: Date.now() - startTime,
         cached: true,
+        quality: 'fallback',
       };
     }
 
@@ -283,6 +284,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
         } as any,
       },
       duration: result.debug.durationMs,
+      quality: 'model',
     };
   } catch {
     return {
@@ -290,6 +292,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       output: { ...buildFallback(input || {} as VirtualLearnerPathEvaluatorInput), degraded: true },
       duration: Date.now() - startTime,
       cached: true,
+      quality: 'fallback',
     };
   }
 }

@@ -1,6 +1,7 @@
 import {
   buildPromptFileRuntimeContractMetadata,
   mapPromptFileToCoreAgentPromptSeed,
+  matchesSeedConfig,
 } from '../seed-core-agent-prompts';
 import type { PromptFile } from '../../composers/prompt-files/loader';
 
@@ -92,5 +93,119 @@ describe('File-as-Truth runtime-contract seed snapshots', () => {
 
     expect(() => buildPromptFileRuntimeContractMetadata(makePromptFile(invalidContract)))
       .toThrow('Prompt skill:teaching-turn has an invalid runtimeContract.contextMode');
+  });
+});
+
+describe('v4 coreHash seed snapshots', () => {
+  it('passes coreHash/coreVersion through to the seed and metadata', () => {
+    const file = { ...makePromptFile(), coreHash: 'abc123', coreVersion: 2 };
+    const seed = mapPromptFileToCoreAgentPromptSeed(file);
+
+    expect(seed.coreHash).toBe('abc123');
+    expect(seed.coreVersion).toBe(2);
+    expect(JSON.parse(seed.metadata!)).toEqual({
+      promptLab: {
+        source: 'prompt-file',
+        coreHash: 'abc123',
+        coreVersion: 2,
+      },
+    });
+  });
+
+  it('v4 file without contracts still gets anchor-only metadata', () => {
+    const seed = mapPromptFileToCoreAgentPromptSeed({ ...makePromptFile(), coreHash: 'deadbeef' });
+
+    expect(JSON.parse(seed.metadata!)).toEqual({
+      promptLab: { source: 'prompt-file', coreHash: 'deadbeef' },
+    });
+    expect(seed).not.toHaveProperty('coreVersion');
+  });
+
+  it('detects coreHash-only drift via structural metadata compare', () => {
+    const active = {
+      systemPrompt: 'System prompt',
+      temperature: 0.7,
+      maxTokens: 4000,
+      model: 'deepseek-chat',
+      metadata: JSON.stringify({ promptLab: { coreHash: 'aaa' } }),
+    };
+    const seed = {
+      agentId: 'skill:teaching-turn',
+      name: 'default-skill-teaching-turn',
+      description: 'seed',
+      systemPrompt: 'System prompt',
+      temperature: 0.7,
+      maxTokens: 4000,
+      metadata: JSON.stringify({ promptLab: { coreHash: 'bbb' } }),
+    };
+
+    expect(matchesSeedConfig(active, seed, 'deepseek-chat')).toBe(false);
+  });
+});
+
+describe('matchesSeedConfig metadata drift detection', () => {
+  function makeActivePrompt(metadata?: string | null) {
+    return {
+      systemPrompt: 'System prompt',
+      temperature: 0.7,
+      maxTokens: 4000,
+      model: 'deepseek-chat',
+      ...(metadata === undefined ? {} : { metadata }),
+    };
+  }
+
+  function makeSeed(metadata?: string) {
+    return {
+      agentId: 'skill:teaching-turn',
+      name: 'default-skill-teaching-turn',
+      description: 'seed',
+      systemPrompt: 'System prompt',
+      temperature: 0.7,
+      maxTokens: 4000,
+      ...(metadata === undefined ? {} : { metadata }),
+    };
+  }
+
+  it('matches when metadata is structurally equal despite key ordering', () => {
+    const active = makeActivePrompt(JSON.stringify({
+      promptLab: {
+        runtimeContract: validRuntimeContract(),
+        source: 'prompt-file',
+      },
+    }));
+    const seed = makeSeed(JSON.stringify({
+      promptLab: {
+        source: 'prompt-file',
+        runtimeContract: validRuntimeContract(),
+      },
+    }));
+
+    expect(matchesSeedConfig(active, seed, 'deepseek-chat')).toBe(true);
+  });
+
+  it('detects contract-only drift that used to skip sync', () => {
+    const driftedPromptContract = { ...validPromptContract(), failurePolicy: 'blocking' };
+    const active = makeActivePrompt(JSON.stringify({
+      promptLab: { promptContract: driftedPromptContract },
+    }));
+    const seed = makeSeed(JSON.stringify({
+      promptLab: { promptContract: validPromptContract() },
+    }));
+
+    expect(matchesSeedConfig(active, seed, 'deepseek-chat')).toBe(false);
+  });
+
+  it('detects a missing metadata snapshot on the ACTIVE side', () => {
+    const active = makeActivePrompt(null);
+    const seed = makeSeed(JSON.stringify({
+      promptLab: { promptContract: validPromptContract() },
+    }));
+
+    expect(matchesSeedConfig(active, seed, 'deepseek-chat')).toBe(false);
+  });
+
+  it('still matches when neither side carries metadata', () => {
+    expect(matchesSeedConfig(makeActivePrompt(null), makeSeed(), 'deepseek-chat')).toBe(true);
+    expect(matchesSeedConfig(makeActivePrompt(), makeSeed(), 'deepseek-chat')).toBe(true);
   });
 });

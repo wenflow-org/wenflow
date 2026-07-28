@@ -52,6 +52,10 @@ model agent_prompts {
   sourceHash           String?
   compileContextHash   String?
   compiledAt           DateTime?
+  /// v4：编译自核心文件的内容哈希（漂移检测锚点）
+  coreHash             String?
+  /// v4：编译自核心文件的版本号
+  coreVersion          Int?
   temperature  Float?
   maxTokens    Int?
   model        String?

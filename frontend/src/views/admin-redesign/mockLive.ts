@@ -12,7 +12,6 @@ import {
   adminLearnerModelsApi,
   adminVirtualLearnersApi,
   adminApiConfigApi,
-  adminPromptLabApi,
   adminAgentsApi,
   adminPromptOpsApi,
   adminAgentTopologyApi,
@@ -700,40 +699,7 @@ export async function liveSaveNetworkPolicy(p: LiveApiConfig['networkPolicy']): 
   await fetchLiveApiConfig()
 }
 
-/* ================= Prompt Lab ================= */
-export interface LivePromptSource {
-  id: string
-  name: string
-  file: string
-  existsInLab: boolean
-  hasManifest: boolean
-}
-
-export const livePromptSources = ref<LivePromptSource[]>([])
-
-async function fetchLivePromptSources(): Promise<void> {
-  const res = await adminPromptLabApi.getSources()
-  const body = res.data?.data ?? res.data ?? []
-  livePromptSources.value = (Array.isArray(body) ? body : body.sources || []).map((s: Record<string, unknown>) => ({
-    id: String(s.id || s.name),
-    name: String(s.name || s.id),
-    file: String(s.file || ''),
-    existsInLab: !!s.existsInLab,
-    hasManifest: !!s.hasManifest
-  }))
-}
-
-export async function liveGetPromptSource(skillId: string): Promise<string> {
-  const res = await adminPromptLabApi.getSource(skillId)
-  const d = res.data?.data ?? res.data ?? {}
-  return String(d.content ?? d.source ?? d ?? '')
-}
-
-export async function liveCompileSource(skillId: string): Promise<string> {
-  const res = await adminPromptLabApi.compileSource({ skillId })
-  const d = res.data?.data ?? res.data ?? {}
-  return String(d.prompt ?? d.compiled ?? d.output ?? JSON.stringify(d, null, 2))
-}
+/* ================= Prompt Lab（v2 已退役，改由 Prompt 工作台 core-* 端点承接） ================= */
 
 /* ================= 协议视图 / 规则总览（懒加载缓存） ================= */
 export interface LiveProtocol {
@@ -859,8 +825,11 @@ async function fetchLiveSkillCatalog(): Promise<void> {
 
 export const liveTopoNodes = ref<LiveTopoNode[]>([])
 
+/** 拓扑统计时间范围（页面可切换，触发服务端重查） */
+export const liveTopoRange = ref<'24h' | '7d' | '30d' | 'all'>('all')
+
 async function fetchLiveTopology(): Promise<void> {
-  const res = await adminAgentTopologyApi.getTopology('all')
+  const res = await adminAgentTopologyApi.getTopology(liveTopoRange.value)
   const body = res.data?.data ?? res.data ?? {}
   const nodes = body.nodes || []
   liveTopoNodes.value = nodes.map((n: Record<string, unknown>) => {
@@ -878,6 +847,12 @@ async function fetchLiveTopology(): Promise<void> {
       }
     }
   })
+}
+
+/** 切换拓扑时间范围并重查 */
+export async function reloadLiveTopology(range: '24h' | '7d' | '30d' | 'all'): Promise<void> {
+  liveTopoRange.value = range
+  await fetchLiveTopology()
 }
 
 /* ================= 平台注册开关 ================= */
@@ -967,7 +942,12 @@ export async function liveDeleteAnnouncement(id: string): Promise<void> {
 }
 
 /* ================= 总入口 ================= */
+/**
+ * 渐进式加载：首屏只等 spans + overview（落地页所需），
+ * 其余 10 个域后台并行，页面响应式填充；liveLoading 到全部结束才复位。
+ */
 export async function loadLiveData() {
+  if (liveLoading.value) return
   liveLoading.value = true
   liveError.value = ''
   liveFailures.value = {}
@@ -980,7 +960,6 @@ export async function loadLiveData() {
     learners: fetchLiveLearners,
     virtuals: fetchLiveVirtuals,
     apiConfig: fetchLiveApiConfig,
-    prompts: fetchLivePromptSources,
     topology: fetchLiveTopology,
     catalog: fetchLiveSkillCatalog,
     registration: fetchRegistrationSetting,
@@ -994,8 +973,24 @@ export async function loadLiveData() {
     liveFailures.value.spans = errMsg(e)
   }
   const { spans: _s, overview, ...rest } = jobs
-  const entries = Object.entries({ overview, ...rest })
-  await Promise.all(
+  try {
+    await overview()
+  } catch (e) {
+    liveFailures.value.overview = errMsg(e)
+  }
+
+  // 核心域（日志）失败才算整体失败；其余局部降级
+  if (liveFailures.value.spans && !liveSpans.value?.length) {
+    liveError.value = `真实数据拉取失败：${liveFailures.value.spans}`
+    dataSource.value = 'demo'
+    liveLoading.value = false
+    return
+  }
+
+  // 关键域就绪即放行首屏；其余域后台继续
+  dataSource.value = 'live'
+  const entries = Object.entries(rest)
+  void Promise.all(
     entries.map(async ([key, fn]) => {
       try {
         await fn()
@@ -1003,19 +998,11 @@ export async function loadLiveData() {
         liveFailures.value[key] = errMsg(e)
       }
     })
-  )
-
-  liveLoading.value = false
-
-  // 核心域（日志）失败才算整体失败；其余局部降级
-  if (liveFailures.value.spans && !liveSpans.value?.length) {
-    liveError.value = `真实数据拉取失败：${liveFailures.value.spans}`
-    dataSource.value = 'demo'
-    return
-  }
-  dataSource.value = 'live'
-  const failedKeys = Object.keys(liveFailures.value)
-  liveError.value = failedKeys.length ? `部分数据不可用：${failedKeys.join('、')}` : ''
+  ).then(() => {
+    const failedKeys = Object.keys(liveFailures.value)
+    liveError.value = failedKeys.length ? `部分数据不可用：${failedKeys.join('、')}` : ''
+    liveLoading.value = false
+  })
 }
 
 export function backToDemo() {

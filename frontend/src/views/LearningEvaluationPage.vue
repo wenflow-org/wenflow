@@ -5,6 +5,7 @@
         <div>
           <p class="evaluation-kicker">学习反馈</p>
           <h1>当前任务学习反馈</h1>
+          <AiContentNote class="evaluation-head__ai-note" />
         </div>
         <div class="evaluation-head__actions">
           <el-button :loading="exportingImage" @click="exportImage">导出图片</el-button>
@@ -98,6 +99,7 @@ import { ElMessageBox } from 'element-plus';
 import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
@@ -415,9 +417,12 @@ const handleAdvisoryAction = async (action: string) => {
 };
 
 const formatTime = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const totalMins = Math.round(seconds / 60);
+  if (totalMins < 1) return '不足 1 分钟';
+  if (totalMins < 60) return `${totalMins} 分钟`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return mins ? `${hours} 小时 ${mins} 分` : `${hours} 小时`;
 };
 
 const getExportFilename = () => {
@@ -480,6 +485,25 @@ onUnmounted(() => {
   gap: 20px;
 }
 
+/* 入场编排：数据就绪后各块依次上浮出现 */
+@media (prefers-reduced-motion: no-preference) {
+  .evaluation-head,
+  .evaluation-degraded,
+  .evaluation-shell .completion-card,
+  .evaluation-shell .session-feedback,
+  .evaluation-transcript-card {
+    animation: eval-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .evaluation-degraded { animation-delay: 0.06s; }
+  .evaluation-shell .completion-card { animation-delay: 0.1s; }
+  .evaluation-shell .session-feedback { animation-delay: 0.2s; }
+  .evaluation-transcript-card { animation-delay: 0.28s; }
+}
+@keyframes eval-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .evaluation-degraded {
   padding: 14px 18px;
   border: 1px solid var(--color-warning-border, rgba(244, 170, 70, 0.24));
@@ -530,10 +554,13 @@ onUnmounted(() => {
 .evaluation-kicker {
   margin: 0 0 6px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-deep, #1f57cc);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--blue-deep, #1f57cc);
+}
+
+.evaluation-head__ai-note {
+  margin-top: 6px;
 }
 
 .evaluation-head h1 {

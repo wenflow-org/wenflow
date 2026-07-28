@@ -1,0 +1,42 @@
+version: prompt-lab-manifest/v1
+skillId: virtual-learner-persona-designer
+agentId: skill:virtual-learner-persona-designer
+name: default-virtual-learner-persona-designer
+archetype: generator
+description: 虚拟学习者身份设计师
+acceptableAgentIds:
+  - skill:virtual-learner-persona-designer
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+runtimeDefaults:
+  tier: chat
+  temperature: 0.8
+  maxTokens: 8000
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+    modelExposure: projected
+  failurePolicy: retry
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - generator

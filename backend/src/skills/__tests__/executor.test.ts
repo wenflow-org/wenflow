@@ -88,6 +88,35 @@ describe('统一 Skill Executor', () => {
     }))
   })
 
+  it('quality 与 cached 双向桥接：legacy cached 派生 quality', async () => {
+    const result = await executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      {},
+      async () => ({ success: true, output: 'ok', duration: 1, cached: true })
+    )
+
+    expect(result.quality).toBe('fallback')
+    expect(result.cached).toBe(true)
+  })
+
+  it('quality 与 cached 双向桥接：canonical quality 派生 cached', async () => {
+    const fallbackResult = await executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      {},
+      async () => ({ success: true, output: 'ok', duration: 1, quality: 'fallback' as const })
+    )
+    const modelResult = await executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      {},
+      async () => ({ success: true, output: 'ok', duration: 1, quality: 'model' as const })
+    )
+
+    expect(fallbackResult.cached).toBe(true)
+    expect(fallbackResult.quality).toBe('fallback')
+    expect(modelResult.cached).toBeUndefined()
+    expect(modelResult.quality).toBe('model')
+  })
+
   it('在 Skill 边界创建并共享一份 Provider 请求预算', async () => {
     let firstBudget: ReturnType<typeof getRequestContext>['retryBudget']
 

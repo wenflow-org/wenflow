@@ -211,14 +211,14 @@ onMounted(load);
   border: 1px solid var(--line); background: #fff;
   border-radius: 999px; padding: 7px 15px;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
-  cursor: pointer; transition: .14s ease;
+  cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 .filter--active { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.07); color: var(--blue-deep); }
 .filter--type { padding: 6px 12px; font-size: 12px; }
 .filters__sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-.ach-card { padding: 16px; display: flex; flex-direction: column; gap: 8px; transition: .16s ease; }
+.ach-card { padding: 16px; display: flex; flex-direction: column; gap: 8px; transition: transform 0.16s ease, box-shadow 0.16s ease; }
 .ach-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); }
 .ach-card--locked { background: #fafcff; }
 .ach-card__head { display: flex; align-items: center; justify-content: space-between; }

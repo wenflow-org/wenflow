@@ -12,6 +12,20 @@
         <span class="topo-toolbar__hint">点 Skill 看详情 · 点 Agent 查日志</span>
       </div>
       <div class="topo-toolbar__controls">
+        <span v-if="isLive" class="topo-range">
+          <button
+            v-for="r in rangeOptions"
+            :key="r.id"
+            type="button"
+            class="topo-range__btn"
+            :class="{ 'topo-range__btn--active': liveTopoRange === r.id }"
+            :disabled="rangeLoading"
+            @click="switchRange(r.id)"
+          >
+            {{ r.label }}
+          </button>
+        </span>
+        <span class="topo-toolbar__vsep"></span>
         <span class="topo-legend"><i class="lg lg--ok"></i>正常</span>
         <span class="topo-legend"><i class="lg lg--idle"></i>空闲</span>
         <span class="topo-legend"><i class="lg lg--err"></i>异常</span>
@@ -65,17 +79,32 @@
             </linearGradient>
           </defs>
 
-          <!-- Agent → Skill 连线 -->
+          <!-- Agent → Skill 连线（底层） -->
           <path
             v-for="(e, i) in edges"
             :key="`e-${i}`"
             :d="e.d"
             fill="none"
             :stroke="e.stroke"
-            :stroke-opacity="e.opacity"
+            :stroke-opacity="edgeDim(e) ? 0.08 : e.opacity"
             :stroke-width="e.width"
             :stroke-dasharray="e.dashed ? '3 5' : undefined"
             :stroke-linecap="e.dashed ? 'round' : undefined"
+            class="topo-edge"
+          />
+
+          <!-- 活跃边的数据流（dash 动画层） -->
+          <path
+            v-for="(e, i) in flowEdges"
+            v-show="!edgeDim(e)"
+            :key="`f-${i}`"
+            :d="e.d"
+            fill="none"
+            :stroke="e.stroke"
+            stroke-opacity="0.95"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            class="topo-flow"
           />
 
           <!-- Agent 间的流水线箭头 -->
@@ -97,7 +126,7 @@
           v-for="a in agentCards"
           :key="a.id"
           class="agent-card"
-          :class="{ 'is-error': a.errorCount > 0 }"
+          :class="{ 'is-error': a.errorCount > 0, 'is-dim': hoverAgentIdx != null && hoverAgentIdx !== a.idx }"
           :style="{
             left: `${a.x}px`,
             top: `${a.y}px`,
@@ -109,6 +138,8 @@
           tabindex="0"
           @click="guardedInvestigate(a.id)"
           @keydown.enter="guardedInvestigate(a.id)"
+          @mouseenter="hoverAgentIdx = a.idx"
+          @mouseleave="hoverAgentIdx = null"
         >
           <div class="agent-card__top">
             <span class="agent-card__icon" aria-hidden="true">
@@ -150,6 +181,14 @@
               <em class="agent-card__err"><b>{{ a.errorCount }}</b> 异常</em>
             </template>
           </div>
+          <!-- 成功率微条 -->
+          <span
+            v-if="a.rate != null"
+            class="agent-card__rate"
+            :class="a.rate >= 0.99 ? 'is-ok' : a.rate >= 0.9 ? 'is-warn' : 'is-bad'"
+            :style="{ width: `${Math.max(4, a.rate * 182)}px` }"
+            :title="`成功率 ${(a.rate * 100).toFixed(1)}%`"
+          ></span>
         </div>
 
         <!-- Skill 卡片 -->
@@ -157,7 +196,11 @@
           v-for="s in skillCards"
           :key="s.id"
           class="skill-card"
-          :class="{ 'is-idle': s.idle, 'is-error': s.error }"
+          :class="{
+            'is-idle': s.idle,
+            'is-error': s.error,
+            'is-dim': (hoverSkillKey != null && hoverSkillKey !== s.id) || (hoverSkillKey == null && hoverAgentIdx != null && hoverAgentIdx !== s.agentIdx)
+          }"
           :style="{
             left: `${s.x}px`,
             top: `${s.y}px`,
@@ -168,6 +211,8 @@
           tabindex="0"
           @click="guardedOpenSkill(s.skillId)"
           @keydown.enter="guardedOpenSkill(s.skillId)"
+          @mouseenter="hoverSkillKey = s.id"
+          @mouseleave="hoverSkillKey = null"
         >
           <span class="skill-card__tick"></span>
           <div class="skill-card__body">
@@ -175,11 +220,20 @@
             <div class="skill-card__meta">
               <template v-if="s.idle">未调用</template>
               <template v-else>
-                <b>{{ s.calls }}</b> 调用<template v-if="s.error"> · <em>{{ s.errors }}</em> 失败</template>
+                <b>{{ s.calls }}</b> 调用 · {{ fmtMs(s.avgMs) }}<template v-if="s.error"> · <em>{{ s.errors }}</em> 失败</template>
               </template>
             </div>
           </div>
           <span v-if="s.error" class="skill-card__flag">{{ s.errors }}</span>
+          <button
+            type="button"
+            class="skill-card__go"
+            title="打开 Prompt 设计页"
+            @click.stop="goDesign(s.skillId)"
+            @keydown.enter.stop="goDesign(s.skillId)"
+          >
+            ↗
+          </button>
         </div>
       </div>
     </div>
@@ -188,8 +242,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { skillProfiles, skillStatOf, openSkillDrawer, investigateAgent, spans, dataSource } from './mockStore'
-import { liveTopoNodes } from './mockLive'
+import { liveTopoNodes, liveTopoRange, reloadLiveTopology } from './mockLive'
 
 /* ========== 布局常量 ========== */
 const COL_W = 208
@@ -290,16 +345,17 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 
-let panOrigin: { x: number; y: number; tx: number; ty: number } | null = null
+let panOrigin: { x: number; y: number; tx: number; ty: number; pointerId: number } | null = null
 let didPan = false
 
 function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return
   const point = toCanvasPoint(event)
-  panOrigin = { x: point.x, y: point.y, tx: tx.value, ty: ty.value }
+  panOrigin = { x: point.x, y: point.y, tx: tx.value, ty: ty.value, pointerId: event.pointerId }
   didPan = false
   panning.value = true
-  ;(event.currentTarget as Element).setPointerCapture(event.pointerId)
+  // 注意：不在此处 setPointerCapture——捕获会把 click 重定向到画布，
+  // 导致节点卡片的 @click 永远不触发；改为实际开始拖拽时才捕获（见 onPointerMove）
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -307,12 +363,15 @@ function onPointerMove(event: PointerEvent) {
   const point = toCanvasPoint(event)
   const dx = point.x - panOrigin.x
   const dy = point.y - panOrigin.y
-  if (Math.abs(dx) + Math.abs(dy) > 4) {
+  if (!didPan && Math.abs(dx) + Math.abs(dy) > 4) {
     didPan = true
     userInteracted.value = true
+    canvasRef.value?.setPointerCapture(panOrigin.pointerId)
   }
-  tx.value = panOrigin.tx + dx
-  ty.value = panOrigin.ty + dy
+  if (didPan) {
+    tx.value = panOrigin.tx + dx
+    ty.value = panOrigin.ty + dy
+  }
 }
 
 function onPointerUp() {
@@ -337,9 +396,15 @@ function guardedOpenSkill(id: string) {
   openSkillDrawer(id)
 }
 
+/** Skill 卡 ↗ → Prompt 二级设计页 */
+const router = useRouter()
+function goDesign(id: string) {
+  void router.push(`/admin/skills/${id}`)
+}
+
 /* ========== 数据（保持 mockStore 接口不变） ========== */
 interface AgentDef { id: string; name: string }
-interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number }
+interface SkillItem { id: string; name: string; agentId: string; calls: number; errors: number; avgMs: number }
 
 const demoAgentDefs: AgentDef[] = [
   { id: 'goal-agent', name: '目标 Agent' },
@@ -362,7 +427,8 @@ const liveSkills = computed<SkillItem[]>(() =>
       name: n.label.replace(/ Skill$/, ''),
       agentId: n.parentAgentId as string,
       calls: n.stats.totalCalls,
-      errors: n.stats.failed
+      errors: n.stats.failed,
+      avgMs: n.stats.avgDuration
     }))
 )
 
@@ -374,8 +440,32 @@ function skillsOf(agentId: string): SkillItem[] {
     .filter((p) => p.agentId === agentId)
     .map((p) => {
       const st = skillStatOf(p.id)
-      return { id: p.id, name: p.name, agentId: p.agentId, calls: st.calls, errors: st.errors }
+      return { id: p.id, name: p.name, agentId: p.agentId, calls: st.calls, errors: st.errors, avgMs: st.avgMs }
     })
+}
+
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
+
+/* ========== Hover 联动（高亮本列、压暗他列） ========== */
+const hoverAgentIdx = ref<number | null>(null)
+const hoverSkillKey = ref<string | null>(null)
+
+/* 时间范围（live） */
+const rangeOptions: Array<{ id: '24h' | '7d' | '30d' | 'all'; label: string }> = [
+  { id: '24h', label: '24h' },
+  { id: '7d', label: '7d' },
+  { id: '30d', label: '30d' },
+  { id: 'all', label: '全部' }
+]
+const rangeLoading = ref(false)
+async function switchRange(r: '24h' | '7d' | '30d' | 'all') {
+  if (rangeLoading.value || liveTopoRange.value === r) return
+  rangeLoading.value = true
+  try {
+    await reloadLiveTopology(r)
+  } finally {
+    rangeLoading.value = false
+  }
 }
 
 const hasError = computed(() =>
@@ -388,6 +478,8 @@ const agentCards = computed(() =>
     const members = skillsOf(a.id)
     const errorCount = members.filter((m) => m.errors > 0).length
     const calls = members.reduce((sum, m) => sum + m.calls, 0)
+    const failures = members.reduce((sum, m) => sum + m.errors, 0)
+    const rate = calls ? (calls - failures) / calls : null
     return {
       ...a,
       idx: i,
@@ -395,6 +487,7 @@ const agentCards = computed(() =>
       memberCount: members.length,
       calls,
       errorCount,
+      rate,
       delay: i * 60,
       x: COL_X0 + i * (COL_W + COL_GAP),
       y: AGENT_Y,
@@ -405,8 +498,8 @@ const agentCards = computed(() =>
 const skillCards = computed(() => {
   const out: Array<{
     id: string; skillId: string; name: string
-    x: number; y: number; idle: boolean; error: boolean; errors: number; calls: number
-    hue: string; delay: number
+    x: number; y: number; idle: boolean; error: boolean; errors: number; calls: number; avgMs: number
+    hue: string; delay: number; agentIdx: number
   }> = []
   agentDefs.value.forEach((a, i) => {
     skillsOf(a.id).forEach((p, j) => {
@@ -415,6 +508,7 @@ const skillCards = computed(() => {
         skillId: p.id,
         name: p.name,
         calls: p.calls,
+        avgMs: p.avgMs,
         x: COL_X0 + i * (COL_W + COL_GAP),
         y: SKILL_Y0 + j * (SKILL_H + SKILL_GAP),
         idle: p.calls === 0,
@@ -422,6 +516,7 @@ const skillCards = computed(() => {
         errors: p.errors,
         hue: stageOf(i).hue,
         delay: 120 + i * 50 + j * 35,
+        agentIdx: i,
       })
     })
   })
@@ -444,8 +539,19 @@ const contentH = computed(() => SKILL_Y0 + maxSkillCount.value * (SKILL_H + SKIL
 const canvasHeight = computed(() => Math.min(720, Math.max(480, contentH.value)))
 
 /* ========== 连线 ========== */
-const edges = computed(() => {
-  const out: Array<{ d: string; stroke: string; opacity: number; width: number; dashed?: boolean }> = []
+interface TopoEdge {
+  d: string
+  stroke: string
+  opacity: number
+  width: number
+  dashed?: boolean
+  agentIdx: number
+  skillKey: string
+  active: boolean
+}
+
+const edges = computed<TopoEdge[]>(() => {
+  const out: TopoEdge[] = []
   agentCards.value.forEach((a, i) => {
     const ax = a.x + COL_W / 2
     const ay = a.y + AGENT_H
@@ -461,11 +567,24 @@ const edges = computed(() => {
         opacity: error ? 0.75 : idle ? 0.55 : 0.5,
         width: error ? 1.6 : Math.min(1.4 + p.calls / 3, 3),
         dashed: idle,
+        agentIdx: i,
+        skillKey: `${a.id}-${j}`,
+        active: !idle,
       })
     })
   })
   return out
 })
+
+/** 活跃边上的流动层（数据包动画） */
+const flowEdges = computed(() => edges.value.filter((e) => e.active))
+
+/** hover 联动：无关列压暗 */
+function edgeDim(e: TopoEdge): boolean {
+  if (hoverSkillKey.value) return e.skillKey !== hoverSkillKey.value
+  if (hoverAgentIdx.value != null) return e.agentIdx !== hoverAgentIdx.value
+  return false
+}
 
 /** Agent 之间的流水线箭头（渐变 + 三角箭头） */
 const flows = computed(() => {
@@ -615,6 +734,44 @@ const flows = computed(() => {
 }
 .topo-edges path { animation: tk-fade 0.6s ease backwards; }
 @keyframes tk-fade { from { opacity: 0; } }
+.topo-edge { transition: stroke-opacity 0.18s ease; }
+
+/* 活跃边数据流：dash 滚动（特异性须高于通用淡入） */
+.topo-edges path.topo-flow {
+  stroke-dasharray: 2.5 9;
+  animation: tk-flow 1.5s linear infinite;
+  pointer-events: none;
+}
+@keyframes tk-flow {
+  to { stroke-dashoffset: -23; }
+}
+
+/* hover 联动：压暗态 */
+.agent-card.is-dim,
+.skill-card.is-dim { opacity: 0.4; }
+
+/* 时间范围切换 */
+.topo-range {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: #eef2fa;
+  border-radius: 8px;
+}
+.topo-range__btn {
+  border: 0;
+  background: transparent;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mk-mono);
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+.topo-range__btn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
+.topo-range__btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* ========== Agent 阶段头卡片 ========== */
 .agent-card {
@@ -630,7 +787,7 @@ const flows = computed(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  transition: opacity 0.18s ease, transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
   animation: tk-rise 0.48s cubic-bezier(0.22, 0.8, 0.32, 1) backwards;
   animation-delay: var(--d, 0ms);
 }
@@ -705,6 +862,18 @@ const flows = computed(() => {
 .agent-card__err { font-style: normal; color: #dc2626; }
 .agent-card__err b { color: #dc2626; }
 
+/* 成功率微条（卡底 2px） */
+.agent-card__rate {
+  position: absolute;
+  left: 13px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 2px;
+}
+.agent-card__rate.is-ok { background: linear-gradient(90deg, #16a34a, #4ade80); }
+.agent-card__rate.is-warn { background: linear-gradient(90deg, #b45309, #fbbf24); }
+.agent-card__rate.is-bad { background: linear-gradient(90deg, #dc2626, #f87171); }
+
 /* ========== Skill 卡片 ========== */
 .skill-card {
   position: absolute;
@@ -719,7 +888,7 @@ const flows = computed(() => {
   padding: 0 12px;
   box-shadow: 0 1px 2px rgba(30, 58, 110, 0.04);
   cursor: pointer;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  transition: opacity 0.18s ease, transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
   animation: tk-rise 0.48s cubic-bezier(0.22, 0.8, 0.32, 1) backwards;
   animation-delay: var(--d, 0ms);
 }
@@ -781,6 +950,28 @@ const flows = computed(() => {
   font-weight: 600;
   font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* ↗ 设计页直达（hover 显现） */
+.skill-card__go {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #8492ab;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.skill-card:hover .skill-card__go { opacity: 1; }
+.skill-card__go:hover {
+  color: var(--hue);
+  background: color-mix(in srgb, var(--hue) 10%, transparent);
+  border-color: color-mix(in srgb, var(--hue) 30%, transparent);
 }
 
 @keyframes tk-rise {

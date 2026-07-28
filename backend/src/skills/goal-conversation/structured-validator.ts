@@ -141,7 +141,10 @@ export function extractStructuredPayload(content: string): StructuredParseResult
   return { parsedJson: null, dialogueText: content, parseMode: 'none' };
 }
 
-export function validateGoalConversationStructuredOutput(content: string): StructuredValidationResult {
+export function validateGoalConversationStructuredOutput(
+  content: string,
+  options: { deltaMode?: boolean } = {}
+): StructuredValidationResult {
   // 允许新版扁平结构（understanding/nextQuestions/...直接在顶层）和旧版包装结构（goalConversation 包装层）
   const allowedTopLevelKeys = new Set([
     'reply', 'state', 'goalConversation', 'hints',
@@ -195,11 +198,12 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
     };
   }
 
-  // reply + state 在新旧两版都必需
-  if (!hasReply || !parsedJson.state || typeof parsedJson.state !== 'object') {
+  // reply + state 在新旧两版都必需；Delta 模式（§5.4）下 state 缺席合法（缺席=不变）
+  const stateRequired = !options.deltaMode;
+  if (!hasReply || (stateRequired && (!parsedJson.state || typeof parsedJson.state !== 'object'))) {
     const missing: string[] = [];
     if (!hasReply) missing.push('reply');
-    if (!parsedJson.state || typeof parsedJson.state !== 'object') missing.push('state');
+    if (stateRequired && (!parsedJson.state || typeof parsedJson.state !== 'object')) missing.push('state');
     return {
       valid: false,
       parseMode,
@@ -207,6 +211,16 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
       dialogueText,
       failureType: 'missing_required_fields',
       violations: [`缺少必要字段: ${missing.join(', ')}`]
+    };
+  }
+  if (parsedJson.state !== undefined && (typeof parsedJson.state !== 'object' || parsedJson.state === null)) {
+    return {
+      valid: false,
+      parseMode,
+      parsedJson,
+      dialogueText,
+      failureType: 'missing_required_fields',
+      violations: ['state 必须是对象（Delta 模式下可整体缺席）']
     };
   }
 
@@ -221,7 +235,7 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
     Array.isArray(payload.nextQuestions)
     || Array.isArray(parsedJson.state?.nextQuestions);
 
-  if (!hasUnderstanding) {
+  if (!hasUnderstanding && !options.deltaMode) {
     return {
       valid: false,
       parseMode,
@@ -242,26 +256,52 @@ export function validateGoalConversationStructuredOutput(content: string): Struc
     };
   }
 
-  if (!['understanding', 'proposing', 'ready'].includes(stage)) {
-    return {
-      valid: false,
-      parseMode,
-      parsedJson,
-      dialogueText,
-      failureType: 'invalid_stage',
-      violations: ['state.stage 必须是 understanding / proposing / ready 之一']
-    };
-  }
+  // Delta 模式：state 缺席时整体跳过；state 存在时按字段出现校验（缺席=不变，由合并层回填 previous）
+  const statePresent = parsedJson.state && typeof parsedJson.state === 'object';
+  if (!options.deltaMode) {
+    if (!['understanding', 'proposing', 'ready'].includes(stage)) {
+      return {
+        valid: false,
+        parseMode,
+        parsedJson,
+        dialogueText,
+        failureType: 'invalid_stage',
+        violations: ['state.stage 必须是 understanding / proposing / ready 之一']
+      };
+    }
 
-  if (typeof confidence !== 'number' || !Number.isFinite(confidence)) {
-    return {
-      valid: false,
-      parseMode,
-      parsedJson,
-      dialogueText,
-      failureType: 'missing_required_fields',
-      violations: ['state.confidence 必须是合法数字']
-    };
+    if (typeof confidence !== 'number' || !Number.isFinite(confidence)) {
+      return {
+        valid: false,
+        parseMode,
+        parsedJson,
+        dialogueText,
+        failureType: 'missing_required_fields',
+        violations: ['state.confidence 必须是合法数字']
+      };
+    }
+  } else if (statePresent) {
+    if (parsedJson.state.stage !== undefined && !['understanding', 'proposing', 'ready'].includes(parsedJson.state.stage)) {
+      return {
+        valid: false,
+        parseMode,
+        parsedJson,
+        dialogueText,
+        failureType: 'invalid_stage',
+        violations: ['state.stage 必须是 understanding / proposing / ready 之一']
+      };
+    }
+    if (parsedJson.state.confidence !== undefined
+      && (typeof parsedJson.state.confidence !== 'number' || !Number.isFinite(parsedJson.state.confidence))) {
+      return {
+        valid: false,
+        parseMode,
+        parsedJson,
+        dialogueText,
+        failureType: 'missing_required_fields',
+        violations: ['state.confidence 必须是合法数字']
+      };
+    }
   }
 
   return {

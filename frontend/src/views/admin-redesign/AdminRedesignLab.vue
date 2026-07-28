@@ -141,7 +141,7 @@ import MockTraceWaterfall from './MockTraceWaterfall.vue';
 import MockApiConfig from './MockApiConfig.vue';
 import MockAddons from './MockAddons.vue';
 import MockAnnouncements from './MockAnnouncements.vue';
-import MockPromptLab from './MockPromptLab.vue';
+import MockPromptWorkbench from './MockPromptWorkbench.vue';
 import MockSkillDrawer from './MockSkillDrawer.vue';
 import MockLearnerDetail from './MockLearnerDetail.vue';
 import MockTeachingSessions from './MockTeachingSessions.vue';
@@ -170,7 +170,7 @@ const components: Record<string, unknown> = {
   'api-config': MockApiConfig,
   'addons': MockAddons,
   'announcements': MockAnnouncements,
-  'prompt-lab': MockPromptLab
+  'prompt-lab': MockPromptWorkbench
 };
 
 // 二级页面（drill-in）

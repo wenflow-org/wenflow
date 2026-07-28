@@ -2,10 +2,12 @@ export {}
 
 const userMocks = {
   findFirst: jest.fn(),
+  findUnique: jest.fn(),
   update: jest.fn()
 }
 
 const bcryptCompare = jest.fn()
+const bcryptHash = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -18,7 +20,7 @@ jest.mock('bcryptjs', () => ({
   __esModule: true,
   default: {
     compare: bcryptCompare,
-    hash: jest.fn()
+    hash: bcryptHash
   }
 }))
 
@@ -73,5 +75,44 @@ describe('AuthService 登录安全边界', () => {
       expect.stringMatching(/^\$2b\$10\$/)
     )
     expect(userMocks.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('AuthService 修改密码', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('当前密码错误时拒绝且不写库', async () => {
+    userMocks.findUnique.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
+    bcryptCompare.mockResolvedValue(false)
+
+    await expect(authService.changePassword('u1', 'wrong-old', 'NewPass123'))
+      .rejects.toBeInstanceOf(InvalidCredentialsError)
+    expect(userMocks.update).not.toHaveBeenCalled()
+  })
+
+  it('用户不存在时也执行比较后拒绝', async () => {
+    userMocks.findUnique.mockResolvedValue(null)
+    bcryptCompare.mockResolvedValue(false)
+
+    await expect(authService.changePassword('ghost', 'any', 'NewPass123'))
+      .rejects.toBeInstanceOf(InvalidCredentialsError)
+    expect(bcryptCompare).toHaveBeenCalled()
+    expect(userMocks.update).not.toHaveBeenCalled()
+  })
+
+  it('校验通过则写入新哈希并刷新 updatedAt', async () => {
+    userMocks.findUnique.mockResolvedValue({ id: 'u1', name: 'u1', password: 'old-hash' })
+    bcryptCompare.mockResolvedValue(true)
+    bcryptHash.mockResolvedValue('new-hash')
+
+    await authService.changePassword('u1', 'correct-old', 'NewPass123')
+
+    expect(bcryptHash).toHaveBeenCalledWith('NewPass123', 10)
+    expect(userMocks.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { password: 'new-hash', updatedAt: expect.any(Date) }
+    })
   })
 })

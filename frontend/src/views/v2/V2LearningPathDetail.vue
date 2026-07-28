@@ -52,6 +52,7 @@
             </div>
             <h1>{{ pathTitle }}</h1>
             <p>{{ path.description || path.summary }}</p>
+            <AiContentNote class="hero__ai-note" />
             <div class="hero__metrics">
               <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
               <span class="metric"><b>{{ path.estimatedHours || '—' }} 小时</b>预计投入</span>
@@ -107,16 +108,17 @@
                 <span class="stage__chev" :class="{ 'stage__chev--open': openStages.includes(si) }">⌄</span>
               </button>
 
-              <div v-if="openStages.includes(si)" class="stage__body">
-                <ul v-if="objectivesOf(stage).length" class="objectives">
-                  <li v-for="(o, oi) in objectivesOf(stage)" :key="oi">{{ o }}</li>
-                </ul>
-                <div
-                  v-for="task in stageTasks(stage)"
-                  :key="task.id"
-                  class="task"
-                  :class="`task--${taskCls(task)}`"
-                >
+              <div class="stage__body" :class="{ 'stage__body--open': openStages.includes(si) }">
+                <div class="stage__body-inner">
+                  <ul v-if="objectivesOf(stage).length" class="objectives">
+                    <li v-for="(o, oi) in objectivesOf(stage)" :key="oi">{{ o }}</li>
+                  </ul>
+                  <div
+                    v-for="task in stageTasks(stage)"
+                    :key="task.id"
+                    class="task"
+                    :class="`task--${taskCls(task)}`"
+                  >
                   <span class="task__icon">
                     <svg v-if="task.status === 'completed'" viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
                     <svg v-else-if="taskCls(task) === 'locked'" viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6-6h-1V9a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM9 9a3 3 0 0 1 6 0v2H9V9z"/></svg>
@@ -133,6 +135,7 @@
                   <span v-else-if="taskCls(task) === 'locked'" class="task__lock-label">待解锁</span>
                   <span v-else-if="task.status === 'in_progress'" class="task__cta" @click="goLearn(task.id)">继续学习</span>
                   <span v-else class="task__todo-label">待开始</span>
+                  </div>
                 </div>
               </div>
             </section>
@@ -181,6 +184,7 @@ import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import './v2.css';
 
 const route = useRoute();
@@ -473,7 +477,20 @@ onBeforeUnmount(() => window.clearTimeout(pollTimer));
 .stage__chev { color: var(--faint); font-size: 15px; transition: transform .18s ease; justify-self: end; }
 .stage__chev--open { transform: rotate(180deg); }
 
-.stage__body { border-top: 1px solid var(--line); padding: 8px 12px 12px; display: grid; gap: 4px; }
+.stage__body {
+  display: grid; grid-template-rows: 0fr;
+  border-top: 1px solid transparent;
+  transition: grid-template-rows 0.32s cubic-bezier(0.32, 0.72, 0.24, 1), border-color 0.24s ease;
+}
+.stage__body--open { grid-template-rows: 1fr; border-top-color: var(--line); }
+.stage__body-inner {
+  overflow: hidden; min-height: 0;
+  padding: 0 12px;
+  display: grid; gap: 4px;
+  opacity: 0;
+  transition: opacity 0.22s ease, padding 0.32s cubic-bezier(0.32, 0.72, 0.24, 1);
+}
+.stage__body--open .stage__body-inner { padding: 8px 12px 12px; opacity: 1; }
 .task {
   display: grid; grid-template-columns: 24px 1fr auto;
   align-items: center; gap: 11px;

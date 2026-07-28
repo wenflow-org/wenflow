@@ -1558,23 +1558,11 @@ export const adminPromptOpsApi = {
 };
 
 // ============================================================
-// V3.7 · Prompt Lab API（源文件编辑 / LLM 编译 / 发布）
+// V3.7 · Prompt Lab API（v2 源文件体系已退役；保留 manifest 平台层与编译约定）
 // ============================================================
 export const adminPromptLabApi = {
   getCompileSpec: async () => {
     return adminAxios.get('/admin/prompt-lab/compile-spec');
-  },
-
-  getSources: async () => {
-    return adminAxios.get('/admin/prompt-lab/sources');
-  },
-
-  getSource: async (skillId: string) => {
-    return adminAxios.get(`/admin/prompt-lab/source/${encodeURIComponent(skillId)}`);
-  },
-
-  saveSource: async (skillId: string, content: string) => {
-    return adminAxios.put(`/admin/prompt-lab/source/${encodeURIComponent(skillId)}`, { content });
   },
 
   getManifest: async (skillId: string) => {
@@ -1583,22 +1571,43 @@ export const adminPromptLabApi = {
 
   saveManifest: async (skillId: string, manifest: Record<string, unknown>) => {
     return adminAxios.put(`/admin/prompt-lab/manifest/${encodeURIComponent(skillId)}`, { manifest });
+  }
+};
+
+// ============================================================
+// V4 · Prompt 工作台 API（核心文件编辑 / 编译预览 / 发布 / 版本回滚 / 血缘）
+// ============================================================
+export const adminPromptWorkbenchApi = {
+  getCoreList: async () => {
+    return adminAxios.get('/admin/prompt-lab/core-list');
   },
 
-  getParams: async (skillId: string) => {
-    return adminAxios.get(`/admin/prompt-lab/params/${encodeURIComponent(skillId)}`);
+  getCore: async (skillId: string) => {
+    return adminAxios.get(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}`);
   },
 
-  compileSource: async (payload: { skillId: string }) => {
-    return adminAxios.post('/admin/prompt-lab/compile-source', payload);
+  saveCore: async (skillId: string, content: string) => {
+    return adminAxios.put(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}`, { content });
   },
 
-  publish: async (payload: { skillId: string; prompt: string; params: Record<string, unknown> }) => {
-    return adminAxios.post('/admin/prompt-lab/publish', payload);
+  compileCore: async (payload: { skillId: string; semanticJudge?: boolean; confirmUncertain?: boolean }) => {
+    return adminAxios.post('/admin/prompt-lab/compile-core', payload);
   },
 
-  createSourceFile: async (skillId: string) => {
-    return adminAxios.post(`/admin/prompt-lab/source/${encodeURIComponent(skillId)}/create`);
+  publishCore: async (payload: { skillId: string; semanticJudge?: boolean; confirmUncertain?: boolean }) => {
+    return adminAxios.post('/admin/prompt-lab/publish-core', payload);
+  },
+
+  getCoreVersions: async (skillId: string) => {
+    return adminAxios.get(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/versions`);
+  },
+
+  rollbackCore: async (skillId: string, version: number) => {
+    return adminAxios.post(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/rollback`, { version });
+  },
+
+  getCoreLineage: async (skillId: string) => {
+    return adminAxios.get(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}/lineage`);
   }
 };
 

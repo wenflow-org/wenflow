@@ -23,6 +23,7 @@
           <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
         </span>
         <p>{{ tipText }}</p>
+        <span class="tip__ai" title="内容由 AI 生成，仅供参考">AI</span>
         <span class="tip__close" title="知道了" @click="tipDismissed = true">×</span>
       </div>
 
@@ -51,6 +52,10 @@
               </div>
               <h1 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h1>
               <p class="action__desc">{{ todayTask?.desc || guidanceNextStep }}</p>
+              <p v-if="actionReason" class="action__reason">
+                <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
+                {{ actionReason }}
+              </p>
               <div class="action__meta">
                 <span class="tag tag--blue">阶段 {{ stageInfo }}</span>
                 <span class="tag">约 {{ todayTask?.minutes || '—' }} 分钟</span>
@@ -512,7 +517,7 @@ const todayTask = computed(() => {
       const tasks = w.subtasks || w.tasks || [];
       const t = tasks.find((x: Record<string, any>) => x.status === 'in_progress') ?? tasks.find((x: Record<string, any>) => x.status !== 'completed');
       if (t) {
-        return { id: t.id, title: gTask || t.title || t.displayLabel, desc: t.description || '', minutes: t.estimatedMinutes, kind: t.displayLabel || t.taskType || '任务' };
+        return { id: t.id, title: gTask || t.title || t.displayLabel, desc: t.description || '', minutes: t.estimatedMinutes, kind: t.displayLabel || t.taskType || '任务', status: t.status || 'todo' };
       }
     }
   }
@@ -584,6 +589,16 @@ function goLearn() {
 /* ================= 提示条（skill: adaptive-guidance-copy 回填 + 分级） ================= */
 const guidanceCopy = computed(() => guidance.value?.copy || null);
 const guidanceSummary = computed(() => guidance.value?.summary || null);
+
+/* 今日行动依据：为什么是这节课（来自学习者快照的推荐动作，无信号则不显示） */
+const actionReason = computed(() => {
+  if (!todayTask.value) return '';
+  const rec = guidanceSummary.value?.path?.recommendedAction;
+  if (rec === 'review-prerequisites') return '前面课程发现有前置缺口，这节课先补基础再推进';
+  if (rec === 'slow-down') return '最近节奏偏紧，今天先稳住这一个任务';
+  if (todayTask.value.status === 'in_progress') return '接着上次的进度继续';
+  return '';
+});
 
 const greetHeadline = computed(() => guidanceCopy.value?.headline || `${greeting.value}，${userName.value}`);
 const greetSub = computed(() => guidanceCopy.value?.subtitle || '');
@@ -1011,6 +1026,13 @@ onMounted(loadAll);
 .tip--empty .tip__icon { color: var(--accent); }
 .tip p { margin: 0; flex: 1; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .tip__close { color: var(--faint); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.tip__ai {
+  flex: 0 0 auto;
+  font-size: 10px; font-weight: 900; letter-spacing: 0.04em;
+  color: var(--faint);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 2px 5px;
+}
 
 /* ---------- 卡片基座 ---------- */
 .card {
@@ -1049,6 +1071,13 @@ onMounted(loadAll);
 .action__from { font-weight: 600; letter-spacing: 0; color: var(--faint); }
 .action__title { margin: 0; font-size: 26px; line-height: 1.3; letter-spacing: -0.01em; }
 .action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
+.action__reason {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0; padding: 6px 12px; width: fit-content;
+  font-size: 12.5px; font-weight: 600; line-height: 1.5;
+  color: var(--blue-deep); background: rgba(52, 120, 246, 0.08);
+  border: 1px solid rgba(52, 120, 246, 0.14); border-radius: 999px;
+}
 .action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag {
   padding: 5px 11px; border-radius: 999px;
@@ -1134,7 +1163,7 @@ onMounted(loadAll);
   padding: 8px 4px 10px;
   border-radius: 12px; border: 1px solid transparent;
   background: transparent; font: inherit; cursor: pointer;
-  transition: 0.14s ease;
+  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 .day:hover { background: #f6f9ff; }
 .day--today { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.05); }
@@ -1222,7 +1251,7 @@ onMounted(loadAll);
   border-radius: 14px;
   padding: 14px 16px;
   cursor: pointer;
-  transition: 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
 }
 .quick__item:hover { border-color: rgba(52, 120, 246, 0.4); box-shadow: 0 8px 20px rgba(52, 120, 246, 0.1); }

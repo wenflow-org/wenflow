@@ -1,5 +1,10 @@
 # Prompt Lab
 
+> **v4 现状注记（2026-07-28）**：统一 Skill 协议 v4 已落地（`doc/SKILL_PROTOCOL_V4.md`）。
+> 业务真相源已迁移至 **`prompts/core/<skillId>.yaml`（核心文件）**，prompt 均为五块编译产物。
+> 本目录中：`sources/`、`compiler-skill/`、`compiled/`、过程文档已归档至 `archive/`（v2 端点 compile-source/publish/sources 已随运营工作台上线移除）；`manifests/` 继续作为契约与执行参数的平台层家园；`backups/` 为回滚材料；`field-lineage.yaml` 为字段血缘注册表（可编辑）。
+> 编辑入口：核心文件 → `POST /api/prompt-lab/compile-core`（预览+守门）→ `POST /api/prompt-lab/publish-core`（发布）；管理界面：Admin「Prompt 工作台」。
+
 Prompt Lab 是 WenFlow 的独立 Prompt authoring / build 工作区。
 
 它的职责不是直接充当平台运行时 `prompts/` 目录的编辑器，而是维护一套独立的作者态真相源，并把这套真相源编译、审核、导出到平台集成目标。

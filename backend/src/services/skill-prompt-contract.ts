@@ -32,6 +32,25 @@ export type SkillPromptFailurePolicy =
   | 'deterministic-fallback'
   | 'none';
 
+/**
+ * 字段级角色分类（三轴正交）：
+ * - direction：input（平台→模型）/ output（模型→平台）/ state（双向主记忆，进时快照、出时 nextState）
+ * - visibility：user-visible（前端可看）/ handoff（交给编排层）/ internal（内部处理）/ debug（仅调试）
+ * - owner：仅 state 有意义——该字段的写入权威（runtime/model/orchestrator/none）
+ * - export：仅 output 有意义——除默认 userVisible 通道外的流出方式（renderHints/event/none）
+ */
+export type SkillPromptFieldDirection = 'input' | 'output' | 'state';
+export type SkillPromptFieldVisibility = 'user-visible' | 'handoff' | 'internal' | 'debug';
+export type SkillPromptFieldOwner = 'runtime' | 'model' | 'orchestrator' | 'none';
+export type SkillPromptFieldExport = 'renderHints' | 'event' | 'none';
+
+export interface SkillPromptFieldRole {
+  direction: SkillPromptFieldDirection;
+  visibility: SkillPromptFieldVisibility;
+  owner?: SkillPromptFieldOwner;
+  export?: SkillPromptFieldExport;
+}
+
 export interface SkillPromptContract {
   version: 'skill-prompt-contract/v2';
   executionMode: SkillPromptExecutionMode;
@@ -52,6 +71,8 @@ export interface SkillPromptContract {
     modelExposure: SkillPromptModelExposure;
   };
   failurePolicy: SkillPromptFailurePolicy;
+  /** 可选字段角色声明；缺失时不影响契约其他部分。 */
+  fields?: Record<string, SkillPromptFieldRole>;
 }
 
 export interface SkillPromptContractIdentity {
@@ -98,6 +119,10 @@ const FAILURE_POLICIES: SkillPromptFailurePolicy[] = [
   'deterministic-fallback',
   'none',
 ];
+const FIELD_DIRECTIONS: SkillPromptFieldDirection[] = ['input', 'output', 'state'];
+const FIELD_VISIBILITIES: SkillPromptFieldVisibility[] = ['user-visible', 'handoff', 'internal', 'debug'];
+const FIELD_OWNERS: SkillPromptFieldOwner[] = ['runtime', 'model', 'orchestrator', 'none'];
+const FIELD_EXPORTS: SkillPromptFieldExport[] = ['renderHints', 'event', 'none'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -199,6 +224,38 @@ export function buildDefaultSkillPromptContract(identity: SkillPromptContractIde
   };
 }
 
+function normalizeFieldRole(value: unknown): SkillPromptFieldRole | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.direction !== 'string' || !FIELD_DIRECTIONS.includes(value.direction as SkillPromptFieldDirection)) return null;
+  if (typeof value.visibility !== 'string' || !FIELD_VISIBILITIES.includes(value.visibility as SkillPromptFieldVisibility)) return null;
+  const role: SkillPromptFieldRole = {
+    direction: value.direction as SkillPromptFieldDirection,
+    visibility: value.visibility as SkillPromptFieldVisibility,
+  };
+  if (typeof value.owner === 'string' && FIELD_OWNERS.includes(value.owner as SkillPromptFieldOwner)) {
+    role.owner = value.owner as SkillPromptFieldOwner;
+  }
+  if (typeof value.export === 'string' && FIELD_EXPORTS.includes(value.export as SkillPromptFieldExport)) {
+    role.export = value.export as SkillPromptFieldExport;
+  }
+  return role;
+}
+
+/** 字段名排序归一，保证 ACTIVE metadata 快照与文件声明的结构比较键序无关。 */
+export function normalizeSkillPromptFields(value: unknown): Record<string, SkillPromptFieldRole> | undefined {
+  if (!isRecord(value)) return undefined;
+  const result: Record<string, SkillPromptFieldRole> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const name = key.trim();
+    if (!name) continue;
+    const role = normalizeFieldRole(raw);
+    if (role) result[name] = role;
+  }
+  const names = Object.keys(result).sort();
+  if (names.length === 0) return undefined;
+  return Object.fromEntries(names.map((name) => [name, result[name]]));
+}
+
 export function normalizeSkillPromptContract(
   value: unknown,
   identity: SkillPromptContractIdentity
@@ -208,6 +265,7 @@ export function normalizeSkillPromptContract(
   const input = isRecord(candidate.input) ? candidate.input : {};
   const output = isRecord(candidate.output) ? candidate.output : {};
   const context = isRecord(candidate.context) ? candidate.context : {};
+  const fields = normalizeSkillPromptFields(candidate.fields);
 
   return {
     version: 'skill-prompt-contract/v2',
@@ -229,6 +287,7 @@ export function normalizeSkillPromptContract(
       modelExposure: pickOne(context.modelExposure, MODEL_EXPOSURES, base.context.modelExposure),
     },
     failurePolicy: pickOne(candidate.failurePolicy, FAILURE_POLICIES, base.failurePolicy),
+    ...(fields ? { fields } : {}),
   };
 }
 
@@ -320,6 +379,62 @@ export function lintDeclaredSkillPromptContract(
       field: 'promptContract.output.envelope',
       message: `promptContract.output.envelope=${contract.output.envelope} 与 runtimeContract.outputEnvelope=${identity.runtimeContract.outputEnvelope} 不一致`,
     });
+  }
+
+  // fields：字段级角色声明（direction × visibility × owner/export）
+  if (value.fields !== undefined) {
+    if (!isRecord(value.fields)) {
+      issues.push({
+        level: 'error',
+        code: 'INVALID_PROMPT_CONTRACT_FIELD',
+        field: 'promptContract.fields',
+        message: 'promptContract.fields 必须是对象',
+      });
+    } else {
+      for (const [name, raw] of Object.entries(value.fields)) {
+        const prefix = `promptContract.fields.${name}`;
+        if (!name.trim()) {
+          issues.push({ level: 'error', code: 'INVALID_PROMPT_CONTRACT_FIELD', field: prefix, message: '字段名不能为空' });
+          continue;
+        }
+        if (!isRecord(raw)) {
+          issues.push({ level: 'error', code: 'INVALID_PROMPT_CONTRACT_FIELD', field: prefix, message: `${prefix} 必须是对象` });
+          continue;
+        }
+        requireOneOf(raw.direction, FIELD_DIRECTIONS, `${prefix}.direction`, issues);
+        requireOneOf(raw.visibility, FIELD_VISIBILITIES, `${prefix}.visibility`, issues);
+        if (raw.owner !== undefined) {
+          requireOneOf(raw.owner, FIELD_OWNERS, `${prefix}.owner`, issues);
+          if (raw.direction !== 'state') {
+            issues.push({ level: 'warning', code: 'PROMPT_CONTRACT_FIELD_AXIS_MISUSE', field: `${prefix}.owner`, message: 'owner 仅对 direction=state 的字段有意义' });
+          }
+        }
+        if (raw.export !== undefined) {
+          requireOneOf(raw.export, FIELD_EXPORTS, `${prefix}.export`, issues);
+          if (raw.direction !== 'output') {
+            issues.push({ level: 'warning', code: 'PROMPT_CONTRACT_FIELD_AXIS_MISUSE', field: `${prefix}.export`, message: 'export 仅对 direction=output 的字段有意义' });
+          }
+        }
+        if (raw.direction === 'input' && raw.visibility === 'user-visible' && name !== 'userInput' && name !== 'latestLearnerMessage') {
+          issues.push({ level: 'warning', code: 'PROMPT_CONTRACT_FIELD_VISIBILITY', field: `${prefix}.visibility`, message: 'input 字段通常不应声明 user-visible（用户原生消息除外）' });
+        }
+      }
+    }
+  }
+  if (identity.runtimeContract && contract.fields) {
+    const stateOwner = identity.runtimeContract.contextUpdate.stateOwner;
+    if (stateOwner !== 'none') {
+      for (const [name, role] of Object.entries(contract.fields)) {
+        if (role.direction === 'state' && role.owner && role.owner !== 'none' && role.owner !== stateOwner) {
+          issues.push({
+            level: 'warning',
+            code: 'PROMPT_CONTRACT_STATE_OWNER_MISMATCH',
+            field: `promptContract.fields.${name}.owner`,
+            message: `fields.${name}.owner=${role.owner} 与 runtimeContract.contextUpdate.stateOwner=${stateOwner} 不一致`,
+          });
+        }
+      }
+    }
   }
 
   return { contract, issues };

@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
-import { adaptiveGuidanceCopy, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
+import { executeSkill } from '../../skills';
+import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import stateTrackingService from '../learning/state-tracking.service';
@@ -321,13 +322,15 @@ class DashboardGuidanceSnapshotService {
         warningCount: warnings.length,
       });
 
-      const result = await adaptiveGuidanceCopy({
+      // v4 §5.2：统一经 executeSkill 入口（遥测/用户级开关/归一化），禁止直连 handler
+      const result = await executeSkill(adaptiveGuidanceCopyDefinition, {
         view: 'dashboard',
         learnerSnapshot,
         learningState,
         path: primaryPath,
         sessionWrapup,
         advisory,
+        userId,
       });
 
       const generatedAt = new Date().toISOString();
@@ -337,7 +340,9 @@ class DashboardGuidanceSnapshotService {
         generatedAt,
         trigger,
         pathId: primaryPath.id,
-        source: result.cached ? 'fallback' : 'model',
+        source: result.quality
+          ? (result.quality === 'model' || result.quality === 'cache' ? 'model' : 'fallback')
+          : result.cached ? 'fallback' : 'model',
         copy: result.output,
         summary,
         debug: {

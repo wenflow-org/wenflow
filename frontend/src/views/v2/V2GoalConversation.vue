@@ -63,7 +63,10 @@
             <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
           </span>
         </div>
-        <div class="composer__hint">Enter 发送 · Shift+Enter 换行 · 点上方场景卡可直接开始</div>
+        <div class="composer__hint">
+          <span>Enter 发送 · Shift+Enter 换行 · 点上方场景卡可直接开始</span>
+          <AiContentNote />
+        </div>
       </div>
     </main>
 
@@ -159,7 +162,10 @@
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
             </span>
           </div>
-          <div class="composer__hint">Enter 发送 · Shift+Enter 换行</div>
+          <div class="composer__hint">
+            <span>Enter 发送 · Shift+Enter 换行</span>
+            <AiContentNote />
+          </div>
         </div>
 
         <!-- 方案确认浮层 -->
@@ -212,7 +218,10 @@
                 <span class="btn-ghost" @click="supplementMode = false">取消</span>
               </div>
             </div>
-            <div class="proposal__note">确认后在本页生成，约 30 秒；万一失败可原地重试，信息不丢。</div>
+            <div class="proposal__note">
+              <span>确认后在本页生成，约 30 秒；万一失败可原地重试，信息不丢。</span>
+              <AiContentNote />
+            </div>
           </div>
 
           <!-- 生成中 -->
@@ -252,6 +261,7 @@ import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import { useGoalLive } from './useGoalLive';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
+import AiContentNote from '@/components/AiContentNote.vue';
 import { hasUserSession } from '@/utils/api';
 import './v2.css';
 
@@ -488,7 +498,7 @@ const scenes = [
   border: 1px solid rgba(52, 120, 246, 0.25);
   border-radius: 14px;
   font: inherit; text-align: left; cursor: pointer;
-  transition: .15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 .resume:hover { border-color: rgba(52, 120, 246, 0.5); box-shadow: 0 8px 20px rgba(52, 120, 246, 0.12); }
 .resume__dot {
@@ -532,7 +542,7 @@ const scenes = [
   border: 1px solid var(--line);
   border-radius: 16px;
   font: inherit; text-align: left; cursor: pointer;
-  transition: .16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 .scene-card:hover:not(:disabled) {
   border-color: rgba(52, 120, 246, 0.45);
@@ -641,6 +651,24 @@ const scenes = [
 .field__value--todo { color: var(--faint); font-size: 12px; }
 .field--todo { opacity: .7; }
 .field--fresh { background: rgba(49, 177, 111, 0.07); }
+/* 刚收录闪显：值写入时一次绿色高亮脉冲（reduced-motion 下被全局规则压掉） */
+@media (prefers-reduced-motion: no-preference) {
+  .field--fresh { animation: field-flash 1.4s ease-out 1; }
+  .field--fresh .field__value { animation: field-value-flash 1.4s ease-out 1; }
+  .field__fresh { animation: field-badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+}
+@keyframes field-flash {
+  0% { box-shadow: inset 0 0 0 999px rgba(49, 177, 111, 0.22); }
+  100% { box-shadow: inset 0 0 0 999px rgba(49, 177, 111, 0); }
+}
+@keyframes field-value-flash {
+  0%, 30% { color: var(--green); }
+  100% { color: var(--ink); }
+}
+@keyframes field-badge-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
 .field__fresh {
   position: absolute; top: 8px; right: 8px;
   font-size: 10px; font-weight: 800; color: var(--green);
@@ -697,6 +725,14 @@ const scenes = [
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
 
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 82%; }
+/* 消息入场：新气泡浮出 */
+@media (prefers-reduced-motion: no-preference) {
+  .msg { animation: msg-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .msg--user { align-self: flex-end; align-items: flex-end; }
 .msg--user .msg__bubble {
   background: linear-gradient(135deg, var(--blue), var(--blue-deep));

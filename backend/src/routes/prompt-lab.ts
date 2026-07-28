@@ -10,11 +10,11 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { randomUUID as uuidv4 } from 'crypto';
 import systemPrisma from '../config/system-database';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../gateway/api-gateway';
+import { getAPIGateway } from '../gateway/api-gateway';
+import { executeSkill } from '../skills';
 import { compilePrompt } from '../services/prompt-compiler';
 import { promptCache } from '../services/cache/prompt-cache.service';
 import { getAgentRoutings } from '../services/field-dispatcher';
-import { compilePromptLabSourceDeterministic } from '../services/prompt-lab/compiler';
 import {
   buildDefaultRuntimeContract,
   normalizeRuntimeContract,
@@ -25,13 +25,25 @@ import {
   normalizeSkillPromptContract,
   type SkillPromptContract,
 } from '../services/skill-prompt-contract';
+import { parsePromptFrontmatterMeta } from '../composers/prompt-files/loader';
+import {
+  compileCoreFile,
+  checkFiveBlockStructure,
+  checkFieldFreeze,
+  buildV4CompileSpecText,
+} from '../services/prompt-lab/core-compiler';
+import { loadCoreFile, scanCoreFiles, computeCoreHash, parseCoreFile, CORE_FILES_DIR } from '../services/prompt-lab/core-file-loader';
+import { getFieldLineage, classifyCoreEdit } from '../services/prompt-lab/field-lineage';
+import {
+  judgeSemanticFreeze,
+  decideSemanticGate,
+  type SemanticFreezeJudgement,
+} from '../services/prompt-lab/semantic-freeze-judge';
 
 const router = Router();
 router.use(rejectPromptLabFileMutation);
 
 const PROMPT_LAB_DIR = path.join(process.cwd(), '../prompt-lab');
-const SOURCES_DIR = path.join(PROMPT_LAB_DIR, 'sources');
-const COMPILED_DIR = path.join(PROMPT_LAB_DIR, 'compiled');
 const MANIFESTS_DIR = path.join(PROMPT_LAB_DIR, 'manifests');
 const BACKUPS_DIR = path.join(PROMPT_LAB_DIR, 'backups');
 const PROMPTS_DIR = path.join(process.cwd(), '../prompts');
@@ -65,10 +77,6 @@ type PromptLabManifest = {
   tags: string[];
   notes: string;
 };
-
-function sortSkillList(list: { id: string; name: string; file: string; existsInLab?: boolean; hasManifest?: boolean }[]) {
-  return list.sort((a, b) => a.id.localeCompare(b.id, 'en'))
-}
 
 function looksLikeMojibake(value: unknown) {
   if (typeof value !== 'string') return false;
@@ -235,19 +243,12 @@ function serializeManifest(manifest: PromptLabManifest) {
   return yaml.dump(ordered, { lineWidth: -1, noRefs: true }).trimEnd() + '\n';
 }
 
-async function loadSourceContent(skillId: string) {
-  const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
-  return fs.readFile(filePath, 'utf-8');
-}
-
 async function loadPromptFrontmatter(skillId: string) {
   const filePath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
-    const match = raw.match(/^---\n([\s\S]*?)\n---/);
-    if (!match) return null;
-    const parsed = yaml.load(match[1]) || {};
-    return parsed && typeof parsed === 'object' ? parsed as any : null;
+    const meta = parsePromptFrontmatterMeta(raw);
+    return Object.keys(meta).length > 0 ? meta as any : null;
   } catch {
     return null;
   }
@@ -352,6 +353,7 @@ async function resolveCompileRoutingKey(agentId: string, skillId: string) {
 /**
  * POST /api/prompt-lab/compile-skill
  * 使用 Compiler Skill (LLM) 编译简化配置为完整 Prompt
+ * 链路统一：委托 executeSkill -> prompt-compiler handler -> callPrompt
  */
 router.post('/compile-skill', async (req, res) => {
   try {
@@ -361,7 +363,7 @@ router.post('/compile-skill', async (req, res) => {
       return res.status(400).json({ error: '缺少配置参数' });
     }
 
-    // 1. 验证配置格式
+    // 1. 验证配置格式（保持 400 语义；handler 内会再次解析）
     let parsedConfig;
     try {
       parsedConfig = yaml.load(config);
@@ -369,55 +371,23 @@ router.post('/compile-skill', async (req, res) => {
       return res.status(400).json({ error: 'YAML 格式错误', details: (error as Error).message });
     }
 
-    // 2. 加载 Compiler Skill 的 Prompt
-    const compilerPromptPath = path.join(
-      process.cwd(),
-      '../prompt-lab/compiler-skill/compile-spec.md'
-    );
-    const compilerPrompt = await fs.readFile(compilerPromptPath, 'utf-8');
-
-    // 3. 构造完整的输入
-    const fullPrompt = `${compilerPrompt}
-
----
-
-## 现在请编译以下配置
-
-\`\`\`yaml
-${config}
-\`\`\`
-
-请生成完整的 Skill Prompt（Markdown 格式）。严格按照上面定义的格式和规则生成。`;
-
-    // 4. 构造消息并调用 Gateway
-    const messages: ChatMessage[] = [
-      { role: 'user', content: fullPrompt }
-    ];
-
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'prompt-compiler' };
-
-    const response = await gateway.execute({
-      messages,
-      max_tokens: 8000,
-      temperature: 0.2
-    }, caller, {});
-
-    let compiledPrompt = response.choices[0]?.message?.content || '';
+    // 2. 统一 Skill 链路：ACTIVE prompt + external-spec + 契约解析 + 重试 + telemetry
+    const output = await executeSkill({ id: 'skill:prompt-compiler' }, { config });
+    let compiledPrompt = output?.prompt || '';
 
     if (!compiledPrompt) {
       return res.status(500).json({ error: 'LLM 返回空结果' });
     }
 
-    // 清理 markdown 代码块包裹
+    // 清理 markdown 代码块包裹（handler 已剥离，此处幂等）
     compiledPrompt = compiledPrompt.replace(/^```markdown\s*\n?/, '').replace(/\n?```\s*$/, '')
 
-    // 5. 统计信息
+    // 3. 统计信息
     const lines = compiledPrompt.split('\n').length;
     const rules = (compiledPrompt.match(/\*?\*?(RULE|OUT|CON|STATE)-\d{2}\*?\*?:/gm) || []).length;
     const chars = compiledPrompt.length;
 
-    // 6. 返回结果
+    // 4. 返回结果
     res.json({
       success: true,
       prompt: compiledPrompt,
@@ -439,96 +409,13 @@ ${config}
 });
 
 /**
- * GET /api/prompt-lab/sources
- * 获取所有可用源文件列表
- */
-router.get('/sources', async (req, res) => {
-  try {
-    const sourceFiles = await fs.readdir(SOURCES_DIR).catch(() => [] as string[]);
-    const manifestFiles = await fs.readdir(MANIFESTS_DIR).catch(() => [] as string[]);
-
-    const sourceIds = sourceFiles
-      .filter((f: string) => f.endsWith('.md'))
-      .map((f: string) => f.replace('.md', ''));
-
-    const manifestIds = manifestFiles
-      .filter((f: string) => f.endsWith('.yaml') && !f.startsWith('_'))
-      .map((f: string) => f.replace(/\.yaml$/, ''));
-
-    const mergedIds = Array.from(new Set([...sourceIds, ...manifestIds]));
-    const list = sortSkillList(mergedIds.map((id) => ({
-      id,
-      name: id,
-      file: `${id}.md`,
-      existsInLab: sourceIds.includes(id),
-      hasManifest: manifestIds.includes(id)
-    })));
-
-    res.json({ success: true, data: list });
-  } catch (error) {
-    res.status(500).json({ error: '读取失败', details: (error as Error).message });
-  }
-});
-
-/**
- * GET /api/prompt-lab/source/:skillId
- * 获取源文件内容
- */
-router.get('/source/:skillId', async (req, res) => {
-  try {
-    const skillId = assertValidSkillId(req.params.skillId);
-    const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
-    
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      res.json({ success: true, data: content });
-    } catch {
-      res.status(404).json({ error: `源文件不存在: ${skillId}` });
-    }
-  } catch (error) {
-    res.status(500).json({ error: '读取失败', details: (error as Error).message });
-  }
-});
-
-/**
- * PUT /api/prompt-lab/source/:skillId
- * 保存源文件内容
- */
-router.put('/source/:skillId', async (req, res) => {
-  try {
-    const skillId = assertValidSkillId(req.params.skillId);
-    const { content } = req.body || {};
-
-    if (typeof content !== 'string' || !content.trim()) {
-      return res.status(400).json({ error: '缺少有效的源文件内容' });
-    }
-
-    const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
-
-    await fs.mkdir(SOURCES_DIR, { recursive: true });
-    await fs.writeFile(filePath, content.trim() + '\n', 'utf-8');
-
-    res.json({ success: true, data: content.trim() + '\n' });
-  } catch (error) {
-    res.status(500).json({ error: '保存失败', details: (error as Error).message });
-  }
-});
-
-/**
  * GET /api/prompt-lab/manifest/:skillId
  * 获取 Prompt Lab manifest
  */
 router.get('/manifest/:skillId', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.params.skillId);
-    let sourceContent = '';
-    try {
-      sourceContent = await loadSourceContent(skillId);
-    } catch {
-      // ignore missing source, manifest 仍可独立存在
-    }
-
-    const { exists, manifest } = await loadManifest(skillId, sourceContent);
+    const { exists, manifest } = await loadManifest(skillId, '');
     res.json({ success: true, exists, data: manifest });
   } catch (error) {
     res.status(500).json({ error: '读取 manifest 失败', details: (error as Error).message });
@@ -543,14 +430,8 @@ router.put('/manifest/:skillId', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.params.skillId);
     const incoming = req.body?.manifest ?? req.body ?? {};
-    let sourceContent = '';
-    try {
-      sourceContent = await loadSourceContent(skillId);
-    } catch {
-      // allow manifest-only save
-    }
 
-    const { manifest: currentManifest } = await loadManifest(skillId, sourceContent);
+    const { manifest: currentManifest } = await loadManifest(skillId, '');
     const nextManifest = {
       ...currentManifest,
       ...incoming,
@@ -599,7 +480,7 @@ router.put('/manifest/:skillId', async (req, res) => {
       notes: incoming.notes ?? currentManifest.notes
     };
 
-    const savedManifest = await writeManifest(skillId, nextManifest, sourceContent);
+    const savedManifest = await writeManifest(skillId, nextManifest, '');
     res.json({ success: true, data: savedManifest });
   } catch (error) {
     res.status(500).json({ error: '保存 manifest 失败', details: (error as Error).message });
@@ -607,347 +488,192 @@ router.put('/manifest/:skillId', async (req, res) => {
 });
 
 /**
- * POST /api/prompt-lab/source/:skillId/create
- * 创建源文件模板
- */
-router.post('/source/:skillId/create', async (req, res) => {
-  try {
-    const skillId = assertValidSkillId(req.params.skillId);
-    const filePath = path.join(SOURCES_DIR, `${skillId}.md`);
-    
-    // 检查文件是否已存在
-    try {
-      await fs.access(filePath);
-      return res.status(400).json({ error: '源文件已存在' });
-    } catch {
-      // 文件不存在，继续创建
-    }
-    
-    // 创建源文件模板
-    const template = `# DEFINITIONS
-
-## Identity
-[角色与任务定义]
-
-## Input
-| field | type | required | description |
-|-------|------|----------|-------------|
-| userInput | string | yes | 用户输入 |
-
-## Output Schema
-只输出一个合法 JSON 对象。
-
-### reply · string
-回复文本。
-
-### state · object
-当前状态。
-
-## Stages
-| stage | description |
-|-------|-------------|
-| processing | 处理中 |
-| completed | 已完成 |
-
----
-
-# EXECUTION
-
-## Format
-只输出一个合法 JSON 对象。JSON 前后不得有任何前言、解释、总结、markdown 包装。
-
-## Context Handling
-根据输入上下文处理请求。
-
-## Stage Logic
-根据当前阶段执行相应逻辑。
-
-## Output Guidance
-填充所有必需字段。
-
-## Constraints
-- 不编造信息
-- 保持一致性
-`;
-    
-    await fs.mkdir(SOURCES_DIR, { recursive: true });
-    await fs.writeFile(filePath, template, 'utf-8');
-
-    const existingManifest = await loadManifest(skillId, template);
-    if (!existingManifest.exists) {
-      await writeManifest(skillId, existingManifest.manifest, template);
-    }
-
-    res.json({ success: true, message: '源文件模板已创建', skillId, manifestCreated: !existingManifest.exists });
-  } catch (error) {
-    res.status(500).json({ error: '创建失败', details: (error as Error).message });
-  }
-});
-
-/**
- * GET /api/prompt-lab/params/:skillId
- * 从 Prompt Lab manifest 读取 skill 运行参数
- */
-router.get('/params/:skillId', async (req, res) => {
-  try {
-    const skillId = assertValidSkillId(req.params.skillId);
-    let sourceContent = '';
-    try {
-      sourceContent = await loadSourceContent(skillId);
-    } catch {
-      // allow params on manifest-only skill
-    }
-
-    const { exists, manifest } = await loadManifest(skillId, sourceContent);
-
-    res.json({
-      success: true,
-      data: {
-        tier: manifest.runtimeDefaults.tier,
-        temperature: manifest.runtimeDefaults.temperature,
-        maxTokens: manifest.runtimeDefaults.maxTokens,
-        model: manifest.runtimeDefaults.model,
-        thinkingMode: manifest.runtimeDefaults.thinkingMode,
-        reasoningEffort: manifest.runtimeDefaults.reasoningEffort,
-        manifestExists: exists
-      },
-      manifest: {
-        skillId: manifest.skillId,
-        agentId: manifest.agentId,
-        archetype: manifest.archetype,
-        name: manifest.name,
-        description: manifest.description
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: '读取参数失败', details: (error as Error).message });
-  }
-});
-
-/**
  * GET /api/prompt-lab/compile-spec
- * 获取编译约定文档
+ * 获取编译约定文档（v4 五块约定，由平台常量生成）
  */
 router.get('/compile-spec', async (req, res) => {
   try {
-    const specPath = path.join(process.cwd(), '../prompt-lab/compiler-skill/compile-spec.md');
-    const content = await fs.readFile(specPath, 'utf-8');
-    res.json({ success: true, data: content });
+    res.json({ success: true, data: buildV4CompileSpecText() });
   } catch (error) {
     res.status(500).json({ error: '读取失败', details: (error as Error).message });
   }
 });
 
+/** v4：查询某 agentId 的下一个 coreVersion（无历史则从 1 起） */
+async function nextCoreVersion(agentId: string): Promise<number> {
+  const latest = await systemPrisma.agent_prompts.findFirst({
+    where: { agentId, coreVersion: { not: null } },
+    orderBy: { coreVersion: 'desc' },
+    select: { coreVersion: true }
+  });
+  return (latest?.coreVersion ?? 0) + 1;
+}
+
+/** v4：读取核心文件原文（judge 对账用 SSOT 文本） */
+async function readCoreText(skillId: string): Promise<string> {
+  return fs.readFile(path.join(CORE_FILES_DIR, `${skillId}.yaml`), 'utf-8');
+}
+
+/** v4：守门第三查（含义冻结）。skip 时返回 null；判定失败按 uncertain 处理 */
+async function runSemanticGate(
+  skillId: string,
+  candidateText: string,
+  skip: boolean
+): Promise<SemanticFreezeJudgement | null> {
+  if (skip) return null;
+  const coreText = await readCoreText(skillId);
+  return judgeSemanticFreeze({ skillId, coreText, candidateText });
+}
+
 /**
- * POST /api/prompt-lab/compile-source
- * 基于 Lab 源文件编译为完整 Prompt
+ * POST /api/prompt-lab/compile-core
+ * v4：核心文件（prompts/core/<skillId>.yaml）确定性编译预览（dry run，不写文件/DB）
+ * 守门：结构合法 + 字段冻结 + 含义冻结（semanticJudge:false 可跳过第三查）
  */
-router.post('/compile-source', async (req, res) => {
+router.post('/compile-core', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.body?.skillId);
-
-    let sourceContent: string;
-    try {
-      sourceContent = await loadSourceContent(skillId);
-    } catch {
-      return res.status(404).json({ 
-        error: `源文件不存在: ${skillId}` 
-      });
+    const loaded = loadCoreFile(skillId);
+    if (!loaded) {
+      return res.status(404).json({ error: `核心文件不存在: prompts/core/${skillId}.yaml` });
+    }
+    if (!loaded.core) {
+      return res.status(400).json({ error: '核心文件 schema 不合法', diagnostics: loaded.diagnostics });
     }
 
-    const { exists: manifestExists, manifest } = await loadManifest(skillId, sourceContent);
+    const coreVersion = await nextCoreVersion(`skill:${skillId}`);
+    const compiled = compileCoreFile(loaded.core, { coreVersion });
+    const gates: Record<string, unknown> = {
+      structure: checkFiveBlockStructure(compiled.prompt),
+      fieldFreeze: checkFieldFreeze(loaded.core, compiled.prompt)
+    };
+    const semantic = await runSemanticGate(skillId, compiled.prompt, req.body?.semanticJudge === false);
+    if (semantic) {
+      gates.semantic = semantic;
+      gates.semanticDecision = decideSemanticGate(semantic, { confirmUncertain: req.body?.confirmUncertain === true });
+    }
 
-    const compileResult = compilePromptLabSourceDeterministic(sourceContent, {
-      skillId: manifest.skillId,
-      agentId: manifest.agentId,
-      name: manifest.name,
-      archetype: manifest.archetype,
-      description: manifest.description,
-      runtimeContract: manifest.runtimeContract,
-    });
-    const compiledPrompt = compileResult.prompt;
-
-    // 纯 Dry Run：只返回内存编译结果，不写服务器文件或 DB。
     res.json({
       success: true,
       skillId,
-      prompt: compiledPrompt,
-      stats: compileResult.stats,
-      manifestExists,
-      manifest,
-      runtimeContract: manifest.runtimeContract,
-      promptContract: manifest.promptContract,
-      compiler: 'deterministic-skeleton',
-      diagnostics: compileResult.diagnostics
+      compiler: 'core-deterministic-v4',
+      prompt: compiled.prompt,
+      coreHash: compiled.coreHash,
+      coreVersion: compiled.coreVersion,
+      gates,
+      gatePassed:
+        (gates.structure as unknown[]).length === 0 &&
+        (gates.fieldFreeze as unknown[]).length === 0 &&
+        (!semantic || decideSemanticGate(semantic, { confirmUncertain: req.body?.confirmUncertain === true }) === 'pass')
     });
-
   } catch (error) {
-    console.error('Source compile error:', error);
-    res.status(500).json({ 
-      error: '编译失败', 
-      details: (error as Error).message 
-    });
+    console.error('Core compile error:', error);
+    res.status(500).json({ error: '编译失败', details: (error as Error).message });
   }
 });
 
 /**
- * POST /api/prompt-lab/publish
- * 将编译产物发布：备份当前 → 写回 prompts/ → 创建 DB ACTIVE 版本
- * 元数据优先来自 Prompt Lab manifests/
+ * POST /api/prompt-lab/publish-core
+ * v4：核心文件 → 确定性编译 → 守门检查 → 发布
+ * 备份当前 → 写回 prompts/skill.<id>.md → 创建 DB ACTIVE 版本（携带 coreHash/coreVersion）
+ * 说明：v4 产物为确定性渲染，不经 compilePrompt LLM 改写；不回写 skill_model_configs（路由配置不动）
  */
-router.post('/publish', async (req, res) => {
+router.post('/publish-core', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.body?.skillId);
-    const { prompt, params } = req.body || {};
+    const loaded = loadCoreFile(skillId);
+    if (!loaded) {
+      return res.status(404).json({ error: `核心文件不存在: prompts/core/${skillId}.yaml` });
+    }
+    if (!loaded.core) {
+      return res.status(400).json({ error: '核心文件 schema 不合法', diagnostics: loaded.diagnostics });
+    }
+    const core = loaded.core;
+    const agentId = `skill:${skillId}`;
 
-    if (!prompt) {
-      return res.status(400).json({ error: '缺少 skillId 或 prompt 参数' });
+    const coreVersion = await nextCoreVersion(agentId);
+    const compiled = compileCoreFile(core, { coreVersion });
+    const gates: Record<string, unknown> = {
+      structure: checkFiveBlockStructure(compiled.prompt),
+      fieldFreeze: checkFieldFreeze(core, compiled.prompt)
+    };
+    const structuralIssues = [
+      ...(gates.structure as Array<unknown>),
+      ...(gates.fieldFreeze as Array<unknown>)
+    ];
+    if (structuralIssues.length > 0) {
+      return res.status(422).json({ error: '守门检查未通过，已阻断发布', gates, issues: structuralIssues });
     }
 
-    let sourceContent = '';
-    try {
-      sourceContent = await loadSourceContent(skillId);
-    } catch {
-      // allow publish from compiled prompt even if source is missing, using manifest/defaults
+    // 守门第三查（§4.2-3 含义冻结）：默认开启；semanticJudge:false 跳过（仅限调试）
+    const semantic = await runSemanticGate(skillId, compiled.prompt, req.body?.semanticJudge === false);
+    let semanticDecision: string | null = null;
+    if (semantic) {
+      gates.semantic = semantic;
+      semanticDecision = decideSemanticGate(semantic, { confirmUncertain: req.body?.confirmUncertain === true });
+      gates.semanticDecision = semanticDecision;
+      if (semanticDecision === 'block-divergent') {
+        return res.status(422).json({
+          error: '含义冻结未通过：编译产物与核心文件语义不等价，已阻断发布',
+          gates,
+          issues: semantic.findings
+        });
+      }
+      if (semanticDecision === 'needs-confirm') {
+        return res.status(409).json({
+          error: '含义冻结判定不确定，需人工确认（确认无误后以 confirmUncertain: true 重新发布）',
+          code: 'SEMANTIC_UNCERTAIN',
+          gates,
+          judgement: semantic
+        });
+      }
     }
 
-    const loadedManifest = await loadManifest(skillId, sourceContent);
-    const currentManifest = loadedManifest.manifest;
-
-    const nextManifest = normalizeManifest(skillId, {
-      ...currentManifest,
-      runtimeDefaults: {
-        ...currentManifest.runtimeDefaults,
-        tier: params?.tier ?? currentManifest.runtimeDefaults.tier,
-        temperature: params?.temperature ?? currentManifest.runtimeDefaults.temperature,
-        maxTokens: params?.maxTokens ?? currentManifest.runtimeDefaults.maxTokens,
-        model: params?.model ?? currentManifest.runtimeDefaults.model,
-        thinkingMode: params?.thinkingMode ?? currentManifest.runtimeDefaults.thinkingMode,
-        reasoningEffort: params?.reasoningEffort ?? currentManifest.runtimeDefaults.reasoningEffort
-      },
-      runtimeContract: currentManifest.runtimeContract,
-      promptContract: currentManifest.promptContract
-    }, sourceContent);
-
-    if (!nextManifest.publish.enabled) {
-      return res.status(400).json({ error: `当前 manifest 禁止发布: ${skillId}` });
-    }
-
-    if (!nextManifest.publish.exportTargets.includes('platform-prompts')) {
-      return res.status(400).json({ error: `当前 manifest 未声明 platform-prompts 导出目标: ${skillId}` });
-    }
-
-    await writeManifest(skillId, nextManifest, sourceContent);
-
+    // 备份当前生产文件
     const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
-    const agentId = nextManifest.agentId;
-    const name = nextManifest.name;
-    const archetype = nextManifest.archetype;
-    const temperature = nextManifest.runtimeDefaults.temperature;
-    const maxTokens = nextManifest.runtimeDefaults.maxTokens;
-    const model = nextManifest.runtimeDefaults.model;
-    const tier = nextManifest.runtimeDefaults.tier || 'chat';
-    const thinkingMode = nextManifest.runtimeDefaults.thinkingMode;
-    const reasoningEffort = nextManifest.runtimeDefaults.reasoningEffort;
-    const description = nextManifest.description || `${name} Skill`;
+    try {
+      const backupsDir = path.join(BACKUPS_DIR, skillId);
+      await fs.mkdir(backupsDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
+    } catch {
+      // 备份失败不阻塞
+    }
 
-    // 2. 查最新 version
+    // 写回 prompts/（编译产物自含完整 frontmatter：agentId/coreHash/coreVersion/执行参数）
+    await fs.writeFile(prodPath, compiled.prompt, 'utf-8');
+
+    // 创建 DB ACTIVE 版本
     const latest = await systemPrisma.agent_prompts.findFirst({
       where: { agentId },
       orderBy: { version: 'desc' },
       select: { version: true }
     });
     const newVersion = (latest?.version ?? 0) + 1;
-
-    // 3. 备份当前生产文件
-    const now = new Date().toISOString();
-    const backupsDir = path.join(BACKUPS_DIR, skillId);
-    try {
-      await fs.mkdir(backupsDir, { recursive: true });
-      const ts = now.replace(/[:.]/g, '-');
-      await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
-    } catch {
-      // 备份失败不阻塞
-    }
-
-    // 4. 写回 prompts/
-    const frontmatter: any = {
-      agentId,
-      name,
-      archetype,
-      description,
-      temperature,
-      maxTokens
-    };
-    frontmatter.runtimeContract = nextManifest.runtimeContract;
-    frontmatter.promptContract = nextManifest.promptContract;
-    if (nextManifest.acceptableAgentIds.length > 0) {
-      frontmatter.acceptableAgentIds = nextManifest.acceptableAgentIds;
-    }
-    if (model) {
-      frontmatter.model = model;
-    }
-    if (thinkingMode && thinkingMode !== 'default') {
-      frontmatter.thinkingMode = thinkingMode;
-    }
-    if (reasoningEffort && reasoningEffort !== 'default') {
-      frontmatter.reasoningEffort = reasoningEffort;
-    }
-
-    const frontmatterYaml = yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd();
-    await fs.writeFile(prodPath, `---\n${frontmatterYaml}\n---\n\n${prompt.trim()}\n`, 'utf-8');
-
-    const compileRoutingKey = await resolveCompileRoutingKey(agentId, skillId);
-    const effectiveModel = tier === 'reasoning' && !model
-      ? (await getPlatformReasoningDefaultModel()) || null
-      : model;
-    const compileResult = await compilePrompt(prompt.trim(), compileRoutingKey);
-
-    // 5. 创建 DB ACTIVE 版本
     const promptId = uuidv4();
     await systemPrisma.agent_prompts.create({
       data: {
         id: promptId,
         agentId,
-        name: `${name} v${newVersion}`,
-        systemPrompt: prompt.trim(),
-        compiledSystemPrompt: compileResult.compiled,
-        compileStatus: compileResult.status,
-        compileError: compileResult.error || null,
-        sourceHash: compileResult.sourceHash,
-        compileContextHash: compileResult.compileContextHash,
-        compiledAt: new Date(),
+        name: `${skillId} v${newVersion}`,
+        systemPrompt: compiled.body,
         status: 'ACTIVE',
         version: newVersion,
-        temperature,
-        maxTokens,
-        model: effectiveModel,
-        description,
+        temperature: core.params.temperature,
+        maxTokens: core.params.maxTokens,
+        model: null,
+        description: core.identity.split('\n')[0].slice(0, 100),
+        coreHash: compiled.coreHash,
+        coreVersion: compiled.coreVersion,
         metadata: JSON.stringify({
           promptLab: {
-            source: 'prompt-lab',
-            manifestVersion: nextManifest.version,
-            sourceSkillId: nextManifest.skillId,
-            runtimeDefaults: nextManifest.runtimeDefaults,
-            runtimeContract: nextManifest.runtimeContract,
-            promptContract: nextManifest.promptContract,
-            exportTargets: nextManifest.publish.exportTargets,
-            tags: nextManifest.tags,
-            notes: nextManifest.notes
-          },
-          compile: {
-            status: compileResult.status,
-            sourceHash: compileResult.sourceHash,
-            compileContextHash: compileResult.compileContextHash,
-            warnings: compileResult.warnings,
-            error: compileResult.error || null,
-            rewritten: compileResult.rewritten,
-            fieldsApplied: compileResult.fieldsApplied,
-            compiledAt: new Date().toISOString()
+            source: 'core-file',
+            coreHash: compiled.coreHash,
+            coreVersion: compiled.coreVersion
           }
         }),
         publishedAt: new Date(),
-        createdBy: 'prompt-lab'
+        createdBy: 'prompt-lab-core'
       }
     });
 
@@ -957,46 +683,9 @@ router.post('/publish', async (req, res) => {
       data: { status: 'ARCHIVED' }
     });
 
-    // 6. 仅同步路由/运维字段到 skill_model_configs。
-    // 生成参数 temperature/maxTokens 的唯一真相源是 prompts/*.md → agent_prompts ACTIVE，禁止双写。
-    const existingCfg = await systemPrisma.skill_model_configs.findFirst({
-      where: { skillId }
-    });
-    if (existingCfg) {
-      await systemPrisma.skill_model_configs.update({
-        where: { id: existingCfg.id },
-        data: {
-          tier,
-          model: effectiveModel || null,
-          thinkingMode,
-          reasoningEffort,
-          updatedAt: new Date().toISOString()
-        }
-      });
-    } else {
-      const now = new Date().toISOString();
-      await systemPrisma.skill_model_configs.create({
-        data: {
-          id: uuidv4(),
-          skillId,
-          tier,
-          // schema 仍有 T/maxTokens 列；新建时用占位默认，运行时不作为生成参数权威源
-          temperature: 0.7,
-          maxTokens: 2000,
-          model: effectiveModel || null,
-          thinkingMode,
-          reasoningEffort,
-          enabled: true,
-          updatedAt: now
-        }
-      });
-    }
-
     try {
       promptCache.clearAgentCache(agentId);
-      if (agentId !== skillId) {
-        promptCache.clearAgentCache(skillId);
-      }
+      promptCache.clearAgentCache(skillId);
       getAPIGateway().invalidateCache(undefined, undefined, skillId);
       getAPIGateway().invalidateCache(undefined, agentId);
     } catch (cacheErr: any) {
@@ -1008,20 +697,238 @@ router.post('/publish', async (req, res) => {
       version: newVersion,
       agentId,
       promptId,
-      manifestUpdated: true,
-      compileStatus: compileResult.status,
-      compileWarnings: compileResult.warnings,
-      compileError: compileResult.error || null
+      coreHash: compiled.coreHash,
+      coreVersion: compiled.coreVersion,
+      gates
     });
-
   } catch (error) {
-    console.error('Publish error:', error);
-    res.status(500).json({
-      error: '发布失败',
-      details: (error as Error).message
-    });
+    console.error('Core publish error:', error);
+    res.status(500).json({ error: '发布失败', details: (error as Error).message });
   }
 });
+
+/**
+ * GET /api/prompt-lab/core-list
+ * v4 工作台：核心文件清单（含与现行 prompt 的哈希对账状态）
+ */
+router.get('/core-list', async (req, res) => {
+  try {
+    const scan = scanCoreFiles();
+    const items = await Promise.all(scan.files.map(async (core) => {
+      const coreHash = computeCoreHash(core);
+      let publishedHash: string | null = null;
+      try {
+        const raw = await fs.readFile(path.join(PROMPTS_DIR, `skill.${core.skillId}.md`), 'utf-8');
+        const meta = parsePromptFrontmatterMeta(raw);
+        publishedHash = typeof meta.coreHash === 'string' ? meta.coreHash : null;
+      } catch {
+        publishedHash = null;
+      }
+      return {
+        skillId: core.skillId,
+        fields: core.fields.length,
+        channels: core.channels,
+        stateAdvance: core.stateAdvance,
+        deltaOutput: core.deltaOutput,
+        outputMedia: core.outputMedia,
+        coreHash,
+        publishedHash,
+        status: publishedHash === null ? 'no-prompt' : (publishedHash === coreHash ? 'synced' : 'pending-compile'),
+      };
+    }));
+    res.json({ success: true, items, diagnostics: scan.diagnostics });
+  } catch (error) {
+    res.status(500).json({ error: '读取核心文件清单失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * GET /api/prompt-lab/core/:skillId
+ * v4 工作台：读取核心文件原文与解析结果
+ */
+router.get('/core/:skillId', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    const filePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
+    let raw: string;
+    try {
+      raw = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      return res.status(404).json({ error: `核心文件不存在: prompts/core/${skillId}.yaml` });
+    }
+    const loaded = loadCoreFile(skillId);
+    res.json({
+      success: true,
+      skillId,
+      raw,
+      core: loaded?.core ?? null,
+      diagnostics: loaded?.diagnostics ?? [],
+      coreHash: loaded?.core ? computeCoreHash(loaded.core) : null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: '读取核心文件失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * PUT /api/prompt-lab/core/:skillId
+ * v4 工作台：保存核心文件（schema 校验 + 编辑分级 + 备份）
+ */
+router.put('/core/:skillId', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    const { content } = req.body || {};
+    if (typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: '缺少 content（核心文件 YAML 文本）' });
+    }
+
+    const filePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
+    const parsed = parseCoreFile(filePath, content);
+    if (!parsed.core) {
+      return res.status(400).json({ error: '核心文件 schema 不合法', diagnostics: parsed.diagnostics });
+    }
+
+    const oldCore = loadCoreFile(skillId)?.core ?? null;
+    const classification = classifyCoreEdit(oldCore, parsed.core);
+
+    // 备份后写入
+    try {
+      const backupsDir = path.join(BACKUPS_DIR, skillId, 'core');
+      await fs.mkdir(backupsDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.copyFile(filePath, path.join(backupsDir, `${ts}.yaml`));
+    } catch {
+      // 首次创建无备份可不做
+    }
+    await fs.writeFile(filePath, content, 'utf-8');
+
+    res.json({
+      success: true,
+      skillId,
+      coreHash: computeCoreHash(parsed.core),
+      classification,
+      status: 'pending-compile',
+    });
+  } catch (error) {
+    res.status(500).json({ error: '保存核心文件失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * GET /api/prompt-lab/core/:skillId/versions
+ * v4 工作台：发布版本历史
+ */
+router.get('/core/:skillId/versions', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    const rows = await systemPrisma.agent_prompts.findMany({
+      where: { agentId: `skill:${skillId}` },
+      orderBy: { version: 'desc' },
+      select: {
+        version: true,
+        status: true,
+        coreHash: true,
+        coreVersion: true,
+        createdBy: true,
+        publishedAt: true,
+        temperature: true,
+        maxTokens: true,
+      },
+      take: 30,
+    });
+    res.json({ success: true, skillId, versions: rows });
+  } catch (error) {
+    res.status(500).json({ error: '读取版本历史失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * POST /api/prompt-lab/core/:skillId/rollback
+ * v4 工作台：回滚到历史版本（文件回写 + ACTIVE 翻转 + 缓存清理）
+ */
+router.post('/core/:skillId/rollback', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    const version = Number(req.body?.version);
+    if (!Number.isInteger(version) || version < 1) {
+      return res.status(400).json({ error: '缺少有效 version' });
+    }
+    const agentId = `skill:${skillId}`;
+    const target = await systemPrisma.agent_prompts.findFirst({
+      where: { agentId, version },
+      select: {
+        id: true, version: true, systemPrompt: true, temperature: true, maxTokens: true,
+        coreHash: true, coreVersion: true, metadata: true,
+      },
+    });
+    if (!target) {
+      return res.status(404).json({ error: `版本不存在: ${agentId} v${version}` });
+    }
+
+    // 1) 文件回写（从目标版本重建 frontmatter + 正文）
+    let metaCoreHash: string | undefined = target.coreHash || undefined;
+    let metaCoreVersion: number | undefined = target.coreVersion || undefined;
+    try {
+      const meta = JSON.parse(target.metadata || '{}');
+      metaCoreHash = metaCoreHash || meta?.promptLab?.coreHash;
+      metaCoreVersion = metaCoreVersion ?? meta?.promptLab?.coreVersion;
+    } catch { /* metadata 不可解析时仅按列值 */ }
+    const frontmatter: Record<string, unknown> = { agentId };
+    if (metaCoreHash) frontmatter.coreHash = metaCoreHash;
+    if (metaCoreVersion !== undefined) frontmatter.coreVersion = metaCoreVersion;
+    if (target.temperature !== null) frontmatter.temperature = target.temperature;
+    if (target.maxTokens !== null) frontmatter.maxTokens = target.maxTokens;
+    const fileText = `---\n${yaml.dump(frontmatter, { lineWidth: -1 }).trimEnd()}\n---\n\n${target.systemPrompt.trim()}\n`;
+
+    const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
+    try {
+      const backupsDir = path.join(BACKUPS_DIR, skillId);
+      await fs.mkdir(backupsDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
+    } catch { /* 备份失败不阻塞 */ }
+    await fs.writeFile(prodPath, fileText, 'utf-8');
+
+    // 2) ACTIVE 翻转（其余置 ARCHIVED）
+    await systemPrisma.agent_prompts.updateMany({
+      where: { agentId, status: 'ACTIVE', id: { not: target.id } },
+      data: { status: 'ARCHIVED', updatedAt: new Date() },
+    });
+    await systemPrisma.agent_prompts.update({
+      where: { id: target.id },
+      data: { status: 'ACTIVE', updatedAt: new Date() },
+    });
+
+    // 3) 缓存清理
+    try {
+      promptCache.clearAgentCache(agentId);
+      promptCache.clearAgentCache(skillId);
+      getAPIGateway().invalidateCache(undefined, undefined, skillId);
+      getAPIGateway().invalidateCache(undefined, agentId);
+    } catch (cacheErr: any) {
+      console.warn('Failed to invalidate prompt/gateway cache:', cacheErr?.message || cacheErr);
+    }
+
+    res.json({ success: true, skillId, agentId, version, rolledBack: true });
+  } catch (error) {
+    console.error('Rollback error:', error);
+    res.status(500).json({ error: '回滚失败', details: (error as Error).message });
+  }
+});
+
+/**
+ * GET /api/prompt-lab/core/:skillId/lineage
+ * v4 工作台：字段血缘（消费者注册表）
+ */
+router.get('/core/:skillId/lineage', async (req, res) => {
+  try {
+    const skillId = assertValidSkillId(req.params.skillId);
+    res.json({ success: true, skillId, lineage: getFieldLineage(skillId) });
+  } catch (error) {
+    res.status(500).json({ error: '读取字段血缘失败', details: (error as Error).message });
+  }
+});
+
 
 /**
  * GET /api/prompt-lab/examples
@@ -1029,12 +936,7 @@ router.post('/publish', async (req, res) => {
  */
 router.get('/examples', async (req, res) => {
   try {
-    const examplesDir = path.join(
-      process.cwd(),
-      '../prompt-lab/compiler-skill/examples'
-    );
-
-    // 如果目录不存在，返回内置示例
+    // 内置示例（历史 compiler-skill/examples 目录引用已随 v4 退役移除）
     const builtInExamples = [
       {
         id: 'simple-qa',
