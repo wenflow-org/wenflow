@@ -51,7 +51,24 @@
           <p v-if="entity.description" class="msk__desc">{{ entity.description }}</p>
         </header>
 
+        <!-- 页签：概览 / 运行 / Prompt / 协议 -->
+        <nav class="msk__tabs" aria-label="详情页签">
+          <button
+            v-for="t in visibleTabs"
+            :key="t.key"
+            type="button"
+            class="msk__tab"
+            :class="{ 'is-active': activeTab === t.key }"
+            @click="activateTab(t.key)"
+          >
+            {{ t.label }}
+            <span v-if="t.badge" class="msk__tab-badge" :class="t.badgeCls">{{ t.badge }}</span>
+          </button>
+        </nav>
+
         <div class="msk__body">
+          <!-- ========== 概览 ========== -->
+          <template v-if="activeTab === 'overview'">
           <!-- 指标条 -->
           <div class="msk__stats">
             <div class="msk__stat">
@@ -123,7 +140,10 @@
             </div>
             <p v-else class="msk__none">近 60 条日志窗口内无调用（统计为全量口径）。</p>
           </section>
+          </template>
 
+          <!-- ========== 运行（配置 + 试跑） ========== -->
+          <template v-if="activeTab === 'run'">
           <!-- 运行配置（live 可编辑：对齐生产 AgentEditor 运行时 tab） -->
           <section v-if="skillProfile && isLive" class="msk__section">
             <header class="msk__sec-head">
@@ -189,136 +209,129 @@
             </div>
             <pre v-if="testResult" class="msk__code" :class="{ 'msk__code--err': testError }">{{ testResult }}</pre>
           </section>
+          </template>
 
-          <!-- 协议规则（对齐生产 AgentEditor 第 4 tab）：默认折叠，展开懒加载 -->
-          <section v-if="isLive" class="msk__section">
-            <button type="button" class="msk__sec-head msk__sec-head--btn" @click="toggleProtocol">
-              <h4>协议规则</h4>
-              <span class="msk__sec-meta">
-                <span v-if="agentRules.length" class="mono">{{ agentRules.length }} 条</span>
-                <svg class="msk__chev" :class="{ 'is-open': protocolOpen }" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3.2 1.8 6.4 5 3.2 8.2" />
-                </svg>
-              </span>
-            </button>
-            <template v-if="protocolOpen">
-              <p v-if="protocolLoading" class="msk__none">加载协议与规则…</p>
-              <template v-else>
-                <!-- 本节点规则 -->
-                <div v-if="agentRules.length" class="msk__rules">
-                  <div v-for="r in agentRules" :key="r.ruleId + r.text.slice(0, 8)" class="msk__rule">
-                    <span class="msk__rule-id mono">{{ r.ruleId }}</span>
-                    <span class="msk__rule-text">{{ r.text }}</span>
-                  </div>
-                </div>
-                <p v-else class="msk__none">本节点没有登记规则。</p>
-                <p v-if="conflictNote" class="msk__conflict">⚠ {{ conflictNote }}</p>
-                <!-- 协议视图 -->
-                <div v-if="protocols.length" class="msk__protocols">
-                  <div v-for="p in protocols" :key="p.id" class="msk__protocol">
-                    <div class="msk__protocol-head">
-                      <strong>{{ p.title }}</strong>
-                      <span class="mk-badge mk-badge--muted">{{ p.statusLabel }}</span>
-                    </div>
-                    <p>{{ p.summary }}</p>
-                    <span class="msk__protocol-sites mono">{{ p.callSites }}</span>
-                  </div>
-                </div>
-              </template>
-            </template>
-          </section>
-
-          <!-- 生效 Prompt：参考内容置后，默认折叠 -->
+          <!-- ========== Prompt ========== -->
+          <template v-if="activeTab === 'prompt'">
           <section v-if="skillProfile" class="msk__section">
-            <button type="button" class="msk__sec-head msk__sec-head--btn" @click="promptOpen = !promptOpen">
+            <header class="msk__sec-head">
               <h4>{{ isLive ? '生效 Prompt' : 'Prompt 版本' }}</h4>
               <span class="msk__sec-meta">
                 <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
-                <svg class="msk__chev" :class="{ 'is-open': promptOpen }" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3.2 1.8 6.4 5 3.2 8.2" />
-                </svg>
               </span>
-            </button>
-            <template v-if="promptOpen">
-              <pre v-if="liveMeta?.effectivePrompt" class="msk__code msk__code--cap">{{ liveMeta.effectivePrompt }}</pre>
-              <div class="msk__prompt">
-                <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
-                <button type="button" class="mk-link" @click="goPromptLab">去 Prompt Lab 检视 →</button>
+            </header>
+            <pre v-if="liveMeta?.effectivePrompt" class="msk__code msk__code--cap">{{ liveMeta.effectivePrompt }}</pre>
+            <div class="msk__prompt">
+              <span class="mono">{{ liveMeta?.promptVersion || skillProfile.promptVersion || '默认' }}</span>
+              <button type="button" class="mk-link" @click="goPromptLab">编辑协议 / 发布 →</button>
+            </div>
+            <div v-if="isLive && promptVersions.length" class="msk__versions">
+              <span class="msk__versions-label">历史版本（可与生效版对比、发布草稿）</span>
+              <p v-if="versionMsg" class="msk__versions-msg">{{ versionMsg }}</p>
+              <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
+                <span class="msk__version-tag mono">v{{ v.version }}</span>
+                <span class="msk__version-status">
+                  <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">
+                    {{ v.status }}
+                  </span>
+                </span>
+                <span class="msk__version-name" :title="v.name">{{ v.name }}</span>
+                <span class="msk__version-ops">
+                  <button
+                    v-if="v.status !== 'ACTIVE'"
+                    type="button"
+                    class="msk__op"
+                    :disabled="versionBusy === v.id"
+                    @click="compareWithActive(v)"
+                  >
+                    {{ compareLoading === v.id ? '…' : '对比' }}
+                  </button>
+                  <button
+                    v-if="v.status !== 'ACTIVE'"
+                    type="button"
+                    class="msk__op msk__op--primary"
+                    :disabled="versionBusy === v.id"
+                    @click="publishVersion(v)"
+                  >
+                    发布
+                  </button>
+                  <button
+                    v-if="v.status === 'DRAFT'"
+                    type="button"
+                    class="msk__op msk__op--danger"
+                    :disabled="versionBusy === v.id"
+                    @click="deleteVersion(v)"
+                  >
+                    删
+                  </button>
+                </span>
               </div>
-              <div v-if="isLive && promptVersions.length" class="msk__versions">
-                <span class="msk__versions-label">历史版本（可与生效版对比、发布草稿）</span>
-                <p v-if="versionMsg" class="msk__versions-msg">{{ versionMsg }}</p>
-                <div v-for="v in promptVersions" :key="v.id" class="msk__version-row">
-                  <span class="msk__version-tag mono">v{{ v.version }}</span>
-                  <span class="msk__version-status">
-                    <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                      {{ v.status }}
-                    </span>
-                  </span>
-                  <span class="msk__version-name" :title="v.name">{{ v.name }}</span>
-                  <span class="msk__version-ops">
-                    <button
-                      v-if="v.status !== 'ACTIVE'"
-                      type="button"
-                      class="msk__op"
-                      :disabled="versionBusy === v.id"
-                      @click="compareWithActive(v)"
-                    >
-                      {{ compareLoading === v.id ? '…' : '对比' }}
-                    </button>
-                    <button
-                      v-if="v.status !== 'ACTIVE'"
-                      type="button"
-                      class="msk__op msk__op--primary"
-                      :disabled="versionBusy === v.id"
-                      @click="publishVersion(v)"
-                    >
-                      发布
-                    </button>
-                    <button
-                      v-if="v.status === 'DRAFT'"
-                      type="button"
-                      class="msk__op msk__op--danger"
-                      :disabled="versionBusy === v.id"
-                      @click="deleteVersion(v)"
-                    >
-                      删
-                    </button>
-                  </span>
-                </div>
 
-                <!-- 与生效版对比结果 -->
-                <div v-if="compareResult" class="msk__diff">
-                  <div class="msk__diff-head">
-                    <span class="mono">{{ compareResult.aLabel }} ↔ {{ compareResult.bLabel }}</span>
-                    <span class="msk__diff-count" :class="{ 'is-clean': compareResult.changedLines === 0 }">
-                      {{ compareResult.changedLines ? `${compareResult.changedLines} 行变更` : '内容一致' }}
-                    </span>
-                    <button type="button" class="msk__op" @click="compareResult = null">收起</button>
-                  </div>
-                  <div class="msk__diff-body mono">
-                    <template v-for="(grp, gi) in compareResult.groups" :key="gi">
-                      <div v-if="grp.gap" class="msk__diff-gap">…</div>
-                      <div
-                        v-for="(line, li) in grp.lines"
-                        :key="li"
-                        class="msk__diff-line"
-                        :class="`is-${line.type}`"
-                      >
-                        <span class="msk__diff-no">{{ line.no }}</span>
-                        <span class="msk__diff-text">{{ line.text }}</span>
-                      </div>
-                    </template>
-                  </div>
+              <!-- 与生效版对比结果 -->
+              <div v-if="compareResult" class="msk__diff">
+                <div class="msk__diff-head">
+                  <span class="mono">{{ compareResult.aLabel }} ↔ {{ compareResult.bLabel }}</span>
+                  <span class="msk__diff-count" :class="{ 'is-clean': compareResult.changedLines === 0 }">
+                    {{ compareResult.changedLines ? `${compareResult.changedLines} 行变更` : '内容一致' }}
+                  </span>
+                  <button type="button" class="msk__op" @click="compareResult = null">收起</button>
+                </div>
+                <div class="msk__diff-body mono">
+                  <template v-for="(grp, gi) in compareResult.groups" :key="gi">
+                    <div v-if="grp.gap" class="msk__diff-gap">…</div>
+                    <div
+                      v-for="(line, li) in grp.lines"
+                      :key="li"
+                      class="msk__diff-line"
+                      :class="`is-${line.type}`"
+                    >
+                      <span class="msk__diff-no">{{ line.no }}</span>
+                      <span class="msk__diff-text">{{ line.text }}</span>
+                    </div>
+                  </template>
                 </div>
               </div>
-            </template>
+            </div>
           </section>
 
           <section v-if="skillProfile && isLive" class="msk__section msk__section--actions">
             <button type="button" class="msk__primary-link" @click="goFullEditor">打开 Prompt 设计页 →</button>
-            <p class="msk__none">设计页含 Prompt 检视、预览、运行时与工程视图；抽屉保留运行配置与试跑。</p>
+            <p class="msk__none">设计页统一承接：协议（core 编辑/发布）、Prompt 检视、试跑、运行时与工程视图；抽屉保留只读速览。</p>
           </section>
+          </template>
+
+          <!-- ========== 协议 ========== -->
+          <template v-if="activeTab === 'rules'">
+          <section class="msk__section">
+            <header class="msk__sec-head">
+              <h4>协议规则</h4>
+              <span v-if="agentRules.length" class="msk__sec-meta mono">{{ agentRules.length }} 条</span>
+            </header>
+            <p v-if="protocolLoading" class="msk__none">加载协议与规则…</p>
+            <template v-else>
+              <!-- 本节点规则 -->
+              <div v-if="agentRules.length" class="msk__rules">
+                <div v-for="r in agentRules" :key="r.ruleId + r.text.slice(0, 8)" class="msk__rule">
+                  <span class="msk__rule-id mono">{{ r.ruleId }}</span>
+                  <span class="msk__rule-text">{{ r.text }}</span>
+                </div>
+              </div>
+              <p v-else class="msk__none">本节点没有登记规则。</p>
+              <p v-if="conflictNote" class="msk__conflict">⚠ {{ conflictNote }}</p>
+              <!-- 协议视图 -->
+              <div v-if="protocols.length" class="msk__protocols">
+                <div v-for="p in protocols" :key="p.id" class="msk__protocol">
+                  <div class="msk__protocol-head">
+                    <strong>{{ p.title }}</strong>
+                    <span class="mk-badge mk-badge--muted">{{ p.statusLabel }}</span>
+                  </div>
+                  <p>{{ p.summary }}</p>
+                  <span class="msk__protocol-sites mono">{{ p.callSites }}</span>
+                </div>
+              </div>
+            </template>
+          </section>
+          </template>
         </div>
       </aside>
     </div>
@@ -338,8 +351,7 @@ import {
   openTrace,
   openSkillDrawer,
   closeSkillDrawer,
-  dataSource,
-  editSkillInPromptLab
+  dataSource
 } from './mockStore'
 import { liveSkillProfiles, liveExtraProfiles, liveApiConfig, errMsg, fetchProtocolView, fetchRulesOverview, type LiveProtocol, type LiveRulesOverview, type LiveRule } from './mockLive'
 import { adminSkillWorkbenchApi, adminSkillsApi, adminAgentPromptsApi } from '@/api/adminApi'
@@ -487,11 +499,26 @@ const testInput = ref('{\n  "input": "用一句话介绍你自己"\n}')
 const testBusy = ref(false)
 const testResult = ref('')
 const testError = ref(false)
-/** 生效 Prompt 默认折叠 */
-const promptOpen = ref(false)
 
-/* 协议规则：折叠区，首次展开时懒加载 */
-const protocolOpen = ref(false)
+/* 页签：概览（健康）/ 运行（配置+试跑）/ Prompt（版本与生效内容）/ 协议 */
+type DrawerTab = 'overview' | 'run' | 'prompt' | 'rules'
+const activeTab = ref<DrawerTab>('overview')
+const visibleTabs = computed<Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }>>(() => {
+  const tabs: Array<{ key: DrawerTab; label: string; badge?: string; badgeCls?: string }> = [
+    { key: 'overview', label: '概览', badge: stat.value.errors ? String(stat.value.errors) : undefined, badgeCls: 'is-bad' }
+  ]
+  if (skillProfile.value && isLive.value) tabs.push({ key: 'run', label: '运行' })
+  if (skillProfile.value) tabs.push({ key: 'prompt', label: 'Prompt' })
+  if (isLive.value) tabs.push({ key: 'rules', label: '协议' })
+  return tabs
+})
+
+function activateTab(key: DrawerTab) {
+  activeTab.value = key
+  if (key === 'rules') void ensureProtocolLoaded()
+}
+
+/* 协议规则：rules 页签首次激活时懒加载 */
 const protocolLoading = ref(false)
 const protocols = ref<LiveProtocol[]>([])
 const rulesOverview = ref<LiveRulesOverview | null>(null)
@@ -514,9 +541,8 @@ function agentRulesReset() {
   // 换节点时保留缓存（rulesOverview/protocols 是全局数据），仅重置展开态
 }
 
-async function toggleProtocol() {
-  protocolOpen.value = !protocolOpen.value
-  if (!protocolOpen.value || protocols.value.length || protocolLoading.value) return
+async function ensureProtocolLoaded() {
+  if (protocols.value.length || protocolLoading.value) return
   protocolLoading.value = true
   try {
     const [pv, ro] = await Promise.all([fetchProtocolView(), fetchRulesOverview()])
@@ -723,8 +749,7 @@ watch(
     runtimeCfg.value = null
     cfgMsg.value = ''
     testResult.value = ''
-    promptOpen.value = false
-    protocolOpen.value = false
+    activeTab.value = 'overview'
     promptVersions.value = []
     compareResult.value = null
     versionMsg.value = ''
@@ -815,7 +840,9 @@ function goTrace(traceId: string) {
 }
 
 function goPromptLab() {
-  editSkillInPromptLab(intent.skillDrawerId)
+  const id = intent.skillDrawerId
+  closeSkillDrawer()
+  void router.push(`/admin/skills/${encodeURIComponent(id)}?tab=protocol`)
 }
 
 /** 二级 Prompt 设计页（/admin/skills/:id，Skill 级编辑台） */
@@ -842,12 +869,53 @@ function goFullEditor() {
   background: #fff;
   box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18);
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   animation: msk-in 0.2s ease;
 }
 @keyframes msk-in {
   from { transform: translateX(30px); opacity: 0; }
 }
+
+/* ========== 页签 ========== */
+.msk__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e1e8f2;
+  background: #fbfdff;
+}
+.msk__tab {
+  border: 0;
+  background: transparent;
+  padding: 10px 12px 9px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #8492ab;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.msk__tab:hover { color: #16233c; }
+.msk__tab.is-active {
+  color: var(--hue, #3478f6);
+  border-bottom-color: var(--hue, #3478f6);
+}
+.msk__tab-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+}
+.msk__tab-badge.is-bad { background: #fef2f2; color: #dc2626; }
 
 /* ========== 头部身份区 ========== */
 .msk__head {

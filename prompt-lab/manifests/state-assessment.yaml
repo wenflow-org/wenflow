@@ -1,0 +1,27 @@
+version: prompt-lab-manifest/v1
+skillId: state-assessment
+agentId: skill:state-assessment
+name: default-skill-state-assessment
+archetype: extractor
+description: 学习状态评估器
+acceptableAgentIds: [skill:state-assessment]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+runtimeDefaults: { tier: chat, temperature: 0.3, maxTokens: 1600, model: null, thinkingMode: default, reasoningEffort: default }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-model, phases: [state-assessed], defaultPhase: state-assessed, terminalPhases: [state-assessed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, learner, assessment, v4]
+notes: v4 核心文件的契约与运行参数家园。

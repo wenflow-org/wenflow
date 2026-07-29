@@ -9,10 +9,13 @@ import {
   AgentContext,
   AgentOutput
 } from '../plugin-types';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 
 /**
  * 基础质量评估插件
+ *
+ * LLM 调用已迁入 v4 Skill `skill:basic-evaluator`（prompt 真相源：
+ * prompts/core/basic-evaluator.yaml）；本插件仅保留输入组装与结果后处理。
  */
 export const basicEvaluator: AgentPlugin = {
   id: 'basic-evaluator',
@@ -31,116 +34,27 @@ export const basicEvaluator: AgentPlugin = {
   config: {
     temperature: 0.5,
     maxTokens: 3000,  // 详细评估反馈需要更多空间
-    systemPrompt: `你是学习质量评估专家。
-
-【任务】
-评估用户的学习成果、答案质量或任务完成情况，并提供建设性反馈。
-
-【输入】
-- 待评估的内容/答案/任务
-- 评估标准（可选）
-- 原始问题/任务要求
-
-【输出格式 - 必须严格遵循】
-{
-  "score": 85,
-  "grade": "A",
-  "dimensions": {
-    "accuracy": {
-      "score": 90,
-      "feedback": "评估维度反馈"
-    },
-    "completeness": {
-      "score": 85,
-      "feedback": "评估维度反馈"
-    },
-    "depth": {
-      "score": 80,
-      "feedback": "评估维度反馈"
-    },
-    "clarity": {
-      "score": 85,
-      "feedback": "评估维度反馈"
-    }
-  },
-  "strengths": [
-    "优点1",
-    "优点2"
-  ],
-  "improvements": [
-    "改进建议1",
-    "改进建议2"
-  ],
-  "overallFeedback": "总体反馈（50-100字）",
-  "nextSteps": [
-    "下一步建议1",
-    "下一步建议2"
-  ]
-}
-
-【评估维度说明】
-- accuracy（准确性）：内容是否正确
-- completeness（完整性）：是否涵盖所有要点
-- depth（深度）：是否有足够深入的分析
-- clarity（清晰度）：表达是否清晰易懂
-
-【评分标准】
-- 分数范围：0-100
-- 等级：S(90-100), A(80-89), B(70-79), C(60-69), D(<60)
-
-【反馈原则】
-1. 客观公正，以建设性为主
-2. 肯定优点，指出不足
-3. 提供具体的改进方向
-4. 给出下一步学习建议`,
     model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2
   },
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'basic-evaluator' };
     const startTime = Date.now();
 
     try {
       // 构建评估上下文
       const evalContext = this.buildEvalContext(input);
 
-      const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-        {
-          role: 'system',
-          content: this.config!.systemPrompt!
-        },
-        {
-          role: 'user',
-          content: evalContext
-        }
-      ];
-
-      const response = await gateway.execute({ messages }, caller);
-
-      const content = response.choices[0]?.message.content || '{}';
-
-      // 解析 JSON
-      let data: any;
-      try {
-        data = JSON.parse(content);
-      } catch {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          data = JSON.parse(jsonMatch[0]);
-        } else {
-          // 如果不是 JSON，作为原始反馈返回
-          data = {
-            score: 0,
-            grade: 'D',
-            overallFeedback: content,
-            improvements: [],
-            nextSteps: []
-          };
-        }
-      }
+      const result = await executeSkillWithResult(auxSkillDefinitionMap['basic-evaluator'], {
+        input,
+        evalContext,
+        model: this.config?.model,
+        temperature: this.config?.temperature,
+        maxTokens: this.config?.maxTokens,
+        __prompt: { requestPath: '/agents/plugins/basic-evaluator' },
+      });
+      const data = result.output;
 
       // 确保分数在有效范围内
       if (data.score !== undefined) {
@@ -165,7 +79,7 @@ export const basicEvaluator: AgentPlugin = {
           confidence: data.score ? data.score / 100 : undefined,
           generatedAt: new Date().toISOString(),
           duration: Date.now() - startTime,
-          tokensUsed: response.usage?.total_tokens
+          tokensUsed: result.debug.tokenUsage?.total
         }
       };
     } catch (error: any) {

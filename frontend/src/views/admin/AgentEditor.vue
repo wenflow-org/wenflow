@@ -81,10 +81,10 @@
           type="warning" 
           plain
           @click="openPromptLab"
-          title="查看 Source 并执行只读 Dry Run"
+          title="打开 Prompt 工作台"
         >
           <el-icon><MagicStick /></el-icon>
-          Dry Run
+          Prompt 工作台
         </el-button>
       </div>
     </header>
@@ -296,6 +296,7 @@ import SkillRuntimeConfigPane from './components/promptOps/SkillRuntimeConfigPan
 import PromptReadOnlyPane from './components/promptOps/PromptReadOnlyPane.vue';
 import PromptPreviewPane from './components/promptOps/PromptPreviewPane.vue';
 import PromptEngineeringPane from './components/promptOps/PromptEngineeringPane.vue';
+import { intent } from '../admin-redesign/mockStore';
 import { toast } from '../../utils/toast';
 
 interface AgentOverviewItem {
@@ -452,7 +453,9 @@ function goBackList() {
 }
 
 function openPromptLab() {
-  void router.push({ name: 'AdminPromptLab' });
+  intent.promptLabSkill = agentIdParam.value.replace(/^skill:/, '');
+  intent.scene = 'prompt-workbench';
+  void router.push({ name: 'AdminConsole' });
 }
 
 async function loadAll() {

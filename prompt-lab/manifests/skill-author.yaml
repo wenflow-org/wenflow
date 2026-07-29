@@ -1,0 +1,27 @@
+version: prompt-lab-manifest/v1
+skillId: skill-author
+agentId: skill:skill-author
+name: default-skill-skill-author
+archetype: copywriter
+description: Prompt 起草助手
+acceptableAgentIds: [skill:skill-author]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+runtimeDefaults: { tier: chat, temperature: 0.5, maxTokens: 2400, model: null, thinkingMode: default, reasoningEffort: default }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: markdown, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: prompt-compiler, phases: [prompt-drafted], defaultPhase: prompt-drafted, terminalPhases: [prompt-drafted], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, prompt, author, v4]
+notes: v4 核心文件的契约与运行参数家园。

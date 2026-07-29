@@ -13,6 +13,7 @@ import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import goalConversationService from '../services/learning/goal-conversation.service';
 import learningService from '../services/learning/learning.service';
+import { assertPathMutationSafe } from '../services/learning/path-mutation-safety';
 import pathCoordinator, { type GoalPathRequest } from './path.coordinator';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
 import {
@@ -40,6 +41,8 @@ const COORDINATOR_ID = 'simulation-agent';
 const ASSISTED_SESSION_LEASE_MS = 10 * 60 * 1000;
 const ASSISTED_SESSION_LEASE_RENEW_MS = 2 * 60 * 1000;
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100];
+const LEARN_UPSTREAM_RETRY_ATTEMPTS = 3;
+const LEARN_UPSTREAM_RETRY_DELAY_MS = 750;
 
 function isPrismaErrorCode(error: unknown, code: string) {
   return typeof error === 'object' && error !== null && (error as any).code === code;
@@ -360,6 +363,40 @@ class SimulationOrchestrator {
     return tasks.filter(task => task.status !== 'completed');
   }
 
+  private countTaskProgress(milestones: any[], completedTaskId?: string | null) {
+    const tasks = milestones.flatMap((milestone: any) => milestone?.subtasks || []);
+    return {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter((task: any) => task.status === 'completed' || task.id === completedTaskId).length
+    };
+  }
+
+  private isRetryableLearnUpstreamError(error: any) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return /invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message);
+  }
+
+  private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
+    let lastError: any;
+    for (let attempt = 1; attempt <= LEARN_UPSTREAM_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        await this.assertCurrentSessionLeaseOwned(sessionId);
+        return await execute();
+      } catch (error: any) {
+        lastError = error;
+        if (!this.isRetryableLearnUpstreamError(error) || attempt === LEARN_UPSTREAM_RETRY_ATTEMPTS) break;
+        logger.warn('[simulation-coordinator] Learn 上游调用失败，准备重试', {
+          sessionId,
+          operation,
+          attempt,
+          error: error?.message || String(error)
+        });
+        await new Promise(resolve => setTimeout(resolve, LEARN_UPSTREAM_RETRY_DELAY_MS * attempt));
+      }
+    }
+    throw lastError;
+  }
+
   private boundTaskCompletionError(error: any): string {
     const message = error?.message || String(error || '任务完成失败');
     return message.length > 1000 ? `${message.slice(0, 997)}...` : message;
@@ -418,6 +455,78 @@ class SimulationOrchestrator {
         totalMilestones: milestones.length
       }
     };
+  }
+
+  /**
+   * 同一虚拟会话可以跨多个 Path task。完成当前 task 后，立即为下一 task 建立新课堂，
+   * 不让已完成 taskRuntime 阻塞后续 executeLearningStep。
+   */
+  private async transitionToNextLearningTask(
+    sessionId: string,
+    session: any,
+    learningState: any,
+    completedTaskRuntime: any,
+    nextProgress: ReturnType<SimulationOrchestrator['buildProgressAfterTaskCompletion']>,
+    milestones: any[],
+    logs: SimulationLogEntry[]
+  ) {
+    if (nextProgress.isPathCompleted || !nextProgress.currentTask) {
+      return { learningState, nextTaskStarted: false };
+    }
+
+    await this.assertCurrentSessionLeaseOwned(sessionId);
+    const nextTeachingSession = await this.retryLearnUpstream(
+      sessionId,
+      'start-next-learning-task',
+      () => aiTeachingOrchestrator.startSession({
+        userId: session.userId,
+        taskId: nextProgress.currentTask.id
+      })
+    );
+    const now = new Date().toISOString();
+    const teachingSessionHistory = [
+      ...(Array.isArray(learningState.teachingSessionHistory) ? learningState.teachingSessionHistory : []),
+      {
+        teachingSessionId: completedTaskRuntime.teachingSessionId || null,
+        taskId: completedTaskRuntime.taskId || null,
+        taskTitle: completedTaskRuntime.taskTitle || null,
+        status: 'completed',
+        completedAt: completedTaskRuntime.completedAt || now
+      }
+    ];
+    const nextLearningState = {
+      ...learningState,
+      ...nextProgress.progress,
+      teachingSessionId: nextTeachingSession.sessionId,
+      teachingRevision: nextTeachingSession.revision,
+      taskRuntime: {
+        status: 'active',
+        taskId: nextProgress.currentTask.id,
+        taskTitle: nextProgress.currentTask.title,
+        teachingSessionId: nextTeachingSession.sessionId,
+        teachingRevision: nextTeachingSession.revision,
+        startedAt: now,
+        error: null,
+        updatedAt: now
+      },
+      teachingSessionHistory
+    };
+
+    logs.push({
+      timestamp: now,
+      phase: 'learning-start',
+      details: {
+        output: {
+          teachingSessionId: nextTeachingSession.sessionId,
+          welcomeMessage: nextTeachingSession.welcomeMessage,
+          currentMilestone: nextLearningState.currentMilestoneTitle,
+          currentTask: nextProgress.currentTask.title,
+          previousTaskId: completedTaskRuntime.taskId || null
+        }
+      }
+    });
+
+    return { learningState: nextLearningState, nextTaskStarted: true };
   }
 
   private async resolveTeachingRevision(
@@ -910,6 +1019,49 @@ class SimulationOrchestrator {
     });
   }
 
+  /** 上游 Learn 调用耗尽重试后的终态记录；checkpoint 恢复分支不会走这里。 */
+  private async persistLearningFailure(sessionId: string, error: any, logs: SimulationLogEntry[]) {
+    const message = this.boundTaskCompletionError(error);
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      const learning = stageResults.learning || {};
+      const now = new Date().toISOString();
+      const failedLearning = {
+        ...learning,
+        taskRuntime: {
+          ...(learning.taskRuntime || {}),
+          status: 'error',
+          error: message,
+          failedAt: now,
+          updatedAt: now
+        }
+      };
+
+      await this.updateStageResults(sessionId, 'learning', failedLearning);
+      await this.updateSessionStatus(sessionId, 'failed', 'learning');
+      const failureLog: SimulationLogEntry = {
+        timestamp: now,
+        phase: 'error',
+        details: {
+          error: message,
+          output: {
+            action: 'learn-upstream-retries-exhausted',
+            currentTaskId: failedLearning.currentTaskId || session.currentTaskId || null
+          }
+        }
+      };
+      logs.push(failureLog);
+      await this.addSessionLog(sessionId, failureLog);
+    } catch (persistError: any) {
+      // 如果租约已丢失，不能越权写入；由新 owner 或后续恢复流程接管。
+      logger.warn('[simulation-coordinator] 持久化 Learn 失败状态失败', {
+        sessionId,
+        error: persistError?.message || String(persistError)
+      });
+    }
+  }
+
   private async resetSessionRuntime(
     sessionId: string,
     options: {
@@ -1059,7 +1211,7 @@ class SimulationOrchestrator {
     const latestSession = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } });
     const latestStageResults = this.parseStageResultsPayload(latestSession?.stageResults);
     const latestLearningState = latestStageResults.learning || learningState;
-    const completedLearningState = {
+    const baseCompletedLearningState = {
       ...latestLearningState,
       teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
       ...nextProgress.progress,
@@ -1079,20 +1231,94 @@ class SimulationOrchestrator {
       }
     };
 
+    // 先持久化当前任务完成，再尝试启动下一课；下一课上游失败也不会丢失已完成 task。
+    const currentProgress = this.countTaskProgress(milestones, taskMatch.task.id);
+
     await this.assertCurrentSessionLeaseOwned(sessionId);
     await prisma.virtual_sessions.update({
       where: { id: sessionId },
       data: {
         stageResults: JSON.stringify({
           ...latestStageResults,
-          learning: completedLearningState
+          learning: baseCompletedLearningState
         }),
         currentTaskId: nextProgress.progress.currentTaskId,
+        completedTasks: currentProgress.completedTasks,
+        totalTasks: currentProgress.totalTasks,
         status: nextProgress.isPathCompleted ? 'completed' : undefined,
         currentStage: nextProgress.isPathCompleted ? 'learning' : undefined,
         updatedAt: new Date()
       }
     });
+
+    let completedLearningState = baseCompletedLearningState;
+    let nextTaskStarted = false;
+    if (!nextProgress.isPathCompleted) {
+      try {
+        const transition = await this.transitionToNextLearningTask(
+          sessionId,
+          session,
+          baseCompletedLearningState,
+          baseCompletedLearningState.taskRuntime,
+          nextProgress,
+          milestones,
+          logs
+        );
+        completedLearningState = transition.learningState;
+        nextTaskStarted = transition.nextTaskStarted;
+        await this.updateStageResults(sessionId, 'learning', completedLearningState);
+        await this.assertCurrentSessionLeaseOwned(sessionId);
+        await prisma.virtual_sessions.update({
+          where: { id: sessionId },
+          data: {
+            currentTaskId: completedLearningState.currentTaskId,
+            completedTasks: currentProgress.completedTasks,
+            totalTasks: currentProgress.totalTasks,
+            status: 'running',
+            currentStage: 'learning',
+            updatedAt: new Date()
+          }
+        });
+      } catch (error: any) {
+        const errorMessage = this.boundTaskCompletionError(error);
+        completedLearningState = {
+          ...baseCompletedLearningState,
+          taskRuntime: {
+            ...baseCompletedLearningState.taskRuntime,
+            status: 'next_task_start_failed',
+            error: errorMessage,
+            updatedAt: new Date().toISOString()
+          }
+        };
+        await this.updateStageResults(sessionId, 'learning', completedLearningState);
+        await this.persistLearningFailure(sessionId, error, logs);
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'error',
+          details: {
+            error: errorMessage,
+            output: {
+              action: 'start-next-learning-task-failed',
+              completedTaskId: taskMatch.task.id,
+              nextTaskId: nextProgress.progress.currentTaskId
+            }
+          }
+        });
+        return {
+          success: false,
+          milestoneProgress: {
+            currentMilestone: nextProgress.progress.currentMilestone + 1,
+            totalMilestones: milestones.length,
+            currentTask: nextProgress.progress.currentTaskTitle
+          },
+          isPathCompleted: false,
+          taskCompleted: true,
+          currentTaskStopped: true,
+          logs,
+          error: errorMessage
+        };
+      }
+    }
 
     return {
       success: true,
@@ -1105,7 +1331,7 @@ class SimulationOrchestrator {
       },
       isPathCompleted: nextProgress.isPathCompleted,
       taskCompleted: true,
-      currentTaskStopped: true,
+      currentTaskStopped: !nextTaskStarted,
       logs
     };
   }
@@ -1729,15 +1955,11 @@ class SimulationOrchestrator {
 
       // Path 不读 story、不特判虚拟人：只消费 Goal 对话产物。
       // rawGoal 优先 conversation.description（= 故事需求经开场传入的正式链路）。
-      const stageResults = this.parseStageResultsPayload(session.stageResults);
-      const storyForDemand = stageResults.story || stageResults.storyContext || null;
       const pathRawGoal = resolvePathRawGoalFromSession({
         goalConversationDescription: conversation.description,
-        story: storyForDemand,
-        profileLearningGoal: session.virtual_learner_profiles?.learningGoal,
       });
       if (!pathRawGoal.rawGoal) {
-        throw new Error('无法推进 Path：Goal 对话缺少 description，且故事未提供当次学习需求');
+        throw new Error('无法推进 Path：Goal 对话缺少正式诉求，请先恢复 Goal 对话');
       }
 
       const pathRequest: GoalPathRequest = {
@@ -2084,10 +2306,14 @@ class SimulationOrchestrator {
       });
       
       await this.assertCurrentSessionLeaseOwned(sessionId);
-      const teachingSession = await aiTeachingOrchestrator.startSession({
-        userId: session.userId,
-        taskId: firstTask.id
-      });
+      const teachingSession = await this.retryLearnUpstream(
+        sessionId,
+        'start-learning-task',
+        () => aiTeachingOrchestrator.startSession({
+          userId: session.userId,
+          taskId: firstTask.id
+        })
+      );
       
       await this.updateSessionStatus(
         sessionId,
@@ -2122,6 +2348,7 @@ class SimulationOrchestrator {
         where: { id: sessionId },
         data: {
           currentTaskId: firstTask.id,
+          ...this.countTaskProgress(learningPath.milestones),
           updatedAt: new Date()
         }
       });
@@ -2264,6 +2491,38 @@ class SimulationOrchestrator {
       }
 
       if (taskRuntime.status === 'completed') {
+        // 已完成任务与当前指针不同，说明在“完成 → 下一课开课”之间中断；恢复下一课。
+        if (
+          learningState.currentTaskId
+          && taskRuntime.taskId
+          && learningState.currentTaskId !== taskRuntime.taskId
+        ) {
+          const recoveredStart = await this.startLearningPhase(sessionId, {
+            taskId: learningState.currentTaskId
+          });
+          if (!recoveredStart.success) {
+            return {
+              success: false,
+              currentTaskStopped: true,
+              logs,
+              error: recoveredStart.error || '恢复下一学习任务失败'
+            };
+          }
+          return {
+            success: true,
+            isPathCompleted: false,
+            taskCompleted: false,
+            currentTaskStopped: false,
+            milestoneProgress: {
+              currentMilestone: typeof learningState.currentMilestone === 'number'
+                ? learningState.currentMilestone + 1
+                : null,
+              totalMilestones: milestones.length,
+              currentTask: learningState.currentTaskTitle || null
+            },
+            logs
+          };
+        }
         const completedProgress = taskRuntime.taskId
           ? this.buildProgressAfterTaskCompletion(milestones, taskRuntime.taskId)
           : null;
@@ -2344,7 +2603,7 @@ class SimulationOrchestrator {
       };
       
       const virtualReplyStart = Date.now();
-      const virtualReplyOutput = await executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
+      const virtualReplyOutput = await this.retryLearnUpstream(sessionId, 'simulate-learning-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
         learner: {
           profile: profile.profile || {},
           learningGoal: profile.learningGoal,
@@ -2368,7 +2627,7 @@ class SimulationOrchestrator {
         },
         knowledgeSnapshot: [],
         frictionBudget: this.getSessionFrictionBudget(session),
-      });
+      }));
 
       const resolvedLearnState = this.resolveSimLearnerState(virtualReplyOutput);
       const virtualReplyResult = {
@@ -2422,10 +2681,12 @@ class SimulationOrchestrator {
         try {
           const aiResponseStart = Date.now();
           await this.assertCurrentSessionLeaseOwned(sessionId);
-          const aiResult = await aiTeachingOrchestrator.processStudentMessage(
-            teachingSessionId,
-            virtualReplyResult.userVisible,
-            { expectedRevision: teachingRevision }
+          const aiResult = await this.retryLearnUpstream(sessionId, 'process-teaching-turn', () =>
+            aiTeachingOrchestrator.processStudentMessage(
+              teachingSessionId,
+              virtualReplyResult.userVisible,
+              { expectedRevision: teachingRevision }
+            )
           );
           teachingRevision = aiResult.revision;
           
@@ -2673,9 +2934,26 @@ class SimulationOrchestrator {
         where: { id: sessionId },
         data: {
           currentTaskId: isPathCompleted ? null : currentTask.id,
+          status: learningStepError ? 'failed' : undefined,
+          currentStage: learningStepError ? 'learning' : undefined,
           updatedAt: new Date()
         }
       });
+
+      if (learningStepError) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'stage-transition',
+          details: {
+            output: {
+              from: 'learning',
+              to: 'failed',
+              message: 'Learn 上游调用重试耗尽，保留当前 task 供重启 Learn 恢复',
+              currentTaskId: currentTask.id
+            }
+          }
+        });
+      }
       
       if (isPathCompleted) {
         await this.updateSessionStatus(sessionId, 'completed', 'learning');
@@ -2754,6 +3032,8 @@ class SimulationOrchestrator {
           error: error.message
         }
       });
+
+      await this.persistLearningFailure(sessionId, error, logs);
       
       return {
         success: false,
@@ -2827,7 +3107,11 @@ class SimulationOrchestrator {
           };
         }
 
-        if (stepResult.taskCompleted || (stepResult as any).currentTaskStopped) {
+        if (!stepResult.success) {
+          throw new Error(stepResult.error || '学习步骤失败');
+        }
+
+        if ((stepResult as any).currentTaskStopped) {
           logger.info('[simulation-coordinator] 当前学习任务已收束或需处理，停止自动学习', {
             sessionId,
             totalSteps: steps
@@ -2838,10 +3122,6 @@ class SimulationOrchestrator {
             totalSteps: steps,
             completedMilestones: 0
           };
-        }
-        
-        if (!stepResult.success) {
-          throw new Error(stepResult.error || '学习步骤失败');
         }
         
         if (i % 5 === 0) {
@@ -2943,6 +3223,11 @@ class SimulationOrchestrator {
       const learningState = stageResults.learning || {}
       const teachingSessionId = learningState.teachingSessionId
 
+      if (session.learningPathId) {
+        // 已进入 Learn/有任务进度的正式 Path 不能删除重建，保留故事→Goal→Path→Learn 证据链。
+        await assertPathMutationSafe(prisma, session.learningPathId, 'delete-path')
+      }
+
       if (teachingSessionId) {
         const teachingRevision = await this.resolveTeachingRevision(
           teachingSessionId,
@@ -2960,7 +3245,7 @@ class SimulationOrchestrator {
       if (session.learningPathId) {
         await prisma.learning_paths.delete({
           where: { id: session.learningPathId }
-        }).catch(() => {})
+        })
       }
 
       await this.resetSessionRuntime(sessionId, {
@@ -2970,7 +3255,8 @@ class SimulationOrchestrator {
         nextStatus: 'running',
         removeStageResults: ['path', 'path_review', 'learning'],
         logPhasesToRemove: ['learning-start', 'learning-step', 'stage-transition'],
-        resetTaskProgress: true,
+        // 重启课堂不重置 Path 上已完成 task 的真实进度。
+        resetTaskProgress: false,
         clearCompletedAt: true
       })
 
@@ -3007,6 +3293,16 @@ class SimulationOrchestrator {
       const learningState = stageResults.learning || {}
       const teachingSessionId = learningState.teachingSessionId
       const preferredTaskId = options.taskId || learningState.currentTaskId || undefined
+      const teachingSessionHistory = [
+        ...(Array.isArray(learningState.teachingSessionHistory) ? learningState.teachingSessionHistory : []),
+        ...(teachingSessionId ? [{
+          teachingSessionId,
+          taskId: learningState.currentTaskId || null,
+          taskTitle: learningState.currentTaskTitle || null,
+          status: 'restarted',
+          restartedAt: new Date().toISOString()
+        }] : [])
+      ]
 
       if (teachingSessionId) {
         const teachingRevision = await this.resolveTeachingRevision(
@@ -3035,6 +3331,12 @@ class SimulationOrchestrator {
 
       const restartResult = await this.startLearningPhase(sessionId, preferredTaskId ? { taskId: preferredTaskId } : {})
       if (restartResult.success) {
+        const restartedSession = await this.getVirtualSession(sessionId)
+        const restartedStageResults = this.parseStageResultsPayload(restartedSession.stageResults)
+        await this.updateStageResults(sessionId, 'learning', {
+          ...(restartedStageResults.learning || {}),
+          teachingSessionHistory
+        })
         return restartResult
       }
 

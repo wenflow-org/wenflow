@@ -1,4 +1,4 @@
-﻿import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+﻿import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
@@ -548,7 +548,6 @@ export class SessionWrapupAgent {
     let result: SessionWrapupResult | null = null;
 
     try {
-      const gateway = getAPIGateway();
       const caller: CallerInfo = { agentId: 'teaching-agent', skillId: 'session-wrapup' };
       const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
 
@@ -568,7 +567,7 @@ export class SessionWrapupAgent {
       let evaluationSource: 'model' | 'ai-fallback' | 'failed' = evaluation ? 'model' : 'failed';
 
       if (!evaluation) {
-        evaluation = await this.generateEvaluationFallback(input, gateway, caller);
+        evaluation = await this.generateEvaluationFallback(input, caller);
         evaluationSource = evaluation ? 'ai-fallback' : 'failed';
       }
 
@@ -628,26 +627,20 @@ export class SessionWrapupAgent {
 
   private async generateEvaluationFallback(
     input: SessionWrapupInput,
-    gateway: ReturnType<typeof getAPIGateway>,
     caller: CallerInfo
   ): Promise<SessionWrapupEvaluation | null> {
     try {
-      const response = await gateway.execute({
-        messages: [
-          {
-            role: 'system',
-            content: '你是一位课程评估员。请只输出单节课 evaluation JSON，对字段格式严格负责，不要输出 summary，不要输出额外说明。'
-          },
-          {
-            role: 'user',
-            content: buildWrapupUserPrompt(input, 'evaluation-fallback')
-          }
-        ]
-      }, caller);
-
-      const content = response.choices[0]?.message.content || '{}';
-      const parsed = parseContent(content);
-      return extractEvaluation(parsed?.evaluation || parsed);
+      // 懒加载避免 skills/index -> session-wrapup -> skills/index 循环依赖
+      const { executeSkill, auxSkillDefinitionMap } = await import('..');
+      const output = await executeSkill(auxSkillDefinitionMap['session-evaluation-fallback'], {
+        ...input,
+        __fallback: null,
+        __prompt: {
+          requestPath: '/skills/session-wrapup/evaluation-fallback',
+          callerAgentId: caller.agentId,
+        },
+      });
+      return output ? (extractEvaluation(output) as SessionWrapupEvaluation) : null;
     } catch (error) {
       logger.warn('[SessionWrapupAgent] AI fallback evaluation 失败', {
         error: error instanceof Error ? error.message : String(error)

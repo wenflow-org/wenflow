@@ -44,23 +44,23 @@
           <span class="mk-card__meta">{{ isBlackbox ? '黑盒 API' : '辅助模拟' }}</span>
         </div>
         <div class="cp-controls">
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal" @click="act('step')">
+          <button type="button" class="cp-btn" :disabled="stepDisabled" :title="stepTitle" @click="act('step')">
             {{ currentStage === 'learning' && !isBlackbox ? 'Learn 单步' : '单步推进' }}
           </button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('auto')">
+          <button type="button" class="cp-btn" :disabled="autoDisabled" :title="autoTitle" @click="act('auto')">
             {{ currentStage === 'learning' ? '自动完成本课' : '自动到阶段末' }}
           </button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="busy || isTerminal || isBlackbox" @click="act('runFull')">一键全流程</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('advancePath')">生成 Path</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('reviewPath')">评审 Path</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('startLearning')">启动 Learn</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('wrapup')">生成总结</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('stop')">停止 Learn</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('resetPath')">重建 Path</button>
-          <button type="button" class="cp-btn" :disabled="busy || isTerminal || isBlackbox" @click="act('resetLearn')">重启 Learn</button>
-          <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" @click="act('abandon')">放弃实验</button>
-          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" @click="act('referee')">生成裁判评估</button>
-          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" @click="act('rerun')">按原输入重跑</button>
+          <button type="button" class="cp-btn cp-btn--primary" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
+          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+          <button type="button" class="cp-btn" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审 Path</button>
+          <button type="button" class="cp-btn" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+          <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成总结</button>
+          <button type="button" class="cp-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">停止 Learn</button>
+          <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
+          <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重启 Learn</button>
+          <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">放弃实验</button>
+          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">生成裁判评估</button>
+          <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">按原输入重跑</button>
         </div>
         <div v-if="!isBlackbox" class="cp-config">
           <label>
@@ -90,6 +90,10 @@
             <p>{{ learnInfo }}</p>
           </div>
           <p v-if="!goalInfo && !pathInfo && !learnInfo" class="cp-none">会话刚启动，推进后这里显示各阶段摘要。</p>
+          <div v-if="showPathReadiness" class="cp-path-readiness" :class="`cp-path-readiness--${pathReadinessTone}`">
+            <span>Path 就绪状态</span>
+            <p>{{ pathReadinessText }}</p>
+          </div>
         </div>
       </section>
 
@@ -108,6 +112,66 @@
         </div>
       </section>
     </div>
+
+    <section v-if="!isBlackbox && (goalConversationMessages.length || learnConversationMessages.length || teachingSessionHistory.length)" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">对话与课堂记录</h3>
+        <span class="mk-card__meta">中断恢复与人工审计证据</span>
+      </div>
+      <div class="cp-transcripts">
+        <details v-if="goalConversationMessages.length" class="cp-transcript" open>
+          <summary>Goal 对话 · {{ goalConversationMessages.length }} 条</summary>
+          <article
+            v-for="(message, index) in goalConversationMessages"
+            :key="`goal-${index}`"
+            class="cp-transcript__message"
+            :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
+          >
+            <span>{{ message.role === 'assistant' ? '平台 Goal' : '虚拟学习者' }}</span>
+            <p>{{ message.content }}</p>
+          </article>
+        </details>
+
+        <details v-if="learnConversationMessages.length || teachingSessionHistory.length" class="cp-transcript" open>
+          <summary>
+            Learn 课堂
+            <template v-if="displayedTeachingSessionId"> · {{ displayedTeachingSessionId.slice(-8) }}</template>
+            <template v-if="learnConversationMessages.length"> · {{ learnConversationMessages.length }} 条</template>
+          </summary>
+          <div v-if="teachingSessionHistory.length" class="cp-teaching-history">
+            <button
+              type="button"
+              class="cp-history-btn"
+              :class="{ 'is-current': !selectedTeachingSessionId }"
+              @click="showCurrentTeaching"
+            >
+              当前课堂
+            </button>
+            <button
+              v-for="item in teachingSessionHistory"
+              :key="item.id"
+              type="button"
+              class="cp-history-btn"
+              :class="{ 'is-current': selectedTeachingSessionId === item.id }"
+              @click="showArchivedTeaching(item.id)"
+            >
+              {{ item.taskTitle || `课堂 ${item.id.slice(-8)}` }}
+            </button>
+          </div>
+          <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
+          <article
+            v-for="(message, index) in learnConversationMessages"
+            :key="`learn-${index}`"
+            class="cp-transcript__message"
+            :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
+          >
+            <span>{{ message.role === 'assistant' ? '教师' : '虚拟学习者' }}</span>
+            <p>{{ message.content }}</p>
+          </article>
+          <p v-if="!teachingDetailLoading && !learnConversationMessages.length" class="cp-none">该课堂暂未记录可展示消息。</p>
+        </details>
+      </div>
+    </section>
 
     <!-- 裁判报告（黑盒终态） -->
     <section v-if="refereeReports.length || actorAuditReports.length" class="mk-card">
@@ -304,6 +368,10 @@ const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.va
 
 const session = ref<Record<string, unknown> | null>(null)
 const logs = ref<{ time: string; text: string }[]>([])
+const pathStatus = ref<Record<string, unknown> | null>(null)
+const teachingDetail = ref<Record<string, unknown> | null>(null)
+const teachingDetailLoading = ref(false)
+const selectedTeachingSessionId = ref('')
 
 interface EvaluationReport {
   id?: string
@@ -379,6 +447,42 @@ const stageResults = computed(() => (session.value?.stageResults || {}) as Recor
 const runtime = computed(() => (session.value?.runtime || {}) as Record<string, unknown>)
 const stageStatus = computed(() => (runtime.value.stageStatus || {}) as Record<string, Record<string, unknown>>)
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function normalized(value: unknown): string {
+  return String(value || '').trim().toLowerCase()
+}
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function boolValue(value: unknown): boolean | undefined {
+  if (value === true || value === 'true') return true
+  if (value === false || value === 'false') return false
+  return undefined
+}
+
+function numberValue(value: unknown): number | null {
+  const number = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function conversationMessages(value: unknown) {
+  if (!Array.isArray(value)) return [] as Array<{ role: string; content: string }>
+  return value.map(asRecord).map((message) => ({
+    role: normalized(message.role) === 'assistant' || normalized(message.role) === 'teacher' ? 'assistant' : 'user',
+    content: firstText(message.content, message.text, message.message)
+  })).filter((message) => message.content)
+}
+
 const isBlackbox = computed(() => !!(stageResults.value.blackbox || stageResults.value.experiment))
 const blackboxTraceCount = computed(() => {
   const bb = (stageResults.value.blackbox || {}) as Record<string, unknown>
@@ -387,14 +491,28 @@ const blackboxTraceCount = computed(() => {
 })
 const modeText = computed(() => (isBlackbox.value ? '黑盒模式' : '辅助模式'))
 const isTerminal = computed(() => {
-  const st = String(session.value?.status || runtime.value.status || '')
-  return ['completed', 'failed', 'abandoned', 'error', 'done', 'wrapup'].includes(st)
+  const st = normalized(session.value?.status || runtime.value.status)
+  return ['completed', 'failed', 'abandoned', 'error', 'done', 'wrapup', 'timeout'].includes(st)
 })
+const terminalStatus = computed(() => normalized(session.value?.status || runtime.value.status))
+const isFailedTerminal = computed(() => ['failed', 'abandoned', 'error', 'timeout'].includes(terminalStatus.value))
 const statusTone = computed(() =>
-  !session.value ? 'mk-status--muted' : isTerminal.value ? 'mk-status--ok' : 'mk-status--warn'
+  !session.value
+    ? 'mk-status--muted'
+    : isFailedTerminal.value
+      ? 'mk-status--bad'
+      : isTerminal.value
+        ? 'mk-status--ok'
+        : 'mk-status--warn'
 )
 const statusTitle = computed(() =>
-  !session.value ? '加载中…' : isTerminal.value ? '会话已终态' : '会话进行中'
+  !session.value
+    ? '加载中…'
+    : isFailedTerminal.value
+      ? '会话失败'
+      : isTerminal.value
+        ? '会话已完成'
+        : '会话进行中'
 )
 
 /* 阶段流：与后端 currentStage 对齐（learning，不是 learn） */
@@ -430,12 +548,276 @@ const bindings = computed(() => {
   }
 })
 
+const goalResult = computed(() => asRecord(stageResults.value.goal))
+const pathResult = computed(() => asRecord(stageResults.value.path))
+const pathReview = computed(() => asRecord(stageResults.value.path_review || stageResults.value.pathReview))
+const learningResult = computed(() => asRecord(stageResults.value.learning))
+const conversations = computed(() => asRecord(session.value?.conversations))
+const goalConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.goal).messages))
+const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
+const teachingSessionHistory = computed(() => {
+  const history = learningResult.value.teachingSessionHistory
+  if (!Array.isArray(history)) return [] as Array<{ id: string; taskTitle: string }>
+  const seen = new Set<string>()
+  return history.map(asRecord).map((item) => ({
+    id: firstText(item.teachingSessionId),
+    taskTitle: firstText(item.taskTitle)
+  })).filter((item) => item.id && !seen.has(item.id) && !!seen.add(item.id))
+})
+const teachingDetailMessages = computed(() => conversationMessages(teachingDetail.value?.messages))
+const learnConversationMessages = computed(() =>
+  teachingDetailMessages.value.length ? teachingDetailMessages.value : fallbackLearnConversationMessages.value
+)
+const displayedTeachingSessionId = computed(() => firstText(
+  teachingDetail.value?.id,
+  selectedTeachingSessionId.value,
+  bindings.value.teachingSessionId
+))
+const pathStatusPath = computed(() => asRecord(pathStatus.value?.path))
+const pathGenerationStatus = computed(() => {
+  const value = pathStatusPath.value.generationStatus ?? pathStatus.value?.generationStatus
+  return asRecord(value)
+})
+const pathId = computed(() => firstText(
+  bindings.value.learningPathId,
+  pathStatus.value?.learningPathId,
+  pathStatusPath.value.id,
+  stageStatus.value.path?.learningPathId
+))
+const pathStateValues = computed(() => [
+  normalized(pathStatus.value?.status),
+  normalized(pathStatusPath.value.status),
+  normalized(pathStatusPath.value.generationStatus),
+  normalized(pathStatus.value?.generationStatus),
+  normalized(pathGenerationStatus.value.status),
+  normalized(pathGenerationStatus.value.core),
+  normalized(pathGenerationStatus.value.stageDesign),
+  normalized(pathGenerationStatus.value.phase)
+].filter(Boolean))
+const pathGenerationInProgress = computed(() =>
+  pathStateValues.value.some((state) => ['generating', 'pending', 'queued', 'processing', 'in_progress', 'running'].includes(state))
+)
+const pathGenerationFailed = computed(() =>
+  pathStateValues.value.some((state) => ['failed', 'error', 'cancelled'].includes(state))
+)
+const hasPath = computed(() =>
+  !!(pathId.value || stageStatus.value.path?.generated || pathResult.value.generated)
+)
+const pathGeneratedOrReady = computed(() =>
+  hasPath.value
+  && !pathGenerationInProgress.value
+  && !pathGenerationFailed.value
+  && !['not_started', 'not_found'].includes(normalized(pathStatus.value?.status))
+)
+const pathStartable = computed(() => {
+  const value = boolValue(pathStatusPath.value.canStartLearning)
+    ?? boolValue(pathStatus.value?.canStartLearning)
+  return value === true
+})
+const learningBlockedReason = computed(() => firstText(
+  pathStatusPath.value.learningBlockedReason,
+  pathStatus.value?.learningBlockedReason
+))
+const pathMilestones = computed(() => {
+  const milestones = pathStatusPath.value.milestones
+    || pathStatusPath.value.stages
+    || pathStatus.value?.milestones
+    || pathStatus.value?.stages
+  return Array.isArray(milestones) ? milestones.map(asRecord) : []
+})
+
 const currentStage = computed(() => {
   const raw = String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
   // 兼容旧 UI / 日志里的 learn 别名
   if (raw === 'learn' || raw === 'teach') return 'learning'
   if (raw === 'summary') return 'wrapup'
   return raw
+})
+
+const goalConverged = computed(() => {
+  const goalStage = normalized(goalResult.value.finalStage || goalResult.value.stage || stageStatus.value.goal?.stage)
+  return stageStatus.value.goal?.ready === true
+    || ['ready', 'completed'].includes(goalStage)
+    || effectiveStageIndex.value >= 1
+    || hasPath.value
+})
+
+const pathReviewAccepted = computed(() => {
+  const reviewStatus = normalized(pathReview.value.status)
+  const runtimeReview = asRecord(stageStatus.value.path?.review)
+  const decision = normalized(pathReview.value.decision || runtimeReview.decision)
+  const reviewedPathId = firstText(pathReview.value.reviewedPathId)
+  return reviewStatus === 'accepted'
+    && decision === 'accept'
+    && !!pathId.value
+    && reviewedPathId === pathId.value
+})
+
+const learningConversation = computed(() => {
+  const history = learningResult.value.conversationHistory
+  return Array.isArray(history) ? history : []
+})
+const learningTaskRuntime = computed(() => asRecord(learningResult.value.taskRuntime))
+const completedTaskCount = computed(() => numberValue(session.value?.completedTasks) || 0)
+const hasCompletedTask = computed(() =>
+  completedTaskCount.value > 0 || normalized(learningTaskRuntime.value.status) === 'completed'
+)
+const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
+  const tasks = milestone.subtasks || milestone.tasks
+  return Array.isArray(tasks) && tasks.some((task) => normalized(asRecord(task).status) !== 'completed')
+}) || (!!bindings.value.currentTaskId && !hasCompletedTask.value))
+const hasLearningProgress = computed(() =>
+  !!bindings.value.teachingSessionId
+  || !!bindings.value.currentTaskId
+  || learningConversation.value.length > 0
+  || Object.keys(learningTaskRuntime.value).length > 0
+  || learningResult.value.currentMilestone !== undefined
+  || learningResult.value.currentTaskId !== undefined
+  || hasCompletedTask.value
+)
+const hasLearnHistoryOrProgress = computed(() => hasLearningProgress.value)
+const learningActive = computed(() =>
+  !isTerminal.value
+  && currentStage.value === 'learning'
+  && stageStatus.value.learning?.manualStop !== true
+  && learningResult.value.manualStop !== true
+)
+const terminalPathCompleted = computed(() => {
+  const completedMilestones = numberValue(pathStatusPath.value.completedMilestones)
+  const totalMilestones = numberValue(pathStatusPath.value.totalMilestones)
+  const allMilestonesCompleted = completedMilestones !== null
+    && totalMilestones !== null
+    && totalMilestones > 0
+    && completedMilestones >= totalMilestones
+  return !isFailedTerminal.value
+    && isTerminal.value
+    && (allMilestonesCompleted || currentStage.value === 'learning' || hasLearnHistoryOrProgress.value)
+})
+const wrapupAvailable = computed(() =>
+  !hasWrapup.value && (hasLearningProgress.value || terminalPathCompleted.value)
+)
+
+const assistedControlBlockReason = computed(() => {
+  if (!session.value) return '会话仍在加载'
+  if (busy.value) return '操作执行中'
+  if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
+  if (isFailedTerminal.value) return '会话已失败或终止，请保留现场记录'
+  if (isTerminal.value) return '会话已完成'
+  return ''
+})
+const stepDisabled = computed(() => !session.value || busy.value || isTerminal.value)
+const stepTitle = computed(() => {
+  if (!session.value) return '会话仍在加载'
+  if (busy.value) return '操作执行中'
+  if (isTerminal.value) return '会话已终态，不能继续推进'
+  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进当前阶段一步'
+})
+const autoDisabled = computed(() => !session.value || busy.value || isTerminal.value || isBlackbox.value)
+const autoTitle = computed(() => {
+  if (!session.value) return '会话仍在加载'
+  if (busy.value) return '操作执行中'
+  if (isBlackbox.value) return '黑盒模式仅支持单步推进'
+  if (isTerminal.value) return '会话已终态，不能继续推进'
+  return '自动推进当前阶段'
+})
+const runFullDisabled = computed(() => !!assistedControlBlockReason.value)
+const runFullTitle = computed(() => assistedControlBlockReason.value || '自动执行 Goal、Path 和 Learn 流程')
+const advancePathDisabled = computed(() =>
+  !!assistedControlBlockReason.value || !goalConverged.value || hasPath.value
+)
+const advancePathTitle = computed(() => {
+  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
+  if (!goalConverged.value) return 'Goal 对话尚未收敛，不能生成 Path'
+  if (hasPath.value) return '已有 Path，不能重复生成'
+  return '根据已收敛的 Goal 生成 Path'
+})
+const reviewPathDisabled = computed(() =>
+  !!assistedControlBlockReason.value || !pathGeneratedOrReady.value || pathReviewAccepted.value
+)
+const reviewPathTitle = computed(() => {
+  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
+  if (pathReviewAccepted.value) return '当前 Path 已通过评审'
+  if (pathGenerationFailed.value) return 'Path 生成失败，请重新生成 Path'
+  if (pathGenerationInProgress.value) return 'Path 正在生成或补全阶段任务'
+  if (!pathGeneratedOrReady.value) return '请先生成并等待 Path 就绪'
+  return '以虚拟学习者视角评审当前 Path'
+})
+const startLearningDisabled = computed(() =>
+  !!assistedControlBlockReason.value || !pathReviewAccepted.value || !pathStartable.value || learningActive.value
+)
+const startLearningTitle = computed(() => {
+  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
+  if (learningActive.value) return 'Learn 已在进行中'
+  if (!pathReviewAccepted.value) return 'Path 尚未通过虚拟学习者评审'
+  if (!pathStartable.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
+  return '启动已评审且可学习的 Path'
+})
+const wrapupDisabled = computed(() => {
+  if (!session.value || busy.value || isBlackbox.value || isFailedTerminal.value) return true
+  return !wrapupAvailable.value
+})
+const wrapupTitle = computed(() => {
+  if (!session.value) return '会话仍在加载'
+  if (busy.value) return '操作执行中'
+  if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
+  if (isFailedTerminal.value) return '会话已失败或终止，不能生成学习总结'
+  if (hasWrapup.value) return '学习总结已生成'
+  if (!wrapupAvailable.value) return '请先启动 Learn 并产生消息或学习进度'
+  return '根据当前 Learn 记录生成总结'
+})
+const stopLearningDisabled = computed(() => !!assistedControlBlockReason.value || !learningActive.value)
+const stopLearningTitle = computed(() => {
+  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
+  if (!learningActive.value) return '仅可停止正在进行的 Learn'
+  return '停止当前 Learn'
+})
+const resetPathDisabled = computed(() =>
+  !!assistedControlBlockReason.value || !hasPath.value || hasLearnHistoryOrProgress.value
+)
+const resetPathTitle = computed(() => {
+  if (hasLearnHistoryOrProgress.value) return '已有 Learn 历史或进度，为保留历史不能重建 Path'
+  if (assistedControlBlockReason.value) return assistedControlBlockReason.value
+  if (!hasPath.value) return '尚无 Path 可重建'
+  return '删除当前 Path 并重新生成'
+})
+const resetLearningBlockReason = computed(() => {
+  if (!session.value) return '会话仍在加载'
+  if (busy.value) return '操作执行中'
+  if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
+  if (isTerminal.value && !isFailedTerminal.value) return '会话已完成，不能重启 Learn'
+  return ''
+})
+const canRestartFromFailedLearn = computed(() => isFailedTerminal.value && hasRunnablePathTask.value)
+const resetLearningDisabled = computed(() =>
+  !!resetLearningBlockReason.value
+  || !pathReviewAccepted.value
+  || !(pathStartable.value || canRestartFromFailedLearn.value)
+  || !hasRunnablePathTask.value
+)
+const resetLearningTitle = computed(() => {
+  if (resetLearningBlockReason.value) return resetLearningBlockReason.value
+  if (!pathReviewAccepted.value) return 'Path 尚未通过虚拟学习者评审'
+  if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
+  if (!hasRunnablePathTask.value) return 'Path 中没有可重启的学习任务'
+  return isFailedTerminal.value ? '从当前可运行任务恢复失败的 Learn' : '以可运行任务重新启动 Learn'
+})
+const showPathReadiness = computed(() =>
+  !isBlackbox.value && (goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
+)
+const pathReadinessTone = computed(() => {
+  if (pathGenerationFailed.value) return 'bad'
+  if (pathGenerationInProgress.value) return 'warn'
+  if (pathStartable.value) return 'ok'
+  return 'muted'
+})
+const pathReadinessText = computed(() => {
+  if (!hasPath.value) return goalConverged.value ? 'Goal 已收敛，等待生成 Path。' : '等待 Goal 对话收敛后生成 Path。'
+  if (pathGenerationFailed.value) return learningBlockedReason.value || 'Path 生成失败，请重新生成。'
+  if (pathGenerationInProgress.value) return learningBlockedReason.value || 'Path 正在生成或补全阶段任务，请稍候。'
+  if (pathStartable.value) return pathReviewAccepted.value
+    ? 'Path 已就绪，可启动或重启 Learn。'
+    : 'Path 已就绪，等待虚拟学习者评审。'
+  return learningBlockedReason.value || 'Path 已生成，正在确认 Learn 启动条件。'
 })
 
 /** 进度条索引：优先 currentStage，并用 bindings 兜底（避免 key 不一致时全「未开始」） */
@@ -451,6 +833,11 @@ const effectiveStageIndex = computed(() => {
   return 0
 })
 
+const hasWrapup = computed(() => {
+  const learning = (stageResults.value.learning || {}) as Record<string, unknown>
+  return !!(stageStatus.value.learning?.wrapup || learning.wrapup)
+})
+
 function stageLabel(st: string) {
   return {
     goal: 'Goal 对话',
@@ -463,7 +850,12 @@ function stageLabel(st: string) {
 function stageDone(st: StageKey) {
   const idx = stageFlow.indexOf(st)
   const cur = effectiveStageIndex.value
-  if (isTerminal.value && (st === 'wrapup' || idx <= cur)) return true
+
+  // Wrapup 不是会话终态的同义词：只有确实写出总结时才算完成。
+  if (st === 'wrapup') return hasWrapup.value
+  // 失败终态只确认失败点以前的阶段；当前失败阶段不能伪装成完成。
+  if (isFailedTerminal.value && idx === cur) return false
+  if (isTerminal.value && idx <= cur) return true
   if (idx < cur) return true
   // 同阶段但已有下游证据时，也标完成（如 learning 时 Goal/Path 已完成）
   if (st === 'goal' && (bindings.value.learningPathId || bindings.value.teachingSessionId || cur >= 1)) return true
@@ -473,7 +865,11 @@ function stageDone(st: StageKey) {
 }
 
 function stageActive(st: StageKey) {
-  if (isTerminal.value) return st === 'wrapup' || stageFlow.indexOf(st) === effectiveStageIndex.value
+  if (isTerminal.value) {
+    return st === 'wrapup'
+      ? hasWrapup.value
+      : stageFlow.indexOf(st) === effectiveStageIndex.value
+  }
   if (stageDone(st) && stageFlow.indexOf(st) !== effectiveStageIndex.value) return false
   return stageFlow.indexOf(st) === effectiveStageIndex.value
 }
@@ -488,6 +884,7 @@ function stageCls(st: string) {
 
 function stageState(st: string) {
   const key = st as StageKey
+  if (isFailedTerminal.value && stageFlow.indexOf(key) === effectiveStageIndex.value) return '失败'
   if (stageDone(key) && !stageActive(key)) return '已完成'
   if (stageActive(key)) return isTerminal.value ? '已完成' : '进行中'
   if (stageDone(key)) return '已完成'
@@ -528,8 +925,12 @@ async function refresh() {
     if (['none', 'low', 'normal', 'high', 'stress_test'].includes(fb)) {
       frictionBudget.value = fb as typeof frictionBudget.value
     }
-    await loadLogs()
     parseBlackbox()
+    await Promise.all([
+      loadLogs(),
+      isBlackbox.value ? Promise.resolve() : loadPathStatus(),
+      isBlackbox.value ? Promise.resolve() : loadTeachingDetail()
+    ])
   } catch (e) {
     showToast(`加载失败：${errMsg(e)}`, 'mk-toast--bad')
   }
@@ -551,6 +952,54 @@ async function loadLogs() {
   } catch {
     logs.value = []
   }
+}
+
+async function loadPathStatus() {
+  if (!sessionId.value || isBlackbox.value) {
+    pathStatus.value = null
+    return
+  }
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualSessionPathStatus(sessionId.value)
+    pathStatus.value = asRecord(res.data?.data ?? res.data)
+  } catch {
+    // Path 状态仅用于控制台就绪提示；主会话数据仍可正常操作和刷新。
+    pathStatus.value = null
+  }
+}
+
+async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.value) {
+  if (!sessionId.value || isBlackbox.value) {
+    teachingDetail.value = null
+    return
+  }
+
+  const currentTeachingSessionId = firstText(bindings.value.teachingSessionId)
+  if (!teachingSessionId && !currentTeachingSessionId) {
+    teachingDetail.value = null
+    return
+  }
+
+  teachingDetailLoading.value = true
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(sessionId.value, teachingSessionId || undefined)
+    teachingDetail.value = asRecord(res.data?.data ?? res.data)
+  } catch {
+    // 当前课堂尚未创建或历史课堂被清理时，仍可展示会话日志投影。
+    teachingDetail.value = null
+  } finally {
+    teachingDetailLoading.value = false
+  }
+}
+
+function showCurrentTeaching() {
+  selectedTeachingSessionId.value = ''
+  void loadTeachingDetail()
+}
+
+function showArchivedTeaching(teachingSessionId: string) {
+  selectedTeachingSessionId.value = teachingSessionId
+  void loadTeachingDetail(teachingSessionId)
 }
 
 function parseBlackbox() {
@@ -703,7 +1152,9 @@ async function act(kind: string) {
     showToast('指令已执行')
     await refresh()
   } catch (e) {
-    showToast(`执行失败：${errMsg(e)}`, 'mk-toast--bad')
+    const message = `执行失败：${errMsg(e)}`
+    await refresh()
+    showToast(message, 'mk-toast--bad')
   } finally {
     busy.value = false
   }
@@ -719,7 +1170,7 @@ async function removeSession() {
   }
 }
 
-/* 日志轮询（非终态 5s） */
+/* 会话、日志与 Path 就绪状态共用同一轮询（非终态 5s） */
 let pollTimer: ReturnType<typeof setInterval> | null = null
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer)
@@ -728,6 +1179,14 @@ function startPolling() {
     void loadLogs()
     void adminVirtualLearnersApi.getVirtualSession(sessionId.value).then((res) => {
       session.value = res.data?.data ?? res.data ?? {}
+      parseBlackbox()
+      if (isBlackbox.value) {
+        pathStatus.value = null
+        teachingDetail.value = null
+      } else {
+        void loadPathStatus()
+        void loadTeachingDetail()
+      }
     }).catch(() => undefined)
   }, 5000)
 }
@@ -738,6 +1197,9 @@ watch(
     if (!id) return
     session.value = null
     logs.value = []
+    pathStatus.value = null
+    teachingDetail.value = null
+    selectedTeachingSessionId.value = ''
     refereeReports.value = []
     actorAuditReports.value = []
     refereeTrace.value = []
@@ -864,6 +1326,23 @@ const statusText = (s?: unknown) =>
 .cp-summary__item span { font-size: 11px; font-weight: 700; color: var(--mk-faint); }
 .cp-summary__item p { margin: 0; font-size: 12.5px; }
 .cp-none { margin: 0; font-size: 12.5px; color: var(--mk-faint); }
+.cp-path-readiness {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--mk-line);
+  border-radius: 5px;
+  background: #f8fafc;
+}
+.cp-path-readiness span { flex: 0 0 auto; font-size: 11px; font-weight: 800; color: var(--mk-muted); }
+.cp-path-readiness p { margin: 0; font-size: 11.5px; color: var(--mk-muted); line-height: 1.5; }
+.cp-path-readiness--ok { border-left-color: var(--mk-green); background: #f0fdf4; }
+.cp-path-readiness--ok p { color: #15803d; }
+.cp-path-readiness--warn { border-left-color: #d97706; background: #fffbeb; }
+.cp-path-readiness--warn p { color: #b45309; }
+.cp-path-readiness--bad { border-left-color: var(--mk-red); background: #fff1f0; }
+.cp-path-readiness--bad p { color: #cf1322; }
 
 .cp-logs {
   max-height: 320px;
@@ -875,6 +1354,40 @@ const statusText = (s?: unknown) =>
 .cp-log { display: flex; gap: 10px; font-size: 12px; }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: 10.5px; white-space: nowrap; padding-top: 1px; }
 .cp-log__text { color: var(--mk-muted); word-break: break-all; }
+
+.cp-transcripts { display: grid; gap: 10px; padding: 12px 16px 16px; }
+.cp-transcript {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+}
+.cp-transcript summary { cursor: pointer; font-size: 12px; font-weight: 800; color: var(--mk-muted); }
+.cp-transcript__message {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 5px;
+  background: #f8fafc;
+}
+.cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: #eff6ff; }
+.cp-transcript__message.is-learner { border-left-color: #0f766e; background: #f0fdfa; }
+.cp-transcript__message span { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); }
+.cp-transcript__message p { margin: 0; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.cp-teaching-history { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-history-btn {
+  border: 1px solid var(--mk-line);
+  border-radius: 6px;
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  padding: 4px 7px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cp-history-btn:hover, .cp-history-btn.is-current { border-color: var(--mk-blue); color: var(--mk-blue); background: #eff6ff; }
 
 .cp-raw { font-size: 12px; color: var(--mk-faint); }
 .cp-raw summary { cursor: pointer; padding: 4px 2px; }
@@ -891,7 +1404,7 @@ const statusText = (s?: unknown) =>
   word-break: break-all;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .cp-grid { grid-template-columns: 1fr; }
 }
 

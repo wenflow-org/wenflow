@@ -11,8 +11,6 @@ import yaml from 'js-yaml';
 import { randomUUID as uuidv4 } from 'crypto';
 import systemPrisma from '../config/system-database';
 import { getAPIGateway } from '../gateway/api-gateway';
-import { executeSkill } from '../skills';
-import { compilePrompt } from '../services/prompt-compiler';
 import { promptCache } from '../services/cache/prompt-cache.service';
 import { getAgentRoutings } from '../services/field-dispatcher';
 import {
@@ -33,20 +31,24 @@ import {
   buildV4CompileSpecText,
 } from '../services/prompt-lab/core-compiler';
 import { loadCoreFile, scanCoreFiles, computeCoreHash, parseCoreFile, CORE_FILES_DIR } from '../services/prompt-lab/core-file-loader';
+import { normalizeCoreFormInput, serializeCoreFile, extractHeaderComment } from '../services/prompt-lab/core-yaml-writer';
 import { getFieldLineage, classifyCoreEdit } from '../services/prompt-lab/field-lineage';
 import {
   judgeSemanticFreeze,
   decideSemanticGate,
   type SemanticFreezeJudgement,
 } from '../services/prompt-lab/semantic-freeze-judge';
+import { buildV4CorePromptMetadata } from '../services/prompt-lab/core-prompt-metadata';
+import { normalizeDeveloperApproval, resolveCoreSnapshot } from '../services/prompt-lab/core-version-snapshot';
 
 const router = Router();
 router.use(rejectPromptLabFileMutation);
 
 const PROMPT_LAB_DIR = path.join(process.cwd(), '../prompt-lab');
 const MANIFESTS_DIR = path.join(PROMPT_LAB_DIR, 'manifests');
-const BACKUPS_DIR = path.join(PROMPT_LAB_DIR, 'backups');
 const PROMPTS_DIR = path.join(process.cwd(), '../prompts');
+// 发布备份与 prompts 同级存放（prompts/backups/<skillId>/），不再跨目录到 prompt-lab
+const BACKUPS_DIR = path.join(PROMPTS_DIR, 'backups');
 
 type PromptLabManifest = {
   version: string;
@@ -351,64 +353,6 @@ async function resolveCompileRoutingKey(agentId: string, skillId: string) {
 }
 
 /**
- * POST /api/prompt-lab/compile-skill
- * 使用 Compiler Skill (LLM) 编译简化配置为完整 Prompt
- * 链路统一：委托 executeSkill -> prompt-compiler handler -> callPrompt
- */
-router.post('/compile-skill', async (req, res) => {
-  try {
-    const { config } = req.body;
-
-    if (!config) {
-      return res.status(400).json({ error: '缺少配置参数' });
-    }
-
-    // 1. 验证配置格式（保持 400 语义；handler 内会再次解析）
-    let parsedConfig;
-    try {
-      parsedConfig = yaml.load(config);
-    } catch (error) {
-      return res.status(400).json({ error: 'YAML 格式错误', details: (error as Error).message });
-    }
-
-    // 2. 统一 Skill 链路：ACTIVE prompt + external-spec + 契约解析 + 重试 + telemetry
-    const output = await executeSkill({ id: 'skill:prompt-compiler' }, { config });
-    let compiledPrompt = output?.prompt || '';
-
-    if (!compiledPrompt) {
-      return res.status(500).json({ error: 'LLM 返回空结果' });
-    }
-
-    // 清理 markdown 代码块包裹（handler 已剥离，此处幂等）
-    compiledPrompt = compiledPrompt.replace(/^```markdown\s*\n?/, '').replace(/\n?```\s*$/, '')
-
-    // 3. 统计信息
-    const lines = compiledPrompt.split('\n').length;
-    const rules = (compiledPrompt.match(/\*?\*?(RULE|OUT|CON|STATE)-\d{2}\*?\*?:/gm) || []).length;
-    const chars = compiledPrompt.length;
-
-    // 4. 返回结果
-    res.json({
-      success: true,
-      prompt: compiledPrompt,
-      stats: {
-        lines,
-        rules,
-        chars
-      },
-      config: parsedConfig
-    });
-
-  } catch (error) {
-    console.error('Compiler Skill error:', error);
-    res.status(500).json({ 
-      error: '编译失败', 
-      details: (error as Error).message 
-    });
-  }
-});
-
-/**
  * GET /api/prompt-lab/manifest/:skillId
  * 获取 Prompt Lab manifest
  */
@@ -605,8 +549,40 @@ router.post('/publish-core', async (req, res) => {
       return res.status(422).json({ error: '守门检查未通过，已阻断发布', gates, issues: structuralIssues });
     }
 
-    // 守门第三查（§4.2-3 含义冻结）：默认开启；semanticJudge:false 跳过（仅限调试）
-    const semantic = await runSemanticGate(skillId, compiled.prompt, req.body?.semanticJudge === false);
+    // 字段结构变更以 ACTIVE 版本的 coreSnapshot 为基准，而不是磁盘当前 core。
+    // 这样 staging 后的重复保存也不能把 blocked/restricted 变成安全修改。
+    const activeForClassification = await systemPrisma.agent_prompts.findFirst({
+      where: { agentId, status: 'ACTIVE' },
+      orderBy: { version: 'desc' },
+      select: { metadata: true },
+    });
+    let classification: ReturnType<typeof classifyCoreEdit> = {
+      level: 'safe',
+      messages: ['首次发布核心文件'],
+    };
+    if (activeForClassification) {
+      const activeSnapshot = resolveCoreSnapshot(activeForClassification.metadata, skillId);
+      if (!activeSnapshot.core) {
+        return res.status(409).json({
+          error: activeSnapshot.error,
+          code: 'ACTIVE_CORE_SNAPSHOT_REQUIRED',
+        });
+      }
+      classification = classifyCoreEdit(activeSnapshot.core, core);
+    }
+    const developerApproval = normalizeDeveloperApproval(req.body?.developerApproval);
+    if (classification.level !== 'safe' && !developerApproval) {
+      return res.status(422).json({
+        error: classification.level === 'blocked'
+          ? '字段删除或类型变更必须先同步消费者，并提供开发确认引用后才能发布'
+          : '新增字段必须经开发确认消费者接入后才能发布',
+        code: 'STRUCTURAL_CHANGE_REQUIRES_DEVELOPER_APPROVAL',
+        classification,
+      });
+    }
+
+    // 发布不可绕过含义冻结；结构审批未完成时不消耗 LLM judge 调用。
+    const semantic = await runSemanticGate(skillId, compiled.prompt, false);
     let semanticDecision: string | null = null;
     if (semantic) {
       gates.semantic = semantic;
@@ -665,12 +641,12 @@ router.post('/publish-core', async (req, res) => {
         description: core.identity.split('\n')[0].slice(0, 100),
         coreHash: compiled.coreHash,
         coreVersion: compiled.coreVersion,
-        metadata: JSON.stringify({
-          promptLab: {
-            source: 'core-file',
-            coreHash: compiled.coreHash,
-            coreVersion: compiled.coreVersion
-          }
+        metadata: buildV4CorePromptMetadata({
+          skillId,
+          coreHash: compiled.coreHash,
+          coreVersion: compiled.coreVersion,
+          deltaOutput: core.deltaOutput && core.outputMedia === 'json',
+          ...(developerApproval ? { developerApprovalReference: developerApproval.reference } : {}),
         }),
         publishedAt: new Date(),
         createdBy: 'prompt-lab-core'
@@ -699,7 +675,9 @@ router.post('/publish-core', async (req, res) => {
       promptId,
       coreHash: compiled.coreHash,
       coreVersion: compiled.coreVersion,
-      gates
+      gates,
+      classification,
+      ...(developerApproval ? { developerApproval } : {}),
     });
   } catch (error) {
     console.error('Core publish error:', error);
@@ -773,23 +751,58 @@ router.get('/core/:skillId', async (req, res) => {
 /**
  * PUT /api/prompt-lab/core/:skillId
  * v4 工作台：保存核心文件（schema 校验 + 编辑分级 + 备份）
+ * 两种模式：
+ * - 默认（raw）：{ content } 直接提交 YAML 文本
+ * - 表单（form）：{ mode: 'form', core } 提交结构化 JSON，服务端确定性序列化为 YAML，
+ *   与 raw 模式共用同一条 parseCoreFile 校验/分级/备份路径
  */
 router.put('/core/:skillId', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.params.skillId);
-    const { content } = req.body || {};
-    if (typeof content !== 'string' || !content.trim()) {
-      return res.status(400).json({ error: '缺少 content（核心文件 YAML 文本）' });
+    const { content, mode, core: formCore } = req.body || {};
+    const filePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
+
+    let yamlText: string;
+    if (mode === 'form') {
+      const normalized = normalizeCoreFormInput(formCore, skillId);
+      if (!normalized.ok) {
+        return res.status(400).json({ error: '表单数据无法矫正为核心文件形状', diagnostics: normalized.diagnostics });
+      }
+      // 保留原文件头部注释块（M1 基准血缘等人工信息）
+      const existingRaw = await fs.readFile(filePath, 'utf-8').catch(() => '');
+      yamlText = serializeCoreFile(normalized.core, extractHeaderComment(existingRaw));
+    } else {
+      if (typeof content !== 'string' || !content.trim()) {
+        return res.status(400).json({ error: '缺少 content（核心文件 YAML 文本）' });
+      }
+      yamlText = content;
     }
 
-    const filePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
-    const parsed = parseCoreFile(filePath, content);
+    const parsed = parseCoreFile(filePath, yamlText);
     if (!parsed.core) {
       return res.status(400).json({ error: '核心文件 schema 不合法', diagnostics: parsed.diagnostics });
     }
 
-    const oldCore = loadCoreFile(skillId)?.core ?? null;
-    const classification = classifyCoreEdit(oldCore, parsed.core);
+    const agentId = `skill:${skillId}`;
+    const active = await systemPrisma.agent_prompts.findFirst({
+      where: { agentId, status: 'ACTIVE' },
+      orderBy: { version: 'desc' },
+      select: { metadata: true },
+    });
+    let classification: ReturnType<typeof classifyCoreEdit> = {
+      level: 'safe',
+      messages: ['首次创建核心文件'],
+    };
+    if (active) {
+      const activeSnapshot = resolveCoreSnapshot(active.metadata, skillId);
+      if (!activeSnapshot.core) {
+        return res.status(409).json({
+          error: activeSnapshot.error,
+          code: 'ACTIVE_CORE_SNAPSHOT_REQUIRED',
+        });
+      }
+      classification = classifyCoreEdit(activeSnapshot.core, parsed.core);
+    }
 
     // 备份后写入
     try {
@@ -800,7 +813,7 @@ router.put('/core/:skillId', async (req, res) => {
     } catch {
       // 首次创建无备份可不做
     }
-    await fs.writeFile(filePath, content, 'utf-8');
+    await fs.writeFile(filePath, yamlText, 'utf-8');
 
     res.json({
       success: true,
@@ -833,10 +846,17 @@ router.get('/core/:skillId/versions', async (req, res) => {
         publishedAt: true,
         temperature: true,
         maxTokens: true,
+        metadata: true,
       },
       take: 30,
     });
-    res.json({ success: true, skillId, versions: rows });
+    const versions = rows.map((row) => ({
+      ...row,
+      // 旧版本没有 coreSnapshot 时只可审计，不能安全回滚到 core SSOT。
+      rollbackable: Boolean(resolveCoreSnapshot(row.metadata, skillId).core),
+      metadata: undefined,
+    }));
+    res.json({ success: true, skillId, versions });
   } catch (error) {
     res.status(500).json({ error: '读取版本历史失败', details: (error as Error).message });
   }
@@ -865,29 +885,39 @@ router.post('/core/:skillId/rollback', async (req, res) => {
       return res.status(404).json({ error: `版本不存在: ${agentId} v${version}` });
     }
 
-    // 1) 文件回写（从目标版本重建 frontmatter + 正文）
-    let metaCoreHash: string | undefined = target.coreHash || undefined;
-    let metaCoreVersion: number | undefined = target.coreVersion || undefined;
-    try {
-      const meta = JSON.parse(target.metadata || '{}');
-      metaCoreHash = metaCoreHash || meta?.promptLab?.coreHash;
-      metaCoreVersion = metaCoreVersion ?? meta?.promptLab?.coreVersion;
-    } catch { /* metadata 不可解析时仅按列值 */ }
-    const frontmatter: Record<string, unknown> = { agentId };
-    if (metaCoreHash) frontmatter.coreHash = metaCoreHash;
-    if (metaCoreVersion !== undefined) frontmatter.coreVersion = metaCoreVersion;
-    if (target.temperature !== null) frontmatter.temperature = target.temperature;
-    if (target.maxTokens !== null) frontmatter.maxTokens = target.maxTokens;
-    const fileText = `---\n${yaml.dump(frontmatter, { lineWidth: -1 }).trimEnd()}\n---\n\n${target.systemPrompt.trim()}\n`;
+    const snapshot = resolveCoreSnapshot(target.metadata, skillId);
+    if (!snapshot.core || !snapshot.raw) {
+      return res.status(409).json({
+        error: snapshot.error,
+        code: 'HISTORICAL_CORE_SNAPSHOT_REQUIRED',
+      });
+    }
+    const compiled = compileCoreFile(snapshot.core, { coreVersion: target.coreVersion ?? 1 });
+    if (target.coreHash && target.coreHash !== compiled.coreHash) {
+      return res.status(409).json({
+        error: '历史版本 coreHash 与 coreSnapshot 不一致，拒绝回滚',
+        code: 'HISTORICAL_CORE_HASH_MISMATCH',
+      });
+    }
+    if (target.systemPrompt.trim() !== compiled.body.trim()) {
+      return res.status(409).json({
+        error: '历史版本 Prompt 不可由 coreSnapshot 确定性重建，拒绝回滚',
+        code: 'HISTORICAL_PROMPT_MISMATCH',
+      });
+    }
 
+    // 1) 文件回写：先恢复 core SSOT，再由其确定性重建 Runtime Prompt。
     const prodPath = path.join(PROMPTS_DIR, `skill.${skillId}.md`);
+    const corePath = path.join(CORE_FILES_DIR, `${skillId}.yaml`);
     try {
       const backupsDir = path.join(BACKUPS_DIR, skillId);
       await fs.mkdir(backupsDir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
       await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
+      await fs.copyFile(corePath, path.join(backupsDir, `core-${ts}.yaml`));
     } catch { /* 备份失败不阻塞 */ }
-    await fs.writeFile(prodPath, fileText, 'utf-8');
+    await fs.writeFile(corePath, snapshot.raw, 'utf-8');
+    await fs.writeFile(prodPath, compiled.prompt, 'utf-8');
 
     // 2) ACTIVE 翻转（其余置 ARCHIVED）
     await systemPrisma.agent_prompts.updateMany({
@@ -967,86 +997,6 @@ router.get('/examples', async (req, res) => {
     console.error('Get examples error:', error);
     res.status(500).json({ 
       error: '获取示例失败', 
-      details: (error as Error).message 
-    });
-  }
-});
-
-/**
- * POST /api/prompt-lab/validate-config
- * 验证简化配置格式
- */
-router.post('/validate-config', async (req, res) => {
-  try {
-    const { config } = req.body;
-
-    if (!config) {
-      return res.status(400).json({ error: '缺少配置参数' });
-    }
-
-    // 1. 解析 YAML
-    let parsedConfig;
-    try {
-      parsedConfig = yaml.load(config);
-    } catch (error) {
-      return res.json({
-        valid: false,
-        errors: [
-          {
-            field: 'yaml',
-            message: 'YAML 格式错误: ' + (error as Error).message
-          }
-        ]
-      });
-    }
-
-    // 2. 验证必需字段
-    const errors = [];
-
-    if (!parsedConfig.meta) {
-      errors.push({ field: 'meta', message: '缺少 meta 字段' });
-    } else {
-      if (!parsedConfig.meta.id) {
-        errors.push({ field: 'meta.id', message: '缺少 id' });
-      }
-      if (!parsedConfig.meta.name) {
-        errors.push({ field: 'meta.name', message: '缺少 name' });
-      }
-      if (!parsedConfig.meta.archetype) {
-        errors.push({ field: 'meta.archetype', message: '缺少 archetype' });
-      }
-    }
-
-    if (!parsedConfig.structure) {
-      errors.push({ field: 'structure', message: '缺少 structure 字段' });
-    } else {
-      if (!parsedConfig.structure.variables || !Array.isArray(parsedConfig.structure.variables)) {
-        errors.push({ field: 'structure.variables', message: 'variables 必须是数组' });
-      }
-      if (!parsedConfig.structure.output) {
-        errors.push({ field: 'structure.output', message: '缺少 output 定义' });
-      }
-    }
-
-    if (!parsedConfig.behavior) {
-      errors.push({ field: 'behavior', message: '缺少 behavior 字段' });
-    } else {
-      if (!parsedConfig.behavior.key_behaviors || !Array.isArray(parsedConfig.behavior.key_behaviors)) {
-        errors.push({ field: 'behavior.key_behaviors', message: 'key_behaviors 必须是数组' });
-      }
-    }
-
-    // 3. 返回验证结果
-    res.json({
-      valid: errors.length === 0,
-      errors,
-      config: parsedConfig
-    });
-
-  } catch (error) {
-    console.error('Validate config error:', error);
-    res.status(500).json({ 
-      error: '验证失败', 
       details: (error as Error).message 
     });
   }

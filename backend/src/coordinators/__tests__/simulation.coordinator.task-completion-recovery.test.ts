@@ -6,6 +6,7 @@ const mockExecuteSkill = jest.fn()
 const mockProcessStudentMessage = jest.fn()
 const mockEndSession = jest.fn()
 const mockGetSessionDetail = jest.fn()
+const mockStartSession = jest.fn()
 
 jest.mock('../../config/database', () => ({
   __esModule: true,
@@ -36,8 +37,9 @@ jest.mock('../path.coordinator', () => ({
 }))
 jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
   __esModule: true,
-  default: {
-    processStudentMessage: mockProcessStudentMessage,
+    default: {
+      startSession: mockStartSession,
+      processStudentMessage: mockProcessStudentMessage,
     endSession: mockEndSession,
     getSessionDetail: mockGetSessionDetail
   }
@@ -166,6 +168,11 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       strategies: []
     })
     mockEndSession.mockResolvedValue({ revision: 3 })
+    mockStartSession.mockResolvedValue({
+      sessionId: 'teaching-2',
+      revision: 1,
+      welcomeMessage: '任务二课堂已启动'
+    })
   })
 
   it('endSession 成功后 completeTask 失败会留下 pending checkpoint，且虚拟会话不终态化', async () => {
@@ -202,7 +209,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockVirtualSessionUpdate.mock.calls.some(([input]) => input.data.status === 'failed')).toBe(false)
   })
 
-  it('下一步只重试 completeTask，并推进到路径中的下一个任务', async () => {
+  it('下一步只重试 completeTask，并为路径中的下一任务建立新课堂', async () => {
     learningPath = buildPath(task('task-1', '任务一'), task('task-2', '任务二'))
     setLearningState(buildLearningState({
       status: 'task_completion_pending',
@@ -225,7 +232,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(result).toEqual(expect.objectContaining({
       success: true,
       taskCompleted: true,
-      currentTaskStopped: true,
+      currentTaskStopped: false,
       isPathCompleted: false
     }))
     expect(mockCompleteTask).toHaveBeenCalledTimes(1)
@@ -233,11 +240,17 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     expect(mockEndSession).not.toHaveBeenCalled()
     expect(mockGetSessionDetail).not.toHaveBeenCalled()
-    expect(learning.taskRuntime.status).toBe('completed')
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'active',
+      taskId: 'task-2',
+      taskTitle: '任务二',
+      teachingSessionId: 'teaching-2'
+    }))
     expect(learning.currentTaskId).toBe('task-2')
     expect(learning.currentTaskTitle).toBe('任务二')
     expect(sessionRecord.currentTaskId).toBe('task-2')
     expect(sessionRecord.status).toBe('running')
+    expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-2' })
   })
 
   it('completeTask 的 alreadyCompleted 返回被视为恢复成功', async () => {
@@ -327,14 +340,33 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     expect(mockEndSession).not.toHaveBeenCalled()
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
-      status: 'completed',
-      taskId: 'task-1',
-      teachingSessionId: 'teaching-1',
-      teachingRevision: 4,
-      finalizedAt: '2026-07-19T00:00:00.000Z',
+      status: 'active',
+      taskId: 'task-2',
+      teachingSessionId: 'teaching-2',
       error: null
     }))
     expect(learning.currentTaskId).toBe('task-2')
     expect(sessionRecord.currentTaskId).toBe('task-2')
+    expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-2' })
+  })
+
+  it('教学上游重试耗尽后将 Learn 标为失败并保留当前 task 供重启', async () => {
+    mockProcessStudentMessage.mockRejectedValue(new Error('API request canceled'))
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      error: 'API request canceled'
+    }))
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(3)
+    expect(sessionRecord.status).toBe('failed')
+    expect(sessionRecord.currentStage).toBe('learning')
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'error',
+      taskId: 'task-1',
+      error: 'API request canceled'
+    }))
   })
 })

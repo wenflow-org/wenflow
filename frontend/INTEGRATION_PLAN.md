@@ -1,4 +1,7 @@
-# Lab → Workbench 整合实施方案
+# 已归档：Lab → Workbench 整合实施方案（v2）
+
+> 本文描述的 `prompt-lab/sources` 集成路径已退役。
+> 当前入口为 `prompts/core/*.yaml` 与 Admin「Prompt 工作台」。
 
 ## 🎯 目标
 将 Prompt Lab 的功能完全整合进 PromptWorkbench，统一编辑入口。

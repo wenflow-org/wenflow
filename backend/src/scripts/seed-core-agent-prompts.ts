@@ -10,6 +10,7 @@
 
 import type { PrismaClient } from '../generated/system-client';
 import { loadAllPromptFiles, type PromptFile } from '../composers/prompt-files/loader';
+import { computeCoreHash, loadCoreFile } from '../services/prompt-lab/core-file-loader';
 import {
   normalizeRuntimeContract,
   type RuntimeContract,
@@ -18,6 +19,7 @@ import {
   lintDeclaredSkillPromptContract,
   type SkillPromptContract,
 } from '../services/skill-prompt-contract';
+import { buildV4CorePromptMetadata } from '../services/prompt-lab/core-prompt-metadata';
 
 export interface CoreAgentPromptSeed {
   agentId: string;
@@ -200,6 +202,16 @@ export function buildPromptFileRuntimeContractMetadata(
 ): string | undefined {
   if (file.runtimeContract === undefined && file.promptContract === undefined && file.coreHash === undefined) return undefined;
 
+  if (file.coreHash !== undefined) {
+    const skillId = file.agentId.replace(/^skill:/, '');
+    return buildV4CorePromptMetadata({
+      skillId,
+      coreHash: file.coreHash,
+      coreVersion: file.coreVersion ?? 1,
+      deltaOutput: file.deltaOutput === true,
+    });
+  }
+
   const runtimeContract = file.runtimeContract === undefined
     ? undefined
     : normalizeDeclaredPromptRuntimeContract(file.runtimeContract, file);
@@ -251,6 +263,17 @@ export function mapPromptFileToCoreAgentPromptSeed(file: PromptFile): CoreAgentP
 export function loadCoreAgentPromptSeeds(): CoreAgentPromptSeed[] {
   return loadAllPromptFiles()
     .filter((file) => file.archetype !== 'code-only')
+    .filter((file) => {
+      if (file.coreHash === undefined) return true;
+      const skillId = file.agentId.replace(/^skill:/, '');
+      const loaded = loadCoreFile(skillId);
+      const inSync = Boolean(loaded?.core && computeCoreHash(loaded.core) === file.coreHash);
+      if (!inSync) {
+        // core 已保存但尚未发布时，绝不能将它的快照混入旧 Runtime Prompt 的 ACTIVE 版本。
+        console.warn(`[prompt-sync] 跳过漂移 v4 prompt: ${file.agentId}；请通过 publish-core 发布核心文件`);
+      }
+      return inSync;
+    })
     .map(mapPromptFileToCoreAgentPromptSeed);
 }
 

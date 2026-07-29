@@ -1284,8 +1284,10 @@ export const adminVirtualLearnersApi = {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/learning-task`);
   },
 
-  getVirtualSessionTeachingDetail: async (sessionId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/teaching-detail`);
+  getVirtualSessionTeachingDetail: async (sessionId: string, teachingSessionId?: string) => {
+    return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/teaching-detail`, {
+      params: teachingSessionId ? { teachingSessionId } : undefined,
+    });
   },
 
   virtualSessionStep: async (sessionId: string) => {
@@ -1590,11 +1592,20 @@ export const adminPromptWorkbenchApi = {
     return adminAxios.put(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}`, { content });
   },
 
+  /** 表单模式保存：结构化 JSON → 服务端确定性序列化为 YAML（与 raw 共用校验/分级/备份路径） */
+  saveCoreForm: async (skillId: string, core: Record<string, unknown>) => {
+    return adminAxios.put(`/admin/prompt-lab/core/${encodeURIComponent(skillId)}`, { mode: 'form', core });
+  },
+
   compileCore: async (payload: { skillId: string; semanticJudge?: boolean; confirmUncertain?: boolean }) => {
     return adminAxios.post('/admin/prompt-lab/compile-core', payload);
   },
 
-  publishCore: async (payload: { skillId: string; semanticJudge?: boolean; confirmUncertain?: boolean }) => {
+  publishCore: async (payload: {
+    skillId: string;
+    confirmUncertain?: boolean;
+    developerApproval?: { reference: string };
+  }) => {
     return adminAxios.post('/admin/prompt-lab/publish-core', payload);
   },
 

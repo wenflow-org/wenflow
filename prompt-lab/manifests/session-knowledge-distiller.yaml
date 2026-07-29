@@ -1,0 +1,27 @@
+version: prompt-lab-manifest/v1
+skillId: session-knowledge-distiller
+agentId: skill:session-knowledge-distiller
+name: default-skill-session-knowledge-distiller
+archetype: distiller
+description: 课堂知识增量蒸馏器
+acceptableAgentIds: [skill:session-knowledge-distiller]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+runtimeDefaults: { tier: chat, temperature: 0.4, maxTokens: 3000, model: null, thinkingMode: default, reasoningEffort: default }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: distillation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-model, phases: [knowledge-distilled], defaultPhase: knowledge-distilled, terminalPhases: [knowledge-distilled], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, distiller, v4]
+notes: v4 核心文件的契约与运行参数家园。

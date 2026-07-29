@@ -4,6 +4,7 @@ import {
   matchesSeedConfig,
 } from '../seed-core-agent-prompts';
 import type { PromptFile } from '../../composers/prompt-files/loader';
+import { computeCoreHash, loadCoreFile } from '../../services/prompt-lab/core-file-loader';
 
 function makePromptFile(runtimeContract?: unknown): PromptFile {
   return {
@@ -98,27 +99,35 @@ describe('File-as-Truth runtime-contract seed snapshots', () => {
 
 describe('v4 coreHash seed snapshots', () => {
   it('passes coreHash/coreVersion through to the seed and metadata', () => {
-    const file = { ...makePromptFile(), coreHash: 'abc123', coreVersion: 2 };
+    const coreHash = computeCoreHash(loadCoreFile('teaching-turn')!.core!);
+    const file = { ...makePromptFile(), coreHash, coreVersion: 2 };
     const seed = mapPromptFileToCoreAgentPromptSeed(file);
 
-    expect(seed.coreHash).toBe('abc123');
+    expect(seed.coreHash).toBe(coreHash);
     expect(seed.coreVersion).toBe(2);
-    expect(JSON.parse(seed.metadata!)).toEqual({
-      promptLab: {
-        source: 'prompt-file',
-        coreHash: 'abc123',
-        coreVersion: 2,
-      },
-    });
+    const metadata = JSON.parse(seed.metadata!);
+    expect(metadata.promptLab).toEqual(expect.objectContaining({
+      source: 'core-file',
+      coreHash,
+      coreVersion: 2,
+      runtimeContractSource: 'manifest',
+      promptContractSource: 'manifest',
+    }));
+    expect(metadata.promptLab.coreSnapshot).toContain('skillId: teaching-turn');
   });
 
   it('v4 file without contracts still gets anchor-only metadata', () => {
-    const seed = mapPromptFileToCoreAgentPromptSeed({ ...makePromptFile(), coreHash: 'deadbeef' });
+    const coreHash = computeCoreHash(loadCoreFile('teaching-turn')!.core!);
+    const seed = mapPromptFileToCoreAgentPromptSeed({ ...makePromptFile(), coreHash });
 
-    expect(JSON.parse(seed.metadata!)).toEqual({
-      promptLab: { source: 'prompt-file', coreHash: 'deadbeef' },
-    });
-    expect(seed).not.toHaveProperty('coreVersion');
+    const metadata = JSON.parse(seed.metadata!);
+    expect(metadata.promptLab).toEqual(expect.objectContaining({
+      source: 'core-file',
+      coreHash,
+      coreVersion: 1,
+    }));
+    expect(metadata.promptLab.coreSnapshot).toContain('skillId: teaching-turn');
+    expect(seed.coreVersion).toBeUndefined();
   });
 
   it('detects coreHash-only drift via structural metadata compare', () => {

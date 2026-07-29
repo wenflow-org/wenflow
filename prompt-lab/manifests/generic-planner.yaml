@@ -1,0 +1,27 @@
+version: prompt-lab-manifest/v1
+skillId: generic-planner
+agentId: skill:generic-planner
+name: default-skill-generic-planner
+archetype: generator
+description: 通用学习路径规划器
+acceptableAgentIds: [skill:generic-planner]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+runtimeDefaults: { tier: chat, temperature: 0.5, maxTokens: 4000, model: null, thinkingMode: default, reasoningEffort: default }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: path-generation, phases: [path-planned], defaultPhase: path-planned, terminalPhases: [path-planned], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, path, planner, v4]
+notes: v4 核心文件的契约与运行参数家园。

@@ -1,0 +1,25 @@
+# v4 核心文件：confidence-handler（SKILL_PROTOCOL_V4 §2）
+skillId: confidence-handler
+baseVersion: 1
+identity: |
+  你是低置信度结果处理器。对 Skill 返回的低置信度注释选择接受、请求澄清或使用保守默认值。
+channels: [task, evidence]
+stateAdvance: false
+rules:
+  - 输入置信度越高越倾向接受；越低越倾向保守默认值
+  - clarificationQuestion 必须可回答、具体、只问最关键的一点
+  - conservativeValue 不能引入输入中没有的事实
+fields:
+  - name: action
+    type: enum
+    desc: accepted|clarification-requested|conservative-default
+  - name: clarificationQuestion
+    type: string?
+    desc: 当 action=clarification-requested 时输出的澄清问题
+  - name: conservativeValue
+    type: object?
+    desc: 当 action=conservative-default 时输出的保守替代值
+constraints:
+  - 不把低置信度结果当作已确认事实使用
+params: { temperature: 0.3, maxTokens: 2000, failurePolicy: fallback }
+deltaOutput: false

@@ -1,4 +1,7 @@
-# Prompt Lab 编译指南
+# 已归档：Prompt Lab 编译指南（v2）
+
+> 本文描述已退役的 source/LLM 编译流程，仅供历史追溯。
+> 当前五块确定性编译器位于 `backend/src/services/prompt-lab/core-compiler.ts`。
 
 ## 本文作用
 

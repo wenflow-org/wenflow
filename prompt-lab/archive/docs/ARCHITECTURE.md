@@ -1,4 +1,7 @@
-# Prompt Lab 架构说明
+# 已归档：Prompt Lab v2 架构说明
+
+> 本文描述已退役的 `sources/*.md` 作者态模型，仅供历史追溯。
+> 当前规范与操作入口以 `doc/SKILL_PROTOCOL_V4.md`、`prompts/core/*.yaml` 为准。
 
 ## 定位
 

@@ -25,7 +25,7 @@ const paths: SensitivePath[] = [
   { path: resolve(backendRoot, 'logs'), kind: 'directory' as const },
   { path: resolve(backendRoot, 'logs', 'combined.log'), kind: 'file' as const },
   { path: resolve(backendRoot, 'logs', 'error.log'), kind: 'file' as const },
-  { path: resolve(repoRoot, 'prompt-lab', 'backups'), kind: 'directory' as const }
+  { path: resolve(repoRoot, 'prompts', 'backups'), kind: 'directory' as const }
 ].filter((target, index, items) => existsSync(target.path)
   && items.findIndex(item => item.path === target.path) === index);
 

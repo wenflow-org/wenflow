@@ -547,7 +547,7 @@ export async function startServer() {
       { path: resolve(backendRoot, 'logs'), kind: 'directory' as const },
       { path: resolve(backendRoot, 'logs', 'combined.log'), kind: 'file' as const },
       { path: resolve(backendRoot, 'logs', 'error.log'), kind: 'file' as const },
-      { path: resolve(repoRoot, 'prompt-lab', 'backups'), kind: 'directory' as const },
+      { path: resolve(repoRoot, 'prompts', 'backups'), kind: 'directory' as const },
       ...(mainDatabasePath ? [{ path: resolve(mainDatabasePath, '..'), kind: 'directory' as const }] : []),
       ...(systemDatabasePath ? [{ path: resolve(systemDatabasePath, '..'), kind: 'directory' as const }] : []),
       ...(mainDatabasePath ? [{ path: mainDatabasePath, kind: 'file' as const }] : []),

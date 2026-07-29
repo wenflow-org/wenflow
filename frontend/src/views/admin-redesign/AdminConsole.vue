@@ -136,6 +136,8 @@ async function boot() {
 }
 
 onMounted(() => {
+  // 跨路由入口可能在控制台挂载前已写入 intent，首次挂载时需主动消费。
+  if (components[intent.scene]) scene.value = intent.scene;
   void boot();
   window.addEventListener('keydown', onGlobalKey);
 });

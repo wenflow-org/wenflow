@@ -70,10 +70,12 @@ export class APIRouter {
     if (caller.skillId) {
       const inheritedRoute = await this.resolveBaseRoute(caller, userId);
       const skillRoute = await this.getSkillConfig(caller.skillId, inheritedRoute);
-      if (skillRoute) {
-        return this.withRequestTimeout(skillRoute, caller.agentId);
+      const route = skillRoute || inheritedRoute;
+      // 守门 judge 必须关闭思考模式，避免审查调用因推理延长而拖慢发布链路。
+      if (caller.skillId === 'semantic-freeze-judge') {
+        return this.withRequestTimeout({ ...route, thinkingMode: 'disabled', reasoningEffort: 'default' }, caller.agentId);
       }
-      return inheritedRoute;
+      return this.withRequestTimeout(route, caller.agentId);
     }
 
     return this.resolveBaseRoute(caller, userId);

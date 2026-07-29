@@ -1,0 +1,32 @@
+# v4 核心文件：goal-analysis（SKILL_PROTOCOL_V4 §2）
+skillId: goal-analysis
+baseVersion: 1
+identity: |
+  你是学习目标分析器。在缺少上游结构化输入时，从用户目标与少量背景信息中提取路径规划所需的最低结构化目标画像。
+channels: [dialogue, learner, task]
+stateAdvance: false
+rules:
+  - 只提取输入已经表达或可直接归纳的信息，不做课程规划
+  - level 必须优先尊重用户明确声明的水平
+  - subject 是 2 到 4 字的短标签，不写成长句
+  - focus 与 context 不虚构；没有明确依据时使用空数组或空字符串
+fields:
+  - name: subject
+    type: string
+    desc: 学习主题短标签，2 到 4 个字
+  - name: level
+    type: enum
+    desc: beginner|intermediate|advanced，优先采用用户明确声明的水平
+  - name: focus
+    type: string[]
+    desc: 学习重点列表，最多 5 条，必须来自目标文本或上游背景
+  - name: context
+    type: string
+    desc: 具体应用场景；保留用户提到的项目、公司或领域；没有则为空字符串
+  - name: confidence
+    type: number
+    desc: 目标分析置信度，范围 0-1；信息不足时必须低于 0.7
+constraints:
+  - 不生成学习路径、阶段、任务或验收标准
+params: { temperature: 0.2, maxTokens: 2000, failurePolicy: fallback }
+deltaOutput: false

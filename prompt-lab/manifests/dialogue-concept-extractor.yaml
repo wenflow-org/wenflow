@@ -1,0 +1,27 @@
+version: prompt-lab-manifest/v1
+skillId: dialogue-concept-extractor
+agentId: skill:dialogue-concept-extractor
+name: default-skill-dialogue-concept-extractor
+archetype: extractor
+description: 课堂对话概念与迁移信号抽取器
+acceptableAgentIds: [skill:dialogue-concept-extractor]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+runtimeDefaults: { tier: chat, temperature: 0.5, maxTokens: 2500, model: null, thinkingMode: default, reasoningEffort: default }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: learner-model, phases: [concept-extracted], defaultPhase: concept-extracted, terminalPhases: [concept-extracted], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, extractor, v4]
+notes: v4 核心文件的契约与运行参数家园。

@@ -743,7 +743,7 @@ const trendHint = computed(() => (d.value.trend === 'down' ? '连续走低，建
 .ld-ev__main span { font-size: 11.5px; color: var(--mk-faint); }
 .ld-ev__time { font-size: 11px; color: var(--mk-faint); white-space: nowrap; }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .ld-grid { grid-template-columns: 1fr; }
   .ld-metrics { grid-template-columns: repeat(2, 1fr); }
   .ld-two { grid-template-columns: 1fr; }

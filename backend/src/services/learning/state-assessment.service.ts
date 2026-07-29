@@ -3,7 +3,7 @@
 
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import aiService from '../ai/ai.service';
+import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { StudentState, Message, ZScores, AIAssessment, IntegratedAssessmentResult } from '../../types/state';
 import { BaselineMetrics } from './student-baseline.service';
 import { ExtractedMetrics } from '../../utils/metrics-extractor';
@@ -41,49 +41,21 @@ class StateAssessmentService {
     reasoning: string
   }> {
     try {
-      // 构建对话摘要
-      const conversationSummary = messages
-        .slice(-10) // 只用最近 10 条消息
-        .map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 200)}`)
-        .join('\n')
-      
-      // AI 评估 Prompt
-      const assessmentPrompt = `你是一个教育心理学专家，擅长评估学生的认知深度。
+      const result = await executeSkill(auxSkillDefinitionMap['state-assessment'], {
+        action: 'assessCognitiveDepth',
+        conversationSummary: messages
+          .slice(-10)
+          .map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 200)}`)
+          .join('\n'),
+        __fallback: this.heuristicCognitiveDepth(messages),
+        __prompt: {
+          requestPath: '/services/learning/state-assessment/assess-cognitive-depth',
+          callerAction: 'assessCognitiveDepth',
+        },
+      }) || {}
 
-请分析以下对话片段，评估学生的认知深度（0-1 分）：
-
-【评分标准】
-- 0.0-0.3：直接要答案、无思考、简单重复
-- 0.4-0.6：有初步想法，但无论证、缺乏深度
-- 0.7-1.0：原创观点、逻辑推演、自我纠错、深度反思
-
-【对话片段】
-${conversationSummary}
-
-请返回 JSON 格式：
-{
-  "depth": 0.7,
-  "reasoning": "评估理由，100 字以内"
-}`
-
-      const response = await aiService.chat([
-        { role: 'system', content: assessmentPrompt }
-      ], {
-        agentId: 'state-assessment',
-        userId: 'system',
-        action: 'assessCognitiveDepth'
-      })
-      
-      // 解析 JSON
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) {
-        throw new Error('AI 返回格式错误')
-      }
-      
-      const result = JSON.parse(jsonMatch[0])
-      
       return {
-        depth: Math.min(1, Math.max(0, result.depth)),
+        depth: Math.min(1, Math.max(0, result.depth ?? 0.5)),
         reasoning: result.reasoning || ''
       }
     } catch (error) {
@@ -101,46 +73,21 @@ ${conversationSummary}
     reasoning: string
   }> {
     try {
-      const conversationSummary = messages
-        .slice(-10)
-        .map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 200)}`)
-        .join('\n')
-      
-      const assessmentPrompt = `你是一个教育心理学专家，擅长识别学生的情绪状态。
+      const result = await executeSkill(auxSkillDefinitionMap['state-assessment'], {
+        action: 'assessStressLevel',
+        conversationSummary: messages
+          .slice(-10)
+          .map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 200)}`)
+          .join('\n'),
+        __fallback: this.heuristicStressLevel(messages),
+        __prompt: {
+          requestPath: '/services/learning/state-assessment/assess-stress-level',
+          callerAction: 'assessStressLevel',
+        },
+      }) || {}
 
-请分析以下对话片段，评估学生的压力程度（0-1 分）：
-
-【评分标准】
-- 0.0-0.3：放松、自信、积极
-- 0.4-0.6：有点困惑、不确定
-- 0.7-1.0：焦虑、挫败、情绪化
-
-【对话片段】
-${conversationSummary}
-
-请返回 JSON 格式：
-{
-  "stress": 0.4,
-  "reasoning": "评估理由，100 字以内"
-}`
-
-      const response = await aiService.chat([
-        { role: 'system', content: assessmentPrompt }
-      ], {
-        agentId: 'state-assessment',
-        userId: 'system',
-        action: 'assessStressLevel'
-      })
-      
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) {
-        throw new Error('AI 返回格式错误')
-      }
-      
-      const result = JSON.parse(jsonMatch[0])
-      
       return {
-        stress: Math.min(1, Math.max(0, result.stress)),
+        stress: Math.min(1, Math.max(0, result.stress ?? 0.5)),
         reasoning: result.reasoning || ''
       }
     } catch (error) {
@@ -158,46 +105,21 @@ ${conversationSummary}
     reasoning: string
   }> {
     try {
-      const conversationSummary = messages
-        .slice(-10)
-        .map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 200)}`)
-        .join('\n')
-      
-      const assessmentPrompt = `你是一个教育心理学专家，擅长评估学生的投入程度。
+      const result = await executeSkill(auxSkillDefinitionMap['state-assessment'], {
+        action: 'assessEngagement',
+        conversationSummary: messages
+          .slice(-10)
+          .map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 200)}`)
+          .join('\n'),
+        __fallback: this.heuristicEngagement(messages),
+        __prompt: {
+          requestPath: '/services/learning/state-assessment/assess-engagement',
+          callerAction: 'assessEngagement',
+        },
+      }) || {}
 
-请分析以下对话片段，评估学生的投入程度（0-1 分）：
-
-【评分标准】
-- 0.0-0.3：敷衍、回复简短、不主动
-- 0.4-0.6：正常参与、被动回答
-- 0.7-1.0：主动提问、深入追问、积极参与
-
-【对话片段】
-${conversationSummary}
-
-请返回 JSON 格式：
-{
-  "engagement": 0.8,
-  "reasoning": "评估理由，100 字以内"
-}`
-
-      const response = await aiService.chat([
-        { role: 'system', content: assessmentPrompt }
-      ], {
-        agentId: 'state-assessment',
-        userId: 'system',
-        action: 'assessEngagement'
-      })
-      
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) {
-        throw new Error('AI 返回格式错误')
-      }
-      
-      const result = JSON.parse(jsonMatch[0])
-      
       return {
-        engagement: Math.min(1, Math.max(0, result.engagement)),
+        engagement: Math.min(1, Math.max(0, result.engagement ?? 0.5)),
         reasoning: result.reasoning || ''
       }
     } catch (error) {

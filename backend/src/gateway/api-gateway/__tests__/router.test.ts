@@ -92,6 +92,18 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     }))
   })
 
+  it('semantic-freeze-judge 强制关闭 thinking mode', async () => {
+    const resolved = await new APIRouter().resolve({
+      agentId: 'prompt-lab',
+      skillId: 'semantic-freeze-judge',
+    })
+
+    expect(resolved).toEqual(expect.objectContaining({
+      thinkingMode: 'disabled',
+      reasoningEffort: 'default',
+    }))
+  })
+
   it('Skill 仅覆盖模型时保留用户 Endpoint 的公网策略', async () => {
     userProviderFindUnique.mockResolvedValue({
       endpoint: 'https://user-provider.example/v1',

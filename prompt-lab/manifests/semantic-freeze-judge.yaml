@@ -20,7 +20,7 @@ runtimeDefaults:
   temperature: 0.1
   maxTokens: 4000
   model: null
-  thinkingMode: default
+  thinkingMode: disabled
   reasoningEffort: default
 
 promptContract:
@@ -32,6 +32,18 @@ promptContract:
   output: { media: json, schemaSource: runtime-validator, envelope: adapter }
   context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
   failurePolicy: retry
+
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: semantic-freeze-judge
+    phases: [judgement-completed]
+    defaultPhase: judgement-completed
+    terminalPhases: [judgement-completed]
+    statusValues: [succeeded, partial, blocked, failed]
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
 
 ownership:
   tier: production

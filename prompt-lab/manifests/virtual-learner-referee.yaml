@@ -34,6 +34,12 @@ promptContract:
     delivery: sidecar
     modelExposure: projected
   failurePolicy: retry
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
 ownership:
   tier: production
   visibility: internal

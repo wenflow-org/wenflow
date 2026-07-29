@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import fs from 'fs';
+import path from 'path';
+import yaml from 'js-yaml';
 import systemPrisma from '../config/system-database';
 import {
   scanPromptFiles,
@@ -6,15 +9,18 @@ import {
   type PromptFileScanDiagnostic,
   type PromptFileScanResult,
 } from '../composers/prompt-files/loader';
-import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
+import { normalizeRuntimeContract, type RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import {
   lintDeclaredSkillPromptContract,
+  normalizeSkillPromptContract,
   type SkillPromptContract,
 } from '../services/skill-prompt-contract';
 import {
   normalizeDeclaredPromptRuntimeContract,
   type DeclaredPromptRuntimeContractIdentity,
 } from './seed-core-agent-prompts';
+
+const MANIFESTS_DIR = path.join(process.cwd(), '../prompt-lab/manifests');
 
 export interface ActivePromptRuntimeContractMetadataRow {
   id: string;
@@ -127,6 +133,10 @@ interface DeclaredPromptSource {
   declaresRuntimeContract: boolean;
   declaresPromptContract: boolean;
   sourceIssues: Array<'duplicate-canonical-agent-id' | 'alias-collision'>;
+  /** v4 manifest 已解析的契约；v2 从 prompt frontmatter 延迟解析。 */
+  manifestRuntimeContract?: RuntimeContract;
+  manifestPromptContract?: SkillPromptContract;
+  declarationError?: string;
 }
 
 function compareText(left: string, right: string): number {
@@ -174,7 +184,7 @@ function promptReference(row: ActivePromptRuntimeContractMetadataRow) {
 export function collectDeclaredPromptRuntimeContractAgentIdCandidates(files: PromptFile[]): string[] {
   return dedupeAndSort(files
     .filter((file) => file.archetype !== 'code-only')
-    .filter((file) => file.runtimeContract !== undefined || file.promptContract !== undefined)
+    .filter((file) => file.coreHash !== undefined || file.runtimeContract !== undefined || file.promptContract !== undefined)
     .flatMap((file) => acceptedAgentIdsForFile(file)));
 }
 
@@ -327,17 +337,21 @@ export function structurallyEqualRuntimeContracts(left: unknown, right: unknown)
 function buildDeclaredSources(files: PromptFile[]): DeclaredPromptSource[] {
   const sources = files
     .filter((file) => file.archetype !== 'code-only')
-    .filter((file) => file.runtimeContract !== undefined || file.promptContract !== undefined)
+    .filter((file) => file.coreHash !== undefined || file.runtimeContract !== undefined || file.promptContract !== undefined)
     .map((file) => {
       const acceptedAgentIds = acceptedAgentIdsForFile(file);
+      const v4Contracts = file.coreHash === undefined ? null : loadV4ManifestContracts(file);
       return {
         file,
         agentId: file.agentId,
         acceptableAgentIds: acceptedAgentIds.filter((agentId) => agentId !== file.agentId),
         acceptedAgentIds,
-        declaresRuntimeContract: file.runtimeContract !== undefined,
-        declaresPromptContract: file.promptContract !== undefined,
+        declaresRuntimeContract: file.coreHash !== undefined || file.runtimeContract !== undefined,
+        declaresPromptContract: file.coreHash !== undefined || file.promptContract !== undefined,
         sourceIssues: [],
+        ...(v4Contracts?.runtimeContract ? { manifestRuntimeContract: v4Contracts.runtimeContract } : {}),
+        ...(v4Contracts?.promptContract ? { manifestPromptContract: v4Contracts.promptContract } : {}),
+        ...(v4Contracts?.error ? { declarationError: v4Contracts.error } : {}),
       };
     });
 
@@ -371,6 +385,43 @@ function buildDeclaredSources(files: PromptFile[]): DeclaredPromptSource[] {
     ...source,
     sourceIssues: dedupeAndSort(source.sourceIssues) as Array<'duplicate-canonical-agent-id' | 'alias-collision'>,
   }));
+}
+
+/** v4 契约唯一声明处为 manifest；缺失或非法时必须让对账失败，不能回退默认值。 */
+function loadV4ManifestContracts(file: PromptFile): {
+  runtimeContract?: RuntimeContract;
+  promptContract?: SkillPromptContract;
+  error?: string;
+} {
+  const skillId = file.agentId.replace(/^skill:/, '');
+  const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { error: `v4 prompt 缺少 manifest: ${filePath}` };
+    }
+    const manifest = (yaml.load(fs.readFileSync(filePath, 'utf-8')) || {}) as Record<string, unknown>;
+    if (!Object.prototype.hasOwnProperty.call(manifest, 'runtimeContract')
+      || !Object.prototype.hasOwnProperty.call(manifest, 'promptContract')) {
+      return { error: `v4 manifest 必须声明 runtimeContract 和 promptContract: ${filePath}` };
+    }
+    const archetype = typeof manifest.archetype === 'string' ? manifest.archetype : file.archetype;
+    const runtimeContract = normalizeRuntimeContract(manifest.runtimeContract, { skillId, archetype });
+    const lint = lintDeclaredSkillPromptContract(manifest.promptContract, {
+      skillId,
+      archetype,
+      runtimeContract,
+    });
+    const errors = lint.issues.filter((issue) => issue.level === 'error');
+    if (errors.length > 0) {
+      return { error: `v4 manifest promptContract 非法: ${errors.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}` };
+    }
+    return {
+      runtimeContract,
+      promptContract: normalizeSkillPromptContract(manifest.promptContract, { skillId, archetype, runtimeContract }),
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function primarySourceIssue(source: DeclaredPromptSource): PromptRuntimeContractMetadataParityStatus | null {
@@ -410,48 +461,65 @@ export function analyzePromptRuntimeContractMetadataParity(
 
   for (const source of sources) {
     const identity = toIdentity(source.file);
-    let declaredContract: RuntimeContract | undefined;
+    if (source.declarationError) {
+      results.push({
+        agentId: source.agentId,
+        filePath: source.file.filePath,
+        acceptableAgentIds: source.acceptableAgentIds,
+        status: 'invalid-file-declaration',
+        detail: source.declarationError,
+        runtimeContractStatus: source.declaresRuntimeContract ? 'invalid-file-declaration' : 'not-declared',
+        promptContractStatus: source.declaresPromptContract ? 'invalid-file-declaration' : 'not-declared',
+      });
+      continue;
+    }
+
+    let declaredContract: RuntimeContract | undefined = source.manifestRuntimeContract;
     if (source.declaresRuntimeContract) {
-      try {
-        declaredContract = normalizeDeclaredPromptRuntimeContract(source.file.runtimeContract, identity);
-      } catch (error) {
-        results.push({
-          agentId: source.agentId,
-          filePath: source.file.filePath,
-          acceptableAgentIds: source.acceptableAgentIds,
-          status: 'invalid-file-declaration',
-          ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
-          detail: error instanceof Error ? error.message : String(error),
-          runtimeContractStatus: 'invalid-file-declaration',
-          ...(source.declaresPromptContract ? { promptContractStatus: 'not-declared' as const } : {}),
-        });
-        continue;
+      if (!declaredContract) {
+        try {
+          declaredContract = normalizeDeclaredPromptRuntimeContract(source.file.runtimeContract, identity);
+        } catch (error) {
+          results.push({
+            agentId: source.agentId,
+            filePath: source.file.filePath,
+            acceptableAgentIds: source.acceptableAgentIds,
+            status: 'invalid-file-declaration',
+            ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
+            detail: error instanceof Error ? error.message : String(error),
+            runtimeContractStatus: 'invalid-file-declaration',
+            ...(source.declaresPromptContract ? { promptContractStatus: 'not-declared' as const } : {}),
+          });
+          continue;
+        }
       }
     }
 
-    let declaredPromptContract: SkillPromptContract | undefined;
+    let declaredPromptContract: SkillPromptContract | undefined = source.manifestPromptContract;
     if (source.declaresPromptContract) {
-      const lint = lintDeclaredSkillPromptContract(source.file.promptContract, {
-        skillId: source.agentId.replace(/^skill:/, ''),
-        archetype: source.file.archetype,
-        runtimeContract: declaredContract ?? null,
-      });
-      const errors = lint.issues.filter((issue) => issue.level === 'error');
-      if (errors.length > 0) {
-        results.push({
-          agentId: source.agentId,
-          filePath: source.file.filePath,
-          acceptableAgentIds: source.acceptableAgentIds,
-          status: 'invalid-file-declaration',
-          ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
-          detail: `Prompt ${source.agentId} has an invalid promptContract: ${errors.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}`,
-          ...(declaredContract ? { declaredContract } : {}),
-          ...(declaredContract ? { runtimeContractStatus: 'in-sync' as const } : {}),
-          promptContractStatus: 'invalid-file-declaration',
+      if (!declaredPromptContract) {
+        const lint = lintDeclaredSkillPromptContract(source.file.promptContract, {
+          skillId: source.agentId.replace(/^skill:/, ''),
+          archetype: source.file.archetype,
+          runtimeContract: declaredContract ?? null,
         });
-        continue;
+        const errors = lint.issues.filter((issue) => issue.level === 'error');
+        if (errors.length > 0) {
+          results.push({
+            agentId: source.agentId,
+            filePath: source.file.filePath,
+            acceptableAgentIds: source.acceptableAgentIds,
+            status: 'invalid-file-declaration',
+            ...(source.sourceIssues.length > 0 ? { sourceIssues: source.sourceIssues } : {}),
+            detail: `Prompt ${source.agentId} has an invalid promptContract: ${errors.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}`,
+            ...(declaredContract ? { declaredContract } : {}),
+            ...(declaredContract ? { runtimeContractStatus: 'in-sync' as const } : {}),
+            promptContractStatus: 'invalid-file-declaration',
+          });
+          continue;
+        }
+        declaredPromptContract = lint.contract;
       }
-      declaredPromptContract = lint.contract;
     }
 
     const sourceIssue = primarySourceIssue(source);

@@ -264,7 +264,7 @@
         </label>
       </div>
       <p class="ac-rel__note">
-        默认关闭。开启后按间隔向模型服务发极简探活（约 15 token），用于 5 条核心学习链路健康判断。间隔 10 秒～24 小时。
+        默认关闭。开启后按间隔向模型服务发极简探活（约 15 token），用于 5 条核心学习链路健康判断。间隔 10 秒～24 小时。关闭仅停止周期任务；服务启动、保存配置与手动「立即探测」仍会各探一次，以维持注册健康门控所需的状态数据。
       </p>
     </section>
 
@@ -888,7 +888,8 @@ async function toggleRegistration() {
 
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 
-@media (max-width: 900px) {
+/* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px），避免两列被挤压 */
+@media (max-width: 1100px) {
   .ac-grid { grid-template-columns: 1fr; }
   .ac-policy { grid-template-columns: 1fr; }
 }

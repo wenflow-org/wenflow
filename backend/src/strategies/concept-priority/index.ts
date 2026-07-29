@@ -7,7 +7,6 @@
 
 import { AdjustmentStrategy, PathAdjustment, AdjustmentReason } from '../../skills/path-planning/adjustment';
 import { LearningSignal, AgentContext, MilestoneOutput, SubtaskOutput } from '../../agents/protocol';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
 import { logger } from '../../utils/logger';
 
 interface ConceptPriorityContext {
@@ -214,75 +213,21 @@ async function upgradeTasksWithLLM(
   signal: LearningSignal,
   context: AgentContext
 ): Promise<TaskUpgradeResult> {
-  const gateway = getAPIGateway();
-  const caller: CallerInfo = { agentId: 'concept-priority' };
-
-  const systemPrompt = `你是学习路径优化专家，负责将实践性任务升级为概念性任务。
-
-【目标】
-根据学习目标类型，调整知识分布。当前概念性任务比例不足，需要升级部分实践性任务。
-
-【升级原则】
-1. 将 "practice" 类型任务升级为 "reading" 类型
-2. 保持任务主题不变，但内容从"动手练习"改为"概念理解"
-3. 增加理论解释和概念阐述
-4. 保持合理的学习时长
-
-【输出格式】
-{
-  "upgradedTasks": [
-    {
-      "id": "原任务ID",
-      "title": "升级后的标题",
-      "type": "reading",
-      "estimatedMinutes": 45,
-      "description": "概念理解内容描述",
-      "acceptanceCriteria": "理解XX概念"
-    }
-  ],
-  "upgradeReasons": ["升级原因1", "升级原因2"],
-  "confidence": 0.8
-}`;
-
-  const userPrompt = `请升级以下实践性任务：
-
-【当前任务列表】
-${JSON.stringify(tasks, null, 2)}
-
-【目标类型】
-${priorityContext.goalType}
-
-【建议分布】
-概念性：${(priorityContext.suggestedDistribution.conceptual * 100).toFixed(0)}%
-实践性：${(priorityContext.suggestedDistribution.practical * 100).toFixed(0)}%
-评估性：${(priorityContext.suggestedDistribution.assessment * 100).toFixed(0)}%
-
-【当前分布】
-概念性：${(priorityContext.currentDistribution.conceptual * 100).toFixed(0)}%
-实践性：${(priorityContext.currentDistribution.practical * 100).toFixed(0)}%
-评估性：${(priorityContext.currentDistribution.assessment * 100).toFixed(0)}%
-
-请输出升级后的任务列表。`;
-
   try {
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: userPrompt }
-    ];
+    // 懒加载避免 skills/index -> path-planning -> strategies -> skills/index 循环依赖
+    const { executeSkillWithResult, auxSkillDefinitionMap } = await import('../../skills');
+    const result = await executeSkillWithResult(auxSkillDefinitionMap['concept-priority'], {
+      tasks,
+      priorityContext,
+      signal,
+      __fallback: fallbackUpgrade(tasks, priorityContext),
+      __prompt: {
+        requestPath: '/strategies/concept-priority/upgrade-tasks',
+        callerAgentId: 'concept-priority',
+      },
+    });
 
-    const response = await gateway.execute({ messages }, caller, {});
-
-    const content = response.choices[0]?.message.content || '';
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        upgradedTasks: parsed.upgradedTasks || [],
-        upgradeReasons: parsed.upgradeReasons || [],
-        confidence: parsed.confidence || 0.7
-      };
-    }
+    if (result.output) return result.output as TaskUpgradeResult;
   } catch (error) {
     logger.error('[ConceptPriorityStrategy] LLM upgrade failed:', error);
   }

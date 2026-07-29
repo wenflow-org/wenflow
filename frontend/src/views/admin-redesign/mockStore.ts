@@ -182,7 +182,7 @@ export interface InvestigationIntent {
   statusFilter: string
   traceId: string
   skillDrawerId: string
-  /** Prompt Lab 预选 Skill（抽屉「在 Prompt Lab 中编辑」直达） */
+  /** Prompt 工作台预选 Skill（抽屉直达） */
   promptLabSkill: string
   /** 页面级快捷动作（命令面板「新建用户」等直达并触发页面动作） */
   quickAction: string
@@ -198,11 +198,11 @@ export const intent = reactive<InvestigationIntent>({
   quickAction: ''
 })
 
-/** Skill 抽屉 → Prompt Lab 编辑（预选该 Skill） */
+/** Skill 抽屉 → Prompt 工作台（预选该 Skill） */
 export function editSkillInPromptLab(skillId: string) {
   intent.promptLabSkill = skillId
   intent.skillDrawerId = ''
-  intent.scene = 'prompt-lab'
+  intent.scene = 'prompt-workbench'
 }
 
 /** 命令面板 → 页面快捷动作（如打开新建弹窗），页面消费后需清空 */

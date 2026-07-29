@@ -369,7 +369,7 @@ const emptyHint = computed(() =>
   padding: 0;
   text-align: left;
 }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .ec-row {
     grid-template-columns: 10px 1fr auto;
   }

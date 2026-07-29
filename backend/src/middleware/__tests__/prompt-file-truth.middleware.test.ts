@@ -60,7 +60,7 @@ describe('Prompt File-as-Truth mutation guards', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it.each(['/eval-cases', '/run-eval', '/compile-skill'])('保留评测或 Dry Run 操作 %s', path => {
+  it.each(['/eval-cases', '/run-eval'])('保留评测操作 %s', path => {
     const next = jest.fn()
     rejectPromptOpsRuntimeMutation({ method: 'POST', path } as any, createResponse(), next)
     expect(next).toHaveBeenCalledTimes(1)
@@ -79,7 +79,7 @@ describe('Prompt File-as-Truth mutation guards', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it.each(['/compile-source', '/compile-skill', '/validate-config'])('prompt-lab 允许纯 Dry Run %s', path => {
+  it.each(['/compile-core'])('prompt-lab 允许 v4 编译预览 %s', path => {
     const next = jest.fn()
     rejectPromptLabFileMutation({ method: 'POST', path } as any, createResponse(), next)
     expect(next).toHaveBeenCalledTimes(1)

@@ -17,7 +17,7 @@ import {
   MilestoneOutput,
   SubtaskOutput
 } from '../../agents/protocol';
-import { getAPIGateway, CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
+import { CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
@@ -366,7 +366,6 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
   replan?: any;
   pathSceneFraming?: any;
 }> {
-  const gateway = getAPIGateway();
   const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
    
   const structuredData = input.structuredData as any;
@@ -420,66 +419,32 @@ async function analyzeGoal(input: AgentInput, context: AgentContext): Promise<{
     };
   }
   
-  const systemPrompt = `你是一位教育规划专家，负责分析用户的学习目标。
-请分析用户的学习目标，识别：
-1. 学习主题/领域（必须是 2-4 字的短标签，如"创业"、"编程"、"前端"、"数据分析"等）
-2. 适合的学习水平（必须优先尊重用户明确声明的水平）
-3. 学习重点
-4. 具体应用场景/上下文（保留用户提到的具体项目、公司、领域等，如"腾讯股票分析"、"电商运营"等；若无则为空字符串）
-5. 分析置信度
-
-重要规则（必须严格遵守）：
-- 【最高优先级】如果用户明确提到"零基础"、"初学者"、"入门"、"小白"、"新手"、"没有基础"、"完全不懂"等词，level 必须为 "beginner"
-- 如果用户明确提到"进阶"、"有基础"、"中级"、"有一定基础"等词，level 必须为 "intermediate"
-- 如果用户明确提到"高级"、"深入"、"专家"、"资深"等词，level 必须为 "advanced"
-- 不要忽略用户明确声明的自身水平，用户说自己是什么水平就是什么水平
-- 即使用户目标看起来很复杂，只要用户声明是零基础，level 就必须是 "beginner"
-
-请以 JSON 格式输出：
-{
-  "subject": "短标签（2-4 字）",
-  "level": "beginner|intermediate|advanced",
-  "focus": ["重点 1", "重点 2"],
-  "context": "具体应用场景（保留用户原话中的关键信息）",
-  "confidence": 0.8
-}`;
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `用户目标：${input.goal}
-${input.currentLevel ? `当前水平：${input.currentLevel}` : ''}
-${input.timePerDay ? `每天可用时间：${input.timePerDay}` : ''}` }
-];
- 
   const userId = context?.userId || input?.metadata?.userId;
-  const response = await gateway.execute(
-    {
-      messages,
-      max_tokens: PATH_AGENT_MAX_TOKENS
-    },
-    caller,
-    { userId }
-  );
-  const content = response.choices[0]?.message.content || '';
-  
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        ...parsed,
-        level: framingLevel || parsed.level,
-        focus: framingPainPoints.length > 0 ? framingPainPoints : (Array.isArray(parsed.focus) ? parsed.focus : []),
-        context: framingContext || parsed.context || '',
-        replan,
-        pathSceneFraming,
-      };
-    }
-  } catch (error: any) {
-    throw new Error(`PATH_AGENT_GOAL_ANALYSIS_INVALID: ${error?.message || 'JSON parse failed'}`);
-  }
+  // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
+  const { executeSkill, auxSkillDefinitionMap } = await import('..');
+  const parsed = await executeSkill(auxSkillDefinitionMap['goal-analysis'], {
+    goal: input.goal,
+    currentLevel: input.currentLevel,
+    timePerDay: input.timePerDay,
+    __onFailure: 'throw',
+    __prompt: { userId, requestPath: '/skills/path-planning/analyze-goal', callerAgentId: caller.agentId, callerAction: caller.action },
+  }) as {
+    subject: string;
+    level: string;
+    focus?: string[];
+    context?: string;
+    confidence?: number;
+  };
 
-  throw new Error('PATH_AGENT_GOAL_ANALYSIS_INVALID: response does not contain valid JSON');
+  return {
+    ...parsed,
+    level: framingLevel || parsed.level,
+    focus: framingPainPoints.length > 0 ? framingPainPoints : (Array.isArray(parsed.focus) ? parsed.focus : []),
+    context: framingContext || parsed.context || '',
+    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+    replan,
+    pathSceneFraming,
+  };
 }
 
 /**
@@ -673,7 +638,6 @@ export async function replanPath(
   if (!currentPath) return currentPath;
   
   const eventBus = getEventBus();
-  const gateway = getAPIGateway();
   const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
   
   let adjustment = '';
@@ -698,56 +662,37 @@ export async function replanPath(
       return currentPath;
   }
   
-  const systemPrompt = `你是一位动态学习路径规划专家。
-根据用户的实时学习状态，调整里程碑式学习路径。
-调整要求：${adjustment}
-
-请输出调整后的完整路径，保持相同的JSON格式。`;
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `当前路径：
-${JSON.stringify(currentPath, null, 2)}
-
-信号强度：${signal.intensity}` }
-  ];
-
   try {
     const userId = context?.userId;
-    const response = await gateway.execute(
-      {
-        messages,
-        max_tokens: PATH_AGENT_MAX_TOKENS
-      },
-      caller,
-      { userId }
-    );
-    const content = response.choices[0]?.message.content || '';
-    
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const newPath = JSON.parse(jsonMatch[0]);
-      
-      // 发布路径调整事件
-      await eventBus.emit({
-        type: 'path:adjusted',
-        source: 'skill:path-planning',
-        userId: context.userId,
-        data: {
-          oldPathId: currentPath.id,
-          newPathId: newPath.id,
-          signal: signal.type,
-          adjustment
-        }
-      });
-      
-      return { ...currentPath, ...newPath };
-    }
+    // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
+    const { executeSkill, auxSkillDefinitionMap } = await import('..');
+    const newPath = await executeSkill(auxSkillDefinitionMap['path-adjustment-generator'], {
+      adjustmentTarget: 'milestone',
+      currentPath,
+      signal,
+      adjustment,
+      maxTokens: PATH_AGENT_MAX_TOKENS,
+      __onFailure: 'throw',
+      __prompt: { userId, requestPath: '/skills/path-planning/replan', callerAgentId: caller.agentId },
+    }) as Partial<PathOutput>;
+
+    // 发布路径调整事件
+    await eventBus.emit({
+      type: 'path:adjusted',
+      source: 'skill:path-planning',
+      userId: context.userId,
+      data: {
+        oldPathId: currentPath.id,
+        newPathId: newPath.id,
+        signal: signal.type,
+        adjustment
+      }
+    });
+
+    return { ...currentPath, ...newPath };
   } catch (error: any) {
     throw new Error(`PATH_REPLAN_FAILED: ${error?.message || 'unknown error'}`);
   }
-
-  throw new Error('PATH_REPLAN_FAILED: response does not contain valid JSON');
 }
 
 export default pathAgentHandler;

@@ -9,7 +9,7 @@
  * 并结合 EMA 数值指标进行综合判断
  */
 
-import { getAPIGateway } from '../../gateway/api-gateway';
+import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { ZScoreResult, AnomalyDetectionResult } from '../student-baseline.service';
 
 /**
@@ -70,75 +70,21 @@ export class AIStateAssessmentService {
     conversationHistory: Message[]
   ): Promise<AIAssessmentResult> {
     
-    const prompt = `
-分析学生当前的学习状态：
-
-【对话历史】
-${conversationHistory.map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content}`).join('\n')}
-
-【分析维度】
-
-1. 认知深度 (0-1):
-   - 0.0-0.3: 直接要答案、复制粘贴、无思考
-   - 0.4-0.6: 有初步想法，但无论证
-   - 0.7-1.0: 原创观点、逻辑推演、自我纠错
-
-2. 压力程度 (0-1):
-   - 0.0-0.3: 放松、自信
-   - 0.4-0.6: 有点困惑，但还能应付
-   - 0.7-1.0: 焦虑、挫败、情绪化
-
-3. 投入程度 (0-1):
-   - 0.0-0.3: 敷衍、回复简短、频繁点"继续"
-   - 0.4-0.6: 正常参与
-   - 0.7-1.0: 主动提问、深入追问、分享想法
-
-【输出格式】
-请返回 JSON 格式：
-{
-  "cognitiveDepth": 数字，
-  "stressLevel": 数字，
-  "engagement": 数字，
-  "reasoning": "分析推理过程"
-}
-`;
-
     try {
-      const gateway = getAPIGateway();
-      const response = await gateway.execute(
-        {
-          messages: [
-            {
-              role: 'system',
-              content: '你是一个专业的教育 AI 评估专家。你擅长通过分析学生的对话来判断其认知状态。请只返回 JSON 格式，不要其他内容。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 500
+      const assessment = await executeSkill(auxSkillDefinitionMap['state-assessment'], {
+        action: 'assessCognitiveState',
+        conversationHistory,
+        __prompt: {
+          requestPath: '/services/ai/state-assessment/assess-cognitive-state',
+          callerAgentId: 'state-assessment-agent',
+          callerAction: 'assessCognitiveState',
         },
-        {
-          agentId: 'state-assessment-agent',
-          action: 'assessCognitiveState'
-        },
-        {
-          requestPath: '/services/ai/state-assessment/assess-cognitive-state'
-        }
-      );
+      }) || {};
 
-      const content = response.choices[0].message.content || '{}';
-      
-      // 解析 JSON（处理 markdown 包裹的情况）
-      const jsonContent = this.extractJsonFromMarkdown(content);
-      const assessment = JSON.parse(jsonContent);
-      
       return {
-        cognitiveDepth: Math.max(0, Math.min(1, assessment.cognitiveDepth || 0.5)),
-        stressLevel: Math.max(0, Math.min(1, assessment.stressLevel || 0.5)),
-        engagement: Math.max(0, Math.min(1, assessment.engagement || 0.5)),
+        cognitiveDepth: Math.max(0, Math.min(1, assessment.cognitiveDepth ?? 0.5)),
+        stressLevel: Math.max(0, Math.min(1, assessment.stressLevel ?? 0.5)),
+        engagement: Math.max(0, Math.min(1, assessment.engagement ?? 0.5)),
         reasoning: assessment.reasoning || 'AI 评估'
       };
     } catch (error: any) {
@@ -152,18 +98,6 @@ ${conversationHistory.map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.cont
         reasoning: 'AI 评估失败，使用默认值'
       };
     }
-  }
-  
-  /**
-   * 从 markdown 中提取 JSON
-   */
-  private extractJsonFromMarkdown(content: string): string {
-    // 如果内容被 ```json 包裹，提取 JSON 部分
-    const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-    return content.trim();
   }
   
   /**
@@ -182,89 +116,37 @@ ${conversationHistory.map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.cont
     conversationHistory: Message[]
   ): Promise<StudentStateAssessment> {
     
-    const prompt = `
-综合评估学生状态：
-
-【AI 语义分析】
-- 认知深度：${aiAssessment.cognitiveDepth.toFixed(2)}
-- 压力程度：${aiAssessment.stressLevel.toFixed(2)}
-- 投入程度：${aiAssessment.engagement.toFixed(2)}
-- 推理：${aiAssessment.reasoning}
-
-【数值指标异常度】(Z-Score)
-- 响应时间：${zScores.responseTime?.toFixed(2) || 'N/A'}（>2.5 表示异常慢）
-- 消息长度：${zScores.messageLength?.toFixed(2) || 'N/A'}
-- 互动间隔：${zScores.interactionInterval?.toFixed(2) || 'N/A'}
-- AI 评分：${zScores.aiScore?.toFixed(2) || 'N/A'}
-
-【异常检测】
-- 是否异常：${anomaly.hasAnomaly ? '是' : '否'}
-- 异常指标：${anomaly.anomalyMetrics.join(', ') || '无'}
-- 异常原因：${anomaly.reasoning || '无'}
-
-【对话历史摘要】
-最近 3 轮对话:
-${conversationHistory.slice(-6).map(m => `${m.role === 'user' ? '学生' : 'AI'}: ${m.content.substring(0, 100)}`).join('\n')}...
-
-【任务】
-综合语义和数值，给出最终评估：
-1. 如果 Z-Score > 2.5，说明学生行为异常（突然变慢/变短）
-2. 结合 AI 的语义理解，判断学生是否遇到困难
-3. 如果需要，给出干预建议
-
-【输出格式】
-请返回 JSON 格式：
-{
-  "cognitive": 数字 (0-1),
-  "stress": 数字 (0-1),
-  "engagement": 数字 (0-1),
-  "anomaly": 布尔值，
-  "anomalyReason": "字符串",
-  "intervention": "干预建议（可选）",
-  "assessedAt": "ISO 时间戳"
-}
-`;
-
     try {
-      const gateway = getAPIGateway();
-      const response = await gateway.execute(
-        {
-          messages: [
-            {
-              role: 'system',
-              content: '你是一个专业的学习状态评估 AI。你综合 AI 语义理解和数值指标，给出最终的学生状态评估。请只返回 JSON 格式。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 600
+      const assessment = await executeSkill(auxSkillDefinitionMap['state-assessment'], {
+        action: 'integrateAIandEMA',
+        aiAssessment,
+        zScores,
+        anomaly,
+        conversationHistory,
+        __fallback: {
+          cognitive: aiAssessment.cognitiveDepth,
+          stress: aiAssessment.stressLevel,
+          engagement: aiAssessment.engagement,
+          anomaly: false,
+          anomalyReason: '',
+          intervention: undefined,
+          assessedAt: new Date().toISOString(),
         },
-        {
-          agentId: 'state-assessment-agent',
-          action: 'integrateAIandEMA'
+        __prompt: {
+          requestPath: '/services/ai/state-assessment/integrate-ai-and-ema',
+          callerAgentId: 'state-assessment-agent',
+          callerAction: 'integrateAIandEMA',
         },
-        {
-          requestPath: '/services/ai/state-assessment/integrate-ai-and-ema'
-        }
-      );
+      }) || {};
 
-      const content = response.choices[0].message.content || '{}';
-      
-      // 解析 JSON（处理 markdown 包裹的情况）
-      const jsonContent = this.extractJsonFromMarkdown(content);
-      const assessment = JSON.parse(jsonContent);
-      
       return {
-        cognitive: Math.max(0, Math.min(1, assessment.cognitive || aiAssessment.cognitiveDepth)),
-        stress: Math.max(0, Math.min(1, assessment.stress || aiAssessment.stressLevel)),
-        engagement: Math.max(0, Math.min(1, assessment.engagement || aiAssessment.engagement)),
+        cognitive: Math.max(0, Math.min(1, assessment.cognitive ?? aiAssessment.cognitiveDepth)),
+        stress: Math.max(0, Math.min(1, assessment.stress ?? aiAssessment.stressLevel)),
+        engagement: Math.max(0, Math.min(1, assessment.engagement ?? aiAssessment.engagement)),
         anomaly: assessment.anomaly || false,
         anomalyReason: assessment.anomalyReason || '',
         intervention: assessment.intervention,
-        assessedAt: new Date().toISOString()
+        assessedAt: assessment.assessedAt || new Date().toISOString()
       };
     } catch (error: any) {
       console.error('AI 综合评估失败:', error.message);

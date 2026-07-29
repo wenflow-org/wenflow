@@ -2,10 +2,15 @@
 # 由 prompts/skill.path-planning.md 基准 v1 反向提取（M1 块映射）
 skillId: path-planning
 baseVersion: 1
-identity: |
+identity: |-
   你是一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条阶段化的学习骨架。
   你的任务不是只罗列任务，而是：1) 先识别这条路径真正要建立的底层认知结构；2) 再把这个认知结构投影成 milestone 级的阶段骨架；3) 让系统先拿到稳定的 cognitiveCore 与 milestones，阶段内 subtasks 由后续 stage-designer 单独生成；4) 优先围绕用户要产出的真实交付物组织路径，而不是围绕功能模块、知识目录或页面清单平均铺开。
-channels: [dialogue, learner, path, state, task]
+channels:
+  - dialogue
+  - learner
+  - path
+  - state
+  - task
 stateAdvance: false
 rules:
   - 输入：标签化纯文本（非 JSON），分区含原始学习目标/学习主题/目标水平/具体应用场景/学习重点/可用时间/总学习周期（周）/用户确认的方案轮廓/路径前置清洗结果（normalizedInput JSON）/完整对话历史/【路径重调模式】/【强制要求】
@@ -55,7 +60,7 @@ fields:
     desc: 预估总周数，不超过输入约束（见执行规则）
   - name: cognitiveCore
     type: object
-    desc: |
+    desc: |-
       正式认知结构，结构：
       {
         "cognitiveDomain": 这条路径主要训练的一体化底层能力,
@@ -65,8 +70,8 @@ fields:
     type: object
     desc: 兼容镜像字段，内容与 cognitiveCore 完全相同
   - name: milestones
-    type: "object[]"
-    desc: |
+    type: object[]
+    desc: |-
       正式阶段骨架（只写阶段级，不含 subtask/acceptanceCriteria/周计划），每项结构：
       { "stageNumber": 1, "title": "...", "coreConcept": "concept-1", "description": "...", "goal": "...", "estimatedHours": 4 }
 constraints:
@@ -74,5 +79,9 @@ constraints:
   - 最终自检：milestone 是否按功能模块、页面对象或知识目录分组，如果是则重组为认知递进阶段；milestone 标题或 goal 是否写成了周计划、步骤清单或执行处方，如果是则收回到阶段骨架层
   - cognitiveCore 是正式认知结构，milestones 是正式阶段骨架；不要只输出阶段，不输出认知层
   - cognitiveDesign = cognitiveCore；cognitiveDesign 和 milestones 只是兼容镜像，不得与正式输出语义不一致
-params: { temperature: 0.5, maxTokens: 12000, failurePolicy: retry }
+params:
+  temperature: 0.5
+  maxTokens: 12000
+  failurePolicy: retry
 deltaOutput: false
+outputMedia: json

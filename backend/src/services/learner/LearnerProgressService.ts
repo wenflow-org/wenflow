@@ -1,4 +1,4 @@
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkill, auxSkillDefinitionMap } from '../../skills';
 import { getEventBus } from '../../gateway/event-bus';
 import { calculateCognitiveEngagement, CognitiveEngagementInput } from '../learning/cognitive-engagement.service';
 import type { LearningSignal, ProgressMetrics } from '../../agents/protocol';
@@ -288,12 +288,12 @@ class LearnerProgressService {
     taskData: { taskTitle?: string; timeSpent?: number; difficulty?: number },
     userId?: string
   ): Promise<{ reasoning: string; suggestion: string }> {
-    const fallbackReasoning = '基于当前学习数据，你正在稳步推进学习进度。继续保持当前的学习节奏。';
-    const fallbackSuggestion = '建议继续保持当前的学习节奏，遇到困难时及时回顾之前的知识点。';
+    const fallback = {
+      reasoning: '基于当前学习数据，你正在稳步推进学习进度。继续保持当前的学习节奏。',
+      suggestion: '建议继续保持当前的学习节奏，遇到困难时及时回顾之前的知识点。',
+    };
 
     try {
-      const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: 'learner-agent', skillId: 'learner-model' };
       const signalDescriptions = signals.map((s) => {
         const typeMap: Record<string, string> = {
           'fatigue-high': '疲劳度较高',
@@ -307,36 +307,28 @@ class LearnerProgressService {
         return `${typeMap[s.type] || s.type}: 强度 ${Math.round(s.intensity * 100)}%${s.context ? ` (${s.context})` : ''}`;
       }).join('；');
 
-      const messages = [
-        {
-          role: 'system' as const,
-          content: `你是学习者状态中心中的学习分析专家，负责分析学员的学习数据并给出个性化反馈。\n\n输出 JSON：{\n  "reasoning": "1-2 句话解释当前学习状态",\n  "suggestion": "1-2 句话给出具体行动建议"\n}\n\n要求：\n- 语气亲切、鼓励\n- 建议具体可执行\n- 不输出字段解释`
+      return await executeSkill(auxSkillDefinitionMap['learner-progress-report'], {
+        task: {
+          title: taskData.taskTitle || '未知任务',
+          timeSpent: taskData.timeSpent || 0,
+          difficulty: taskData.difficulty || 5,
         },
-        {
-          role: 'user' as const,
-          content: `请分析以下学习数据：\n\n任务信息：\n- 任务名称：${taskData.taskTitle || '未知任务'}\n- 学习时长：${taskData.timeSpent || 0} 分钟\n- 主观难度：${taskData.difficulty || 5}/10\n\n学习指标：\n- 完成率：${Math.round(metrics.completionRate * 100)}%\n- KTL：${metrics.ktl?.toFixed(1) || 0}\n- LF：${metrics.lf?.toFixed(1) || 0}\n- LSS：${metrics.lss?.toFixed(1) || 0}\n\n学习信号：\n${signalDescriptions || '无明显信号'}\n\n请输出 JSON。`
-        }
-      ];
-
-      const response = await gateway.execute({ messages }, caller, { userId });
-      const content = response.choices[0]?.message?.content || '';
-
-      try {
-        const parsed = JSON.parse(content);
-        return {
-          reasoning: parsed.reasoning || fallbackReasoning,
-          suggestion: parsed.suggestion || fallbackSuggestion
-        };
-      } catch {
-        const reasoningMatch = content.match(/"reasoning"\s*:\s*"([^"]+)"/);
-        const suggestionMatch = content.match(/"suggestion"\s*:\s*"([^"]+)"/);
-        return {
-          reasoning: reasoningMatch?.[1] || fallbackReasoning,
-          suggestion: suggestionMatch?.[1] || fallbackSuggestion
-        };
-      }
+        metrics: {
+          completionRate: Math.round(metrics.completionRate * 100),
+          ktl: metrics.ktl || 0,
+          lf: metrics.lf || 0,
+          lss: metrics.lss || 0,
+        },
+        signals: signalDescriptions || '无明显信号',
+        __fallback: fallback,
+        __prompt: {
+          userId,
+          requestPath: '/services/learner/progress-report',
+          callerAgentId: 'learner-agent',
+        },
+      });
     } catch {
-      return { reasoning: fallbackReasoning, suggestion: fallbackSuggestion };
+      return fallback;
     }
   }
 }

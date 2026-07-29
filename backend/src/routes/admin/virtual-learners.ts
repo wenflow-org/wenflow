@@ -1237,9 +1237,24 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: any, res) => {
     }
 
     const learningProgress = parseLearningProgress(session);
-    const teachingSessionId = learningProgress.teachingSessionId || null;
+    const currentTeachingSessionId = learningProgress.teachingSessionId || null;
+    const requestedTeachingSessionId = typeof req.query?.teachingSessionId === 'string'
+      ? req.query.teachingSessionId.trim()
+      : '';
+    const teachingHistory = Array.isArray(learningProgress.teachingSessionHistory)
+      ? learningProgress.teachingSessionHistory
+      : [];
+    const archivedTeachingSessionIds = new Set(
+      teachingHistory
+        .map((entry: any) => typeof entry?.teachingSessionId === 'string' ? entry.teachingSessionId : '')
+        .filter(Boolean)
+    );
+    const teachingSessionId = requestedTeachingSessionId || currentTeachingSessionId;
     if (!teachingSessionId) {
       return res.status(404).json({ success: false, error: '当前虚拟会话尚未绑定 Learn 会话' });
+    }
+    if (requestedTeachingSessionId && requestedTeachingSessionId !== currentTeachingSessionId && !archivedTeachingSessionIds.has(requestedTeachingSessionId)) {
+      return res.status(403).json({ success: false, error: '该授课会话不属于当前虚拟会话的教学历史' });
     }
 
     const teachingSession = await teachingSessionRepository.getById(String(teachingSessionId));
@@ -1264,6 +1279,8 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: any, res) => {
         wrapup: teachingSession.wrapup,
         advisory: teachingSession.advisory || null,
         revision: teachingSession.revision,
+        isArchived: teachingSessionId !== currentTeachingSessionId,
+        teachingSessionHistory: teachingHistory,
       }
     });
   } catch (error: any) {
@@ -1860,7 +1877,8 @@ router.put('/:id', async (req: any, res) => {
     if (typeof req.body.name === 'string' && req.body.name.trim()) {
       await prisma.users.update({ where: { id: profile.userId }, data: { name: req.body.name.trim() } });
     }
-    if (req.body.learningGoal) updateData.learningGoal = req.body.learningGoal;
+    // learningGoal 的产品语义已降为可选长期倾向；请求显式携带空串时也要允许清空。
+    if (typeof req.body.learningGoal === 'string') updateData.learningGoal = req.body.learningGoal.trim();
     if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
     if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
     if (req.body.struggleConcepts) updateData.struggleConcepts = JSON.stringify(req.body.struggleConcepts);

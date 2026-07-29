@@ -88,6 +88,10 @@ import { promptCompilerHandler as promptCompilerFn } from './prompt-compiler';
 export { mcpToolDefinition } from './mcp-tool';
 import { executeMcpTool as executeMcpToolFn } from './mcp-tool';
 
+// v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
+import { auxSkillDefinitions, auxSkillHandlers, auxSkillDefinitionMap } from './v4-aux-skills';
+export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
+
 // 虚拟学习者场景设计
 export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './virtual-learner-scenario-designer';
 import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } from './virtual-learner-scenario-designer';
@@ -194,6 +198,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   teachingStrategySelectorDefinition,
   promptCompilerDefinition,
   mcpToolDefinition,
+  ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
   {
     name: 'goal-conversation',
@@ -286,6 +291,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'teaching-strategy-selector': teachingStrategySelectorFn,
   'prompt-compiler': promptCompilerFn,
   'mcp-tool': executeMcpToolFn,
+  ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),
@@ -303,20 +309,30 @@ import type { SkillExecutionOptions } from './protocol';
  * @param input - 输入数据
  * @returns 执行结果
  */
-export async function executeSkill(
+/**
+ * 执行 Skill 并返回完整结果（含 quality/debug/runtimeEnvelope）。
+ * 需要区分 model/fallback 质量或读取 prompt 调试信息的调用方使用本入口。
+ */
+export async function executeSkillWithResult(
   definition: SkillDefinition | { id?: string; name?: string },
   input: any,
   options: SkillExecutionOptions = {}
 ): Promise<any> {
   const rawId = (definition.id || definition.name) as string;
-  // 兼容核心能力单元：AgentDefinition 的 id 形如 'skill:goal-conversation'，
-  // 而 skillHandlers 的 key 是去前缀的 'goal-conversation'。
   const skillId = skillHandlers[rawId] ? rawId : rawId.replace(/^skill:/, '');
   const handler = skillHandlers[skillId];
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);
   }
-  const result = await executeSkillHandler(definition, input, handler, options);
+  return executeSkillHandler(definition, input, handler, options);
+}
+
+export async function executeSkill(
+  definition: SkillDefinition | { id?: string; name?: string },
+  input: any,
+  options: SkillExecutionOptions = {}
+): Promise<any> {
+  const result = await executeSkillWithResult(definition, input, options);
   return result.output;
 }
 

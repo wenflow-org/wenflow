@@ -28,6 +28,8 @@
     "prompts:lint": "ts-node src/scripts/lint-prompts.ts",
     "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
+    "llm:calls:check": "ts-node src/scripts/check-llm-call-boundary.ts",
+    "prompts:compile-all": "ts-node src/scripts/compile-core-files.ts",
     "prisma:generate": "npm run prisma:generate:all",
     "prisma:generate:main": "prisma generate",
     "prisma:generate:system": "prisma generate --schema prisma/system/schema.prisma",

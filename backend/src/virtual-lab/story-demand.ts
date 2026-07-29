@@ -79,25 +79,15 @@ export function resolveStorySessionDemand(params: {
 }
 
 /**
- * Path 旁路/手动推进时：优先用 Goal 对话已写入的 description（= 开场诉求经正式链路），
- * 其次用故事需求；画像 learningGoal 仅作最后兜底，不是正规传递路径。
+ * Path 只接受 Goal 对话已经落库的正式诉求。故事只负责 Goal 开场，
+ * 不能作为 Path 旁路输入，否则会破坏“故事 → Goal → Path”的领域边界。
  */
 export function resolvePathRawGoalFromSession(params: {
   goalConversationDescription?: string | null;
-  story?: any | null;
-  profileLearningGoal?: string | null;
 }): { rawGoal: string; source: string } {
   const fromGoal = asText(params.goalConversationDescription);
   if (fromGoal) {
     return { rawGoal: fromGoal, source: 'goal.conversation.description' };
-  }
-
-  const demand = resolveStorySessionDemand({
-    story: params.story,
-    profileLearningGoal: params.profileLearningGoal,
-  });
-  if (demand.text) {
-    return { rawGoal: demand.text, source: demand.source };
   }
 
   return { rawGoal: '', source: 'none' };

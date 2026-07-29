@@ -1,11 +1,10 @@
 const mockCallPrompt = jest.fn()
-const mockGatewayExecute = jest.fn()
 
 jest.mock('../../composers/prompt-composer', () => ({
   callPrompt: mockCallPrompt,
 }))
 jest.mock('../../gateway/api-gateway', () => ({
-  getAPIGateway: () => ({ execute: mockGatewayExecute }),
+  getAPIGateway: () => ({}),
 }))
 
 import { sessionWrapupAgent } from '../session-wrapup'
@@ -43,20 +42,26 @@ const MINIMAL_INPUT = {
 describe('session-wrapup payload snapshot parity', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockCallPrompt.mockResolvedValue({
-      success: false,
-      error: { code: 'SESSION_WRAPUP_FAILED', message: 'force fallback path' },
-      debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
-    })
-    mockGatewayExecute.mockResolvedValue({
-      choices: [{ message: { content: '{"sessionLss":5,"sessionKtl":6,"sessionLf":4,"confidence":0.7,"reasoning":"ok"}' } }],
+    mockCallPrompt.mockImplementation((spec: any) => {
+      if (spec?.agentId === 'skill:session-evaluation-fallback') {
+        return Promise.resolve({
+          success: true,
+          output: { sessionLss: 5, sessionKtl: 6, sessionLf: 4, confidence: 0.7, reasoning: 'ok' },
+          debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
+        })
+      }
+      return Promise.resolve({
+        success: false,
+        error: { code: 'SESSION_WRAPUP_FAILED', message: 'force fallback path' },
+        debug: { attempts: [], extractedJson: null, rawModelOutput: '' },
+      })
     })
   })
 
   it('payload carries the tagged sections the prompt input spec declares', async () => {
     await sessionWrapupAgent.generate(MINIMAL_INPUT as any)
 
-    expect(mockCallPrompt).toHaveBeenCalledTimes(1)
+    expect(mockCallPrompt).toHaveBeenCalledTimes(2)
     const [spec] = mockCallPrompt.mock.calls[0]
     const payload = spec.buildUserPayload(MINIMAL_INPUT, {})
 

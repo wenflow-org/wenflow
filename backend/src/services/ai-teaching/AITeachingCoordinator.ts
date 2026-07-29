@@ -4,9 +4,8 @@ import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
 import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
 import { getEventBus } from '../../gateway/event-bus';
-import { executeSkill, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
 import {
   teachingSessionRepository,
@@ -1065,8 +1064,6 @@ export class AITeachingOrchestrator {
   }
 
   private async generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: AI_TEACHING_AGENT_ID };
     const runtimeSignals = deriveTeachingRuntimeSignals(context);
     const openingMode: TeachingOpening['mode'] = context.taskType === 'project'
       || context.taskType === 'practice'
@@ -1077,51 +1074,31 @@ export class AITeachingOrchestrator {
         ? 'predict'
         : 'self-assess';
     const fallbackOpening = buildFallbackOpening(context, openingMode);
-    let response: any = null;
+    let parsed: any = null;
     try {
-      response = await withTimeout(gateway.execute({
-        messages: [
-          {
-            role: 'system',
-            content: `你是一位经验丰富的 AI 教师。请为本节课生成一个“开场交互块”，输出严格 JSON。
-
-格式：
-{
-  "message": "1-2 句开场定位，不要像通知",
-  "question": "一句低门槛互动问题",
-  "quickReplies": [{"text":"选项1"}, {"text":"选项2"}, {"text":"选项3"}]
-}
-
-要求：
-1. 只输出 JSON
-2. 开场要有互动感，不要只是宣布上课
-3. question 必须容易回答，适合学生立即回应
-4. quickReplies 提供 2-3 个短选项，适合一键点击
-5. 结合任务类型、当前阶段、学习者信心与节奏来决定 opening 风格
-6. 如果 mode = example-first，优先从一个小例子或具体切入口打开
-7. 如果 mode = predict，优先让学生先猜或先判断
-8. 如果 mode = self-assess，优先让学生快速自评当前熟悉度或难点`
+      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
+        subject: context.subject,
+        topic: context.topic,
+        taskTitle: context.taskTitle,
+        taskDescription: context.taskDescription,
+        taskType: context.taskType,
+        pathSummary: context.pathProgress.pathSummary,
+        currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+        learner: {
+          confidenceLevel: runtimeSignals.confidenceLevel,
+          recentTrend: runtimeSignals.recentTrend,
+          recommendedPacing: runtimeSignals.recommendedPacing,
         },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            subject: context.subject,
-            topic: context.topic,
-            taskTitle: context.taskTitle,
-            taskDescription: context.taskDescription,
-            taskType: context.taskType,
-            pathSummary: context.pathProgress.pathSummary,
-            currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
-            learner: {
-              confidenceLevel: runtimeSignals.confidenceLevel,
-              recentTrend: runtimeSignals.recentTrend,
-              recommendedPacing: runtimeSignals.recommendedPacing,
-            },
-            openingMode,
-          })
-          }
-        ]
-      }, caller, { userId: context.userId }), 15000, 'OPENING_GENERATION_TIMEOUT');
+        openingMode,
+        __fallback: fallbackOpening,
+        __prompt: {
+          userId: context.userId,
+          taskId: context.taskId,
+          requestPath: '/services/ai-teaching/generate-opening',
+          callerAgentId: AI_TEACHING_AGENT_ID,
+        },
+      }), 15000, 'OPENING_GENERATION_TIMEOUT');
+      parsed = result.success && result.output ? result.output : null;
     } catch (error) {
       logger.warn('[AITeaching] 开场交互块生成失败，使用 fallback opening', {
         error: error instanceof Error ? error.message : String(error),
@@ -1132,40 +1109,14 @@ export class AITeachingOrchestrator {
       return fallbackOpening;
     }
 
-    try {
-      const content = response?.choices?.[0]?.message?.content || '{}';
-      const parsed = JSON.parse(content);
-      const quickReplies = Array.isArray(parsed?.quickReplies)
-        ? parsed.quickReplies
-            .map((item: any) => typeof item?.text === 'string' ? { text: item.text.trim() } : null)
-            .filter((item: any) => item && item.text)
-            .slice(0, 3)
-        : [];
-
-      if (typeof parsed?.message === 'string' && typeof parsed?.question === 'string' && quickReplies.length > 0) {
-        return {
-          message: parsed.message.trim(),
-          question: parsed.question.trim(),
-          quickReplies,
-          mode: openingMode,
-        };
-      }
-    } catch (error) {
-      logger.warn('[AITeaching] 开场交互块解析失败，使用 fallback opening', {
-        error: error instanceof Error ? error.message : String(error),
-        userId: context.userId,
-        taskId: context.taskId,
-        topic: context.topic,
-        rawContent: response?.choices?.[0]?.message?.content || null,
-      });
-      return fallbackOpening;
+    if (parsed) {
+      return parsed as TeachingOpening;
     }
 
     logger.warn('[AITeaching] 开场交互块缺少有效结构，使用 fallback opening', {
       userId: context.userId,
       taskId: context.taskId,
       topic: context.topic,
-      rawContent: response?.choices?.[0]?.message?.content || null,
     });
     return fallbackOpening;
   }

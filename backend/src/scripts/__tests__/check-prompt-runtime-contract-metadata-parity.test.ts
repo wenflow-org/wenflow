@@ -4,6 +4,8 @@ import {
   checkPromptRuntimeContractMetadataParity,
   type ActivePromptRuntimeContractMetadataRow,
 } from '../check-prompt-runtime-contract-metadata-parity'
+import { buildV4CorePromptMetadata } from '../../services/prompt-lab/core-prompt-metadata'
+import { computeCoreHash, loadCoreFile } from '../../services/prompt-lab/core-file-loader'
 
 function validRuntimeContract() {
   return {
@@ -99,6 +101,26 @@ describe('prompt runtime-contract metadata parity checker', () => {
       scannedFiles: 2,
       declaredRuntimeContractFiles: 1,
       skippedFilesWithoutRuntimeContract: 1,
+    })
+  })
+
+  it('uses v4 manifest contracts when the Runtime Prompt frontmatter carries coreHash', () => {
+    const coreHash = computeCoreHash(loadCoreFile('teaching-turn')!.core!)
+    const v4File = makeFile({
+      coreHash,
+      coreVersion: 1,
+      runtimeContract: undefined,
+      promptContract: undefined,
+    })
+    const report = analyze([v4File], [makeRow({
+      metadata: buildV4CorePromptMetadata({
+        skillId: 'teaching-turn', coreHash, coreVersion: 1,
+      }),
+    })])
+
+    expect(report.hasErrors).toBe(false)
+    expect(report.results[0]).toMatchObject({
+      status: 'in-sync', runtimeContractStatus: 'in-sync', promptContractStatus: 'in-sync',
     })
   })
 

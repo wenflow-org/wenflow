@@ -2,7 +2,7 @@
 import { logger } from '../../utils/logger';
 import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
 import { StudentStateAssessment } from './state-assessment.service';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import type { RetryBudget } from '../../gateway/api-gateway/retry-budget';
 
 // AI 配置 - 主模型
@@ -341,27 +341,51 @@ class AIService {
         messagesPreview: JSON.stringify(messages).substring(0, 500)
       });
 
-      const gateway = getAPIGateway();
-      const caller: CallerInfo = {
-        agentId: options?.agentId,
-        skillId: options?.skillId,
-        userId: options?.userId,
-        action: options?.action,
-      };
-      
-      const response = await gateway.execute(
-        {
-          messages,
-          model: options?.model,
-          temperature: options?.temperature,
-          max_tokens: options?.maxTokens
-        },
-        caller,
-        {
+      const systemPrompt = messages.find((message) => message.role === 'system')?.content || '';
+      const conversation = messages.filter((message) => message.role !== 'system');
+      const lastUserMessage = [...conversation].reverse().find((message) => message.role === 'user')?.content
+        || conversation.at(-1)?.content
+        || '';
+      const history = conversation.slice(0, -1).map((message) => ({
+        role: message.role as 'user' | 'assistant',
+        content: message.content,
+      }));
+      const promptResult = await executeSkillWithResult(auxSkillDefinitionMap['generic-chat'], {
+        systemPrompt,
+        message: lastUserMessage,
+        model: options?.model,
+        temperature: options?.temperature,
+        maxTokens: options?.maxTokens,
+        __prompt: {
+          userId: options?.userId,
           requestPath: '/services/ai/chat',
-          retryBudget: options?.retryBudget
-        }
-      );
+          retryBudget: options?.retryBudget,
+          assistantMessages: history,
+          callerAgentId: options?.agentId,
+          callerAction: options?.action,
+        },
+      });
+      if (!promptResult.success || promptResult.output === undefined) {
+        throw Object.assign(new Error(promptResult.error?.message || 'GENERIC_CHAT_FAILED'), {
+          code: promptResult.error?.code || 'GENERIC_CHAT_FAILED',
+        });
+      }
+      const response = {
+        id: promptResult.debug.finalLlmRequestId || promptResult.debug.promptCallId,
+        model: promptResult.debug.model || options?.model || '',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: promptResult.output },
+          finish_reason: 'stop',
+        }],
+        usage: promptResult.debug.tokenUsage
+          ? {
+              prompt_tokens: promptResult.debug.tokenUsage.prompt,
+              completion_tokens: promptResult.debug.tokenUsage.completion,
+              total_tokens: promptResult.debug.tokenUsage.total,
+            }
+          : undefined,
+      } as any;
 
 
       logger.info('AI 响应原始数据', { response: JSON.stringify(response, null, 2).substring(0, 1000) });
@@ -931,69 +955,26 @@ ${context ? `上下文：
       completedTasks: number;
     }[];
   }) {
-    const systemPrompt = SYSTEM_PROMPTS.COURSE_DESIGN;
-
-    const userMessage = `【周次信息】
-第 ${params.weekNumber} 周：${params.weekTitle}
-描述：${params.weekDescription}
-
-【整体学习目标】
-${params.overallGoal}
-
-【用户背景】
-- 技能水平：${params.userProfile.skillLevel || '未知'}
-- 每天可用时间：${params.userProfile.timePerDay || '未知'}
-- 学习风格：${params.userProfile.learningStyle || '未知'}
-
-${params.previousWeeks && params.previousWeeks.length > 0 ? `【已完成的周次】
-${params.previousWeeks.map(w => `Week ${w.weekNumber}: ${w.title} (${w.completedTasks}个任务完成)`).join('\n')}` : ''}
-
-请为本周设计 3-5 个学习任务。`;
-
-    const startTime = Date.now();
-    
     try {
       logger.info('课程设计请求', { 
         weekNumber: params.weekNumber,
         model: COURSE_DESIGN_MODEL
       });
 
-      const gateway = getAPIGateway();
-      const response = await gateway.execute(
-        {
-          model: COURSE_DESIGN_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000
-        },
-        {
-          agentId: 'course-design',
+      const response = await executeSkillWithResult(auxSkillDefinitionMap['course-design'], {
+        ...params,
+        model: COURSE_DESIGN_MODEL,
+        __prompt: {
           userId: params.userId,
-          action: 'designWeekCourses'
+          requestPath: '/services/ai/design-week-courses',
+          callerAgentId: 'course-design',
+          callerAction: 'designWeekCourses',
         },
-        {
-          userId: params.userId,
-          requestPath: '/services/ai/design-week-courses'
-        }
-      );
-
-      // 检查响应是否有效
-      if (!response.choices || response.choices.length === 0) {
-        throw new Error('AI 返回空响应，请重试');
+      });
+      if (!response.success || !response.output) {
+        throw new Error(response.error?.message || 'COURSE_DESIGN_FAILED');
       }
-
-      const reply = response.choices[0]?.message?.content || '';
-
-      // 尝试解析 JSON
-      const jsonMatch = reply.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('AI 返回格式错误');
-      }
-
-      const result = JSON.parse(jsonMatch[0]);
+      const result = response.output;
 
       return {
         success: true,

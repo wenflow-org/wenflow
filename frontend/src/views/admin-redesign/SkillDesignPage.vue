@@ -183,6 +183,267 @@
         </div>
       </div>
 
+      <!-- ========== 协议（core YAML · SSOT 编辑与发布） ========== -->
+      <div v-show="tab === 'protocol'" class="sdp-pane">
+        <div class="sdp-pw">
+          <!-- 左：core 编辑器 -->
+          <section class="sdp-block">
+            <header class="sdp-block__head">
+              <h4>核心文件 <code class="mono">prompts/core/{{ skillId }}.yaml</code></h4>
+              <span class="sdp-block__meta">
+                <span v-if="coreDirty" class="mk-badge mk-badge--muted">未保存</span>
+                <button type="button" class="mk-link" :disabled="!coreLoaded || coreSaving" @click="saveCore">
+                  {{ coreSaving ? '保存中…' : '保存并校验' }}
+                </button>
+                <button type="button" class="mk-link" :disabled="!coreLoaded || coreCompiling" @click="previewCore">
+                  {{ coreCompiling ? '编译中…' : '编译预览' }}
+                </button>
+                <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="!coreLoaded || corePublishing" @click="publishCore(false)">
+                  {{ corePublishing ? '发布中…' : '发布' }}
+                </button>
+              </span>
+            </header>
+            <p class="sdp-pw__hint">
+              core YAML 是业务 SSOT：发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + DB ACTIVE），运行时立即生效。
+            </p>
+            <div class="sdp-pw__viewswitch">
+              <button
+                type="button"
+                class="sdp-pw__viewbtn"
+                :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'form' }"
+                @click="coreViewMode = 'form'"
+              >表单</button>
+              <button
+                type="button"
+                class="sdp-pw__viewbtn"
+                :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'raw' }"
+                @click="coreViewMode = 'raw'"
+              >源码</button>
+            </div>
+            <div v-if="coreClassification" class="sdp-pw__classify" :class="`sdp-pw__classify--${coreClassification.level}`">
+              <strong>编辑分级：{{ coreLevelLabel(coreClassification.level) }}</strong>
+              <ul><li v-for="(m, i) in coreClassification.messages" :key="i">{{ m }}</li></ul>
+            </div>
+            <div v-if="coreDiagnostics.length" class="sdp-pw__diag">
+              <div v-for="(dg, i) in coreDiagnostics" :key="i" class="sdp-pw__diag-item">
+                <span class="mono">{{ dg.code }}</span>
+                <span>{{ dg.message }}</span>
+              </div>
+            </div>
+
+            <!-- 表单视图 -->
+            <div v-if="coreViewMode === 'form'" class="sdp-pwform">
+              <template v-if="coreForm">
+                <!-- 身份 -->
+                <section class="sdp-pwform__card">
+                  <h5>身份</h5>
+                  <label class="sdp-pwform__field">
+                    <span>identity（角色定位）</span>
+                    <textarea v-model="coreForm.identity" rows="3" class="sdp-input" @input="coreDirty = true"></textarea>
+                  </label>
+                  <div class="sdp-pwform__field">
+                    <span>channels（材料池，至少一个）</span>
+                    <div class="sdp-pwform__checks">
+                      <label v-for="c in CORE_CHANNELS" :key="c" class="sdp-pwform__check">
+                        <input type="checkbox" :checked="coreForm.channels.includes(c)" @change="toggleChannel(c)" />
+                        <code class="mono">{{ c }}</code>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="sdp-pwform__row3">
+                    <label class="sdp-pwform__check">
+                      <input v-model="coreForm.stateAdvance" type="checkbox" @change="coreDirty = true" />
+                      stateAdvance
+                    </label>
+                    <label class="sdp-pwform__check">
+                      <input v-model="coreForm.deltaOutput" type="checkbox" @change="coreDirty = true" />
+                      deltaOutput
+                    </label>
+                    <label class="sdp-pwform__field">
+                      <span>outputMedia</span>
+                      <select v-model="coreForm.outputMedia" class="sdp-input" @change="coreDirty = true">
+                        <option v-for="m in CORE_OUTPUT_MEDIA" :key="m" :value="m">{{ m }}</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <!-- 规则 -->
+                <section class="sdp-pwform__card">
+                  <h5>执行规则 <b class="mono">{{ coreForm.rules.length }}</b></h5>
+                  <div v-for="i in coreForm.rules.length" :key="i - 1" class="sdp-pwform__listitem">
+                    <span class="sdp-pwform__idx mono">{{ i }}</span>
+                    <textarea v-model="coreForm.rules[i - 1]" rows="2" class="sdp-input" @input="coreDirty = true"></textarea>
+                    <span class="sdp-pwform__itemops">
+                      <button type="button" class="mk-link" :disabled="i === 1" @click="moveItem(coreForm.rules, i - 1, -1)">↑</button>
+                      <button type="button" class="mk-link" :disabled="i === coreForm.rules.length" @click="moveItem(coreForm.rules, i - 1, 1)">↓</button>
+                      <button type="button" class="mk-link mk-link--danger" @click="removeItem(coreForm.rules, i - 1)">删</button>
+                    </span>
+                  </div>
+                  <button type="button" class="mk-link" @click="addItem(coreForm.rules)">+ 添加规则</button>
+                </section>
+
+                <!-- 输出字段（高危：字段冻结守门） -->
+                <section class="sdp-pwform__card sdp-pwform__card--danger">
+                  <h5>输出字段 <b class="mono">{{ coreForm.fields.length }}</b></h5>
+                  <p class="sdp-pwform__warn">增删字段、改型、改名会触发字段冻结守门（受限/阻断需开发确认引用才能发布）。</p>
+                  <div class="sdp-pwform__fields">
+                    <div class="sdp-pwform__fieldrow sdp-pwform__fieldrow--head">
+                      <span>name</span><span>type</span><span>可选</span><span>desc（生成指令）</span><span>turn</span><span></span>
+                    </div>
+                    <div v-for="(f, i) in coreForm.fields" :key="i" class="sdp-pwform__fieldrow">
+                      <input v-model="f.name" class="sdp-input mono" placeholder="fieldName" @input="coreDirty = true" />
+                      <select v-model="f.baseType" class="sdp-input" @change="coreDirty = true">
+                        <option v-for="t in CORE_FIELD_TYPES" :key="t" :value="t">{{ t }}</option>
+                      </select>
+                      <input v-model="f.optional" type="checkbox" @change="coreDirty = true" />
+                      <input v-model="f.desc" class="sdp-input" placeholder="功能描述" @input="coreDirty = true" />
+                      <input v-model="f.turn" type="checkbox" @change="coreDirty = true" />
+                      <button type="button" class="mk-link mk-link--danger" @click="removeField(i)">删</button>
+                    </div>
+                  </div>
+                  <button type="button" class="mk-link" @click="addField">+ 添加字段</button>
+                </section>
+
+                <!-- 约束 -->
+                <section class="sdp-pwform__card">
+                  <h5>自检约束 <b class="mono">{{ coreForm.constraints.length }}</b></h5>
+                  <div v-for="i in coreForm.constraints.length" :key="i - 1" class="sdp-pwform__listitem">
+                    <span class="sdp-pwform__idx mono">-</span>
+                    <textarea v-model="coreForm.constraints[i - 1]" rows="2" class="sdp-input" @input="coreDirty = true"></textarea>
+                    <span class="sdp-pwform__itemops">
+                      <button type="button" class="mk-link" :disabled="i === 1" @click="moveItem(coreForm.constraints, i - 1, -1)">↑</button>
+                      <button type="button" class="mk-link" :disabled="i === coreForm.constraints.length" @click="moveItem(coreForm.constraints, i - 1, 1)">↓</button>
+                      <button type="button" class="mk-link mk-link--danger" @click="removeItem(coreForm.constraints, i - 1)">删</button>
+                    </span>
+                  </div>
+                  <button type="button" class="mk-link" @click="addItem(coreForm.constraints)">+ 添加约束</button>
+                </section>
+
+                <!-- 参数 -->
+                <section class="sdp-pwform__card">
+                  <h5>生成参数</h5>
+                  <div class="sdp-pwform__row3">
+                    <label class="sdp-pwform__field">
+                      <span>temperature</span>
+                      <input v-model.number="coreForm.params.temperature" type="number" step="0.1" min="0" max="2" class="sdp-input" @input="coreDirty = true" />
+                    </label>
+                    <label class="sdp-pwform__field">
+                      <span>maxTokens</span>
+                      <input v-model.number="coreForm.params.maxTokens" type="number" step="100" min="1" class="sdp-input" @input="coreDirty = true" />
+                    </label>
+                    <label class="sdp-pwform__field">
+                      <span>failurePolicy</span>
+                      <select v-model="coreForm.params.failurePolicy" class="sdp-input" @change="coreDirty = true">
+                        <option v-for="p in CORE_FAILURE_POLICIES" :key="p" :value="p">{{ p }}</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+              </template>
+              <p v-else class="sdp-none">{{ coreMissing ? '该 Skill 暂无核心文件' : '加载中…' }}</p>
+            </div>
+
+            <!-- 源码视图 -->
+            <textarea
+              v-else
+              v-model="coreText"
+              class="sdp-pw__textarea mono"
+              spellcheck="false"
+              :placeholder="coreMissing ? '该 Skill 暂无核心文件（prompts/core/' + skillId + '.yaml）' : '加载中…'"
+              :disabled="!coreLoaded"
+              @input="coreDirty = true"
+            ></textarea>
+            <div v-if="corePublishResult" class="sdp-pw__publish" :class="`sdp-pw__publish--${corePublishResult.ok ? 'ok' : 'bad'}`">
+              <template v-if="corePublishResult.ok">
+                已发布：{{ corePublishResult.agentId }} v{{ corePublishResult.version }} · coreHash
+                <span class="mono">{{ coreShortHash(corePublishResult.coreHash) }}</span>
+              </template>
+              <template v-else>{{ corePublishResult.message }}</template>
+            </div>
+            <div v-if="coreUncertain" class="sdp-pw__uncertain">
+              <strong>含义冻结判定不确定</strong>
+              <p>{{ coreUncertain.rationale || 'judge 无法确定语义等价性' }}</p>
+              <ul><li v-for="(f, i) in coreUncertain.findings || []" :key="i">[{{ f.severity }}] {{ f.aspect }}：{{ f.issue }}</li></ul>
+              <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="corePublishing" @click="publishCore(true)">
+                人工确认无误，强制发布
+              </button>
+            </div>
+          </section>
+
+          <!-- 右：编译预览 / 版本 / 血缘 -->
+          <section class="sdp-block">
+            <header class="sdp-block__head">
+              <span class="sdp-pw__pills">
+                <button type="button" class="sdp-pw__pill" :class="{ 'sdp-pw__pill--active': coreSideTab === 'preview' }" @click="coreSideTab = 'preview'">编译预览</button>
+                <button type="button" class="sdp-pw__pill" :class="{ 'sdp-pw__pill--active': coreSideTab === 'versions' }" @click="openCoreVersions">版本历史</button>
+                <button type="button" class="sdp-pw__pill" :class="{ 'sdp-pw__pill--active': coreSideTab === 'lineage' }" @click="openCoreLineage">字段血缘</button>
+              </span>
+            </header>
+            <div v-if="coreSideTab === 'preview'" class="sdp-pw__pane">
+              <div v-if="coreGates" class="sdp-pw__gates">
+                <div class="sdp-pw__gate" :class="coreGateCls(coreGates.structure?.length === 0)">
+                  结构合法 {{ coreGates.structure?.length === 0 ? '✓' : `✗ ${coreGates.structure?.length}` }}
+                </div>
+                <div class="sdp-pw__gate" :class="coreGateCls(coreGates.fieldFreeze?.length === 0)">
+                  字段冻结 {{ coreGates.fieldFreeze?.length === 0 ? '✓' : `✗ ${coreGates.fieldFreeze?.length}` }}
+                </div>
+                <div v-if="coreGates.semantic" class="sdp-pw__gate" :class="coreGateCls(coreGates.semanticDecision === 'pass')">
+                  含义冻结 {{ coreGates.semantic.verdict }}（{{ coreGates.semanticDecision }}）
+                </div>
+                <div v-for="(issue, i) in [...(coreGates.structure || []), ...(coreGates.fieldFreeze || [])]" :key="i" class="sdp-pw__gate-issue">
+                  [{{ issue.code }}] {{ issue.message }}
+                </div>
+              </div>
+              <div v-if="coreCompiledMeta" class="sdp-pw__meta mono">
+                coreHash {{ coreShortHash(coreCompiledMeta.coreHash) }} · coreVersion {{ coreCompiledMeta.coreVersion }}
+              </div>
+              <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '点击「编译预览」查看五块产物（dry run，不写入）。' }}</pre>
+            </div>
+            <div v-else-if="coreSideTab === 'versions'" class="sdp-pw__pane">
+              <div v-if="coreVersionsLoading" class="sdp-none">加载中…</div>
+              <table v-else class="sdp-pw__table">
+                <thead>
+                  <tr><th>版本</th><th>coreHash</th><th>coreVer</th><th>状态</th><th>发布者</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
+                    <td class="mono">v{{ v.version }}</td>
+                    <td class="mono">{{ coreShortHash(v.coreHash) }}</td>
+                    <td class="mono">{{ v.coreVersion ?? '—' }}</td>
+                    <td>{{ v.status }}</td>
+                    <td>{{ v.createdBy }}</td>
+                    <td>
+                      <button
+                        v-if="v.status !== 'ACTIVE' && v.rollbackable"
+                        type="button"
+                        class="mk-link"
+                        :disabled="coreRollbacking"
+                        @click="rollbackCore(v.version)"
+                      >回滚</button>
+                      <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的 core 快照，只保留审计用途">仅审计</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-if="!coreVersionsLoading && !coreVersions.length" class="sdp-none">暂无版本记录</p>
+            </div>
+            <div v-else class="sdp-pw__pane">
+              <table class="sdp-pw__table">
+                <thead><tr><th>字段</th><th>消费者（爆炸半径）</th></tr></thead>
+                <tbody>
+                  <tr v-for="(entry, i) in coreLineage" :key="i">
+                    <td class="mono">{{ entry.field }}</td>
+                    <td><div v-for="(c, j) in entry.consumers" :key="j" class="sdp-pw__consumer">{{ c }}</div></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-if="!coreLineage.length" class="sdp-none">该 skill 暂无血缘注册（后台消费或未登记）</p>
+            </div>
+          </section>
+        </div>
+      </div>
+
       <!-- ========== 版本 ========== -->
       <div v-show="tab === 'versions'" class="sdp-pane">
         <section class="sdp-versions">
@@ -493,10 +754,10 @@ import {
   adminAgentsApi,
   adminPlatformSettingsApi,
   adminPromptOpsApi,
+  adminPromptWorkbenchApi,
   adminSkillWorkbenchApi,
   adminSkillsApi
 } from '@/api/adminApi'
-import { editSkillInPromptLab } from './mockStore'
 import './mock-shared.css'
 
 /* ---------- 路由与基础 ---------- */
@@ -513,10 +774,12 @@ function goConsole() {
   void router.push('/admin/console')
 }
 
-/** Dry Run → 控制台 Prompt Lab（预选本 Skill） */
+/** Dry Run → 协议页签编译预览（dry run，不写入） */
 function goDryRun() {
-  editSkillInPromptLab(skillId.value)
-  void router.push('/admin/console')
+  tab.value = 'protocol'
+  void ensureCoreLoaded().then(() => {
+    if (coreLoaded.value) void previewCore()
+  })
 }
 
 /* ---------- 阶段色（与拓扑/抽屉同套） ---------- */
@@ -581,17 +844,18 @@ const healthBadgeCls = computed(() =>
 )
 
 /* ---------- Tabs ---------- */
-type TabKey = 'workbench' | 'versions' | 'runtime' | 'engineering'
+type TabKey = 'workbench' | 'protocol' | 'versions' | 'runtime' | 'engineering'
 const tab = ref<TabKey>('workbench')
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'workbench', label: '工作台' },
+  { key: 'protocol', label: '协议' },
   { key: 'versions', label: '版本' },
   { key: 'runtime', label: '运行时' },
   { key: 'engineering', label: '工程' }
 ]
 // ?tab= 直达 + 旧链接兼容
 const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
-if (['workbench', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
+if (['workbench', 'protocol', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
 if (qTab === 'edit' || qTab === 'inspect') tab.value = 'workbench'
 if (qTab === 'preview' || qTab === 'trial') tab.value = 'workbench'
 
@@ -969,6 +1233,335 @@ async function resetRuntime() {
   }
 }
 
+/* ---------- 协议：core YAML（SSOT）编辑 / 编译 / 发布 ---------- */
+const CORE_CHANNELS = ['dialogue', 'state', 'task', 'evidence', 'learner', 'path'] as const
+const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
+const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
+const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const
+
+interface CoreFormField {
+  name: string
+  baseType: string
+  optional: boolean
+  desc: string
+  turn: boolean
+}
+interface CoreFormState {
+  identity: string
+  channels: string[]
+  stateAdvance: boolean
+  deltaOutput: boolean
+  outputMedia: string
+  rules: string[]
+  constraints: string[]
+  examples: string[]
+  fields: CoreFormField[]
+  params: { temperature: number; maxTokens: number; failurePolicy: string }
+}
+
+interface CoreDiagnostic { code: string; message: string }
+interface CoreClassification { level: 'safe' | 'restricted' | 'blocked'; messages: string[] }
+interface CoreVersionRow {
+  version: number; status: string; coreHash: string | null; coreVersion: number | null
+  createdBy: string; publishedAt: string | null; rollbackable: boolean
+}
+interface CoreLineageEntry { field: string; consumers: string[] }
+
+const coreText = ref('')
+const coreLoaded = ref(false)
+const coreMissing = ref(false)
+const coreDirty = ref(false)
+const coreSaving = ref(false)
+const coreCompiling = ref(false)
+const corePublishing = ref(false)
+const coreRollbacking = ref(false)
+const coreDiagnostics = ref<CoreDiagnostic[]>([])
+const coreClassification = ref<CoreClassification | null>(null)
+const coreSideTab = ref<'preview' | 'versions' | 'lineage'>('preview')
+const coreGates = ref<any>(null)
+const coreCompiledPrompt = ref('')
+const coreCompiledMeta = ref<{ coreHash: string; coreVersion: number } | null>(null)
+const corePublishResult = ref<{ ok: boolean; message?: string; agentId?: string; version?: number; coreHash?: string } | null>(null)
+const coreUncertain = ref<any>(null)
+const coreVersions = ref<CoreVersionRow[]>([])
+const coreVersionsLoading = ref(false)
+const coreLineage = ref<CoreLineageEntry[]>([])
+const coreViewMode = ref<'form' | 'raw'>('form')
+const coreForm = ref<CoreFormState | null>(null)
+let coreRequested = false
+
+/* ---------- 表单视图：CoreFile JSON → 表单状态 ---------- */
+function initCoreForm(core: Record<string, unknown> | null) {
+  if (!core) {
+    coreForm.value = null
+    return
+  }
+  const fields = Array.isArray(core.fields) ? core.fields : []
+  const params = (core.params || {}) as Record<string, unknown>
+  coreForm.value = {
+    identity: String(core.identity || ''),
+    channels: Array.isArray(core.channels) ? core.channels.map((c) => String(c)) : [],
+    stateAdvance: core.stateAdvance === true,
+    deltaOutput: core.deltaOutput === true,
+    outputMedia: String(core.outputMedia || 'json'),
+    rules: Array.isArray(core.rules) ? core.rules.map((r) => String(r)) : [],
+    constraints: Array.isArray(core.constraints) ? core.constraints.map((c) => String(c)) : [],
+    examples: Array.isArray(core.examples) ? (core.examples as unknown[]).map((e) => String(e)) : [],
+    fields: fields.map((f) => {
+      const item = f as Record<string, unknown>
+      const rawType = String(item.type || 'string')
+      return {
+        name: String(item.name || ''),
+        baseType: rawType.replace(/\?$/, ''),
+        optional: rawType.endsWith('?'),
+        desc: String(item.desc || ''),
+        turn: item.turn === true
+      }
+    }),
+    params: {
+      temperature: Number(params.temperature ?? 0.5),
+      maxTokens: Number(params.maxTokens ?? 8000),
+      failurePolicy: String(params.failurePolicy || 'retry')
+    }
+  }
+}
+
+/** 表单状态 → PUT mode=form 的 core 载荷（type 合成 baseType + ? 后缀） */
+function buildCorePayload() {
+  const f = coreForm.value
+  if (!f) return null
+  return {
+    identity: f.identity,
+    channels: f.channels,
+    stateAdvance: f.stateAdvance,
+    deltaOutput: f.deltaOutput,
+    outputMedia: f.outputMedia,
+    rules: f.rules,
+    constraints: f.constraints,
+    ...(f.examples.length ? { examples: f.examples } : {}),
+    fields: f.fields.map((item) => ({
+      name: item.name,
+      type: `${item.baseType}${item.optional ? '?' : ''}`,
+      desc: item.desc,
+      turn: item.turn
+    })),
+    params: {
+      temperature: f.params.temperature,
+      maxTokens: f.params.maxTokens,
+      failurePolicy: f.params.failurePolicy
+    }
+  }
+}
+
+function toggleChannel(c: string) {
+  const f = coreForm.value
+  if (!f) return
+  const idx = f.channels.indexOf(c)
+  if (idx >= 0) f.channels.splice(idx, 1)
+  else f.channels.push(c)
+  coreDirty.value = true
+}
+
+function moveItem(list: string[], i: number, dir: -1 | 1) {
+  const j = i + dir
+  if (j < 0 || j >= list.length) return
+  const [item] = list.splice(i, 1)
+  list.splice(j, 0, item)
+  coreDirty.value = true
+}
+function addItem(list: string[]) {
+  list.push('')
+  coreDirty.value = true
+}
+function removeItem(list: string[], i: number) {
+  list.splice(i, 1)
+  coreDirty.value = true
+}
+function addField() {
+  coreForm.value?.fields.push({ name: '', baseType: 'string', optional: false, desc: '', turn: false })
+  coreDirty.value = true
+}
+function removeField(i: number) {
+  coreForm.value?.fields.splice(i, 1)
+  coreDirty.value = true
+}
+
+const coreShortHash = (hash?: string | null) => (hash ? `${hash.slice(0, 10)}…` : '—')
+const coreGateCls = (ok: boolean) => (ok ? 'sdp-pw__gate--ok' : 'sdp-pw__gate--bad')
+function coreLevelLabel(level: string) {
+  if (level === 'safe') return '安全（可发布）'
+  if (level === 'restricted') return '受限（需开发确认）'
+  return '阻断（需开发同步）'
+}
+
+async function ensureCoreLoaded() {
+  if (coreRequested) return
+  coreRequested = true
+  coreDiagnostics.value = []
+  try {
+    const res = await adminPromptWorkbenchApi.getCore(skillId.value)
+    coreText.value = res.data?.raw || ''
+    coreDiagnostics.value = res.data?.diagnostics || []
+    initCoreForm((res.data?.core || null) as Record<string, unknown> | null)
+    coreLoaded.value = true
+    coreMissing.value = false
+  } catch (e) {
+    coreText.value = ''
+    coreLoaded.value = false
+    coreMissing.value = true
+    const status = (e as { response?: { status?: number } })?.response?.status
+    if (status !== 404) showToast(`核心文件读取失败：${errText(e)}`, 'mk-toast--bad')
+  }
+}
+
+async function saveCore() {
+  if (!coreLoaded.value || coreSaving.value) return
+  coreSaving.value = true
+  coreClassification.value = null
+  coreDiagnostics.value = []
+  try {
+    if (coreViewMode.value === 'form') {
+      const payload = buildCorePayload()
+      if (!payload) throw new Error('表单未加载')
+      const res = await adminPromptWorkbenchApi.saveCoreForm(skillId.value, payload)
+      coreClassification.value = res.data?.classification || null
+      // 回读：raw 源码与表单状态同步到磁盘真值
+      coreRequested = false
+      await ensureCoreLoaded()
+    } else {
+      const res = await adminPromptWorkbenchApi.saveCore(skillId.value, coreText.value)
+      coreClassification.value = res.data?.classification || null
+    }
+    coreDirty.value = false
+    showToast(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
+  } catch (e) {
+    const data = (e as { response?: { data?: { diagnostics?: CoreDiagnostic[]; error?: string } } })?.response?.data
+    coreDiagnostics.value = data?.diagnostics || []
+    showToast(data?.error || `保存失败：${errText(e)}`, 'mk-toast--bad')
+  } finally {
+    coreSaving.value = false
+  }
+}
+
+async function previewCore() {
+  if (!coreLoaded.value || coreCompiling.value) return
+  coreCompiling.value = true
+  coreSideTab.value = 'preview'
+  coreGates.value = null
+  coreCompiledPrompt.value = ''
+  try {
+    const res = await adminPromptWorkbenchApi.compileCore({ skillId: skillId.value })
+    coreGates.value = res.data?.gates || null
+    coreCompiledPrompt.value = res.data?.prompt || ''
+    coreCompiledMeta.value = { coreHash: res.data?.coreHash, coreVersion: res.data?.coreVersion }
+  } catch (e) {
+    const data = (e as { response?: { data?: { error?: string } } })?.response?.data
+    showToast(data?.error || `编译失败：${errText(e)}`, 'mk-toast--bad')
+  } finally {
+    coreCompiling.value = false
+  }
+}
+
+async function publishCore(confirmUncertain: boolean) {
+  if (!coreLoaded.value || corePublishing.value) return
+  let developerApproval: { reference: string } | undefined
+  if (coreClassification.value && coreClassification.value.level !== 'safe') {
+    const reference = window.prompt(
+      coreClassification.value.level === 'blocked'
+        ? '字段删除或类型变更须先完成消费者同步。请输入对应开发提交、PR 或变更单引用：'
+        : '新增字段须经开发确认消费者接入。请输入对应开发提交、PR 或变更单引用：'
+    )?.trim()
+    if (!reference) {
+      showToast('未提供开发确认引用，已取消发布', 'mk-toast--bad')
+      return
+    }
+    developerApproval = { reference }
+  }
+  corePublishing.value = true
+  corePublishResult.value = null
+  coreUncertain.value = null
+  try {
+    const res = await adminPromptWorkbenchApi.publishCore({
+      skillId: skillId.value,
+      confirmUncertain: confirmUncertain || undefined,
+      developerApproval
+    })
+    corePublishResult.value = {
+      ok: true,
+      agentId: res.data?.agentId,
+      version: res.data?.version,
+      coreHash: res.data?.coreHash
+    }
+    showToast(`发布成功：v${res.data?.version}（运行时已生效）`)
+    // 发布改 ACTIVE：同步刷新检视与版本页数据
+    await Promise.all([loadInspect(), loadVersions(), loadOverviewLite()])
+  } catch (e) {
+    const status = (e as { response?: { status?: number } })?.response?.status
+    const data = (e as { response?: { data?: any } })?.response?.data || {}
+    if (status === 409 && data?.code === 'SEMANTIC_UNCERTAIN') {
+      coreUncertain.value = data?.judgement || {}
+      showToast('含义冻结不确定，需人工确认', 'mk-toast--bad')
+    } else {
+      if (data?.classification) coreClassification.value = data.classification
+      corePublishResult.value = { ok: false, message: data?.error || `发布失败：${errText(e)}` }
+      if (data?.issues?.length) {
+        coreUncertain.value = { findings: data.issues, rationale: data.error }
+      }
+      showToast(data?.error || '发布被阻断', 'mk-toast--bad')
+    }
+  } finally {
+    corePublishing.value = false
+  }
+}
+
+/** 发布/回滚后只刷新 overview 芯片（不重跑全量 loadAll） */
+async function loadOverviewLite() {
+  const r = await adminPromptOpsApi.getAgentOverview().catch(() => null)
+  const items = (r?.data?.data?.items || []) as OverviewItem[]
+  const found = items.find((x) => x.agentId === `skill:${skillId.value}` || x.agentId === skillId.value) || null
+  if (found) overview.value = found
+}
+
+async function openCoreVersions() {
+  coreSideTab.value = 'versions'
+  coreVersionsLoading.value = true
+  try {
+    const res = await adminPromptWorkbenchApi.getCoreVersions(skillId.value)
+    coreVersions.value = res.data?.versions || []
+  } catch (e) {
+    showToast(`版本加载失败：${errText(e)}`, 'mk-toast--bad')
+  } finally {
+    coreVersionsLoading.value = false
+  }
+}
+
+async function rollbackCore(version: number) {
+  if (coreRollbacking.value) return
+  if (!window.confirm(`确认回滚 ${skillId.value} 到 v${version}？现行文件与 ACTIVE 将被替换。`)) return
+  coreRollbacking.value = true
+  try {
+    await adminPromptWorkbenchApi.rollbackCore(skillId.value, version)
+    showToast(`已回滚到 v${version}`)
+    await openCoreVersions()
+    await Promise.all([loadInspect(), loadVersions(), loadOverviewLite()])
+  } catch (e) {
+    const data = (e as { response?: { data?: { error?: string } } })?.response?.data
+    showToast(data?.error || `回滚失败：${errText(e)}`, 'mk-toast--bad')
+  } finally {
+    coreRollbacking.value = false
+  }
+}
+
+async function openCoreLineage() {
+  coreSideTab.value = 'lineage'
+  try {
+    const res = await adminPromptWorkbenchApi.getCoreLineage(skillId.value)
+    coreLineage.value = res.data?.lineage || []
+  } catch (e) {
+    showToast(`血缘加载失败：${errText(e)}`, 'mk-toast--bad')
+  }
+}
+
 /* ---------- 工程：协议与规则 ---------- */
 interface Protocol { id: string; title: string; statusLabel: string; summary: string; callSites: string }
 interface RuleItem { ruleId: string; text: string; agentId: string }
@@ -1008,6 +1601,7 @@ async function loadEngineering() {
 
 watch(tab, (t) => {
   if (t === 'engineering') void loadEngineering()
+  if (t === 'protocol') void ensureCoreLoaded()
 })
 
 /* ---------- 工具 ---------- */
@@ -1070,11 +1664,28 @@ async function loadAll() {
 }
 
 watch(agentIdParam, () => {
+  // 切换 skill：core 状态全部重置，协议页签下次激活时重新拉取
+  coreRequested = false
+  coreLoaded.value = false
+  coreMissing.value = false
+  coreText.value = ''
+  coreDirty.value = false
+  coreDiagnostics.value = []
+  coreClassification.value = null
+  coreGates.value = null
+  coreCompiledPrompt.value = ''
+  coreCompiledMeta.value = null
+  corePublishResult.value = null
+  coreUncertain.value = null
+  coreVersions.value = []
+  coreLineage.value = []
   if (agentIdParam.value) void loadAll()
+  if (tab.value === 'protocol') void ensureCoreLoaded()
 })
 onMounted(() => {
   void loadAll()
   if (tab.value === 'engineering') void loadEngineering()
+  if (tab.value === 'protocol') void ensureCoreLoaded()
 })
 </script>
 
@@ -1634,5 +2245,206 @@ onMounted(() => {
   bottom: 20px;
   z-index: 300;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+/* ---------- 协议（core 编辑与发布） ---------- */
+.sdp-pw {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .sdp-pw { grid-template-columns: 1fr; }
+}
+.sdp-pw__hint {
+  margin: 0 16px 10px;
+  font-size: 11.5px;
+  color: var(--mk-faint);
+  line-height: 1.6;
+}
+.sdp-pw__hint code { font-size: 10.5px; }
+.sdp-pw__textarea {
+  width: 100%;
+  min-height: 46vh;
+  resize: vertical;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #fff;
+  color: var(--mk-ink);
+  outline: none;
+  margin: 0 0 12px;
+  box-sizing: border-box;
+}
+.sdp-pw__textarea:focus { border-color: var(--mk-blue); }
+.sdp-pw__textarea:disabled { background: #f6f8fc; color: var(--mk-faint); }
+.sdp-pw__classify {
+  margin: 0 16px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.sdp-pw__classify ul { margin: 6px 0 0; padding-left: 18px; }
+.sdp-pw__classify--safe { background: var(--mk-green-bg); }
+.sdp-pw__classify--restricted { background: var(--mk-amber-bg); }
+.sdp-pw__classify--blocked { background: var(--mk-red-bg); }
+.sdp-pw__diag { margin: 0 16px 10px; display: grid; gap: 4px; }
+.sdp-pw__diag-item { display: flex; gap: 8px; font-size: 12px; color: var(--mk-red); }
+.sdp-pw__diag-item .mono { flex-shrink: 0; }
+.sdp-pw__publish {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.sdp-pw__publish--ok { background: var(--mk-green-bg); }
+.sdp-pw__publish--bad { background: var(--mk-red-bg); }
+.sdp-pw__uncertain {
+  margin: 0 16px 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--mk-amber-bg);
+  font-size: 12px;
+}
+.sdp-pw__uncertain ul { margin: 6px 0 10px; padding-left: 18px; }
+.sdp-pw__pills { display: inline-flex; gap: 4px; background: #eef2fa; border-radius: 9px; padding: 3px; }
+.sdp-pw__pill {
+  border: 0;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+.sdp-pw__pill--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }
+.sdp-pw__pane { display: grid; gap: 10px; align-content: start; padding: 0 16px 14px; max-height: 62vh; overflow-y: auto; }
+.sdp-pw__gates { display: grid; gap: 6px; }
+.sdp-pw__gate { font-size: 12px; padding: 6px 10px; border-radius: 8px; }
+.sdp-pw__gate--ok { background: var(--mk-green-bg); }
+.sdp-pw__gate--bad { background: var(--mk-red-bg); }
+.sdp-pw__gate-issue { font-size: 11px; color: var(--mk-faint); padding-left: 10px; }
+.sdp-pw__meta { font-size: 11px; color: var(--mk-faint); }
+.sdp-pw__pre {
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: var(--mk-mono);
+}
+.sdp-pw__table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sdp-pw__table th, .sdp-pw__table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.sdp-pw__table-active { background: var(--mk-green-bg); }
+.sdp-pw__consumer { font-size: 11px; color: var(--mk-muted); padding: 1px 0; }
+.sdp-pw__audit { font-size: 11px; color: var(--mk-faint); }
+
+/* ---------- 协议·表单视图 ---------- */
+.sdp-pw__viewswitch {
+  display: inline-flex;
+  gap: 4px;
+  background: #eef2fa;
+  border-radius: 9px;
+  padding: 3px;
+  margin: 0 16px 10px;
+  width: fit-content;
+}
+.sdp-pw__viewbtn {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+.sdp-pw__viewbtn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }
+.sdp-pwform {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 14px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+.sdp-pwform__card {
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  background: #fff;
+}
+.sdp-pwform__card h5 {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mk-ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sdp-pwform__card h5 b { color: var(--mk-faint); font-weight: 600; }
+.sdp-pwform__card--danger { border-color: rgba(180, 83, 9, 0.35); }
+.sdp-pwform__warn {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--mk-amber);
+  line-height: 1.5;
+}
+.sdp-pwform__field { display: grid; gap: 5px; }
+.sdp-pwform__field > span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
+.sdp-pwform__checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.sdp-pwform__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--mk-ink);
+  cursor: pointer;
+}
+.sdp-pwform__check input { width: 14px; height: 14px; accent-color: var(--mk-blue); }
+.sdp-pwform__row3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 860px) {
+  .sdp-pwform__row3 { grid-template-columns: 1fr; }
+}
+.sdp-pwform__listitem {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+.sdp-pwform__idx { color: var(--mk-faint); font-size: 11px; padding-top: 8px; text-align: right; }
+.sdp-pwform__itemops { display: flex; gap: 4px; padding-top: 6px; }
+.sdp-pwform__fields { display: grid; gap: 6px; }
+.sdp-pwform__fieldrow {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) 110px 32px minmax(140px, 1.6fr) 32px 28px;
+  gap: 8px;
+  align-items: center;
+}
+.sdp-pwform__fieldrow--head {
+  font-size: 11px;
+  color: var(--mk-faint);
+  font-weight: 700;
+}
+.sdp-pwform__fieldrow input[type='checkbox'] { width: 14px; height: 14px; accent-color: var(--mk-blue); justify-self: center; }
+@media (max-width: 860px) {
+  .sdp-pwform__fieldrow { grid-template-columns: 1fr 90px 28px; }
+  .sdp-pwform__fieldrow--head { display: none; }
 }
 </style>

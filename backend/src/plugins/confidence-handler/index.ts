@@ -11,7 +11,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../../agents/plugin-types';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { getEventBus, LearningEvent } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
@@ -42,28 +42,6 @@ export const confidenceHandler: AgentPlugin = {
   config: {
     temperature: 0.4,
     maxTokens: 1000,
-    systemPrompt: `你是学习路径规划助手，负责处理置信度不确定的情况。
-
-【任务】
-当 Skill 注释结果置信度低于阈值时，你需要决定：
-1. 如果可以生成澄清问题，让用户补充信息
-2. 如果无法澄清，使用保守的默认值
-
-【输出格式】
-{
-  "action": "clarification-requested" | "conservative-default",
-  "clarificationQuestion": "需要澄清的问题（如果选择 clarification-requested）",
-  "conservativeValue": {
-    "type": "保守的默认值（如果选择 conservative-default）",
-    "reason": "使用保守值的原因"
-  },
-  "analysis": "简短分析为什么选择这个处理方式"
-}
-
-【决策原则】
-- 如果缺少关键信息且可以通过提问获得 → 请求澄清
-- 如果信息模糊但可以做出安全假设 → 使用保守默认值
-- 保守默认值应该是最安全、最保守的选项`,
     model: process.env.AI_MODEL || '',
     timeout: 30000,
     retries: 2
@@ -199,53 +177,34 @@ export const confidenceHandler: AgentPlugin = {
     skillName: string,
     skillContext: Record<string, any>
   ): Promise<ConfidenceHandlerResult> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'confidence-handler' };
+    const deterministicFallback = this.fallbackHandle({ annotation, confidence, skillName, skillContext });
 
-    const messages = [
-      {
-        role: 'system' as const,
-        content: this.config!.systemPrompt!
-      },
-      {
-        role: 'user' as const,
-        content: `Skill "${skillName}" 返回了低置信度的注释结果：
+    const result = await executeSkillWithResult(auxSkillDefinitionMap['confidence-handler'], {
+      annotation,
+      confidence,
+      skillName,
+      skillContext,
+      __fallback: deterministicFallback,
+      __prompt: { requestPath: '/plugins/confidence-handler/handle-low-confidence' },
+    });
 
-【原始注释】
-${JSON.stringify(annotation, null, 2)}
-
-【置信度】
-${confidence}
-
-【上下文】
-${JSON.stringify(skillContext, null, 2)}
-
-请决定如何处理这个低置信度结果。`
-      }
-    ];
-
-    const response = await gateway.execute({ messages }, caller, {});
-
-    const content = response.choices[0]?.message.content || '';
-
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          originalAnnotation: annotation,
-          confidence,
-          action: parsed.action || 'conservative-default',
-          clarificationQuestion: parsed.clarificationQuestion,
-          conservativeValue: parsed.conservativeValue,
-          fallback: false
-        };
-      }
-    } catch (parseError) {
-      logger.warn('[ConfidenceHandler] JSON parse failed, using fallback');
+    if (result.quality === 'fallback') {
+      return deterministicFallback;
     }
 
-    return this.fallbackHandle({ annotation, confidence, skillName, skillContext });
+    const parsed = result.output;
+    if (parsed) {
+      return {
+        originalAnnotation: annotation,
+        confidence,
+        action: parsed.action || 'conservative-default',
+        clarificationQuestion: parsed.clarificationQuestion,
+        conservativeValue: parsed.conservativeValue,
+        fallback: false
+      };
+    }
+
+    return deterministicFallback;
   },
 
   fallbackHandle(input: any): ConfidenceHandlerResult {

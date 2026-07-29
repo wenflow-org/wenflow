@@ -1,4 +1,6 @@
-# Prompt Lab Source Protocol v1
+# 已归档：Prompt Lab Source Protocol v1
+
+> v1 source 协议已由统一 Skill 协议 v4 取代。
 
 ## 目标
 

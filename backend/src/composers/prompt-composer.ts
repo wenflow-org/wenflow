@@ -153,9 +153,10 @@ export async function callPrompt<TInput, TOutput>(
       success: false,
       error: { code: errorCode, message },
       debug: {
-        agentId: spec.agentId, systemPrompt: '', systemPromptVersion: null, userPayload: '',
+        promptCallId, agentId: spec.agentId, systemPrompt: '', systemPromptVersion: null, userPayload: '',
         rawModelOutput: '', extractedJson: null, normalizedOutput: null,
         promptDrift: null, attempts: [], durationMs: 0, tokenUsage: null,
+        finalLlmRequestId: null, providerId: null, model: null,
       },
     };
   }
@@ -198,7 +199,8 @@ export async function callPrompt<TInput, TOutput>(
   const taskId = context.taskId || contextEnvelope.session?.taskId || requestContext.taskId || null;
   const traceId = context.traceId || requestContext.traceId || null;
   const parentExecutionId = context.parentExecutionId || requestContext.executionLogId || null;
-  const retryBudget = requestContext.retryBudget
+  const retryBudget = context.retryBudget
+    || requestContext.retryBudget
     || await createRuntimeRetryBudget();
   const currentSkillLogicalRetryLimit = requestContext.logicalRetryLimit
     ?? await getEffectiveLogicalRetryLimit(
@@ -243,9 +245,10 @@ export async function callPrompt<TInput, TOutput>(
       success: false,
       error: { code: errorCode, message: `Missing active prompt for ${spec.agentId}` },
       debug: {
-        agentId: spec.agentId, systemPrompt: '', systemPromptVersion: null, userPayload,
+        promptCallId, agentId: spec.agentId, systemPrompt: '', systemPromptVersion: null, userPayload,
         rawModelOutput: '', extractedJson: null, normalizedOutput: null,
         promptDrift: null, attempts: [], durationMs: 0, tokenUsage: null,
+        finalLlmRequestId: null, providerId: null, model: null,
       },
     };
   }
@@ -298,10 +301,21 @@ export async function callPrompt<TInput, TOutput>(
     const retryMessage = retryNotice && lastViolations?.length
       ? `${retryNotice}\n\n校验问题：\n${lastViolations.map(violation => `- ${violation}`).join('\n')}`
       : retryNotice;
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload },
-    ];
+    const messages = spec.buildMessages
+      ? spec.buildMessages({
+          input,
+          systemPrompt,
+          userPayload,
+          retryMessage,
+          runtime: { contextEnvelope, runtimeContract, promptContract },
+        })
+      : [
+          { role: 'system' as const, content: systemPrompt },
+          ...(Array.isArray(context.assistantMessages)
+            ? context.assistantMessages.map((message) => ({ role: message.role as 'user' | 'assistant', content: message.content }))
+            : []),
+          { role: 'user' as const, content: retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload },
+        ];
 
     let response: any;
     try {
@@ -333,8 +347,9 @@ export async function callPrompt<TInput, TOutput>(
          conversationId: conversationId || undefined,
          pathId: pathId || undefined,
          taskId: taskId || undefined,
-         locale: contextEnvelope.locale,
-        promptCallId,
+          locale: contextEnvelope.locale,
+          requestPath: context.requestPath,
+         promptCallId,
         promptAttemptNo: attempt,
         retryBudget
       });
@@ -482,10 +497,11 @@ export async function callPrompt<TInput, TOutput>(
       output: normalizedOutput,
       runtimeEnvelope,
       debug: {
-        agentId: spec.agentId, systemPrompt,
+        promptCallId, agentId: spec.agentId, systemPrompt,
         systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
         userPayload, rawModelOutput, extractedJson: extracted.extractedJson,
         normalizedOutput, promptDrift, attempts, durationMs, tokenUsage,
+        finalLlmRequestId: lastLlmRequestId, providerId: lastProviderId, model: lastModel,
       },
     };
   }
@@ -525,11 +541,12 @@ export async function callPrompt<TInput, TOutput>(
   return {
     success: false,
     error: { code: errorCode, message: lastFailureReason },
-    debug: {
-      agentId: spec.agentId, systemPrompt,
+      debug: {
+        promptCallId, agentId: spec.agentId, systemPrompt,
       systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
       userPayload, rawModelOutput: lastRaw, extractedJson: lastExtractedJson,
-      normalizedOutput: null, promptDrift, attempts, durationMs, tokenUsage: null,
+        normalizedOutput: null, promptDrift, attempts, durationMs, tokenUsage: null,
+        finalLlmRequestId: lastLlmRequestId, providerId: lastProviderId, model: lastModel,
     },
   };
 }

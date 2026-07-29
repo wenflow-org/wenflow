@@ -68,13 +68,68 @@
               @click="selectStory(s, i)"
             >
               <div class="vp-story-item__main">
-                <strong>{{ s.title }}</strong>
-                <span>{{ s.outline }}</span>
-                <div class="vp-story-item__meta">
-                  <span v-if="s.pathId" class="vp-chip vp-chip--path">Path 已生成</span>
-                  <span v-else class="vp-chip">尚无 Path</span>
-                  <span class="vp-chip">运行 {{ s.runCount || 0 }}</span>
+                <div class="vp-story-item__head">
+                  <strong>{{ s.title }}</strong>
+                  <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
+                    {{ storyStatusLabel(s) }}
+                  </span>
                 </div>
+                <span class="vp-story-item__outline">{{ s.outline }}</span>
+
+                <!-- 平台视角：该故事的 Goal → Path → Learn 生命周期 -->
+                <div class="vp-pipe" @click.stop>
+                  <span class="vp-pipe__stage" :class="{ 'is-on': (s.goalCount || 0) > 0 }">
+                    Goal <b>{{ s.goalCount || 0 }}</b>
+                    <span v-if="s.projection?.formal?.goal" class="vp-pipe__links">
+                      <a @click="openLink(s.projection.formal.goal)">前台</a>
+                      <a v-if="s.projection?.test?.goal" @click="openLink(s.projection.test.goal)">调试</a>
+                    </span>
+                  </span>
+                  <i class="vp-pipe__arrow">→</i>
+                  <span class="vp-pipe__stage" :class="{ 'is-on': (s.pathCount || 0) > 0 }">
+                    Path <b>{{ s.pathCount || 0 }}</b>
+                    <span v-if="s.projection?.formal?.path" class="vp-pipe__links">
+                      <a @click="openLink(s.projection.formal.path)">前台</a>
+                      <a v-if="s.projection?.test?.path" @click="openLink(s.projection.test.path)">调试</a>
+                    </span>
+                  </span>
+                  <i class="vp-pipe__arrow">→</i>
+                  <span class="vp-pipe__stage" :class="{ 'is-on': (s.learnCount || 0) > 0 }">
+                    Learn <b>{{ s.learnCount || 0 }}</b>
+                    <span v-if="s.projection?.formal?.learn" class="vp-pipe__links">
+                      <a @click="openLink(s.projection.formal.learn)">前台</a>
+                      <a v-if="s.projection?.test?.learn" @click="openLink(s.projection.test.learn)">调试</a>
+                    </span>
+                  </span>
+                  <span v-if="(s.runningCount || 0) > 0" class="vp-pipe__running">● {{ s.runningCount }} 运行中</span>
+                </div>
+
+                <div v-if="s.latestRun" class="vp-story-item__latest" @click.stop>
+                  最近运行：{{ formatRunStage(s.latestRun.currentStage) }} · {{ formatRunResult(s.latestRun.status) }} · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}
+                  <button type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">控制台</button>
+                </div>
+
+                <div v-if="selectedStoryId === (s.id || String(i))" class="vp-story-runs" @click.stop>
+                  <template v-if="runsForStory(s).length">
+                    <div v-for="(r, ri) in runsForStory(s)" :key="r.sessionId || ri" class="vp-run">
+                      <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
+                      <div class="vp-run__main">
+                        <strong>{{ formatRunStage(r.stage) }}</strong>
+                        <span>
+                          {{ formatRunResult(r.result) }}
+                          <template v-if="r.pathId"> · Path</template>
+                        </span>
+                      </div>
+                      <span class="vp-run__time">{{ r.time }}</span>
+                      <div v-if="isLive && r.sessionId" class="vp-run__ops">
+                        <button type="button" class="mk-link" @click="openSubPage('session', r.sessionId)">控制台</button>
+                        <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
+                      </div>
+                    </div>
+                  </template>
+                  <p v-else class="vp-none">这个故事还没有运行记录</p>
+                </div>
+
                 <details v-if="hasAdvancedFields(s)" class="vp-story-item__advanced" @click.stop>
                   <summary>高级诊断</summary>
                   <div class="vp-adv-body">
@@ -106,9 +161,6 @@
                 </details>
               </div>
               <div class="vp-story-item__side">
-                <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                  {{ selectedStoryId === (s.id || String(i)) ? '已选' : s.status === 'ready' ? '就绪' : s.status }}
-                </span>
                 <button
                   v-if="isLive"
                   type="button"
@@ -138,24 +190,11 @@
       <div class="vp-col">
         <section class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">
-              运行记录
-              <span v-if="selectedStoryTitle" class="vp-run-scope">· {{ selectedStoryTitle }}</span>
-            </h3>
-            <button
-              type="button"
-              class="mk-status__action mk-status__action--primary"
-              :disabled="running || (isLive && !selectedStoryId && displayStories.length !== 1)"
-              @click="runOnce"
-            >
-              {{ running ? '启动中…' : selectedStoryTitle ? '按选中故事运行' : '运行一轮' }}
-            </button>
+            <h3 class="mk-card__title">全部运行</h3>
+            <span class="mk-badge mk-badge--muted">{{ allRuns.length }} 条</span>
           </div>
-          <p v-if="isLive && displayStories.length > 1 && !selectedStoryId" class="vp-next">
-            请先在左侧选中一个故事；每个故事对应一套学习任务（Path）。
-          </p>
           <div class="vp-runs">
-            <div v-for="(r, i) in scopedRuns" :key="r.sessionId || i" class="vp-run">
+            <div v-for="(r, i) in allRuns" :key="r.sessionId || i" class="vp-run">
               <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
               <div class="vp-run__main">
                 <strong>{{ formatRunStage(r.stage) }}</strong>
@@ -171,9 +210,7 @@
                 <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" @click="removeSession(r.sessionId)">删除</button>
               </div>
             </div>
-            <p v-if="!scopedRuns.length" class="vp-none">
-              {{ selectedStoryTitle ? '这个故事还没有运行记录' : '还没有运行记录' }}
-            </p>
+            <p v-if="!allRuns.length" class="vp-none">还没有运行记录</p>
           </div>
         </section>
 
@@ -193,14 +230,6 @@
           <p class="vp-tools__hint">用该虚拟身份打开前台页面验收。</p>
         </section>
 
-        <section class="vp-preview">
-          <h4>链路说明</h4>
-          <p>
-            一个虚拟人对应多个故事；每个故事产生学习需求后与平台交互，对应一条 Path（一套学习任务）。
-            链路：人设 → 选故事 → Goal / Path / Learn。数据写在绑定账号上，前台投影验收。
-            「账号自动学习」是账号已有 Path 后，跳过黑盒模拟直接上课的快捷支路。
-          </p>
-        </section>
       </div>
     </div>
 
@@ -290,6 +319,19 @@ interface Detail {
   aiProfile: { label: string; value: string }[]
 }
 
+interface StoryLatestRun {
+  sessionId: string
+  status: string
+  currentStage: string
+  updatedAt?: string
+  createdAt?: string
+}
+
+interface StoryProjection {
+  formal?: { goal?: string | null; path?: string | null; learn?: string | null }
+  test?: { goal?: string | null; path?: string | null; learn?: string | null }
+}
+
 interface StoryItem {
   id?: string
   index?: number
@@ -298,7 +340,13 @@ interface StoryItem {
   status: string
   runCount?: number
   pathId?: string | null
+  // 平台视角：Goal → Path → Learn 生命周期计数
+  goalCount?: number
   pathCount?: number
+  learnCount?: number
+  runningCount?: number
+  latestRun?: StoryLatestRun | null
+  projection?: StoryProjection | null
   // 来自 scenario-designer 的隐藏字段（高级诊断）——保留原始对象用于折叠展示
   hiddenDetails?: string[]
   behaviorHooks?: string[]
@@ -315,17 +363,17 @@ const selectedStoryId = ref<string | null>(null)
 /* demo 模式的故事池（按样本给出有差异的演示故事） */
 const DEMO_STORIES: Record<string, StoryItem[]> = {
   'vl-001': [
-    { id: 'demo-s1', index: 0, title: '周五下午的老板突袭', outline: '17:40 老板临时要周报汇总，她只有 40 分钟做完 3 小时的活', status: 'ready', runCount: 2, pathId: 'demo-p1' },
-    { id: 'demo-s2', index: 1, title: '模板救星', outline: '她找到去年的周报模板，但数据源格式变了，VLOOKUP 全报错', status: 'ready', runCount: 1, pathId: null },
-    { id: 'demo-s3', index: 2, title: '最后一次手工周报', outline: '同事告诉她"其实可以自动化"，她决定这次真的学会', status: 'draft', runCount: 0, pathId: null }
+    { id: 'demo-s1', index: 0, title: '周五下午的老板突袭', outline: '17:40 老板临时要周报汇总，她只有 40 分钟做完 3 小时的活', status: 'ready', runCount: 2, pathId: 'demo-p1', goalCount: 2, pathCount: 1, learnCount: 3 },
+    { id: 'demo-s2', index: 1, title: '模板救星', outline: '她找到去年的周报模板，但数据源格式变了，VLOOKUP 全报错', status: 'ready', runCount: 1, pathId: null, goalCount: 1, pathCount: 0, learnCount: 0 },
+    { id: 'demo-s3', index: 2, title: '最后一次手工周报', outline: '同事告诉她"其实可以自动化"，她决定这次真的学会', status: 'draft', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
   ],
   'vl-002': [
-    { id: 'demo-s4', index: 0, title: '十年教案的思维惯性', outline: '她把学习路径排成"学期课程表"，两周还没写第一行代码', status: 'ready', runCount: 1, pathId: 'demo-p2' },
-    { id: 'demo-s5', index: 1, title: '被推着的第一个项目', outline: '里程碑倒逼：本周必须交出一份真实数据分析，哪怕很糙', status: 'ready', runCount: 0, pathId: null }
+    { id: 'demo-s4', index: 0, title: '十年教案的思维惯性', outline: '她把学习路径排成"学期课程表"，两周还没写第一行代码', status: 'ready', runCount: 1, pathId: 'demo-p2', goalCount: 1, pathCount: 1, learnCount: 2 },
+    { id: 'demo-s5', index: 1, title: '被推着的第一个项目', outline: '里程碑倒逼：本周必须交出一份真实数据分析，哪怕很糙', status: 'ready', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
   ],
   'vl-003': [
-    { id: 'demo-s6', index: 0, title: '截稿日前 30 天', outline: '导师下了最后通牒，她却在擦桌子、整理文献、做一切与论文无关的事', status: 'ready', runCount: 1, pathId: null },
-    { id: 'demo-s7', index: 1, title: '周末爆发户', outline: 'weekday 低效、周末爆发——系统需要适应她的节奏而不是纠正', status: 'draft', runCount: 0, pathId: null }
+    { id: 'demo-s6', index: 0, title: '截稿日前 30 天', outline: '导师下了最后通牒，她却在擦桌子、整理文献、做一切与论文无关的事', status: 'ready', runCount: 1, pathId: null, goalCount: 1, pathCount: 0, learnCount: 0 },
+    { id: 'demo-s7', index: 1, title: '周末爆发户', outline: 'weekday 低效、周末爆发——系统需要适应她的节奏而不是纠正', status: 'draft', runCount: 0, pathId: null, goalCount: 0, pathCount: 0, learnCount: 0 }
   ]
 }
 const displayStories = computed<StoryItem[]>(() => {
@@ -394,9 +442,19 @@ function showToast(msg: string, cls = 'mk-toast--ok') {
 
 function mapStoryItem(s: Record<string, unknown>, index: number): StoryItem {
   const stats = (s.stats || {}) as Record<string, unknown>
-  const latestRun = (s.latestRun || {}) as Record<string, unknown>
-  const bindings = (latestRun.bindings || {}) as Record<string, unknown>
+  const latestRunRaw = (s.latestRun || null) as Record<string, unknown> | null
+  const bindings = ((latestRunRaw?.bindings || {}) as Record<string, unknown>)
   const pathId = bindings.learningPathId ? String(bindings.learningPathId) : null
+  const latestRun: StoryLatestRun | null = latestRunRaw && latestRunRaw.sessionId
+    ? {
+        sessionId: String(latestRunRaw.sessionId),
+        status: String(latestRunRaw.status || ''),
+        currentStage: String(latestRunRaw.currentStage || ''),
+        updatedAt: latestRunRaw.updatedAt ? String(latestRunRaw.updatedAt) : undefined,
+        createdAt: latestRunRaw.createdAt ? String(latestRunRaw.createdAt) : undefined
+      }
+    : null
+  const projectionRaw = (s.projection || null) as StoryProjection | null
   return {
     id: String(s.storyId || s.id || s.key || `story-${index}`),
     index: typeof s.index === 'number' ? Number(s.index) : index,
@@ -404,7 +462,12 @@ function mapStoryItem(s: Record<string, unknown>, index: number): StoryItem {
     outline: String(s.storyOutline || s.outline || s.storyTriggerEvent || s.triggerEvent || ''),
     status: String(s.status || 'draft'),
     runCount: Number(stats.totalRuns ?? 0),
+    goalCount: Number(stats.goalCount ?? 0),
     pathCount: Number(stats.pathCount ?? (pathId ? 1 : 0)),
+    learnCount: Number(stats.learnCount ?? 0),
+    runningCount: Number(stats.runningCount ?? 0),
+    latestRun,
+    projection: projectionRaw && typeof projectionRaw === 'object' ? projectionRaw : null,
     pathId,
     hiddenDetails: Array.isArray(s.hiddenDetails)
       ? s.hiddenDetails.map((item) => String(item)).filter(Boolean) : undefined,
@@ -648,10 +711,6 @@ async function runStory(story?: StoryItem, index?: number) {
   }
 }
 
-async function runOnce() {
-  await runStory()
-}
-
 async function removeSession(sessionId: string) {
   if (!sessionId || sessionBusy.value) return
   if (!window.confirm('确认删除该会话？')) return
@@ -699,15 +758,28 @@ const d = computed<Detail | undefined>(() => {
   return { ...demo, level: 'beginner', notes: '' }
 })
 
-const scopedRuns = computed(() => {
+/* 全部运行 feed（右栏，人物级） */
+const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, 12))
+
+/* 单个故事的运行历史（故事卡内展开） */
+function runsForStory(story: StoryItem): RunItem[] {
   const runs = d.value?.runs || []
-  const story = selectedStory.value
-  if (!story) return runs
   const sid = story.id
-  if (!sid) return runs
+  if (!sid) return []
   const matched = runs.filter((r) => r.storyId && r.storyId === sid)
   return matched.length ? matched : runs.filter((r) => r.storyTitle === story.title)
-})
+}
+
+function storyStatusLabel(s: StoryItem): string {
+  if (selectedStoryId.value === (s.id || String(s.index ?? 0))) return '已选'
+  return s.status === 'ready' ? '就绪' : s.status || '草稿'
+}
+
+/* 打开故事 projection 深链（前台正式页 / 测试台调试页） */
+function openLink(url?: string | null) {
+  if (!url) return
+  window.open(url, '_blank')
+}
 
 function formatRunStage(stage: string) {
   const s = String(stage || '').toLowerCase()
@@ -851,36 +923,90 @@ function formatRunResult(result: string) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.vp-story-item__meta {
+.vp-story-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vp-story-item__head strong { flex: 1; min-width: 0; }
+.vp-story-item__outline {
+  font-size: 12.5px;
+  color: var(--mk-faint);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 平台视角生命周期条：Goal → Path → Learn */
+.vp-pipe {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: #f6f8fc;
+  border: 1px solid #eef1f6;
+  font-size: 11.5px;
+  color: var(--mk-faint);
 }
-.vp-chip {
+.vp-pipe__stage {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #eef2fa;
-  color: var(--mk-muted, #5b6577);
+  gap: 5px;
+  font-weight: 600;
+}
+.vp-pipe__stage b {
+  font-family: var(--mk-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--mk-muted);
+}
+.vp-pipe__stage.is-on { color: var(--mk-muted); }
+.vp-pipe__stage.is-on b { color: var(--mk-blue, #3478f6); }
+.vp-pipe__arrow { font-style: normal; color: #c4ccd9; }
+.vp-pipe__links {
+  display: inline-flex;
+  gap: 4px;
+}
+.vp-pipe__links a {
+  color: var(--mk-blue, #3478f6);
   font-size: 11px;
   font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
 }
-.vp-chip--path {
-  background: #e8f7ee;
-  color: #1a7f4b;
+.vp-pipe__links a:hover { text-decoration: underline; }
+.vp-pipe__running {
+  margin-left: auto;
+  color: var(--mk-amber, #b7791f);
+  font-weight: 700;
+  font-size: 11px;
 }
+.vp-story-item__latest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--mk-faint);
+}
+.vp-story-runs {
+  margin-top: 6px;
+  border-top: 1px dashed #edf0f5;
+  display: grid;
+}
+.vp-story-runs .vp-run { padding: 10px 2px; }
+.vp-story-runs .vp-none { padding: 10px 2px; }
 .vp-story-item__side {
   display: grid;
   gap: 6px;
   justify-items: end;
   flex-shrink: 0;
-}
-.vp-run-scope {
-  font-weight: 600;
-  color: var(--mk-muted, #5b6577);
-  font-size: 12.5px;
 }
 
 .vp-runs { display: grid; }
@@ -973,17 +1099,6 @@ function formatRunResult(result: string) {
   color: var(--mk-faint);
   line-height: 1.5;
 }
-
-.vp-preview {
-  padding: 16px 18px;
-  border: 1px dashed var(--mk-line);
-  border-radius: 14px;
-  display: grid;
-  gap: 8px;
-  background: #fafbfd;
-}
-.vp-preview h4 { margin: 0; font-size: 12.5px; color: var(--mk-muted); }
-.vp-preview p { margin: 0; font-size: 12.5px; color: var(--mk-faint); line-height: 1.7; }
 
 @media (max-width: 1100px) {
   .vp-grid { grid-template-columns: 1fr; }

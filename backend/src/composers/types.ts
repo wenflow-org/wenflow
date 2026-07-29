@@ -16,10 +16,16 @@ export interface PromptCallContext {
   };
   /** 显式覆盖 ALS 中的 Context Envelope；默认只供投影函数和 telemetry 使用。 */
   contextEnvelope?: import('../skills/context-envelope').ContextEnvelopeV1;
+  /** 已完成的对话历史；仅 conversational/turn 类 Skill 应使用。 */
+  assistantMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   pipelineRunId?: string;
   pipelineStepIndex?: number;
   traceId?: string;
   parentExecutionId?: string;
+  /** 调用来源，仅用于 Gateway telemetry 与排障。 */
+  requestPath?: string;
+  /** 显式复用上游预算，避免兼容调用重置重试额度。 */
+  retryBudget?: import('../gateway/api-gateway/retry-budget').RetryBudget;
   systemPromptOverride?: string;
 }
 
@@ -35,6 +41,7 @@ export interface PromptAttemptTrace {
 }
 
 export interface PromptDebugTrace<TOutput = any> {
+  promptCallId: string;
   agentId: string;
   systemPrompt: string;
   systemPromptVersion: number | null;
@@ -50,6 +57,9 @@ export interface PromptDebugTrace<TOutput = any> {
     completion?: number;
     total?: number;
   } | null;
+  finalLlmRequestId?: string | null;
+  providerId?: string | null;
+  model?: string | null;
 }
 
 export interface PromptCallError {
@@ -104,6 +114,7 @@ export interface PromptCallSpec<TInput, TOutput> {
   caller: {
     agentId?: string;
     skillId?: string;
+    action?: string;
   };
   buildUserPayload: (
     input: TInput,
@@ -113,6 +124,21 @@ export interface PromptCallSpec<TInput, TOutput> {
       promptContract: SkillPromptContract;
     }
   ) => string | object;
+  /**
+   * 仅用于兼容遗留多消息调用。正式 Skill 保持 system + user 的确定性投影，
+   * 不应默认使用此扩展点。
+   */
+  buildMessages?: (params: {
+    input: TInput;
+    systemPrompt: string;
+    userPayload: string;
+    retryMessage: string | null;
+    runtime: {
+      contextEnvelope: import('../skills/context-envelope').ContextEnvelopeV1;
+      runtimeContract: RuntimeContract;
+      promptContract: SkillPromptContract;
+    };
+  }) => Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   normalizeOutput: (parsed: any, input: TInput) => TOutput;
   validateParsedOutput?: (parsed: any, input: TInput) => PromptValidationResult;
   /** 覆盖默认 extractJsonObject；用于 goal 等专用结构化解析 */

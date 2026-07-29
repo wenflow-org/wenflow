@@ -1,0 +1,27 @@
+version: prompt-lab-manifest/v1
+skillId: label-generator
+agentId: skill:label-generator
+name: default-skill-label-generator
+archetype: copywriter
+description: 学习路径标签生成器
+acceptableAgentIds: [skill:label-generator]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+runtimeDefaults: { tier: chat, temperature: 0.7, maxTokens: 2000, model: null, thinkingMode: default, reasoningEffort: default }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: snapshot
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: labeling, phases: [label-generated], defaultPhase: label-generated, terminalPhases: [label-generated], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, copywriter, v4]
+notes: v4 核心文件的契约与运行参数家园。

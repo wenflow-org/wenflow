@@ -373,7 +373,7 @@ const d = computed<Detail | undefined>(() => {
   padding: 0 16px 16px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .ud-stats { grid-template-columns: repeat(2, 1fr); }
   .ud-grid { grid-template-columns: 1fr; }
   .ud-grant__grid { grid-template-columns: 1fr; }

@@ -1,4 +1,6 @@
-# Prompt Lab Docs Index
+# 已归档：Prompt Lab Docs Index（v2）
+
+> 本目录文档对应已退役的 v2 Prompt Lab。
 
 本目录包含 Prompt Lab 的正式文档与历史探索文档。
 
