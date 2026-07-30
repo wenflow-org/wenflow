@@ -43,6 +43,10 @@ const ASSISTED_SESSION_LEASE_RENEW_MS = 2 * 60 * 1000;
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100];
 const LEARN_UPSTREAM_RETRY_ATTEMPTS = 3;
 const LEARN_UPSTREAM_RETRY_DELAY_MS = 750;
+/** 一节课的课时预算：超过仍未双方收束则显式失败（可重启恢复），不允许无限拖堂 */
+const LEARN_TASK_TURN_BUDGET = 30;
+/** 「自动完成本课」单次调用的回合上限（按课界停止，不按里程碑数估算） */
+const LEARN_AUTO_TURN_CAP = 24;
 
 function isPrismaErrorCode(error: unknown, code: string) {
   return typeof error === 'object' && error !== null && (error as any).code === code;
@@ -2697,6 +2701,30 @@ class SimulationOrchestrator {
         
         return await this.executeLearningStep(sessionId);
       }
+
+      // 课时预算：同一 task 回合数超限仍未双方收束 → 显式失败（可重启恢复），不允许无限拖堂
+      const runtimeTurns = taskRuntime.taskId === currentTask.id ? Number(taskRuntime.turns || 0) : 0;
+      if (runtimeTurns >= LEARN_TASK_TURN_BUDGET) {
+        const budgetError = `当前 task 已达 ${LEARN_TASK_TURN_BUDGET} 回合课时预算仍未收束（turn_budget_exhausted）`;
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'error',
+          details: {
+            error: budgetError,
+            output: { currentTask: currentTask.title, action: 'turn-budget-exhausted', turns: runtimeTurns }
+          }
+        });
+        await this.persistLearningFailure(sessionId, new Error(budgetError), logs);
+        for (const log of logs) {
+          await this.addSessionLog(sessionId, log).catch(() => {});
+        }
+        return {
+          success: false,
+          currentTaskStopped: true,
+          logs,
+          error: budgetError
+        };
+      }
       
       const trimmedConversationHistory = this.trimLearningConversationHistory(learningState.conversationHistory || [])
       const lastAssistantMessage = [...trimmedConversationHistory]
@@ -2743,6 +2771,9 @@ class SimulationOrchestrator {
         currentTask: {
           title: currentTask.title,
           milestoneTitle: currentMilestone.title,
+          // 学习者自评“是否达成”要与教师侧用同一判据（subtasks 表已有该字段）
+          acceptanceCriteria: currentTask.acceptanceCriteria || null,
+          description: currentTask.description || null,
         },
         knowledgeSnapshot: [],
         frictionBudget: this.getSessionFrictionBudget(session),
@@ -3035,6 +3066,9 @@ class SimulationOrchestrator {
                 : 'active',
           taskId: currentTask.id,
           taskTitle: currentTask.title,
+          turns: learningState.taskRuntime?.taskId === currentTask.id
+            ? Number(learningState.taskRuntime.turns || 0) + 1
+            : 1,
           teachingSessionId,
           error: learningStepError,
           closureDecision,
@@ -3164,7 +3198,7 @@ class SimulationOrchestrator {
 
   async executeAutoLearning(
     sessionId: string,
-    options: { maxMilestones?: number } = {}
+    options: { maxMilestones?: number; maxTurns?: number } = {}
   ): Promise<{
     success: boolean;
     totalSteps?: number;
@@ -3197,8 +3231,8 @@ class SimulationOrchestrator {
       }
       
       let steps = 0;
-      const maxSteps = maxMilestones * 3;
-      
+      const maxSteps = options.maxTurns || LEARN_AUTO_TURN_CAP;
+
       for (let i = 0; i < maxSteps; i++) {
         const latestSession = await this.getVirtualSession(sessionId)
         const latestStageResults = this.parseStageResultsPayload(latestSession.stageResults)
@@ -3212,13 +3246,13 @@ class SimulationOrchestrator {
 
         const stepResult = await this.executeLearningStep(sessionId);
         steps++;
-        
+
         if (stepResult.isPathCompleted) {
           logger.info('[simulation-coordinator] 自动学习完成', {
             sessionId,
             totalSteps: steps
           });
-          
+
           return {
             success: true,
             totalSteps: steps,
@@ -3228,6 +3262,15 @@ class SimulationOrchestrator {
 
         if (!stepResult.success) {
           throw new Error(stepResult.error || '学习步骤失败');
+        }
+
+        // “自动完成本课”以课界为终点：本课完成即返回；状态机已自动开下一课，但不代跑。
+        if (stepResult.taskCompleted) {
+          return {
+            success: true,
+            totalSteps: steps,
+            completedMilestones: 1
+          };
         }
 
         if ((stepResult as any).currentTaskStopped) {
@@ -3242,7 +3285,7 @@ class SimulationOrchestrator {
             completedMilestones: 0
           };
         }
-        
+
         if (i % 5 === 0) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }

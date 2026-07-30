@@ -39,6 +39,9 @@ export interface LearnLearnerSimulationInput {
   currentTask?: {
     title?: string | null;
     milestoneTitle?: string | null;
+    /** 当前 task 的验收标准：学习者自评“是否达成”时以此为对照，与教师侧判据对齐 */
+    acceptanceCriteria?: string | null;
+    description?: string | null;
   } | null;
   knowledgeSnapshot?: Array<{
     name: string;
@@ -120,6 +123,7 @@ export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT = `你是“Learn 阶�
 - selfReportedTaskDone 表示“你作为学习者是否觉得当前 task 的学习目标已经达成”，不是平台最终完成决定。
 - 如果老师还在讲新内容、你还有卡点、你仍想要例子/提示/解释，selfReportedTaskDone 必须为 false。
 - 只有当老师已经明显收束、你能完成当前 task、remainingBlockers 为空且不想继续追问时，selfReportedTaskDone 才能为 true。
+- 如果 currentTask 提供了 acceptanceCriteria / description：自评“是否达成”必须逐条对照验收标准——能说出每条怎么做到才算达成；任何一条还做不到，selfReportedTaskDone 必须为 false，并把做不到的那条写进 remainingBlockers。
 - stopAsking 表示你是否愿意停止当前 task 的继续追问；它通常只在 ready_to_close 且 wantsMoreHelp=false 时为 true。
 
 输出 JSON：
