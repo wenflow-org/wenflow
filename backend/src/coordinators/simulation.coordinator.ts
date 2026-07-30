@@ -373,7 +373,7 @@ class SimulationOrchestrator {
 
   private isRetryableLearnUpstreamError(error: any) {
     const message = String(error?.message || error || '').toLowerCase();
-    return /invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message);
+    return /structured_output_invalid|invalid chat completion|finish_reason|length|empty content|reply completion mismatch|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b502\b|\b503\b|\b504\b/.test(message);
   }
 
   private async retryLearnUpstream<T>(sessionId: string, operation: string, execute: () => Promise<T>): Promise<T> {
@@ -1537,16 +1537,18 @@ class SimulationOrchestrator {
       );
       
       const virtualReplyStart = Date.now();
-      const virtualReplyResult = await this.simulateGoalLearnerReply({
-        profile,
-        storyContext: activeStoryContext,
-        conversationHistory,
-        lastAssistantMessage,
-        currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage),
-        previousLearnerState: stageResults.goal?.learnerState,
-        goalState,
-        frictionBudget: this.getSessionFrictionBudget(session)
-      });
+      const virtualReplyResult = await this.retryLearnUpstream(input.sessionId, 'simulate-goal-reply', () =>
+        this.simulateGoalLearnerReply({
+          profile,
+          storyContext: activeStoryContext,
+          conversationHistory,
+          lastAssistantMessage,
+          currentPhase: this.mapGoalStageToLearnerPhase(goalState?.stage || existingGoalState.stage),
+          previousLearnerState: stageResults.goal?.learnerState,
+          goalState,
+          frictionBudget: this.getSessionFrictionBudget(session)
+        })
+      );
       
       if (!virtualReplyResult.success || !virtualReplyResult.output?.reply) {
         throw new Error('虚拟用户回复生成失败');
@@ -1593,11 +1595,19 @@ class SimulationOrchestrator {
       
       const goalResponseStart = Date.now();
       await this.assertCurrentSessionLeaseOwned(input.sessionId);
-      const goalResult = await goalConversationService.continueConversation(
-        session.goalConversationId,
-        virtualReplyResult.output.reply,
-        input.userId,
-        { systemPromptOverrides: this.getSessionPromptOverrides(session) }
+      const goalResult = await this.retryLearnUpstream(input.sessionId, 'goal-conversation-turn', () =>
+        goalConversationService.continueConversation(
+          session.goalConversationId,
+          virtualReplyResult.output.reply,
+          input.userId,
+          {
+            systemPromptOverrides: this.getSessionPromptOverrides(session),
+            // 平台硬规则：proposing 阶段只有显式确认动作才会收束并触发 Path 生成。
+            // 黑盒有 confirm_proposal 动作映射；辅助模式由协调器根据虚拟学习者
+            // 自评的 readyToAdvance 代发确认，否则 Goal 会永远停在 proposing。
+            confirmProposal: currentGoalLearnerState.readyToAdvance === true
+          }
+        )
       );
       
       logs.push({
@@ -1950,7 +1960,22 @@ class SimulationOrchestrator {
       } catch {}
       
       if (session.learningPathId) {
-        return { success: true, learningPathId: session.learningPathId };
+        // 会话上的 Path 指针可能因外部删除/重建而过期，校验后再复用。
+        const existingPath = await prisma.learning_paths.findUnique({
+          where: { id: session.learningPathId },
+          select: { id: true }
+        });
+        if (existingPath) {
+          return { success: true, learningPathId: session.learningPathId };
+        }
+        logger.warn('[simulation-coordinator] 会话绑定的 Path 已不存在，重新生成', {
+          sessionId,
+          stalePathId: session.learningPathId
+        });
+        await prisma.virtual_sessions.update({
+          where: { id: sessionId },
+          data: { learningPathId: null, updatedAt: new Date() }
+        });
       }
 
       // Path 不读 story、不特判虚拟人：只消费 Goal 对话产物。
@@ -1996,7 +2021,22 @@ class SimulationOrchestrator {
           undefined,
           learningPathId
         );
-        
+
+        // 同步 Goal ↔ Path 指针：重建 Path 后 goal_conversations 可能仍指向已删除的旧 Path，
+        // 不回写会导致后续评审重规划拿着失效 id 报错。
+        if (conversation.learningPathId !== learningPathId) {
+          await prisma.goal_conversations.update({
+            where: { id: session.goalConversationId },
+            data: { learningPathId }
+          }).catch((err: any) => {
+            logger.warn('[simulation-coordinator] 回写 goal_conversations.learningPathId 失败', {
+              sessionId,
+              learningPathId,
+              error: err?.message || String(err)
+            });
+          });
+        }
+
         await this.updateStageResults(sessionId, 'path', {
           success: true,
           learningPathId,
@@ -2152,6 +2192,119 @@ class SimulationOrchestrator {
     }
   }
 
+  /** 人工确认接受评审结论。只改评审状态，不自动启动 Learn。 */
+  async acceptPathReview(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const session = await this.getVirtualSession(sessionId);
+      const stageResults = this.parseStageResultsPayload(session.stageResults);
+      const pathReview = stageResults.path_review || {};
+
+      if (!session.learningPathId) {
+        throw new Error('学习路径不存在，请先生成 Path');
+      }
+      if (pathReview.decision !== 'accept') {
+        throw new Error('虚拟学习者尚未接受当前 Path，不能标记接受');
+      }
+      if (pathReview.reviewedPathId !== session.learningPathId) {
+        throw new Error('评审针对的是旧版 Path，请重新评审当前 Path');
+      }
+
+      await this.updateStageResults(sessionId, 'path_review', { ...pathReview, status: 'accepted' });
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: {
+          output: {
+            from: 'path-review',
+            to: 'path-accepted',
+            reason: 'operator-confirmed-accept',
+            learningPathId: session.learningPathId
+          }
+        }
+      });
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /** 人工触发：按评审意见重规划。评审保持 pending，直到人工决定。 */
+  async replanPathFromReview(sessionId: string): Promise<{
+    success: boolean;
+    learningPathId?: string;
+    error?: string;
+  }> {
+    const session = await this.getVirtualSession(sessionId);
+    const stageResults = this.parseStageResultsPayload(session.stageResults);
+    const pathReview = stageResults.path_review || {};
+
+    try {
+      if (!session.learningPathId) {
+        throw new Error('学习路径不存在，无法重规划');
+      }
+      if (!session.goalConversationId) {
+        throw new Error('Goal 对话不存在，无法重规划');
+      }
+      if (pathReview.reviewedPathId && pathReview.reviewedPathId !== session.learningPathId) {
+        throw new Error('评审针对的是旧版 Path，请先重新评审当前 Path');
+      }
+      if (pathReview.status === 'replanned') {
+        throw new Error('已按上次意见重规划过，请先重新评审新版 Path');
+      }
+
+      const feedback = [pathReview.reaction, ...(pathReview.visibleRequestedChanges || [])]
+        .filter(Boolean)
+        .join('\n');
+      if (!feedback) {
+        throw new Error('评审没有可执行的修改意见，请先评审 Path');
+      }
+
+      await this.updateStageResults(sessionId, 'path_review', {
+        ...pathReview,
+        status: 'replanning',
+        replan: { requestedAt: new Date().toISOString(), sourcePathId: session.learningPathId, reason: feedback }
+      });
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'path-replan',
+        details: { output: { decision: pathReview.decision, learningPathId: session.learningPathId, feedback } }
+      });
+
+      await this.assertCurrentSessionLeaseOwned(sessionId);
+      const result = await goalConversationService.regeneratePath(
+        session.goalConversationId,
+        session.userId,
+        feedback,
+        this.getSessionPromptOverrides(session)
+      );
+      const learningPathId = result.internal?.core?.learningPath?.id || session.learningPathId;
+      await this.updateSessionStatus(sessionId, 'running', 'path', session.goalConversationId, learningPathId);
+      await this.updateStageResults(sessionId, 'path_review', {
+        ...pathReview,
+        status: 'replanned',
+        replan: { requestedAt: new Date().toISOString(), sourcePathId: session.learningPathId, resultPathId: learningPathId, completedAt: new Date().toISOString(), reason: feedback }
+      });
+      await this.addSessionLog(sessionId, {
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: pathReview.decision, learningPathId } }
+      });
+      return { success: true, learningPathId };
+    } catch (error: any) {
+      const latest = this.parseStageResultsPayload((await this.getVirtualSession(sessionId)).stageResults);
+      await this.updateStageResults(sessionId, 'path_review', {
+        ...(latest.path_review || pathReview),
+        status: 'failed',
+        error: error.message || '重规划失败'
+      });
+      return { success: false, error: error.message || '重规划失败' };
+    }
+  }
+
+  /**
+   * 一键全流程专用：评审后自动推进（accept→可选启动 Learn；否则自动重规划）。
+   * 手动操作请用 reviewPathProposal / acceptPathReview / replanPathFromReview。
+   */
   async resolvePathReview(sessionId: string, options: { startLearning?: boolean } = {}): Promise<{
     success: boolean;
     decision?: 'accept' | 'modify' | 'reject';
@@ -2163,11 +2316,10 @@ class SimulationOrchestrator {
     if (!review.success || !review.decision) return { success: false, error: review.error || 'Path 评审失败' };
 
     const session = await this.getVirtualSession(sessionId);
-    const stageResults = this.parseStageResultsPayload(session.stageResults);
-    const pathReview = stageResults.path_review || {};
 
     if (review.decision === 'accept') {
-      await this.updateStageResults(sessionId, 'path_review', { ...pathReview, status: 'accepted' });
+      const accepted = await this.acceptPathReview(sessionId);
+      if (!accepted.success) return { success: false, decision: review.decision, error: accepted.error };
       if (!options.startLearning) {
         return { success: true, decision: review.decision, currentStage: 'path', learningPathId: session.learningPathId };
       }
@@ -2186,45 +2338,14 @@ class SimulationOrchestrator {
       };
     }
 
-    if (!session.goalConversationId) return { success: false, decision: review.decision, error: 'Goal 对话不存在，无法重规划' };
-
-    const feedback = [review.reaction, ...(review.visibleRequestedChanges || [])].filter(Boolean).join('\n');
-    await this.updateStageResults(sessionId, 'path_review', {
-      ...pathReview,
-      status: 'replanning',
-      replan: { requestedAt: new Date().toISOString(), sourcePathId: session.learningPathId, reason: feedback }
-    });
-    await this.addSessionLog(sessionId, {
-      timestamp: new Date().toISOString(),
-      phase: 'path-replan',
-      details: { output: { decision: review.decision, learningPathId: session.learningPathId, feedback } }
-    });
-
-    try {
-      await this.assertCurrentSessionLeaseOwned(sessionId);
-      const result = await goalConversationService.regeneratePath(
-        session.goalConversationId,
-        session.userId,
-        feedback,
-        this.getSessionPromptOverrides(session)
-      );
-      const learningPathId = result.internal?.core?.learningPath?.id || session.learningPathId;
-      await this.updateSessionStatus(sessionId, 'running', 'path', session.goalConversationId, learningPathId);
-      await this.updateStageResults(sessionId, 'path_review', {
-        ...pathReview,
-        status: 'replanned',
-        replan: { requestedAt: new Date().toISOString(), sourcePathId: session.learningPathId, resultPathId: learningPathId, completedAt: new Date().toISOString(), reason: feedback }
-      });
-      await this.addSessionLog(sessionId, {
-        timestamp: new Date().toISOString(),
-        phase: 'stage-transition',
-        details: { output: { from: 'path-review', to: 'path', reason: 'path-replanned-awaiting-review', decision: review.decision, learningPathId } }
-      });
-      return { success: true, decision: review.decision, currentStage: 'path', learningPathId };
-    } catch (error: any) {
-      await this.updateStageResults(sessionId, 'path_review', { ...pathReview, status: 'failed', error: error.message || '重规划失败' });
-      return { success: false, decision: review.decision, error: error.message || '重规划失败' };
-    }
+    const replanned = await this.replanPathFromReview(sessionId);
+    return {
+      success: replanned.success,
+      decision: review.decision,
+      currentStage: replanned.success ? 'path' : undefined,
+      learningPathId: replanned.learningPathId,
+      error: replanned.error
+    };
   }
 
   async startLearningPhase(sessionId: string, options: { taskId?: string } = {}): Promise<{
@@ -2242,10 +2363,8 @@ class SimulationOrchestrator {
         throw new Error('学习路径不存在，请先生成路径');
       }
 
-      const pathReview = this.parseStageResultsPayload(session.stageResults)?.path_review;
-      if (pathReview?.status !== 'accepted' || pathReview?.decision !== 'accept' || pathReview?.reviewedPathId !== session.learningPathId) {
-        throw new Error('Path 尚未通过虚拟学习者评审，不能启动 Learn');
-      }
+      // 评审是独立质量旁路，不作为 Learn 前置闸门：Path 存在且任务就绪即可启动。
+      // Learn 产生进度后，路径变更保护会阻止重规划/删除，证据链不被破坏。
       
       const learningPath = await prisma.learning_paths.findUnique({
         where: { id: session.learningPathId },
@@ -3246,6 +3365,13 @@ class SimulationOrchestrator {
         await prisma.learning_paths.delete({
           where: { id: session.learningPathId }
         })
+        // Goal 上的 Path 指针同步清空，避免后续重规划引用已删除的旧 Path。
+        if (session.goalConversationId) {
+          await prisma.goal_conversations.update({
+            where: { id: session.goalConversationId },
+            data: { learningPathId: null }
+          }).catch(() => {})
+        }
       }
 
       await this.resetSessionRuntime(sessionId, {

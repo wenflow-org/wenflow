@@ -43,8 +43,7 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   // adaptive-guidance-copy
   { skillId: 'adaptive-guidance-copy', field: '*', consumers: ['frontend: Dashboard.vue（引导文案）', 'frontend: V2Dashboard.vue（nextStep）'] },
   // 蒸馏/抽取家族（后台消费，无前端直接绑定）
-  { skillId: 'session-knowledge-distiller', field: '*', consumers: ['backend: learner.coordinator applyProfileUpdate', 'backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] },
-  { skillId: 'dialogue-concept-extractor', field: '*', consumers: ['backend: learner.coordinator', 'backend: LessonKnowledgeEnrichmentConsumer'] },
+  { skillId: 'lesson-knowledge-enricher', field: '*', consumers: ['backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] },
   { skillId: 'goal-profile-inference', field: '*', consumers: ['backend: profile-aggregator（narrativeInsights → learner profile）'] },
   { skillId: 'learning-pattern-distiller', field: '*', consumers: ['backend: profile-aggregator'] },
   // path 家族

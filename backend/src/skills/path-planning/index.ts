@@ -14,21 +14,13 @@ import {
   AgentInput,
   AgentOutput,
   AgentContext,
-  MilestoneOutput,
-  SubtaskOutput
+  MilestoneOutput
 } from '../../agents/protocol';
-import { CallerInfo, ExecutionContext } from '../../gateway/api-gateway';
-import { agentConfigService } from '../../services/agentConfig.service';
+import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 
-type MessageRole = 'user' | 'assistant' | 'system';
-type ChatMessage = { role: MessageRole; content: string };
-import { EventBus, getEventBus } from '../../gateway/event-bus';
-import { textStructureAnalyzer } from '../../skills/text-structure-analyzer';
-import { pathSceneFramingDefinition } from '../../skills/path-scene-framing';
-import { stageDesignerDefinition } from '../../skills/stage-designer';
-import { labelGeneratorDefinition } from '../../skills/label-generator';
+import { getEventBus } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
 const PATH_AGENT_MAX_TOKENS = 32000;
@@ -625,74 +617,6 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
       extractedJson: result.debug.extractedJson || undefined,
     }
   };
-}
-
-/**
- * 动态重规划路径（里程碑模式）
- */
-export async function replanPath(
-  currentPath: PathOutput,
-  signal: { type: string; intensity: number },
-  context: AgentContext
-): Promise<PathOutput> {
-  if (!currentPath) return currentPath;
-  
-  const eventBus = getEventBus();
-  const caller: CallerInfo = { agentId: 'path-agent', skillId: 'path-planning' };
-  
-  let adjustment = '';
-  
-  switch (signal.type) {
-    case 'accelerating':
-      adjustment = '用户学习速度加快，合并相似里程碑';
-      break;
-    case 'decelerating':
-      adjustment = '用户学习速度减慢，拆分里程碑，增加子任务';
-      break;
-    case 'fatigue-high':
-      adjustment = '用户疲劳度高，减少每个里程碑的子任务数量';
-      break;
-    case 'struggling':
-      adjustment = '用户遇到困难，在里程碑前插入补充里程碑';
-      break;
-    case 'mastery':
-      adjustment = '用户已掌握当前内容，跳过基础里程碑';
-      break;
-    default:
-      return currentPath;
-  }
-  
-  try {
-    const userId = context?.userId;
-    // 懒加载避免 skills/index -> path-planning -> skills/index 循环依赖
-    const { executeSkill, auxSkillDefinitionMap } = await import('..');
-    const newPath = await executeSkill(auxSkillDefinitionMap['path-adjustment-generator'], {
-      adjustmentTarget: 'milestone',
-      currentPath,
-      signal,
-      adjustment,
-      maxTokens: PATH_AGENT_MAX_TOKENS,
-      __onFailure: 'throw',
-      __prompt: { userId, requestPath: '/skills/path-planning/replan', callerAgentId: caller.agentId },
-    }) as Partial<PathOutput>;
-
-    // 发布路径调整事件
-    await eventBus.emit({
-      type: 'path:adjusted',
-      source: 'skill:path-planning',
-      userId: context.userId,
-      data: {
-        oldPathId: currentPath.id,
-        newPathId: newPath.id,
-        signal: signal.type,
-        adjustment
-      }
-    });
-
-    return { ...currentPath, ...newPath };
-  } catch (error: any) {
-    throw new Error(`PATH_REPLAN_FAILED: ${error?.message || 'unknown error'}`);
-  }
 }
 
 export default pathAgentHandler;

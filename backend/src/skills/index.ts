@@ -8,34 +8,6 @@
 export * from './protocol';
 export * from './context-envelope';
 
-// 文本结构分析
-export { textStructureAnalyzerDefinition } from './text-structure-analyzer';
-import { textStructureAnalyzer as textStructureAnalyzerFn } from './text-structure-analyzer';
-
-// 检索
-export { retrievalDefinition } from './retrieval';
-import { retrieval as retrievalFn } from './retrieval';
-
-// Web 内容提取
-export { webExtractorDefinition } from './web-extractor';
-import { webExtractor as webExtractorFn } from './web-extractor';
-
-// 图片分析
-export { imageAnalyzerDefinition } from './image-analyzer';
-import { imageAnalyzer as imageAnalyzerFn } from './image-analyzer';
-
-// 记忆搜索
-export { memorySearchDefinition } from './memory-search';
-import { memorySearch as memorySearchFn } from './memory-search';
-
-// 智能搜索
-export { smartSearchDefinition } from './smart-search';
-import { smartSearch as smartSearchFn } from './smart-search';
-
-// 动态标签生成 (PathAgent v3.1)
-export { labelGeneratorDefinition } from './label-generator';
-import { labelGenerator as labelGeneratorFn } from './label-generator';
-
 // 路径场景 framing (PathAgent v3.2)
 export { pathSceneFramingDefinition } from './path-scene-framing';
 import { pathSceneFraming as pathSceneFramingFn } from './path-scene-framing';
@@ -56,13 +28,9 @@ import { goalProfileInference as goalProfileInferenceFn } from './goal-profile-i
 export { learningPatternDistillerDefinition } from './learning-pattern-distiller';
 import { learningPatternDistiller as learningPatternDistillerFn } from './learning-pattern-distiller';
 
-// 课堂知识蒸馏
-export { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
-import { sessionKnowledgeDistiller as sessionKnowledgeDistillerFn } from './session-knowledge-distiller';
-
-// 对话概念抽取
-export { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
-import { dialogueConceptExtractor as dialogueConceptExtractorFn } from './dialogue-concept-extractor';
+// 课后知识增强（session-knowledge-distiller + dialogue-concept-extractor 于 2026-07 合并）
+export { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
+import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './lesson-knowledge-enricher';
 
 // 结构化输出解析器（新增：通用 JSON 提取）
 export { structuredOutputParserDefinition } from './structured-output-parser';
@@ -89,7 +57,7 @@ export { mcpToolDefinition } from './mcp-tool';
 import { executeMcpTool as executeMcpToolFn } from './mcp-tool';
 
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
-import { auxSkillDefinitions, auxSkillHandlers, auxSkillDefinitionMap } from './v4-aux-skills';
+import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
 export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
 
 // 虚拟学习者场景设计
@@ -128,7 +96,7 @@ export { andersonLabelerCache, AndersonLabelerCache, CachedLabel, CacheHitResult
 // ============================================================
 export { goalConversationAgentDefinition } from './goal-conversation';
 import { runGoalConversationAgent } from './goal-conversation';
-export { pathAgentDefinition, replanPath } from './path-planning';
+export { pathAgentDefinition } from './path-planning';
 import { pathAgentHandler } from './path-planning';
 export { teachingTurnAgentDefinition, toTeachingTurnSkillOutcome } from './teaching-turn';
 export type { TeachingTurnArtifact, TeachingTurnInput, TeachingTurnOutput } from './teaching-turn';
@@ -142,20 +110,12 @@ export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outco
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
-import { textStructureAnalyzerDefinition } from './text-structure-analyzer';
-import { retrievalDefinition } from './retrieval';
-import { webExtractorDefinition } from './web-extractor';
-import { imageAnalyzerDefinition } from './image-analyzer';
-import { memorySearchDefinition } from './memory-search';
-import { smartSearchDefinition } from './smart-search';
-import { labelGeneratorDefinition } from './label-generator';
 import { pathSceneFramingDefinition } from './path-scene-framing';
 import { stageDesignerDefinition } from './stage-designer';
 import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
 import { goalProfileInferenceDefinition } from './goal-profile-inference';
 import { learningPatternDistillerDefinition } from './learning-pattern-distiller';
-import { sessionKnowledgeDistillerDefinition } from './session-knowledge-distiller';
-import { dialogueConceptExtractorDefinition } from './dialogue-concept-extractor';
+import { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
 import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
 import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
 import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
@@ -171,20 +131,12 @@ import { promptCompilerDefinition } from './prompt-compiler';
 import { mcpToolDefinition } from './mcp-tool';
 
 export const allSkillDefinitions: SkillDefinition[] = [
-  textStructureAnalyzerDefinition,
-  retrievalDefinition,
-  webExtractorDefinition,
-  imageAnalyzerDefinition,
-  memorySearchDefinition,
-  smartSearchDefinition,
-  labelGeneratorDefinition,
   pathSceneFramingDefinition,
   stageDesignerDefinition,
   adaptiveGuidanceCopyDefinition,
   goalProfileInferenceDefinition,
   learningPatternDistillerDefinition,
-  sessionKnowledgeDistillerDefinition,
-  dialogueConceptExtractorDefinition,
+  lessonKnowledgeEnricherDefinition,
   virtualLearnerPersonaDesignerDefinition,
   virtualLearnerScenarioDesignerDefinition,
   virtualLearnerGoalDialogueSimulatorDefinition,
@@ -264,20 +216,12 @@ export const allSkillDefinitions: SkillDefinition[] = [
 
 // Skill 名称映射
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
-  'text-structure-analyzer': textStructureAnalyzerFn,
-  'retrieval': retrievalFn,
-  'web-extractor': webExtractorFn,
-  'image-analyzer': imageAnalyzerFn,
-  'memory-search': memorySearchFn,
-  'smart-search': smartSearchFn,
-  'label-generator': labelGeneratorFn,
   'path-scene-framing': pathSceneFramingFn,
   'stage-designer': stageDesignerFn,
   'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
   'goal-profile-inference': goalProfileInferenceFn,
   'learning-pattern-distiller': learningPatternDistillerFn,
-  'session-knowledge-distiller': sessionKnowledgeDistillerFn,
-  'dialogue-concept-extractor': dialogueConceptExtractorFn,
+  'lesson-knowledge-enricher': lessonKnowledgeEnricherFn,
   'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
   'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
   'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,

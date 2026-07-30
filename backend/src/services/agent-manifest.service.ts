@@ -67,8 +67,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     agentMembers: [
       'skill:goal-conversation',
       'skill:goal-profile-inference',
-      'skill:goal-understanding-composer',
-      'skill:dialogue-concept-extractor'
+      'skill:goal-understanding-composer'
     ]
   },
   {
@@ -117,8 +116,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     agentMembers: [
       'skill:learner-model',
       'skill:learning-pattern-distiller',
-      'skill:session-knowledge-distiller',
-      'skill:label-generator'
+      'skill:lesson-knowledge-enricher'
     ]
   },
   {
@@ -179,18 +177,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Goal',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 2000 }
-  },
-  {
-    id: 'skill:dialogue-concept-extractor',
-    name: '对话概念抽取 Skill',
-    description: '从目标对话中抽取关键概念实体',
-    category: 'goal',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Goal',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 1000 }
   },
 
   // ============ Path 下辖 Skills ============
@@ -336,28 +322,16 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 1500 }
   },
   {
-    id: 'skill:session-knowledge-distiller',
-    name: '会话知识蒸馏 Skill',
-    description: '从单次教学会话蒸馏知识点掌握情况',
+    id: 'skill:lesson-knowledge-enricher',
+    name: '课后知识增强 Skill',
+    description: '课后单次调用：蒸馏知识台账增量并抽取隐性概念线索',
     category: 'learner',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Learner',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 1500 }
-  },
-  {
-    id: 'skill:label-generator',
-    name: '画像标签生成 Skill',
-    description: '生成学习者画像短标签',
-    category: 'learner',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Learner',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.5, maxTokens: 600 }
+    defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },
 
   // ============ Simulation 下辖 Skills ============

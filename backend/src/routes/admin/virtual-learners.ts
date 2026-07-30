@@ -2840,18 +2840,51 @@ router.post('/sessions/:sessionId/synthetic-token', async (req: any, res) => {
 });
 
 /**
- * 以虚拟学习者视角评审当前 Path，并按结论进入 Learn 或重规划。
+ * 以虚拟学习者视角评审当前 Path。只产出评审结论（accept/modify/reject），
+ * 不自动启动 Learn、不自动重规划；后续动作由人工通过 accept-path / replan-path 触发。
  * POST /api/admin/virtual-learners/sessions/:sessionId/review-path
  */
 router.post('/sessions/:sessionId/review-path', async (req: any, res) => {
   try {
     const result = await runAssistedSessionMutation(req.params.sessionId, () =>
-      simulationCoordinator.resolvePathReview(req.params.sessionId, { startLearning: true })
+      simulationCoordinator.reviewPathProposal(req.params.sessionId)
     );
     res.json({ success: result.success, data: result, error: result.error });
   } catch (error: any) {
     logger.error('Path 评审失败:', error);
     sendVirtualSessionError(res, error, 'Path 评审失败');
+  }
+});
+
+/**
+ * 人工确认接受评审结论（decision=accept 且评审对应当前 Path）。只改评审状态，不启动 Learn。
+ * POST /api/admin/virtual-learners/sessions/:sessionId/accept-path
+ */
+router.post('/sessions/:sessionId/accept-path', async (req: any, res) => {
+  try {
+    const result = await runAssistedSessionMutation(req.params.sessionId, () =>
+      simulationCoordinator.acceptPathReview(req.params.sessionId)
+    );
+    res.json({ success: result.success, data: result, error: result.error });
+  } catch (error: any) {
+    logger.error('接受 Path 失败:', error);
+    sendVirtualSessionError(res, error, '接受 Path 失败');
+  }
+});
+
+/**
+ * 人工触发：按评审意见重规划 Path（评审保持 pending 直到人工决定）。
+ * POST /api/admin/virtual-learners/sessions/:sessionId/replan-path
+ */
+router.post('/sessions/:sessionId/replan-path', async (req: any, res) => {
+  try {
+    const result = await runAssistedSessionMutation(req.params.sessionId, () =>
+      simulationCoordinator.replanPathFromReview(req.params.sessionId)
+    );
+    res.json({ success: result.success, data: result, error: result.error });
+  } catch (error: any) {
+    logger.error('重规划 Path 失败:', error);
+    sendVirtualSessionError(res, error, '重规划 Path 失败');
   }
 });
 

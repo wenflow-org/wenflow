@@ -144,20 +144,14 @@ function inferPhases(skillId: string, domain: string): { phases: string[]; defau
   if (skillId === 'adaptive-guidance-copy') {
     return { phases: ['guidance-generated'], defaultPhase: 'guidance-generated', terminalPhases: ['guidance-generated'] };
   }
-  if (skillId === 'session-knowledge-distiller') {
-    return { phases: ['knowledge-distilled'], defaultPhase: 'knowledge-distilled', terminalPhases: ['knowledge-distilled'] };
-  }
-  if (skillId === 'dialogue-concept-extractor') {
-    return { phases: ['concept-extracted'], defaultPhase: 'concept-extracted', terminalPhases: ['concept-extracted'] };
+  if (skillId === 'lesson-knowledge-enricher') {
+    return { phases: ['knowledge-enriched'], defaultPhase: 'knowledge-enriched', terminalPhases: ['knowledge-enriched'] };
   }
   if (skillId === 'learning-pattern-distiller') {
     return { phases: ['pattern-distilled'], defaultPhase: 'pattern-distilled', terminalPhases: ['pattern-distilled'] };
   }
   if (skillId === 'goal-profile-inference') {
     return { phases: ['profile-inferred'], defaultPhase: 'profile-inferred', terminalPhases: ['profile-inferred'] };
-  }
-  if (skillId === 'label-generator') {
-    return { phases: ['label-generated'], defaultPhase: 'label-generated', terminalPhases: ['label-generated'] };
   }
   if (skillId === 'prompt-compiler') {
     return { phases: ['prompt-compiled'], defaultPhase: 'prompt-compiled', terminalPhases: ['prompt-compiled'] };

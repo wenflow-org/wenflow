@@ -14,7 +14,6 @@ import { basicExtractor } from './basic-extractor';
 import { basicEvaluator } from './basic-evaluator';
 import { dataMappingAgent } from './data-mapping';
 import { goalAlignmentChecker } from '../../plugins/goal-alignment-checker';
-import { confidenceHandler } from '../../plugins/confidence-handler';
 import { adaptPluginToSkill } from './skill-adapter';
 
 // 插件列表
@@ -24,8 +23,7 @@ export const allPlugins = [
   basicExtractor,
   basicEvaluator,
   dataMappingAgent,
-  goalAlignmentChecker,
-  confidenceHandler
+  goalAlignmentChecker
 ];
 
 /**

@@ -5,8 +5,6 @@ import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
 import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
-import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';
-import { labelGeneratorDefinition } from '../../skills/label-generator';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 

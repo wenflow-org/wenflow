@@ -36,20 +36,7 @@ const TASK_TYPE_MAPPING: Record<string, { type: string; estimatedMinutes: number
   '考核': { type: 'quiz', estimatedMinutes: 30 }
 };
 
-const DEFAULT_CONSERVATIVE_VALUES: Record<string, any> = {
-  'text-structure-analyzer': {
-    outline: [],
-    chapters: [],
-    keywords: [],
-    summary: '无法提取结构，使用降级方案',
-    estimatedReadTime: 30
-  },
-  'smart-search': {
-    results: [],
-    totalFound: 0,
-    queryExpansion: []
-  }
-};
+const DEFAULT_CONSERVATIVE_VALUES: Record<string, any> = {};
 
 export function handleSkillFailure<T>(
   skillName: string,

@@ -62,9 +62,8 @@ router.use(rejectPromptOpsRuntimeMutation);
 // ============================================================
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'skill:adaptive-guidance-copy': '自适应引导文案',
-  'skill:dialogue-concept-extractor': '对话概念抽取',
+  'skill:lesson-knowledge-enricher': '课后知识增强',
   'skill:goal-profile-inference': '目标画像推断',
-  'skill:label-generator': '标签生成器',
   'skill:learning-pattern-distiller': '学习模式提炼',
   'skill:path-scene-framing': '路径场景包装',
   'skill:peer-reinforcement': '同伴强化对话',
@@ -85,8 +84,6 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learn'> = {
   'skill:goal-conversation': 'goal',
   'skill:goal-profile-inference': 'goal',
-  'skill:dialogue-concept-extractor': 'goal',
-  'skill:label-generator': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
   'skill:path-scene-framing': 'path',
@@ -96,7 +93,7 @@ const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learn'> = {
   'skill:peer-reinforcement': 'learn',
   'skill:adaptive-guidance-copy': 'learn',
   'skill:learning-pattern-distiller': 'learn',
-  'skill:session-knowledge-distiller': 'learn',
+  'skill:lesson-knowledge-enricher': 'learn',
 };
 
 // ============================================================

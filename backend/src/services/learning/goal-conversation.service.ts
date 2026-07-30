@@ -895,11 +895,20 @@ async continueConversation(
           where: { id: request.existingPathId },
           select: { activeGenerationRunId: true }
         });
-        if (!path) throw new Error('学习路径不存在');
-        request.generationRunId = await learningService.claimPathCoreGeneration(
-          request.existingPathId,
-          path.activeGenerationRunId
-        );
+        if (!path) {
+          // Goal 上的 learningPathId 可能因 Path 被重建/删除而过期；降级为新建路径，
+          // 由调用方把新 pathId 写回 goal_conversations，恢复 Goal ↔ Path 1:1 指针。
+          logger.warn('会话绑定的学习路径已不存在，改为生成新路径', {
+            conversationId: conversation.id,
+            stalePathId: request.existingPathId
+          });
+          request.existingPathId = undefined;
+        } else {
+          request.generationRunId = await learningService.claimPathCoreGeneration(
+            request.existingPathId,
+            path.activeGenerationRunId
+          );
+        }
       }
       const learningPath = await pathOrchestrator.generateFromGoal(request);
 

@@ -13,11 +13,8 @@ import {
   PATH_SCENE_FRAMING_TEMPERATURE 
 } from '../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../skills/stage-designer';
-import { LABEL_GENERATOR_PROMPT, LABEL_GENERATOR_MAX_TOKENS } from '../skills/label-generator';
 import { GOAL_PROFILE_INFERENCE_PROMPT } from '../skills/goal-profile-inference';
 import { LEARNING_PATTERN_DISTILLER_PROMPT } from '../skills/learning-pattern-distiller';
-import { SESSION_KNOWLEDGE_DISTILLER_PROMPT } from '../skills/session-knowledge-distiller';
-import { DIALOGUE_CONCEPT_EXTRACTOR_PROMPT } from '../skills/dialogue-concept-extractor';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../skills/adaptive-guidance-copy';
 import { 
   VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT, 
@@ -116,14 +113,6 @@ const promptsToExport: PromptToExport[] = [
     maxTokens: 32000,
   },
   {
-    agentId: 'skill:label-generator',
-    name: 'default-label-generator',
-    description: '教育标签设计师',
-    systemPrompt: LABEL_GENERATOR_PROMPT,
-    temperature: 0.5,
-    maxTokens: LABEL_GENERATOR_MAX_TOKENS,
-  },
-  {
     agentId: 'skill:goal-profile-inference',
     name: 'default-goal-profile-inference',
     description: '学习者画像推断器',
@@ -138,22 +127,6 @@ const promptsToExport: PromptToExport[] = [
     systemPrompt: LEARNING_PATTERN_DISTILLER_PROMPT,
     temperature: 0.5,
     maxTokens: 3000,
-  },
-  {
-    agentId: 'skill:session-knowledge-distiller',
-    name: 'default-session-knowledge-distiller',
-    description: '课堂知识蒸馏器',
-    systemPrompt: SESSION_KNOWLEDGE_DISTILLER_PROMPT,
-    temperature: 0.4,
-    maxTokens: 3000,
-  },
-  {
-    agentId: 'skill:dialogue-concept-extractor',
-    name: 'default-dialogue-concept-extractor',
-    description: '对话概念抽取器',
-    systemPrompt: DIALOGUE_CONCEPT_EXTRACTOR_PROMPT,
-    temperature: 0.5,
-    maxTokens: 2500,
   },
   {
     agentId: 'skill:adaptive-guidance-copy',

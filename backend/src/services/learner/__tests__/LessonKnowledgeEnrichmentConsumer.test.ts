@@ -11,8 +11,7 @@ jest.mock('../../../config/database', () => ({
 }));
 
 jest.mock('../../../skills', () => ({ executeSkill }));
-jest.mock('../../../skills/session-knowledge-distiller', () => ({ sessionKnowledgeDistillerDefinition: { name: 'session-knowledge-distiller' } }));
-jest.mock('../../../skills/dialogue-concept-extractor', () => ({ dialogueConceptExtractorDefinition: { name: 'dialogue-concept-extractor' } }));
+jest.mock('../../../skills/lesson-knowledge-enricher', () => ({ lessonKnowledgeEnricherDefinition: { name: 'lesson-knowledge-enricher' } }));
 
 import { LessonKnowledgeEnrichmentConsumer } from '../LessonKnowledgeEnrichmentConsumer';
 import { createDomainEvent } from '../../../events/contracts';
@@ -20,11 +19,15 @@ import { createDomainEvent } from '../../../events/contracts';
 describe('LessonKnowledgeEnrichmentConsumer', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('runs both stateless skills and commits evidence with one inbox receipt', async () => {
+  it('runs the merged enrichment skill once and commits evidence with one inbox receipt', async () => {
     inboxFindUnique.mockResolvedValue(null);
-    executeSkill
-      .mockResolvedValueOnce({ conceptLedger: [{ conceptKey: 'a', label: 'A' }] })
-      .mockResolvedValueOnce({ recurringConfusions: [] });
+    executeSkill.mockResolvedValue({
+      conceptLedger: [{ conceptKey: 'a', label: 'A' }],
+      reusableFoundations: ['A'],
+      blockedFoundations: [],
+      transferSignals: [{ conceptKey: 'a', label: 'A', readiness: 'high', confidence: 0.8 }],
+      recurringConfusions: []
+    });
     const tx = {
       domain_event_inbox: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -50,7 +53,14 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
       }
     }));
 
-    expect(executeSkill).toHaveBeenCalledTimes(2);
+    expect(executeSkill).toHaveBeenCalledTimes(1);
+    expect(executeSkill).toHaveBeenCalledWith(
+      { name: 'lesson-knowledge-enricher' },
+      expect.objectContaining({
+        knowledgeState: [{ name: 'A', status: 'mastered', progress: 100 }],
+        visibleDialogueContext: []
+      })
+    );
     expect(tx.learner_evidence.createMany).toHaveBeenCalledWith({
       data: expect.arrayContaining([
         expect.objectContaining({ evidenceType: 'session-knowledge-distilled' }),

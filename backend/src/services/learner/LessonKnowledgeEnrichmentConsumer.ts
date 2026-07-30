@@ -1,8 +1,7 @@
 import prisma from '../../config/database';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { executeSkill } from '../../skills';
-import { sessionKnowledgeDistillerDefinition } from '../../skills/session-knowledge-distiller';
-import { dialogueConceptExtractorDefinition } from '../../skills/dialogue-concept-extractor';
+import { lessonKnowledgeEnricherDefinition } from '../../skills/lesson-knowledge-enricher';
 
 const CONSUMER_ID = 'lesson-knowledge-enrichment-v1';
 
@@ -24,27 +23,34 @@ export class LessonKnowledgeEnrichmentConsumer {
         ? data.wrapup.sessionStructure.classroomEventHistory
         : [];
 
-    const [sessionKnowledge, dialogueKnowledge] = await Promise.all([
-      executeSkill(sessionKnowledgeDistillerDefinition, {
-        knowledgeState,
-        knowledgeDelta: data.wrapup?.progress
-          ? {
-              newlyMastered: data.wrapup.progress.newlyMastered || [],
-              movedToReview: data.wrapup.progress.movedToReview || [],
-              stillLearning: data.wrapup.progress.stillLearning || [],
-              unchangedMastered: data.wrapup.progress.unchangedMastered || []
-            }
-          : null,
-        wrapup: data.wrapup || null,
-        taskContext: { learningPathId: data.pathId, taskId: data.taskId },
-        sessionEvidence: data.performance || null
-      }),
-      executeSkill(dialogueConceptExtractorDefinition, {
-        visibleDialogueContext,
-        classroomEventHistory,
-        currentKnowledgeState: knowledgeState
-      })
-    ]);
+    // 单次 LLM 调用完成知识台账蒸馏 + 隐性概念抽取（原两个 skill 合并）
+    const enriched = await executeSkill(lessonKnowledgeEnricherDefinition, {
+      knowledgeState,
+      knowledgeDelta: data.wrapup?.progress
+        ? {
+            newlyMastered: data.wrapup.progress.newlyMastered || [],
+            movedToReview: data.wrapup.progress.movedToReview || [],
+            stillLearning: data.wrapup.progress.stillLearning || [],
+            unchangedMastered: data.wrapup.progress.unchangedMastered || []
+          }
+        : null,
+      wrapup: data.wrapup || null,
+      taskContext: { learningPathId: data.pathId, taskId: data.taskId },
+      sessionEvidence: data.performance || null,
+      visibleDialogueContext,
+      classroomEventHistory,
+    });
+
+    const sessionKnowledge = {
+      conceptLedger: enriched?.conceptLedger || [],
+      reusableFoundations: enriched?.reusableFoundations || [],
+      blockedFoundations: enriched?.blockedFoundations || [],
+      transferSignals: enriched?.transferSignals || [],
+    };
+    const dialogueKnowledge = {
+      recurringConfusions: enriched?.recurringConfusions || [],
+      transferSignals: enriched?.transferSignals || [],
+    };
 
     await prisma.$transaction(async (tx) => {
       const consumed = await tx.domain_event_inbox.findUnique({

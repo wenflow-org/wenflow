@@ -192,20 +192,12 @@ const SKILL_HINTS: Record<string, string> = {
 };
 
 const SKILL_CN_NAMES: Record<string, string> = {
-  'text-structure-analyzer': '文本结构分析器',
-  'retrieval': '内容检索器',
-  'web-extractor': '网页内容提取器',
-  'image-analyzer': '图片分析器',
-  'memory-search': '学习记忆搜索器',
-  'smart-search': '智能搜索器',
-  'label-generator': '动态标签生成器',
   'path-scene-framing': '路径场景构图',
   'stage-designer': '阶段任务设计器',
   'adaptive-guidance-copy': '动态引导文案生成器',
   'goal-profile-inference': '目标阶段画像推断器',
   'learning-pattern-distiller': '学习模式蒸馏器',
-  'session-knowledge-distiller': '课堂知识蒸馏器',
-  'dialogue-concept-extractor': '对话概念抽取器',
+  'lesson-knowledge-enricher': '课后知识增强器',
   'virtual-learner-persona-designer': '虚拟学习者身份设计器',
   'virtual-learner-scenario-designer': '虚拟学习者故事设计器',
   'peer-reinforcement': '同伴强化',

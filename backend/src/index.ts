@@ -56,7 +56,20 @@ const RETIRED_SKILLS = [
   'answer-generation',
   'batch-anderson-labeler',
   'goal-type-identifier',
-  'task-profile-builder'
+  'task-profile-builder',
+  // 2026-07 调用调查后退役：生产零调用或事件无发射者
+  'state-assessment',
+  'confidence-handler',
+  'label-generator',
+  'text-structure-analyzer',
+  'retrieval',
+  'web-extractor',
+  'image-analyzer',
+  'memory-search',
+  'smart-search',
+  // 2026-07 合并入 lesson-knowledge-enricher
+  'session-knowledge-distiller',
+  'dialogue-concept-extractor'
 ] as const;
 
 // ACP 中间件
@@ -281,19 +294,12 @@ agents: {
       'skill:learner-model': '学习者画像与状态中心'
     },
     skills: [
-      'text-structure-analyzer',
-      'retrieval',
-      'web-extractor',
-      'image-analyzer',
-      'memory-search',
-      'smart-search',
       'path-scene-framing',
       'stage-designer',
       'adaptive-guidance-copy',
       'goal-profile-inference',
       'learning-pattern-distiller',
-      'session-knowledge-distiller',
-      'dialogue-concept-extractor'
+      'lesson-knowledge-enricher'
     ]
   });
 });

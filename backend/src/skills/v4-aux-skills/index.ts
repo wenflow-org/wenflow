@@ -14,13 +14,10 @@ import { callPrompt } from '../../composers/prompt-composer';
 import type { PromptCallContext } from '../../composers/types';
 import type { SkillDefinition, SkillExecutionResult } from '../protocol';
 
-type JsonObject = Record<string, any>;
-
 export type AuxSkillId =
   | 'teaching-opening-generator'
   | 'session-evaluation-fallback'
   | 'learner-progress-report'
-  | 'state-assessment'
   | 'path-adjustment-generator'
   | 'goal-analysis'
   | 'generic-chat'
@@ -33,7 +30,6 @@ export type AuxSkillId =
   | 'basic-generator'
   | 'data-mapping'
   | 'goal-alignment-checker'
-  | 'confidence-handler'
   | 'concept-priority';
 
 interface AuxPlumbing extends PromptCallContext {
@@ -65,11 +61,6 @@ function definition(meta: AuxSkillMeta): SkillDefinition {
     outputSchema: OBJECT_OUTPUT,
     stats: { callCount: 0, successRate: 1, avgLatency: 0 },
   };
-}
-
-function clamp01(value: any, defaultValue: number): number {
-  const num = Number(value);
-  return Number.isFinite(num) ? Math.max(0, Math.min(1, num)) : defaultValue;
 }
 
 function asTrimmedString(value: any): string {
@@ -152,7 +143,6 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation', policy: 'fallback' },
   'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis', policy: 'fallback' },
   'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis', policy: 'fallback' },
-  'state-assessment': { skillId: 'state-assessment', displayName: '学习状态评估器', description: '评估认知深度、压力、投入与综合异常状态', category: 'analysis', policy: 'fallback' },
   'path-adjustment-generator': { skillId: 'path-adjustment-generator', displayName: '路径动态调整生成器', description: '生成可插入路径的 milestone 或 subtask', category: 'generation', policy: 'fallback' },
   'goal-analysis': { skillId: 'goal-analysis', displayName: '学习目标分析器', description: '从用户目标中提取主题、水平、重点与场景', category: 'analysis', policy: 'fallback' },
   'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation', policy: 'propagate' },
@@ -165,7 +155,6 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
   'basic-generator': { skillId: 'basic-generator', displayName: '基础教学内容生成器', description: '生成教学讲解、代码示例、练习与常见错误分析', category: 'generation', policy: 'propagate' },
   'data-mapping': { skillId: 'data-mapping', displayName: '数据映射器', description: '将输入数据映射为目标字段结构', category: 'analysis', policy: 'propagate' },
   'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis', policy: 'fallback' },
-  'confidence-handler': { skillId: 'confidence-handler', displayName: '低置信度结果处理器', description: '对低置信度输出选择接受、澄清或保守默认值', category: 'analysis', policy: 'fallback' },
   'concept-priority': { skillId: 'concept-priority', displayName: '概念优先级调整器', description: '将实践任务升级为概念理解任务', category: 'generation', policy: 'fallback' },
 };
 
@@ -244,56 +233,6 @@ async function learnerProgressReportHandler(input: any) {
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
       : { valid: false, failureReason: 'LEARNER_PROGRESS_REPORT_OUTPUT_NOT_OBJECT' },
-  });
-}
-
-type StateAssessmentAction =
-  | 'assessCognitiveState'
-  | 'integrateAIandEMA'
-  | 'assessCognitiveDepth'
-  | 'assessStressLevel'
-  | 'assessEngagement';
-
-function normalizeStateAssessment(parsed: any, action: StateAssessmentAction): any {
-  switch (action) {
-    case 'assessCognitiveDepth':
-      return { depth: clamp01(parsed?.depth ?? parsed?.cognitiveDepth, 0.5), reasoning: asTrimmedString(parsed?.reasoning) };
-    case 'assessStressLevel':
-      return { stress: clamp01(parsed?.stress ?? parsed?.stressLevel, 0.5), reasoning: asTrimmedString(parsed?.reasoning) };
-    case 'assessEngagement':
-      return { engagement: clamp01(parsed?.engagement, 0.5), reasoning: asTrimmedString(parsed?.reasoning) };
-    case 'integrateAIandEMA':
-      return {
-        cognitive: clamp01(parsed?.cognitive ?? parsed?.cognitiveDepth, 0.5),
-        stress: clamp01(parsed?.stress ?? parsed?.stressLevel, 0.5),
-        engagement: clamp01(parsed?.engagement, 0.5),
-        anomaly: Boolean(parsed?.anomaly),
-        anomalyReason: asTrimmedString(parsed?.anomalyReason),
-        intervention: typeof parsed?.intervention === 'string' ? parsed.intervention : undefined,
-        assessedAt: typeof parsed?.assessedAt === 'string' ? parsed.assessedAt : new Date().toISOString(),
-      };
-    case 'assessCognitiveState':
-    default:
-      return {
-        cognitiveDepth: clamp01(parsed?.cognitiveDepth, 0.5),
-        stressLevel: clamp01(parsed?.stressLevel ?? parsed?.stress, 0.5),
-        engagement: clamp01(parsed?.engagement, 0.5),
-        reasoning: asTrimmedString(parsed?.reasoning) || 'AI 评估',
-      };
-  }
-}
-
-async function stateAssessmentHandler(input: any) {
-  return runAux({
-    meta: META['state-assessment'],
-    input,
-    modelDefaults: () => ({ temperature: 0.3, maxTokens: 600 }),
-    buildUserPayload: (d) => d,
-    normalize: (parsed, d) => normalizeStateAssessment(parsed, d.action),
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'STATE_ASSESSMENT_OUTPUT_NOT_OBJECT' },
-    builtinFallback: (d) => normalizeStateAssessment({}, d.action),
   });
 }
 
@@ -483,24 +422,6 @@ async function goalAlignmentCheckerHandler(input: any) {
   });
 }
 
-async function confidenceHandlerHandler(input: any) {
-  return runAux({
-    meta: META['confidence-handler'],
-    input,
-    modelDefaults: () => ({ temperature: 0.3, maxTokens: 2000 }),
-    buildUserPayload: (d) => ({
-      annotation: d.annotation,
-      confidence: d.confidence,
-      skillName: d.skillName,
-      skillContext: d.skillContext,
-    }),
-    normalize: (parsed) => parsed,
-    validate: (parsed) => parsed && typeof parsed === 'object'
-      ? { valid: true }
-      : { valid: false, failureReason: 'CONFIDENCE_HANDLER_OUTPUT_NOT_OBJECT' },
-  });
-}
-
 async function conceptPriorityHandler(input: any) {
   return runAux({
     meta: META['concept-priority'],
@@ -532,7 +453,6 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'session-evaluation-fallback': sessionEvaluationFallbackHandler,
   'learner-progress-report': learnerProgressReportHandler,
-  'state-assessment': stateAssessmentHandler,
   'path-adjustment-generator': pathAdjustmentGeneratorHandler,
   'goal-analysis': goalAnalysisHandler,
   'generic-chat': genericChatHandler,
@@ -545,6 +465,5 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'basic-generator': basicGeneratorHandler,
   'data-mapping': dataMappingHandler,
   'goal-alignment-checker': goalAlignmentCheckerHandler,
-  'confidence-handler': confidenceHandlerHandler,
   'concept-priority': conceptPriorityHandler,
 };

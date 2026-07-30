@@ -1,44 +1,37 @@
 <template>
   <div class="mk-page sdp">
-    <!-- 顶部：返回 + 身份 + 全局操作 -->
+    <!-- 顶部：返回 + 状态条（与 console 统一的运维简报语言） -->
     <header class="sdp-head">
       <button type="button" class="sdp-back" @click="goConsole">← 控制台</button>
-      <template v-if="overview">
-        <span class="sdp-icon" :style="{ '--hue': tone.hue, '--soft': tone.soft }" aria-hidden="true">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 1.8 13.8 5v6L8 14.2 2.2 11V5Z" />
-            <path d="M8 8 13.8 5M8 8 2.2 5M8 8v6.2" />
-          </svg>
+      <div v-if="overview" class="mk-status" :class="statusToneCls">
+        <span class="mk-status__dot"></span>
+        <strong class="mk-status__title">{{ overview.displayName || skillId }}</strong>
+        <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
+        <span v-if="workbenchMeta?.parentAgent" class="sdp-parent" :style="{ color: tone.hue }">
+          ↑ {{ workbenchMeta.parentAgent.name }}
         </span>
-        <div class="sdp-title">
-          <div class="sdp-title__row">
-            <h1>{{ overview.displayName || skillId }}</h1>
-            <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
-            <span v-if="workbenchMeta?.parentAgent" class="sdp-parent" :style="{ color: tone.hue }">
-              ↑ {{ workbenchMeta.parentAgent.name }}
-            </span>
-          </div>
-          <div class="sdp-title__meta">
-            <code class="mono">{{ overview.agentId }}</code>
-            <span v-if="overview.file" class="sdp-chip mono" :title="overview.file.path">{{ overview.file.path }}</span>
-            <span v-if="overview.db?.version" class="sdp-chip">DB ACTIVE <b class="mono">v{{ overview.db.version }}</b></span>
-            <span v-if="workbenchMeta?.stats" class="sdp-chip">
-              调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
-              · 成功率 <b class="mono">{{ workbenchMeta.stats.successRate ?? '—' }}%</b>
-              · 均耗 <b class="mono">{{ fmtMs(workbenchMeta.stats.avgDuration || 0) }}</b>
-            </span>
-            <span v-if="recentFailures > 0" class="sdp-chip sdp-chip--bad">近 60 条日志 {{ recentFailures }} 失败</span>
-            <span v-if="overview.drift === 'file-vs-db-mismatch'" class="sdp-chip sdp-chip--warn">版本不一致</span>
-            <span v-if="overview.tsFallback" class="sdp-chip sdp-chip--warn">代码兜底</span>
-          </div>
-        </div>
-      </template>
-      <div v-else class="sdp-title__loading">{{ loading ? '加载中…' : '' }}</div>
-      <div class="sdp-head__actions">
-        <button type="button" class="sdp-btn" :disabled="loading" @click="loadAll">
+        <span class="mk-status__sep"></span>
+        <span class="mk-status__meta mono">{{ overview.agentId }}</span>
+        <span v-if="overview.file" class="mk-status__meta mono sdp-ellipsis" :title="overview.file.path">{{ overview.file.path }}</span>
+        <span v-if="overview.db?.version" class="mk-status__meta">DB ACTIVE <b class="mono">v{{ overview.db.version }}</b></span>
+        <span v-if="workbenchMeta?.stats" class="mk-status__meta">
+          调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
+          · 成功率 <b class="mono">{{ workbenchMeta.stats.successRate ?? '—' }}%</b>
+          · 均耗 <b class="mono">{{ fmtMs(workbenchMeta.stats.avgDuration || 0) }}</b>
+        </span>
+        <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 60 条 {{ recentFailures }} 失败</span>
+        <span v-if="overview.drift === 'file-vs-db-mismatch'" class="mk-badge mk-badge--warn">版本不一致</span>
+        <span v-if="overview.tsFallback" class="mk-badge mk-badge--warn">代码兜底</span>
+        <button type="button" class="mk-status__action" :disabled="loading" @click="loadAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
-        <button type="button" class="sdp-btn sdp-btn--primary" @click="goDryRun">Dry Run</button>
+        <button type="button" class="mk-status__action mk-status__action--primary sdp-action-fix" @click="goDryRun">
+          试跑
+        </button>
+      </div>
+      <div v-else class="mk-status mk-status--muted">
+        <span class="mk-status__dot"></span>
+        <strong class="mk-status__title">{{ loading ? '加载中…' : skillId }}</strong>
       </div>
     </header>
 
@@ -70,10 +63,34 @@
         </button>
       </nav>
 
-      <!-- ========== 工作台：Prompt + 试跑 + 最近调用（调试闭环同屏） ========== -->
-      <div v-show="tab === 'workbench'" class="sdp-pane">
+      <!-- ========== 试跑：试跑 + ACTIVE 参照 + 最近调用（验证闭环） ========== -->
+      <div v-show="tab === 'trial'" class="sdp-pane">
         <div class="sdp-workbench">
-          <!-- 左：Prompt 内容 -->
+          <!-- 左：试跑 -->
+          <section class="sdp-block">
+            <header class="sdp-block__head">
+              <h4>试跑</h4>
+              <span class="sdp-block__meta">
+                <button type="button" class="mk-link" :disabled="!trialInput.trim()" @click="formatTrialJson">格式化</button>
+                <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="trialRunning" @click="runTrial">
+                  {{ trialRunning ? '运行中…' : '运行预览' }}
+                </button>
+              </span>
+            </header>
+            <textarea v-model="trialInput" class="sdp-json mono" rows="7" placeholder='{"input": "…"}'></textarea>
+            <div v-if="trialResult" class="sdp-trial__meta">
+              <span class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">
+                {{ trialResult.success ? '成功' : '失败' }}
+              </span>
+              <span class="sdp-chip">耗时 <b class="mono">{{ trialResult.duration ?? '—' }}ms</b></span>
+              <span class="sdp-chip">{{ trialResult.cached ? '缓存' : '实时' }}</span>
+              <button type="button" class="mk-link" @click="clearTrial">清空</button>
+            </div>
+            <div v-if="trialError" class="sdp-error">{{ trialError }}</div>
+            <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
+          </section>
+
+          <!-- 右：ACTIVE Prompt 只读参照 -->
           <section class="sdp-prompt">
             <header class="sdp-block__head">
               <div class="sdp-viewswitch">
@@ -109,37 +126,14 @@
               File-as-Truth：正式内容只能修改 <code class="mono">{{ overview.file?.path || 'prompts/skill.*.md' }}</code>，经部署同步生效。
             </p>
           </section>
+        </div>
 
-          <!-- 右：试跑 + 最近调用 -->
-          <div class="sdp-side">
-            <section class="sdp-block">
-              <header class="sdp-block__head">
-                <h4>试跑</h4>
-                <span class="sdp-block__meta">
-                  <button type="button" class="mk-link" :disabled="!trialInput.trim()" @click="formatTrialJson">格式化</button>
-                  <button type="button" class="sdp-btn sdp-btn--primary sdp-btn--sm" :disabled="trialRunning" @click="runTrial">
-                    {{ trialRunning ? '运行中…' : '运行预览' }}
-                  </button>
-                </span>
-              </header>
-              <textarea v-model="trialInput" class="sdp-json mono" rows="7" placeholder='{"input": "…"}'></textarea>
-              <div v-if="trialResult" class="sdp-trial__meta">
-                <span class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">
-                  {{ trialResult.success ? '成功' : '失败' }}
-                </span>
-                <span class="sdp-chip">耗时 <b class="mono">{{ trialResult.duration ?? '—' }}ms</b></span>
-                <span class="sdp-chip">{{ trialResult.cached ? '缓存' : '实时' }}</span>
-                <button type="button" class="mk-link" @click="clearTrial">清空</button>
-              </div>
-              <div v-if="trialError" class="sdp-error">{{ trialError }}</div>
-              <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
-            </section>
-
-            <section class="sdp-block">
-              <header class="sdp-block__head">
-                <h4>最近调用</h4>
-                <span class="sdp-block__meta">点「重跑」用真实输入立即复现</span>
-              </header>
+        <!-- 最近调用（全宽） -->
+        <section class="sdp-block">
+          <header class="sdp-block__head">
+            <h4>最近调用</h4>
+            <span class="sdp-block__meta">点「重跑」用真实输入立即复现</span>
+          </header>
               <div v-if="recentLogs.length" class="sdp-logs">
                 <div
                   v-for="log in recentLogs"
@@ -178,9 +172,7 @@
                 </div>
               </div>
               <p v-else class="sdp-none">近 60 条日志窗口内无调用。</p>
-            </section>
-          </div>
-        </div>
+        </section>
       </div>
 
       <!-- ========== 协议（core YAML · SSOT 编辑与发布） ========== -->
@@ -453,7 +445,7 @@
           </header>
           <p v-if="versionMsg" class="sdp-versions-msg">
             {{ versionMsg }}
-            <button v-if="versionMsg.startsWith('已发布')" type="button" class="mk-link" @click="tab = 'workbench'">去试跑验证 →</button>
+            <button v-if="versionMsg.startsWith('已发布')" type="button" class="mk-link" @click="tab = 'trial'">去试跑验证 →</button>
           </p>
           <div class="mk-table-wrap">
             <table class="mk-table">
@@ -774,12 +766,9 @@ function goConsole() {
   void router.push('/admin/console')
 }
 
-/** Dry Run → 协议页签编译预览（dry run，不写入） */
+/** Dry Run → 试跑页签 */
 function goDryRun() {
-  tab.value = 'protocol'
-  void ensureCoreLoaded().then(() => {
-    if (coreLoaded.value) void previewCore()
-  })
+  tab.value = 'trial'
 }
 
 /* ---------- 阶段色（与拓扑/抽屉同套） ---------- */
@@ -842,22 +831,27 @@ const healthLabel = computed(() => ({ good: '健康', warn: '需关注', risk: '
 const healthBadgeCls = computed(() =>
   overview.value?.health === 'good' ? 'mk-badge--ok' : overview.value?.health === 'warn' ? 'mk-badge--warn' : 'mk-badge--bad'
 )
+/** 状态条圆点色调（与 console mk-status 语言一致） */
+const statusToneCls = computed(() =>
+  overview.value?.health === 'good' ? 'mk-status--ok' : overview.value?.health === 'warn' ? 'mk-status--warn' : 'mk-status--bad'
+)
 
 /* ---------- Tabs ---------- */
-type TabKey = 'workbench' | 'protocol' | 'versions' | 'runtime' | 'engineering'
-const tab = ref<TabKey>('workbench')
+type TabKey = 'protocol' | 'trial' | 'versions' | 'runtime' | 'engineering'
+/* 页签按任务流：协议(改) → 试跑(验) → 版本(看线上) → 运行时(调) → 工程(查)；默认落协议 */
+const tab = ref<TabKey>('protocol')
 const tabs: Array<{ key: TabKey; label: string }> = [
-  { key: 'workbench', label: '工作台' },
   { key: 'protocol', label: '协议' },
+  { key: 'trial', label: '试跑' },
   { key: 'versions', label: '版本' },
   { key: 'runtime', label: '运行时' },
   { key: 'engineering', label: '工程' }
 ]
-// ?tab= 直达 + 旧链接兼容
+// ?tab= 直达 + 旧链接兼容（workbench 已拆入试跑）
 const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
-if (['workbench', 'protocol', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
-if (qTab === 'edit' || qTab === 'inspect') tab.value = 'workbench'
-if (qTab === 'preview' || qTab === 'trial') tab.value = 'workbench'
+if (['protocol', 'trial', 'versions', 'runtime', 'engineering'].includes(qTab)) tab.value = qTab as TabKey
+if (qTab === 'workbench' || qTab === 'inspect' || qTab === 'preview' || qTab === 'trial') tab.value = 'trial'
+if (qTab === 'edit') tab.value = 'protocol'
 
 /* ---------- Prompt 内容 ---------- */
 interface CompileInfo {
@@ -1120,7 +1114,7 @@ async function rerun(log: LogRow) {
     return
   }
   trialInput.value = log.detail.input
-  tab.value = 'workbench'
+  tab.value = 'trial'
   showToast('已填入真实输入，正在重跑…')
   await runTrial()
 }
@@ -1705,7 +1699,10 @@ onMounted(() => {
   --mk-red: #dc2626;
   --mk-red-bg: #fef2f2;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  max-width: 1280px;
+  /* #app 是 flex 列容器：margin auto 会让本页收缩到内容宽，必须显式 width:100% */
+  width: 100%;
+  /* 全页签统一宽度：避免协议/工作台等页签切换时页面宽度跳动 */
+  max-width: 1440px;
   margin: 0 auto;
   min-height: 100vh;
   font-family: Inter, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
@@ -1717,9 +1714,9 @@ onMounted(() => {
 
 /* ---------- 顶部 ---------- */
 .sdp-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display: grid;
+  gap: 8px;
+  align-items: start;
   padding: 4px 0 2px;
 }
 .sdp-back {
@@ -1730,30 +1727,19 @@ onMounted(() => {
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  padding: 8px 0;
+  padding: 0;
   white-space: nowrap;
+  width: fit-content;
 }
 .sdp-back:hover { text-decoration: underline; }
-.sdp-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: var(--soft);
-  color: var(--hue);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
+.sdp-parent { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.sdp-ellipsis {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.sdp-icon svg { width: 20px; height: 20px; }
-.sdp-title { min-width: 0; flex: 1; display: grid; gap: 6px; }
-.sdp-title__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.sdp-title__row h1 { margin: 0; font-size: 19px; font-weight: 600; color: #16233c; }
-.sdp-parent { font-size: 12px; font-weight: 600; }
-.sdp-title__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.sdp-title__meta > code { font-size: 11px; color: var(--mk-faint); }
-.sdp-title__loading { flex: 1; color: var(--mk-faint); font-size: 13px; padding: 10px 0; }
+.sdp-bad-text { color: var(--mk-red); font-weight: 700; }
+.sdp-action-fix { margin-left: 0; }
 .sdp-chip {
   display: inline-flex;
   align-items: center;
@@ -1770,7 +1756,6 @@ onMounted(() => {
 .sdp-chip--amber { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .sdp-chip--amber b { color: var(--mk-amber); }
 .sdp-chip--bad { background: var(--mk-red-bg); color: var(--mk-red); }
-.sdp-head__actions { display: flex; gap: 8px; flex-shrink: 0; padding-top: 4px; }
 
 .sdp-btn {
   padding: 7px 14px;
@@ -2250,18 +2235,18 @@ onMounted(() => {
 /* ---------- 协议（core 编辑与发布） ---------- */
 .sdp-pw {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 18px;
   align-items: start;
 }
 @media (max-width: 1100px) {
   .sdp-pw { grid-template-columns: 1fr; }
 }
 .sdp-pw__hint {
-  margin: 0 16px 10px;
-  font-size: 11.5px;
+  margin: 0 18px 12px;
+  font-size: 12px;
   color: var(--mk-faint);
-  line-height: 1.6;
+  line-height: 1.7;
 }
 .sdp-pw__hint code { font-size: 10.5px; }
 .sdp-pw__textarea {
@@ -2323,7 +2308,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .sdp-pw__pill--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }
-.sdp-pw__pane { display: grid; gap: 10px; align-content: start; padding: 0 16px 14px; max-height: 62vh; overflow-y: auto; }
+.sdp-pw__pane { display: grid; gap: 12px; align-content: start; padding: 0 18px 16px; max-height: 74vh; overflow-y: auto; }
 .sdp-pw__gates { display: grid; gap: 6px; }
 .sdp-pw__gate { font-size: 12px; padding: 6px 10px; border-radius: 8px; }
 .sdp-pw__gate--ok { background: var(--mk-green-bg); }
@@ -2355,7 +2340,7 @@ onMounted(() => {
   background: #eef2fa;
   border-radius: 9px;
   padding: 3px;
-  margin: 0 16px 10px;
+  margin: 0 18px 12px;
   width: fit-content;
 }
 .sdp-pw__viewbtn {
@@ -2372,22 +2357,20 @@ onMounted(() => {
 .sdp-pw__viewbtn--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1); }
 .sdp-pwform {
   display: grid;
-  gap: 12px;
-  padding: 0 16px 14px;
-  max-height: 62vh;
-  overflow-y: auto;
+  gap: 16px;
+  padding: 0 18px 18px;
 }
 .sdp-pwform__card {
   border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  padding: 16px 18px;
   display: grid;
-  gap: 10px;
+  gap: 14px;
   background: #fff;
 }
 .sdp-pwform__card h5 {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--mk-ink);
   display: flex;
   align-items: center;
@@ -2397,26 +2380,26 @@ onMounted(() => {
 .sdp-pwform__card--danger { border-color: rgba(180, 83, 9, 0.35); }
 .sdp-pwform__warn {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--mk-amber);
-  line-height: 1.5;
+  line-height: 1.6;
 }
-.sdp-pwform__field { display: grid; gap: 5px; }
-.sdp-pwform__field > span { font-size: 11.5px; color: var(--mk-muted); font-weight: 600; }
-.sdp-pwform__checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.sdp-pwform__field { display: grid; gap: 6px; }
+.sdp-pwform__field > span { font-size: 12px; color: var(--mk-muted); font-weight: 600; }
+.sdp-pwform__checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .sdp-pwform__check {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 7px;
+  font-size: 12.5px;
   color: var(--mk-ink);
   cursor: pointer;
 }
-.sdp-pwform__check input { width: 14px; height: 14px; accent-color: var(--mk-blue); }
+.sdp-pwform__check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
 .sdp-pwform__row3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
   align-items: end;
 }
 @media (max-width: 860px) {
@@ -2424,27 +2407,32 @@ onMounted(() => {
 }
 .sdp-pwform__listitem {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: start;
 }
-.sdp-pwform__idx { color: var(--mk-faint); font-size: 11px; padding-top: 8px; text-align: right; }
-.sdp-pwform__itemops { display: flex; gap: 4px; padding-top: 6px; }
-.sdp-pwform__fields { display: grid; gap: 6px; }
+.sdp-pwform__listitem textarea { min-height: 58px; }
+.sdp-pwform__idx { color: var(--mk-faint); font-size: 11px; padding-top: 10px; text-align: right; }
+.sdp-pwform__itemops { display: flex; gap: 6px; padding-top: 8px; }
+.sdp-pwform__fields { display: grid; gap: 8px; }
 .sdp-pwform__fieldrow {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) 110px 32px minmax(140px, 1.6fr) 32px 28px;
-  gap: 8px;
+  grid-template-columns: minmax(120px, 1fr) 116px 34px minmax(150px, 1.6fr) 34px 30px;
+  gap: 10px;
   align-items: center;
+  padding: 4px 0;
 }
 .sdp-pwform__fieldrow--head {
   font-size: 11px;
   color: var(--mk-faint);
   font-weight: 700;
+  padding-bottom: 0;
 }
-.sdp-pwform__fieldrow input[type='checkbox'] { width: 14px; height: 14px; accent-color: var(--mk-blue); justify-self: center; }
+.sdp-pwform__fieldrow input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--mk-blue); justify-self: center; }
+.sdp-pwform .sdp-input { min-height: 36px; padding: 8px 12px; font-size: 13px; }
+.sdp-pwform textarea.sdp-input { line-height: 1.65; }
 @media (max-width: 860px) {
-  .sdp-pwform__fieldrow { grid-template-columns: 1fr 90px 28px; }
+  .sdp-pwform__fieldrow { grid-template-columns: 1fr 96px 30px; }
   .sdp-pwform__fieldrow--head { display: none; }
 }
 </style>

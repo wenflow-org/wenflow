@@ -24,10 +24,15 @@
       <button type="button" class="mk-status__action cp-danger" :disabled="busy" @click="removeSession">删除会话</button>
     </div>
 
-    <!-- 阶段进度 -->
+    <!-- 阶段进度（点击切换下方分页） -->
     <div class="cp-stages">
       <template v-for="(st, i) in stageFlow" :key="st">
-        <div class="cp-stage" :class="stageCls(st)">
+        <div
+          class="cp-stage"
+          :class="[stageCls(st), { 'cp-stage--tab': !isBlackbox && activeTab === st }]"
+          :title="isBlackbox ? undefined : `查看${stageLabel(st)}`"
+          @click="selectStageTab(st)"
+        >
           <span class="cp-stage__order">{{ String(i + 1).padStart(2, '0') }}</span>
           <strong>{{ stageLabel(st) }}</strong>
           <span class="cp-stage__state">{{ stageState(st) }}</span>
@@ -44,23 +49,11 @@
           <span class="mk-card__meta">{{ isBlackbox ? '黑盒 API' : '辅助模拟' }}</span>
         </div>
         <div class="cp-controls">
-          <button type="button" class="cp-btn" :disabled="stepDisabled" :title="stepTitle" @click="act('step')">
-            {{ currentStage === 'learning' && !isBlackbox ? 'Learn 单步' : '单步推进' }}
-          </button>
-          <button type="button" class="cp-btn" :disabled="autoDisabled" :title="autoTitle" @click="act('auto')">
-            {{ currentStage === 'learning' ? '自动完成本课' : '自动到阶段末' }}
-          </button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
-          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-          <button type="button" class="cp-btn" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审 Path</button>
-          <button type="button" class="cp-btn" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
-          <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成总结</button>
-          <button type="button" class="cp-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">停止 Learn</button>
-          <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
-          <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重启 Learn</button>
+          <button v-if="!isBlackbox" type="button" class="cp-btn cp-btn--primary" :disabled="runFullDisabled" :title="runFullTitle" @click="act('runFull')">一键全流程</button>
           <button v-if="isBlackbox && !isTerminal" type="button" class="cp-btn cp-danger-btn" :disabled="busy" :title="busy ? '操作执行中' : '终止当前黑盒实验'" @click="act('abandon')">放弃实验</button>
           <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn cp-btn--primary" :disabled="busy" :title="busy ? '操作执行中' : '生成终局裁判评估'" @click="act('referee')">生成裁判评估</button>
           <button v-if="isBlackbox && isTerminal" type="button" class="cp-btn" :disabled="busy" :title="busy ? '操作执行中' : '以相同输入创建新的实验会话'" @click="act('rerun')">按原输入重跑</button>
+          <span v-if="!isBlackbox" class="cp-controls__hint">各阶段操作在下方对应分页内</span>
         </div>
         <div v-if="!isBlackbox" class="cp-config">
           <label>
@@ -113,63 +106,230 @@
       </section>
     </div>
 
-    <section v-if="!isBlackbox && (goalConversationMessages.length || learnConversationMessages.length || teachingSessionHistory.length)" class="mk-card">
+    <!-- 分页：Path 内容（主）+ 评审（独立旁路） -->
+    <section v-if="!isBlackbox && activeTab === 'path'" class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">对话与课堂记录</h3>
-        <span class="mk-card__meta">中断恢复与人工审计证据</span>
+        <h3 class="mk-card__title">Path 内容</h3>
+        <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
+      </div>
+      <div class="cp-tab-actions">
+        <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+        <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+        <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
+      </div>
+      <div class="cp-path-grid">
+        <!-- 主区：路径内容 -->
+        <div class="cp-path-detail">
+          <template v-if="hasPath">
+            <div class="cp-path-detail__head">
+              <strong>{{ pathDetailTitle }}</strong>
+              <span v-if="pathDetailMeta" class="cp-path-detail__meta">{{ pathDetailMeta }}</span>
+            </div>
+            <p v-if="pathDetailSummary" class="cp-path-detail__summary">{{ pathDetailSummary }}</p>
+            <details v-if="pathMilestonesView.length" class="cp-transcript" open>
+              <summary>里程碑 · {{ pathMilestonesView.length }} 个</summary>
+              <article v-for="m in pathMilestonesView" :key="m.stageNumber" class="cp-milestone">
+                <div class="cp-milestone__head">
+                  <span class="cp-milestone__order">M{{ m.stageNumber }}</span>
+                  <strong>{{ m.title }}</strong>
+                  <span v-if="m.estimatedHours" class="cp-milestone__meta">{{ m.estimatedHours }}h</span>
+                </div>
+                <p v-if="m.description" class="cp-milestone__desc">{{ m.description }}</p>
+                <ul v-if="m.tasks.length" class="cp-task-list">
+                  <li
+                    v-for="t in m.tasks"
+                    :key="t.id || t.title"
+                    :class="{ 'is-done': t.completed, 'is-current': t.current }"
+                  >
+                    <span class="cp-task-list__mark">{{ t.completed ? '✓' : t.current ? '▸' : '·' }}</span>
+                    {{ t.title }}
+                  </li>
+                </ul>
+              </article>
+            </details>
+            <p v-else-if="pathGenerationInProgress" class="cp-none">Path 阶段任务仍在生成，稍后自动刷新。</p>
+          </template>
+          <p v-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
+        </div>
+
+        <!-- 旁路：评审面板（独立质量环，不阻塞 Learn） -->
+        <aside class="cp-review-panel">
+          <div class="cp-review-panel__head">
+            <span>虚拟学习者评审</span>
+            <em>独立旁路 · 不阻塞 Learn</em>
+          </div>
+          <div class="cp-review-panel__actions">
+            <button type="button" class="cp-btn" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
+            <button
+              v-if="acceptPathVisible"
+              type="button"
+              class="cp-btn cp-btn--primary"
+              :disabled="acceptPathDisabled"
+              :title="acceptPathTitle"
+              @click="act('acceptPath')"
+            >接受</button>
+            <button
+              v-if="replanPathVisible"
+              type="button"
+              class="cp-btn cp-btn--primary"
+              :disabled="replanPathDisabled"
+              :title="replanPathTitle"
+              @click="act('replanPath')"
+            >按意见重规划</button>
+          </div>
+          <div v-if="pathReviewStatus" class="cp-review">
+            <div class="cp-review__badges">
+              <span class="cp-review__badge" :data-decision="pathReviewDecision">{{ pathReviewDecisionLabel }}</span>
+              <span class="cp-review__meta">{{ pathReviewStatusLabel }}<template v-if="pathReviewTime"> · {{ pathReviewTime }}</template></span>
+            </div>
+            <p v-if="pathReviewReaction" class="cp-review__reaction">{{ pathReviewReaction }}</p>
+            <p v-if="pathReviewConcern" class="cp-review__concern">最大顾虑：{{ pathReviewConcern }}</p>
+            <ul v-if="pathReviewChanges.length" class="cp-review__changes">
+              <li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li>
+            </ul>
+            <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
+          </div>
+          <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动 Learn。</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 分页：Goal 对话 -->
+    <section v-if="!isBlackbox && activeTab === 'goal'" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">Goal 对话</h3>
+        <span class="mk-card__meta">
+          {{ goalConversationMessages.length ? `${goalConversationMessages.length} 条已落库` : '暂无记录' }}
+          <template v-if="goalConverged"> · 已收敛</template>
+        </span>
+      </div>
+      <div class="cp-tab-actions">
+        <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">单步推进</button>
+        <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动到 Goal 收敛</button>
+        <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
+        <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
       </div>
       <div class="cp-transcripts">
-        <details v-if="goalConversationMessages.length" class="cp-transcript" open>
-          <summary>Goal 对话 · {{ goalConversationMessages.length }} 条</summary>
-          <article
-            v-for="(message, index) in goalConversationMessages"
-            :key="`goal-${index}`"
-            class="cp-transcript__message"
-            :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
-          >
-            <span>{{ message.role === 'assistant' ? '平台 Goal' : '虚拟学习者' }}</span>
-            <p>{{ message.content }}</p>
-          </article>
-        </details>
+        <article
+          v-for="(message, index) in goalConversationMessages"
+          :key="`goal-${index}`"
+          class="cp-transcript__message"
+          :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
+        >
+          <span>{{ message.role === 'assistant' ? '平台 Goal' : '虚拟学习者' }}</span>
+          <p>{{ message.content }}</p>
+        </article>
+        <p v-if="!goalConversationMessages.length" class="cp-none">尚未产生 Goal 对话，点击「单步推进」开始。</p>
+      </div>
+    </section>
 
-        <details v-if="learnConversationMessages.length || teachingSessionHistory.length" class="cp-transcript" open>
-          <summary>
-            Learn 课堂
-            <template v-if="displayedTeachingSessionId"> · {{ displayedTeachingSessionId.slice(-8) }}</template>
-            <template v-if="learnConversationMessages.length"> · {{ learnConversationMessages.length }} 条</template>
-          </summary>
-          <div v-if="teachingSessionHistory.length" class="cp-teaching-history">
-            <button
-              type="button"
-              class="cp-history-btn"
-              :class="{ 'is-current': !selectedTeachingSessionId }"
-              @click="showCurrentTeaching"
-            >
-              当前课堂
-            </button>
-            <button
-              v-for="item in teachingSessionHistory"
-              :key="item.id"
-              type="button"
-              class="cp-history-btn"
-              :class="{ 'is-current': selectedTeachingSessionId === item.id }"
-              @click="showArchivedTeaching(item.id)"
-            >
-              {{ item.taskTitle || `课堂 ${item.id.slice(-8)}` }}
-            </button>
+    <!-- 分页：Learn 课堂 -->
+    <section v-if="!isBlackbox && activeTab === 'learning'" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">Learn 课堂</h3>
+        <span class="mk-card__meta">
+          <template v-if="learnLessons.length">{{ learnProgressText }} · </template>
+          <template v-if="displayedTeachingSessionId">课堂 {{ displayedTeachingSessionId.slice(-8) }}</template>
+          <template v-if="learnConversationMessages.length"> · {{ learnConversationMessages.length }} 条</template>
+          <template v-if="!learnLessons.length && !displayedTeachingSessionId && !learnConversationMessages.length">暂无记录</template>
+        </span>
+      </div>
+      <div class="cp-tab-actions">
+        <button type="button" class="cp-btn" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+        <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">Learn 单步</button>
+        <button type="button" class="cp-btn" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动完成本课</button>
+        <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重启 Learn</button>
+        <button type="button" class="cp-btn cp-danger-btn" :disabled="stopLearningDisabled" :title="stopLearningTitle" @click="act('stop')">停止 Learn</button>
+      </div>
+      <div class="cp-transcripts">
+        <!-- 单课视图：当前查看课节的标题/状态/导航；全量任务列表在 Path 页 -->
+        <div v-if="viewedLesson" class="cp-lesson-head">
+          <div class="cp-lesson-head__main">
+            <span class="cp-lesson-head__state" :data-state="viewedLesson.state">{{ lessonStateLabel(viewedLesson.state) }}</span>
+            <strong>第 {{ viewedLessonIndex + 1 }}/{{ learnLessons.length }} 课 · {{ viewedLesson.title }}</strong>
+            <span class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
           </div>
-          <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
-          <article
-            v-for="(message, index) in learnConversationMessages"
-            :key="`learn-${index}`"
-            class="cp-transcript__message"
-            :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
+          <div class="cp-lesson-head__nav">
+            <button
+              type="button"
+              class="cp-history-btn"
+              :disabled="!prevReplayableLesson"
+              title="上一节有记录的课"
+              @click="prevReplayableLesson && openLesson(prevReplayableLesson)"
+            >‹ 上一课</button>
+            <select
+              v-if="replayableLessons.length > 1"
+              class="cp-lesson-head__select"
+              :value="viewedLesson.teachingSessionId ? viewedLesson.taskId : ''"
+              @change="jumpLesson(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="l in replayableLessons" :key="l.taskId" :value="l.taskId">
+                {{ lessonMark(l.state) }} 第 {{ learnLessons.findIndex((x) => x.taskId === l.taskId) + 1 }} 课 · {{ l.title }}
+              </option>
+            </select>
+            <button
+              type="button"
+              class="cp-history-btn"
+              :disabled="!nextReplayableLesson"
+              title="下一节有记录的课"
+              @click="nextReplayableLesson && openLesson(nextReplayableLesson)"
+            >下一课 ›</button>
+          </div>
+        </div>
+        <div v-else-if="teachingSessionHistory.length" class="cp-teaching-history">
+          <button
+            type="button"
+            class="cp-history-btn"
+            :class="{ 'is-current': !selectedTeachingSessionId }"
+            @click="showCurrentTeaching"
           >
-            <span>{{ message.role === 'assistant' ? '教师' : '虚拟学习者' }}</span>
-            <p>{{ message.content }}</p>
-          </article>
-          <p v-if="!teachingDetailLoading && !learnConversationMessages.length" class="cp-none">该课堂暂未记录可展示消息。</p>
-        </details>
+            当前课堂
+          </button>
+          <button
+            v-for="item in teachingSessionHistory"
+            :key="item.id"
+            type="button"
+            class="cp-history-btn"
+            :class="{ 'is-current': selectedTeachingSessionId === item.id }"
+            @click="showArchivedTeaching(item.id)"
+          >
+            {{ item.taskTitle || `课堂 ${item.id.slice(-8)}` }}
+          </button>
+        </div>
+        <p v-if="teachingDetailLoading" class="cp-none">正在读取教学会话记录…</p>
+        <article
+          v-for="(message, index) in learnConversationMessages"
+          :key="`learn-${index}`"
+          class="cp-transcript__message"
+          :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'"
+        >
+          <span>{{ message.role === 'assistant' ? '教师' : '虚拟学习者' }}</span>
+          <p>{{ message.content }}</p>
+        </article>
+        <p v-if="!teachingDetailLoading && !learnConversationMessages.length" class="cp-none">
+          {{ learnEmptyHint }}
+        </p>
+      </div>
+    </section>
+
+    <!-- 分页：Wrapup 总结 -->
+    <section v-if="!isBlackbox && activeTab === 'wrapup'" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">Wrapup 总结</h3>
+        <span class="mk-card__meta">{{ hasWrapup ? '已生成' : '未生成' }}</span>
+      </div>
+      <div class="cp-tab-actions">
+        <button type="button" class="cp-btn" :disabled="wrapupDisabled" :title="wrapupTitle" @click="act('wrapup')">生成总结</button>
+      </div>
+      <div class="cp-transcripts">
+        <template v-if="hasWrapup">
+          <div v-for="section in wrapupSections" :key="section.label" class="cp-wrapup">
+            <span class="cp-wrapup__label">{{ section.label }}</span>
+            <pre v-if="section.isJson" class="cp-wrapup__json">{{ section.text }}</pre>
+            <p v-else>{{ section.text }}</p>
+          </div>
+        </template>
+        <p v-else class="cp-none">尚无学习总结。Learn 产生进度后点击「生成总结」。</p>
       </div>
     </section>
 
@@ -519,6 +679,13 @@ const statusTitle = computed(() =>
 const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
 type StageKey = (typeof stageFlow)[number]
 
+/* 阶段分页：阶段条即 tab，默认跟随 currentStage；控制面板与日志常驻 */
+const activeTab = ref<StageKey>('goal')
+function selectStageTab(st: StageKey) {
+  if (isBlackbox.value) return
+  activeTab.value = st
+}
+
 const bindings = computed(() => {
   const fromRuntime = (runtime.value.bindings || {}) as Record<string, unknown>
   const fromSession = (session.value?.bindings || {}) as Record<string, unknown>
@@ -557,10 +724,11 @@ const goalConversationMessages = computed(() => conversationMessages(asRecord(co
 const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
 const teachingSessionHistory = computed(() => {
   const history = learningResult.value.teachingSessionHistory
-  if (!Array.isArray(history)) return [] as Array<{ id: string; taskTitle: string }>
+  if (!Array.isArray(history)) return [] as Array<{ id: string; taskId: string; taskTitle: string }>
   const seen = new Set<string>()
   return history.map(asRecord).map((item) => ({
     id: firstText(item.teachingSessionId),
+    taskId: firstText(item.taskId),
     taskTitle: firstText(item.taskTitle)
   })).filter((item) => item.id && !seen.has(item.id) && !!seen.add(item.id))
 })
@@ -573,6 +741,106 @@ const displayedTeachingSessionId = computed(() => firstText(
   selectedTeachingSessionId.value,
   bindings.value.teachingSessionId
 ))
+/* Path : Learn = 1 : N。课程列表以 Path 任务树为数据源，
+   每节课的课堂 id 从 teachingSessionHistory / 当前绑定推导，点击切换 transcript。 */
+type LessonState = 'done' | 'active' | 'failed' | 'pending'
+interface LearnLesson {
+  taskId: string
+  title: string
+  milestone: string
+  state: LessonState
+  teachingSessionId: string
+}
+const learnLessons = computed<LearnLesson[]>(() => {
+  const currentTaskId = firstText(bindings.value.currentTaskId, learningResult.value.currentTaskId)
+  const currentTeachingId = firstText(bindings.value.teachingSessionId)
+  const runtimeStatus = normalized(learningTaskRuntime.value.status)
+  const historyByTask = new Map<string, string>()
+  for (const item of teachingSessionHistory.value) {
+    if (item.taskId) historyByTask.set(item.taskId, item.id)
+  }
+  const lessons: LearnLesson[] = []
+  for (const m of pathMilestonesView.value) {
+    for (const t of m.tasks) {
+      if (!t.id) continue
+      let state: LessonState = 'pending'
+      let teachingSessionId = ''
+      if (t.completed) {
+        state = 'done'
+        teachingSessionId = historyByTask.get(t.id) || ''
+      }
+      if (t.id === currentTaskId) {
+        state = ['error', 'next_task_start_failed'].includes(runtimeStatus) ? 'failed' : 'active'
+        teachingSessionId = currentTeachingId
+      }
+      lessons.push({ taskId: t.id, title: t.title, milestone: m.title, state, teachingSessionId })
+    }
+  }
+  return lessons
+})
+
+function lessonMark(state: LessonState) {
+  return { done: '✓', active: '▸', failed: '✕', pending: '·' }[state]
+}
+function lessonStateLabel(state: LessonState) {
+  return { done: '已完成', active: '进行中', failed: '失败，可重启恢复', pending: '未开始' }[state]
+}
+const learnProgressText = computed(() => {
+  const done = learnLessons.value.filter((l) => l.state === 'done').length
+  const total = learnLessons.value.length
+  return `课程进度 ${done}/${total}`
+})
+
+/* Learn 页 = 单课视图：正在查看的课节（默认当前进行中的课），
+   全量任务列表在 Path 页；这里只保留上一课/下一课/可回放课的紧凑导航。 */
+const activeLesson = computed(() =>
+  learnLessons.value.find((l) => l.state === 'active' || l.state === 'failed') || null
+)
+const viewedLesson = computed(() => {
+  const displayedId = displayedTeachingSessionId.value
+  return learnLessons.value.find((l) => l.teachingSessionId && l.teachingSessionId === displayedId)
+    || activeLesson.value
+    || null
+})
+const viewedLessonIndex = computed(() =>
+  viewedLesson.value ? learnLessons.value.findIndex((l) => l.taskId === viewedLesson.value!.taskId) : -1
+)
+const replayableLessons = computed(() => learnLessons.value.filter((l) => !!l.teachingSessionId))
+const prevReplayableLesson = computed(() => {
+  if (viewedLessonIndex.value <= 0) return null
+  for (let i = viewedLessonIndex.value - 1; i >= 0; i -= 1) {
+    if (learnLessons.value[i].teachingSessionId) return learnLessons.value[i]
+  }
+  return null
+})
+const nextReplayableLesson = computed(() => {
+  if (viewedLessonIndex.value < 0) return null
+  for (let i = viewedLessonIndex.value + 1; i < learnLessons.value.length; i += 1) {
+    if (learnLessons.value[i].teachingSessionId) return learnLessons.value[i]
+  }
+  return null
+})
+function jumpLesson(taskId: string) {
+  const lesson = learnLessons.value.find((l) => l.taskId === taskId)
+  if (lesson) openLesson(lesson)
+}
+function openLesson(lesson: LearnLesson) {
+  if (!lesson.teachingSessionId) return
+  const currentTeachingId = firstText(bindings.value.teachingSessionId)
+  if (lesson.teachingSessionId === currentTeachingId) {
+    showCurrentTeaching()
+  } else {
+    showArchivedTeaching(lesson.teachingSessionId)
+  }
+}
+
+/* Learn 空态只反映 Learn 自身状态，不写跨阶段操作引导（解耦：引导在各页操作区与按钮 tooltip） */
+const learnEmptyHint = computed(() => {
+  if (teachingSessionHistory.value.length) return '该课堂暂未记录可展示消息。'
+  if (!hasPath.value) return '尚未启动 Learn。'
+  if (learningBlockedReason.value) return `尚未启动 Learn：${learningBlockedReason.value}`
+  return '尚未启动 Learn。'
+})
 const pathStatusPath = computed(() => asRecord(pathStatus.value?.path))
 const pathGenerationStatus = computed(() => {
   const value = pathStatusPath.value.generationStatus ?? pathStatus.value?.generationStatus
@@ -625,6 +893,78 @@ const pathMilestones = computed(() => {
     || pathStatus.value?.stages
   return Array.isArray(milestones) ? milestones.map(asRecord) : []
 })
+
+/* Path 内容展示：标题/摘要/里程碑/任务（读 path-status 的完整结构） */
+const pathDetailTitle = computed(() => firstText(pathStatusPath.value.title, pathStatusPath.value.name) || '学习路径')
+const pathDetailSummary = computed(() => firstText(pathStatusPath.value.summary, pathStatusPath.value.description))
+const pathDetailMeta = computed(() => {
+  if (!hasPath.value) return ''
+  const parts: string[] = []
+  const difficulty = firstText(pathStatusPath.value.difficulty)
+  const hours = numberValue(pathStatusPath.value.estimatedHours)
+  const total = numberValue(pathStatusPath.value.totalMilestones) ?? pathMilestones.value.length
+  if (difficulty) parts.push(`难度 ${difficulty}`)
+  if (hours !== null) parts.push(`约 ${hours} 小时`)
+  if (total) parts.push(`${total} 个里程碑`)
+  return parts.join(' · ')
+})
+const pathMilestonesView = computed(() => pathMilestones.value.map((m, index) => {
+  const rawTasks = m.subtasks || m.tasks
+  const tasks = (Array.isArray(rawTasks) ? rawTasks : []).map(asRecord).map((t) => {
+    const id = firstText(t.id)
+    return {
+      id,
+      title: firstText(t.title, t.name) || '未命名任务',
+      completed: normalized(t.status) === 'completed',
+      current: !!id && id === bindings.value.currentTaskId
+    }
+  })
+  return {
+    stageNumber: numberValue(m.stageNumber) ?? index + 1,
+    title: firstText(m.title, m.name) || `里程碑 ${index + 1}`,
+    description: firstText(m.description),
+    estimatedHours: numberValue(m.estimatedHours),
+    tasks
+  }
+}))
+
+/* Path 评审展示：stageResults.path_review */
+const pathReviewStatus = computed(() => normalized(pathReview.value.status))
+const pathReviewDecision = computed(() => normalized(pathReview.value.decision) || 'pending')
+const pathReviewDecisionLabel = computed(() => ({
+  accept: '接受',
+  modify: '需要修改',
+  reject: '拒绝',
+  pending: '待评审'
+}[pathReviewDecision.value] || pathReviewDecision.value))
+const pathReviewStatusLabel = computed(() => ({
+  pending: '评审完成，待人工处理',
+  accepted: '已接受',
+  replanning: '重规划中',
+  replanned: '已生成新版 Path，待再次评审',
+  failed: '评审失败'
+}[pathReviewStatus.value] || pathReviewStatus.value))
+const pathReviewReaction = computed(() => firstText(pathReview.value.reaction))
+const pathReviewConcern = computed(() => firstText(pathReview.value.biggestConcern))
+const pathReviewChanges = computed(() => {
+  const list = pathReview.value.visibleRequestedChanges
+  return Array.isArray(list) ? list.map((item) => String(item || '').trim()).filter(Boolean) : []
+})
+const pathReviewTime = computed(() => {
+  const raw = firstText(pathReview.value.reviewedAt)
+  return raw ? formatTime(raw) : ''
+})
+const pathReviewReplan = computed(() => {
+  const replan = asRecord(pathReview.value.replan)
+  if (!Object.keys(replan).length) return ''
+  if (pathReviewStatus.value === 'replanning') return '正在根据评审意见重新规划 Path…'
+  if (pathReviewStatus.value === 'replanned') return '已根据评审意见生成新版 Path，请再次评审。'
+  return ''
+})
+/* Path 空态同样只反映状态，不写跨阶段操作引导 */
+const pathEmptyHint = computed(() =>
+  goalConverged.value ? '尚无 Path。' : '尚无 Path：Goal 未收敛。'
+)
 
 const currentStage = computed(() => {
   const raw = String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
@@ -722,6 +1062,21 @@ const autoTitle = computed(() => {
 })
 const runFullDisabled = computed(() => !!assistedControlBlockReason.value)
 const runFullTitle = computed(() => assistedControlBlockReason.value || '自动执行 Goal、Path 和 Learn 流程')
+
+/* 分页内的阶段操作：除通用禁用外，还要求后端 currentStage 匹配，防止在错误阶段误推 */
+function stageMismatchTitle(stage: StageKey, action: string) {
+  return currentStage.value !== stage
+    ? `当前阶段是「${stageLabel(currentStage.value)}」，请切换到对应分页再${action}`
+    : ''
+}
+const goalStepDisabled = computed(() => stepDisabled.value || currentStage.value !== 'goal')
+const goalStepTitle = computed(() => stageMismatchTitle('goal', '推进 Goal') || stepTitle.value)
+const goalAutoDisabled = computed(() => autoDisabled.value || currentStage.value !== 'goal')
+const goalAutoTitle = computed(() => stageMismatchTitle('goal', '自动推进 Goal') || autoTitle.value)
+const learnStepDisabled = computed(() => stepDisabled.value || currentStage.value !== 'learning')
+const learnStepTitle = computed(() => stageMismatchTitle('learning', '推进 Learn') || stepTitle.value)
+const learnAutoDisabled = computed(() => autoDisabled.value || currentStage.value !== 'learning')
+const learnAutoTitle = computed(() => stageMismatchTitle('learning', '自动推进 Learn') || autoTitle.value)
 const advancePathDisabled = computed(() =>
   !!assistedControlBlockReason.value || !goalConverged.value || hasPath.value
 )
@@ -732,25 +1087,43 @@ const advancePathTitle = computed(() => {
   return '根据已收敛的 Goal 生成 Path'
 })
 const reviewPathDisabled = computed(() =>
-  !!assistedControlBlockReason.value || !pathGeneratedOrReady.value || pathReviewAccepted.value
+  !!assistedControlBlockReason.value || !pathGeneratedOrReady.value || pathReviewAccepted.value || reviewAwaitingDecision.value
 )
 const reviewPathTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
   if (pathReviewAccepted.value) return '当前 Path 已通过评审'
+  if (reviewAwaitingDecision.value) return '已有评审结论待处理：接受或按意见重规划'
   if (pathGenerationFailed.value) return 'Path 生成失败，请重新生成 Path'
   if (pathGenerationInProgress.value) return 'Path 正在生成或补全阶段任务'
   if (!pathGeneratedOrReady.value) return '请先生成并等待 Path 就绪'
   return '以虚拟学习者视角评审当前 Path'
 })
+
+/* 评审后的两个人工动作：接受（仅 decision=accept）或按意见重规划（decision=modify/reject） */
+const reviewMatchesCurrentPath = computed(() =>
+  !!pathId.value && firstText(pathReview.value.reviewedPathId) === pathId.value
+)
+const reviewAwaitingDecision = computed(() => pathReviewStatus.value === 'pending' && reviewMatchesCurrentPath.value)
+const acceptPathVisible = computed(() => reviewAwaitingDecision.value && pathReviewDecision.value === 'accept')
+const acceptPathDisabled = computed(() => !!assistedControlBlockReason.value)
+const acceptPathTitle = computed(() =>
+  assistedControlBlockReason.value || '确认接受评审结论；之后仍需手动启动 Learn'
+)
+const replanPathVisible = computed(() =>
+  reviewAwaitingDecision.value && ['modify', 'reject'].includes(pathReviewDecision.value)
+)
+const replanPathDisabled = computed(() => !!assistedControlBlockReason.value)
+const replanPathTitle = computed(() =>
+  assistedControlBlockReason.value || '把评审反应和修改意见交给 Goal 重新生成 Path，完成后需再次评审'
+)
 const startLearningDisabled = computed(() =>
-  !!assistedControlBlockReason.value || !pathReviewAccepted.value || !pathStartable.value || learningActive.value
+  !!assistedControlBlockReason.value || !pathStartable.value || learningActive.value
 )
 const startLearningTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
   if (learningActive.value) return 'Learn 已在进行中'
-  if (!pathReviewAccepted.value) return 'Path 尚未通过虚拟学习者评审'
   if (!pathStartable.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
-  return '启动已评审且可学习的 Path'
+  return '启动 Learn（评审为独立旁路，无需先通过评审）'
 })
 const wrapupDisabled = computed(() => {
   if (!session.value || busy.value || isBlackbox.value || isFailedTerminal.value) return true
@@ -790,16 +1163,14 @@ const resetLearningBlockReason = computed(() => {
 const canRestartFromFailedLearn = computed(() => isFailedTerminal.value && hasRunnablePathTask.value)
 const resetLearningDisabled = computed(() =>
   !!resetLearningBlockReason.value
-  || !pathReviewAccepted.value
   || !(pathStartable.value || canRestartFromFailedLearn.value)
   || !hasRunnablePathTask.value
 )
 const resetLearningTitle = computed(() => {
   if (resetLearningBlockReason.value) return resetLearningBlockReason.value
-  if (!pathReviewAccepted.value) return 'Path 尚未通过虚拟学习者评审'
   if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
   if (!hasRunnablePathTask.value) return 'Path 中没有可重启的学习任务'
-  return isFailedTerminal.value ? '从当前可运行任务恢复失败的 Learn' : '以可运行任务重新启动 Learn'
+  return isFailedTerminal.value ? '从当前可运行任务恢复失败的 Learn' : '以可运行任务重新启动 Learn（评审为独立旁路）'
 })
 const showPathReadiness = computed(() =>
   !isBlackbox.value && (goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
@@ -816,7 +1187,7 @@ const pathReadinessText = computed(() => {
   if (pathGenerationInProgress.value) return learningBlockedReason.value || 'Path 正在生成或补全阶段任务，请稍候。'
   if (pathStartable.value) return pathReviewAccepted.value
     ? 'Path 已就绪，可启动或重启 Learn。'
-    : 'Path 已就绪，等待虚拟学习者评审。'
+    : 'Path 已就绪，可启动 Learn；评审为独立旁路，不阻塞启动。'
   return learningBlockedReason.value || 'Path 已生成，正在确认 Learn 启动条件。'
 })
 
@@ -836,6 +1207,22 @@ const effectiveStageIndex = computed(() => {
 const hasWrapup = computed(() => {
   const learning = (stageResults.value.learning || {}) as Record<string, unknown>
   return !!(stageStatus.value.learning?.wrapup || learning.wrapup)
+})
+
+/* Wrapup 分页内容：summary/evaluation 可能是结构化对象，按只读证据渲染 */
+const wrapupSections = computed(() => {
+  const learning = asRecord(stageResults.value.learning)
+  const wrapup = asRecord(learning.wrapup || stageStatus.value.learning?.wrapup)
+  if (!Object.keys(wrapup).length) return [] as Array<{ label: string; text: string; isJson: boolean }>
+  const render = (value: unknown) => typeof value === 'string'
+    ? { text: value, isJson: false }
+    : { text: JSON.stringify(value, null, 2), isJson: true }
+  const sections: Array<{ label: string; text: string; isJson: boolean }> = []
+  if (wrapup.summary) sections.push({ label: '学习总结', ...render(wrapup.summary) })
+  if (wrapup.evaluation) sections.push({ label: '评估', ...render(wrapup.evaluation) })
+  const generatedAt = firstText(wrapup.generatedAt)
+  if (generatedAt) sections.push({ label: '生成时间', text: formatTime(generatedAt), isJson: false })
+  return sections
 })
 
 function stageLabel(st: string) {
@@ -968,7 +1355,7 @@ async function loadPathStatus() {
   }
 }
 
-async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.value) {
+async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.value, options: { silent?: boolean } = {}) {
   if (!sessionId.value || isBlackbox.value) {
     teachingDetail.value = null
     return
@@ -980,7 +1367,8 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
     return
   }
 
-  teachingDetailLoading.value = true
+  // 轮询走静默刷新：不闪「正在读取」占位，避免页面高度变化导致滚动跳动。
+  if (!options.silent) teachingDetailLoading.value = true
   try {
     const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(sessionId.value, teachingSessionId || undefined)
     teachingDetail.value = asRecord(res.data?.data ?? res.data)
@@ -988,7 +1376,7 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
     // 当前课堂尚未创建或历史课堂被清理时，仍可展示会话日志投影。
     teachingDetail.value = null
   } finally {
-    teachingDetailLoading.value = false
+    if (!options.silent) teachingDetailLoading.value = false
   }
 }
 
@@ -1115,6 +1503,12 @@ async function act(kind: string) {
       case 'reviewPath':
         await adminVirtualLearnersApi.reviewVirtualSessionPath(id)
         break
+      case 'acceptPath':
+        await adminVirtualLearnersApi.acceptVirtualSessionPath(id)
+        break
+      case 'replanPath':
+        await adminVirtualLearnersApi.replanVirtualSessionPath(id)
+        break
       case 'startLearning':
         await adminVirtualLearnersApi.startVirtualLearning(id)
         break
@@ -1151,6 +1545,27 @@ async function act(kind: string) {
     }
     showToast('指令已执行')
     await refresh()
+    // 操作闭环：成功后跳到结果所在分页；推进类操作跟随新的当前阶段
+    if (!isBlackbox.value) {
+      const tabAfterAction: Record<string, StageKey> = {
+        advancePath: 'path',
+        reviewPath: 'path',
+        acceptPath: 'path',
+        replanPath: 'path',
+        resetPath: 'path',
+        startLearning: 'learning',
+        resetLearn: 'learning',
+        stop: 'learning',
+        wrapup: 'wrapup'
+      }
+      const target = tabAfterAction[kind]
+      if (target) {
+        activeTab.value = target
+      } else if (['step', 'auto', 'runFull'].includes(kind)) {
+        const next = currentStage.value
+        if ((stageFlow as readonly string[]).includes(next)) activeTab.value = next as StageKey
+      }
+    }
   } catch (e) {
     const message = `执行失败：${errMsg(e)}`
     await refresh()
@@ -1185,7 +1600,7 @@ function startPolling() {
         teachingDetail.value = null
       } else {
         void loadPathStatus()
-        void loadTeachingDetail()
+        void loadTeachingDetail(selectedTeachingSessionId.value, { silent: true })
       }
     }).catch(() => undefined)
   }, 5000)
@@ -1207,6 +1622,8 @@ watch(
     privateStateTrace.value = []
     privateStateTraceCount.value = 0
     await refresh()
+    const stage = currentStage.value
+    activeTab.value = (stageFlow as readonly string[]).includes(stage) ? stage as StageKey : 'goal'
     startPolling()
   },
   { immediate: true }
@@ -1264,8 +1681,10 @@ const statusText = (s?: unknown) =>
 .cp-stage__order { font-size: 10px; font-weight: 800; color: var(--mk-faint); letter-spacing: 0.08em; }
 .cp-stage strong { font-size: 13px; }
 .cp-stage__state { font-size: 11px; color: var(--mk-faint); }
+.cp-stage { cursor: pointer; }
 .cp-stage--active { border-color: var(--mk-blue); background: #eef5ff; }
 .cp-stage--active .cp-stage__state { color: var(--mk-blue); font-weight: 700; }
+.cp-stage--tab { box-shadow: 0 0 0 2px rgba(52, 120, 246, 0.35); }
 .cp-stage--done { border-color: rgba(21, 128, 61, 0.3); }
 .cp-stage--done .cp-stage__state { color: var(--mk-green); }
 .cp-stage__arrow { color: var(--mk-faint); }
@@ -1314,6 +1733,8 @@ const statusText = (s?: unknown) =>
   font-weight: 700;
 }
 .cp-config select { min-width: 140px; }
+.cp-controls__hint { font-size: 11px; color: var(--mk-faint); align-self: center; }
+.cp-tab-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 0; }
 
 .cp-summary { padding: 12px 16px 16px; display: grid; gap: 8px; }
 .cp-summary__item {
@@ -1388,6 +1809,90 @@ const statusText = (s?: unknown) =>
   cursor: pointer;
 }
 .cp-history-btn:hover, .cp-history-btn.is-current { border-color: var(--mk-blue); color: var(--mk-blue); background: #eff6ff; }
+
+.cp-lesson-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.cp-lesson-head__main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.cp-lesson-head__main strong { font-size: 13px; }
+.cp-lesson-head__ms { font-size: 11px; color: var(--mk-faint); }
+.cp-lesson-head__state { padding: 2px 8px; border-radius: 5px; font-size: 10.5px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
+.cp-lesson-head__state[data-state='done'] { background: #f0fdf4; color: #15803d; }
+.cp-lesson-head__state[data-state='active'] { background: #eff6ff; color: var(--mk-blue); }
+.cp-lesson-head__state[data-state='failed'] { background: #fff1f0; color: #cf1322; }
+.cp-lesson-head__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cp-lesson-head__select {
+  max-width: 240px;
+  border: 1px solid var(--mk-line);
+  border-radius: 6px;
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.cp-path-detail { display: grid; gap: 10px; padding: 12px 16px 16px; align-content: start; }
+.cp-path-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 0;
+  align-items: start;
+}
+.cp-review-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px 16px;
+  border-left: 1px solid var(--mk-line);
+  align-content: start;
+}
+.cp-review-panel__head { display: grid; gap: 2px; }
+.cp-review-panel__head span { font-size: 12.5px; font-weight: 800; }
+.cp-review-panel__head em { font-style: normal; font-size: 10.5px; color: var(--mk-faint); }
+.cp-review-panel__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 1100px) {
+  .cp-path-grid { grid-template-columns: 1fr; }
+  .cp-review-panel { border-left: none; border-top: 1px solid var(--mk-line); }
+}
+.cp-path-detail__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cp-path-detail__head strong { font-size: 13.5px; }
+.cp-path-detail__meta { font-size: 11px; color: var(--mk-faint); }
+.cp-path-detail__summary { margin: 0; font-size: 12px; color: var(--mk-muted); line-height: 1.6; }
+.cp-milestone { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--mk-line); border-radius: 8px; }
+.cp-milestone__head { display: flex; align-items: baseline; gap: 8px; }
+.cp-milestone__head strong { font-size: 12.5px; }
+.cp-milestone__order { font-size: 10.5px; font-weight: 800; color: var(--mk-faint); font-family: var(--mk-mono); }
+.cp-milestone__meta { font-size: 10.5px; color: var(--mk-faint); }
+.cp-milestone__desc { margin: 0; font-size: 11.5px; color: var(--mk-muted); line-height: 1.55; }
+.cp-task-list { margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.cp-task-list li { display: flex; gap: 6px; font-size: 11.5px; color: var(--mk-muted); line-height: 1.5; }
+.cp-task-list li.is-done { color: var(--mk-green); }
+.cp-task-list li.is-current { color: var(--mk-blue); font-weight: 700; }
+.cp-task-list__mark { flex: 0 0 auto; font-family: var(--mk-mono); }
+.cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #f8fafc; }
+.cp-review__badges { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cp-review__badge { padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 800; background: #f3f5f9; color: var(--mk-muted); }
+.cp-review__badge[data-decision='accept'] { background: #f0fdf4; color: #15803d; }
+.cp-review__badge[data-decision='modify'] { background: #fffbeb; color: #b45309; }
+.cp-review__badge[data-decision='reject'] { background: #fff1f0; color: #cf1322; }
+.cp-review__meta { font-size: 10.5px; color: var(--mk-faint); }
+.cp-review__reaction { margin: 0; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+.cp-review__concern { margin: 0; font-size: 11.5px; color: #b45309; }
+.cp-review__changes { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 11.5px; color: var(--mk-muted); }
+.cp-review__replan { margin: 0; font-size: 11px; color: var(--mk-blue); }
+
+.cp-wrapup { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 9px; }
+.cp-wrapup__label { font-size: 11px; font-weight: 800; color: var(--mk-faint); }
+.cp-wrapup p { margin: 0; font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; }
+.cp-wrapup__json { margin: 0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; font-family: var(--mk-mono); color: var(--mk-muted); }
 
 .cp-raw { font-size: 12px; color: var(--mk-faint); }
 .cp-raw summary { cursor: pointer; padding: 4px 2px; }

@@ -32,7 +32,7 @@ export { agentPluginConfig } from '../config/agent-plugin-config';
 export { registerAllPlugins, getAllPlugins } from './plugins';
 
 // Path Agent
-export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn, replanPath } from '../skills/path-planning';
+export { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 
 // Goal Conversation Agent
 export {

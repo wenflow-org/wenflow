@@ -919,8 +919,7 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                     { agentId: 'skill:learner-model', action: 'apply learner profile update', condition: 'when learning or goal understanding changes' },
                     { agentId: 'skill:goal-profile-inference', action: 'enrich goal narrative/profile', condition: 'when goal understanding changes' },
                     { agentId: 'skill:learning-pattern-distiller', action: 'distill learning patterns', condition: 'when learning traces are aggregated' },
-                    { agentId: 'skill:session-knowledge-distiller', action: 'distill lesson knowledge background', condition: 'when lesson ends' },
-                    { agentId: 'skill:dialogue-concept-extractor', action: 'extract recurring concepts/confusions', condition: 'when lesson ends' },
+                    { agentId: 'skill:lesson-knowledge-enricher', action: 'enrich lesson knowledge and concepts', condition: 'when lesson ends' },
                   ]
                 }
             : undefined,

@@ -2728,7 +2728,7 @@ class LearningService {
     const startTime = Date.now();
     const triggerSource = data.sourceConversationId ? 'goal-conversation' : 'api';
     let stopHeartbeat = () => undefined;
-    let currentStageItemId: string | null = null;
+    let inFlightStageItemIds: Set<string> | null = null;
 
     try {
       const persistedRun = await this.getActiveGenerationRun(pathId, runId);
@@ -2808,13 +2808,20 @@ class LearningService {
       }> = [];
       let designedTaskCount = 0;
 
-      for (let stageIndex = 0; stageIndex < learningPath.milestones.length; stageIndex += 1) {
+      // 阶段任务设计并发度：串行 M 次 LLM 是纯时钟浪费；
+      // 限流 2 路，兼顾 LLM 速率限制与 SQLite 写入串行化。
+      const STAGE_DESIGN_CONCURRENCY = 2;
+      inFlightStageItemIds = new Set<string>();
+      let completedStageCount = 0;
+
+      const processStageDesign = async (stageIndex: number): Promise<void> => {
         const milestone = learningPath.milestones[stageIndex];
         const stageStartedAt = new Date();
-        currentStageItemId = this.createGenerationId('pgsi');
+        const stageItemId = this.createGenerationId('pgsi');
+        inFlightStageItemIds.add(stageItemId);
         await prisma.path_generation_stage_items.create({
           data: {
-            id: currentStageItemId,
+            id: stageItemId,
             runId,
             milestoneId: milestone.id,
             stageNumber: milestone.stageNumber,
@@ -2823,11 +2830,6 @@ class LearningService {
             startedAt: stageStartedAt
           }
         });
-        await this.heartbeatGenerationRun(
-          pathId,
-          runId,
-          calculateStageProgress(stageIndex, learningPath.milestones.length)
-        );
         const stageDesignerInput = {
           milestone: {
             stageNumber: milestone.stageNumber,
@@ -2859,7 +2861,7 @@ class LearningService {
         });
         const stageFinishedAt = new Date();
         await prisma.path_generation_stage_items.update({
-          where: { id: currentStageItemId },
+          where: { id: stageItemId },
           data: {
             status: 'succeeded',
             taskCount: stageTasks.length,
@@ -2869,12 +2871,20 @@ class LearningService {
             errorMessage: null
           }
         });
-        currentStageItemId = null;
+        inFlightStageItemIds.delete(stageItemId);
+        completedStageCount += 1;
         await this.heartbeatGenerationRun(
           pathId,
           runId,
-          calculateStageProgress(stageIndex + 1, learningPath.milestones.length)
+          calculateStageProgress(completedStageCount, learningPath.milestones.length)
         );
+      };
+
+      for (let batchStart = 0; batchStart < learningPath.milestones.length; batchStart += STAGE_DESIGN_CONCURRENCY) {
+        const batchIndexes = learningPath.milestones
+          .map((_, index) => index)
+          .slice(batchStart, batchStart + STAGE_DESIGN_CONCURRENCY);
+        await Promise.all(batchIndexes.map(processStageDesign));
       }
 
       await prisma.$transaction(async (tx) => {
@@ -3019,10 +3029,10 @@ class LearningService {
         error: andersonError?.message || String(andersonError)
       });
 
-      if (currentStageItemId) {
+      if (inFlightStageItemIds && inFlightStageItemIds.size > 0) {
         const failedAt = new Date();
         await prisma.path_generation_stage_items.updateMany({
-          where: { id: currentStageItemId, runId, status: 'processing' },
+          where: { id: { in: [...inFlightStageItemIds] }, runId, status: 'processing' },
           data: {
             status: 'failed',
             heartbeatAt: failedAt,

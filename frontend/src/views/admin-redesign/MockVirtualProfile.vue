@@ -5,16 +5,41 @@
       <div class="vp-top__meta">
         <h2 class="vp-top__name">{{ d.name }}</h2>
         <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
-        <button v-if="isLive" type="button" class="mk-link" @click="editOpen = true">编辑画像</button>
+        <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
+      </div>
+      <div v-if="isLive" class="vp-top__actions">
+        <button type="button" class="mk-status__action" @click="quickLearnOpen = true">账号自动学习</button>
+        <button type="button" class="mk-status__action" @click="editOpen = true">编辑画像</button>
       </div>
     </header>
 
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
-    <div class="vp-grid">
-      <!-- 左：身份与故事 -->
-      <div class="vp-col">
-        <section class="mk-card vp-hero">
+    <!-- 统计条：只放数字与长期倾向；人物背景全文在「画像」页 -->
+    <div class="vp-overview">
+      <span><b>{{ displayStories.length }}</b> 故事</span>
+      <span><b>{{ allRuns.length }}</b> 运行</span>
+      <span v-if="runningCount > 0" class="is-live"><b>{{ runningCount }}</b> 进行中</span>
+      <span class="vp-overview__goal">长期倾向：{{ d.goal || '由故事产生当次学习需求' }}</span>
+    </div>
+
+    <!-- 分页：故事池是主工作区，画像/运行/验收各归其页 -->
+    <nav class="vp-tabs">
+      <button
+        v-for="t in tabs"
+        :key="t.key"
+        type="button"
+        class="vp-tab"
+        :class="{ 'is-active': activeTab === t.key }"
+        @click="activeTab = t.key"
+      >
+        {{ t.label }}
+        <span v-if="t.count !== undefined" class="vp-tab__count">{{ t.count }}</span>
+      </button>
+    </nav>
+
+    <div class="vp-body">
+        <section v-if="activeTab === 'profile'" class="mk-card vp-hero">
           <div class="vp-hero__body">
             <p class="vp-hero__story">{{ d.story || '暂无人物背景' }}</p>
             <div v-if="d.traits?.length" class="vp-traits">
@@ -27,7 +52,7 @@
           </div>
         </section>
 
-        <section class="mk-card">
+        <section v-if="activeTab === 'profile'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">画像字段</h3>
           </div>
@@ -39,25 +64,25 @@
           </div>
         </section>
 
-        <section class="mk-card">
+        <section v-if="activeTab === 'stories'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">故事池 · {{ displayStories.length }}</h3>
-            <button
-              v-if="isLive"
-              type="button"
-              class="mk-status__action"
-              :class="{ 'mk-status__action--primary': !displayStories.length }"
-              :disabled="storyBusy"
-              @click="generateStory"
-            >
-              {{ storyBusy ? '生成中…' : displayStories.length ? '再生成一条' : '生成第一条故事' }}
-            </button>
+            <div class="vp-stories-head">
+              <span class="mk-card__meta">一人多故事；选中故事运行，走 Goal → Path → Learn</span>
+              <button
+                v-if="isLive"
+                type="button"
+                class="mk-status__action"
+                :class="{ 'mk-status__action--primary': !displayStories.length }"
+                :disabled="storyBusy"
+                @click="generateStory"
+              >
+                {{ storyBusy ? '生成中…' : displayStories.length ? '再生成故事' : '生成第一条故事' }}
+              </button>
+            </div>
           </div>
           <p v-if="isLive && !displayStories.length" class="vp-next">
             先生成故事。每个故事产生一次学习需求，对应平台上的一条 Path。
-          </p>
-          <p v-else class="vp-next">
-            一人多故事；选中故事后运行，会走 Goal → Path → Learn。平台视角下，该故事对应一套学习任务（一条 Path）。
           </p>
           <div v-if="displayStories.length" class="vp-stories">
             <div
@@ -67,49 +92,58 @@
               :class="{ 'is-selected': selectedStoryId === (s.id || String(i)) }"
               @click="selectStory(s, i)"
             >
-              <div class="vp-story-item__main">
-                <div class="vp-story-item__head">
-                  <strong>{{ s.title }}</strong>
-                  <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                    {{ storyStatusLabel(s) }}
-                  </span>
+              <!-- 标题行：标题 + 状态 + 操作（主操作随内容走） -->
+              <div class="vp-story-item__head">
+                <strong>{{ s.title }}</strong>
+                <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
+                  {{ storyStatusLabel(s) }}
+                </span>
+                <div v-if="isLive" class="vp-story-item__ops" @click.stop>
+                  <button type="button" class="mk-link" :disabled="running" @click="runStory(s, i)">按此故事运行</button>
+                  <button type="button" class="mk-link mk-link--danger" :disabled="storyBusy" @click="removeStory(i)">删除</button>
                 </div>
-                <span class="vp-story-item__outline">{{ s.outline }}</span>
+              </div>
+              <p class="vp-story-item__outline">{{ s.outline }}</p>
 
-                <!-- 平台视角：该故事的 Goal → Path → Learn 生命周期 -->
-                <div class="vp-pipe" @click.stop>
-                  <span class="vp-pipe__stage" :class="{ 'is-on': (s.goalCount || 0) > 0 }">
-                    Goal <b>{{ s.goalCount || 0 }}</b>
-                    <span v-if="s.projection?.formal?.goal" class="vp-pipe__links">
-                      <a @click="openLink(s.projection.formal.goal)">前台</a>
-                      <a v-if="s.projection?.test?.goal" @click="openLink(s.projection.test.goal)">调试</a>
-                    </span>
+              <!-- 生命周期：Goal → Path → Learn 计数与投影链接 -->
+              <div class="vp-pipe" @click.stop>
+                <span class="vp-pipe__stage" :class="{ 'is-on': (s.goalCount || 0) > 0 }">
+                  Goal <b>{{ s.goalCount || 0 }}</b>
+                  <span v-if="s.projection?.formal?.goal" class="vp-pipe__links">
+                    <a @click="openLink(s.projection.formal.goal)">前台</a>
+                    <a v-if="s.projection?.test?.goal" @click="openLink(s.projection.test.goal)">调试</a>
                   </span>
-                  <i class="vp-pipe__arrow">→</i>
-                  <span class="vp-pipe__stage" :class="{ 'is-on': (s.pathCount || 0) > 0 }">
-                    Path <b>{{ s.pathCount || 0 }}</b>
-                    <span v-if="s.projection?.formal?.path" class="vp-pipe__links">
-                      <a @click="openLink(s.projection.formal.path)">前台</a>
-                      <a v-if="s.projection?.test?.path" @click="openLink(s.projection.test.path)">调试</a>
-                    </span>
+                </span>
+                <i class="vp-pipe__arrow">→</i>
+                <span class="vp-pipe__stage" :class="{ 'is-on': (s.pathCount || 0) > 0 }">
+                  Path <b>{{ s.pathCount || 0 }}</b>
+                  <span v-if="s.projection?.formal?.path" class="vp-pipe__links">
+                    <a @click="openLink(s.projection.formal.path)">前台</a>
+                    <a v-if="s.projection?.test?.path" @click="openLink(s.projection.test.path)">调试</a>
                   </span>
-                  <i class="vp-pipe__arrow">→</i>
-                  <span class="vp-pipe__stage" :class="{ 'is-on': (s.learnCount || 0) > 0 }">
-                    Learn <b>{{ s.learnCount || 0 }}</b>
-                    <span v-if="s.projection?.formal?.learn" class="vp-pipe__links">
-                      <a @click="openLink(s.projection.formal.learn)">前台</a>
-                      <a v-if="s.projection?.test?.learn" @click="openLink(s.projection.test.learn)">调试</a>
-                    </span>
+                </span>
+                <i class="vp-pipe__arrow">→</i>
+                <span class="vp-pipe__stage" :class="{ 'is-on': (s.learnCount || 0) > 0 }">
+                  Learn <b>{{ s.learnCount || 0 }}</b>
+                  <span v-if="s.projection?.formal?.learn" class="vp-pipe__links">
+                    <a @click="openLink(s.projection.formal.learn)">前台</a>
+                    <a v-if="s.projection?.test?.learn" @click="openLink(s.projection.test.learn)">调试</a>
                   </span>
-                  <span v-if="(s.runningCount || 0) > 0" class="vp-pipe__running">● {{ s.runningCount }} 运行中</span>
-                </div>
+                </span>
+                <span v-if="(s.runningCount || 0) > 0" class="vp-pipe__running">● {{ s.runningCount }} 运行中</span>
+              </div>
 
-                <div v-if="s.latestRun" class="vp-story-item__latest" @click.stop>
+              <!-- 最近运行一行：无则显示空态，保持卡片节奏一致 -->
+              <div class="vp-story-item__latest" @click.stop>
+                <template v-if="s.latestRun">
                   最近运行：{{ formatRunStage(s.latestRun.currentStage) }} · {{ formatRunResult(s.latestRun.status) }} · {{ timeAgo(String(s.latestRun.updatedAt || s.latestRun.createdAt || '')) }}
                   <button type="button" class="mk-link" @click="openSubPage('session', s.latestRun.sessionId)">控制台</button>
-                </div>
+                </template>
+                <span v-else class="vp-story-item__never">尚未运行</span>
+              </div>
 
-                <div v-if="selectedStoryId === (s.id || String(i))" class="vp-story-runs" @click.stop>
+              <template v-if="selectedStoryId === (s.id || String(i))">
+                <div class="vp-story-runs" @click.stop>
                   <template v-if="runsForStory(s).length">
                     <div v-for="(r, ri) in runsForStory(s)" :key="r.sessionId || ri" class="vp-run">
                       <span class="vp-run__dot" :class="`is-${r.tone}`"></span>
@@ -159,36 +193,13 @@
                     </div>
                   </div>
                 </details>
-              </div>
-              <div class="vp-story-item__side">
-                <button
-                  v-if="isLive"
-                  type="button"
-                  class="mk-link"
-                  :disabled="running"
-                  @click.stop="runStory(s, i)"
-                >
-                  按此故事运行
-                </button>
-                <button
-                  v-if="isLive"
-                  type="button"
-                  class="mk-link mk-link--danger"
-                  :disabled="storyBusy"
-                  @click.stop="removeStory(i)"
-                >
-                  删除
-                </button>
-              </div>
+              </template>
             </div>
           </div>
           <p v-else class="vp-none">还没有故事。</p>
         </section>
-      </div>
 
-      <!-- 右：运行与工具 -->
-      <div class="vp-col">
-        <section class="mk-card">
+        <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">全部运行</h3>
             <span class="mk-badge mk-badge--muted">{{ allRuns.length }} 条</span>
@@ -214,9 +225,10 @@
           </div>
         </section>
 
-        <section v-if="isLive" class="mk-card">
+        <section v-if="isLive && activeTab === 'verify'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">前台投影</h3>
+            <h3 class="mk-card__title">前台投影验收</h3>
+            <span class="mk-card__meta">用该虚拟身份打开前台页面，核对 Goal / Path / 状态展示</span>
           </div>
           <div class="vp-tools">
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('dashboard')">
@@ -225,12 +237,9 @@
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('goal')">Goal</button>
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('paths')">路径</button>
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('state')">状态</button>
-            <button type="button" class="vp-tool vp-tool--primary" @click="quickLearnOpen = true">账号自动学习</button>
           </div>
-          <p class="vp-tools__hint">用该虚拟身份打开前台页面验收。</p>
+          <p class="vp-tools__hint">投影会生成一次性 token 并以虚拟账号身份打开前台；故事卡里的「前台 / 调试」链接走同一机制。「账号自动学习」入口在顶部操作区。</p>
         </section>
-
-      </div>
     </div>
 
     <QuickLearnPanel
@@ -359,6 +368,10 @@ const isLive = computed(() => dataSource.value === 'live')
 const liveDetail = ref<Detail | null>(null)
 const stories = ref<StoryItem[]>([])
 const selectedStoryId = ref<string | null>(null)
+
+/* 分页：故事池是主工作区（默认页），画像/运行/验收各归其页 */
+type ProfileTab = 'stories' | 'runs' | 'profile' | 'verify'
+const activeTab = ref<ProfileTab>('stories')
 
 /* demo 模式的故事池（按样本给出有差异的演示故事） */
 const DEMO_STORIES: Record<string, StoryItem[]> = {
@@ -752,6 +765,25 @@ async function openProjection(entry: 'dashboard' | 'goal' | 'paths' | 'state' = 
   }
 }
 
+const runningCount = computed(() =>
+  displayStories.value.reduce((n, s) => n + (s.runningCount || 0), 0)
+)
+const tabs = computed(() => {
+  const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
+    { key: 'stories', label: '故事池', count: displayStories.value.length },
+    { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
+    { key: 'profile', label: '画像' }
+  ]
+  if (isLive.value) list.push({ key: 'verify', label: '验收' })
+  return list
+})
+const levelLabel = computed(() => ({
+  beginner: '零基础',
+  elementary: '入门',
+  intermediate: '中级',
+  advanced: '进阶'
+}[d.value?.level || ''] || d.value?.level || ''))
+
 const d = computed<Detail | undefined>(() => {
   if (isLive.value) return liveDetail.value || undefined
   const demo = virtualProfiles.find((x) => x.id === subPage.value?.id) || virtualProfiles[0]
@@ -844,13 +876,67 @@ function formatRunResult(result: string) {
   letter-spacing: -0.02em;
   line-height: 1.25;
 }
-.vp-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.9fr);
-  gap: 18px;
-  align-items: start;
+.vp-top__level { font-size: 11.5px; color: var(--mk-faint); font-weight: 700; }
+.vp-top__actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.vp-col { display: grid; gap: 16px; min-width: 0; }
+
+/* 统计条 */
+.vp-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+  padding: 10px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: 12px;
+  background: var(--mk-surface);
+  font-size: 12px;
+  color: var(--mk-faint);
+}
+.vp-overview b {
+  font-family: var(--mk-mono, ui-monospace, monospace);
+  font-size: 14px;
+  color: var(--mk-ink);
+  margin-right: 2px;
+}
+.vp-overview .is-live b { color: var(--mk-amber, #b7791f); }
+.vp-overview__goal { margin-left: auto; color: var(--mk-faint); }
+
+/* 分页 */
+.vp-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.vp-tab {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mk-faint);
+  padding: 8px 12px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.vp-tab:hover { color: var(--mk-ink); }
+.vp-tab.is-active { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.vp-tab__count {
+  font-family: var(--mk-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mk-faint);
+}
+.vp-tab.is-active .vp-tab__count { color: var(--mk-blue); }
+
+.vp-body { display: grid; gap: 14px; }
 
 .vp-hero__body {
   padding: 18px 20px 20px;
@@ -896,11 +982,17 @@ function formatRunResult(result: string) {
 .vp-profile__row span { color: var(--mk-faint); padding-top: 1px; }
 .vp-profile__row strong { font-weight: 600; line-height: 1.55; word-break: break-word; }
 
+.vp-stories-head {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .vp-stories { display: grid; }
 .vp-story-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display: grid;
+  gap: 6px;
   padding: 14px 18px;
   border-bottom: 1px solid #f0f2f5;
   cursor: pointer;
@@ -912,25 +1004,21 @@ function formatRunResult(result: string) {
   box-shadow: inset 3px 0 0 var(--mk-blue, #3478f6);
 }
 .vp-story-item:last-child { border-bottom: none; }
-.vp-story-item__main { flex: 1; display: grid; gap: 4px; min-width: 0; }
-.vp-story-item__main strong { font-size: 13.5px; line-height: 1.4; }
-.vp-story-item__main > span {
-  font-size: 12.5px;
-  color: var(--mk-faint);
-  line-height: 1.55;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 .vp-story-item__head {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
-.vp-story-item__head strong { flex: 1; min-width: 0; }
+.vp-story-item__head strong { font-size: 13.5px; line-height: 1.4; min-width: 0; }
+.vp-story-item__ops {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
 .vp-story-item__outline {
+  margin: 0;
   font-size: 12.5px;
   color: var(--mk-faint);
   line-height: 1.55;
@@ -939,6 +1027,7 @@ function formatRunResult(result: string) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.vp-story-item__never { color: var(--mk-faint); }
 
 /* 平台视角生命周期条：Goal → Path → Learn */
 .vp-pipe {
@@ -1002,12 +1091,6 @@ function formatRunResult(result: string) {
 }
 .vp-story-runs .vp-run { padding: 10px 2px; }
 .vp-story-runs .vp-none { padding: 10px 2px; }
-.vp-story-item__side {
-  display: grid;
-  gap: 6px;
-  justify-items: end;
-  flex-shrink: 0;
-}
 
 .vp-runs { display: grid; }
 .vp-run {
@@ -1101,8 +1184,8 @@ function formatRunResult(result: string) {
 }
 
 @media (max-width: 1100px) {
-  .vp-grid { grid-template-columns: 1fr; }
   .vp { padding: 16px; }
+  .vp-overview__goal { margin-left: 0; flex-basis: 100%; }
 }
 
 /* =====故事高级诊断折叠区 ===== */

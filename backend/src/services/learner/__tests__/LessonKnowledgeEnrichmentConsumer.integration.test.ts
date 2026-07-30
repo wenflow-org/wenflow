@@ -42,16 +42,13 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
   })
 
   it('消费 lesson:completed 事件后会写入 learner_evidence 和 domain_event_inbox', async () => {
-    ;(executeSkill as jest.Mock)
-      .mockResolvedValueOnce({
-        conceptLedger: [{ conceptKey: 'a', label: 'A' }],
-        reusableFoundations: ['a'],
-        blockedFoundations: [],
-        transferSignals: []
-      })
-      .mockResolvedValueOnce({
-        recurringConfusions: [{ conceptKey: 'b', label: 'B', confidence: 0.7 }]
-      })
+    ;(executeSkill as jest.Mock).mockResolvedValue({
+      conceptLedger: [{ conceptKey: 'a', label: 'A' }],
+      reusableFoundations: ['a'],
+      blockedFoundations: [],
+      transferSignals: [],
+      recurringConfusions: [{ conceptKey: 'b', label: 'B', confidence: 0.7 }]
+    })
 
     const { LessonKnowledgeEnrichmentConsumer } = await import('../LessonKnowledgeEnrichmentConsumer')
 
@@ -118,9 +115,7 @@ runIntegration('LessonKnowledgeEnrichmentConsumer 集成测试（真实数据库
   })
 
   it('重复消费同一事件会被 inbox 幂等拦截', async () => {
-    ;(executeSkill as jest.Mock)
-      .mockResolvedValueOnce({ conceptLedger: [] })
-      .mockResolvedValueOnce({ recurringConfusions: [] })
+    ;(executeSkill as jest.Mock).mockResolvedValue({ conceptLedger: [], recurringConfusions: [] })
 
     const { LessonKnowledgeEnrichmentConsumer } = await import('../LessonKnowledgeEnrichmentConsumer')
 

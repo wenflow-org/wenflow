@@ -1358,6 +1358,14 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/review-path`);
   },
 
+  acceptVirtualSessionPath: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/accept-path`);
+  },
+
+  replanVirtualSessionPath: async (sessionId: string) => {
+    return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/replan-path`);
+  },
+
   getVirtualSessionPathStatus: async (sessionId: string) => {
     return adminAxios.get(`/admin/virtual-learners/sessions/${sessionId}/path-status`);
   },

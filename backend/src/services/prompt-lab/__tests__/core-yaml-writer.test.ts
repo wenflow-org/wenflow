@@ -104,10 +104,10 @@ describe('core-yaml-writer', () => {
     expect(extractHeaderComment('skillId: demo\nidentity: x')).toBeUndefined();
   });
 
-  it('仓库内全部 40 个核心文件 round-trip 不丢信息', () => {
+  it('仓库内全部核心文件 round-trip 不丢信息', () => {
     const { files, diagnostics } = scanCoreFiles(CORE_FILES_DIR);
     expect(diagnostics).toEqual([]);
-    expect(files.length).toBeGreaterThanOrEqual(40);
+    expect(files.length).toBeGreaterThan(0);
     for (const core of files) {
       const parsed = parseCoreFile('virtual', serializeCoreFile(core));
       expect(parsed.diagnostics).toEqual([]);

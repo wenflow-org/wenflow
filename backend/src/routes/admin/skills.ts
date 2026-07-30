@@ -18,12 +18,9 @@ import {
 } from '../../services/skill-runtime-contract.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
-import { SESSION_KNOWLEDGE_DISTILLER_PROMPT } from '../../skills/session-knowledge-distiller';
-import { LABEL_GENERATOR_PROMPT } from '../../skills/label-generator';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
 import { GOAL_PROFILE_INFERENCE_PROMPT } from '../../skills/goal-profile-inference';
 import { LEARNING_PATTERN_DISTILLER_PROMPT } from '../../skills/learning-pattern-distiller';
-import { DIALOGUE_CONCEPT_EXTRACTOR_PROMPT } from '../../skills/dialogue-concept-extractor';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
 import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
 import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
@@ -38,14 +35,11 @@ import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
-  'label-generator': LABEL_GENERATOR_PROMPT,
   'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
   'stage-designer': STAGE_DESIGNER_PROMPT,
   'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
   'goal-profile-inference': GOAL_PROFILE_INFERENCE_PROMPT,
   'learning-pattern-distiller': LEARNING_PATTERN_DISTILLER_PROMPT,
-  'session-knowledge-distiller': SESSION_KNOWLEDGE_DISTILLER_PROMPT,
-  'dialogue-concept-extractor': DIALOGUE_CONCEPT_EXTRACTOR_PROMPT,
   'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
   'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
   'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,

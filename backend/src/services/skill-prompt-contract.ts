@@ -164,7 +164,7 @@ function inferInteractionMode(archetype: Archetype): SkillPromptInteractionMode 
 function inferInputTransport(skillId: string, archetype: Archetype): SkillPromptInputTransport {
   if (archetype === 'code-only') return 'none';
   if (skillId === 'prompt-compiler') return 'yaml';
-  if (['path-planning', 'peer-reinforcement', 'session-wrapup', 'label-generator'].includes(skillId)) {
+  if (['path-planning', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) {
     return 'tagged-text';
   }
   return 'json';
@@ -181,7 +181,7 @@ function inferFailurePolicy(skillId: string, archetype: Archetype): SkillPromptF
   if (['goal-conversation', 'path-planning', 'path-scene-framing', 'stage-designer', 'teaching-turn', 'prompt-compiler'].includes(skillId)) {
     return 'retry';
   }
-  if (['adaptive-guidance-copy', 'dialogue-concept-extractor', 'goal-profile-inference', 'label-generator', 'learning-pattern-distiller', 'session-knowledge-distiller', 'session-wrapup', 'peer-reinforcement'].includes(skillId)) {
+  if (['adaptive-guidance-copy', 'goal-profile-inference', 'learning-pattern-distiller', 'lesson-knowledge-enricher', 'session-wrapup', 'peer-reinforcement'].includes(skillId)) {
     return 'deterministic-fallback';
   }
   if (archetype === 'extractor' || archetype === 'distiller' || archetype === 'copywriter') {
