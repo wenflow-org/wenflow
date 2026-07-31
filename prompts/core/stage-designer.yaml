@@ -7,6 +7,13 @@ identity: |
   你的职责不是重新规划整条学习路径，而是只围绕一个已经确定的 milestone，为当前阶段生成一组可执行但不过度教学化的 subtasks。
 channels: [path, state, task]
 stateAdvance: false
+inputs:
+  - ref: skill:path-planning.milestones
+    note: 当前服务的 milestone（loopOver 逐阶段喂入）
+  - ref: skill:path-planning.cognitiveCore
+    note: 认知结构，约束子任务的概念归属
+  - ref: skill:path-scene-framing.normalizedInput
+    note: 场景/预算/成功标准上下文
 rules:
   - 只服务当前 milestone，不要重写整条路径方向
   - subtasks 必须围绕当前 milestone 绑定的 coreConcept 展开
@@ -16,6 +23,8 @@ rules:
   - linkedConcept 必须等于 milestone.coreConcept，除非 repairHints 明确要求桥接任务
   - 输出数量优先遵守 normalizedInput.planningHints.subtasksPerStageRange；若未提供，默认 3-6 个
   - 如果输入提供 firstDeliverable，当前阶段若是首阶段，应让第一批任务直接服务它
+  - 每个阶段的 subtasks 中至少包含 1 个 consolidate 类型任务，显式回捞前一阶段的核心概念
+  - 首阶段第一个 subtask 必须低门槛（estimatedMinutes ≤45、当次即可产出可见结果），让学习者第一节课就有"我做到了"的时刻
   - 可以补轻量标签 knowledgeType、cognitiveLevel、transferable，但不要输出 learningObjectives
   - estimatedMinutes 优先落在 planningHints.subtaskMinutesRange 内；若未提供，默认 30-90 分钟
   - 你生成的是"阶段内任务方向"，不是"本周执行方案"

@@ -1,5 +1,5 @@
 ﻿/**
- * Learner 阶段字段路由 seed（skill 粒度）
+ * 画像阶段字段路由 seed（skill 粒度）
  *
  * 契约（按调用关系）：
  *   - skill:goal-profile-inference：从 Goal 输出推断长期画像叙述
@@ -26,7 +26,7 @@ interface SeedField { fieldId: string; promptRole: PromptRole; valueType: string
 interface SeedContract { agentId: string; displayName: string; description: string; }
 interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; handoff: string[]; internal: boolean; accumulate: boolean; visibilityPreset?: string; notes?: string; }
 
-const STAGE = 'learner';
+const STAGE = 'profile';
 
 export const LEARNER_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
   { agentId: 'skill:goal-profile-inference', displayName: '目标画像推断 Skill', description: '从 Goal 输出推断长期学习者画像叙述' },

@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: c5e69f63522ad95a956493b0c9202d9e2e63411e001f1c125aaae6aea6d25846
+coreHash: 2d8ee4b4d14a3ee92b7ae8c7d455e0debffa7bd7066078173222e90dce633775
 coreVersion: 1
 temperature: 0.4
 maxTokens: 1200
@@ -24,7 +24,9 @@ failurePolicy: fallback
 2. question 必须低门槛，学生可以直接用一句话回答
 3. quickReplies 只能输出 2 到 3 个短选项，每项只保留 text
 4. mode 决定开场风格；example-first 从小例子切入，predict 让学生先判断，self-assess 让学生快速自评
-5. 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
+5. 输入提供 lastLessonRecap（上一课摘要）时，message 必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节开场；不要让每节课像第一次见面
+6. 输入提供 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 message，不机械复述原话
+7. 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
 
 ## 输出字段
 

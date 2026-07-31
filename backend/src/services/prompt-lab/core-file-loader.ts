@@ -59,12 +59,34 @@ export interface CoreFileParams {
   failurePolicy: CoreFailurePolicy;
 }
 
+/** §2.5 上游字段输入声明：ref = `skill:<skillId>.<fieldPath>` */
+export interface CoreInputRef {
+  /** 原始引用，如 skill:path-scene-framing.normalizedInput */
+  ref: string;
+  /** 上游 skillId（不含 skill: 前缀） */
+  skill: string;
+  /** 上游输出字段路径 */
+  fieldPath: string;
+  /** 用途说明（可选） */
+  note?: string;
+}
+
+const INPUT_REF_PATTERN = /^skill:([a-z0-9][a-z0-9-]*)\.([A-Za-z0-9_.\[\]-]+)$/;
+
+/** 解析 inputs ref；不合法返回 null */
+export function parseInputRef(ref: string): { skill: string; fieldPath: string } | null {
+  const m = INPUT_REF_PATTERN.exec(ref.trim());
+  return m ? { skill: m[1], fieldPath: m[2] } : null;
+}
+
 export interface CoreFile {
   skillId: string;
   baseVersion: number;
   identity: string;
   channels: CoreChannel[];
   stateAdvance: boolean;
+  /** 上游字段输入声明（§2.5，可选；编译进「使用通道」块，供 handoff 对账与血缘推导） */
+  inputs?: CoreInputRef[];
   rules: string[];
   fields: CoreFieldSpec[];
   constraints: string[];
@@ -112,6 +134,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'identity',
   'channels',
   'stateAdvance',
+  'inputs',
   'rules',
   'fields',
   'constraints',
@@ -164,6 +187,40 @@ export function validateCoreFileShape(raw: unknown): CoreFileIssue[] {
           message: `未知材料池：${String(channel)}（可选：${CORE_CHANNELS.join('/')}）`,
         });
       }
+    }
+  }
+
+  // inputs：可选；每项 { ref: skill:<skillId>.<fieldPath>, note? }
+  if (raw.inputs !== undefined && raw.inputs !== null) {
+    if (!Array.isArray(raw.inputs)) {
+      issues.push({ code: 'inputs-invalid', message: 'inputs 必须是数组：每项 { ref, note? }' });
+    } else {
+      const seenRefs = new Set<string>();
+      raw.inputs.forEach((item, index) => {
+        const label = `inputs[${index}]`;
+        if (!isPlainObject(item)) {
+          issues.push({ code: 'input-not-object', message: `${label} 必须是对象 { ref, note? }` });
+          return;
+        }
+        const ref = asNonEmptyString(item.ref);
+        if (ref == null) {
+          issues.push({ code: 'input-ref-required', message: `${label}.ref 必填（形如 skill:path-scene-framing.normalizedInput）` });
+        } else {
+          if (!parseInputRef(ref)) {
+            issues.push({
+              code: 'input-ref-invalid',
+              message: `${label}.ref "${ref}" 格式不合法（应为 skill:<skillId>.<fieldPath>）`,
+            });
+          }
+          if (seenRefs.has(ref)) {
+            issues.push({ code: 'input-ref-duplicate', message: `输入声明重复：${ref}` });
+          }
+          seenRefs.add(ref);
+        }
+        if (item.note !== undefined && typeof item.note !== 'string') {
+          issues.push({ code: 'input-note-invalid', message: `${label}.note 必须是字符串` });
+        }
+      });
     }
   }
 
@@ -278,6 +335,20 @@ export function normalizeCoreFile(raw: Record<string, unknown>): CoreFile {
     identity: String(raw.identity).trim(),
     channels: (raw.channels as string[]).map((c) => c.trim()) as CoreChannel[],
     stateAdvance: raw.stateAdvance === true,
+    ...(Array.isArray(raw.inputs) && raw.inputs.length
+      ? {
+          inputs: (raw.inputs as Array<Record<string, unknown>>).map((item) => {
+            const ref = String(item.ref).trim();
+            const parts = parseInputRef(ref)!;
+            return {
+              ref,
+              skill: parts.skill,
+              fieldPath: parts.fieldPath,
+              ...(asNonEmptyString(item.note) ? { note: String(item.note).trim() } : {}),
+            };
+          }),
+        }
+      : {}),
     rules: (raw.rules as string[]).map((r) => r.trim()),
     fields: (raw.fields as Array<Record<string, unknown>>).map((field) => {
       const type = String(field.type).trim();

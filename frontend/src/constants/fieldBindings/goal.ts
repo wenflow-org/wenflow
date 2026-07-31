@@ -30,7 +30,7 @@ export type RenderValue = 'visible' | 'hidden';
 
 export interface FieldDefinition {
   fieldId: string;
-  stage: 'goal' | 'path' | 'execution';
+  stage: 'goal' | 'path' | 'learning';
   promptRole: PromptRole;
   valueType: 'string' | 'string[]' | 'number' | 'boolean' | 'object' | 'enum';
   snakeName?: string;
@@ -52,7 +52,7 @@ export interface FieldDefinition {
 
 export interface AgentContract {
   agentId: string;
-  stage: 'goal' | 'path' | 'execution';
+  stage: 'goal' | 'path' | 'learning';
   displayName: string;
   description: string;
 }

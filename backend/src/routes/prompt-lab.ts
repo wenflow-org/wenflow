@@ -32,7 +32,7 @@ import {
 } from '../services/prompt-lab/core-compiler';
 import { loadCoreFile, scanCoreFiles, computeCoreHash, parseCoreFile, CORE_FILES_DIR } from '../services/prompt-lab/core-file-loader';
 import { normalizeCoreFormInput, serializeCoreFile, extractHeaderComment } from '../services/prompt-lab/core-yaml-writer';
-import { getFieldLineage, classifyCoreEdit } from '../services/prompt-lab/field-lineage';
+import { getFieldLineageWithDeclarations, classifyCoreEdit } from '../services/prompt-lab/field-lineage';
 import {
   judgeSemanticFreeze,
   decideSemanticGate,
@@ -40,6 +40,7 @@ import {
 } from '../services/prompt-lab/semantic-freeze-judge';
 import { buildV4CorePromptMetadata } from '../services/prompt-lab/core-prompt-metadata';
 import { normalizeDeveloperApproval, resolveCoreSnapshot } from '../services/prompt-lab/core-version-snapshot';
+import { checkInputHandoffs } from '../services/prompt-lab/input-handoff-check';
 
 const router = Router();
 router.use(rejectPromptLabFileMutation);
@@ -489,7 +490,9 @@ router.post('/compile-core', async (req, res) => {
     const compiled = compileCoreFile(loaded.core, { coreVersion });
     const gates: Record<string, unknown> = {
       structure: checkFiveBlockStructure(compiled.prompt),
-      fieldFreeze: checkFieldFreeze(loaded.core, compiled.prompt)
+      fieldFreeze: checkFieldFreeze(loaded.core, compiled.prompt),
+      // inputs 声明 ↔ handoff 对账（advisory，不影响 gatePassed）
+      inputHandoff: await checkInputHandoffs(loaded.core)
     };
     const semantic = await runSemanticGate(skillId, compiled.prompt, req.body?.semanticJudge === false);
     if (semantic) {
@@ -539,7 +542,9 @@ router.post('/publish-core', async (req, res) => {
     const compiled = compileCoreFile(core, { coreVersion });
     const gates: Record<string, unknown> = {
       structure: checkFiveBlockStructure(compiled.prompt),
-      fieldFreeze: checkFieldFreeze(core, compiled.prompt)
+      fieldFreeze: checkFieldFreeze(core, compiled.prompt),
+      // inputs 声明 ↔ handoff 对账（advisory，不参与阻断）
+      inputHandoff: await checkInputHandoffs(core)
     };
     const structuralIssues = [
       ...(gates.structure as Array<unknown>),
@@ -820,6 +825,8 @@ router.put('/core/:skillId', async (req, res) => {
       skillId,
       coreHash: computeCoreHash(parsed.core),
       classification,
+      // inputs 声明 ↔ handoff 对账（advisory 告警）
+      inputWarnings: await checkInputHandoffs(parsed.core),
       status: 'pending-compile',
     });
   } catch (error) {
@@ -948,12 +955,12 @@ router.post('/core/:skillId/rollback', async (req, res) => {
 
 /**
  * GET /api/prompt-lab/core/:skillId/lineage
- * v4 工作台：字段血缘（消费者注册表）
+ * v4 工作台：字段血缘（静态注册表 ∪ 全仓 core inputs 声明推导）
  */
 router.get('/core/:skillId/lineage', async (req, res) => {
   try {
     const skillId = assertValidSkillId(req.params.skillId);
-    res.json({ success: true, skillId, lineage: getFieldLineage(skillId) });
+    res.json({ success: true, skillId, lineage: getFieldLineageWithDeclarations(skillId) });
   } catch (error) {
     res.status(500).json({ error: '读取字段血缘失败', details: (error as Error).message });
   }

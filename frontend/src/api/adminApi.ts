@@ -326,7 +326,7 @@ export const adminUsersApi = {
 
   createProjectionTokenFromGrant: async (
     grantId: string,
-    data?: { scope?: 'dashboard' | 'full'; entry?: 'dashboard' | 'goal' | 'path' | 'learn' }
+    data?: { scope?: 'dashboard' | 'full'; entry?: 'dashboard' | 'goal' | 'path' | 'learning' }
   ) => {
     return adminAxios.post(`/admin/projection-access-grants/${grantId}/projection-token`, data || {});
   },

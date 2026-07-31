@@ -580,7 +580,7 @@ const getCapabilityType = (agentId?: string) => {
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
     'skill:path-planning': 'path',
-    'ai-teaching-agent': 'teaching',
+    'ai-teaching-agent': 'learning',
     'ai-tutor': 'tutoring',
     'learner-model-agent': 'profile',
     'unknown': 'system',

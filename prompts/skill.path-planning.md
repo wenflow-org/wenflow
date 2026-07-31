@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-planning
-coreHash: 72434791060f4c38997868d0762d4ace009a9f398d3b187244675d421598ea65
+coreHash: b75b2d350e20f30aeb51dc87630106897adfaa1a5dfabc3c3030c03d06667029
 coreVersion: 1
 temperature: 0.5
 maxTokens: 12000
@@ -19,6 +19,10 @@ failurePolicy: retry
 - path：路径与确认方案上下文
 - state：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
+
+上游字段输入（同一学习链条上，上游 Skill 的输出字段作为本 Skill 输入）：
+- 「skill:path-scene-framing.normalizedInput」 — 路径生成的主真相源（learning.service 注入 metadata）
+- 「skill:path-scene-framing.normalizedInput.planningHints」 — 上游对路径节奏的建议范围
 
 ## 执行规则
 
@@ -41,16 +45,17 @@ failurePolicy: retry
 17. milestone 必须按认知递进组织，而不是按功能模块、页面对象或知识目录排列；应体现类似：识别问题结构 → 建立判断框架 → 在场景中应用 → 通过验证与迭代收敛
 18. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
 19. 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
-20. milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个
-21. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
-22. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方
-23. 如果 successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果；如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点；如果两者都缺失，再依据 realProblem 与 keyStages 组织路径
-24. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则
-25. 如果输入提供 totalWeeks 不要超过它，maxWeeks 存在也不要超过，两者都缺失默认不超过 52 周；整体阶段任务量要与输入的 timeBudget/timePerWeek 等预算匹配，不要明显超配；预算不足时优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段
-26. 当原始目标天然容易让人想到视频教程、图片示意、界面演示时，也必须把路径收束为纯文本可完成的学习安排
-27. 如果提供了具体应用场景，所有里程碑标题、描述、goal 都必须紧密围绕该场景，不可使用泛泛的通用示例
-28. 路径名称必须直接反映用户的原始学习目标和具体应用场景，不可使用通用模板名称
-29. 如果用户水平是 beginner，路径名称必须使用"入门""基础""从零开始"等词，不得出现"中级""进阶""高级"等词
+20. hub concept 必须被至少 2 个非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次
+21. milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个
+22. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
+23. 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方
+24. 如果 successCriteria.observableResult 存在，所有里程碑 goal 必须通向该结果；如果 observableResult 缺失但 firstDeliverable 存在，用 firstDeliverable 作为首阶段和早期验收的主锚点；如果两者都缺失，再依据 realProblem 与 keyStages 组织路径
+25. goal 必须是用户可观察的阶段结果，但保持阶段级，不要下钻成 task 级验收细则
+26. 如果输入提供 totalWeeks 不要超过它，maxWeeks 存在也不要超过，两者都缺失默认不超过 52 周；整体阶段任务量要与输入的 timeBudget/timePerWeek 等预算匹配，不要明显超配；预算不足时优先保留 hub concept 与 firstDeliverable 相关阶段，裁剪外围阶段
+27. 当原始目标天然容易让人想到视频教程、图片示意、界面演示时，也必须把路径收束为纯文本可完成的学习安排
+28. 如果提供了具体应用场景，所有里程碑标题、描述、goal 都必须紧密围绕该场景，不可使用泛泛的通用示例
+29. 路径名称必须直接反映用户的原始学习目标和具体应用场景，不可使用通用模板名称
+30. 如果用户水平是 beginner，路径名称必须使用"入门""基础""从零开始"等词，不得出现"中级""进阶""高级"等词
 
 ## 输出字段
 

@@ -13,6 +13,7 @@ rules:
   - 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
   - knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
   - practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
+  - actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"），供下次开场复用
   - summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
   - 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
   - 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握

@@ -177,9 +177,9 @@ const SKILL_CN_NAMES: Record<string, string> = {
   'lesson-knowledge-enricher': '课后知识增强器',
   'virtual-learner-persona-designer': '虚拟学习者身份设计器',
   'virtual-learner-scenario-designer': '虚拟学习者故事设计器',
-  'virtual-learner-goal-dialogue-simulator': '虚拟学习者 Goal 对话模拟器',
+  'virtual-learner-goal-dialogue-simulator': '虚拟学习者澄清对话模拟器',
   'virtual-learner-path-evaluator': '虚拟学习者路径评估器（辅助调试）',
-  'virtual-learner-learn-turn-simulator': '虚拟学习者 Learn 回合模拟器',
+  'virtual-learner-learn-turn-simulator': '虚拟学习者学习回合模拟器',
   'virtual-learner-referee': '虚拟学习者实验裁判',
   'peer-reinforcement': '同伴强化',
 };

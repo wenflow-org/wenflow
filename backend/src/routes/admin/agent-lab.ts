@@ -65,7 +65,7 @@ function getAgentCategory(name: string): string {
     'GenerateAgent': 'generation',  // 统一的路径生成 Agent
     'EvaluateAgent': 'analysis',
     'OptimizeAgent': 'analysis',
-    'TutorAgent': 'execution'
+    'TutorAgent': 'learning'
   };
   return categories[name] || 'other';
 }

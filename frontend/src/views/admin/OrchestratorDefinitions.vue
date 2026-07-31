@@ -485,41 +485,41 @@ const PHASES: PhaseSpec[] = [
   {
     id: 'goal',
     agentId: 'goal-agent',
-    label: 'Goal 阶段',
-    shortName: 'Goal',
-    description: '目标收集、意图澄清与进入 Path 前的统一主输入整理。',
+    label: '澄清阶段',
+    shortName: '澄清',
+    description: '目标收集、意图澄清与进入规划前的统一主输入整理。',
     order: 1
   },
   {
     id: 'path',
     agentId: 'path-agent',
-    label: 'Path 阶段',
-    shortName: 'Path',
+    label: '规划阶段',
+    shortName: '规划',
     description: '路径生成、里程碑拆解与阶段任务扩展，是主规划链路。',
     order: 2
   },
   {
-    id: 'teaching',
+    id: 'learning',
     agentId: 'teaching-agent',
-    label: 'Teaching 阶段',
-    shortName: 'Teaching',
+    label: '学习阶段',
+    shortName: '学习',
     description: '课堂上下文构建、单轮教学、伴学强化与 wrapup 的执行层。',
     order: 3
   },
   {
-    id: 'learner',
+    id: 'profile',
     agentId: 'learner-agent',
-    label: 'Learner 阶段',
-    shortName: 'Learner',
-    description: '学习者画像、知识沉淀、动态投影与 learner 状态刷新。',
+    label: '画像阶段',
+    shortName: '画像',
+    description: '学习者画像、知识沉淀、动态投影与学习者状态刷新。',
     order: 4
   },
   {
     id: 'simulation',
     agentId: 'simulation-agent',
-    label: 'Simulation 阶段',
-    shortName: 'Simulation',
-    description: '虚拟学习者实验链路，串联 Goal、Path、Learn 的回放与评估。',
+    label: '仿真阶段',
+    shortName: '仿真',
+    description: '虚拟学习者实验链路，串联澄清、规划、学习的回放与评估。',
     order: 5
   }
 ]
@@ -541,12 +541,12 @@ const roleLabelMap: Record<string, string> = {
   'session-background-distillation': '课堂背景蒸馏',
   'dialogue-concept-extraction': '对话概念抽取',
   'learner-snapshot-refresh': '学习者快照刷新',
-  'goal-stage-learner-turn-simulation': 'Goal 阶段学习者模拟',
-  'goal-clarification-and-convergence': 'Goal 对话收敛',
+  'goal-stage-learner-turn-simulation': '澄清阶段学习者模拟',
+  'goal-clarification-and-convergence': '澄清对话收敛',
   'learning-path-generation': '学习路径生成',
   'path-review-reaction': '路径评估反应',
   'legacy-assisted-path-review': '辅助调试：路径评估',
-  'learn-stage-learner-turn-simulation': 'Learn 阶段学习者模拟',
+  'learn-stage-learner-turn-simulation': '学习阶段学习者模拟',
   'learning-session-execution': '学习会话执行',
   'experiment-referee-evaluation': '实验终局旁路裁判'
 }

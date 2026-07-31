@@ -165,14 +165,14 @@ router.get('/stages', async (_req: Request, res: Response) => {
           status: 'active',
         },
         {
-          id: 'execution',
-          displayName: 'Execution 阶段',
+          id: 'learning',
+          displayName: '学习阶段',
           description: '授课执行：Teaching Turn → Peer/Checkpoint → Wrapup',
           status: 'active',
         },
         {
-          id: 'learner',
-          displayName: 'Learner 阶段',
+          id: 'profile',
+          displayName: '画像阶段',
           description: '学习者画像增强与背景知识沉淀（编排器内部）',
           status: 'active',
         },
@@ -277,10 +277,12 @@ router.get('/flow/:stage', async (req: Request, res: Response) => {
     goal: 'goal-agent',
     requirement: 'goal-agent',
     path: 'path-agent',
+    learning: 'teaching-agent',
     execution: 'teaching-agent',
     teaching: 'teaching-agent',
-    learner: 'learner-agent',
-    learn: 'teaching-agent'
+    learn: 'teaching-agent',
+    profile: 'learner-agent',
+    learner: 'learner-agent'
   };
 
   const [fields, contracts] = await Promise.all([

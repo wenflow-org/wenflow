@@ -369,4 +369,39 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       error: 'API request canceled'
     }))
   })
+
+  it('同一 task 达到课时预算后显式失败，不再调用 LLM，也不误标完成', async () => {
+    setLearningState(buildLearningState({
+      status: 'active',
+      taskId: 'task-1',
+      taskTitle: '任务一',
+      teachingSessionId: 'teaching-1',
+      turns: 30
+    }))
+    // 课堂仍在进行：不触发“已完成课堂”的 legacy 恢复分支，让预算检查生效
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 1
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      currentTaskStopped: true
+    }))
+    expect(result.error).toContain('turn_budget_exhausted')
+    expect(mockExecuteSkill).not.toHaveBeenCalled()
+    expect(mockProcessStudentMessage).not.toHaveBeenCalled()
+    expect(mockCompleteTask).not.toHaveBeenCalled()
+    expect(sessionRecord.status).toBe('failed')
+    expect(sessionRecord.currentStage).toBe('learning')
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'error',
+      taskId: 'task-1'
+    }))
+  })
 })

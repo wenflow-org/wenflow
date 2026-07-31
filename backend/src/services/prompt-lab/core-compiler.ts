@@ -125,6 +125,15 @@ export function compileCoreFile(core: CoreFile, options: CompileCoreOptions = {}
     const advance = channel === 'state' && core.stateAdvance ? '（可推进）' : '';
     return `- ${channel}${advance}：${CORE_CHANNEL_DESCRIPTIONS[channel]}`;
   });
+  // §2.5 上游字段输入声明：渲染进同一块，注明出处与用途
+  if (core.inputs?.length) {
+    channelLines.push('');
+    channelLines.push('上游字段输入（同一学习链条上，上游 Skill 的输出字段作为本 Skill 输入）：');
+    for (const input of core.inputs) {
+      const note = input.note ? ` — ${input.note}` : '';
+      channelLines.push(`- 「${input.ref}」${note}`);
+    }
+  }
   sections.push(`## 使用通道\n\n${channelLines.join('\n')}`);
 
   // ## 执行规则（编号平铺）

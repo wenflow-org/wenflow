@@ -78,22 +78,22 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
 
 // ============================================================
 // agentId → stage 映射（运营在 AI 起草时挑该 stage 的字段）
-// stage 与 OrchestratorDefinitions 页一致：goal / path / learn
+// stage 与 OrchestratorDefinitions 页一致：澄清(goal) / 规划(path) / 学习(learning)
 // 暂未迁移到字段路由的 agent 留空，前端会回退到「手填字段 ID」
 // ============================================================
-const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learn'> = {
+const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learning'> = {
   'skill:goal-conversation': 'goal',
   'skill:goal-profile-inference': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
   'skill:path-scene-framing': 'path',
   'skill:stage-designer': 'path',
-  'skill:teaching-turn': 'learn',
-  'skill:session-wrapup': 'learn',
-  'skill:peer-reinforcement': 'learn',
-  'skill:adaptive-guidance-copy': 'learn',
-  'skill:learning-pattern-distiller': 'learn',
-  'skill:lesson-knowledge-enricher': 'learn',
+  'skill:teaching-turn': 'learning',
+  'skill:session-wrapup': 'learning',
+  'skill:peer-reinforcement': 'learning',
+  'skill:adaptive-guidance-copy': 'learning',
+  'skill:learning-pattern-distiller': 'learning',
+  'skill:lesson-knowledge-enricher': 'learning',
 };
 
 // ============================================================

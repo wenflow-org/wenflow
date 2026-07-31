@@ -12,6 +12,11 @@ channels:
   - state
   - task
 stateAdvance: false
+inputs:
+  - ref: skill:path-scene-framing.normalizedInput
+    note: 路径生成的主真相源（learning.service 注入 metadata）
+  - ref: skill:path-scene-framing.normalizedInput.planningHints
+    note: 上游对路径节奏的建议范围
 rules:
   - 输入：标签化纯文本（非 JSON），分区含原始学习目标/学习主题/目标水平/具体应用场景/学习重点/可用时间/总学习周期（周）/用户确认的方案轮廓/路径前置清洗结果（normalizedInput JSON）/完整对话历史/【路径重调模式】/【强制要求】
   - normalizedInput 是路径生成的主真相源，通过【路径前置清洗结果】JSON 分区提供；未提供时以标签文本分区和对话历史为准
@@ -32,6 +37,7 @@ rules:
   - milestone 必须按认知递进组织，而不是按功能模块、页面对象或知识目录排列；应体现类似：识别问题结构 → 建立判断框架 → 在场景中应用 → 通过验证与迭代收敛
   - 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
   - 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
+  - hub concept 必须被至少 2 个非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次
   - milestone 数量优先遵守 normalizedInput.planningHints.milestoneRange；若未提供 planningHints，默认 3-6 个
   - milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
   - 如果 normalizedInput.confirmedProposal.firstDeliverable 存在，第一个 milestone 必须直接服务于它；第一个 milestone 的 goal 应明确首阶段要建立的核心能力入口，而不是写成完整执行处方

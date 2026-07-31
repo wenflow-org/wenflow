@@ -79,6 +79,13 @@ export interface TeachingTurnInput {
       recap: string | null;
     };
     pathBackgroundContext?: Record<string, any>;
+    learningSignal?: string | null;
+    lastLessonRecap?: {
+      sourceTopic?: string | null;
+      topicSummary?: string | null;
+      retrievalCue?: string | null;
+      unresolvedPoints?: string[];
+    } | null;
   };
   knowledge: {
     points: Array<{

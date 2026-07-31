@@ -666,7 +666,7 @@ const getPipelineBucket = (profile: VirtualLearnerProfile): Exclude<ProfileFilte
 const experimentSteps = [
   { step: '01', title: '准备样本', desc: '完善稳定画像和至少一个 Story。' },
   { step: '02', title: '选择 Story', desc: '固定开场、压力点和问题知识。' },
-  { step: '03', title: '黑盒运行', desc: '通过普通用户 API 推进 Goal、Path、Learn。' },
+  { step: '03', title: '黑盒运行', desc: '通过普通用户 API 推进澄清、规划、学习。' },
   { step: '04', title: '裁判评审', desc: '终态后生成独立报告。' }
 ]
 
@@ -1287,11 +1287,11 @@ const getSessionStatusLabel = (status: string | undefined) => {
 const getSessionStageLabel = (stage: string | undefined) => {
   switch (stage) {
     case 'goal':
-      return 'Goal'
+      return '澄清'
     case 'path':
-      return 'Path'
+      return '规划'
     case 'learning':
-      return 'Learn'
+      return '学习'
     default:
       return stage || '-'
   }

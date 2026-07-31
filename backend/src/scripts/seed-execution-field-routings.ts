@@ -1,5 +1,5 @@
 ﻿/**
- * Execution（Learn）阶段字段路由 seed（skill 粒度）
+ * 学习阶段字段路由 seed（skill 粒度）
  *
  * 契约（按执行顺序）：
  *   - skill:teaching-turn：单轮教学回复 + 结构化教学状态
@@ -21,7 +21,7 @@ interface SeedField { fieldId: string; promptRole: PromptRole; valueType: string
 interface SeedContract { agentId: string; displayName: string; description: string; }
 interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; handoff: string[]; internal: boolean; accumulate: boolean; visibilityPreset?: string; notes?: string; }
 
-const STAGE = 'execution';
+const STAGE = 'learning';
 
 export const EXECUTION_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
   { agentId: 'skill:teaching-turn', displayName: '教学回合 Skill', description: '生成单轮教学回复，输出 reply + analysis + knowledge + control' },

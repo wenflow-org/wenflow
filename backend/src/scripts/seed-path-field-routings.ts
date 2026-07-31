@@ -83,7 +83,8 @@ export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
       'normalizedInput.planningHints.conceptRange', 'normalizedInput.planningHints.subtasksPerStageRange',
       'normalizedInput.planningHints.subtaskMinutesRange', 'normalizedInput.planningHints.maxWeeks'].map(fieldId => ({
     agentId: 'skill:path-scene-framing' as const, fieldId,
-    render: 'hidden' as RenderValue, handoff: ['skill:path-planning'],
+    // normalizedInput 同时供 stage-designer（learning.service stageDesignerBaseInput）
+    render: 'hidden' as RenderValue, handoff: ['skill:path-planning', 'skill:stage-designer'],
     internal: true, accumulate: false,
     visibilityPreset: 'agent-internal'
   })),
@@ -93,8 +94,9 @@ export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
   { agentId: 'skill:path-planning', fieldId: 'path.name', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: false },
   { agentId: 'skill:path-planning', fieldId: 'path.summary', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: false },
   { agentId: 'skill:path-planning', fieldId: 'path.totalMilestones', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: false },
-  { agentId: 'skill:path-planning', fieldId: 'cognitiveCore.cognitiveDomain', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: true },
-  { agentId: 'skill:path-planning', fieldId: 'cognitiveCore.coreConcepts', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: true },
+  // cognitiveCore 同时供 stage-designer（learning.service stageDesignerBaseInput）
+  { agentId: 'skill:path-planning', fieldId: 'cognitiveCore.cognitiveDomain', render: 'visible', handoff: ['path-agent', 'skill:stage-designer'], internal: false, accumulate: true },
+  { agentId: 'skill:path-planning', fieldId: 'cognitiveCore.coreConcepts', render: 'visible', handoff: ['path-agent', 'skill:stage-designer'], internal: false, accumulate: true },
   ...['milestones.stageNumber', 'milestones.title', 'milestones.coreConcept',
       'milestones.goal', 'milestones.estimatedHours'].map(fieldId => ({
     agentId: 'skill:path-planning' as const, fieldId,

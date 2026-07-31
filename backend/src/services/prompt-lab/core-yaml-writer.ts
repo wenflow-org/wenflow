@@ -13,6 +13,7 @@ import {
   CORE_FAILURE_POLICIES,
   CORE_FIELD_TYPES,
   CORE_OUTPUT_MEDIA,
+  parseInputRef,
   type CoreChannel,
   type CoreFailurePolicy,
   type CoreFile,
@@ -27,6 +28,7 @@ export interface CoreFormInput {
   identity?: unknown;
   channels?: unknown;
   stateAdvance?: unknown;
+  inputs?: unknown;
   rules?: unknown;
   fields?: unknown;
   constraints?: unknown;
@@ -93,6 +95,25 @@ export function normalizeCoreFormInput(
     ? (String(raw.outputMedia) as CoreOutputMedia)
     : 'json';
 
+  const inputs = (Array.isArray(raw.inputs) ? raw.inputs : [])
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const entry = item as Record<string, unknown>;
+      const ref = String(entry.ref ?? '').trim();
+      const note = String(entry.note ?? '').trim();
+      return { ref, note };
+    })
+    .filter((entry) => entry.ref)
+    .map((entry) => {
+      const parts = parseInputRef(entry.ref);
+      return {
+        ref: entry.ref,
+        skill: parts?.skill || '',
+        fieldPath: parts?.fieldPath || '',
+        ...(entry.note ? { note: entry.note } : {}),
+      };
+    });
+
   const examples = asTrimmedStringList(raw.examples);
 
   const core: CoreFile = {
@@ -101,6 +122,7 @@ export function normalizeCoreFormInput(
     identity: String(raw.identity ?? '').trim(),
     channels,
     stateAdvance: raw.stateAdvance === true,
+    ...(inputs.length ? { inputs } : {}),
     rules: asTrimmedStringList(raw.rules),
     fields,
     constraints: asTrimmedStringList(raw.constraints),
@@ -131,6 +153,9 @@ export function serializeCoreFile(core: CoreFile, headerComment?: string): strin
     identity: core.identity,
     channels: core.channels,
     stateAdvance: core.stateAdvance,
+    ...(core.inputs?.length
+      ? { inputs: core.inputs.map((input) => ({ ref: input.ref, ...(input.note ? { note: input.note } : {}) })) }
+      : {}),
     rules: core.rules,
     fields: core.fields.map((field) => ({
       name: field.name,

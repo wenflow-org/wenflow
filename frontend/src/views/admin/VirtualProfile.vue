@@ -401,7 +401,7 @@
               <el-button @click="openProjectionEntry('dashboard')">学习台</el-button>
               <el-button :disabled="!testProjection.entries?.formal?.goal" @click="openProjectionEntry('goal')">目标</el-button>
               <el-button :disabled="!testProjection.entries?.formal?.path" @click="openProjectionEntry('path')">路径</el-button>
-              <el-button :disabled="!testProjection.entries?.formal?.learn" @click="openProjectionEntry('learn')">学习</el-button>
+              <el-button :disabled="!testProjection.entries?.formal?.learning" @click="openProjectionEntry('learning')">学习</el-button>
             </div>
           </section>
 
@@ -410,7 +410,7 @@
               <div class="projection-runtime__actions">
               <el-button plain :disabled="!testProjection.entries?.test?.goal" @click="openTestDebugEntry('goal')">调试 Goal</el-button>
               <el-button plain :disabled="!testProjection.entries?.test?.path" @click="openTestDebugEntry('path')">调试 Path</el-button>
-              <el-button plain :disabled="!testProjection.entries?.test?.learn" @click="openTestDebugEntry('learn')">调试 Learn</el-button>
+              <el-button plain :disabled="!testProjection.entries?.test?.learning" @click="openTestDebugEntry('learning')">调试学习</el-button>
             </div>
           </section>
         </template>
@@ -525,7 +525,7 @@ interface VirtualLearnerDetail {
   [key: string]: unknown
 }
 
-type ProjectionEntryKey = 'dashboard' | 'goal' | 'path' | 'learn'
+type ProjectionEntryKey = 'dashboard' | 'goal' | 'path' | 'learning'
 
 interface TestProjection {
   recommendedEntry: ProjectionEntryKey
@@ -534,7 +534,7 @@ interface TestProjection {
   latestSession?: { id?: string; updatedAt?: string; [key: string]: unknown } | null
   entries?: {
     formal?: Partial<Record<ProjectionEntryKey, string>>
-    test?: Partial<Record<'goal' | 'path' | 'learn', string>>
+    test?: Partial<Record<'goal' | 'path' | 'learning', string>>
     [key: string]: unknown
   }
   [key: string]: unknown
@@ -571,9 +571,9 @@ const activeTab = ref('overview')
 
 const projectionEntryLabelMap: Record<string, string> = {
   dashboard: 'Dashboard',
-  goal: 'Goal',
-  path: 'Path',
-  learn: 'Learn'
+  goal: '澄清',
+  path: '规划',
+  learning: '学习'
 }
 
 const summarizeStory = (value: string, limit = 84) => {
@@ -830,9 +830,9 @@ const getSessionStatusLabel = (status: string | undefined) => {
 
 const getSessionStageLabel = (stage: string | undefined) => {
   switch (stage) {
-    case 'goal': return 'Goal'
-    case 'path': return 'Path'
-    case 'learning': return 'Learn'
+    case 'goal': return '澄清'
+    case 'path': return '规划'
+    case 'learning': return '学习'
     default: return stage || '-'
   }
 }
@@ -1164,7 +1164,7 @@ const openProjectionEntry = async (entry: ProjectionEntryKey) => {
   }
 }
 
-const openTestDebugEntry = (entry: 'goal' | 'path' | 'learn') => {
+const openTestDebugEntry = (entry: 'goal' | 'path' | 'learning') => {
   const target = testProjection.value?.entries?.test?.[entry]
   if (!target) {
     ElMessage.info(`当前没有可打开的 ${projectionEntryLabelMap[entry]} 调试入口`)

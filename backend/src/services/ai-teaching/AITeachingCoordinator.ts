@@ -732,6 +732,8 @@ function buildTeachingTurnInput(
       totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
       taskKnowledgeScope: context.taskKnowledgeScope,
       pathBackgroundContext: buildPathBackgroundContext(context),
+      learningSignal: context.learningSignal,
+      lastLessonRecap: context.lastLessonRecap,
       contextCompression: compression.compressed ? {
         enabled: true,
         estimatedTokens: compression.estimatedTokens,
@@ -1090,6 +1092,8 @@ export class AITeachingOrchestrator {
           recommendedPacing: runtimeSignals.recommendedPacing,
         },
         openingMode,
+        ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
+        ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
         __fallback: fallbackOpening,
         __prompt: {
           userId: context.userId,

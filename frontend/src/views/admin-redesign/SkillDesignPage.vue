@@ -222,6 +222,12 @@
                 <span>{{ dg.message }}</span>
               </div>
             </div>
+            <div v-if="coreInputWarnings.length" class="sdp-pw__diag sdp-pw__diag--warn">
+              <div v-for="(w, i) in coreInputWarnings" :key="i" class="sdp-pw__diag-item">
+                <span class="mono">{{ w.code }}</span>
+                <span>{{ w.message }}</span>
+              </div>
+            </div>
 
             <!-- 表单视图 -->
             <div v-if="coreViewMode === 'form'" class="sdp-pwform">
@@ -258,6 +264,21 @@
                       </select>
                     </label>
                   </div>
+                </section>
+
+                <!-- 输入声明（上游字段引用） -->
+                <section class="sdp-pwform__card">
+                  <h5>输入声明 <b class="mono">{{ coreForm.inputs.length }}</b></h5>
+                  <p class="sdp-pwform__note">
+                    声明本 Skill 消费同一链条上哪个上游 Skill 的哪个输出字段（<code class="mono">skill:xxx.fieldPath</code>）。
+                    保存/发布时与字段路由 handoff 对账（advisory）；血缘表自动收录。
+                  </p>
+                  <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
+                    <input v-model="input.ref" class="sdp-input mono" placeholder="skill:path-scene-framing.normalizedInput" @input="coreDirty = true" />
+                    <input v-model="input.note" class="sdp-input" placeholder="用途说明（可选）" @input="coreDirty = true" />
+                    <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删</button>
+                  </div>
+                  <button type="button" class="mk-link" @click="addInput">+ 添加上游输入</button>
                 </section>
 
                 <!-- 规则 -->
@@ -382,6 +403,16 @@
                 </div>
                 <div v-if="coreGates.semantic" class="sdp-pw__gate" :class="coreGateCls(coreGates.semanticDecision === 'pass')">
                   含义冻结 {{ coreGates.semantic.verdict }}（{{ coreGates.semanticDecision }}）
+                </div>
+                <div
+                  v-if="Array.isArray(coreGates.inputHandoff)"
+                  class="sdp-pw__gate"
+                  :class="coreGateCls(coreGates.inputHandoff.length === 0)"
+                >
+                  输入对账 {{ coreGates.inputHandoff.length === 0 ? '✓' : `⚠ ${coreGates.inputHandoff.length} 条 advisory` }}
+                </div>
+                <div v-for="(issue, i) in coreGates.inputHandoff || []" :key="`ih-${i}`" class="sdp-pw__gate-issue">
+                  [{{ issue.code }}] {{ issue.message }}
                 </div>
                 <div v-for="(issue, i) in [...(coreGates.structure || []), ...(coreGates.fieldFreeze || [])]" :key="i" class="sdp-pw__gate-issue">
                   [{{ issue.code }}] {{ issue.message }}
@@ -1246,6 +1277,7 @@ interface CoreFormState {
   stateAdvance: boolean
   deltaOutput: boolean
   outputMedia: string
+  inputs: { ref: string; note: string }[]
   rules: string[]
   constraints: string[]
   examples: string[]
@@ -1270,6 +1302,7 @@ const coreCompiling = ref(false)
 const corePublishing = ref(false)
 const coreRollbacking = ref(false)
 const coreDiagnostics = ref<CoreDiagnostic[]>([])
+const coreInputWarnings = ref<CoreDiagnostic[]>([])
 const coreClassification = ref<CoreClassification | null>(null)
 const coreSideTab = ref<'preview' | 'versions' | 'lineage'>('preview')
 const coreGates = ref<any>(null)
@@ -1298,6 +1331,12 @@ function initCoreForm(core: Record<string, unknown> | null) {
     stateAdvance: core.stateAdvance === true,
     deltaOutput: core.deltaOutput === true,
     outputMedia: String(core.outputMedia || 'json'),
+    inputs: Array.isArray(core.inputs)
+      ? (core.inputs as Array<Record<string, unknown>>).map((item) => ({
+          ref: String(item.ref || ''),
+          note: String(item.note || '')
+        }))
+      : [],
     rules: Array.isArray(core.rules) ? core.rules.map((r) => String(r)) : [],
     constraints: Array.isArray(core.constraints) ? core.constraints.map((c) => String(c)) : [],
     examples: Array.isArray(core.examples) ? (core.examples as unknown[]).map((e) => String(e)) : [],
@@ -1330,6 +1369,10 @@ function buildCorePayload() {
     stateAdvance: f.stateAdvance,
     deltaOutput: f.deltaOutput,
     outputMedia: f.outputMedia,
+    inputs: f.inputs.filter((item) => item.ref.trim()).map((item) => ({
+      ref: item.ref.trim(),
+      ...(item.note.trim() ? { note: item.note.trim() } : {})
+    })),
     rules: f.rules,
     constraints: f.constraints,
     ...(f.examples.length ? { examples: f.examples } : {}),
@@ -1379,6 +1422,14 @@ function removeField(i: number) {
   coreForm.value?.fields.splice(i, 1)
   coreDirty.value = true
 }
+function addInput() {
+  coreForm.value?.inputs.push({ ref: '', note: '' })
+  coreDirty.value = true
+}
+function removeInput(i: number) {
+  coreForm.value?.inputs.splice(i, 1)
+  coreDirty.value = true
+}
 
 const coreShortHash = (hash?: string | null) => (hash ? `${hash.slice(0, 10)}…` : '—')
 const coreGateCls = (ok: boolean) => (ok ? 'sdp-pw__gate--ok' : 'sdp-pw__gate--bad')
@@ -1413,18 +1464,21 @@ async function saveCore() {
   coreSaving.value = true
   coreClassification.value = null
   coreDiagnostics.value = []
+  coreInputWarnings.value = []
   try {
     if (coreViewMode.value === 'form') {
       const payload = buildCorePayload()
       if (!payload) throw new Error('表单未加载')
       const res = await adminPromptWorkbenchApi.saveCoreForm(skillId.value, payload)
       coreClassification.value = res.data?.classification || null
+      coreInputWarnings.value = res.data?.inputWarnings || []
       // 回读：raw 源码与表单状态同步到磁盘真值
       coreRequested = false
       await ensureCoreLoaded()
     } else {
       const res = await adminPromptWorkbenchApi.saveCore(skillId.value, coreText.value)
       coreClassification.value = res.data?.classification || null
+      coreInputWarnings.value = res.data?.inputWarnings || []
     }
     coreDirty.value = false
     showToast(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
@@ -1665,6 +1719,7 @@ watch(agentIdParam, () => {
   coreText.value = ''
   coreDirty.value = false
   coreDiagnostics.value = []
+  coreInputWarnings.value = []
   coreClassification.value = null
   coreGates.value = null
   coreCompiledPrompt.value = ''
@@ -2277,6 +2332,7 @@ onMounted(() => {
 .sdp-pw__classify--restricted { background: var(--mk-amber-bg); }
 .sdp-pw__classify--blocked { background: var(--mk-red-bg); }
 .sdp-pw__diag { margin: 0 16px 10px; display: grid; gap: 4px; }
+.sdp-pw__diag--warn .sdp-pw__diag-item { color: var(--mk-amber); }
 .sdp-pw__diag-item { display: flex; gap: 8px; font-size: 12px; color: var(--mk-red); }
 .sdp-pw__diag-item .mono { flex-shrink: 0; }
 .sdp-pw__publish {
@@ -2383,6 +2439,21 @@ onMounted(() => {
   font-size: 12px;
   color: var(--mk-amber);
   line-height: 1.6;
+}
+.sdp-pwform__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mk-faint);
+  line-height: 1.6;
+}
+.sdp-pwform__inputrow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, 1fr) 28px;
+  gap: 10px;
+  align-items: center;
+}
+@media (max-width: 860px) {
+  .sdp-pwform__inputrow { grid-template-columns: 1fr 28px; }
 }
 .sdp-pwform__field { display: grid; gap: 6px; }
 .sdp-pwform__field > span { font-size: 12px; color: var(--mk-muted); font-weight: 600; }

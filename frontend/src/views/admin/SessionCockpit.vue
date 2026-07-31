@@ -1143,7 +1143,7 @@ const stageStripItems = computed(() => {
       : reached || (key === 'referee' && isTerminal.value)
     return {
       key,
-      label: key === 'goal' ? 'Goal' : key === 'path' ? 'Path' : key === 'learning' ? 'Learn' : key === 'referee' ? 'Referee' : 'Wrapup',
+      label: key === 'goal' ? '澄清' : key === 'path' ? '规划' : key === 'learning' ? '学习' : key === 'referee' ? '裁判' : '收尾',
       done,
       disabled: !unlocked,
       statusLabel: done ? '已完成'
@@ -1253,7 +1253,7 @@ const overviewFacts = computed(() => {
 
   return [
     { label: '当前定位', value: `${currentStageLabel} · ${statusText.value}`, meta: `${Math.min(stageIndex.value + 1, stageOrder.value.length)}/${stageOrder.value.length} 阶段` },
-    { label: 'Goal 对话', value: `${goalConversation.value.length} 轮消息`, meta: goalReady.value ? '目标已收敛' : '目标对齐中' },
+    { label: '澄清对话', value: `${goalConversation.value.length} 轮消息`, meta: goalReady.value ? '目标已收敛' : '目标对齐中' },
     { label: '路径规模', value: milestones.value.length ? `${milestones.value.length} 个里程碑` : '尚无 Path', meta: taskCount ? `${taskCount} 个学习任务` : '等待路径结果' },
     { label: 'Learn 进展', value: `${learnConversation.value.length} 轮消息`, meta: wrapupSummary.value ? '总结已生成' : learningStarted.value ? '教学进行中' : '尚未开始' }
   ]

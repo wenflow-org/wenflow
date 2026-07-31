@@ -177,6 +177,8 @@ async function teachingOpeningGeneratorHandler(input: any) {
       currentMilestoneTitle: d.currentMilestoneTitle,
       learner: d.learner,
       openingMode: d.openingMode,
+      ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
+      ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
     }),
     normalize: (parsed, d) => ({
       message: asTrimmedString(parsed?.message),

@@ -21,6 +21,10 @@ describe('core-yaml-writer', () => {
       identity: '你是测试身份。\n第二行。',
       channels: ['dialogue', 'state'],
       stateAdvance: true,
+      inputs: [
+        { ref: 'skill:path-scene-framing.normalizedInput', skill: 'path-scene-framing', fieldPath: 'normalizedInput', note: '主真相源' },
+        { ref: 'skill:path-planning.milestones.stageNumber', skill: 'path-planning', fieldPath: 'milestones.stageNumber' },
+      ],
       rules: ['规则一', '规则二：包含：冒号 与 "引号"'],
       fields: [
         { name: 'reply', type: 'string', optional: false, desc: '回复正文', turn: true },
@@ -40,6 +44,47 @@ describe('core-yaml-writer', () => {
     expect(parsed.diagnostics).toEqual([]);
     expect(parsed.core).not.toBeNull();
     expect(stripLoaded(parsed.core!)).toEqual(stripLoaded(core));
+  });
+
+  it('loader 解析 inputs 声明；非法 ref 报 schema-error', () => {
+    const valid = parseCoreFile('virtual', [
+      'skillId: demo',
+      'baseVersion: 1',
+      'identity: x',
+      'channels: [dialogue]',
+      'stateAdvance: false',
+      'inputs:',
+      '  - ref: skill:path-scene-framing.normalizedInput.problemSpace.realProblem',
+      '    note: 真实问题',
+      'rules: [r]',
+      'fields: [{ name: f, type: string, desc: d }]',
+      'constraints: []',
+      'params: { temperature: 0.5, maxTokens: 100, failurePolicy: retry }',
+    ].join('\n'));
+    expect(valid.diagnostics).toEqual([]);
+    expect(valid.core?.inputs).toEqual([
+      {
+        ref: 'skill:path-scene-framing.normalizedInput.problemSpace.realProblem',
+        skill: 'path-scene-framing',
+        fieldPath: 'normalizedInput.problemSpace.realProblem',
+        note: '真实问题',
+      },
+    ]);
+
+    const invalid = parseCoreFile('virtual', [
+      'skillId: demo',
+      'baseVersion: 1',
+      'identity: x',
+      'channels: [dialogue]',
+      'stateAdvance: false',
+      'inputs: [{ ref: "not-a-ref" }]',
+      'rules: [r]',
+      'fields: [{ name: f, type: string, desc: d }]',
+      'constraints: []',
+      'params: { temperature: 0.5, maxTokens: 100, failurePolicy: retry }',
+    ].join('\n'));
+    expect(invalid.core).toBeNull();
+    expect(invalid.diagnostics[0]?.message).toContain('inputs[0].ref');
   });
 
   it('normalizeCoreFormInput 矫正松散表单输入', () => {
@@ -73,6 +118,32 @@ describe('core-yaml-writer', () => {
     // 矫正后再序列化，必须过 schema
     const parsed = parseCoreFile('virtual', serializeCoreFile(result.core));
     expect(parsed.core).not.toBeNull();
+  });
+
+  it('编译器把 inputs 渲染进「使用通道」块', async () => {
+    const { compileCoreFile } = await import('../core-compiler');
+    const core: CoreFile = {
+      skillId: 'demo',
+      baseVersion: 1,
+      identity: 'x',
+      channels: ['dialogue'],
+      stateAdvance: false,
+      inputs: [
+        { ref: 'skill:path-scene-framing.normalizedInput', skill: 'path-scene-framing', fieldPath: 'normalizedInput', note: '主真相源' },
+      ],
+      rules: ['r'],
+      fields: [{ name: 'f', type: 'string', optional: false, desc: 'd', turn: false }],
+      constraints: [],
+      params: { temperature: 0.5, maxTokens: 100, failurePolicy: 'retry' },
+      deltaOutput: false,
+      outputMedia: 'json',
+    };
+    const { body } = compileCoreFile(core);
+    expect(body).toContain('上游字段输入');
+    expect(body).toContain('「skill:path-scene-framing.normalizedInput」 — 主真相源');
+    // 无 inputs 时不渲染该小节
+    const { body: bodyNoInputs } = compileCoreFile({ ...core, inputs: undefined });
+    expect(bodyNoInputs).not.toContain('上游字段输入');
   });
 
   it('extractHeaderComment 提取头部注释块并在序列化时保留', () => {

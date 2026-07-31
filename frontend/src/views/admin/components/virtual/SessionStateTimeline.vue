@@ -372,7 +372,7 @@
     (['goal', 'learning'] as ActorStage[])
       .map((stage) => ({
         key: stage,
-        label: stage === 'goal' ? 'Goal' : 'Learn',
+        label: stage === 'goal' ? '澄清' : '学习',
         count: actorEntries.value.filter((entry) => entry.stage === stage).length
       }))
       .filter((option) => option.count > 0)
@@ -519,7 +519,7 @@
       verifying: '验证理解',
       ready_to_close: '准备收口'
     }
-    return labels[phase || ''] || (stage === 'goal' ? 'Goal 回合' : 'Learn 回合')
+    return labels[phase || ''] || (stage === 'goal' ? '澄清回合' : '学习回合')
   }
 
   function emotionLabel(emotion: string) {

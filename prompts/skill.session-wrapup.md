@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: 40d0355194d7f5e7d9933e105eaec4f39617f338d262e5e1cbed6378e1a0dccf
+coreHash: 6a248735085ef2de0c1351a2566b6fbf5be1d9c616f12e9ea01bf5e5c08e9a7a
 coreVersion: 1
 temperature: 0.7
 maxTokens: 4000
@@ -27,11 +27,12 @@ failurePolicy: fallback
 4. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
 5. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
 6. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
-7. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
-8. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
-9. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
-10. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
-11. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
+7. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"），供下次开场复用
+8. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
+9. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
+10. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
+11. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
+12. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
 
 ## 输出字段
 

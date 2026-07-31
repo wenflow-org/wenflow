@@ -669,12 +669,12 @@ function buildVirtualLearnerTestProjection(profile: any) {
     ? storyPool.find((story: any) => story?.id === latestStoryContext.storyId) || latestStoryContext
     : latestStoryContext || storyPool[0] || null;
 
-  let recommendedEntry: 'dashboard' | 'goal' | 'path' | 'learn' = 'dashboard';
+  let recommendedEntry: 'dashboard' | 'goal' | 'path' | 'learning' = 'dashboard';
   let recommendedReason = '当前还没有运行记录，先进入前台总览。';
 
   if (latestSession && latestBindings?.currentTaskId) {
-    recommendedEntry = 'learn';
-    recommendedReason = '最近一次运行已经进入 Learn，直接查看当前学习任务最贴近真实状态。';
+    recommendedEntry = 'learning';
+    recommendedReason = '最近一次运行已经进入学习阶段，直接查看当前学习任务最贴近真实状态。';
   } else if (latestSession && latestBindings?.learningPathId) {
     recommendedEntry = 'path';
     recommendedReason = '最近一次运行已经生成 Path，先查看路径内容与阶段承接。';
@@ -714,7 +714,7 @@ function buildVirtualLearnerTestProjection(profile: any) {
         path: latestBindings?.learningPathId
           ? `/learning-path/${latestBindings.learningPathId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
           : null,
-        learn: latestBindings?.currentTaskId
+        learning: latestBindings?.currentTaskId
           ? `/learn/${latestBindings.currentTaskId}?virtualSessionId=${latestSession.id}&viewMode=formal&projection=1`
           : null,
       },
@@ -725,7 +725,7 @@ function buildVirtualLearnerTestProjection(profile: any) {
         path: latestBindings?.learningPathId
           ? `/admin/test/learning-path/${latestBindings.learningPathId}?virtualSessionId=${latestSession.id}&viewMode=debug`
           : null,
-        learn: latestBindings?.currentTaskId
+        learning: latestBindings?.currentTaskId
           ? `/admin/test/learn/${latestBindings.currentTaskId}?virtualSessionId=${latestSession.id}&viewMode=debug`
           : null,
       }
@@ -897,12 +897,12 @@ router.get('/:id/stories', async (req: any, res) => {
           formal: {
             goal: latestRun?.bindings?.goalConversationId ? `/goal-conversation/${latestRun.bindings.goalConversationId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
             path: latestRun?.bindings?.learningPathId ? `/learning-path/${latestRun.bindings.learningPathId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
-            learn: latestRun?.bindings?.currentTaskId ? `/learn/${latestRun.bindings.currentTaskId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
+            learning: latestRun?.bindings?.currentTaskId ? `/learn/${latestRun.bindings.currentTaskId}?virtualSessionId=${latestRun.sessionId}&viewMode=formal` : null,
           },
           test: {
             goal: latestRun?.bindings?.goalConversationId ? `/admin/test/goal-full/${latestRun.bindings.goalConversationId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
             path: latestRun?.bindings?.learningPathId ? `/admin/test/learning-path/${latestRun.bindings.learningPathId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
-            learn: latestRun?.bindings?.currentTaskId ? `/admin/test/learn/${latestRun.bindings.currentTaskId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
+            learning: latestRun?.bindings?.currentTaskId ? `/admin/test/learn/${latestRun.bindings.currentTaskId}?virtualSessionId=${latestRun.sessionId}&viewMode=debug` : null,
           }
         }
       }

@@ -6,6 +6,7 @@
  */
 
 import type { CoreFile } from './core-file-loader';
+import { scanCoreFiles } from './core-file-loader';
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
@@ -63,6 +64,33 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
 /** 查询某 skill 的血缘条目（文件优先，静态表兜底；按 mtime 缓存） */
 export function getFieldLineage(skillId: string): FieldLineageEntry[] {
   return loadLineageEntries().filter((entry) => entry.skillId === skillId);
+}
+
+/**
+ * §2.5 声明式血缘：静态注册表 ∪ 全仓 core inputs 声明推导。
+ * 凡 core Y 的 inputs 引用 skill:X.fieldPath，即记为 X 该字段的消费者 skill:Y（inputs 声明）。
+ */
+export function getFieldLineageWithDeclarations(skillId: string): FieldLineageEntry[] {
+  const merged = new Map<string, FieldLineageEntry>();
+  for (const entry of getFieldLineage(skillId)) {
+    merged.set(entry.field, { ...entry, consumers: [...entry.consumers] });
+  }
+
+  const { files } = scanCoreFiles();
+  for (const core of files) {
+    if (core.skillId === skillId || !core.inputs?.length) continue;
+    for (const input of core.inputs) {
+      if (input.skill !== skillId) continue;
+      const consumer = `skill:${core.skillId}（inputs 声明）`;
+      const existing = merged.get(input.fieldPath);
+      if (existing) {
+        if (!existing.consumers.includes(consumer)) existing.consumers.push(consumer);
+      } else {
+        merged.set(input.fieldPath, { skillId, field: input.fieldPath, consumers: [consumer] });
+      }
+    }
+  }
+  return Array.from(merged.values());
 }
 
 const LINEAGE_FILE = path.join(process.cwd(), '../prompt-lab/field-lineage.yaml');

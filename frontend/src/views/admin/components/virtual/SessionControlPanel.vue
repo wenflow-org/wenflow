@@ -208,14 +208,14 @@ const canAbandon = computed(() => !!props.blackboxMode && !['completed', 'failed
 
 const stepHint = computed(() => {
   if (props.blackboxMode) return ''
-  if (props.currentStage === 'goal') return '一轮 Goal 对话'
+  if (props.currentStage === 'goal') return '一轮澄清对话'
   if (props.currentStage === 'learning') return '一轮教学'
   return '当前阶段不可单步'
 })
 
 const stepLabel = computed(() => {
   if (props.blackboxMode && props.currentStage === 'path') {
-    return props.pathReady ? '进入 Learn' : '刷新结果'
+    return props.pathReady ? '进入学习' : '刷新结果'
   }
   return '单步'
 })

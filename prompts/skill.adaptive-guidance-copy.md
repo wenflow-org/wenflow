@@ -1,6 +1,6 @@
 ---
 agentId: skill:adaptive-guidance-copy
-coreHash: 6ce91d7ac0662857a9e57927c594d7b8a8276bb23c1ac11bc0a31798426223aa
+coreHash: 88ad82a1a840a97cd22609601ddd25e30ecc1fd319d90b4d537f9288249ce651
 coreVersion: 1
 temperature: 0.6
 maxTokens: 2000
@@ -26,6 +26,7 @@ failurePolicy: fallback
 4. 文案要简洁、自然、具体，不要像机器总结
 5. 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
 6. learning-state 页面要避免重复解释指标公式，更聚焦"当前状态意味着什么"
+7. 输入的 learner 画像中含 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话
 
 ## 输出字段
 
