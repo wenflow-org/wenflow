@@ -741,13 +741,6 @@ export const adminAgentsApi = {
   getManifestDiagnostics: async () => {
     return adminAxios.get<{ data: ManifestDiagnosticsData }>('/admin/manifest/diagnostics');
   },
-
-  testAgent: async (agentId: string, input: unknown, context?: unknown) => {
-    return adminAxios.post<{ success: boolean; data: { agentName: string; agentType: string; input: unknown; output: unknown; duration: number } }>(
-      `/admin/agent-lab/agents/${encodeURIComponent(agentId)}/test`,
-      { input, context }
-    );
-  },
 };
 
 export const adminRuntimeDefinitionsApi = {
