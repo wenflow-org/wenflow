@@ -257,35 +257,4 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
   }
 });
 
-router.post('/quick-generate', authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.userId;
-    const goal = getInputText(req.body);
-    const { level = 'beginner', timePerDay = '1 小时', learningStyle = 'mixed' } = req.body;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, error: '用户未认证' });
-    }
-
-    if (!goal || goal.length === 0) {
-      return res.status(400).json({ success: false, error: '学习目标不能为空' });
-    }
-
-    const result = await requirementOrchestrator.quickGenerate(userId, {
-      goal,
-      level,
-      timePerDay,
-      learningStyle
-    });
-
-    return res.json({
-      success: true,
-      data: goalEnvelopeForRequest(req, result)
-    });
-  } catch (error: any) {
-    logger.error('快速生成失败:', error);
-    return res.status(500).json({ success: false, error: error.message || '快速生成失败' });
-  }
-});
-
 export default router;

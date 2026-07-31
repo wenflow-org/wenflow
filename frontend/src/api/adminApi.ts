@@ -276,20 +276,6 @@ export const adminDevtoolsApi = {
 /**
  * 测试工具 API
  */
-export const adminTestApi = {
-  replayPath: async (goalConversationId: string, systemPromptOverrides?: { pathAgent?: string }) => {
-    const response = await adminAxios.post('/admin/test/replay-path', {
-      goalConversationId,
-      ...(systemPromptOverrides ? { systemPromptOverrides } : {})
-    });
-    return response.data;
-  },
-  getPromptVersions: async (agentId: string) => {
-    const response = await adminAxios.get(`/admin/test/agent-prompts/${encodeURIComponent(agentId)}/versions`);
-    return response.data;
-  }
-};
-
 /**
  * 用户管理 API
  */
@@ -1563,21 +1549,6 @@ export const adminPromptOpsApi = {
 // ============================================================
 // V3.7 · Prompt Lab API（v2 源文件体系已退役；保留 manifest 平台层与编译约定）
 // ============================================================
-export const adminPromptLabApi = {
-  getCompileSpec: async () => {
-    return adminAxios.get('/admin/prompt-lab/compile-spec');
-  },
-
-  getManifest: async (skillId: string) => {
-    return adminAxios.get(`/admin/prompt-lab/manifest/${encodeURIComponent(skillId)}`);
-  },
-
-  saveManifest: async (skillId: string, manifest: Record<string, unknown>) => {
-    return adminAxios.put(`/admin/prompt-lab/manifest/${encodeURIComponent(skillId)}`, { manifest });
-  }
-};
-
-// ============================================================
 // V4 · Prompt 工作台 API（核心文件编辑 / 编译预览 / 发布 / 版本回滚 / 血缘）
 // ============================================================
 export const adminPromptWorkbenchApi = {
@@ -1664,12 +1635,6 @@ export const adminApi = {
   // PromptOps
   ...adminPromptOpsApi,
 
-  // PromptLab
-  ...adminPromptLabApi,
-
-  // Test Tools
-  ...adminTestApi,
-
   // Devtools
   ...adminDevtoolsApi,
 
@@ -1681,9 +1646,6 @@ export const adminApi = {
   // adminSkillsApi 版本请求 GET /admin/skills/agent-relations（不同端点）；
   // 此处保留后展开的 skills 版本，agents 版本请用 adminAgentsApi.getAgentRelations()
   getAgentRelations: adminSkillsApi.getAgentRelations,
-  // getPromptVersions: adminAgentPromptsApi 版本签名为 (params?: { agentId?, status? })，
-  // adminTestApi 版本签名为 (agentId: string)（端点、签名均不同）；
-  // 扁平键无现存调用方，绑定语义更通用的 prompts 版本，
-  // test 版本请用 adminTestApi.getPromptVersions()
+  // getPromptVersions: 绑定语义更通用的 prompts 版本
   getPromptVersions: adminAgentPromptsApi.getPromptVersions,
 };

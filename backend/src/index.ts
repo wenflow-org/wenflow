@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -207,14 +207,11 @@ import learningRoutes from './routes/learning';
 import userRoutes from './routes/users';
 import stateTrackingRoutes from './routes/state-tracking.routes';
 import achievementsRoutes from './routes/achievements';
-import reportRoutes from './routes/reports';
 import metricsRoutes from './routes/metrics';
 import goalConversationRoutes from './routes/goal-conversation';
 import testGoalConversationRoutes from './routes/test-goal-conversation';
 import agentsRoutes from './routes/agents';
-import skillsRoutes from './routes/skills';
 import adaptiveGuidanceRoutes from './routes/adaptive-guidance.routes';
-import pluginRoutes from './routes/plugins';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminSkillsRoutes from './routes/admin/skills';
@@ -237,15 +234,12 @@ import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
 import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
 import adminDevtoolsRoutes from './routes/admin/devtools';
-import adminTestRoutes from './routes/admin/test';
 import adminDebugRoutes from './routes/admin/debug';
 import adminFeedbackRoutes from './routes/admin/feedback';
 import adminSystemStatusRoutes from './routes/admin/system-status';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
-import abTestingRoutes from './routes/ab-testing';
 import configRoutes from './routes/config';
-import systemStatusRoutes from './routes/system-status';
 
 // 用户自定义路由
 import userAgentsRoutes from './routes/user-agents';
@@ -290,7 +284,7 @@ app.get('/api', (req, res) => {
     },
 agents: {
       'skill:path-planning': '学习路径规划',
-      'teaching-agent': 'AI授课编排',
+      'learning-agent': 'AI授课编排',
       'skill:learner-model': '学习者画像与状态中心'
     },
     skills: [
@@ -327,7 +321,6 @@ const directUserSessionOnly = rejectProjectionAccess('投影视角不允许访�
 app.use('/api/learning', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), learningRoutes);
 app.use('/api/state', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), stateTrackingRoutes);
 app.use('/api/achievements', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), achievementsRoutes);
-app.use('/api/reports', authMiddleware, acpContextMiddleware('platform'), reportRoutes);
 app.use('/api/metrics', authMiddleware, acpContextMiddleware('platform'), metricsRoutes);
 // 用户端公告（登录即可见，无平台策略限制）
 app.use('/api/announcements', authMiddleware, announcementsRoutes);
@@ -341,7 +334,6 @@ app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('tes
 app.use('/api/auth', authRoutes);
 // 公共配置路由（不需要认证，用于获取模型列表等）
 app.use('/api/config', configRoutes);
-app.use('/api/system', systemStatusRoutes);
 // 管理员登录路由（应用本地访问限制中间件）
 app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
 const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin')];
@@ -365,18 +357,14 @@ app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminPro
 app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
 app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
 app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
-app.use('/api/admin/test', ...adminRouteMiddleware, adminTestRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminDebugRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminDevtoolsRoutes);
 app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
-app.use('/api/skills', authMiddleware, acpContextMiddleware('user'), skillsRoutes);
 app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
-app.use('/api/plugins', authMiddleware, acpContextMiddleware('user'), pluginRoutes);
 app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
 app.use('/api/feedback', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), feedbackRoutes);
-app.use('/api/ab-testing', authMiddleware, acpContextMiddleware('user'), abTestingRoutes);
 
 
 // 用户自定义路由

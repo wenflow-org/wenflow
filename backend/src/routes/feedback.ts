@@ -75,24 +75,6 @@ router.put('/sessions/:sessionId', async (req, res) => {
   return submitSessionFeedback(req, res, req.params.sessionId);
 });
 
-// 兼容旧客户端；新客户端使用 PUT /sessions/:sessionId。
-router.post('/submit', async (req, res) => {
-  const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId.trim() : '';
-  if (!sessionId) {
-    return res.status(400).json({
-      success: false,
-      error: { message: '缺少 sessionId', code: 'VALIDATION_ERROR' }
-    });
-  }
-  const body = { ...(req.body || {}) };
-  delete body.sessionId;
-  delete body.strategy;
-  delete body.uiType;
-  delete body.roundNumber;
-  req.body = body;
-  return submitSessionFeedback(req, res, sessionId);
-});
-
 router.get('/sessions/:sessionId', async (req, res) => {
   try {
     const userId = req.user?.userId;

@@ -1,7 +1,5 @@
-﻿// AI 服务 - 多模型支持
+// AI 服务 - 多模型支持
 import { logger } from '../../utils/logger';
-import { buildTutoringPrompt, determineZPDLevel, determineTutoringStrategy } from './zpd-strategy';
-import { StudentStateAssessment } from './state-assessment.service';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import type { RetryBudget } from '../../gateway/api-gateway/retry-budget';
 
@@ -133,17 +131,6 @@ export const SYSTEM_PROMPTS = {
     }
   ]
 }`,
-
-  TUTORING: `你是一个耐心的问流 AI 学习导师。你的任务是帮助学生理解和解决学习问题。
-
-你的风格应该：
-1. 简单易懂，避免过于技术化的术语
-2. 循序渐进，逐步引导学生思考
-3. 鼓励为主，指出错误的同时给予积极反馈
-4. 提供多个解释角度如果可能
-5. 给出具体的例子帮助理解
-
-如果不知道答案，诚实承认，并建议学生查看其他资源。`,
 
   TASK_GENERATION: `你是一个注重实战的 AI 教学设计师。你的目标是设计以解决问题为导向的学习任务。
 
@@ -702,143 +689,6 @@ ${userInfo.length > 0 ? userInfo.join('\n') : '- 未提供'}
         error: error.message,
         rawAdvice: response?.content || ''
       };
-    }
-  }
-
-  // AI 辅导 - 学习问题问答（集成学生状态评估）
-  async tutoring(
-    question: string,
-    context?: {
-      currentTask?: string;
-      learningLevel?: string;
-      previousContext?: string;
-      userId?: string;
-      sessionId?: string;  // 学习会话 ID（用于获取状态）
-      studentState?: StudentStateAssessment;  // 学生当前状态（可选，如果提供则直接使用）
-    }
-  ) {
-    const studentState = context?.studentState;
-
-    // 根据学生状态生成辅导策略
-    let strategyPrompt = '';
-    if (studentState) {
-      const { aiStateAssessmentService } = await import('./state-assessment.service');
-      strategyPrompt = aiStateAssessmentService.generateInterventionStrategy(studentState);
-      
-      // 记录使用的干预策略
-      logger.info('AI Tutor 使用干预策略', {
-        userId: context?.userId,
-        sessionId: context?.sessionId,
-        cognitive: studentState.cognitive,
-        stress: studentState.stress,
-        engagement: studentState.engagement,
-        anomaly: studentState.anomaly,
-        intervention: studentState.intervention
-      });
-    }
-
-    const contextInfo = context ? `
-  当前任务：${context.currentTask || '未指定'}
-  学习水平：${context.learningLevel || '未知'}
-  之前的内容：${context.previousContext || '无'}
-  ${studentState ? `
-  【当前学生状态】
-  - 认知深度：${(studentState.cognitive * 100).toFixed(0)}%
-  - 压力程度：${(studentState.stress * 100).toFixed(0)}%
-  - 投入程度：${(studentState.engagement * 100).toFixed(0)}%
-  - 是否异常：${studentState.anomaly ? '是' : '否'}
-  ${studentState.intervention ? `\n【干预策略】\n${studentState.intervention}` : ''}
-  ` : ''}
-  ` : '';
-
-    try {
-      const response = await this.chat([
-        { role: 'system', content: strategyPrompt || SYSTEM_PROMPTS.TUTORING },
-        {
-          role: 'user',
-          content: `问题：${question}
-  ${contextInfo}`
-        }
-      ], {
-        agentId: 'ai-tutor',
-        userId: context?.userId,
-        action: 'tutoring'
-      });
-
-      return {
-        success: true,
-        answer: response.content,
-        tokensUsed: response.usage,
-        studentState  // 返回使用的状态
-      };
-    } catch (error: any) {
-      logger.error('AI 辅导失败:', error);
-      throw new Error(error.message);
-    }
-  }
-
-  /**
-   * ZPD 分层 AI 辅导
-   * 根据用户水平动态调整辅导策略
-   * 统一通过 TutorAgent 调用
-   */
-  async zpdTutoring(params: {
-    question: string;
-    taskDescription: string;
-    userXP: number;
-    completedTasks: number;
-    taskContext?: {
-      taskType?: string;
-      weekNumber?: number;
-      subject?: string;
-    };
-    userId?: string; // 用于 Agent 日志记录
-  }) {
-    try {
-      // 1. 确定用户的 ZPD 等级
-      const zpdLevel = determineZPDLevel(params.userXP, params.completedTasks);
-
-      // 2. 根据 ZPD 等级确定辅导策略
-      const strategy = determineTutoringStrategy({
-        level: zpdLevel,
-        xp: params.userXP,
-        completedTasks: params.completedTasks
-      });
-
-      // 3. 构建基于策略的提示词
-      const systemPrompt = buildTutoringPrompt(
-        params.taskDescription,
-        params.question,
-        strategy,
-        params.taskContext
-      );
-
-      // 4. 调用 AI（通过 TutorAgent 调用）
-      const response = await this.chat([
-        { role: 'system', content: systemPrompt }
-      ], {
-        agentId: 'teaching-agent',
-        userId: params.userId,
-        action: 'zpdTutoring'
-      });
-
-      logger.info('ZPD 辅导请求', {
-        userXP: params.userXP,
-        completedTasks: params.completedTasks,
-        zpdLevel,
-        hintLevel: strategy.hintLevel
-      });
-
-      return {
-        success: true,
-        answer: response.content,
-        tokensUsed: response.usage,
-        zpdLevel,
-        hintLevel: strategy.hintLevel
-      };
-    } catch (error: any) {
-      logger.error('ZPD 辅导失败:', error);
-      throw new Error(error.message);
     }
   }
 
