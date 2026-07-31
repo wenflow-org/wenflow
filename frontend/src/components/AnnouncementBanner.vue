@@ -51,7 +51,6 @@ const isUserAppPage = computed(() => {
   const p = route.path
   if (p.startsWith('/admin')) return false
   if (p === '/login' || p === '/register' || p === '/' || p === '/vision') return false
-  if (p.startsWith('/legacy/login') || p.startsWith('/legacy/register')) return false
   return true
 })
 

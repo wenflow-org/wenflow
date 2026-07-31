@@ -1,7 +1,6 @@
 ﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
-import { setTestMode, hasUserSession } from '../utils/api';
+import { hasUserSession } from '../utils/api';
 import { hasAdminSession } from '../api/adminApi';
-import { setDebugMode } from '../utils/debugMode';
 import { getProjectionToken } from '../utils/projection';
 
 const THEME_STORAGE_KEY = 'wenflow-theme';
@@ -36,19 +35,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/VisionNext.vue'),
     meta: { title: '愿景' }
   },
-  // 旧版营销页归档（暂不删除文件）
-  {
-    path: '/legacy/home',
-    name: 'LegacyHome',
-    component: () => import('@/views/Home.vue'),
-    meta: { title: '首页 · 旧版' }
-  },
-  {
-    path: '/legacy/vision',
-    name: 'LegacyVision',
-    component: () => import('@/views/Vision.vue'),
-    meta: { title: '愿景 · 旧版' }
-  },
   // 新稿预览地址 → 正式路径
   {
     path: '/next',
@@ -71,28 +57,10 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '注册' }
   },
   {
-    path: '/legacy/login',
-    name: 'LegacyLogin',
-    component: () => import('@/views/Login.vue'),
-    meta: { title: '登录 · 旧版' }
-  },
-  {
-    path: '/legacy/register',
-    name: 'LegacyRegister',
-    component: () => import('@/views/Register.vue'),
-    meta: { title: '注册 · 旧版' }
-  },
-  {
     path: '/dashboard',
     name: 'V2Dashboard',
     component: () => import('@/views/v2/V2Dashboard.vue'),
     meta: { title: '学习台', requiresAuth: true }
-  },
-  {
-    path: '/legacy/dashboard',
-    name: 'LegacyDashboard',
-    component: () => import('@/views/Dashboard.vue'),
-    meta: { title: '学习台 · 旧版', requiresAuth: true }
   },
   {
     path: '/learning-paths',
@@ -101,28 +69,10 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '学习路径', requiresAuth: true }
   },
   {
-    path: '/legacy/learning-paths',
-    name: 'LegacyLearningPaths',
-    component: () => import('@/views/LearningPaths.vue'),
-    meta: { title: '学习路径 · 旧版', requiresAuth: true }
-  },
-  {
-    path: '/test/learning-paths',
-    name: 'TestLearningPaths',
-    redirect: '/admin/test/learning-paths',
-    meta: { title: '学习路径测试', requiresAuth: true, isTestMode: true }
-  },
-  {
     path: '/learning-state',
     name: 'V2LearningState',
     component: () => import('@/views/v2/V2LearningState.vue'),
     meta: { title: '学习状态', requiresAuth: true }
-  },
-  {
-    path: '/legacy/learning-state',
-    name: 'LegacyLearningState',
-    component: () => import('@/views/LearningState.vue'),
-    meta: { title: '学习状态 · 旧版', requiresAuth: true }
   },
   {
     path: '/achievements',
@@ -131,40 +81,16 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '成就', requiresAuth: true }
   },
   {
-    path: '/legacy/achievements',
-    name: 'LegacyAchievements',
-    component: () => import('@/views/Achievements.vue'),
-    meta: { title: '成就 · 旧版', requiresAuth: true }
-  },
-  {
     path: '/learning-path/:id',
     name: 'V2LearningPathDetail',
     component: () => import('@/views/v2/V2LearningPathDetail.vue'),
     meta: { title: '学习路径详情', requiresAuth: true }
   },
   {
-    path: '/legacy/learning-path/:id',
-    name: 'LegacyLearningPathDetail',
-    component: () => import('@/views/LearningPathDetail.vue'),
-    meta: { title: '学习路径详情 · 旧版', requiresAuth: true }
-  },
-  {
-    path: '/test/learning-path/:id',
-    name: 'TestLearningPathDetail',
-    redirect: (to) => `/admin/test/learning-path/${to.params.id}`,
-    meta: { title: '学习路径详情测试', requiresAuth: true, isTestMode: true }
-  },
-  {
     path: '/learn/:taskId',
     name: 'V2LearningPage',
     component: () => import('@/views/v2/V2LearningPage.vue'),
     meta: { title: '学习中', requiresAuth: true }
-  },
-  {
-    path: '/legacy/learn/:taskId',
-    name: 'LegacyLearningPage',
-    component: () => import('@/views/LearningPage.vue'),
-    meta: { title: '学习中 · 旧版', requiresAuth: true }
   },
   {
     path: '/learn/:taskId/evaluation/:sessionId',
@@ -231,30 +157,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '目标规划', requiresAuth: true }
   },
   {
-    path: '/legacy/goal-conversation/:conversationId?',
-    name: 'LegacyGoalConversation',
-    component: () => import('@/views/GoalConversation.vue'),
-    meta: { title: '目标规划 · 旧版', requiresAuth: true }
-  },
-  {
-    path: '/test/goal-conversation/:conversationId?',
-    name: 'GoalConversationTest',
-    redirect: (to) => {
-      const conversationId = typeof to.params.conversationId === 'string' ? `/${to.params.conversationId}` : '';
-      return `/admin/test/goal-full${conversationId}`;
-    },
-    meta: { title: '目标规划测试', requiresAuth: true }
-  },
-  {
-    path: '/test/goal-full/:conversationId?',
-    name: 'TestGoalConversationFull',
-    redirect: (to) => {
-      const conversationId = typeof to.params.conversationId === 'string' ? `/${to.params.conversationId}` : '';
-      return `/admin/test/goal-full${conversationId}`;
-    },
-    meta: { title: '全量上下文测试', requiresAuth: true, contextMode: 'full', isTestMode: true }
-  },
-  {
     path: '/docs',
     name: 'DeveloperDocs',
     component: () => import('@/views/DeveloperDocs.vue'),
@@ -296,10 +198,6 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/v2/achievements',
     redirect: '/achievements'
-  },
-  {
-    path: '/legacy',
-    redirect: '/dashboard'
   },
   {
     // 管理控制台（唯一正式入口）
@@ -410,78 +308,6 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/announcements',
     redirect: '/admin/console'
   },
-  // 前台测试台（isTestMode）：仍挂在轻量壳下，不暴露旧运营导航
-  {
-    path: '/admin/test',
-    name: 'AdminTestLayout',
-    component: () => import('@/views/admin/Dashboard.vue'),
-    meta: { title: '前台测试台', requiresAdminAuth: true },
-    redirect: '/admin/test/dashboard',
-    children: [
-      {
-        path: 'dashboard',
-        name: 'AdminTestDashboard',
-        component: () => import('@/views/Dashboard.vue'),
-        meta: { title: '测试学习台', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'goal-full/:conversationId?',
-        name: 'AdminTestGoalConversationFull',
-        component: () => import('@/views/GoalConversation.vue'),
-        meta: {
-          title: '测试目标规划',
-          requiresAdminAuth: true,
-          adminGroup: 'lab',
-          contextMode: 'full',
-          isTestMode: true
-        }
-      },
-      {
-        path: 'learning-paths',
-        name: 'AdminTestLearningPaths',
-        component: () => import('@/views/LearningPaths.vue'),
-        meta: { title: '测试学习路径', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'learning-path/:id',
-        name: 'AdminTestLearningPathDetail',
-        component: () => import('@/views/LearningPathDetail.vue'),
-        meta: { title: '测试学习路径详情', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'learning-state',
-        name: 'AdminTestLearningState',
-        component: () => import('@/views/LearningState.vue'),
-        meta: { title: '测试学习状态', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'achievements',
-        name: 'AdminTestAchievements',
-        component: () => import('@/views/Achievements.vue'),
-        meta: { title: '测试成就', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'learn/:taskId',
-        name: 'AdminTestLearningPage',
-        component: () => import('@/views/LearningPage.vue'),
-        meta: { title: '测试授课页面', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'learn/:taskId/evaluation/:sessionId',
-        name: 'AdminTestLearningEvaluationPage',
-        component: () => import('@/views/LearningEvaluationPage.vue'),
-        meta: { title: '测试课程评估', requiresAdminAuth: true, adminGroup: 'lab', isTestMode: true }
-      },
-      {
-        path: 'skill-prompt-preview',
-        redirect: '/admin/console'
-      },
-      {
-        path: 'prompt-stability',
-        redirect: '/admin/console'
-      }
-    ]
-  },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
@@ -504,20 +330,9 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);
-  const usesAdminSurface = to.path.startsWith('/admin/')
-    && to.path !== '/admin/login'
-    && !to.path.startsWith('/admin/test/');
+  const usesAdminSurface = to.path.startsWith('/admin/') && to.path !== '/admin/login';
   document.body.classList.toggle('admin-route', usesAdminSurface);
-  
-  setTestMode(to.meta.isTestMode === true);
-  setDebugMode(to.meta.isTestMode === true);
-  if (!to.meta.isTestMode) {
-    import('@/stores/debug').then(({ useDebugStore }) => {
-      const debugStore = useDebugStore();
-      debugStore.clear();
-    });
-  }
-  
+
   const hasSession = hasUserSession();
   const projectionToken = getProjectionToken();
   const adminSession = hasAdminSession();

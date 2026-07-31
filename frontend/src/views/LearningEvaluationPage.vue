@@ -111,26 +111,9 @@ const router = useRouter();
 const taskId = computed(() => route.params.taskId as string);
 const sessionId = computed(() => route.params.sessionId as string);
 
-const isTestMode = computed(() => route.meta.isTestMode === true);
-const isAdminRoute = computed(() => route.path.startsWith('/admin/'));
-const learningPathDetailBasePath = computed(() => {
-  if (isTestMode.value) {
-    return isAdminRoute.value ? '/admin/test/learning-path' : '/learning-path';
-  }
-  return '/learning-path';
-});
-const learningPathsPath = computed(() => {
-  if (isTestMode.value) {
-    return isAdminRoute.value ? '/admin/test/learning-paths' : '/learning-paths';
-  }
-  return '/learning-paths';
-});
-const learnBasePath = computed(() => {
-  if (isTestMode.value) {
-    return isAdminRoute.value ? '/admin/test/learn' : '/learn';
-  }
-  return '/learn';
-});
+const learningPathDetailBasePath = computed(() => '/learning-path');
+const learningPathsPath = computed(() => '/learning-paths');
+const learnBasePath = computed(() => '/learn');
 
 const loading = ref(true);
 const error = ref('');
@@ -192,7 +175,7 @@ const evaluationDegraded = computed(() => {
   return currentWrapup?.evaluationSource === 'failed'
     || currentWrapup?.sources?.evaluation === 'failed';
 });
-const canSubmitSessionFeedback = computed(() => !isTestMode.value && !isAdminRoute.value && !isProjectionMode());
+const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
 const durationSeconds = computed(() => {
   const minutes = sessionDetail.value?.wrapup?.duration ?? sessionDetail.value?.duration ?? 0;

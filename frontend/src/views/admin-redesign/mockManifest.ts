@@ -43,6 +43,5 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'api-config', label: '连接与安全', group: '配置', realRoute: '/admin/console' },
   { id: 'announcements', label: '公告', group: '配置', realRoute: '/admin/console' },
   { id: 'addons', label: '外挂组件', group: '配置', realRoute: '/admin/console' },
-  { id: 'prompt-workbench', label: 'Prompt 工作台', group: '调试', realRoute: '/admin/console' },
-  { id: 'debug-lab', label: '前台测试台', group: '调试', realRoute: '/admin/test/dashboard' }
+  { id: 'prompt-workbench', label: 'Prompt 工作台', group: '调试', realRoute: '/admin/console' }
 ]

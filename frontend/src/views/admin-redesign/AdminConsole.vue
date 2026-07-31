@@ -12,7 +12,7 @@
     <MockShell :current="scene" :crumb="crumbLabel" release @navigate="navigate" @palette="paletteOpen = true">
       <div v-if="booting" class="ac-boot">
         <span class="ac-boot__spinner"></span>
-        正在接入真实数据…
+        加载中…
       </div>
       <component v-else :is="detailComponent || currentComponent" :state="'normal'" />
     </MockShell>
@@ -58,7 +58,6 @@ import MockSessionCockpit from './MockSessionCockpit.vue';
 import MockCommandPalette from './MockCommandPalette.vue';
 import MockVirtualProfile from './MockVirtualProfile.vue';
 import MockUserDetail from './MockUserDetail.vue';
-import MockDebugLab from './MockDebugLab.vue';
 import { intent, subPage } from './mockStore';
 import { loadLiveData, liveLoading } from './mockLive';
 import './mock-shared.css';
@@ -81,8 +80,7 @@ const components: Record<string, unknown> = {
   'api-config': MockApiConfig,
   'addons': MockAddons,
   'announcements': MockAnnouncements,
-  'prompt-workbench': MockPromptWorkbench,
-  'debug-lab': MockDebugLab
+  'prompt-workbench': MockPromptWorkbench
 };
 
 const detailComponents: Record<string, unknown> = {

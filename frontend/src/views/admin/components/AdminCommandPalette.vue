@@ -101,8 +101,7 @@ const KEYWORDS: Record<string, string> = {
   '/admin/prompt-call-logs': 'prompt tishi 提示词 调用',
   '/admin/api-config': 'api config peizhi 配置 连接 安全 密钥',
   '/admin/skill-model-configs': 'model moxing 模型 外挂 组件',
-  '/admin/prompt-lab': 'prompt lab dryrun 调试 实验',
-  '/admin/test/dashboard': 'test ceshi 测试 学习台'
+  '/admin/prompt-lab': 'prompt lab dryrun 调试 实验'
 }
 
 interface FlatItem extends PaletteNavItem {

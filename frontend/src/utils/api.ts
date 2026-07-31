@@ -78,11 +78,6 @@ api.interceptors.request.use(
       config.headers['X-Projection-Token'] = projectionToken;
     }
 
-    const isTestMode = localStorage.getItem('testMode') === 'true';
-    if (isTestMode) {
-      config.headers['X-Source-Entry'] = 'test';
-    }
-
     if (!config.signal) {
       const controller = new AbortController();
       config.signal = controller.signal;
@@ -105,44 +100,6 @@ api.interceptors.response.use(
     // 清理已完成的请求
     const requestKey = (response.config as RequestKeyCarrier).__wenflowRequestKey;
     if (requestKey) pendingRequests.delete(requestKey);
-
-    // 调试浮层：捕获 traceId 和 debug 载荷
-    try {
-      const traceId = response.headers?.['x-trace-id'];
-      const url = response.config?.url || '';
-      const data = response.data;
-
-      if (traceId && typeof traceId === 'string') {
-        import('@/stores/debug').then(({ useDebugStore }) => {
-          useDebugStore().setTraceId(traceId);
-        });
-      }
-
-      // B 类镜像：goal-conversation meta.debug
-      if (url.includes('/goal-conversation') && data?.meta?.debug) {
-        import('@/stores/debug').then(({ useDebugStore }) => {
-          useDebugStore().captureGoalDebug(data.meta.debug, url);
-        });
-      }
-
-      // B 类镜像：ai-teaching promptDebug
-      if (url.includes('/ai-teaching/sessions/') && url.includes('/messages') && data?.promptDebug) {
-        const sessionIdMatch = url.match(/\/ai-teaching\/sessions\/([^/]+)/);
-        const sessionId = sessionIdMatch?.[1] || '';
-        import('@/stores/debug').then(({ useDebugStore }) => {
-          useDebugStore().captureTeachingDebug(sessionId, data, url, traceId);
-        });
-      }
-
-      // B 类镜像：adaptive-guidance debug
-      if (url.includes('/adaptive-guidance') && data?.debug) {
-        import('@/stores/debug').then(({ useDebugStore }) => {
-          useDebugStore().captureAdaptiveGuidanceDebug(data.debug, url);
-        });
-      }
-    } catch {
-      // 镜像失败不影响主流程
-    }
 
     return response.data;
   },
@@ -228,25 +185,6 @@ export const cancelAgentRequests = (): number => {
  */
 export const getPendingRequestCount = (): number => {
   return pendingRequests.size;
-};
-
-/**
- * 设置测试模式（影响 X-Source-Entry header）
- * 测试站点页面在挂载时调用 setTestMode(true)，卸载时调用 setTestMode(false)
- */
-export const setTestMode = (enabled: boolean): void => {
-  if (enabled) {
-    localStorage.setItem('testMode', 'true');
-  } else {
-    localStorage.removeItem('testMode');
-  }
-};
-
-/**
- * 获取当前是否为测试模式
- */
-export const isTestModeEnabled = (): boolean => {
-  return localStorage.getItem('testMode') === 'true';
 };
 
 export default api;

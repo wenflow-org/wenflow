@@ -69,7 +69,12 @@ const RETIRED_SKILLS = [
   'smart-search',
   // 2026-07 合并入 lesson-knowledge-enricher
   'session-knowledge-distiller',
-  'dialogue-concept-extractor'
+  'dialogue-concept-extractor',
+  // 2026-07 阶段词统一后改名（learning-*）；旧 id 仅保留在 agent-manifest 别名，
+  // 注册表/DB 不应残留，启动时 purge 防止幽灵注册出现在 Skill 目录
+  'teaching-turn',
+  'teaching-opening-generator',
+  'teaching-strategy-selector'
 ] as const;
 
 // ACP 中间件
@@ -209,7 +214,6 @@ import stateTrackingRoutes from './routes/state-tracking.routes';
 import achievementsRoutes from './routes/achievements';
 import metricsRoutes from './routes/metrics';
 import goalConversationRoutes from './routes/goal-conversation';
-import testGoalConversationRoutes from './routes/test-goal-conversation';
 import agentsRoutes from './routes/agents';
 import adaptiveGuidanceRoutes from './routes/adaptive-guidance.routes';
 import adminAuthRoutes from './routes/admin-auth';
@@ -266,13 +270,10 @@ app.get('/api', (req, res) => {
       users: '/api/users',
       learning: '/api/learning',
       goalConversation: '/api/goal-conversation',
-      testGoalConversation: '/api/test/goal-conversation',
       state: '/api/state',
       achievements: '/api/achievements',
-      reports: '/api/reports',
       metrics: '/api/metrics',
       agents: '/api/agents',
-      skills: '/api/skills',
       feedback: '/api/feedback',
       userCustom: {
         agents: '/api/user/agents',
@@ -327,7 +328,6 @@ app.use('/api/announcements', authMiddleware, announcementsRoutes);
 
 // goal-conversation 路由（用户侧调用）
 app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('user'), goalConversationRoutes);
-app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('test'), testGoalConversationRoutes);
 
 // 其他路由（保持原有认证）
 // 注意：具体路由必须在通用路由之前注册！

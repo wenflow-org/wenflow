@@ -177,7 +177,7 @@ async function openDebugStation() {
       scope: projectionGrant.value.scope === 'full' ? 'full' : 'dashboard',
       source: 'user-projection-grant'
     })
-    window.open('/admin/test/dashboard', '_blank')
+    window.open('/admin/console', '_blank')
   } catch (e) {
     grantMessage.value = `打开失败：${errMsg(e)}`
   } finally {
