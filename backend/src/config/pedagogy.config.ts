@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 教学策略可配置参数
  * 
  * 改此文件无需重启服务（需要模块热加载支持，目前全量重启后生效）。
@@ -18,7 +18,7 @@ export const peerTriggerConfig = {
 }
 
 // ============================================================
-// 策略别名映射（skill:teaching-turn normalizeAllowedStrategy）
+// 策略别名映射（skill:learning-turn normalizeAllowedStrategy）
 // ============================================================
 export const strategyAliasConfig: Record<string, string> = {
   explanation: 'explain',
@@ -49,7 +49,7 @@ export const allowedPedagogyStrategies = [
 ] as const
 
 // ============================================================
-// 回退策略（skill:teaching-turn deriveFallbackStrategies）
+// 回退策略（skill:learning-turn deriveFallbackStrategies）
 // ============================================================
 export const fallbackStrategyConfig: Record<string, string[]> = {
   factual: ['explain', 'drill'],
@@ -215,7 +215,7 @@ export const teachingStrategyConfig = {
 }
 
 // ============================================================
-// 完成判定关键词（skill:teaching-turn evaluateCompletionByTaskProfile）
+// 完成判定关键词（skill:learning-turn evaluateCompletionByTaskProfile）
 // ============================================================
 export const completionKeywordConfig = {
   knowledgeType: {

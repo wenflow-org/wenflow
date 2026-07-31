@@ -1,8 +1,8 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import systemPrisma from '../config/system-database';
 import { pathAgentRuntimeDefinition } from '../skills/path-planning/definition';
 import { goalConversationRuntimeDefinition } from '../skills/goal-conversation/definition';
-import { teachingTurnRuntimeDefinition } from '../skills/teaching-turn/definition';
+import { learningTurnRuntimeDefinition } from '../skills/learning-turn/definition';
 import { peerRuntimeDefinition } from '../skills/peer-reinforcement/definition';
 import { sessionWrapupRuntimeDefinition } from '../skills/session-wrapup/definition';
 import { learnerModelRuntimeDefinition } from '../agents/learner-model-agent/definition';
@@ -30,7 +30,7 @@ async function main() {
     pathAgentRuntimeDefinition,
     goalConversationRuntimeDefinition,
     learnerModelRuntimeDefinition,
-    teachingTurnRuntimeDefinition,
+    learningTurnRuntimeDefinition,
     peerRuntimeDefinition,
     sessionWrapupRuntimeDefinition,
     pathSceneFramingRuntimeDefinition,

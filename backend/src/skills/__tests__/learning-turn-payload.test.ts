@@ -7,7 +7,7 @@ jest.mock('../../composers/prompt-composer', () => ({
 import fs from 'fs'
 import path from 'path'
 import yaml from 'js-yaml'
-import { teachingTurnAgentHandler } from '../teaching-turn'
+import { learningTurnAgentHandler } from '../learning-turn'
 
 type DeclaredFieldRole = { direction: string; visibility: string; owner?: string; export?: string }
 
@@ -62,14 +62,14 @@ const SUCCESS_RESULT = {
   debug: { attempts: [{ attempt: 1, status: 'success' }], systemPromptVersion: 1 },
 }
 
-describe('teaching-turn payload snapshot parity', () => {
+describe('learning-turn payload snapshot parity', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCallPrompt.mockResolvedValue(SUCCESS_RESULT)
   })
 
   it('payload contains exactly the keys the prompt input spec declares', async () => {
-    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+    await learningTurnAgentHandler(MINIMAL_INPUT as any)
 
     expect(mockCallPrompt).toHaveBeenCalledTimes(1)
     const [spec, input] = mockCallPrompt.mock.calls[0]
@@ -96,7 +96,7 @@ describe('teaching-turn payload snapshot parity', () => {
   })
 
   it('latestLearnerMessage picks the most recent user message', async () => {
-    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+    await learningTurnAgentHandler(MINIMAL_INPUT as any)
 
     const [spec, input] = mockCallPrompt.mock.calls[0]
     const payload = spec.buildUserPayload(input, {})
@@ -107,7 +107,7 @@ describe('teaching-turn payload snapshot parity', () => {
   })
 
   it('visibleDialogueContext overrides messages when provided explicitly', async () => {
-    await teachingTurnAgentHandler({
+    await learningTurnAgentHandler({
       ...MINIMAL_INPUT,
       visibleDialogueContext: [{ role: 'user', content: '只看这一句' }],
     } as any)
@@ -120,11 +120,11 @@ describe('teaching-turn payload snapshot parity', () => {
   })
 
   it('fields declaration reconciles with real payload and output keys (File-as-Truth)', async () => {
-    await teachingTurnAgentHandler(MINIMAL_INPUT as any)
+    await learningTurnAgentHandler(MINIMAL_INPUT as any)
 
     const [spec, input] = mockCallPrompt.mock.calls[0]
     const payload = spec.buildUserPayload(input, {})
-    const fields = loadDeclaredFields('teaching-turn.yaml')
+    const fields = loadDeclaredFields('learning-turn.yaml')
 
     // 声明的 input 字段全部进入 payload；payload 顶层键都声明为 input 或 state
     const declaredInputs = Object.keys(fields).filter((key) => fields[key].direction === 'input')

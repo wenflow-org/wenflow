@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`teaching-turn payload snapshot parity payload contains exactly the keys the prompt input spec declares 1`] = `
+exports[`learning-turn payload snapshot parity payload contains exactly the keys the prompt input spec declares 1`] = `
 {
   "classroomContext": undefined,
   "classroomEventContext": undefined,

@@ -145,7 +145,7 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '该学习者暂无认知画像数据' : '认知画像仅在真实数据模式下可用' }}</p>
+      <p v-else class="ld-none">{{ isLive ? '暂无认知画像数据' : '演示模式下无数据' }}</p>
     </div>
 
     <!-- 动态状态 -->
@@ -176,7 +176,7 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '该学习者暂无动态状态数据' : '动态状态仅在真实数据模式下可用' }}</p>
+      <p v-else class="ld-none">{{ isLive ? '暂无动态状态数据' : '演示模式下无数据' }}</p>
     </div>
 
     <!-- 知识记忆 -->
@@ -192,7 +192,7 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '该学习者暂无知识记忆数据' : '知识记忆仅在真实数据模式下可用' }}</p>
+      <p v-else class="ld-none">{{ isLive ? '暂无知识记忆数据' : '演示模式下无数据' }}</p>
     </div>
 
     <!-- 教学建议 -->
@@ -237,7 +237,7 @@
           </div>
         </section>
       </template>
-      <p v-else class="ld-none">{{ isLive ? '该学习者暂无教学建议数据' : '教学建议仅在真实数据模式下可用' }}</p>
+      <p v-else class="ld-none">{{ isLive ? '暂无教学建议数据' : '演示模式下无数据' }}</p>
     </div>
 
     <!-- 证据记录 -->
@@ -257,7 +257,7 @@
             <span class="ld-ev__time">{{ e.time }}</span>
           </div>
         </div>
-        <p v-else class="ld-none">{{ isLive ? '还没有证据记录，学习轨迹累积后出现' : '证据记录仅在真实数据模式下可用' }}</p>
+        <p v-else class="ld-none">{{ isLive ? '暂无证据记录' : '演示模式下无数据' }}</p>
       </section>
     </div>
   </div>

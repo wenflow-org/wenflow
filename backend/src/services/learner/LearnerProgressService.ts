@@ -324,7 +324,7 @@ class LearnerProgressService {
         __prompt: {
           userId,
           requestPath: '/services/learner/progress-report',
-          callerAgentId: 'learner-agent',
+          callerAgentId: 'profile-agent',
         },
       });
     } catch {

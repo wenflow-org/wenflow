@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 画像阶段字段路由 seed（skill 粒度）
  *
  * 契约（按调用关系）：
@@ -7,11 +7,11 @@
  *   - skill:session-knowledge-distiller：蒸馏会话知识背景（conceptLedger）
  *   - skill:dialogue-concept-extractor：抽取对话中的概念信号
  *   - skill:label-generator：生成画像短标签
- *   - learner-agent：聚合，刷新 snapshot / projection
+ *   - profile-agent：聚合，刷新 snapshot / projection
  *
  * 字段命名 = 各 skill prompt `## 输出规格` 的 camelCase
  *
- * 注：learner 阶段字段全部为编排器内部沉淀（写入 learnerModel），
+ * 注：profile 阶段字段全部为编排器内部沉淀（写入 learnerModel），
  *    所以 render 默认 hidden, accumulate=true, internal 多为 false
  *    （因为 snapshot/projection 会读，不是 skill 私有）
  */
@@ -28,16 +28,16 @@ interface SeedRouting { agentId: string; fieldId: string; render: RenderValue; h
 
 const STAGE = 'profile';
 
-export const LEARNER_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
+export const PROFILE_FIELD_ROUTING_CONTRACTS: SeedContract[] = [
   { agentId: 'skill:goal-profile-inference', displayName: '目标画像推断 Skill', description: '从 Goal 输出推断长期学习者画像叙述' },
   { agentId: 'skill:learning-pattern-distiller', displayName: '学习模式蒸馏 Skill', description: '从历史学习行为蒸馏稳定模式叙述' },
   { agentId: 'skill:session-knowledge-distiller', displayName: '会话知识蒸馏 Skill', description: '从单次教学会话蒸馏 conceptLedger / 基础概念' },
   { agentId: 'skill:dialogue-concept-extractor', displayName: '对话概念抽取 Skill', description: '从对话中抽取反复出现的概念信号' },
   { agentId: 'skill:label-generator', displayName: '画像标签生成 Skill', description: '为学习者画像生成展示用短标签' },
-  { agentId: 'learner-agent', displayName: '学习者 Agent', description: '学习者画像编排，聚合所有 distiller 输出并刷新 snapshot / projection' },
+  { agentId: 'profile-agent', displayName: '学习者 Agent', description: '学习者画像编排，聚合所有 distiller 输出并刷新 snapshot / projection' },
 ];
 
-export const LEARNER_FIELD_ROUTING_FIELDS: SeedField[] = [
+export const PROFILE_FIELD_ROUTING_FIELDS: SeedField[] = [
   // === skill:goal-profile-inference 产出 ===
   { fieldId: 'goalNarrative', promptRole: 'hidden-inference', valueType: 'string', description: '学习目标叙述（长期画像）' },
   { fieldId: 'backgroundNarrative', promptRole: 'hidden-inference', valueType: 'string', description: '学习背景叙述（长期画像）' },
@@ -69,52 +69,52 @@ export const LEARNER_FIELD_ROUTING_FIELDS: SeedField[] = [
   { fieldId: 'labelColor', promptRole: 'derived-presentation', valueType: 'string', description: '标签颜色', snakeName: 'color', camelName: 'color' },
 ];
 
-export const LEARNER_FIELD_ROUTINGS: SeedRouting[] = [
-  // goal-profile-inference → learner-agent
+export const PROFILE_FIELD_ROUTINGS: SeedRouting[] = [
+  // goal-profile-inference → profile-agent
   ...['goalNarrative', 'backgroundNarrative', 'motivationNarrative',
       'baselineNarrative', 'learningContextNarrative'].map(fieldId => ({
     agentId: 'skill:goal-profile-inference' as const, fieldId,
-    render: 'hidden' as RenderValue, handoff: ['learner-agent'],
+    render: 'hidden' as RenderValue, handoff: ['profile-agent'],
     internal: false, accumulate: true,
     visibilityPreset: 'agent-internal' as const
   })),
 
-  // learning-pattern-distiller → learner-agent
+  // learning-pattern-distiller → profile-agent
   ...['learningPreferenceNarrative', 'teachingModeNarrative', 'cognitiveStyleNarrative',
       'pacingNarrative', 'motivationLeverNarrative'].map(fieldId => ({
     agentId: 'skill:learning-pattern-distiller' as const, fieldId,
-    render: 'hidden' as RenderValue, handoff: ['learner-agent'],
+    render: 'hidden' as RenderValue, handoff: ['profile-agent'],
     internal: false, accumulate: true,
     visibilityPreset: 'agent-internal' as const
   })),
 
-  // session-knowledge-distiller → learner-agent
+  // session-knowledge-distiller → profile-agent
   ...['conceptLedger', 'reusableFoundations', 'blockedFoundations', 'transferSignals'].map(fieldId => ({
     agentId: 'skill:session-knowledge-distiller' as const, fieldId,
-    render: 'hidden' as RenderValue, handoff: ['learner-agent'],
+    render: 'hidden' as RenderValue, handoff: ['profile-agent'],
     internal: false, accumulate: true,
     visibilityPreset: 'agent-internal' as const
   })),
 
-  // dialogue-concept-extractor → learner-agent
+  // dialogue-concept-extractor → profile-agent
   ...['recurringConfusions', 'extractorTransferSignals'].map(fieldId => ({
     agentId: 'skill:dialogue-concept-extractor' as const, fieldId,
-    render: 'hidden' as RenderValue, handoff: ['learner-agent'],
+    render: 'hidden' as RenderValue, handoff: ['profile-agent'],
     internal: false, accumulate: true,
     visibilityPreset: 'agent-internal' as const
   })),
 
-  // label-generator → learner-agent（标签可见，因为是画像 UI 用）
-  { agentId: 'skill:label-generator', fieldId: 'displayLabel', render: 'visible', handoff: ['learner-agent'], internal: false, accumulate: true },
-  { agentId: 'skill:label-generator', fieldId: 'shortLabel', render: 'visible', handoff: ['learner-agent'], internal: false, accumulate: true },
-  { agentId: 'skill:label-generator', fieldId: 'labelIcon', render: 'visible', handoff: ['learner-agent'], internal: false, accumulate: true },
-  { agentId: 'skill:label-generator', fieldId: 'labelColor', render: 'visible', handoff: ['learner-agent'], internal: false, accumulate: true },
+  // label-generator → profile-agent（标签可见，因为是画像 UI 用）
+  { agentId: 'skill:label-generator', fieldId: 'displayLabel', render: 'visible', handoff: ['profile-agent'], internal: false, accumulate: true },
+  { agentId: 'skill:label-generator', fieldId: 'shortLabel', render: 'visible', handoff: ['profile-agent'], internal: false, accumulate: true },
+  { agentId: 'skill:label-generator', fieldId: 'labelIcon', render: 'visible', handoff: ['profile-agent'], internal: false, accumulate: true },
+  { agentId: 'skill:label-generator', fieldId: 'labelColor', render: 'visible', handoff: ['profile-agent'], internal: false, accumulate: true },
 
-  // learner-agent 聚合（不再 handoff，是终点；触发 snapshot/projection 刷新）
+  // profile-agent 聚合（不再 handoff，是终点；触发 snapshot/projection 刷新）
   ...['goalNarrative', 'learningPreferenceNarrative', 'conceptLedger',
       'reusableFoundations', 'blockedFoundations',
       'displayLabel', 'shortLabel'].map(fieldId => ({
-    agentId: 'learner-agent' as const, fieldId,
+    agentId: 'profile-agent' as const, fieldId,
     render: 'hidden' as RenderValue, handoff: [],
     internal: true, accumulate: true,
     visibilityPreset: 'agent-internal' as const,
@@ -128,22 +128,22 @@ export interface FieldRoutingBootstrapResult {
   routingsCreated: number; routingsSkipped: number;
 }
 
-export async function ensureLearnerFieldRoutings(systemPrisma: PrismaClient): Promise<FieldRoutingBootstrapResult> {
+export async function ensureProfileFieldRoutings(systemPrisma: PrismaClient): Promise<FieldRoutingBootstrapResult> {
   const result: FieldRoutingBootstrapResult = { fieldsCreated: 0, fieldsSkipped: 0, contractsCreated: 0, contractsSkipped: 0, routingsCreated: 0, routingsSkipped: 0 };
 
-  for (const c of LEARNER_FIELD_ROUTING_CONTRACTS) {
+  for (const c of PROFILE_FIELD_ROUTING_CONTRACTS) {
     const exists = await systemPrisma.agent_contracts.findUnique({ where: { agentId: c.agentId } });
     await systemPrisma.agent_contracts.upsert({ where: { agentId: c.agentId }, update: {}, create: { id: randomUUID(), agentId: c.agentId, stage: STAGE, displayName: c.displayName, description: c.description, schemaVersion: 'v3', source: 'code', managedByCode: true } });
     exists ? result.contractsSkipped++ : result.contractsCreated++;
   }
 
-  for (const f of LEARNER_FIELD_ROUTING_FIELDS) {
+  for (const f of PROFILE_FIELD_ROUTING_FIELDS) {
     const exists = await systemPrisma.field_definitions.findUnique({ where: { fieldId: f.fieldId } });
     await systemPrisma.field_definitions.upsert({ where: { fieldId: f.fieldId }, update: {}, create: { id: randomUUID(), fieldId: f.fieldId, stage: STAGE, promptRole: f.promptRole, valueType: f.valueType, snakeName: f.snakeName ?? null, camelName: f.camelName ?? null, description: f.description, enumValues: f.enumValues ? JSON.stringify(f.enumValues) : null, systemLocked: f.systemLocked ?? false, structureLocked: f.structureLocked ?? false, bindings: f.bindings ? JSON.stringify(f.bindings) : null } });
     exists ? result.fieldsSkipped++ : result.fieldsCreated++;
   }
 
-  for (const r of LEARNER_FIELD_ROUTINGS) {
+  for (const r of PROFILE_FIELD_ROUTINGS) {
     const exists = await systemPrisma.agent_field_routings.findUnique({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } } });
     await systemPrisma.agent_field_routings.upsert({ where: { agentId_fieldId: { agentId: r.agentId, fieldId: r.fieldId } }, update: {}, create: { id: randomUUID(), agentId: r.agentId, fieldId: r.fieldId, render: r.render, handoff: (r.handoff && r.handoff.length) ? JSON.stringify(r.handoff) : null, internalFlag: r.internal, accumulate: r.accumulate, visibilityPreset: r.visibilityPreset ?? null, notes: r.notes ?? null, source: 'code', managedByCode: true } });
     exists ? result.routingsSkipped++ : result.routingsCreated++;

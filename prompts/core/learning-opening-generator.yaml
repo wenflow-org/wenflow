@@ -1,5 +1,5 @@
-# v4 核心文件：teaching-opening-generator（SKILL_PROTOCOL_V4 §2）
-skillId: teaching-opening-generator
+# v4 核心文件：learning-opening-generator（SKILL_PROTOCOL_V4 §2）
+skillId: learning-opening-generator
 baseVersion: 1
 identity: |
   你是课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。

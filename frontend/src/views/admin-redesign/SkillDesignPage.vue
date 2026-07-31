@@ -132,7 +132,7 @@
         <section class="sdp-block">
           <header class="sdp-block__head">
             <h4>最近调用</h4>
-            <span class="sdp-block__meta">点「重跑」用真实输入立即复现</span>
+            <span class="sdp-block__meta">重跑：用真实输入复现</span>
           </header>
               <div v-if="recentLogs.length" class="sdp-logs">
                 <div
@@ -299,7 +299,7 @@
                 <!-- 输出字段（高危：字段冻结守门） -->
                 <section class="sdp-pwform__card sdp-pwform__card--danger">
                   <h5>输出字段 <b class="mono">{{ coreForm.fields.length }}</b></h5>
-                  <p class="sdp-pwform__warn">增删字段、改型、改名会触发字段冻结守门（受限/阻断需开发确认引用才能发布）。</p>
+                  <p class="sdp-pwform__warn">增删字段、改型、改名会触发字段冻结守门。</p>
                   <div class="sdp-pwform__fields">
                     <div class="sdp-pwform__fieldrow sdp-pwform__fieldrow--head">
                       <span>name</span><span>type</span><span>可选</span><span>desc（生成指令）</span><span>turn</span><span></span>
@@ -472,7 +472,7 @@
         <section class="sdp-versions">
           <header class="sdp-sec-head">
             <h4>版本管理</h4>
-            <span class="sdp-sec-meta">{{ promptVersions.length }} 个版本 · 发布后建议回工作台试跑验证</span>
+            <span class="sdp-sec-meta">{{ promptVersions.length }} 个版本</span>
           </header>
           <p v-if="versionMsg" class="sdp-versions-msg">
             {{ versionMsg }}
@@ -562,7 +562,7 @@
       <div v-show="tab === 'runtime'" class="sdp-pane">
         <div class="sdp-notice">
           <strong>路由与可靠性</strong>
-          本页只配置 endpoint / model 路由 / 超时 / 逻辑重试。温度与 Max Tokens 由 ACTIVE Prompt（File-as-Truth）管理，保存时不会写入节点覆盖表。
+          只配置 endpoint / model 路由 / 超时 / 逻辑重试；温度与 Max Tokens 由 ACTIVE Prompt 管理。
         </div>
 
         <div class="sdp-chiprows">

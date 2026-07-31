@@ -15,9 +15,7 @@
       </div>
     </div>
 
-    <p class="pw-lead">
-      core YAML 是业务 SSOT。编辑、编译预览与发布已统一收进 Skill 设计页的「协议」页签；此处为全量目录与同步状态总览。
-    </p>
+    <p class="pw-lead">编辑与发布在 Skill 设计页的「协议」页签。</p>
 
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 

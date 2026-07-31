@@ -10,7 +10,6 @@
         <span class="mk-status__meta">待处理 {{ pendingCount }}</span>
         <span v-if="recent30 != null" class="mk-status__meta">近 30 天 {{ recent30 }}</span>
       </template>
-      <span v-else class="mk-status__meta">前台教学反馈的收集与处理</span>
       <button type="button" class="mk-status__action" :disabled="loading" @click="load">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
@@ -19,8 +18,8 @@
     <div v-if="toast" class="mk-toast" :class="toastCls">{{ toast }}</div>
 
     <div v-if="!isLive" class="mk-empty">
-      <strong>演示模式暂无反馈数据</strong>
-      <span>通过顶栏刷新或命令面板切换到真实数据查看。</span>
+      <strong>暂无反馈数据</strong>
+      <span>刷新或切换到真实数据查看。</span>
     </div>
 
     <template v-else>
@@ -91,8 +90,7 @@
           </tbody>
         </table>
         <div v-else class="mk-empty">
-          <strong>{{ loading ? '加载中…' : '没有匹配的反馈' }}</strong>
-          <span>{{ keyword || statusFilter || lowOnly ? '调整筛选条件试试。' : '还没有收到用户反馈。' }}</span>
+          <strong>{{ loading ? '加载中…' : (keyword || statusFilter || lowOnly ? '当前筛选无匹配' : '暂无反馈') }}</strong>
         </div>
       </div>
     </template>

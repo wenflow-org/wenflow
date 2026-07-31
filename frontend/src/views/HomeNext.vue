@@ -228,7 +228,6 @@
         </div>
         <div class="hn-foot__links">
           <router-link to="/vision">愿景</router-link>
-          <router-link to="/legacy/home">旧版首页</router-link>
           <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
         </div>
       </div>

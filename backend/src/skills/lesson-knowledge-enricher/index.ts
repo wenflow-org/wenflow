@@ -225,8 +225,7 @@ export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInpu
       defaultSystemPrompt: '',
       requireActivePrompt: true,
       caller: { skillId: 'lesson-knowledge-enricher' },
-      modelDefaults: { temperature: 0.4, maxTokens: 4000 },
-      buildUserPayload: (payload) => payload,
+            buildUserPayload: (payload) => payload,
       normalizeOutput: (parsed, payload) => {
         const base = buildFallback(payload);
         const obj = parsed && typeof parsed === 'object' ? parsed : {};

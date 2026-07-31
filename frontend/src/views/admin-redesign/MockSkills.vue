@@ -52,7 +52,7 @@
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`"></span>
                   <div class="mk-cell-main">
-                    <strong>{{ s.name }}</strong>
+                    <strong :title="s.name">{{ s.name }}</strong>
                     <span class="mk-cell-sub mono">{{ s.id }}</span>
                   </div>
                 </div>
@@ -95,8 +95,9 @@
       </div>
 
       <div v-if="!filtered.length" class="mk-empty">
-        <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '没有匹配的 Skill' : '全部 Skill 处于空闲' }}</strong>
-        <span>{{ onlyAttention ? '一切健康。' : keyword ? '换个关键词试试。' : '产生真实调用后，这里会出现运行数据。' }}</span>
+        <strong>{{ onlyAttention ? '没有需关注的 Skill' : keyword ? '没有匹配的 Skill' : '暂无运行数据' }}</strong>
+        <span v-if="onlyAttention">一切健康。</span>
+        <span v-else-if="keyword">换个关键词试试。</span>
       </div>
     </div>
   </div>

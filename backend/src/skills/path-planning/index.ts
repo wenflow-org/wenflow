@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Path Agent
  * 
  * 学习路径规划 + 动态重规划
@@ -569,11 +569,7 @@ ${JSON.stringify(replan.learnerReplanProjection || {}, null, 2)}
     defaultSystemPrompt: '',
     requireActivePrompt: true,
     caller: { agentId: 'path-agent', skillId: 'path-planning' },
-    modelDefaults: {
-      maxTokens: PATH_AGENT_MAX_TOKENS,
-      temperature: 0.2,
-    },
-    buildUserPayload: () => userPayload,
+        buildUserPayload: () => userPayload,
     normalizeOutput: (pathData) => ({
       id: `path_${Date.now()}`,
       name: pathData.name,

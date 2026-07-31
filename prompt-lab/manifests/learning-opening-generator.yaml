@@ -1,10 +1,10 @@
 version: prompt-lab-manifest/v1
-skillId: teaching-opening-generator
-agentId: skill:teaching-opening-generator
-name: default-skill-teaching-opening-generator
+skillId: learning-opening-generator
+agentId: skill:learning-opening-generator
+name: default-skill-learning-opening-generator
 archetype: generator
 description: 课堂开场交互生成器
-acceptableAgentIds: [skill:teaching-opening-generator]
+acceptableAgentIds: [skill:learning-opening-generator]
 publish: { enabled: true, exportTargets: [platform-prompts] }
 runtimeDefaults: { tier: chat, temperature: 0.4, maxTokens: 1200, model: null, thinkingMode: default, reasoningEffort: default }
 promptContract:

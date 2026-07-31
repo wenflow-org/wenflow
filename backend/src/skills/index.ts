@@ -45,8 +45,8 @@ export { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-eva
 import { acceptanceEvidenceEvaluator as acceptanceEvidenceEvaluatorFn } from './acceptance-evidence-evaluator';
 
 // 教学策略选择器（新增：策略别名映射 + 引导 prompt 构建）
-export { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
-import { teachingStrategySelector as teachingStrategySelectorFn } from './teaching-strategy-selector';
+export { learningStrategySelectorDefinition } from './learning-strategy-selector';
+import { learningStrategySelector as learningStrategySelectorFn } from './learning-strategy-selector';
 
 // Prompt 编译器（新增：简化配置编译为完整 Prompt）
 export { promptCompilerDefinition, promptCompilerRuntimeDefinition } from './prompt-compiler';
@@ -98,9 +98,9 @@ export { goalConversationAgentDefinition } from './goal-conversation';
 import { runGoalConversationAgent } from './goal-conversation';
 export { pathAgentDefinition } from './path-planning';
 import { pathAgentHandler } from './path-planning';
-export { teachingTurnAgentDefinition, toTeachingTurnSkillOutcome } from './teaching-turn';
-export type { TeachingTurnArtifact, TeachingTurnInput, TeachingTurnOutput } from './teaching-turn';
-import { teachingTurnAgentHandler } from './teaching-turn';
+export { learningTurnAgentDefinition, toLearningTurnSkillOutcome } from './learning-turn';
+export type { LearningTurnArtifact, LearningTurnInput, LearningTurnOutput } from './learning-turn';
+import { learningTurnAgentHandler } from './learning-turn';
 export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './session-wrapup';
 import { sessionWrapupAgentHandler } from './session-wrapup';
 export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './peer-reinforcement';
@@ -126,7 +126,7 @@ import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-au
 import { structuredOutputParserDefinition } from './structured-output-parser';
 import { goalUnderstandingComposerDefinition } from './goal-understanding-composer';
 import { acceptanceEvidenceEvaluatorDefinition } from './acceptance-evidence-evaluator';
-import { teachingStrategySelectorDefinition } from './teaching-strategy-selector';
+import { learningStrategySelectorDefinition } from './learning-strategy-selector';
 import { promptCompilerDefinition } from './prompt-compiler';
 import { mcpToolDefinition } from './mcp-tool';
 
@@ -147,7 +147,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   structuredOutputParserDefinition,
   goalUnderstandingComposerDefinition,
   acceptanceEvidenceEvaluatorDefinition,
-  teachingStrategySelectorDefinition,
+  learningStrategySelectorDefinition,
   promptCompilerDefinition,
   mcpToolDefinition,
   ...auxSkillDefinitions,
@@ -177,7 +177,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
     stats: { callCount: 0, successRate: 1, avgLatency: 0 }
   },
   {
-    name: 'teaching-turn',
+    name: 'learning-turn',
     displayName: '教学回合 Skill',
     version: '1.0.0',
     status: 'working',
@@ -232,14 +232,14 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'structured-output-parser': structuredOutputParserFn,
   'goal-understanding-composer': goalUnderstandingComposerFn,
   'acceptance-evidence-evaluator': acceptanceEvidenceEvaluatorFn,
-  'teaching-strategy-selector': teachingStrategySelectorFn,
+  'learning-strategy-selector': learningStrategySelectorFn,
   'prompt-compiler': promptCompilerFn,
   'mcp-tool': executeMcpToolFn,
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),
-  'teaching-turn': (input: any) => teachingTurnAgentHandler(input),
+  'learning-turn': (input: any) => learningTurnAgentHandler(input),
   'session-wrapup': (input: any) => sessionWrapupAgentHandler(input.input, (input as any).context),
   'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };

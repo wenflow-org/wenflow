@@ -14,6 +14,12 @@
         </div>
       </header>
 
+      <nav class="uc__tabs" aria-label="个人中心导航">
+        <router-link v-for="t in tabs" :key="t.to" :to="t.to" class="uc__tab" :class="{ 'uc__tab--on': isActive(t) }">
+          {{ t.label }}
+        </router-link>
+      </nav>
+
       <div class="uc__body">
         <slot />
       </div>
@@ -24,11 +30,27 @@
 </template>
 
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
 import V2Nav from '@/views/v2/V2Nav.vue'
 import V2Footer from '@/views/v2/V2Footer.vue'
 import '@/views/v2/v2.css'
 
 defineProps<{ title: string; description?: string }>()
+
+const route = useRoute()
+
+const tabs = [
+  { to: '/user/account', label: '账户', match: ['/user/account'] },
+  { to: '/user/agents', label: 'AI 助手', match: ['/user/agents'] },
+  { to: '/user/skills', label: 'Skill', match: ['/user/skills'] },
+  { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
+  { to: '/user/developer', label: '开发者接入', match: ['/user/developer', '/user/code-repo'] },
+  { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
+]
+
+function isActive(t: { match: string[] }) {
+  return t.match.some((m) => route.path.startsWith(m))
+}
 </script>
 
 <style scoped>
@@ -87,6 +109,37 @@ defineProps<{ title: string; description?: string }>()
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
+}
+
+.uc__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+
+.uc__tab {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+  background: #fff;
+  border: 1px solid var(--line, #e3e9f4);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.uc__tab:hover {
+  color: var(--blue-deep, #1f57cc);
+  border-color: rgba(52, 120, 246, 0.35);
+}
+
+.uc__tab--on {
+  color: #fff;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  border-color: transparent;
+  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.22);
 }
 
 .uc__body {

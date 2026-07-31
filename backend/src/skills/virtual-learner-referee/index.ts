@@ -10,6 +10,7 @@ export const VIRTUAL_LEARNER_REFEREE_PROMPT = loadPromptFile('skill:virtual-lear
 
 const SCORE_KEYS = [
   'goalExperience',
+  'goalUnderstanding',
   'pathExperience',
   'teachingExperience',
   'controlConsistency',
@@ -35,13 +36,14 @@ function normalizeEvidence(value: unknown, input: VirtualLearnerRefereeInput): V
   if (!Array.isArray(value)) return []
   const seen = new Set<string>()
   return value.flatMap((item: any, position: number) => {
-    const source = ['publicTrace', 'refereeTrace', 'control', 'experimentSummary'].includes(item?.source)
+    const source = ['publicTrace', 'refereeTrace', 'control', 'experimentSummary', 'storyMeta', 'metricCompleteness'].includes(item?.source)
       ? item.source as VirtualLearnerRefereeOutput['evidence'][number]['source']
       : null
     if (!source) return []
     const index = item?.index === null || item?.index === undefined ? null : Number(item.index)
     if (source === 'publicTrace' && (!Number.isInteger(index) || index! < 0 || index! >= input.publicTrace.length)) return []
     if (source === 'refereeTrace' && (!Number.isInteger(index) || index! < 0 || index! >= input.refereeTrace.length)) return []
+    if ((source === 'storyMeta' || source === 'metricCompleteness') && index !== null) return []
     const id = text(item?.id, 40) || `E${position + 1}`
     if (seen.has(id)) return []
     seen.add(id)
@@ -93,18 +95,32 @@ export function normalizeRefereeOutput(parsed: any, input: VirtualLearnerReferee
   const scores: VirtualLearnerRefereeOutput['scores'] = {
     overall: 0,
     goalExperience: coverage.goal ? clampScore(rawScores.goalExperience, 50) : null,
+    // 目标理解：只在有故事基准（真实问题）且 Goal 阶段被覆盖时评估
+    goalUnderstanding: coverage.goal && input.storyMeta?.realProblem
+      ? clampScore(rawScores.goalUnderstanding, 50)
+      : null,
     pathExperience: coverage.path ? clampScore(rawScores.pathExperience, 50) : null,
     teachingExperience: coverage.learning ? clampScore(rawScores.teachingExperience, 50) : null,
     controlConsistency: clampScore(rawScores.controlConsistency, 50),
     boundaryIntegrity: clampScore(rawScores.boundaryIntegrity, 50),
     evidenceSufficiency: clampScore(rawScores.evidenceSufficiency, evidence.length ? 60 : 20)
   }
+  // 数据契约门禁：跑过教学阶段却没有任何指标/wrapup 产出 → 证据不足，不得给出结论性裁判
+  const metricCompleteness = input.metricCompleteness
+  const allMetricsMissing = metricCompleteness?.available === true
+    && metricCompleteness.teachingSessions > 0
+    && metricCompleteness.metricsPresent === 0
+    && metricCompleteness.wrapupPresent === 0
+  if (allMetricsMissing) {
+    scores.evidenceSufficiency = Math.min(scores.evidenceSufficiency, 45)
+  }
   const weighted = [
-    [scores.goalExperience, 20],
+    [scores.goalExperience, 15],
+    [scores.goalUnderstanding, 10],
     [scores.pathExperience, 20],
     [scores.teachingExperience, 25],
-    [scores.controlConsistency, 15],
-    [scores.boundaryIntegrity, 10],
+    [scores.controlConsistency, 12],
+    [scores.boundaryIntegrity, 8],
     [scores.evidenceSufficiency, 10]
   ].filter(([score]) => score !== null) as Array<[number, number]>
   const weightTotal = weighted.reduce((sum, [, weight]) => sum + weight, 0)
@@ -137,14 +153,16 @@ export const virtualLearnerRefereeDefinition: SkillDefinition = {
       publicTrace: { type: 'array', description: '学习者实际可见的公开轨迹', required: true },
       refereeTrace: { type: 'array', description: '不回流学习者的旁路诊断轨迹', required: true },
       control: { type: 'object', description: '实验最终控制回执', required: true },
-      experimentSummary: { type: 'object', description: '服务端生成的实验摘要', required: true }
+      experimentSummary: { type: 'object', description: '服务端生成的实验摘要', required: true },
+      storyMeta: { type: 'object', description: '平行通道：故事元数据与当次诉求（surfaceGoal/realProblem/demandText），不进入主链' },
+      metricCompleteness: { type: 'object', description: '数据完整性：教学指标与 wrapup 产出情况（判 evidenceSufficiency 用）' }
     }
   },
   outputSchema: {
     type: 'object',
     properties: {
       verdict: { type: 'string', description: 'pass|pass_with_concerns|fail|inconclusive' },
-      scores: { type: 'object', description: '各维度 0-100 分' },
+      scores: { type: 'object', description: '各维度 0-100 分（含 goalUnderstanding 目标理解维度）' },
       findings: { type: 'array', description: '带证据引用的问题发现' },
       recommendations: { type: 'array', description: '面向实验维护者的改进建议' },
       evidence: { type: 'array', description: '可定位到输入轨迹的证据' }
@@ -169,8 +187,7 @@ export async function virtualLearnerReferee(input: VirtualLearnerRefereeInput): 
     defaultSystemPrompt: VIRTUAL_LEARNER_REFEREE_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'virtual-learner-referee' },
-    modelDefaults: { maxTokens: VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, temperature: VIRTUAL_LEARNER_REFEREE_TEMPERATURE },
-    buildUserPayload: value => ({
+        buildUserPayload: value => ({
       publicTrace: value.publicTrace,
       refereeTrace: value.refereeTrace,
       control: value.control,

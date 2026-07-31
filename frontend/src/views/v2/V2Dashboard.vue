@@ -51,7 +51,7 @@
                 <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
               </div>
               <h1 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h1>
-              <p class="action__desc">{{ todayTask?.desc || guidanceNextStep }}</p>
+              <p v-if="actionDesc" class="action__desc">{{ actionDesc }}</p>
               <p v-if="actionReason" class="action__reason">
                 <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74c.6.52 1 1.31 1 2.26v1h6v-1c0-.95.4-1.74 1-2.26A7 7 0 0 0 12 2z"/></svg>
                 {{ actionReason }}
@@ -207,7 +207,7 @@
             <section class="card mini" v-if="nearestAchievement">
               <div class="mini__icon mini__icon--medal">{{ nearestAchievement.icon }}</div>
               <div>
-                <strong>成就「{{ nearestAchievement.name }}」</strong>
+                <strong>成就「{{ nearestAchievement.name }}」<span v-if="nearestAchievement.achieved" class="mini__badge">待解锁</span></strong>
                 <p>{{ nearestAchievement.hint }}</p>
               </div>
             </section>
@@ -535,11 +535,17 @@ const stageInfo = computed(() => {
   return `${(idx >= 0 ? idx : 0) + 1} / ${primaryPath.value.stages.length || '?'}`;
 });
 
-const guidanceNextStep = computed(() => guidanceCopy.value?.nextStep || guidance.value?.copy?.nextStep || '');
 const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '不用整理、不用说得很准。讲讲最近想解决的事，问流会帮你收敛成目标和阶段安排。');
 
 /* skill 今日行动（todayActions 语义跳转解析） */
 interface SkillAction { label: string; to: string; primary: boolean }
+const ACTION_LABEL_BY_TO: Record<string, string> = {
+  'continue-learning': '继续学习',
+  'learning-state': '查看学习状态',
+  achievements: '查看成就',
+  'create-goal': '规划新目标',
+  'path-detail': '查看路径'
+};
 const skillActions = computed<SkillAction[]>(() => {
   const list = guidanceCopy.value?.todayActions;
   if (!Array.isArray(list) || !list.length) return [];
@@ -560,7 +566,9 @@ const skillActions = computed<SkillAction[]>(() => {
     }
   };
   return list.slice(0, 3).map((item: Record<string, any>, i: number) => ({
-    label: item.label || item.title || item.action || '去学习',
+    label: i === 0
+      ? item.action || item.title || ACTION_LABEL_BY_TO[item.to] || '去学习'
+      : ACTION_LABEL_BY_TO[item.to] || item.action || item.title || '去学习',
     to: resolve(item.to),
     primary: i === 0
   }));
@@ -580,6 +588,13 @@ const pathStruggleNote = computed(() => {
 const todayBarPct = computed(() => {
   const target = todayTask.value?.minutes || 25;
   return Math.min(100, Math.round((todayMinutes.value / target) * 100));
+});
+
+/* 今日行动描述：desc 与标题重复时不重复展示 */
+const actionDesc = computed(() => {
+  const desc = todayTask.value?.desc?.trim();
+  if (!desc || desc === todayTask.value?.title) return '';
+  return desc;
 });
 
 function goLearn() {
@@ -666,6 +681,7 @@ const nearestAchievement = computed(() => {
   return {
     icon: nearest.icon || '🏅',
     name: nearest.name,
+    achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
     hint: `${nearest.description}（${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}）`
   };
 });
@@ -1190,6 +1206,11 @@ onMounted(loadAll);
 .mini__icon--medal { color: var(--accent); background: rgba(141, 107, 255, 0.13); }
 .mini strong { font-size: 14px; }
 .mini p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.mini__badge {
+  margin-left: 4px; padding: 1px 6px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; vertical-align: 2px;
+  color: var(--accent); background: rgba(141, 107, 255, 0.12);
+}
 
 /* ---------- 整月日历 ---------- */
 .month { padding: 20px 22px; display: grid; gap: 14px; }

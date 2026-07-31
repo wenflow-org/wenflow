@@ -219,8 +219,7 @@ export async function adaptiveGuidanceCopy(
       defaultSystemPrompt: '',
       requireActivePrompt: true,
       caller: { skillId: 'adaptive-guidance-copy' },
-      modelDefaults: { temperature: 0.6, maxTokens: 2000 },
-      buildUserPayload: () => userPayload,
+            buildUserPayload: () => userPayload,
       normalizeOutput: (parsed, payload) => normalizeAdaptiveOutput(parsed, payload),
       validateParsedOutput: (parsed) =>
         parsed && typeof parsed === 'object'

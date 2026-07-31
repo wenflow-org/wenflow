@@ -1920,7 +1920,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(executeSkill).not.toHaveBeenCalled()
   })
 
-  it('裁判只接收四类旁路输入且不污染学习者轨迹', async () => {
+  it('裁判只接收旁路输入与平行通道且不污染学习者轨迹', async () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     let currentSession: any = {
       ...sessionWith(
@@ -1933,7 +1933,16 @@ describe('BlackboxVirtualLearnerRunner', () => {
       completedAt: new Date('2026-07-14T10:10:00.000Z')
     }
     const state = JSON.parse(currentSession.stageResults)
-    state.story = { hiddenDetails: ['不能进入裁判输入'] }
+    state.story = {
+      hiddenDetails: ['不能进入裁判输入'],
+      title: '被消息打断的复盘',
+      triggerEvent: '周五复盘被中断',
+      visibleOpening: '我最近总被消息打断，想学时间管理',
+      goalSeed: {
+        surfaceGoal: '学会时间管理',
+        realProblem: '任务被碎片化消息打断无法进入深度工作'
+      }
+    }
     state.blackbox.publicTrace = [{
       timestamp: '2026-07-14T10:01:00.000Z',
       observation: { stage: 'goal', visibleMessages: [{ role: 'platform', content: '公开问题' }], availableActions: ['chat'] },
@@ -1942,20 +1951,37 @@ describe('BlackboxVirtualLearnerRunner', () => {
     state.blackbox.refereeTrace = [{ timestamp: '2026-07-14T10:01:00.000Z', traceId: 'trace1', diagnostic: { analysis: { score: 0.8 } } }]
     currentSession.stageResults = JSON.stringify(state)
     runner.getSession = jest.fn(async () => currentSession)
+    ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
+      id: 'vp1', userId: 'u1', learningGoal: '长期目标', profile: '{}',
+      knownConcepts: '[]', struggleConcepts: '[]', personalityTraits: '{}'
+    })
     ;(prisma.virtual_sessions.update as jest.Mock).mockImplementation(async ({ data }: any) => {
       currentSession = { ...currentSession, ...data }
       return currentSession
     })
     ;(executeSkill as jest.Mock).mockResolvedValue({
       verdict: 'pass',
-      scores: { overall: 90, goalExperience: 90, pathExperience: null, teachingExperience: null, controlConsistency: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
+      scores: { overall: 90, goalExperience: 90, goalUnderstanding: 80, pathExperience: null, teachingExperience: null, controlConsistency: 90, boundaryIntegrity: 90, evidenceSufficiency: 90 },
       findings: [], recommendations: [], evidence: []
     })
 
     const report = await runner.referee('vs1', 'admin1')
 
     const input = (executeSkill as jest.Mock).mock.calls[0][1]
-    expect(Object.keys(input).sort()).toEqual(['control', 'experimentSummary', 'publicTrace', 'refereeTrace'])
+    expect(Object.keys(input).sort()).toEqual([
+      'control', 'experimentSummary', 'metricCompleteness', 'publicTrace', 'refereeTrace', 'storyMeta'
+    ])
+    expect(input.storyMeta).toEqual(expect.objectContaining({
+      storyTitle: '被消息打断的复盘',
+      surfaceGoal: '学会时间管理',
+      realProblem: '任务被碎片化消息打断无法进入深度工作',
+      demandText: '我最近总被消息打断，想学时间管理',
+      demandSource: 'story.visibleOpening'
+    }))
+    expect(input.metricCompleteness).toEqual(expect.objectContaining({
+      available: true,
+      teachingSessions: 0
+    }))
     expect(JSON.stringify(input)).not.toContain('hiddenDetails')
     expect(JSON.stringify(input)).not.toContain('learnerPrivateState')
     const persisted = JSON.parse(currentSession.stageResults)

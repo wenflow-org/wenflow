@@ -1,14 +1,14 @@
-﻿import { callPrompt } from '../../composers/prompt-composer';
+import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
-import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
+import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/learning-strategy-selector';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 
-const AGENT_ID = 'skill:teaching-turn';
+const AGENT_ID = 'skill:learning-turn';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -16,7 +16,7 @@ const ALLOWED_COGNITIVE_LEVELS = ['remember', 'understand', 'apply', 'analyze', 
 const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused'] as const;
 const ALLOWED_KNOWLEDGE_STATUSES = ['pending', 'learning', 'mastered', 'review'] as const;
 
-export interface TeachingTurnInput {
+export interface LearningTurnInput {
   messages: Array<{ role: MessageRole; content: string }>;
   learner: TeachingLearnerProjection;
   scenario: {
@@ -103,7 +103,7 @@ export interface TeachingTurnInput {
   visibleDialogueContext?: Array<{ role: MessageRole; content: string }>;
 }
 
-export interface TeachingTurnOutput {
+export interface LearningTurnOutput {
   reply: string;
   analysis: {
     cognitiveLevel: string;
@@ -144,16 +144,16 @@ export interface TeachingTurnOutput {
  * 已通过 raw validator 与 normalizer 的单轮教学领域产物。
  * 保留独立别名，避免将 legacy agent-output-v1 的 internal 包装误作领域模型。
  */
-export type TeachingTurnArtifact = TeachingTurnOutput;
+export type LearningTurnArtifact = LearningTurnOutput;
 
 /**
  * Phase 2 internal canonical sidecar.
  * Coordinator 仍负责知识状态合并和持久化，所以不在此阶段声明 transition。
  */
-export function toTeachingTurnSkillOutcome(
-  artifact: TeachingTurnArtifact,
+export function toLearningTurnSkillOutcome(
+  artifact: LearningTurnArtifact,
   runtimeEnvelope?: ReturnType<typeof adaptToRuntimeEnvelope> | null,
-): SkillOutcome<TeachingTurnArtifact> {
+): SkillOutcome<LearningTurnArtifact> {
   return buildSkillOutcome({
     skillId: AGENT_ID,
     artifact,
@@ -163,15 +163,15 @@ export function toTeachingTurnSkillOutcome(
   });
 }
 
-export const teachingTurnAgentDefinition: AgentDefinition = {
+export const learningTurnAgentDefinition: AgentDefinition = {
   id: AGENT_ID,
-  name: '教学回合 Skill',
+  name: '学习回合 Skill',
   version: '1.0.0',
   type: 'teaching',
   category: 'standard',
   description: '根据课堂上下文生成本轮教学回复与结构化教学状态',
   capabilities: [
-    'teaching-turn-generation',
+    'learning-turn-generation',
     'cognitive-analysis',
     'knowledge-state-suggestion',
     'teaching-strategy-selection'
@@ -215,11 +215,11 @@ function normalizeConceptName(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function buildStrategyGuidancePrompt(input: TeachingTurnInput): string | null {
+function buildStrategyGuidancePrompt(input: LearningTurnInput): string | null {
   return buildGuidancePrompt(input.scenario.teachingStrategyGuidance);
 }
 
-function buildTaskExecutionPrompt(input: TeachingTurnInput): string {
+function buildTaskExecutionPrompt(input: LearningTurnInput): string {
   const taskProfile = input.scenario.taskProfile;
   const taskContext = input.scenario.currentTaskContext;
   const lines = [
@@ -237,11 +237,11 @@ function normalizeAllowedStrategy(value: string | undefined) {
   return normalizeStrategy(value);
 }
 
-function deriveFallbackStrategies(input: TeachingTurnInput): string[] {
+function deriveFallbackStrategies(input: LearningTurnInput): string[] {
   return getFallbackStrategies(input.scenario.taskProfile?.knowledgeType);
 }
 
-function filterOverlyBroadKnowledgePoints(points: Array<{ name: string; status: 'pending' | 'learning' | 'mastered' | 'review'; progress: number }>, input: TeachingTurnInput) {
+function filterOverlyBroadKnowledgePoints(points: Array<{ name: string; status: 'pending' | 'learning' | 'mastered' | 'review'; progress: number }>, input: LearningTurnInput) {
   const coreConcept = normalizeConceptName(input.scenario.taskProfile?.coreConcept || input.scenario.taskProfile?.linkedConceptName || '');
   const hasFinerPrimaryConcept = points.some((point) => normalizeConceptName(point.name) && normalizeConceptName(point.name) !== coreConcept);
 
@@ -252,7 +252,7 @@ function filterOverlyBroadKnowledgePoints(points: Array<{ name: string; status: 
   const filtered = points.filter((point) => normalizeConceptName(point.name) !== coreConcept);
   return filtered.length > 0 ? filtered : points;
 }
-function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput): TeachingTurnOutput {
+function normalizeOutput(parsed: Record<string, any>, input: LearningTurnInput): LearningTurnOutput {
   const reply = typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
     : '我们继续沿着这个主题往下学。';
@@ -272,7 +272,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     : [];
 
   if (Array.isArray(pedagogy.strategies) && pedagogy.strategies.length > 0 && normalizedStrategies.length === 0) {
-    logger.warn('[TeachingTurnAgent] 检测到非法 pedagogy.strategies，已自动回退到默认策略', {
+    logger.warn('[LearningTurnAgent] 检测到非法 pedagogy.strategies，已自动回退到默认策略', {
       rawStrategies: pedagogy.strategies,
       fallbackStrategies,
       taskTitle: input.scenario.taskTitle,
@@ -307,7 +307,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
   const resolvedCompletionCandidate = requestedCompletionCandidate && completionEvidenceSatisfied;
 
   if (requestedCompletionCandidate && !resolvedCompletionCandidate) {
-    logger.warn('[TeachingTurnAgent] completionCandidate 被验收证据门槛拦截', {
+    logger.warn('[LearningTurnAgent] completionCandidate 被验收证据门槛拦截', {
       taskTitle: input.scenario.taskTitle,
       taskType: input.scenario.taskType,
       acceptanceCriteria: acceptanceEvidence.acceptanceCriteria,
@@ -362,7 +362,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
   };
 }
 
-function buildPromptInput(input: TeachingTurnInput) {
+function buildPromptInput(input: LearningTurnInput) {
   const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
   const taskExecutionPrompt = buildTaskExecutionPrompt(input);
 
@@ -383,7 +383,7 @@ function buildPromptInput(input: TeachingTurnInput) {
   };
 }
 
-function evaluateAcceptanceCriteriaEvidence(input: TeachingTurnInput) {
+function evaluateAcceptanceCriteriaEvidence(input: LearningTurnInput) {
   return evaluateByCriteria({
     messages: input.messages,
     acceptanceCriteria: input.scenario.currentTaskContext?.acceptanceCriteria,
@@ -391,7 +391,7 @@ function evaluateAcceptanceCriteriaEvidence(input: TeachingTurnInput) {
   });
 }
 
-function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
+function evaluateCompletionByTaskProfile(input: LearningTurnInput) {
   return evaluateByProfile({
     messages: input.messages,
     taskType: input.scenario.taskType,
@@ -407,17 +407,17 @@ function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
   });
 }
 
-function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
+function validateLearningTurnOutput(parsed: any, input: LearningTurnInput) {
   if (!parsed || typeof parsed !== 'object') {
-    return { valid: false, failureReason: 'TEACHING_TURN_OUTPUT_NOT_OBJECT' };
+    return { valid: false, failureReason: 'LEARNING_TURN_OUTPUT_NOT_OBJECT' };
   }
 
   if (typeof parsed.reply !== 'string' || !parsed.reply.trim()) {
-    return { valid: false, failureReason: 'TEACHING_TURN_REPLY_MISSING' };
+    return { valid: false, failureReason: 'LEARNING_TURN_REPLY_MISSING' };
   }
 
   if (!parsed.analysis || typeof parsed.analysis !== 'object' || !parsed.knowledge || typeof parsed.knowledge !== 'object' || !parsed.pedagogy || typeof parsed.pedagogy !== 'object' || !parsed.control || typeof parsed.control !== 'object') {
-    return { valid: false, failureReason: 'TEACHING_TURN_REQUIRED_BLOCK_MISSING' };
+    return { valid: false, failureReason: 'LEARNING_TURN_REQUIRED_BLOCK_MISSING' };
   }
 
   const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
@@ -449,23 +449,23 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   const completionLanguageAllowed = rawCompletionCandidate && completionEvidenceSatisfied && allKnowledgeMastered;
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
-    return { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' };
+    return { valid: false, failureReason: 'LEARNING_TURN_REPLY_COMPLETION_MISMATCH' };
   }
 
   return { valid: true };
 }
 
-const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
+const learningTurnPromptSpec: PromptCallSpec<LearningTurnInput, LearningTurnOutput> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: '',
   requireActivePrompt: true,
   caller: {
-    agentId: 'teaching-agent',
-    skillId: 'teaching-turn',
+    agentId: 'learning-agent',
+    skillId: 'learning-turn',
   },
   buildUserPayload: (input) => buildPromptInput(input),
   normalizeOutput: (parsed, input) => normalizeOutput(parsed, input),
-  validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
+  validateParsedOutput: (parsed, input) => validateLearningTurnOutput(parsed, input),
   mapEnvelope: (output, _input, runtimeContract) => {
     const isCompletion = !!output.control?.isCompletionCandidate;
     const phase = isCompletion ? 'completion-candidate' : 'turn-generated';
@@ -486,26 +486,22 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
       },
     });
   },
-  modelDefaults: {
-    temperature: 0.7,
-    maxTokens: 4000,
-  },
-  retryStrategy: {
+    retryStrategy: {
     maxAttempts: 2,
     onValidationFail: ({ failureReason }) => `上一次输出未通过校验，原因是：${failureReason}。请重新输出一个严格 JSON，特别注意：1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；2) pedagogy.strategies 只能使用允许的枚举；3) 保持当前任务的 core concept 与 target relation 不偏移。`,
   },
 };
 
-export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promise<AgentOutput> {
+export async function learningTurnAgentHandler(input: LearningTurnInput): Promise<AgentOutput> {
   try {
-    const result = await callPrompt(teachingTurnPromptSpec, input);
+    const result = await callPrompt(learningTurnPromptSpec, input);
 
     if (!result.success || !result.output) {
-      throw new Error(result.error?.message || 'TEACHING_TURN_OUTPUT_INVALID');
+      throw new Error(result.error?.message || 'LEARNING_TURN_OUTPUT_INVALID');
     }
 
     const output = result.output;
-    const skillOutcome = toTeachingTurnSkillOutcome(output, result.runtimeEnvelope);
+    const skillOutcome = toLearningTurnSkillOutcome(output, result.runtimeEnvelope);
     return {
       success: true,
       userVisible: output.reply,
@@ -518,13 +514,13 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
         ext: {
           teaching: output,
           // Internal canonical sidecar. Keep `teaching` unchanged for legacy consumers.
-          teachingTurnOutcome: skillOutcome,
+          learningTurnOutcome: skillOutcome,
           promptDebug: result.debug,
         }
       },
       runtimeEnvelope: result.runtimeEnvelope,
       renderHints: {
-        component: 'teaching-turn'
+        component: 'learning-turn'
       },
       schemaVersion: 'agent-output-v1',
       metadata: {
@@ -536,12 +532,12 @@ export async function teachingTurnAgentHandler(input: TeachingTurnInput): Promis
       }
     };
   } catch (error) {
-    logger.error('[TeachingTurnAgent] 执行失败', { error });
+    logger.error('[LearningTurnAgent] 执行失败', { error });
     return {
       success: false,
       userVisible: '这一轮教学内容生成失败，请稍后重试。',
       error: {
-        code: 'TEACHING_TURN_FAILED',
+        code: 'LEARNING_TURN_FAILED',
         message: error instanceof Error ? error.message : String(error)
       },
       schemaVersion: 'agent-output-v1',

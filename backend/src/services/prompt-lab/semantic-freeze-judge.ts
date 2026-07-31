@@ -83,8 +83,7 @@ export async function judgeSemanticFreeze(
       defaultSystemPrompt: '',
       requireActivePrompt: true,
       caller: { skillId: 'semantic-freeze-judge' },
-      modelDefaults: { temperature: 0.1, maxTokens: 4000 },
-      buildUserPayload: () => payload,
+            buildUserPayload: () => payload,
       validateParsedOutput: (parsed) => ({
         valid:
           Boolean(parsed) &&

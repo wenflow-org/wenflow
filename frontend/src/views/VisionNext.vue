@@ -140,7 +140,6 @@
         <span>问流 · 从问题到学习路径</span>
         <div>
           <router-link to="/">首页</router-link>
-          <router-link to="/legacy/vision">旧版愿景</router-link>
         </div>
       </div>
     </footer>

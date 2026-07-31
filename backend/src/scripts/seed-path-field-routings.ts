@@ -113,10 +113,10 @@ export const PATH_FIELD_ROUTINGS: SeedRouting[] = [
     internal: false, accumulate: false,
   })),
 
-  // path-agent → execution（聚合 handoff）
+  // path-agent → learning（聚合 handoff）
   ...['path.name', 'path.summary', 'milestones.title', 'milestones.goal', 'subtasks.title', 'subtasks.acceptanceCriteria'].map(fieldId => ({
     agentId: 'path-agent' as const, fieldId,
-    render: 'visible' as RenderValue, handoff: ['execution'],
+    render: 'visible' as RenderValue, handoff: ['learning'],
     internal: false, accumulate: false,
   })),
 ];

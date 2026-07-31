@@ -277,12 +277,12 @@ router.get('/flow/:stage', async (req: Request, res: Response) => {
     goal: 'goal-agent',
     requirement: 'goal-agent',
     path: 'path-agent',
-    learning: 'teaching-agent',
-    execution: 'teaching-agent',
-    teaching: 'teaching-agent',
-    learn: 'teaching-agent',
-    profile: 'learner-agent',
-    learner: 'learner-agent'
+    learning: 'learning-agent',
+    execution: 'learning-agent',
+    teaching: 'learning-agent',
+    learn: 'learning-agent',
+    profile: 'profile-agent',
+    learner: 'profile-agent'
   };
 
   const [fields, contracts] = await Promise.all([
@@ -344,9 +344,9 @@ router.get('/flow/:stage', async (req: Request, res: Response) => {
     const handoff = parseHandoff(r.handoff);
 
     if (handoff.length === 0) {
-      // 没有 handoff 但 accumulate=true → 流向 learner-agent
+      // 没有 handoff 但 accumulate=true → 流向 profile-agent
       if (r.accumulate) {
-        const target = 'learner-agent';
+        const target = 'profile-agent';
         addNode(target);
         const key = `${sourceCanonical}__${target}`;
         if (!edgeAgg.has(key)) {

@@ -15,8 +15,8 @@
           <p>{{ health.subline }}</p>
         </div>
       </div>
-      <ul v-if="data.actions.length" class="brief-actions">
-        <li v-for="(a, i) in data.actions" :key="i">
+      <ul v-if="effectiveActions.length" class="brief-actions">
+        <li v-for="(a, i) in effectiveActions" :key="i">
           <span class="brief-actions__dot" :class="`brief-actions__dot--${a.tone}`"></span>
           <span class="brief-actions__text">{{ a.text }}</span>
           <button type="button" class="brief-actions__btn" @click="investigateAgent(a.agentId)">
@@ -65,9 +65,15 @@
 
       <!-- 动态时间线 -->
       <section class="brief-card brief-card--feed">
-        <h4>动态</h4>
-        <ul v-if="data.feed.length" class="feed">
-          <li v-for="(f, i) in data.feed" :key="i">
+        <div class="brief-card__head brief-card__head--feed">
+          <h4>动态</h4>
+          <label class="feed-filter">
+            <input type="checkbox" v-model="hideTestAccounts" />
+            <span>隐藏虚拟/测试账号</span>
+          </label>
+        </div>
+        <ul v-if="visibleFeed.length" class="feed">
+          <li v-for="(f, i) in visibleFeed" :key="i">
             <span class="feed__dot" :class="`feed__dot--${f.tone}`"></span>
             <div>
               <strong>{{ f.text }}</strong>
@@ -75,14 +81,15 @@
             </div>
           </li>
         </ul>
-        <p v-else class="feed__empty">还没有动态。第一条会来自第一个真实学习者。</p>
+        <p v-else-if="data.feed.length" class="feed__empty">近期动态均为虚拟/测试账号，取消勾选即可查看。</p>
+        <p v-else class="feed__empty">暂无动态</p>
       </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { overviewHealth, investigateAgent, dataSource } from './mockStore';
 import { liveOverviewFull } from './mockLive';
 
@@ -109,6 +116,16 @@ const props = defineProps<{ state: 'normal' | 'incident' | 'fresh' }>();
 // 结论来自 mockStore（由 spans 推导，与日志/瀑布/Skill 同源）；funnel/pulse/feed 为静态演示
 const health = computed(() => overviewHealth.value);
 
+// 健康结论与行动项同源：health 提示异常时即使静态 actions 为空也要给出排查入口，避免「需关注」与「无事可做」并存
+const effectiveActions = computed(() => {
+  if (data.value.actions.length) return data.value.actions;
+  const tone = health.value.tone;
+  if (tone === 'warn') {
+    return [{ text: '教学链路出现失败，检查模型服务与限流配置', tone: 'bad' as Tone, agentId: 'learning-agent', link: '' }];
+  }
+  return [];
+});
+
 const pulse = (hot: number[]) =>
   Array.from({ length: 24 }, (_, i) => ({
     calls: hot[i] || 0,
@@ -129,8 +146,8 @@ const datasets: Record<string, BriefData> = {
       { label: '任务', value: '342', idle: false },
       { label: '完成', value: '217', idle: false }
     ],
-    rates: ['67%', '74%', '×5.3', '63%'],
-    funnelNote: '目标 → 路径转化 74%，断点不明显。',
+    rates: ['67%', '74%', '×5.3 个/条', '63%'],
+    funnelNote: '目标 → 路径转化 74%，断点不明显；平均每条路径 5.3 个任务。',
     pulse: pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]),
     totalCalls: 273,
     totalIssues: 0,
@@ -158,8 +175,8 @@ const datasets: Record<string, BriefData> = {
       { label: '任务', value: '342', idle: false },
       { label: '完成', value: '217', idle: false }
     ],
-    rates: ['67%', '74%', '×5.3', '63%'],
-    funnelNote: '漏斗本身健康，问题在执行层。',
+    rates: ['67%', '74%', '×5.3 个/条', '63%'],
+    funnelNote: '漏斗本身健康，问题在执行层；平均每条路径 5.3 个任务。',
     pulse: (() => {
       const p = pulse([2, 1, 0, 0, 1, 3, 6, 9, 14, 18, 22, 19, 16, 21, 25, 28, 24, 19, 15, 12, 8, 5, 4, 3]);
       p[15].issue = 3;
@@ -180,7 +197,7 @@ const datasets: Record<string, BriefData> = {
     tone: 'muted',
     score: 100,
     headline: '系统空闲',
-    subline: '部署完成，等待第一个真实学习者。比率类指标在有数据后才会出现。',
+    subline: '等待第一个真实学习者。',
     actions: [],
     funnel: [
       { label: '用户', value: '2', idle: false },
@@ -226,6 +243,17 @@ const barHeight = (calls: number) => `${calls > 0 ? Math.max((calls / maxCalls.v
 const scoreDash = computed(() => `${data.value.score * 1.194} 119.4`);
 const barTitle = (hour: number, b: { calls: number; issue: number }) =>
   `${String(hour).padStart(2, '0')}:00 · ${b.calls} 次调用 · ${b.issue} 异常`;
+
+// 动态筛选：默认隐藏虚拟学习者与测试/审计账号，可切换查看全量
+const hideTestAccounts = ref(true);
+const isTestAccount = (text: string) => {
+  const email = String(text || '').replace(/^新用户注册：/, '');
+  if (email.startsWith('virtual_') || email.endsWith('@test.local')) return true;
+  return /^(audit_probe_|e2e_|ui_check|motion_review)/.test(email);
+};
+const visibleFeed = computed(() =>
+  hideTestAccounts.value ? data.value.feed.filter((f) => !isTestAccount(f.text)) : data.value.feed
+);
 </script>
 
 <style scoped>
@@ -367,6 +395,25 @@ const barTitle = (hour: number, b: { calls: number; issue: number }) =>
   color: var(--faint);
 }
 .brief-card__note { margin: 0; font-size: 12.5px; color: var(--muted); }
+.brief-card__head--feed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.feed-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.feed-filter input {
+  margin: 0;
+  accent-color: #3478f6;
+}
 
 /* 漏斗 */
 .funnel {

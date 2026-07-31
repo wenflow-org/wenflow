@@ -268,7 +268,7 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
     if (isExtraSkill(id)) {
       extras.push({
         id,
-        name: s.displayName || s.description?.slice(0, 12) || id,
+        name: s.displayName || s.description || id,
         category: s.category || s.tier || 'skill',
         agentId: ''
       })
@@ -276,7 +276,7 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
     }
     profiles.push({
       id,
-      name: s.displayName || s.description?.slice(0, 12) || id,
+      name: s.displayName || s.description || id,
       category: s.category || s.tier || 'skill',
       agentId: ''
     })
@@ -310,7 +310,7 @@ export const liveOverviewFull = ref<LiveOverviewFull | null>(null)
 async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }> {
   const [statsRes, activityRes] = await Promise.all([
     adminDashboardApi.getStats(),
-    adminDashboardApi.getActivity(8).catch(() => null)
+    adminDashboardApi.getActivity(30).catch(() => null)
   ])
   const stats = statsRes.data?.data ?? statsRes.data ?? {}
   const agents = stats.agents || {}
@@ -376,7 +376,7 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     : '—'
   const pulseCalls24h = pulse.reduce((a, b) => a + b.calls, 0)
 
-  /* 动态 */
+  /* 动态（不在此过滤；虚拟/测试账号由总览页筛选开关控制显隐） */
   const act = activityRes?.data?.data ?? {}
   const feed: LiveOverviewFull['feed'] = []
   for (const u of act.recentUsers || []) {

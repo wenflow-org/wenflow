@@ -234,11 +234,7 @@ export async function virtualLearnerPathEvaluator(input: VirtualLearnerPathEvalu
       defaultSystemPrompt: VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-path-evaluator' },
-      modelDefaults: {
-        maxTokens: VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS,
-        temperature: VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE,
-      },
-      buildUserPayload,
+            buildUserPayload,
       validateParsedOutput: (parsed) => ({
         valid: !!safeText(parsed?.reaction),
         failureReason: 'missing reaction'

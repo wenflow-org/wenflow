@@ -271,11 +271,7 @@ export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillEx
       defaultSystemPrompt: VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-persona-designer' },
-      modelDefaults: {
-        maxTokens: VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS,
-        temperature: VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE,
-      },
-      buildUserPayload: (payload) => ({
+            buildUserPayload: (payload) => ({
         preferredLevels: normalizeStringArray(payload?.preferredLevels),
         candidatePersonas: normalizeStringArray(payload?.candidatePersonas, DEFAULT_CANDIDATE_PERSONAS),
         recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),

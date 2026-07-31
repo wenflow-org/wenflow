@@ -60,7 +60,7 @@ describe('FeedbackCollectionService', () => {
         userId: 'user-1',
         sessionId: 'session-1',
         subtaskId: 'task-1',
-        agentId: 'teaching-agent',
+        agentId: 'learning-agent',
         strategy: 'scaffold',
         uiType: 'session-report-v1'
       }),

@@ -170,8 +170,7 @@ export async function virtualLearnerActorAuditor(input: VirtualLearnerActorAudit
     defaultSystemPrompt: VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'virtual-learner-actor-auditor' },
-    modelDefaults: { maxTokens: VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, temperature: VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE },
-    buildUserPayload: value => value,
+        buildUserPayload: value => value,
     validateParsedOutput: parsed => ({
       valid: !!parsed?.scores && Array.isArray(parsed?.findings) && Array.isArray(parsed?.evidence),
       failureReason: 'missing scores/findings/evidence'

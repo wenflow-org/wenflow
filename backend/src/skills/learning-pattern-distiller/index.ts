@@ -92,8 +92,7 @@ export async function learningPatternDistiller(input: LearningPatternDistillerIn
       defaultSystemPrompt: '',
       requireActivePrompt: true,
       caller: { skillId: 'learning-pattern-distiller' },
-      modelDefaults: { temperature: 0.5, maxTokens: 3000 },
-      buildUserPayload: (payload) => payload,
+            buildUserPayload: (payload) => payload,
       normalizeOutput: (parsed, payload) => {
         const fallback = buildFallback(payload);
         const obj = parsed && typeof parsed === 'object' ? parsed : {};

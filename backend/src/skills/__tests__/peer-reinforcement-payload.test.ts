@@ -4,7 +4,7 @@ jest.mock('../../composers/prompt-composer', () => ({
   callPrompt: mockCallPrompt,
 }))
 
-import { peerAgent } from '../peer-reinforcement'
+import { executePeerDiscussion } from '../peer-reinforcement'
 
 const MINIMAL_INPUT = {
   topic: '闭包与变量生命周期',
@@ -32,7 +32,7 @@ describe('peer-reinforcement payload snapshot parity', () => {
   })
 
   it('payload carries the tagged sections the prompt input spec declares', async () => {
-    await peerAgent.discuss(MINIMAL_INPUT as any)
+    await executePeerDiscussion(MINIMAL_INPUT as any)
 
     expect(mockCallPrompt).toHaveBeenCalledTimes(1)
     const [spec] = mockCallPrompt.mock.calls[0]
@@ -50,7 +50,7 @@ describe('peer-reinforcement payload snapshot parity', () => {
   })
 
   it('optional sections disappear when the inputs are absent', async () => {
-    await peerAgent.discuss({
+    await executePeerDiscussion({
       topic: '闭包',
       strategy: 'debate' as const,
       tutorContext: [],
@@ -66,7 +66,7 @@ describe('peer-reinforcement payload snapshot parity', () => {
   })
 
   it('strategy instruction follows the selected strategy', async () => {
-    await peerAgent.discuss({ topic: '闭包', strategy: 'counterexample', tutorContext: [] } as any)
+    await executePeerDiscussion({ topic: '闭包', strategy: 'counterexample', tutorContext: [] } as any)
 
     const [spec] = mockCallPrompt.mock.calls[0]
     const payload = spec.buildUserPayload({ topic: '闭包', strategy: 'counterexample', tutorContext: [] }, {})

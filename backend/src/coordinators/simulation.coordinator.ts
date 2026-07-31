@@ -2831,7 +2831,7 @@ class SimulationOrchestrator {
         try {
           const aiResponseStart = Date.now();
           await this.assertCurrentSessionLeaseOwned(sessionId);
-          const aiResult = await this.retryLearnUpstream(sessionId, 'process-teaching-turn', () =>
+          const aiResult = await this.retryLearnUpstream(sessionId, 'process-learning-turn', () =>
             aiTeachingOrchestrator.processStudentMessage(
               teachingSessionId,
               virtualReplyResult.userVisible,

@@ -1,4 +1,4 @@
-﻿import {
+import {
   SkillDefinition,
   SkillExecutionResult,
 } from '../protocol';
@@ -336,11 +336,7 @@ export async function pathSceneFraming(
       defaultSystemPrompt: PATH_SCENE_FRAMING_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'path-scene-framing' },
-      modelDefaults: {
-        maxTokens: PATH_SCENE_FRAMING_MAX_TOKENS,
-        temperature: PATH_SCENE_FRAMING_TEMPERATURE,
-      },
-      buildUserPayload: (payload) => ({
+            buildUserPayload: (payload) => ({
         goal: payload.goal,
         currentLevel: payload.currentLevel,
         timePerDay: payload.timePerDay,

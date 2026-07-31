@@ -223,7 +223,7 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
   defaultSystemPrompt: '',
   requireActivePrompt: true,
   caller: {
-    agentId: 'teaching-agent',
+    agentId: 'learning-agent',
     skillId: 'peer-reinforcement',
   },
   buildUserPayload: (input) => buildPeerUserPayload(input),
@@ -246,98 +246,85 @@ const peerPromptSpec: PromptCallSpec<PeerDiscussionInput, PeerModelArtifact> = {
       topic: input.topic,
     },
   }),
-  modelDefaults: {
-    temperature: 0.7,
-    maxTokens: 4000,
-  },
-};
-
-export class PeerAgent {
-  private readonly config = {
-    timeout: 30000,
   };
 
-  async discuss(input: PeerDiscussionInput): Promise<PeerDiscussionOutput> {
-    return this.execute(input);
-  }
+export async function executePeerDiscussion(input: PeerDiscussionInput): Promise<PeerDiscussionOutput> {
+  const startTime = Date.now();
+  let error: Error | null = null;
+  let result: PeerDiscussionOutput | null = null;
 
-  async execute(input: PeerDiscussionInput): Promise<PeerDiscussionOutput> {
-    const startTime = Date.now();
-    let error: Error | null = null;
-    let result: PeerDiscussionOutput | null = null;
+  try {
+    const promptResult = await callPrompt(peerPromptSpec, input);
 
-    try {
-      const promptResult = await callPrompt(peerPromptSpec, input);
-
-      if (!promptResult.success) {
-        throw new Error(promptResult.error?.message || 'PEER_PROMPT_FAILED');
-      }
-
-      const modelArtifact = promptResult.output;
-      const message = modelArtifact?.message || '';
-
-      if (!message.trim()) {
-        throw new Error('PEER_RESPONSE_EMPTY');
-      }
-
-      logger.info(`[PeerReinforcementSkill] 生成讨论消息：strategy=${input.strategy}, topic=${input.topic}`);
-
-      result = {
-        message,
-        strategy: input.strategy,
-        followUpQuestions: modelArtifact.followUpQuestions,
-        promptDebug: promptResult.debug || null,
-        inputEcho: input,
-        runtimeEnvelope: promptResult.runtimeEnvelope,
-        source: 'model',
-      };
-      return result;
-    } catch (e: any) {
-      error = e instanceof Error ? e : new Error(e.message);
-      if (error.message === 'PEER_RESPONSE_EMPTY') {
-        logger.warn('[PeerReinforcementSkill] 讨论生成为空，使用 fallback');
-      } else {
-        logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
-      }
-      
-      const fallbackMessage = this.getFallbackMessage(input.strategy, input.topic);
-      const fallbackFollowUpQuestions: string[] = [];
-      result = {
-        message: fallbackMessage,
-        strategy: input.strategy,
-        followUpQuestions: fallbackFollowUpQuestions,
-        promptDebug: null,
-        inputEcho: input,
-        runtimeEnvelope: adaptToRuntimeEnvelope({
-          contract: PEER_FALLBACK_RUNTIME_CONTRACT,
-          artifact: {
-            message: fallbackMessage,
-            strategy: input.strategy,
-            followUpQuestions: fallbackFollowUpQuestions,
-          },
-          phase: 'discussion-generated',
-          status: 'partial',
-          isTerminal: false,
-          nextAction: 'continue-discussion',
-          reason: error.message,
-          nextState: { stage: 'discussion-generated', strategy: input.strategy, topic: input.topic, fallback: true },
-        }),
-        source: 'fallback',
-      };
-      return result;
-    } finally {
-      const durationMs = Date.now() - startTime;
-      logger.debug('[PeerReinforcementSkill] 执行结束', {
-        durationMs,
-        success: !error,
-        error: error?.message || null,
-      });
+    if (!promptResult.success) {
+      throw new Error(promptResult.error?.message || 'PEER_PROMPT_FAILED');
     }
-  }
 
-  private getFallbackMessage(strategy: string, topic: string): string {
+    const modelArtifact = promptResult.output;
+    const message = modelArtifact?.message || '';
+
+    if (!message.trim()) {
+      throw new Error('PEER_RESPONSE_EMPTY');
+    }
+
+    logger.info(`[PeerReinforcementSkill] 生成讨论消息：strategy=${input.strategy}, topic=${input.topic}`);
+
+    result = {
+      message,
+      strategy: input.strategy,
+      followUpQuestions: modelArtifact.followUpQuestions,
+      promptDebug: promptResult.debug || null,
+      inputEcho: input,
+      runtimeEnvelope: promptResult.runtimeEnvelope,
+      source: 'model',
+    };
+    return result;
+  } catch (e: any) {
+    error = e instanceof Error ? e : new Error(e.message);
+    if (error.message === 'PEER_RESPONSE_EMPTY') {
+      logger.warn('[PeerReinforcementSkill] 讨论生成为空，使用 fallback');
+    } else {
+      logger.error(`[PeerReinforcementSkill] 讨论生成失败：${error.message}`);
+    }
+
+    const fallbackMessage = buildFallbackPeerMessage(input.strategy, input.topic);
+    const fallbackFollowUpQuestions: string[] = [];
+    result = {
+      message: fallbackMessage,
+      strategy: input.strategy,
+      followUpQuestions: fallbackFollowUpQuestions,
+      promptDebug: null,
+      inputEcho: input,
+      runtimeEnvelope: adaptToRuntimeEnvelope({
+        contract: PEER_FALLBACK_RUNTIME_CONTRACT,
+        artifact: {
+          message: fallbackMessage,
+          strategy: input.strategy,
+          followUpQuestions: fallbackFollowUpQuestions,
+        },
+        phase: 'discussion-generated',
+        status: 'partial',
+        isTerminal: false,
+        nextAction: 'continue-discussion',
+        reason: error.message,
+        nextState: { stage: 'discussion-generated', strategy: input.strategy, topic: input.topic, fallback: true },
+      }),
+      source: 'fallback',
+    };
+    return result;
+  } finally {
+    const durationMs = Date.now() - startTime;
+    logger.debug('[PeerReinforcementSkill] 执行结束', {
+      durationMs,
+      success: !error,
+      error: error?.message || null,
+    });
+  }
+}
+
+function buildFallbackPeerMessage(strategy: string, topic: string): string {
     const shortTopic = topic.length > 20 ? topic.substring(0, 20) + '...' : topic;
-    
+
     const fallbacks: Record<string, string> = {
       feynman: `你能给我讲讲"${shortTopic}"吗？就像我是第一次听说一样。`,
       debate: `关于"${shortTopic}"，有人支持，有人反对。你怎么看？`,
@@ -347,24 +334,21 @@ export class PeerAgent {
     };
 
     return fallbacks[strategy] || fallbacks.feynman;
-  }
 }
-
-export const peerAgent = new PeerAgent();
 
 export async function peerAgentHandler(input: any, context: any): Promise<any> {
   const startTime = Date.now();
   let success = false;
-  
+
   try {
-    const result = await peerAgent.execute(input);
+    const result = await executePeerDiscussion(input);
     success = true;
-    
+
     peerAgentDefinition.stats.callCount++;
     peerAgentDefinition.stats.successRate = 
       (peerAgentDefinition.stats.successRate * (peerAgentDefinition.stats.callCount - 1) + 1) 
       / peerAgentDefinition.stats.callCount;
-    
+
     const skillOutcome = toPeerSkillOutcome(result, {
       quality: result.source === 'fallback' ? 'fallback' : 'model',
       reason: result.runtimeEnvelope?.businessState?.reason || null,
@@ -414,7 +398,7 @@ export async function peerAgentHandler(input: any, context: any): Promise<any> {
     peerAgentDefinition.stats.successRate = 
       (peerAgentDefinition.stats.successRate * (peerAgentDefinition.stats.callCount - 1)) 
       / peerAgentDefinition.stats.callCount;
-    
+
     return {
       success: false,
       userVisible: '同伴回复生成失败，请稍后重试。',

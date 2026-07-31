@@ -22,7 +22,7 @@ import { resolveEffectiveRuntimeContract } from '../services/prompt-lab/resolve-
 import { resolveEffectivePromptContract } from '../services/prompt-lab/resolve-prompt-contract';
 import { adaptToRuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
-import { resolveLlmGenerationParams } from '../services/resolve-llm-call-params';
+import { resolveLlmCallParams } from '../services/resolve-llm-call-params';
 import type { SkillPromptOutputMedia } from '../services/skill-prompt-contract';
 import {
   mergeContextEnvelopes,
@@ -109,7 +109,16 @@ export async function callPrompt<TInput, TOutput>(
 ): Promise<PromptCallResult<TOutput>> {
   const requestContext = getRequestContext();
   const promptCallId = `pcl_${randomUUID()}`;
-  const runtimeOverride = requestContext.promptRuntimeOverride || {};
+  const requestRuntimeOverride = requestContext.promptRuntimeOverride || {};
+  const callOverride = context.generationOverride || {};
+  // 调用点级显式参数（generationOverride）与请求级调试覆盖合并，调用点更具体优先；
+  // 统一归一为 promptRuntimeOverride 的字段命名（modelOverride/temperatureOverride/maxTokensOverride）
+  const runtimeOverride = {
+    ...requestRuntimeOverride,
+    ...(callOverride.model !== undefined ? { modelOverride: callOverride.model } : {}),
+    ...(callOverride.temperature !== undefined ? { temperatureOverride: callOverride.temperature } : {}),
+    ...(callOverride.maxTokens !== undefined ? { maxTokensOverride: callOverride.maxTokens } : {}),
+  };
   const systemPromptOverride = runtimeOverride.systemPromptOverride || context.systemPromptOverride;
   const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
   const { contract: runtimeContract } = await resolveEffectiveRuntimeContract(spec.agentId, promptConfig);
@@ -271,7 +280,18 @@ export async function callPrompt<TInput, TOutput>(
   let lastProviderId: string | null = null;
   let lastModel: string | null = null;
   let llmRequestCount = 0;
-  let currentMaxTokens = spec.modelDefaults?.maxTokens;
+  // 生成参数单一解析：generationOverride → ACTIVE prompt（core params）→ route（model config）
+  const generationResolution = await resolveLlmCallParams({
+    skillId: spec.caller?.skillId,
+    agentId: spec.caller?.agentId,
+    promptConfig,
+    runtimeOverride: {
+      model: runtimeOverride.modelOverride,
+      temperature: runtimeOverride.temperatureOverride,
+      maxTokens: runtimeOverride.maxTokensOverride,
+    },
+  });
+  let currentMaxTokens = generationResolution.maxTokens;
   const tokenCeiling = Math.max(currentMaxTokens || 8000, 16000);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -320,21 +340,14 @@ export async function callPrompt<TInput, TOutput>(
     let response: any;
     try {
       llmRequestCount += 1;
-      // 单一读路径：override → ACTIVE prompt → codeDefaults（route 仅在 executor 回退）
-      const llmParams = resolveLlmGenerationParams({
-        runtimeOverride: {
-          model: runtimeOverride.modelOverride,
-          temperature: runtimeOverride.temperatureOverride,
-          maxTokens: runtimeOverride.maxTokensOverride ?? currentMaxTokens,
+      // 单一读路径：override → ACTIVE prompt → route（executor 仅在 route 缺失时兜底）
+      const llmParams = {
+        request: {
+          model: generationResolution.model,
+          temperature: generationResolution.temperature,
+          max_tokens: currentMaxTokens ?? generationResolution.maxTokens,
         },
-        promptConfig,
-        codeDefaults: {
-          model: spec.modelDefaults?.model,
-          temperature: spec.modelDefaults?.temperature,
-          maxTokens: currentMaxTokens ?? spec.modelDefaults?.maxTokens,
-          minMaxTokens: spec.modelDefaults?.minMaxTokens,
-        },
-      });
+      };
       response = await gateway.execute({
         messages,
         ...llmParams.request,

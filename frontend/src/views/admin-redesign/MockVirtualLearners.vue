@@ -66,8 +66,8 @@
       </table>
 
       <div v-else class="mk-empty">
-        <strong>{{ samples.length ? '没有匹配的样本' : '还没有虚拟学习者' }}</strong>
-        <span>从「新建虚拟人」开始：先定稳定人设，再在画像页用故事产生学习需求。</span>
+        <strong>{{ samples.length ? '没有匹配的样本' : '暂无虚拟学习者' }}</strong>
+        <span>新建虚拟人后，在画像页生成故事即可运行。</span>
       </div>
     </div>
 
@@ -80,7 +80,7 @@
         </div>
         <div class="mk-modal__body">
           <p class="vl-steps">
-            ① 称呼与背景（稳定人设）→ ② AI 补全身份（可选）→ ③ 创建虚拟人 → ④ 画像页生成故事（学习需求）→ ⑤ 按故事运行（一故事一 Path）
+            ① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行
           </p>
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
             <span class="mk-field__label">称呼 / 样本名 <em class="vl-req">必填</em></span>
@@ -144,7 +144,6 @@
                 {{ st.title }}{{ st.pathId ? ' · 已有 Path' : ' · 尚无 Path' }}（运行 {{ st.runCount }}）
               </option>
             </select>
-            <span class="mk-field__hint">每个故事产生一次学习需求，对应平台上的一条 Path</span>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">运行模式</span>

@@ -12,35 +12,35 @@ import {
   PATH_FIELD_ROUTINGS
 } from '../scripts/seed-path-field-routings';
 import {
-  ensureExecutionFieldRoutings,
-  EXECUTION_FIELD_ROUTING_CONTRACTS,
-  EXECUTION_FIELD_ROUTING_FIELDS,
-  EXECUTION_FIELD_ROUTINGS
+  ensureLearningFieldRoutings,
+  LEARNING_FIELD_ROUTING_CONTRACTS,
+  LEARNING_FIELD_ROUTING_FIELDS,
+  LEARNING_FIELD_ROUTINGS
 } from '../scripts/seed-execution-field-routings';
 import {
-  ensureLearnerFieldRoutings,
-  LEARNER_FIELD_ROUTING_CONTRACTS,
-  LEARNER_FIELD_ROUTING_FIELDS,
-  LEARNER_FIELD_ROUTINGS
+  ensureProfileFieldRoutings,
+  PROFILE_FIELD_ROUTING_CONTRACTS,
+  PROFILE_FIELD_ROUTING_FIELDS,
+  PROFILE_FIELD_ROUTINGS
 } from '../scripts/seed-learner-field-routings';
 
 const contractGroups = [
   GOAL_FIELD_ROUTING_CONTRACTS,
   PATH_FIELD_ROUTING_CONTRACTS,
-  EXECUTION_FIELD_ROUTING_CONTRACTS,
-  LEARNER_FIELD_ROUTING_CONTRACTS
+  LEARNING_FIELD_ROUTING_CONTRACTS,
+  PROFILE_FIELD_ROUTING_CONTRACTS
 ];
 const fieldGroups = [
   GOAL_FIELD_ROUTING_FIELDS,
   PATH_FIELD_ROUTING_FIELDS,
-  EXECUTION_FIELD_ROUTING_FIELDS,
-  LEARNER_FIELD_ROUTING_FIELDS
+  LEARNING_FIELD_ROUTING_FIELDS,
+  PROFILE_FIELD_ROUTING_FIELDS
 ];
 const routingGroups = [
   GOAL_FIELD_ROUTINGS,
   PATH_FIELD_ROUTINGS,
-  EXECUTION_FIELD_ROUTINGS,
-  LEARNER_FIELD_ROUTINGS
+  LEARNING_FIELD_ROUTINGS,
+  PROFILE_FIELD_ROUTINGS
 ];
 
 export const FIELD_ROUTING_SEED_MANIFEST = {
@@ -64,14 +64,14 @@ export interface FieldRoutingBootstrapDependencies {
   database: PrismaClient;
   ensureGoal?: typeof ensureGoalFieldRoutings;
   ensurePath?: typeof ensurePathFieldRoutings;
-  ensureExecution?: typeof ensureExecutionFieldRoutings;
-  ensureLearner?: typeof ensureLearnerFieldRoutings;
+  ensureLearning?: typeof ensureLearningFieldRoutings;
+  ensureProfile?: typeof ensureProfileFieldRoutings;
 }
 
 export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrapDependencies) {
   const goal = await (dependencies.ensureGoal || ensureGoalFieldRoutings)(dependencies.database);
   const path = await (dependencies.ensurePath || ensurePathFieldRoutings)(dependencies.database);
-  const execution = await (dependencies.ensureExecution || ensureExecutionFieldRoutings)(dependencies.database);
-  const learner = await (dependencies.ensureLearner || ensureLearnerFieldRoutings)(dependencies.database);
-  return { goal, path, execution, learner };
+  const learning = await (dependencies.ensureLearning || ensureLearningFieldRoutings)(dependencies.database);
+  const profile = await (dependencies.ensureProfile || ensureProfileFieldRoutings)(dependencies.database);
+  return { goal, path, learning, profile };
 }

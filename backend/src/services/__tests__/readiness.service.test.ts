@@ -24,7 +24,7 @@ function createDatabases() {
         { agentId: 'skill:goal-conversation' },
         { agentId: 'skill:path-planning' },
         { agentId: 'skill:stage-designer' },
-        { agentId: 'skill:teaching-turn' },
+        { agentId: 'skill:learning-turn' },
         { agentId: 'skill:session-wrapup' }
       ])
     },

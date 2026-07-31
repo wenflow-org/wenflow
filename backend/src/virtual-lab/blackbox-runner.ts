@@ -10,6 +10,8 @@ import type {
   LearnerObservation,
   PlatformControlReceipt,
   PlatformInteractionResult,
+  RefereeMetricCompleteness,
+  RefereeStoryMeta,
   TaskCompletionCheckpoint,
   VirtualLearnerActorAuditInput,
   VirtualLearnerRefereeInput
@@ -514,7 +516,7 @@ export class BlackboxVirtualLearnerRunner {
       throw new Error('黑盒实验尚未结束，不能生成终局裁判报告')
     }
 
-    const input = this.buildRefereeInput(session, state)
+    const input = await this.buildRefereeInput(session, state)
     const inputFingerprint = this.reportFingerprint(input, {
       skillId: virtualLearnerRefereeDefinition.name,
       version: virtualLearnerRefereeDefinition.version,
@@ -1632,7 +1634,7 @@ export class BlackboxVirtualLearnerRunner {
     return normalized ? normalized.slice(0, limit) : null
   }
 
-  private buildRefereeInput(session: any, state: any): VirtualLearnerRefereeInput {
+  private async buildRefereeInput(session: any, state: any): Promise<VirtualLearnerRefereeInput> {
     const { rawPublic, publicTrace, summary } = this.buildSharedAuditTrace(session, state)
     const rawReferee = Array.isArray(state.blackbox?.refereeTrace) ? state.blackbox.refereeTrace : []
     const refereeTrace = this.compactTrace(rawReferee, 120).map((entry: any) => ({
@@ -1645,7 +1647,65 @@ export class BlackboxVirtualLearnerRunner {
     summary.inputCoverage.originalRefereeTraceCount = rawReferee.length
     summary.inputCoverage.includedRefereeTraceCount = refereeTrace.length
     summary.inputCoverage.truncated = summary.inputCoverage.truncated || rawReferee.length !== refereeTrace.length
-    return { publicTrace, refereeTrace, control, experimentSummary: summary }
+    return {
+      publicTrace,
+      refereeTrace,
+      control,
+      experimentSummary: summary,
+      storyMeta: await this.buildRefereeStoryMeta(session, state),
+      metricCompleteness: await this.buildRefereeMetricCompleteness(session, state)
+    }
+  }
+
+  /** 平行通道：故事元数据 + 当次诉求（不进入 Goal/Path 主链，只给裁判评估「目标理解」） */
+  private async buildRefereeStoryMeta(session: any, state: any): Promise<RefereeStoryMeta | null> {
+    const snapshot = await this.getExperimentSnapshot(session, state)
+    const story = snapshot.story && typeof snapshot.story === 'object' ? snapshot.story : null
+    const learner = snapshot.actorProfile && typeof snapshot.actorProfile === 'object' ? snapshot.actorProfile : {}
+    const demand = resolveStorySessionDemand({
+      story,
+      profileLearningGoal: (learner as any)?.learningGoal,
+    })
+    if (!story && !demand.text) return null
+    const goalSeed = story?.goalSeed && typeof story.goalSeed === 'object' ? story.goalSeed : {}
+    return {
+      personaSummary: (learner as any)?.profile?.occupation
+        ? `${(learner as any)?.learningGoal || ''}｜${(learner as any).profile.occupation}`
+        : (learner as any)?.learningGoal || null,
+      storyId: demand.storyId,
+      storyTitle: this.timelineText(story?.title, 200),
+      surfaceGoal: this.timelineText(goalSeed.surfaceGoal, 500),
+      realProblem: this.timelineText(goalSeed.realProblem, 500),
+      triggerEvent: this.timelineText(story?.triggerEvent || story?.storyTriggerEvent, 500),
+      demandText: demand.text ? demand.text.slice(0, 800) : null,
+      demandSource: demand.source === 'none' ? null : demand.source
+    }
+  }
+
+  /** 数据完整性：平台侧教学指标 / wrapup 产出情况（供裁判 evidenceSufficiency 判断） */
+  private async buildRefereeMetricCompleteness(session: any, state: any): Promise<RefereeMetricCompleteness> {
+    const base = { available: true, teachingSessions: 0, wrapupPresent: 0, metricsPresent: 0, lssPresent: 0, degraded: false, error: null as string | null }
+    try {
+      const teachingSessionIds = this.teachingSessionIds(state)
+      if (!teachingSessionIds.length) return base
+      const timeline = await learningStateService.getSessionStateTimeline(session.userId, teachingSessionIds)
+      base.teachingSessions = timeline.length
+      for (const entry of timeline) {
+        if (entry.summarySource || entry.evaluationSource || entry.source !== 'missing') base.wrapupPresent += 1
+        if (entry.metrics) {
+          base.metricsPresent += 1
+          if (typeof entry.metrics.lss === 'number') base.lssPresent += 1
+        }
+        if (entry.degraded) base.degraded = true
+      }
+      return base
+    } catch (error) {
+      return {
+        ...base,
+        available: false,
+        error: String(error instanceof Error ? error.message : error).slice(0, 300)
+      }
+    }
   }
 
   private async buildActorAuditInput(session: any, state: any): Promise<VirtualLearnerActorAuditInput> {

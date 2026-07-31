@@ -27,6 +27,15 @@ export interface PromptCallContext {
   /** 显式复用上游预算，避免兼容调用重置重试额度。 */
   retryBudget?: import('../gateway/api-gateway/retry-budget').RetryBudget;
   systemPromptOverride?: string;
+  /**
+   * 调用点级生成参数覆盖（调用方显式传入的 model/temperature/maxTokens）。
+   * 优先级高于 ACTIVE prompt（core params）与路由配置，与调试用 promptRuntimeOverride 同级、按调用合并。
+   */
+  generationOverride?: {
+    model?: string | null;
+    temperature?: number | null;
+    maxTokens?: number | null;
+  };
 }
 
 export interface PromptAttemptTrace {
@@ -154,11 +163,5 @@ export interface PromptCallSpec<TInput, TOutput> {
    * 未提供时 callPrompt 使用 contract 默认 phase 做通用包装。
    */
   mapEnvelope?: (output: TOutput, input: TInput, runtimeContract: RuntimeContract) => RuntimeEnvelope;
-  modelDefaults?: {
-    maxTokens?: number;
-    minMaxTokens?: number;
-    temperature?: number;
-    model?: string;
-  };
   retryStrategy?: PromptRetryStrategy<TInput>;
 }

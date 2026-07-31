@@ -80,8 +80,7 @@ export async function goalProfileInference(input: GoalProfileInferenceInput): Pr
       defaultSystemPrompt: '',
       requireActivePrompt: true,
       caller: { skillId: 'goal-profile-inference' },
-      modelDefaults: { temperature: 0.7, maxTokens: 2000 },
-      buildUserPayload: (payload) => payload,
+            buildUserPayload: (payload) => payload,
       normalizeOutput: (parsed, payload) => {
         const fallback = buildFallback(payload);
         const obj = parsed && typeof parsed === 'object' ? parsed : {};

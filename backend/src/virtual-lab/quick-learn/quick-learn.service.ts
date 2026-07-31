@@ -2,7 +2,7 @@
  * Quick Learn Service（虚拟账号自动学习运行器）
  *
  * 开发者选定虚拟学习者账号名下的 Task，系统沿真实生产链驱动这个账号学完一节课：
- *   startSession → teaching-turn × N（双重收束）→ endSession（含 wrapup）
+ *   startSession → learning-turn × N（双重收束）→ endSession（含 wrapup）
  *   → completeTask → 等待异步投影 → 生成 Propagation Report。
  *
  * 设计文档：doc/VIRTUAL_LEARNER_QUICK_LEARN_DESIGN_2026-07-21_091152.md

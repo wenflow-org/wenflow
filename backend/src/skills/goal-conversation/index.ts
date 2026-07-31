@@ -1,4 +1,4 @@
-﻿import { logger } from '../../utils/logger';
+import { logger } from '../../utils/logger';
 import { agentConfigService } from '../../services/agentConfig.service';
 import { mergeStateDelta } from './delta-merge';
 import {
@@ -740,11 +740,7 @@ function buildGoalPromptSpec(
       agentId: 'goal-agent',
       skillId: 'goal-conversation',
     },
-    modelDefaults: {
-      temperature: 0.7,
-      maxTokens: 8000,
-    },
-    buildUserPayload: (payload) => buildGoalConversationUserPayload({
+        buildUserPayload: (payload) => buildGoalConversationUserPayload({
       userInput: payload.goal,
       conversationHistory: payload.conversationHistory,
       previousState: payload.previousState,

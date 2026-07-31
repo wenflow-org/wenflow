@@ -1,5 +1,5 @@
 /**
- * teaching-strategy-selector Skill
+ * learning-strategy-selector Skill
  *
  * 教学策略选择器。
  * 根据知识类型映射推荐教学策略，处理策略别名标准化，
@@ -8,7 +8,7 @@
 
 import { SkillDefinition, SkillExecutionResult } from '../protocol'
 
-export const TEACHING_STRATEGY_SELECTOR_PROMPT = ''
+export const LEARNING_STRATEGY_SELECTOR_PROMPT = ''
 
 const ALLOWED_PEDAGOGY_STRATEGIES = ['explain', 'demonstrate', 'scaffold', 'drill', 'diagnose', 'feedback', 'motivate', 'reflect'] as const
 type AllowedPedagogyStrategy = typeof ALLOWED_PEDAGOGY_STRATEGIES[number]
@@ -32,7 +32,7 @@ const FALLBACK_STRATEGY_CONFIG: Record<string, string[]> = {
   default: ['explain'],
 }
 
-export interface TeachingStrategyGuidance {
+export interface LearningStrategyGuidance {
   knowledgeType?: string
   cognitiveLevel?: string
   explanationStyle?: string
@@ -44,8 +44,8 @@ export interface TeachingStrategyGuidance {
   responseConstraints?: string[]
 }
 
-export const teachingStrategySelectorDefinition: SkillDefinition = {
-  name: 'teaching-strategy-selector',
+export const learningStrategySelectorDefinition: SkillDefinition = {
+  name: 'learning-strategy-selector',
   displayName: '教学策略选择器',
   version: '1.0.0',
   category: 'analysis',
@@ -71,25 +71,25 @@ export const teachingStrategySelectorDefinition: SkillDefinition = {
   stats: { callCount: 0, successRate: 1, avgLatency: 0 }
 }
 
-export interface TeachingStrategySelectorInput {
+export interface LearningStrategySelectorInput {
   knowledgeType?: string
   strategyValue?: string
-  guidance?: TeachingStrategyGuidance
+  guidance?: LearningStrategyGuidance
   action: 'getFallback' | 'normalize' | 'buildGuidance'
 }
 
-export interface TeachingStrategySelectorOutput {
+export interface LearningStrategySelectorOutput {
   strategies?: string[]
   normalized?: string | null
   promptText?: string
 }
 
-export async function teachingStrategySelector(
-  input: TeachingStrategySelectorInput
-): Promise<SkillExecutionResult<TeachingStrategySelectorOutput>> {
+export async function learningStrategySelector(
+  input: LearningStrategySelectorInput
+): Promise<SkillExecutionResult<LearningStrategySelectorOutput>> {
   const startedAt = Date.now()
   try {
-    let result: TeachingStrategySelectorOutput = {}
+    let result: LearningStrategySelectorOutput = {}
     switch (input.action) {
       case 'getFallback':
         result = { strategies: getFallbackStrategies(input.knowledgeType) }
@@ -123,7 +123,7 @@ export function normalizeStrategy(value?: string): AllowedPedagogyStrategy | nul
     : null
 }
 
-export function buildGuidancePrompt(guidance?: TeachingStrategyGuidance): string | null {
+export function buildGuidancePrompt(guidance?: LearningStrategyGuidance): string | null {
   if (!guidance) return null
   const lines = [
     '以下是本轮教学策略显式约束，优先级高于一般风格偏好：',

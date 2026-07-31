@@ -13,9 +13,11 @@
 import { callPrompt } from '../../composers/prompt-composer';
 import type { PromptCallContext } from '../../composers/types';
 import type { SkillDefinition, SkillExecutionResult } from '../protocol';
+import { agentConfigService } from '../../services/agentConfig.service';
+import { resolveEffectivePromptContract } from '../../services/prompt-lab/resolve-prompt-contract';
 
 export type AuxSkillId =
-  | 'teaching-opening-generator'
+  | 'learning-opening-generator'
   | 'session-evaluation-fallback'
   | 'learner-progress-report'
   | 'path-adjustment-generator'
@@ -42,8 +44,6 @@ interface AuxSkillMeta {
   displayName: string;
   description: string;
   category: SkillDefinition['category'];
-  /** core 声明的失败策略：propagate=抛错，fallback=确定性降级 */
-  policy: 'propagate' | 'fallback';
 }
 
 const OBJECT_OUTPUT = { type: 'object', properties: {} } as const;
@@ -70,7 +70,6 @@ function asTrimmedString(value: any): string {
 interface RunAuxOptions<TOutput> {
   meta: AuxSkillMeta;
   input: any;
-  modelDefaults: (domain: any) => { model?: string; temperature?: number; maxTokens?: number };
   buildUserPayload: (domain: any) => any;
   normalize: (parsed: any, domain: any, fallback: any) => TOutput;
   validate?: (parsed: any) => { valid: true } | { valid: false; failureReason: string };
@@ -88,8 +87,13 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
     ...domain
   } = opts.input || {};
   const { callerAgentId, callerAction, ...promptContext } = (rawPlumbing || {}) as AuxPlumbing;
-  const mode: 'throw' | 'fallback' = onFailureOverride
-    || (opts.meta.policy === 'propagate' ? 'throw' : 'fallback');
+  // 调用方显式传入的生成参数（model/temperature/maxTokens）提升为调用点级覆盖，
+  // 优先级高于 ACTIVE prompt（core params）与路由配置。
+  const generationOverride = {
+    ...(domain.model !== undefined && domain.model !== null ? { model: domain.model } : {}),
+    ...(domain.temperature !== undefined && domain.temperature !== null ? { temperature: domain.temperature } : {}),
+    ...(domain.maxTokens !== undefined && domain.maxTokens !== null ? { maxTokens: domain.maxTokens } : {}),
+  };
   const hasCallerFallback = callerFallback !== undefined;
   const resolveFallback = (): TOutput => hasCallerFallback
     ? callerFallback
@@ -103,7 +107,6 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
       defaultSystemPrompt: '',
       requireActivePrompt: true,
       caller: { skillId: opts.meta.skillId, agentId: callerAgentId, action: callerAction },
-      modelDefaults: opts.modelDefaults(domain),
       ...(opts.prepareSystemPrompt
         ? { prepareSystemPrompt: (systemPrompt: string) => Promise.resolve(opts.prepareSystemPrompt!(systemPrompt, domain)) }
         : {}),
@@ -112,7 +115,10 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
       validateParsedOutput: opts.validate || ((parsed) => parsed !== undefined && parsed !== null
         ? { valid: true }
         : { valid: false, failureReason: `${opts.meta.skillId.toUpperCase().replace(/-/g, '_')}_OUTPUT_EMPTY` }),
-    }, domain, promptContext);
+    }, domain, {
+      ...promptContext,
+      ...(Object.keys(generationOverride).length > 0 ? { generationOverride } : {}),
+    });
     if (!result.success || result.output === undefined || result.output === null) {
       throw new Error(result.error?.message || `${opts.meta.skillId} failed`);
     }
@@ -125,7 +131,10 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
       debug: result.debug,
     };
   } catch (error) {
-    if (mode === 'throw') throw error;
+    // 失败策略运行时从 ACTIVE prompt（core params.failurePolicy 编译产物）解析，
+    // 调用方 __onFailure 显式覆盖优先；不再在代码里维护第二份拷贝。
+    const effectiveMode = onFailureOverride || await resolveDefaultFailureMode(opts.meta.skillId);
+    if (effectiveMode === 'throw') throw error;
     return {
       success: true,
       output: resolveFallback(),
@@ -135,39 +144,54 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
   }
 }
 
+/**
+ * 解析 skill 默认失败策略：读取 ACTIVE prompt 的 promptContract.failurePolicy。
+ * 映射：deterministic（core fallback）→ 降级；blocking/retry（core propagate/retry）→ 抛错。
+ * 读取失败时保守抛错（fail loud）。
+ */
+async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' | 'fallback'> {
+  try {
+    const agentId = `skill:${skillId}`;
+    const promptConfig = await agentConfigService.getActivePrompt(agentId);
+    const { contract } = await resolveEffectivePromptContract(agentId, promptConfig);
+    return ['deterministic-fallback', 'best-effort'].includes(contract.failurePolicy) ? 'fallback' : 'throw';
+  } catch {
+    return 'throw';
+  }
+}
+
 // ============================================================
-// Skill 元数据（policy 与 prompts/core/<skillId>.yaml 的 failurePolicy 对齐）
+// Skill 元数据（failurePolicy 运行时从 ACTIVE prompt 解析，见 resolveDefaultFailureMode）
 // ============================================================
 
 const META: Record<AuxSkillId, AuxSkillMeta> = {
-  'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation', policy: 'fallback' },
-  'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis', policy: 'fallback' },
-  'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis', policy: 'fallback' },
-  'path-adjustment-generator': { skillId: 'path-adjustment-generator', displayName: '路径动态调整生成器', description: '生成可插入路径的 milestone 或 subtask', category: 'generation', policy: 'fallback' },
-  'goal-analysis': { skillId: 'goal-analysis', displayName: '学习目标分析器', description: '从用户目标中提取主题、水平、重点与场景', category: 'analysis', policy: 'fallback' },
-  'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation', policy: 'propagate' },
-  'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation', policy: 'propagate' },
-  'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation', policy: 'propagate' },
-  'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis', policy: 'propagate' },
-  'generic-planner': { skillId: 'generic-planner', displayName: '通用学习路径规划器', description: '为普通学习目标生成阶段化学习方案', category: 'generation', policy: 'propagate' },
-  'basic-extractor': { skillId: 'basic-extractor', displayName: '内容结构化提取器', description: '提取内容摘要、知识点、链接、难度与标签', category: 'analysis', policy: 'propagate' },
-  'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis', policy: 'propagate' },
-  'basic-generator': { skillId: 'basic-generator', displayName: '基础教学内容生成器', description: '生成教学讲解、代码示例、练习与常见错误分析', category: 'generation', policy: 'propagate' },
-  'data-mapping': { skillId: 'data-mapping', displayName: '数据映射器', description: '将输入数据映射为目标字段结构', category: 'analysis', policy: 'propagate' },
-  'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis', policy: 'fallback' },
-  'concept-priority': { skillId: 'concept-priority', displayName: '概念优先级调整器', description: '将实践任务升级为概念理解任务', category: 'generation', policy: 'fallback' },
+  'learning-opening-generator': { skillId: 'learning-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
+  'session-evaluation-fallback': { skillId: 'session-evaluation-fallback', displayName: '课程评估补全器', description: '在主课后总结缺少 evaluation 时补齐结构化评估', category: 'analysis' },
+  'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
+  'path-adjustment-generator': { skillId: 'path-adjustment-generator', displayName: '路径动态调整生成器', description: '生成可插入路径的 milestone 或 subtask', category: 'generation' },
+  'goal-analysis': { skillId: 'goal-analysis', displayName: '学习目标分析器', description: '从用户目标中提取主题、水平、重点与场景', category: 'analysis' },
+  'generic-chat': { skillId: 'generic-chat', displayName: '平台通用文本能力', description: '无更专用 Skill 时的通用文本调用能力', category: 'generation' },
+  'course-design': { skillId: 'course-design', displayName: '课程设计器', description: '为周次主题生成结构化课程任务', category: 'generation' },
+  'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
+  'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
+  'generic-planner': { skillId: 'generic-planner', displayName: '通用学习路径规划器', description: '为普通学习目标生成阶段化学习方案', category: 'generation' },
+  'basic-extractor': { skillId: 'basic-extractor', displayName: '内容结构化提取器', description: '提取内容摘要、知识点、链接、难度与标签', category: 'analysis' },
+  'basic-evaluator': { skillId: 'basic-evaluator', displayName: '学习质量评估器', description: '评估学习内容、答案或任务完成情况', category: 'analysis' },
+  'basic-generator': { skillId: 'basic-generator', displayName: '基础教学内容生成器', description: '生成教学讲解、代码示例、练习与常见错误分析', category: 'generation' },
+  'data-mapping': { skillId: 'data-mapping', displayName: '数据映射器', description: '将输入数据映射为目标字段结构', category: 'analysis' },
+  'goal-alignment-checker': { skillId: 'goal-alignment-checker', displayName: '路径目标对齐检查器', description: '检查学习路径与目标的对齐程度', category: 'analysis' },
+  'concept-priority': { skillId: 'concept-priority', displayName: '概念优先级调整器', description: '将实践任务升级为概念理解任务', category: 'generation' },
 };
 
 // ============================================================
 // Handlers
 // ============================================================
 
-async function teachingOpeningGeneratorHandler(input: any) {
+async function learningOpeningGeneratorHandler(input: any) {
   return runAux({
-    meta: META['teaching-opening-generator'],
+    meta: META['learning-opening-generator'],
     input,
-    modelDefaults: () => ({ temperature: 0.4, maxTokens: 1200 }),
-    buildUserPayload: (d) => ({
+        buildUserPayload: (d) => ({
       subject: d.subject,
       topic: d.topic,
       taskTitle: d.taskTitle,
@@ -204,8 +228,7 @@ async function sessionEvaluationFallbackHandler(input: any) {
   return runAux({
     meta: META['session-evaluation-fallback'],
     input,
-    modelDefaults: () => ({ temperature: 0.2, maxTokens: 1500 }),
-    buildUserPayload: (d) => ({
+        buildUserPayload: (d) => ({
       transcript: d.messages,
       sessionInfo: d.sessionInfo,
       knowledgePoints: d.knowledgePoints,
@@ -226,8 +249,7 @@ async function learnerProgressReportHandler(input: any) {
   return runAux({
     meta: META['learner-progress-report'],
     input,
-    modelDefaults: () => ({ temperature: 0.4, maxTokens: 1200 }),
-    buildUserPayload: (d) => ({ task: d.task, metrics: d.metrics, signals: d.signals }),
+        buildUserPayload: (d) => ({ task: d.task, metrics: d.metrics, signals: d.signals }),
     normalize: (parsed, _d, fb) => ({
       reasoning: asTrimmedString(parsed?.reasoning) || fb?.reasoning || '基于当前学习数据，你正在稳步推进学习进度。',
       suggestion: asTrimmedString(parsed?.suggestion) || fb?.suggestion || '继续保持当前学习节奏，遇到困难时先回顾前置知识点。',
@@ -242,8 +264,7 @@ async function pathAdjustmentGeneratorHandler(input: any) {
   return runAux({
     meta: META['path-adjustment-generator'],
     input,
-    modelDefaults: (d) => ({ temperature: d.temperature ?? 0.7, maxTokens: d.maxTokens ?? 3000 }),
-    buildUserPayload: (d) => {
+        buildUserPayload: (d) => {
       const { temperature: _t, maxTokens: _m, ...payload } = d;
       return payload;
     },
@@ -259,8 +280,7 @@ async function goalAnalysisHandler(input: any) {
   return runAux({
     meta: META['goal-analysis'],
     input,
-    modelDefaults: () => ({ maxTokens: 2000, temperature: 0.2 }),
-    buildUserPayload: (d) => ({
+        buildUserPayload: (d) => ({
       goal: d.goal,
       currentLevel: d.currentLevel ?? null,
       timePerDay: d.timePerDay ?? null,
@@ -283,8 +303,7 @@ async function genericChatHandler(input: any) {
   return runAux<string>({
     meta: META['generic-chat'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: d.temperature, maxTokens: d.maxTokens }),
-    prepareSystemPrompt: (systemPrompt, d) => d.systemPrompt
+        prepareSystemPrompt: (systemPrompt, d) => d.systemPrompt
       ? `${systemPrompt}\n\n【调用方系统指令】\n${d.systemPrompt}`
       : systemPrompt,
     buildUserPayload: (d) => d.message ?? '',
@@ -299,8 +318,7 @@ async function courseDesignHandler(input: any) {
   return runAux({
     meta: META['course-design'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: 0.7, maxTokens: 4000 }),
-    buildUserPayload: (d) => {
+        buildUserPayload: (d) => {
       const { model: _m, ...params } = d;
       return params;
     },
@@ -315,8 +333,7 @@ async function skillAuthorHandler(input: any) {
   return runAux<string>({
     meta: META['skill-author'],
     input,
-    modelDefaults: () => ({ maxTokens: 2400, temperature: 0.5 }),
-    buildUserPayload: (d) => d,
+        buildUserPayload: (d) => d,
     normalize: (parsed) => (typeof parsed === 'string' ? parsed : String(parsed?.systemPrompt || '')),
     validate: (parsed) => typeof parsed === 'string' && parsed.trim()
       ? { valid: true }
@@ -328,12 +345,7 @@ async function skillCompilerHandler(input: any) {
   return runAux({
     meta: META['skill-compiler'],
     input,
-    modelDefaults: (d) => ({
-      model: d.modelOverride,
-      maxTokens: d.maxTokensOverride || 2000,
-      temperature: d.temperatureOverride ?? 0.3,
-    }),
-    buildUserPayload: (d) => d,
+        buildUserPayload: (d) => d,
     normalize: (parsed) => parsed,
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
@@ -345,8 +357,7 @@ async function genericPlannerHandler(input: any) {
   return runAux({
     meta: META['generic-planner'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: d.temperature, maxTokens: d.maxTokens }),
-    buildUserPayload: (d) => d.input ?? d,
+        buildUserPayload: (d) => d.input ?? d,
     normalize: (parsed) => parsed,
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
@@ -358,8 +369,7 @@ async function basicExtractorHandler(input: any) {
   return runAux({
     meta: META['basic-extractor'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: d.temperature, maxTokens: d.maxTokens }),
-    buildUserPayload: (d) => ({ input: d.input, analysisPrompt: d.analysisPrompt }),
+        buildUserPayload: (d) => ({ input: d.input, analysisPrompt: d.analysisPrompt }),
     normalize: (parsed) => parsed,
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
@@ -371,8 +381,7 @@ async function basicEvaluatorHandler(input: any) {
   return runAux({
     meta: META['basic-evaluator'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: d.temperature, maxTokens: d.maxTokens }),
-    buildUserPayload: (d) => ({ input: d.input, evalContext: d.evalContext }),
+        buildUserPayload: (d) => ({ input: d.input, evalContext: d.evalContext }),
     normalize: (parsed) => parsed,
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
@@ -384,8 +393,7 @@ async function basicGeneratorHandler(input: any) {
   return runAux({
     meta: META['basic-generator'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: d.temperature, maxTokens: d.maxTokens }),
-    buildUserPayload: (d) => ({ input: d.input, learningContext: d.learningContext }),
+        buildUserPayload: (d) => ({ input: d.input, learningContext: d.learningContext }),
     normalize: (parsed) => parsed,
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
@@ -397,8 +405,7 @@ async function dataMappingHandler(input: any) {
   return runAux({
     meta: META['data-mapping'],
     input,
-    modelDefaults: (d) => ({ model: d.model, temperature: d.temperature, maxTokens: d.maxTokens }),
-    buildUserPayload: (d) => ({
+        buildUserPayload: (d) => ({
       mappingType: d.mappingType,
       sourceData: d.sourceData,
       targetSchema: d.targetSchema,
@@ -415,8 +422,7 @@ async function goalAlignmentCheckerHandler(input: any) {
   return runAux({
     meta: META['goal-alignment-checker'],
     input,
-    modelDefaults: () => ({ temperature: 0.3, maxTokens: 3000 }),
-    buildUserPayload: (d) => ({ path: d.path, goal: d.goal, userContext: d.userContext, pathSummary: d.pathSummary }),
+        buildUserPayload: (d) => ({ path: d.path, goal: d.goal, userContext: d.userContext, pathSummary: d.pathSummary }),
     normalize: (parsed) => parsed,
     validate: (parsed) => parsed && typeof parsed === 'object'
       ? { valid: true }
@@ -428,8 +434,7 @@ async function conceptPriorityHandler(input: any) {
   return runAux({
     meta: META['concept-priority'],
     input,
-    modelDefaults: () => ({ temperature: 0.3, maxTokens: 3000 }),
-    buildUserPayload: (d) => ({ tasks: d.tasks, priorityContext: d.priorityContext, signal: d.signal }),
+        buildUserPayload: (d) => ({ tasks: d.tasks, priorityContext: d.priorityContext, signal: d.signal }),
     normalize: (parsed) => ({
       upgradedTasks: Array.isArray(parsed?.upgradedTasks) ? parsed.upgradedTasks : [],
       upgradeReasons: Array.isArray(parsed?.upgradeReasons) ? parsed.upgradeReasons : [],
@@ -452,7 +457,7 @@ export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object
 ) as Record<AuxSkillId, SkillDefinition>;
 
 export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
-  'teaching-opening-generator': teachingOpeningGeneratorHandler,
+  'learning-opening-generator': learningOpeningGeneratorHandler,
   'session-evaluation-fallback': sessionEvaluationFallbackHandler,
   'learner-progress-report': learnerProgressReportHandler,
   'path-adjustment-generator': pathAdjustmentGeneratorHandler,

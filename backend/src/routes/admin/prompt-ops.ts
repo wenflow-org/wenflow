@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin · Prompt 运营开发与评估中心
  * ============================================================
  * 服务于 /admin/agent-registry（V3.6 重构后的 Prompt 运营中心）
@@ -88,7 +88,7 @@ const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'learning'> = {
   'skill:path-planning': 'path',
   'skill:path-scene-framing': 'path',
   'skill:stage-designer': 'path',
-  'skill:teaching-turn': 'learning',
+  'skill:learning-turn': 'learning',
   'skill:session-wrapup': 'learning',
   'skill:peer-reinforcement': 'learning',
   'skill:adaptive-guidance-copy': 'learning',

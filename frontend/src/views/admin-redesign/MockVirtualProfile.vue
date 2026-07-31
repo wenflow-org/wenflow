@@ -82,7 +82,7 @@
             </div>
           </div>
           <p v-if="isLive && !displayStories.length" class="vp-next">
-            先生成故事。每个故事产生一次学习需求，对应平台上的一条 Path。
+            先生成故事，再进入学习链路。
           </p>
           <div v-if="displayStories.length" class="vp-stories">
             <div
@@ -228,7 +228,6 @@
         <section v-if="isLive && activeTab === 'verify'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">前台投影验收</h3>
-            <span class="mk-card__meta">用该虚拟身份打开前台页面，核对 Goal / Path / 状态展示</span>
           </div>
           <div class="vp-tools">
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('dashboard')">
@@ -238,7 +237,6 @@
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('paths')">路径</button>
             <button type="button" class="vp-tool" :disabled="projecting" @click="openProjection('state')">状态</button>
           </div>
-          <p class="vp-tools__hint">投影会生成一次性 token 并以虚拟账号身份打开前台；故事卡里的「前台 / 调试」链接走同一机制。「账号自动学习」入口在顶部操作区。</p>
         </section>
     </div>
 

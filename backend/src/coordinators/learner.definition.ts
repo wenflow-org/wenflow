@@ -1,5 +1,5 @@
 export const learnerAgentRuntimeDefinition = {
-  id: 'learner-agent',
+  id: 'profile-agent',
   displayName: 'Learner State Agent',
   description: 'Goal/lesson 事件 -> learner profile enrich -> background consolidation -> snapshot refresh 的学习者主链编排。',
   category: 'agent',

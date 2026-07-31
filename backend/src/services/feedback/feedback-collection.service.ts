@@ -114,7 +114,7 @@ export class FeedbackCollectionService {
       where: { feedbackKey },
       update: {
         subtaskId: session.taskId,
-        agentId: 'teaching-agent',
+        agentId: 'learning-agent',
         rating: params.rating,
         helpfulness: params.helpfulness ?? null,
         clarity: params.clarity ?? null,
@@ -136,7 +136,7 @@ export class FeedbackCollectionService {
         userId: params.userId,
         sessionId: params.sessionId,
         subtaskId: session.taskId,
-        agentId: 'teaching-agent',
+        agentId: 'learning-agent',
         rating: params.rating,
         helpfulness: params.helpfulness ?? null,
         clarity: params.clarity ?? null,

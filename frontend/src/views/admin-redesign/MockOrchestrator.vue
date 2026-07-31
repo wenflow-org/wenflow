@@ -144,62 +144,61 @@ interface Stage {
 const demoStages: Stage[] = [
   {
     id: 'goal',
-    name: 'Goal',
+    name: '澄清',
     agentId: 'goal-agent',
     consumes: ['user_message'],
     produces: ['goal_understanding', 'learner_profile'],
     skills: [
       { id: 'goal-conversation', name: '目标对话', calls: 1284, produces: ['dialogue_concepts'] },
       { id: 'goal-profile-inference', name: '画像推断', calls: 856, produces: ['learner_profile'] },
-      { id: 'goal-understanding-composer', name: '理解合成', calls: 640, produces: ['goal_understanding'] },
-      { id: 'dialogue-concept-extractor', name: '概念抽取', calls: 1180, produces: ['dialogue_concepts'] }
+      { id: 'goal-understanding-composer', name: '理解合成', calls: 640, produces: ['goal_understanding'] }
     ]
   },
   {
     id: 'path',
-    name: 'Path',
+    name: '规划',
     agentId: 'path-agent',
     consumes: ['goal_understanding'],
     produces: ['learning_path', 'milestones'],
     skills: [
-      { id: 'generic-planner', name: '路径规划', calls: 640, produces: ['learning_path'] },
-      { id: 'path-scene-framer', name: '场景定帧', calls: 512, produces: ['path_scene'] },
+      { id: 'path-planning', name: '路径规划', calls: 640, produces: ['learning_path'] },
+      { id: 'path-scene-framing', name: '场景定帧', calls: 512, produces: ['path_scene'] },
       { id: 'stage-designer', name: '阶段设计', calls: 498, produces: ['milestones'] }
     ]
   },
   {
-    id: 'teaching',
-    name: 'Teaching',
-    agentId: 'teaching-agent',
+    id: 'learning',
+    name: '学习',
+    agentId: 'learning-agent',
     consumes: ['learning_path', 'milestones'],
     produces: ['teaching_session', 'mastery_delta'],
     skills: [
-      { id: 'teaching-round', name: '教学回合', calls: 2210, produces: ['round_output'] },
-      { id: 'companion-boost', name: '伴学补强', calls: 388, produces: ['boost_note'] },
+      { id: 'learning-turn', name: '教学回合', calls: 2210, produces: ['round_output'] },
+      { id: 'peer-reinforcement', name: '伴学补强', calls: 388, produces: ['boost_note'] },
       { id: 'session-wrapup', name: '课后产出', calls: 415, produces: ['wrapup_notes'] }
     ]
   },
   {
-    id: 'learner',
-    name: 'Learner',
-    agentId: 'learner-agent',
+    id: 'profile',
+    name: '画像',
+    agentId: 'profile-agent',
     consumes: ['mastery_delta'],
     produces: ['learner_snapshot', 'risk_signals'],
     skills: [
-      { id: 'state-aggregator', name: '状态聚合', calls: 930, produces: ['learner_snapshot'] },
-      { id: 'snapshot-refresh', name: '快照刷新', calls: 1204, produces: ['risk_signals'] },
-      { id: 'knowledge-distill', name: '知识沉淀', calls: 260, produces: ['concept_map'] }
+      { id: 'learner-model', name: '状态聚合', calls: 930, produces: ['learner_snapshot'] },
+      { id: 'learning-pattern-distiller', name: '快照刷新', calls: 1204, produces: ['risk_signals'] },
+      { id: 'lesson-knowledge-enricher', name: '知识沉淀', calls: 260, produces: ['concept_map'] }
     ]
   },
   {
     id: 'simulation',
-    name: 'Simulation',
-    agentId: 'virtual-agent',
+    name: '仿真',
+    agentId: 'simulation-agent',
     consumes: ['learner_snapshot'],
     produces: ['simulation_report'],
     skills: [
-      { id: 'turn-simulator', name: '回合模拟', calls: 320, produces: ['sim_turns'] },
-      { id: 'path-evaluator', name: '路径评估', calls: 96, produces: ['simulation_report'] }
+      { id: 'virtual-learner-learn-turn-simulator', name: '回合模拟', calls: 320, produces: ['sim_turns'] },
+      { id: 'virtual-learner-path-evaluator', name: '路径评估', calls: 96, produces: ['simulation_report'] }
     ]
   }
 ]

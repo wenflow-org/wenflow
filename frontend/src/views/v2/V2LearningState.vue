@@ -17,7 +17,7 @@
       <div class="metrics">
         <section v-for="m in metricCards" :key="m.key" class="card metric">
           <small>{{ m.label }}</small>
-          <div class="metric__value" :style="{ color: m.color }">{{ m.value }}<i> 分</i></div>
+          <div class="metric__value" :style="{ color: m.color }">{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></div>
           <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
         </section>
       </div>
@@ -217,9 +217,10 @@ const metricOptions: Array<{ key: MetricKey; label: string }> = [
 function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
   if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: '#5b6577', note: '暂无数据' };
   if (key === 'lsb') {
-    if (v >= 70) return { tone: 'green', color: '#31b16f', note: '良好' };
-    if (v >= 40) return { tone: 'blue', color: '#3478f6', note: '一般' };
-    return { tone: 'amber', color: '#d9932e', note: '需调整' };
+    // LSB = KTL - LF（-100 ~ +100），档位与趋势图状态区一致
+    if (v >= -5) return { tone: 'green', color: '#31b16f', note: '精力充沛' };
+    if (v >= -25) return { tone: 'blue', color: '#3478f6', note: '最优训练区' };
+    return { tone: 'amber', color: '#d9932e', note: '需要安排休息' };
   }
   if (key === 'ktl') {
     if (v > 0) return { tone: 'purple', color: '#8d6bff', note: '上升' };
@@ -236,7 +237,7 @@ const metricCards = computed(() =>
   metricOptions.map((m) => {
     const v = current.value?.[m.key];
     const t = toneOf(m.key, v);
-    return { ...m, value: v ?? '—', ...t };
+    return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
   })
 );
 
@@ -473,9 +474,9 @@ function decisionTime(at: string | null): string {
 }
 
 const suggestSource = computed(() => {
-  if (!guidance.value) return '规则兜底';
-  if (guidance.value.source === 'model') return 'skill 生成';
-  return '规则兜底';
+  if (!guidance.value) return '系统建议';
+  if (guidance.value.source === 'model') return 'AI 生成';
+  return '系统建议';
 });
 
 const skillWarning = computed(() => {

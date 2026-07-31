@@ -72,7 +72,7 @@ function pickOne<T extends string>(value: unknown, allowed: readonly T[], fallba
 
 function inferContextMode(skillId: string, archetype: string): RuntimeContextMode {
   if (skillId === 'goal-conversation') return 'state-refresh';
-  if (['teaching-turn', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) return 'thread-context';
+  if (['learning-turn', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) return 'thread-context';
   if (/^virtual-learner-(goal-dialogue|learn-turn|path-evaluator)/.test(skillId)) return 'simulation-refresh';
   if (archetype === 'conversational') return 'thread-context';
   return 'snapshot-context';
@@ -94,7 +94,7 @@ function inferStateOwner(mode: RuntimeContextMode): RuntimeStateOwner {
 
 function inferDomain(skillId: string): string {
   if (skillId === 'goal-conversation') return 'goal-conversation';
-  if (['teaching-turn', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) return 'teaching';
+  if (['learning-turn', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) return 'teaching';
   if (['path-scene-framing', 'path-planning', 'stage-designer'].includes(skillId)) return 'path-generation';
   if (skillId.startsWith('virtual-learner-')) return 'virtual-learner';
   if (skillId.includes('knowledge') || skillId.includes('pattern') || skillId.includes('profile') || skillId.includes('concept')) return 'learner-model';
@@ -111,7 +111,7 @@ function inferPhases(skillId: string, domain: string): { phases: string[]; defau
       terminalPhases: ['ready', 'completed'],
     };
   }
-  if (skillId === 'teaching-turn') {
+  if (skillId === 'learning-turn') {
     return {
       phases: ['turn-generated', 'checkpoint-pending', 'completion-candidate', 'turn-blocked'],
       defaultPhase: 'turn-generated',

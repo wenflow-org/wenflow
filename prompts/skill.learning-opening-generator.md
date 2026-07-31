@@ -1,6 +1,6 @@
 ---
-agentId: skill:teaching-opening-generator
-coreHash: 2d8ee4b4d14a3ee92b7ae8c7d455e0debffa7bd7066078173222e90dce633775
+agentId: skill:learning-opening-generator
+coreHash: 4f6863b4c966d83dfa25da4256d7b263f7fe5adbab7d8961eb416fe79e16e542
 coreVersion: 1
 temperature: 0.4
 maxTokens: 1200

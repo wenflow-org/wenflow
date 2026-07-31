@@ -85,7 +85,7 @@
 
         <aside class="auth__demo-side">
           <div class="demo">
-            <p class="demo__tagline">Quiet UI · 运维简报式控制台，从平台总览一路钻到 Trace。</p>
+            <p class="demo__tagline">WenFlow 管理后台</p>
 
             <div class="demo__status">
               <span class="demo__dot"></span>

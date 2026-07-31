@@ -18,8 +18,8 @@ export type AgentRuntimeKind = 'agent' | 'skill' | 'alias';
 export type MonitoringGroupName =
   | 'Goal'
   | 'Path'
-  | 'Teaching'
-  | 'Learner'
+  | 'Learning'
+  | 'Profile'
   | 'Simulation'
   | 'Tool'
   // 兼容旧值（不再新增）
@@ -86,33 +86,33 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ]
   },
   {
-    id: 'teaching-agent',
-    name: '教学 Agent',
+    id: 'learning-agent',
+    name: '学习 Agent',
     description: 'AI 教学会话编排：单轮教学、伴学补强、课后产出',
     category: 'agent',
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
-    monitoringGroup: 'Teaching',
+    monitoringGroup: 'Learning',
     aliases: ['ai-teaching-agent', 'ai-teaching'],
     agentMembers: [
-      'skill:teaching-turn',
+      'skill:learning-turn',
       'skill:peer-reinforcement',
       'skill:session-wrapup',
-      'skill:teaching-strategy-selector',
+      'skill:learning-strategy-selector',
       'skill:adaptive-guidance-copy',
       'skill:acceptance-evidence-evaluator'
     ]
   },
   {
-    id: 'learner-agent',
+    id: 'profile-agent',
     name: '学习者 Agent',
     description: '编排学习者画像、状态聚合、知识沉淀与 snapshot/projection 刷新',
     category: 'agent',
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learner',
+    monitoringGroup: 'Profile',
     agentMembers: [
       'skill:learner-model',
       'skill:learning-pattern-distiller',
@@ -217,17 +217,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },
 
-  // ============ Teaching 下辖 Skills ============
+  // ============ Learning 下辖 Skills ============
   {
-    id: 'skill:teaching-turn',
-    name: '教学回合 Skill',
+    id: 'skill:learning-turn',
+    name: '学习回合 Skill',
     description: '生成单轮教学回复与结构化教学状态',
-    category: 'teaching',
+    category: 'learning',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Teaching',
-    aliases: ['teaching-turn-agent'],
+    monitoringGroup: 'Learning',
+    aliases: ['learning-turn-agent', 'teaching-turn-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.5, maxTokens: 2200 }
   },
@@ -235,11 +235,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:peer-reinforcement',
     name: '伴学补强 Skill',
     description: '同伴式引导讨论与理解补强',
-    category: 'teaching',
+    category: 'learning',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Teaching',
+    monitoringGroup: 'Learning',
     aliases: ['peer-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.8, maxTokens: 1000 }
@@ -248,24 +248,24 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:session-wrapup',
     name: '课后产出 Skill',
     description: '生成课后总结与评估',
-    category: 'teaching',
+    category: 'learning',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Teaching',
+    monitoringGroup: 'Learning',
     aliases: ['session-wrapup-agent'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 2200 }
   },
   {
-    id: 'skill:teaching-strategy-selector',
-    name: '教学策略选择 Skill',
+    id: 'skill:learning-strategy-selector',
+    name: '学习策略选择 Skill',
     description: '基于学习者状态选择教学策略',
-    category: 'teaching',
+    category: 'learning',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Teaching',
+    monitoringGroup: 'Learning',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
   },
@@ -273,11 +273,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:adaptive-guidance-copy',
     name: '自适应引导文案 Skill',
     description: '根据情境生成自适应引导话术',
-    category: 'teaching',
+    category: 'learning',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Teaching',
+    monitoringGroup: 'Learning',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 800 }
   },
@@ -285,25 +285,25 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:acceptance-evidence-evaluator',
     name: '验收证据评估 Skill',
     description: '评估学习者输出是否满足验收点',
-    category: 'teaching',
+    category: 'learning',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Teaching',
+    monitoringGroup: 'Learning',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 1200 }
   },
 
-  // ============ Learner 下辖 Skills ============
+  // ============ Profile 下辖 Skills ============
   {
     id: 'skill:learner-model',
     name: '学习者模型 Skill',
     description: '聚合学习者画像、状态与知识记忆（handler-only，无 LLM prompt）',
-    category: 'learner',
+    category: 'profile',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learner',
+    monitoringGroup: 'Profile',
     aliases: ['learner-model-agent'],
     noPromptFile: true,
     ioContractVersion: 'agent-output-v1',
@@ -313,11 +313,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:learning-pattern-distiller',
     name: '学习模式蒸馏 Skill',
     description: '从历史学习行为蒸馏稳定模式',
-    category: 'learner',
+    category: 'profile',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learner',
+    monitoringGroup: 'Profile',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 1500 }
   },
@@ -325,11 +325,11 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     id: 'skill:lesson-knowledge-enricher',
     name: '课后知识增强 Skill',
     description: '课后单次调用：蒸馏知识台账增量并抽取隐性概念线索',
-    category: 'learner',
+    category: 'profile',
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
-    monitoringGroup: 'Learner',
+    monitoringGroup: 'Profile',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },

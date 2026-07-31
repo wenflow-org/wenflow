@@ -129,7 +129,6 @@
 
     <div v-else class="mk-empty">
       <strong>{{ isFiltered ? '当前筛选无日志' : '暂无日志' }}</strong>
-      <span>{{ isFiltered ? '放宽筛选条件。' : '有真实调用后出现在这里。' }}</span>
       <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
     </div>
   </div>

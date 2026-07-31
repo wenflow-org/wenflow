@@ -552,11 +552,7 @@ export async function virtualLearnerScenarioDesigner(input: any): Promise<SkillE
       defaultSystemPrompt: VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-scenario-designer' },
-      modelDefaults: {
-        maxTokens: VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS,
-        temperature: VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE,
-      },
-      buildUserPayload: (payload) => ({
+            buildUserPayload: (payload) => ({
         preferredDomains: normalizeStringArray(payload?.preferredDomains),
         preferredGoalTypes: normalizeStringArray(payload?.preferredGoalTypes),
         preferredLevels: normalizeStringArray(payload?.preferredLevels),

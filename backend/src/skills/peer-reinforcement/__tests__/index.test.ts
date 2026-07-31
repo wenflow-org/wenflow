@@ -4,7 +4,7 @@ jest.mock('../../../composers/prompt-composer', () => ({ callPrompt: mockCallPro
 
 import {
   normalizePeerParsedOutput,
-  PeerAgent,
+  executePeerDiscussion,
   peerAgentHandler,
   toPeerSkillOutcome,
   type PeerDiscussionInput,
@@ -85,7 +85,7 @@ describe('peer-reinforcement model artifact', () => {
       }
     })
 
-    const result = await new PeerAgent().execute(input)
+    const result = await executePeerDiscussion(input)
 
     expect(result.followUpQuestions).toEqual(parsed.followUpQuestions)
     expect(result.source).toBe('model')

@@ -1,5 +1,4 @@
-/* Admin 重设计实验室：共享样式（mk- 前缀，全局可用）
-   统一"运维简报式 Admin"语言：状态条 / 紧凑表格 / mono 点缀 */
+﻿/* Admin 閲嶈璁″疄楠屽锛氬叡浜牱寮忥紙mk- 鍓嶇紑锛屽叏灞€鍙敤锛?   缁熶竴"杩愮淮绠€鎶ュ紡 Admin"璇█锛氱姸鎬佹潯 / 绱у噾琛ㄦ牸 / mono 鐐圭紑 */
 
 .mk-page {
   --mk-ink: #1a2a44;
@@ -23,14 +22,12 @@
   padding: 14px 16px 20px;
   display: grid;
   gap: 12px;
-  /* 关键：行高按内容计算，多余空间留在底部。
-     缺省 align-content: stretch 会把 auto 行拉满整个 min-height，
-     导致状态条等首行被拉伸成"虚高"。 */
+  /* 鍏抽敭锛氳楂樻寜鍐呭璁＄畻锛屽浣欑┖闂寸暀鍦ㄥ簳閮ㄣ€?     缂虹渷 align-content: stretch 浼氭妸 auto 琛屾媺婊℃暣涓?min-height锛?     瀵艰嚧鐘舵€佹潯绛夐琛岃鎷変几鎴?铏氶珮"銆?*/
   align-content: start;
   min-height: 100%;
 }
 
-/* ----- 状态条（每页开头一行） ----- */
+/* ----- 鐘舵€佹潯锛堟瘡椤靛紑澶翠竴琛岋級 ----- */
 .mk-status {
   display: flex;
   align-items: center;
@@ -65,7 +62,7 @@
 .mk-status__action:hover { border-color: rgba(52, 120, 246, 0.4); }
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: #fff; }
 
-/* ----- 卡片 ----- */
+/* ----- 鍗＄墖 ----- */
 .mk-card {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
@@ -84,7 +81,7 @@
 .mk-card__title { margin: 0; font-size: 13px; font-weight: 700; }
 .mk-card__meta { color: var(--mk-faint); font-size: 12px; }
 
-/* ----- 表格 ----- */
+/* ----- 琛ㄦ牸 ----- */
 .mk-table { width: 100%; border-collapse: collapse; }
 .mk-table th {
   text-align: left;
@@ -109,12 +106,12 @@
 .mk-table--click tbody tr { cursor: pointer; }
 
 .mk-cell-main { display: grid; gap: 1px; min-width: 0; }
-.mk-cell-main strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cell-main strong { display: block; max-width: 260px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-cell-sub { color: var(--mk-faint); font-size: 11.5px; font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; text-align: right; }
 .mk-na { color: var(--mk-faint); }
 
-/* ----- 徽标 ----- */
+/* ----- 寰芥爣 ----- */
 .mk-badge {
   display: inline-flex;
   align-items: center;
@@ -131,7 +128,7 @@
 .mk-badge--muted { background: #f0f2f5; color: var(--mk-muted); }
 .mk-badge--info { background: #eff6ff; color: var(--mk-blue); }
 
-/* ----- 筛选行 ----- */
+/* ----- 绛涢€夎 ----- */
 .mk-filter {
   display: flex;
   align-items: center;
@@ -166,7 +163,7 @@
 }
 .mk-pill--active { background: #fff; color: var(--mk-ink); box-shadow: 0 1px 2px rgba(23, 32, 51, 0.1); }
 
-/* ----- 链接按钮 ----- */
+/* ----- 閾炬帴鎸夐挳 ----- */
 .mk-link {
   border: 0;
   background: transparent;
@@ -181,7 +178,7 @@
 .mk-link:hover { background: #eff6ff; }
 .mk-actions { display: flex; gap: 4px; justify-content: flex-end; }
 
-/* ----- 空态 ----- */
+/* ----- 绌烘€?----- */
 .mk-empty {
   padding: 48px 20px;
   text-align: center;
@@ -193,7 +190,7 @@
 .mk-empty strong { color: var(--mk-muted); font-size: 13.5px; }
 .mk-empty span { font-size: 12.5px; }
 
-/* ----- 弹窗（表单/编辑） ----- */
+/* ----- 寮圭獥锛堣〃鍗?缂栬緫锛?----- */
 .mk-modal {
   position: fixed;
   inset: 0;
@@ -239,7 +236,7 @@
   border-top: 1px solid var(--mk-line, #e1e8f2);
 }
 
-/* 表单字段 */
+/* 琛ㄥ崟瀛楁 */
 .mk-field { display: grid; gap: 6px; }
 .mk-field__label { font-size: 12px; font-weight: 700; color: var(--mk-muted, #5b6577); }
 .mk-field__hint { font-size: 11px; color: var(--mk-faint, #8492ab); }
@@ -264,7 +261,7 @@
 .mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
 .mk-field__err { font-size: 11px; color: var(--mk-red, #dc2626); font-weight: 600; }
 
-/* 按钮 */
+/* 鎸夐挳 */
 .mk-btn {
   padding: 8px 16px;
   border-radius: 8px;
@@ -285,7 +282,7 @@
 .mk-btn--primary:hover { background: #2b64d8; }
 .mk-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* 行内提示条 */
+/* 琛屽唴鎻愮ず鏉?*/
 .mk-toast {
   display: flex;
   align-items: center;
@@ -299,7 +296,7 @@
 .mk-toast--bad { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-toast--info { background: #eff6ff; color: var(--mk-blue, #3478f6); }
 
-/* 加载点 */
+/* 鍔犺浇鐐?*/
 .mk-spinner {
   display: inline-block;
   width: 12px;

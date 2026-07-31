@@ -9,7 +9,7 @@ export const simulationAgentRuntimeDefinition = {
     { step: 3, agentId: 'path-agent', role: 'learning-path-generation', condition: 'when goal stage converges' },
     { step: 4, agentId: 'skill:virtual-learner-path-evaluator', role: 'legacy-assisted-path-review', condition: 'legacy assisted mode only' },
     { step: 5, agentId: 'skill:virtual-learner-learn-turn-simulator', role: 'learn-stage-learner-turn-simulation', condition: 'when learning phase starts', loopOver: 'learning-turns' },
-    { step: 6, agentId: 'teaching-agent', role: 'learning-session-execution', condition: 'when learning phase starts', loopOver: 'learning-turns' },
+    { step: 6, agentId: 'learning-agent', role: 'learning-session-execution', condition: 'when learning phase starts', loopOver: 'learning-turns' },
     { step: 7, agentId: 'skill:virtual-learner-referee', role: 'platform-quality-referee', condition: 'after blackbox experiment reaches terminal state' },
     { step: 8, agentId: 'skill:virtual-learner-actor-auditor', role: 'synthetic-learner-fidelity-audit', condition: 'after blackbox experiment reaches terminal state' },
   ],

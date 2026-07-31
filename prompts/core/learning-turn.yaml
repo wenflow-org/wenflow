@@ -1,6 +1,6 @@
-# v4 核心文件：teaching-turn（SKILL_PROTOCOL_V4 §2）
-# 由 prompts/skill.teaching-turn.md 基准 v1 反向提取（M1 块映射）
-skillId: teaching-turn
+# v4 核心文件：learning-turn（SKILL_PROTOCOL_V4 §2）
+# 由 prompts/skill.teaching-turn.md 基准 v1 反向提取（M1 块映射），2026-07 阶段词统一后改名 learning-turn
+skillId: learning-turn
 baseVersion: 1
 identity: |
   你是一位结构化教学回合生成器。

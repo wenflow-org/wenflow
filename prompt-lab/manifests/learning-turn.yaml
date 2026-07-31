@@ -1,14 +1,15 @@
 version: prompt-lab-manifest/v1
 
-skillId: teaching-turn
-agentId: skill:teaching-turn
+skillId: learning-turn
+agentId: skill:learning-turn
 
-name: default-skill-teaching-turn
+name: default-skill-learning-turn
 archetype: conversational
 description: 结构化教学回合生成器
 
 acceptableAgentIds:
-  - skill:teaching-turn
+  - skill:learning-turn
+  - learning-turn-agent
   - teaching-turn-agent
 
 publish:

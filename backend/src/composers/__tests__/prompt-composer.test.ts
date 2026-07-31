@@ -70,7 +70,6 @@ describe('callPrompt runtime overrides', () => {
       defaultSystemPrompt: 'default prompt',
       requireActivePrompt: true,
       caller: { skillId: 'test' },
-      modelDefaults: { temperature: 0.7, maxTokens: 800 },
       buildUserPayload: () => ({ input: true }),
       normalizeOutput: parsed => parsed
     }, {}))

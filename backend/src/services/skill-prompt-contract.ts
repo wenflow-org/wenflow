@@ -178,7 +178,7 @@ function inferOutputMedia(skillId: string, archetype: Archetype): SkillPromptOut
 
 function inferFailurePolicy(skillId: string, archetype: Archetype): SkillPromptFailurePolicy {
   if (archetype === 'code-only') return 'none';
-  if (['goal-conversation', 'path-planning', 'path-scene-framing', 'stage-designer', 'teaching-turn', 'prompt-compiler'].includes(skillId)) {
+  if (['goal-conversation', 'path-planning', 'path-scene-framing', 'stage-designer', 'learning-turn', 'prompt-compiler'].includes(skillId)) {
     return 'retry';
   }
   if (['adaptive-guidance-copy', 'goal-profile-inference', 'learning-pattern-distiller', 'lesson-knowledge-enricher', 'session-wrapup', 'peer-reinforcement'].includes(skillId)) {

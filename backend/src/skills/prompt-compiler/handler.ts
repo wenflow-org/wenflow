@@ -73,8 +73,7 @@ export async function promptCompilerHandler(input: CompilerInput): Promise<Compi
         : { valid: false, failureReason: 'LLM 返回空结果' }
     ),
     normalizeOutput: (parsed) => stripMarkdownFence(String(parsed).trim()),
-    modelDefaults: { maxTokens: 8000, temperature: 0.2 },
-    retryStrategy: {
+        retryStrategy: {
       maxAttempts: 2,
       onValidationFail: () => '上次输出为空或无效。请严格按编译约定生成完整的 Markdown Skill Prompt。',
     },

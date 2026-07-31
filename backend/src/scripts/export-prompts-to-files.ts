@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 导出脚本：将代码中的 prompt 常量提取到 prompts/*.md 文件
  * 运行方式: npx ts-node src/scripts/export-prompts-to-files.ts
  */
@@ -73,8 +73,8 @@ const promptsToExport: PromptToExport[] = [
     maxTokens: 32000,
   },
   {
-    agentId: 'skill:teaching-turn',
-    name: 'default-teaching-turn',
+    agentId: 'skill:learning-turn',
+    name: 'default-learning-turn',
     description: '结构化教学回合生成器',
     systemPrompt: '',
     temperature: 0.7,

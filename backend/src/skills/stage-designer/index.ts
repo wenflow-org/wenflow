@@ -166,11 +166,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'stage-designer' },
-      modelDefaults: {
-        maxTokens: STAGE_DESIGNER_MAX_TOKENS,
-        temperature: STAGE_DESIGNER_TEMPERATURE,
-      },
-      buildUserPayload: (payload) => ({
+            buildUserPayload: (payload) => ({
         milestone: payload.milestone,
         cognitiveCore: payload.cognitiveCore,
         normalizedInput: payload.normalizedInput || null,

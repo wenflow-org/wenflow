@@ -516,7 +516,13 @@ export class APIExecutor {
       requestBytes: Buffer.byteLength(JSON.stringify(request), 'utf8'),
       responseBytes: attempt.responseBytes || null,
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-      metadata: null
+      metadata: JSON.stringify({
+        temperature: request.temperature ?? null,
+        max_tokens: request.max_tokens ?? null,
+        model: request.model ?? null,
+        thinkingMode: route.thinkingMode ?? null,
+        reasoningEffort: route.reasoningEffort ?? null,
+      })
     });
   }
 
@@ -597,6 +603,11 @@ export class APIExecutor {
         routeSource: route.source, model: request.model || route.model,
         statusCode, attempts: attemptsMade, maxAttempts,
         requestPath: context.requestPath, messageCount: request.messages?.length || 0,
+        requestParams: {
+          temperature: request.temperature ?? null,
+          max_tokens: request.max_tokens ?? null,
+          model: request.model ?? null,
+        },
         finishReason: response?.choices?.[0]?.finish_reason, completionId: response?.id,
         promptCallId: context.promptCallId || null,
         recoveredByRetry: success && attemptsMade > 1,

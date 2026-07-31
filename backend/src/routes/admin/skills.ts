@@ -740,7 +740,7 @@ function getCategoryLabel(category: string): string {
  *   - 字段契约（agent_contracts 表，按 stage）
  *   - 调用统计（agent_call_logs 聚合）
  *
- * 同时接受老 id（如 'teaching-turn-agent'）通过 alias 解析。
+ * 同时接受老 id（如 'learning-turn-agent'）通过 alias 解析。
  */
 router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
   try {

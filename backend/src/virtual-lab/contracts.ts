@@ -120,6 +120,36 @@ export type VirtualLearnerRefereeInput = {
   refereeTrace: BlackboxRefereeTraceEntry[]
   control: PlatformControlReceipt
   experimentSummary: BlackboxExperimentSummary
+  /**
+   * 平行通道：故事元数据与当次诉求（不进入 Goal/Path 主链）。
+   * 供裁判评估「正式 Goal 是否抓住了故事的真实问题」。
+   */
+  storyMeta?: RefereeStoryMeta | null
+  /** 数据完整性：平台侧教学指标 / wrapup 产出情况（用于 evidenceSufficiency 判断） */
+  metricCompleteness?: RefereeMetricCompleteness | null
+}
+
+export type RefereeStoryMeta = {
+  personaSummary: string | null
+  storyId: string | null
+  storyTitle: string | null
+  surfaceGoal: string | null
+  realProblem: string | null
+  triggerEvent: string | null
+  /** 正式 Goal 开场实际写入 description 的诉求文本 */
+  demandText: string | null
+  /** 诉求来源（见 story-demand.ts StoryDemandSource） */
+  demandSource: string | null
+}
+
+export type RefereeMetricCompleteness = {
+  available: boolean
+  teachingSessions: number
+  wrapupPresent: number
+  metricsPresent: number
+  lssPresent: number
+  degraded: boolean
+  error: string | null
 }
 
 export type VirtualLearnerRefereeOutput = {
@@ -127,6 +157,7 @@ export type VirtualLearnerRefereeOutput = {
   scores: {
     overall: number
     goalExperience: number | null
+    goalUnderstanding: number | null
     pathExperience: number | null
     teachingExperience: number | null
     controlConsistency: number
@@ -149,7 +180,7 @@ export type VirtualLearnerRefereeOutput = {
   }>
   evidence: Array<{
     id: string
-    source: 'publicTrace' | 'refereeTrace' | 'control' | 'experimentSummary'
+    source: 'publicTrace' | 'refereeTrace' | 'control' | 'experimentSummary' | 'storyMeta' | 'metricCompleteness'
     index: number | null
     path: string
     timestamp: string | null

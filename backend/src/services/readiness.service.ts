@@ -33,7 +33,7 @@ const CRITICAL_PROMPT_IDS = [
   'skill:goal-conversation',
   'skill:path-planning',
   'skill:stage-designer',
-  'skill:teaching-turn',
+  'skill:learning-turn',
   'skill:session-wrapup'
 ] as const;
 

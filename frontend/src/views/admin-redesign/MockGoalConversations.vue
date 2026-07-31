@@ -11,7 +11,6 @@
         <span class="mk-status__meta">已完成 {{ stats.completed }}</span>
         <span class="mk-status__meta">完成率 {{ stats.completionRate }}%</span>
       </template>
-      <span v-else class="mk-status__meta">目标对话是路径生成的源头</span>
       <button type="button" class="mk-status__action" :disabled="loading" @click="load">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
@@ -21,8 +20,8 @@
 
     <!-- 非 live：无演示数据 -->
     <div v-if="!isLive" class="mk-empty">
-      <strong>演示模式暂无 Goal 会话数据</strong>
-      <span>通过顶栏刷新或命令面板切换到真实数据查看。</span>
+      <strong>暂无 Goal 会话数据</strong>
+      <span>刷新或切换到真实数据查看。</span>
     </div>
 
     <template v-else>
@@ -85,8 +84,7 @@
           </tbody>
         </table>
         <div v-else class="mk-empty">
-          <strong>{{ loading ? '加载中…' : '没有匹配的会话' }}</strong>
-          <span>{{ keyword || statusFilter ? '调整筛选条件试试。' : '还没有 Goal 会话记录。' }}</span>
+          <strong>{{ loading ? '加载中…' : (keyword || statusFilter ? '当前筛选无匹配' : '暂无会话') }}</strong>
         </div>
       </div>
     </template>

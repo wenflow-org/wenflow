@@ -65,8 +65,7 @@
         </table>
 
         <div v-else class="mk-empty">
-          <strong>{{ rows.length ? '当前筛选无记录' : '还没有 Prompt 调用记录' }}</strong>
-          <span>{{ rows.length ? '放宽筛选条件。' : '有真实调用后出现在这里。' }}</span>
+          <strong>{{ keyword ? '当前筛选无记录' : '暂无调用记录' }}</strong>
         </div>
       </div>
     </div>

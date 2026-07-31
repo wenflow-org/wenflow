@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Agents 入口文件
  *
  * 统一导出所有 Agent
@@ -50,9 +50,9 @@ export {
 } from './learner-model-agent';
 
 export {
-  teachingTurnAgentDefinition,
-  teachingTurnAgentHandler,
-} from '../skills/teaching-turn';
+  learningTurnAgentDefinition,
+  learningTurnAgentHandler,
+} from '../skills/learning-turn';
 
 export {
   sessionWrapupAgentDefinition,
@@ -85,26 +85,12 @@ export {
 export { genericPlanner } from './path-planner/plugins/generic-planner';
 export { basicGenerator } from './content-generator/plugins/basic-generator';
 
-// Content Strategy Selector
-export {
-  ContentStrategySelector,
-  contentStrategySelector,
-  selectContentStrategy,
-  inferCognitiveLoad,
-  type ContentStrategy,
-  type TaskType,
-  type CognitiveLoad,
-  type TaskMetadata,
-  type StrategySelection,
-  type StrategyConfig
-} from '../skills/content-strategy-selector';
-
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
 import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from '../skills/goal-conversation';
-import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from '../skills/teaching-turn';
+import { learningTurnAgentDefinition, learningTurnAgentHandler } from '../skills/learning-turn';
 import { peerAgentDefinition, peerAgentHandler } from '../skills/peer-reinforcement';
 import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from '../skills/session-wrapup';
 import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-agent';
@@ -115,7 +101,7 @@ export const allAgentDefinitions: AgentDefinition[] = [
   pathAgentDefinition,
   learnerModelAgentDefinition,
   goalConversationAgentDefinition,
-  teachingTurnAgentDefinition,
+  learningTurnAgentDefinition,
   peerAgentDefinition,
   sessionWrapupAgentDefinition,
   simulationOrchestratorAgentDefinition
@@ -125,7 +111,7 @@ export const agentHandlers: Record<string, (input: any, context: any) => Promise
   'skill:path-planning': pathAgentHandlerFn,
   'skill:learner-model': learnerModelAgentHandlerFn,
   'skill:goal-conversation': goalConversationAgentHandler,
-  'skill:teaching-turn': teachingTurnAgentHandler,
+  'skill:learning-turn': learningTurnAgentHandler,
   'skill:peer-reinforcement': peerAgentHandler,
   'skill:session-wrapup': sessionWrapupAgentHandler,
   'simulation-agent': simulationOrchestratorAgentHandler

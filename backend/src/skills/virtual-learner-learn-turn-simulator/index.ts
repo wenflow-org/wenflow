@@ -380,12 +380,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
       defaultSystemPrompt: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-learn-turn-simulator' },
-      modelDefaults: {
-        maxTokens: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS,
-        minMaxTokens: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS,
-        temperature: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE,
-      },
-      buildUserPayload,
+            buildUserPayload,
       validateParsedOutput: (parsed: any) => {
         const replyOk = typeof parsed?.reply === 'string' && parsed.reply.trim().length > 0
         const stateOk = parsed?.learnerState && typeof parsed.learnerState === 'object'

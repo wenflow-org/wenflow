@@ -141,10 +141,10 @@ describe('Skill Prompt Contract v2', () => {
     expect(result.contract.fields!.state.owner).toBe('orchestrator')
   })
 
-  it('试点 skill 的 fields 声明零告警（goal-conversation / teaching-turn）', () => {
+  it('试点 skill 的 fields 声明零告警（goal-conversation / learning-turn）', () => {
     // v4：契约真相源 = 平台层 manifest（runtime 经 ACTIVE metadata → manifest → default 链解析）；
     // goal-conversation 已切换 v4 编译产物，frontmatter 不再携带 promptContract，两者统一从 manifest 对账
-    for (const skillId of ['goal-conversation', 'teaching-turn']) {
+    for (const skillId of ['goal-conversation', 'learning-turn']) {
       const raw = fs.readFileSync(path.join(process.cwd(), '../prompt-lab/manifests', `${skillId}.yaml`), 'utf-8')
       const manifest = yaml.load(raw) as any
       const runtimeContract = manifest.runtimeContract === undefined

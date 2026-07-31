@@ -13,7 +13,7 @@ dotenv.config();
 
 const CORE_AGENT_IDS = [
   'skill:goal-conversation',
-  'skill:teaching-turn',
+  'skill:learning-turn',
   'skill:session-wrapup',
   'skill:peer-reinforcement',
   'skill:path-planning',

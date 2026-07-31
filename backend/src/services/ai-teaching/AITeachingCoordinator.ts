@@ -1,9 +1,9 @@
-﻿import { createHash, randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import prisma from '../../config/database';
 import learningStateService, { LearningStateMetrics } from '../learning/learning-state.service';
 import type { SessionWrapupArtifact, SessionWrapupSummary } from '../../skills/session-wrapup';
-import { teachingTurnAgentDefinition, type TeachingTurnInput, type TeachingTurnOutput } from '../../skills/teaching-turn';
+import { learningTurnAgentDefinition, type LearningTurnInput, type LearningTurnOutput } from '../../skills/learning-turn';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, sessionWrapupAgentDefinition, peerAgentDefinition } from '../../skills';
 import { getEventBus } from '../../gateway/event-bus';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
@@ -29,7 +29,7 @@ import { classifyFinalizationError } from './FinalizationErrors';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 
 export type TeachingMode = 'tutor' | 'peer' | 'debate';
-const AI_TEACHING_AGENT_ID = 'teaching-agent';
+const AI_TEACHING_AGENT_ID = 'learning-agent';
 
 export interface KnowledgePointStatus {
   name: string;
@@ -308,7 +308,7 @@ function detectEndIntent(message: string) {
 
 function determineNextStage(params: {
   currentStage: LearnStage;
-  teachingOutput: TeachingTurnOutput;
+  teachingOutput: LearningTurnOutput;
   peerTriggered: boolean;
   learnerMessage: string;
 }): { stage: LearnStage; reason: string } {
@@ -347,7 +347,7 @@ function buildClassroomContext(params: {
   previousState: Record<string, any> | null | undefined;
   stage: LearnStage;
   stageReason: string;
-  teachingOutput?: TeachingTurnOutput | null;
+  teachingOutput?: LearningTurnOutput | null;
   learnerMessage: string;
   context: TeachingScenarioContext;
   knowledgeState: TeachingKnowledgePointState[];
@@ -691,10 +691,10 @@ function computeSessionEvidence(session: TeachingSessionRecord) {
   };
 }
 
-function buildTeachingTurnInput(
+function buildLearningTurnInput(
   session: TeachingSessionRecord,
   context: TeachingScenarioContext
-): TeachingTurnInput {
+): LearningTurnInput {
   const compression = teachingContextCompressionService.compress(session.messages);
   const teachingState = session.teachingState || {};
   const classroomContext = teachingState.classroomContext || {};
@@ -785,7 +785,7 @@ function pruneOverlyBroadCoreConceptPoints(
 
 function reconcileTeachingKnowledgeState(
   context: TeachingScenarioContext,
-  output: TeachingTurnOutput,
+  output: LearningTurnOutput,
   existingPoints: TeachingKnowledgePointState[]
 ) {
   const coreConcept = context.taskProfile.coreConcept || context.taskProfile.linkedConceptName || null;
@@ -809,16 +809,16 @@ function reconcileTeachingKnowledgeState(
         currentPoint,
         points: filteredOutputPoints,
       }
-    } as TeachingTurnOutput,
+    } as LearningTurnOutput,
     existingPoints: filteredExistingPoints,
   };
 }
 
-function extractTeachingOutput(agentOutput: any): TeachingTurnOutput {
+function extractTeachingOutput(agentOutput: any): LearningTurnOutput {
   return (
-    agentOutput?.internal?.ext?.teachingTurnOutcome?.artifact
+    agentOutput?.internal?.ext?.learningTurnOutcome?.artifact
     || agentOutput?.internal?.ext?.teaching
-  ) as TeachingTurnOutput;
+  ) as LearningTurnOutput;
 }
 
 function extractPeerDebug(agentOutput: any) {
@@ -1078,7 +1078,7 @@ export class AITeachingOrchestrator {
     const fallbackOpening = buildFallbackOpening(context, openingMode);
     let parsed: any = null;
     try {
-      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
+      const result = await withTimeout(executeSkillWithResult(auxSkillDefinitionMap['learning-opening-generator'], {
         subject: context.subject,
         topic: context.topic,
         taskTitle: context.taskTitle,
@@ -1130,7 +1130,7 @@ export class AITeachingOrchestrator {
     message: string,
     options: ProcessStudentMessageOptions = {},
   ): Promise<{
-    analysis: TeachingTurnOutput['analysis'];
+    analysis: LearningTurnOutput['analysis'];
     aiResponse: string;
     strategies: string[];
     knowledgePoint: string | null;
@@ -1205,12 +1205,12 @@ export class AITeachingOrchestrator {
       session.knowledgeState,
     );
 
-    const turnInput = buildTeachingTurnInput({
+    const turnInput = buildLearningTurnInput({
       ...session,
       messages: updatedMessages,
       knowledgeState: frozenKnowledgeState,
     }, context);
-    const turnResult = await executeSkill(teachingTurnAgentDefinition, turnInput, {
+    const turnResult = await executeSkill(learningTurnAgentDefinition, turnInput, {
       contextEnvelope: {
         schemaVersion: 'context-envelope/v1',
         principal: { userId: session.userId },
@@ -1218,7 +1218,7 @@ export class AITeachingOrchestrator {
       },
     });
     if (!turnResult.success) {
-      throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'TEACHING_TURN_FAILED');
+      throw new Error(typeof turnResult.error === 'string' ? turnResult.error : turnResult.error?.message || 'LEARNING_TURN_FAILED');
     }
 
     const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
@@ -1255,7 +1255,7 @@ export class AITeachingOrchestrator {
         envelopeTerminal: turnRuntimeEnvelope?.businessState?.isTerminal === true,
       });
     }
-    const effectiveTeachingOutput: TeachingTurnOutput = {
+    const effectiveTeachingOutput: LearningTurnOutput = {
       ...teachingOutput,
       control: {
         ...teachingOutput.control,
@@ -1333,7 +1333,7 @@ export class AITeachingOrchestrator {
       ? [...previousTeachingState.classroomEventHistory]
       : [];
 
-    classroomEvents.push(buildClassroomEvent('teaching-turn', nextStageDecision.reason, {
+    classroomEvents.push(buildClassroomEvent('learning-turn', nextStageDecision.reason, {
       stage: nextStageDecision.stage,
       focusKnowledgePoint: classroomContext.focus.currentKnowledgePoint,
       learnerMessage: message,

@@ -1,7 +1,7 @@
 import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
 
-export const teachingTurnRuntimeDefinition: RuntimeDefinitionRecord = {
-  id: 'skill:teaching-turn',
+export const learningTurnRuntimeDefinition: RuntimeDefinitionRecord = {
+  id: 'skill:learning-turn',
   displayName: '教学回合',
   description: '根据任务、路径、学习者状态和当前对话，生成单轮教学回复与结构化教学状态。',
   category: 'skill',
@@ -63,7 +63,7 @@ export const teachingTurnRuntimeDefinition: RuntimeDefinitionRecord = {
     ],
   },
   capabilities: [
-    'teaching-turn-generation',
+    'learning-turn-generation',
     'cognitive-analysis',
     'knowledge-state-suggestion',
     'teaching-strategy-selection',

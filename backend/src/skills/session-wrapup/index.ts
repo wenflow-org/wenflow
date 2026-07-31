@@ -1,4 +1,4 @@
-﻿import { CallerInfo } from '../../gateway/api-gateway';
+import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
@@ -470,7 +470,7 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
   defaultSystemPrompt: '',
   requireActivePrompt: true,
   caller: {
-    agentId: 'teaching-agent',
+    agentId: 'learning-agent',
     skillId: 'session-wrapup',
   },
   buildUserPayload: (input) => buildWrapupUserPrompt(input, 'primary'),
@@ -489,11 +489,7 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
       hasEvaluation: !!(output && typeof output === 'object' && (output as any).evaluation),
     },
   }),
-  modelDefaults: {
-    temperature: 0.7,
-    maxTokens: 4000,
-  },
-  retryStrategy: {
+    retryStrategy: {
     maxAttempts: 2,
     onValidationFail: ({ failureReason }) => `请只输出完整的课后总结 JSON，必须同时包含符合规格的 summary 和 evaluation。上次失败原因：${failureReason}`,
   },
@@ -548,7 +544,7 @@ export class SessionWrapupAgent {
     let result: SessionWrapupResult | null = null;
 
     try {
-      const caller: CallerInfo = { agentId: 'teaching-agent', skillId: 'session-wrapup' };
+      const caller: CallerInfo = { agentId: 'learning-agent', skillId: 'session-wrapup' };
       const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
 
       // A failed raw-contract retry still retains the final extracted JSON in

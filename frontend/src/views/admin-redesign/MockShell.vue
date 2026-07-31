@@ -71,8 +71,7 @@
         <img src="/favicon.png" alt="" class="mshell__footer-logo" />
         <span>{{ release ? 'WenFlow Admin' : 'WenFlow Admin · 重设计实验稿' }}</span>
         <span class="mshell__footer-sep">·</span>
-        <span>数据源：{{ sourceLabel }}</span>
-        <span class="mshell__footer-right">Quiet UI · 运维简报式</span>
+        <span>{{ sourceLabel }}</span>
       </footer>
     </div>
   </div>
@@ -88,7 +87,7 @@ import { adminAuthApi } from '@/api/adminApi'
 const props = defineProps<{ current: string; crumb?: string; release?: boolean }>()
 defineEmits<{ (e: 'navigate', id: string): void; (e: 'palette'): void }>()
 
-const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实（API）' : '演示（mock）'))
+const sourceLabel = computed(() => (dataSource.value === 'live' ? '真实数据' : '演示数据'))
 
 function refreshData() {
   if (liveLoading.value) return
@@ -334,7 +333,6 @@ const groupedScenes = computed(() => {
 }
 .mshell__footer-logo { height: 16px; width: 16px; border-radius: 4px; opacity: 0.8; }
 .mshell__footer-sep { color: #c3cede; }
-.mshell__footer-right { margin-left: auto; }
 
 @media (max-width: 860px) {
   .mshell { grid-template-columns: 64px minmax(0, 1fr); }

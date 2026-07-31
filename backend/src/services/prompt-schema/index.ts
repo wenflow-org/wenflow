@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Prompt Schema 解析器 v2 (PROMPT_AUTHORING_PROTOCOL v1.1)
  * ============================================================
  * 把 skill prompt 文本解析为统一的结构化 schema，并支持：
@@ -979,7 +979,7 @@ export function suggestRulePrefix(agentId: string): string {
     'skill:stage-designer': 'SD',
     'skill:goal-conversation': 'GC',
     'skill:path-planning': 'PA',
-    'skill:teaching-turn': 'TT',
+    'skill:learning-turn': 'TT',
     'skill:session-wrapup': 'SW',
   };
   if (customMap[agentId]) return customMap[agentId];

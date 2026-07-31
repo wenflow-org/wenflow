@@ -44,7 +44,6 @@ describe('promptCompilerHandler', () => {
     expect(input).toEqual({ config: VALID_CONFIG })
     expect(spec.agentId).toBe('skill:prompt-compiler')
     expect(spec.requireActivePrompt).toBe(true)
-    expect(spec.modelDefaults).toEqual({ maxTokens: 8000, temperature: 0.2 })
     expect(spec.retryStrategy.maxAttempts).toBe(2)
 
     const payload = spec.buildUserPayload(input, {})

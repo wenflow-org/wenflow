@@ -169,7 +169,7 @@ npm run dev</code></pre>
 ├── index.ts                 # skillHandlers 注册表（全部 handler 在此登记）
 ├── goal-conversation/       # 目标对话（conversational）
 ├── path-planning/           # 路径规划（generator）
-├── teaching-turn/           # 教学回合（conversational）
+├── learning-turn/           # 教学回合（conversational）
 ├── session-wrapup/          # 课后产出（distiller）
 └── …                        # 共 30+ 个 Skill 目录（含检索、网页、图片等外挂能力）
 

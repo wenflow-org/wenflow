@@ -3,15 +3,15 @@ const mockCallPrompt = jest.fn()
 jest.mock('../../../composers/prompt-composer', () => ({ callPrompt: mockCallPrompt }))
 
 import {
-  teachingTurnAgentHandler,
-  toTeachingTurnSkillOutcome,
-  type TeachingTurnInput,
-  type TeachingTurnOutput,
+  learningTurnAgentHandler,
+  toLearningTurnSkillOutcome,
+  type LearningTurnInput,
+  type LearningTurnOutput,
 } from '../index'
 
-const input: TeachingTurnInput = {
+const input: LearningTurnInput = {
   messages: [{ role: 'user', content: '我觉得条件类型会根据条件选择结果。' }],
-  learner: {} as TeachingTurnInput['learner'],
+  learner: {} as LearningTurnInput['learner'],
   scenario: {
     subject: 'TypeScript',
     topic: '条件类型',
@@ -22,7 +22,7 @@ const input: TeachingTurnInput = {
   knowledge: { points: [] },
 }
 
-const artifact: TeachingTurnOutput = {
+const artifact: LearningTurnOutput = {
   reply: '说得不错。你能再举一个 T extends U 的例子吗？',
   analysis: {
     cognitiveLevel: 'understand',
@@ -43,17 +43,17 @@ const artifact: TeachingTurnOutput = {
   },
 }
 
-describe('teaching-turn canonical artifact', () => {
+describe('learning-turn canonical artifact', () => {
   beforeEach(() => {
     mockCallPrompt.mockReset()
   })
 
   it('builds an internal SkillOutcome without proposing a persistence transition', () => {
-    const outcome = toTeachingTurnSkillOutcome(artifact)
+    const outcome = toLearningTurnSkillOutcome(artifact)
 
     expect(outcome).toMatchObject({
       schemaVersion: 'skill-outcome/v1',
-      meta: { skillId: 'skill:teaching-turn', quality: 'model' },
+      meta: { skillId: 'skill:learning-turn', quality: 'model' },
       artifact,
       transition: null,
     })
@@ -67,7 +67,7 @@ describe('teaching-turn canonical artifact', () => {
       debug: { promptId: 'prompt-1' },
     })
 
-    const output = await teachingTurnAgentHandler(input)
+    const output = await learningTurnAgentHandler(input)
 
     expect(output).toMatchObject({
       success: true,
@@ -76,7 +76,7 @@ describe('teaching-turn canonical artifact', () => {
       internal: {
         ext: {
           teaching: artifact,
-          teachingTurnOutcome: {
+          learningTurnOutcome: {
             schemaVersion: 'skill-outcome/v1',
             artifact,
             transition: null,
