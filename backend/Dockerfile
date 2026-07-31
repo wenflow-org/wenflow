@@ -7,7 +7,7 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY backend/package.json backend/package-lock.json ./
-RUN npm install
+RUN npm ci
 
 COPY backend/prisma/ ./prisma/
 RUN npx prisma generate

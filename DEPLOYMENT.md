@@ -91,6 +91,18 @@ cd backend
 
 说明：该脚本适合 backend-only 本地调试，会先执行一次 core prompt sync 再启动后端；如无特殊需要，日常开发仍推荐优先使用项目根目录的 `start-dev.ps1`。
 
+### 方式五：Docker 部署（Linux/macOS）
+
+PowerShell 启动脚本当前仅适配 Windows；Linux/macOS 使用 Docker 一键脚本：
+
+```bash
+./docker-start.sh
+```
+
+说明：该脚本会检查 Docker/Compose v2，交互式引导补齐 `backend/.env`（JWT_SECRET、Keyring、AI 密钥、管理员账号），适配 nginx 端口与 `FRONTEND_URL`/`CORS_ORIGIN` 后执行 `docker compose up -d --build`。支持环境变量非交互传入（`JWT_SECRET`、`AI_API_KEY`、`SECRET_ENCRYPTION_KEYS` 等），也支持 `NGINX_PORT` 覆盖默认 80 端口。
+
+自定义域名部署：`nginx.docker.conf` 的 `server_name` 需按域名修改后重新构建；反向代理与健康检查细节见下文「常见问题」。
+
 ---
 
 ## 配置说明

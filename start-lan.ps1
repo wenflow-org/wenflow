@@ -45,6 +45,7 @@ function Get-DefaultEnvEntries {
         AI_MODEL_REASONING = 'deepseek-v4-pro'
         FRONTEND_URL = 'http://localhost:5173'
         INIT_ADMIN_NAME = 'admin'
+        INIT_ADMIN_EMAIL = 'admin@wenflow.local'
         INIT_ADMIN_PASSWORD = ''
     }
 
@@ -535,7 +536,7 @@ function Ensure-CoreAgentPromptsSync {
     Write-Host "Syncing core agent prompts from code..." -ForegroundColor Yellow
     Push-Location $BackendPath
     try {
-        npm run prompts:sync
+        npm run prompts:sync-core
         if ($LASTEXITCODE -ne 0) {
             Write-Host "core agent prompt sync failed" -ForegroundColor Red
             exit $LASTEXITCODE
