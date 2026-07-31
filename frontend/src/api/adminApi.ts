@@ -212,8 +212,8 @@ export const adminDashboardApi = {
   /**
    * 获取活动日志
    */
-  getActivity: async (limit?: number) => {
-    return adminAxios.get('/admin/activity', { params: { limit } });
+  getActivity: async (limit?: number, excludeTest?: boolean) => {
+    return adminAxios.get('/admin/activity', { params: { limit, excludeTest: excludeTest ? '1' : undefined } });
   },
 
   /**
@@ -1056,8 +1056,8 @@ export const adminAgentPromptsApi = {
  * Skill 模型配置 API
  */
 export const adminSkillsApi = {
-  getSkills: async () => {
-    return adminAxios.get('/admin/skills');
+  getSkills: async (params?: { range?: 'all' | '24h' | '7d' | '30d' }) => {
+    return adminAxios.get('/admin/skills', { params });
   },
 
   getSkillModelConfigs: async () => {

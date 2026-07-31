@@ -120,7 +120,8 @@ function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
 }
 
 async function fetchLiveSpans(): Promise<TraceSpan[]> {
-  const res = await adminAgentsApi.getLogs({ timeRange: 'week', limit: 60 })
+  // 放宽样本到 200 条：待办失败统计基于该样本，60 条截断会让"近 7 天 N 次失败"严重低估
+  const res = await adminAgentsApi.getLogs({ timeRange: 'week', limit: 200 })
   const body = res.data?.data ?? res.data ?? {}
   const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
   return mapLogsToSpans(items)
@@ -242,9 +243,11 @@ export interface LiveSkillProfile {
 export const liveSkillProfiles = ref<LiveSkillProfile[]>([])
 /** 外挂能力 Skill 档案（主目录排除，但抽屉/外挂页需要名称等基本信息） */
 export const liveExtraProfiles = ref<LiveSkillProfile[]>([])
+/** Skill 目录统计时间窗口（默认 7d，历史失败不永久红点） */
+export const liveSkillStatsRange = ref<'all' | '24h' | '7d' | '30d'>('7d')
 
 async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
-  const res = await adminSkillsApi.getSkills()
+  const res = await adminSkillsApi.getSkills({ range: liveSkillStatsRange.value })
   const body = res.data?.data ?? res.data ?? {}
   const items: RawSkill[] = Array.isArray(body) ? body : body.skills || body.items || []
 
@@ -301,16 +304,19 @@ export interface LiveOverviewFull {
   totalCalls: number
   totalIssues: number
   peak: string
-  feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }[]
+  feed: { text: string; time: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ts?: number }[]
   actions: { text: string; link: string; tone: 'bad' | 'warn'; agentId: string }[]
 }
 
 export const liveOverviewFull = ref<LiveOverviewFull | null>(null)
 
+/** 总览动态是否隐藏虚拟/测试账号（前端开关，直接传给后端 activity 端点） */
+export const overviewHideTest = ref(true)
+
 async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }> {
   const [statsRes, activityRes] = await Promise.all([
     adminDashboardApi.getStats(),
-    adminDashboardApi.getActivity(30).catch(() => null)
+    adminDashboardApi.getActivity(30, overviewHideTest.value).catch(() => null)
   ])
   const stats = statsRes.data?.data ?? statsRes.data ?? {}
   const agents = stats.agents || {}
@@ -318,33 +324,39 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
   const learning = stats.learning || {}
   const conv = stats.conversations || {}
 
+  // 指标一律带时间窗口：头部结论只用今日数据（累计值仅作副文案）
   const todayCalls = Number(agents.todayCalls || 0)
-  const successRate = Number(agents.successRate ?? 100)
-  const failedCalls = Number(agents.failedCalls || 0)
+  const todaySuccessRate = Number(agents.todaySuccessRate ?? 100)
+  const todayFailed = Math.max(0, Math.round(todayCalls * (1 - todaySuccessRate / 100)))
   const activeUsers = Number(users.activeToday || 0)
 
-  /* 头部结论：健康分贴近成功率，少量失败只轻扣分 */
+  /* 头部结论：基于今日窗口 + 样本量门槛（今日调用 <20 时只看失败绝对数），
+     避免历史失败永久粘住"需要关注"，也避免低流量单次失败误报 */
   let head: { tone: 'ok' | 'warn' | 'muted'; score: number; headline: string; subline: string }
-  const rateScore = Math.max(0, Math.min(100, Math.round(successRate)))
-  if (todayCalls === 0 && activeUsers === 0 && Number(users.total || 0) <= 2) {
-    head = { tone: 'muted', score: 100, headline: '系统空闲', subline: '部署完成，等待第一个真实学习者。' }
-  } else if (failedCalls > 0 || successRate < 90) {
-    const failPenalty = Math.min(12, Math.floor(failedCalls / 5))
+  const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
+  const warnByFailures = todayFailed > 0 && todayFailed >= 3
+  if (todayCalls === 0 && activeUsers === 0) {
+    head = { tone: 'muted', score: 100, headline: '系统空闲', subline: '今日尚无调用，等待学习者开始。' }
+  } else if (warnByRate || warnByFailures) {
     head = {
       tone: 'warn',
-      score: Math.max(50, rateScore - failPenalty),
-      headline: `需要关注：成功率 ${successRate}%`,
-      subline: `累计 ${agents.totalCalls || 0} 次调用，${failedCalls} 次失败。`
+      score: Math.max(50, Math.round(todaySuccessRate)),
+      headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
+      subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
     }
   } else {
-    head = { tone: 'ok', score: Math.max(90, rateScore), headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
+    head = { tone: 'ok', score: Math.round(todaySuccessRate), headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
   }
 
-  /* 漏斗 */
+  /* 漏斗：目标=完成澄清的对话数（非记录数）；路径保留总量、失败数单列用于断点归因 */
+  const completedConversations = Number(conv.completed || 0)
+  const totalConversations = Number(conv.total || 0)
+  const totalPaths = Number(learning.totalPaths || 0)
+  const failedPaths = Number(learning.failedPaths || 0)
   const funnelRaw = [
     { label: '用户', value: Number(users.total || 0) },
-    { label: '目标', value: Number(conv.total || 0) },
-    { label: '路径', value: Number(learning.totalPaths || 0) },
+    { label: '目标对话', value: completedConversations },
+    { label: '路径', value: totalPaths },
     { label: '任务', value: Number(learning.totalTasks || 0) },
     { label: '完成', value: Number(learning.completedTasks || 0) }
   ]
@@ -352,18 +364,27 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
   const rates = funnelRaw.slice(1).map((f, i) => {
     const prev = funnelRaw[i].value
     if (!prev || !f.value) return '—'
-    // 下游可大于上游（一人多目标/多路径），超过 100% 用倍数展示，避免 517% 这种误导
+    // 下游可大于上游（一人多目标/一目标多任务），超过 100% 用倍数展示，避免 517% 这种误导
     if (f.label === '任务' || f.value > prev) return `×${(f.value / prev).toFixed(1)}`
     return `${Math.round((f.value / prev) * 100)}%`
   })
-  const zeroIdx = funnelRaw.findIndex((f) => f.value === 0)
-  const funnelNote = zeroIdx === -1
-    ? `目标 → 路径转化 ${rates[1]}，任务完成率 ${learning.completionRate ?? 0}%。`
-    : zeroIdx <= 1
-      ? '断点在第一步：还没有人创建目标。'
-      : `断点在「${funnelRaw[zeroIdx].label}」：上游有量、这里为零。`
+  /* 断点归因：路径生成失败 > 澄清完成率低 > 零值断点，按序取第一个成立项 */
+  const completedRate = totalConversations > 0 ? completedConversations / totalConversations : 0
+  let funnelNote: string
+  if (failedPaths > 0) {
+    funnelNote = `规划环节 ${failedPaths}/${totalPaths} 条路径生成失败，断点疑似在路径生成，先排查 path-agent。`
+  } else if (totalConversations > 0 && completedRate < 0.3) {
+    funnelNote = `澄清完成率低（${completedConversations}/${totalConversations}），多数对话未收敛到方向。`
+  } else {
+    const zeroIdx = funnelRaw.findIndex((f) => f.value === 0)
+    funnelNote = zeroIdx === -1
+      ? `目标 → 路径转化 ${rates[1]}，任务完成率 ${learning.completionRate ?? 0}%。`
+      : zeroIdx <= 1
+        ? '断点在第一步：还没有人完成目标澄清。'
+        : `断点在「${funnelRaw[zeroIdx].label}」：上游有量、这里为零。`
+  }
 
-  /* 24h 脉搏（后端已按小时聚合） */
+  /* 24h 脉搏（后端已按小时聚合）；空数据不回退全量累计，避免时间口径错位 */
   const last24h: { label?: string; total?: number; error?: number; timeout?: number }[] = agents.last24h || []
   const pulse = last24h.length
     ? last24h.map((b) => ({ calls: Number(b.total || 0), issue: Number(b.error || 0) + Number(b.timeout || 0) }))
@@ -376,20 +397,21 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     : '—'
   const pulseCalls24h = pulse.reduce((a, b) => a + b.calls, 0)
 
-  /* 动态（不在此过滤；虚拟/测试账号由总览页筛选开关控制显隐） */
+  /* 动态（excludeTest 已由后端过滤虚拟/测试账号；三类事件按时间戳统一归并排序） */
   const act = activityRes?.data?.data ?? {}
   const feed: LiveOverviewFull['feed'] = []
   for (const u of act.recentUsers || []) {
-    feed.push({ text: `新用户注册：${u.email || u.name}`, time: timeAgo(u.createdAt), tone: 'muted' })
+    feed.push({ text: `新用户注册：${u.email || u.name}`, time: timeAgo(u.createdAt), ts: new Date(u.createdAt).getTime(), tone: 'muted' })
   }
   for (const s of act.recentSessions || []) {
-    feed.push({ text: `教学会话：${s.title || s.id}`, time: timeAgo(s.createdAt || s.updatedAt), tone: 'ok' })
+    feed.push({ text: `教学会话：${s.title || s.id}`, time: timeAgo(s.createdAt || s.updatedAt), ts: new Date(s.createdAt || s.updatedAt).getTime(), tone: 'ok' })
   }
   for (const t of act.completedTasks || []) {
-    feed.push({ text: `任务完成：${t.title || t.id}`, time: timeAgo(t.completedAt || t.updatedAt), tone: 'ok' })
+    feed.push({ text: `任务完成：${t.title || t.id}`, time: timeAgo(t.completedAt || t.updatedAt), ts: new Date(t.completedAt || t.updatedAt).getTime(), tone: 'ok' })
   }
+  feed.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
 
-  /* 待办：失败最多的节点 */
+  /* 待办：失败最多的节点（近 7 天日志，放宽样本到 200 条减少截断偏差） */
   const byAgent = new Map<string, number>()
   for (const s of liveSpans.value || []) {
     if (s.status === 'err') byAgent.set(s.agent, (byAgent.get(s.agent) || 0) + 1)
@@ -410,8 +432,8 @@ async function fetchLiveOverview(): Promise<{ tone: 'ok' | 'warn' | 'muted'; sco
     rates,
     funnelNote,
     pulse,
-    // 脉搏卡展示 24h 汇总；累计全量调用见健康分副文案，避免「24h 图 + 累计 389」错位
-    totalCalls: pulseCalls24h || Number(agents.totalCalls || todayCalls),
+    // 脉搏卡展示 24h 汇总；与健康分（今日窗口）分离，避免时间口径混用
+    totalCalls: pulseCalls24h,
     totalIssues,
     peak,
     feed: feed.slice(0, 6),
@@ -939,6 +961,16 @@ export async function liveArchiveAnnouncement(id: string): Promise<void> {
 export async function liveDeleteAnnouncement(id: string): Promise<void> {
   await adminAnnouncementsApi.remove(id)
   liveAnnouncements.value = liveAnnouncements.value.filter((a) => a.id !== id)
+}
+
+export async function refreshLiveOverview() {
+  if (liveLoading.value) return
+  liveOverview.value = await fetchLiveOverview()
+}
+
+export async function refreshLiveSkills() {
+  if (liveLoading.value) return
+  liveSkillStatsMap.value = await fetchLiveSkills()
 }
 
 /* ================= 总入口 ================= */

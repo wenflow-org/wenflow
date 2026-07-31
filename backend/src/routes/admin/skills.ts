@@ -119,7 +119,9 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const gateway = getGateway();
     const skills = gateway.matchSkills({});
-    const runtimeStats = await getSkillRuntimeStats(skills.map(s => s.definition.name));
+    // 时间窗口：all/24h/7d/30d（默认 all 保持兼容；前端目录页默认传 7d）
+    const statsRange = (String(req.query.range || 'all')) as SkillStatsRange;
+    const runtimeStats = await getSkillRuntimeStats(skills.map(s => s.definition.name), statsRange);
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;

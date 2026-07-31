@@ -11,6 +11,12 @@
         <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" @click="onlyAttention = false">全部</button>
         <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" @click="onlyAttention = true">仅看需关注</button>
       </div>
+      <select v-if="isLive" v-model="statsRange" class="sk-range" title="统计时间窗口（默认近 7 天）">
+        <option value="7d">近 7 天</option>
+        <option value="24h">近 24 小时</option>
+        <option value="30d">近 30 天</option>
+        <option value="all">全部</option>
+      </select>
       <div class="sk-view">
         <button type="button" class="sk-view__btn" :class="{ 'sk-view__btn--active': view === 'list' }" @click="view = 'list'">列表</button>
         <button type="button" class="sk-view__btn" :class="{ 'sk-view__btn--active': view === 'grid' }" @click="view = 'grid'">网格</button>
@@ -104,9 +110,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { skillProfiles, skillStatOf, openSkillDrawer, dataSource } from './mockStore'
-import { liveSkillProfiles } from './mockLive'
+import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills } from './mockLive'
 
 type Health = 'ok' | 'idle' | 'error'
 type SortKey = 'calls' | 'errors' | 'avgMs'
@@ -116,6 +122,12 @@ const keyword = ref('')
 const view = ref<'list' | 'grid'>('list')
 const sortKey = ref<SortKey>('errors')
 const sortDir = ref<'asc' | 'desc'>('desc')
+const isLive = computed(() => dataSource.value === 'live')
+const statsRange = liveSkillStatsRange
+// 时间窗口切换 → 按新窗口重新拉取统计
+watch(statsRange, () => {
+  if (isLive.value) void refreshLiveSkills()
+})
 
 // 卡片数据 = 档案 + 实时统计（live 模式用真实注册表，demo 模式用演示档案）
 const cards = computed(() => {
@@ -141,7 +153,8 @@ function toggleSort(key: SortKey) {
 
 const filtered = computed(() => {
   let list = cards.value
-  if (onlyAttention.value) list = list.filter((c) => c.health !== 'ok')
+  // "仅看需关注"只含失败节点；"从未调用"（idle）是常态不是问题
+  if (onlyAttention.value) list = list.filter((c) => c.health === 'error')
   const q = keyword.value.trim().toLowerCase()
   if (q) list = list.filter((c) => `${c.name} ${c.id} ${c.category}`.toLowerCase().includes(q))
   // 排序：默认失败优先，其次调用量
@@ -174,6 +187,14 @@ const successRate = (s: { calls: number; errors: number }) =>
   padding: 2px;
   background: #eef2fa;
   border-radius: 8px;
+}
+.sk-range {
+  border: 1px solid #d6deeb;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--mk-muted, #5a6a85);
+  background: #fff;
 }
 .sk-view__btn {
   border: 0;

@@ -61,6 +61,22 @@ const AGENT_ID_TO_NAME = Object.entries(AGENT_NAME_TO_IDS).reduce((acc, [name, i
 
 const AGENT_RELATIONS = getAgentRelations();
 
+/**
+ * 生产统计用户过滤：排除虚拟学习者与测试/审计账号（合成流量），避免污染真实指标。
+ * 测试账号按命名模式识别（e2e_/audit_probe_/ui_check/motion_review/@test.local/virtual_）。
+ */
+const REAL_USER_WHERE = {
+  isVirtualLearner: false,
+  NOT: [
+    { email: { startsWith: 'virtual_' } },
+    { email: { endsWith: '@test.local' } },
+    { email: { startsWith: 'e2e_' } },
+    { email: { startsWith: 'audit_probe_' } },
+    { email: { startsWith: 'ui_check' } },
+    { email: { startsWith: 'motion_review' } },
+  ],
+};
+
 const inferRuntimeRole = (agentId: string, type?: string | null) => {
   const typeText = String(type || '').toLowerCase();
   if (agentId.startsWith('skill:')) return 'skill';
@@ -380,9 +396,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         { executionLayer: { not: 'api-gateway' } }
       ]
     };
-    // 生产统计排除虚拟学习者（合成数据），避免污染真实指标
-    const REAL_USER_WHERE = { isVirtualLearner: false };
-
+    // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
     const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
       const errorCode = String(log.errorCode || '').toLowerCase();
       const errorMessage = String(log.error || '').toLowerCase();
@@ -397,10 +411,12 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       newUsersToday,
       activeUsersToday,
       totalPaths,
+      failedPaths,
       activePaths,
       totalTasks,
       completedTasks,
       totalConversations,
+      completedConversations,
       activeConversations,
       totalAgentLogs,
       platformStats,
@@ -440,9 +456,14 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         select: { userId: true },
       }),
       
-      // 总学习路径数（不含虚拟学习者）
+      // 总学习路径数（不含虚拟学习者/测试账号）
       prisma.learning_paths.count({
         where: { users: REAL_USER_WHERE },
+      }),
+
+      // 生成失败的学习路径数（断点归因用，不含虚拟学习者/测试账号）
+      prisma.learning_paths.count({
+        where: { users: REAL_USER_WHERE, status: 'failed' },
       }),
       
       // 活跃学习路径（有未完成的任务，不含虚拟学习者）
@@ -477,9 +498,14 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
       
-      // 总对话数（不含虚拟学习者）
+      // 总对话数（不含虚拟学习者/测试账号）
       prisma.goal_conversations.count({
         where: { users: REAL_USER_WHERE },
+      }),
+
+      // 完成澄清的对话数（漏斗"目标"口径，不含虚拟学习者/测试账号）
+      prisma.goal_conversations.count({
+        where: { users: REAL_USER_WHERE, status: 'completed' },
       }),
       
       // 活跃对话（不含虚拟学习者）
@@ -676,6 +702,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
         learning: {
           totalPaths,
+          failedPaths,
           activePaths: activePathsCount,
           totalTasks,
           completedTasks,
@@ -683,6 +710,7 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
         conversations: {
           total: totalConversations,
+          completed: completedConversations,
           active: activeConversations,
         },
         agents: {
@@ -2488,11 +2516,17 @@ router.get('/stats', async (req: Request, res: Response) => {
 router.get('/activity', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
+    // excludeTest=1 时过滤虚拟学习者与测试/审计账号（合成流量）
+    const excludeTest = String(req.query.excludeTest || '') === '1';
+    const ACTIVITY_USER_WHERE = excludeTest
+      ? REAL_USER_WHERE
+      : { isVirtualLearner: false };
 
     // 最近的学习会话
     const recentSessions = await prisma.teaching_sessions.findMany({
       take: limit,
       orderBy: { startTime: 'desc' },
+      where: { users: ACTIVITY_USER_WHERE },
       include: {
         users: {
           select: { id: true, email: true, name: true }
@@ -2509,10 +2543,11 @@ router.get('/activity', async (req: Request, res: Response) => {
       : [];
     const sessionTaskMap = new Map(sessionTasks.map((task) => [task.id, task]));
 
-    // 最近注册的用户
+    // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号）
     const recentUsers = await prisma.users.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
+      where: excludeTest ? REAL_USER_WHERE : undefined,
       select: {
         id: true,
         email: true,
@@ -2521,10 +2556,13 @@ router.get('/activity', async (req: Request, res: Response) => {
       }
     });
 
-    // 最近完成的任务
+    // 最近完成的任务（excludeTest 时排除虚拟学习者/测试账号）
     const completedTasks = await prisma.subtasks.findMany({
       take: 20,
-      where: { status: 'completed' },
+      where: {
+        status: 'completed',
+        users: ACTIVITY_USER_WHERE,
+      },
       orderBy: { completedAt: 'desc' },
       include: {
         users: {

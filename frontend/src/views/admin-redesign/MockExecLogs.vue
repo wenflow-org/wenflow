@@ -298,6 +298,17 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .log-status__filters {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .log-keyword { flex: 1 1 140px; min-width: 0; }
 }
 .log-agent {
   padding: 6px 10px;

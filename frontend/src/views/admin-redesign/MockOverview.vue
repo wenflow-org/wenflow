@@ -37,7 +37,11 @@
               <span>{{ n.label }}</span>
               <strong>{{ n.value }}</strong>
             </div>
-            <span v-if="i < data.funnel.length - 1" class="funnel__rate">{{ data.rates[i] }}</span>
+            <span
+              v-if="i < data.funnel.length - 1"
+              class="funnel__rate"
+              :title="rateHint(i)"
+            >{{ data.rates[i] }}</span>
           </template>
         </div>
         <p class="brief-card__note">{{ data.funnelNote }}</p>
@@ -89,9 +93,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, watch } from 'vue';
 import { overviewHealth, investigateAgent, dataSource } from './mockStore';
-import { liveOverviewFull } from './mockLive';
+import { liveOverviewFull, overviewHideTest, refreshLiveOverview } from './mockLive';
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -244,8 +248,20 @@ const scoreDash = computed(() => `${data.value.score * 1.194} 119.4`);
 const barTitle = (hour: number, b: { calls: number; issue: number }) =>
   `${String(hour).padStart(2, '0')}:00 · ${b.calls} 次调用 · ${b.issue} 异常`;
 
-// 动态筛选：默认隐藏虚拟学习者与测试/审计账号，可切换查看全量
-const hideTestAccounts = ref(true);
+// 漏斗相邻段速率说明（× 为 1:N 关系而非转化率）
+const rateHint = (i: number) => {
+  const pairs = [
+    '每位用户发起的澄清对话数（可 >1）',
+    '每条完成澄清对话生成的路径数',
+    '每条路径下的任务数（1:N 正常）',
+    '任务完成率'
+  ]
+  return pairs[i] || ''
+};
+
+// 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤并重新拉取），
+// 前端正则仅为 demo 模式兜底
+const hideTestAccounts = overviewHideTest
 const isTestAccount = (text: string) => {
   const email = String(text || '').replace(/^新用户注册：/, '');
   if (email.startsWith('virtual_') || email.endsWith('@test.local')) return true;
@@ -254,6 +270,10 @@ const isTestAccount = (text: string) => {
 const visibleFeed = computed(() =>
   hideTestAccounts.value ? data.value.feed.filter((f) => !isTestAccount(f.text)) : data.value.feed
 );
+// 开关切换 → 后端按 excludeTest 重新拉取动态
+watch(hideTestAccounts, () => {
+  if (dataSource.value === 'live') void refreshLiveOverview()
+})
 </script>
 
 <style scoped>
@@ -504,6 +524,12 @@ const visibleFeed = computed(() =>
 .feed li strong { font-size: 13px; font-weight: 600; }
 .feed li span { font-size: 11.5px; color: var(--faint); }
 .feed__empty { margin: 0; color: var(--faint); font-size: 13px; }
+
+@media (max-width: 1280px) and (min-width: 1001px) {
+  /* 中等宽度：三列过渡为两列，动态卡占整行，避免 1024 下三列挤成 ~250px */
+  .brief-grid { grid-template-columns: 1fr 1fr; }
+  .brief-card--feed { grid-column: 1 / -1; }
+}
 
 @media (max-width: 1000px) {
   .brief-grid { grid-template-columns: 1fr; }
