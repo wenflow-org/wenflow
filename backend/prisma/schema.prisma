@@ -7,47 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model ab_test {
-  id             String           @id
-  name           String
-  description    String?
-  testType       String
-  variants       String
-  trafficSplit   String
-  status         String           @default("draft")
-  startDate      DateTime?
-  endDate        DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime
-  ab_test_result ab_test_result[]
 
-  @@index([status])
-  @@index([testType])
-}
-
-model ab_test_result {
-  id             String   @id
-  testId         String
-  userId         String
-  sessionId      String
-  taskId         String
-  variantId      String
-  completionTime Int?
-  successRate    Float?
-  averageScore   Float?
-  engagement     Float?
-  frustration    Float?
-  satisfaction   Float?
-  preTestScore   Float?
-  postTestScore  Float?
-  learningGain   Float?
-  createdAt      DateTime @default(now())
-  ab_test        ab_test  @relation(fields: [testId], references: [id], onDelete: Cascade)
-
-  @@index([testId])
-  @@index([variantId])
-  @@index([userId])
-}
 
 model achievements {
   id          String    @id
@@ -115,55 +75,8 @@ model agent_call_logs {
   @@index([providerId, calledAt])
 }
 
-model agent_execution_logs {
-  id         String   @id
-  instanceId String
-  agentName  String
-  action     String
-  status     String
-  input      String?
-  output     String?
-  error      String?
-  durationMs Int
-  timestamp  DateTime @default(now())
 
-  @@index([timestamp])
-  @@index([agentName])
-  @@index([instanceId])
-}
 
-model agent_instances {
-  id            String    @id
-  name          String
-  status        String    @default("idle")
-  agentType     String    @default("official")
-  currentTaskId String?
-  taskType      String?
-  avgDurationMs Int       @default(0)
-  totalCalls    Int       @default(0)
-  successCalls  Int       @default(0)
-  errorCalls    Int       @default(0)
-  cpuUsage      Float?
-  memoryUsage   Float?
-  lastHeartbeat DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime
-}
-
-model agent_logs {
-  id         String   @id
-  agentName  String
-  action     String
-  status     String
-  input      String?
-  output     String?
-  error      String?
-  durationMs Int
-  timestamp  DateTime @default(now())
-
-  @@index([timestamp])
-  @@index([agentName])
-}
 
 model prompt_call_logs {
   id                  String   @id
@@ -262,158 +175,13 @@ model llm_execution_attempts {
   @@index([errorCategory, startedAt])
 }
 
-model arena_agent_logs {
-  id               String         @id
-  sessionId        String
-  agentName        String
-  agentType        String
-  status           String
-  startTime        DateTime
-  endTime          DateTime?
-  durationMs       Int?
-  input            String?
-  output           String?
-  promptTokens     Int?
-  completionTokens Int?
-  totalTokens      Int?
-  error            String?
-  metadata         String?
-  createdAt        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-  @@index([agentName])
-  @@index([status])
-  @@index([startTime])
-}
 
-model arena_dialogues {
-  id               String         @id
-  sessionId        String         @unique
-  messages         String
-  messageCount     Int
-  userMessageCount Int
-  aiMessageCount   Int
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
 
-model arena_evaluations {
-  id               String         @id
-  sessionId        String         @unique
-  overallScore     Int
-  personaScore     Int?
-  dialogueScore    Int?
-  extractionScore  Int?
-  proposalScore    Int?
-  pathScore        Int?
-  report           String?
-  suggestions      String?
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
 
-model arena_extractions {
-  id                String         @id
-  sessionId         String         @unique
-  content           String?
-  surfaceGoal       String?
-  realProblem       String?
-  level             String?
-  timePerDay        String?
-  totalWeeks        String?
-  motivation        String?
-  urgency           String?
-  completenessScore Int?
-  missingFields     String?
-  followUpQuestions String?
-  generationTimeMs  Int?
-  agentName         String?
-  timestamp         DateTime       @default(now())
-  arena_sessions    arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
-}
-
-model arena_generations {
-  id               String         @id
-  sessionId        String         @unique
-  proposalContent  String?
-  pathContent      String?
-  totalWeeks       Int?
-  totalTasks       Int?
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-}
-
-model arena_optimizations {
-  id                  String         @id
-  sessionId           String         @unique
-  suggestions         String?
-  optimizedPrompts    String?
-  expectedImprovement String?
-  generationTimeMs    Int?
-  agentName           String?
-  timestamp           DateTime       @default(now())
-  arena_sessions      arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-}
-
-model arena_personas {
-  id               String         @id
-  sessionId        String         @unique
-  content          String?
-  surfaceGoal      String?
-  realProblem      String?
-  level            String?
-  timePerDay       String?
-  totalWeeks       String?
-  motivation       String?
-  urgency          String?
-  generationTimeMs Int?
-  agentName        String?
-  timestamp        DateTime       @default(now())
-  arena_sessions   arena_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-}
-
-model arena_sessions {
-  id                  String               @id
-  name                String
-  description         String?
-  scenario            String               @default("default")
-  config              String?
-  status              String               @default("active")
-  agentCount          Int                  @default(0)
-  currentRound        Int                  @default(0)
-  totalRounds         Int?
-  startedAt           DateTime             @default(now())
-  completedAt         DateTime?
-  createdById         String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @default(now())
-  arena_agent_logs    arena_agent_logs[]
-  arena_dialogues     arena_dialogues?
-  arena_evaluations   arena_evaluations?
-  arena_extractions   arena_extractions?
-  arena_generations   arena_generations?
-  arena_optimizations arena_optimizations?
-  arena_personas      arena_personas?
-}
 
 model content_feedback {
   id              String    @id
@@ -449,81 +217,10 @@ model content_feedback {
   @@index([rating, createdAt])
 }
 
-model debug_learning_paths {
-  id              String           @id
-  snapshotId      String
-  userId          String
-  goal            String
-  path            String?
-  version         Int              @default(1)
-  isActive        Boolean          @default(false)
-  totalWeeks      Int?
-  totalTasks      Int?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @default(now())
-  proposalId      String?
-  debug_snapshots debug_snapshots  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  debug_proposals debug_proposals? @relation(fields: [proposalId], references: [id])
-}
 
-model debug_proposals {
-  id                   String                 @id
-  snapshotId           String
-  userId               String
-  goal                 String
-  proposal             String?
-  version              Int                    @default(1)
-  isActive             Boolean                @default(false)
-  status               String                 @default("pending")
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @default(now())
-  debug_learning_paths debug_learning_paths[]
-  debug_snapshots      debug_snapshots        @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-}
 
-model debug_requirements {
-  id              String          @id
-  snapshotId      String
-  userId          String
-  requirement     String
-  version         Int             @default(1)
-  isActive        Boolean         @default(false)
-  realProblem     String?
-  status          String          @default("pending")
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @default(now())
-  debug_snapshots debug_snapshots @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-}
 
-model debug_snapshots {
-  id                   String                 @id
-  userId               String
-  name                 String                 @default("未命名快照")
-  description          String?
-  sourceConversationId String?
-  rawMessages          String?
-  snapshot             String?
-  tags                 String?
-  createdAt            DateTime               @default(now())
-  debug_learning_paths debug_learning_paths[]
-  debug_proposals      debug_proposals[]
-  debug_requirements   debug_requirements[]
-}
 
-model dialogue_sessions {
-  id                String   @id
-  userId            String
-  taskId            String
-  pathId            String
-  status            String   @default("active")
-  round             Int      @default(0)
-  history           String
-  content           String
-  evaluation_params String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime
-  users             users    @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
 model goal_conversations {
   id             String    @id
@@ -705,20 +402,6 @@ model milestones {
   @@index([status])
 }
 
-model path_decompositions {
-  id              String   @id
-  userId          String
-  goal            String
-  stages          String
-  milestones      String
-  subtasks        String
-  aiAnalysis      String?
-  feasibility     String?
-  difficulty      String?
-  recommendations String?
-  createdAt       DateTime @default(now())
-  users           users    @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
 model platform_stats {
   id             String   @id
@@ -794,15 +477,6 @@ model subtasks {
   @@index([cognitiveLevel])
 }
 
-model system_announcements {
-  id        String    @id
-  title     String
-  content   String
-  priority  String    @default("normal")
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  expiresAt DateTime?
-}
 
 model teaching_sessions {
   id                      String    @id
@@ -1059,6 +733,7 @@ model users {
   currentLevel              String                     @default("beginner")
   xp                        Int                        @default(0)
   isAdmin                   Boolean                    @default(false)
+  isVirtualLearner          Boolean                    @default(false)
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime
   lastLoginAt               DateTime?
@@ -1066,12 +741,10 @@ model users {
   learningStateRevision     Int                        @default(0)
   achievements              achievements[]
   content_feedback          content_feedback[]
-  dialogue_sessions         dialogue_sessions[]
   goal_conversations        goal_conversations[]
   learning_goals            learning_goals[]
   learning_metrics          learning_metrics[]
   learning_paths            learning_paths[]
-  path_decompositions       path_decompositions[]
   projection_access_grants  projection_access_grants[]
   student_baselines         student_baselines?
   subtasks                  subtasks[]
@@ -1194,6 +867,25 @@ model virtual_quick_learn_runs {
   @@index([profileId, createdAt])
   @@index([status])
   @@index([userId])
+}
+
+model virtual_experiment_runs {
+  id               String    @id @default(uuid())
+  mode             String    @default("blackbox-api")
+  status           String    @default("queued")
+  entriesJson      String
+  resultsJson      String    @default("[]")
+  progressJson     String    @default("{}")
+  error            String?
+  abortRequestedAt DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdBy        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model announcements {

@@ -46,7 +46,7 @@ const MONITORED_AGENT_ORDER = [
   'RequirementCollection',
   'PathPlanning',
   'LearnerOrchestration',
-  'Teaching',
+  'Learning',
   'TeachingOrchestration',
   'LearningCompanion',
   'SessionWrapup'
@@ -221,7 +221,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
       'ai-service'
     ]);
 
-    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples, arenaOutputSamples] = await Promise.all([
+    const [registrations, modelConfigs, logGroups, catalog, agentCallOutputSamples] = await Promise.all([
       systemPrisma.agent_registrations.findMany({
         orderBy: { id: 'asc' },
         select: {
@@ -249,17 +249,10 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
         orderBy: { calledAt: 'desc' },
         take: 500,
         select: { output: true }
-      }),
-      prisma.arena_agent_logs.findMany({
-        where: { output: { not: null } },
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-        select: { output: true }
       })
     ]);
 
     const agentCallContractCounts = summarizeOutputContracts(agentCallOutputSamples);
-    const arenaContractCounts = summarizeOutputContracts(arenaOutputSamples);
 
     const registrationIds = registrations.map(item => item.id);
     const modelConfigIds = modelConfigs.map(item => item.agentId);
@@ -316,7 +309,6 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
           calledAgentTotal: calledAgentIds.length,
           catalogTotal: catalogIds.length,
           outputContractSampleSize: agentCallContractCounts.sampleSize,
-          arenaOutputContractSampleSize: arenaContractCounts.sampleSize,
           driftCount:
             missingRegistrations.length +
             unknownRegistrations.length +
@@ -325,8 +317,7 @@ router.get('/manifest/diagnostics', async (req: Request, res: Response) => {
             catalogOnly.length
         },
         outputContracts: {
-          agentCallLogs: agentCallContractCounts,
-          arenaAgentLogs: arenaContractCounts
+          agentCallLogs: agentCallContractCounts
         },
         drift: {
           missingRegistrations,
@@ -389,6 +380,8 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         { executionLayer: { not: 'api-gateway' } }
       ]
     };
+    // 生产统计排除虚拟学习者（合成数据），避免污染真实指标
+    const REAL_USER_WHERE = { isVirtualLearner: false };
 
     const isTimeoutLog = (log: { errorCode: string | null; error: string | null }) => {
       const errorCode = String(log.errorCode || '').toLowerCase();
@@ -418,12 +411,15 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       recentAgentLogs24h,
       wrapupLogs
     ] = await Promise.all([
-      // 总用户数
-      prisma.users.count(),
+      // 总用户数（不含虚拟学习者）
+      prisma.users.count({
+        where: REAL_USER_WHERE,
+      }),
       
-      // 今日新增用户
+      // 今日新增用户（不含虚拟学习者）
       prisma.users.count({
         where: {
+          ...REAL_USER_WHERE,
           createdAt: {
             gte: today,
             lt: tomorrow,
@@ -431,9 +427,10 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         },
       }),
       
-      // 今日活跃用户（有学习会话）
+      // 今日活跃用户（有学习会话，不含虚拟学习者）
       prisma.teaching_sessions.findMany({
         where: {
+          users: REAL_USER_WHERE,
           startTime: {
             gte: today,
             lt: tomorrow,
@@ -443,12 +440,15 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         select: { userId: true },
       }),
       
-      // 总学习路径数
-      prisma.learning_paths.count(),
+      // 总学习路径数（不含虚拟学习者）
+      prisma.learning_paths.count({
+        where: { users: REAL_USER_WHERE },
+      }),
       
-      // 活跃学习路径（有未完成的任务）
+      // 活跃学习路径（有未完成的任务，不含虚拟学习者）
       prisma.learning_paths.findMany({
         where: {
+          users: REAL_USER_WHERE,
           milestones: {
             some: {
               subtasks: {
@@ -464,22 +464,28 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
         select: { id: true },
       }),
       
-      // 总任务数
-      prisma.subtasks.count(),
+      // 总任务数（不含虚拟学习者）
+      prisma.subtasks.count({
+        where: { users: REAL_USER_WHERE },
+      }),
       
-      // 已完成任务数
+      // 已完成任务数（不含虚拟学习者）
       prisma.subtasks.count({
         where: {
+          users: REAL_USER_WHERE,
           status: 'completed',
         },
       }),
       
-      // 总对话数
-      prisma.goal_conversations.count(),
+      // 总对话数（不含虚拟学习者）
+      prisma.goal_conversations.count({
+        where: { users: REAL_USER_WHERE },
+      }),
       
-      // 活跃对话
+      // 活跃对话（不含虚拟学习者）
       prisma.goal_conversations.count({
         where: {
+          users: REAL_USER_WHERE,
           status: 'active',
         },
       }),
@@ -849,7 +855,7 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
       });
     }
 
-    const [callSamples, arenaSamples] = await Promise.all([
+    const [callSamples] = await Promise.all([
       prisma.agent_call_logs.findMany({
         where: { agentId: canonicalAgentId },
         orderBy: { calledAt: 'desc' },
@@ -860,20 +866,6 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
           output: true,
           success: true,
           calledAt: true,
-          durationMs: true,
-          error: true
-        }
-      }),
-      prisma.arena_agent_logs.findMany({
-        where: { agentName: canonicalAgentId },
-        orderBy: { createdAt: 'desc' },
-        take: 3,
-        select: {
-          id: true,
-          input: true,
-          output: true,
-          status: true,
-          createdAt: true,
           durationMs: true,
           error: true
         }
@@ -909,10 +901,10 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                   { agentId: 'path-agent', action: 'generate path', condition: 'when goal converges' },
                   { agentId: 'skill:virtual-learner-path-evaluator', action: 'accept/modify/reject path', condition: 'when path is available' },
                   { agentId: 'skill:virtual-learner-learn-turn-simulator', action: 'learn learner turn', condition: 'learning turns' },
-                  { agentId: 'teaching-agent', action: 'teaching orchestration', condition: 'learning turns' },
+                  { agentId: 'learning-agent', action: 'teaching orchestration', condition: 'learning turns' },
                 ]
               }
-            : canonicalAgentId === 'learner-agent'
+            : canonicalAgentId === 'profile-agent'
               ? {
                   description: '学习者状态主编排：接收 Goal/lesson 相关事件，串联 learner profile 更新、知识背景沉淀与 snapshot refresh。',
                   steps: [
@@ -924,9 +916,9 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                 }
             : undefined,
           promptManagement: {
-            mode: canonicalAgentId === 'teaching-agent'
+            mode: canonicalAgentId === 'learning-agent'
               ? 'agent-no-direct-prompt'
-              : canonicalAgentId === 'learner-agent'
+              : canonicalAgentId === 'profile-agent'
               ? 'agent-no-direct-prompt'
               : canonicalAgentId === 'goal-agent'
                 ? 'agent-no-direct-prompt'
@@ -935,9 +927,9 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
                   : canonicalAgentId === 'simulation-agent'
                     ? 'agent-no-direct-prompt'
                     : 'agent-prompt',
-            note: canonicalAgentId === 'teaching-agent'
-              ? '该 Agent 是编排器，不直接持有 System Prompt，教学主输出由 skill:teaching-turn / skill:peer-reinforcement / skill:session-wrapup 等下辖 Skill 提供。'
-              : canonicalAgentId === 'learner-agent'
+            note: canonicalAgentId === 'learning-agent'
+              ? '该 Agent 是编排器，不直接持有 System Prompt，教学主输出由 skill:learning-turn / skill:peer-reinforcement / skill:session-wrapup 等下辖 Skill 提供。'
+              : canonicalAgentId === 'profile-agent'
                 ? '该 Agent 是编排器，不直接持有 System Prompt，学习者画像增强与知识沉淀由 skill:learner-model 与下辖 Skill 链共同提供。'
                 : canonicalAgentId === 'goal-agent'
                   ? '该 Agent 是编排器，不直接持有 System Prompt，目标对话由 skill:goal-conversation 等下辖 Skill 提供。'
@@ -960,15 +952,6 @@ router.get('/agents/design/:agentId', async (req: Request, res: Response) => {
             id: item.id,
             calledAt: item.calledAt,
             success: item.success,
-            durationMs: item.durationMs,
-            error: item.error,
-            input: parseOutputPayload(item.input),
-            output: parseOutputPayload(item.output)
-          })),
-          arenaAgentLogs: arenaSamples.map((item) => ({
-            id: item.id,
-            calledAt: item.createdAt,
-            success: item.status === 'success',
             durationMs: item.durationMs,
             error: item.error,
             input: parseOutputPayload(item.input),
@@ -1505,7 +1488,7 @@ router.get('/agents/status', async (req: Request, res: Response) => {
         { name: 'RequirementCollection', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'PathPlanning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearnerOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
-        { name: 'Teaching', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
+        { name: 'Learning', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'TeachingOrchestration', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'LearningCompanion', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },
         { name: 'SessionWrapup', status: 'idle', successRate: '100.0', avgDuration: 0, totalCalls: 0 },

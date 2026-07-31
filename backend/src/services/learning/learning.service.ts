@@ -1,4 +1,4 @@
-﻿// 学习服务
+// 学习服务
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import aiService from '../ai/ai.service';
@@ -114,7 +114,7 @@ interface GeneratePathData {
 interface PathReplanRequest {
   pathId: string;
   userId: string;
-  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'learning-agent' | 'admin' | 'system' | 'api';
   reason?: string;
   mode?: 'new_version' | 'overwrite';
   stageNumber?: number;
@@ -266,7 +266,7 @@ type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
   recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-  triggerSource?: 'learn' | 'ai-teaching' | 'teaching-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'learning-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
 }
 
 interface PathAdjustmentEvidence {
@@ -336,6 +336,12 @@ function parsePathSummary(raw: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function cleanPathTitle(title: string): string {
+  const t = title.trim();
+  const cleaned = t.replace(/(?:[，,、\s]*)(?:学习路径|学习计划|路径计划)$/, '').trim();
+  return cleaned || t;
 }
 
 function normalizeStringArray(value: any): string[] {
@@ -2542,11 +2548,12 @@ class LearningService {
         });
         if (lockedPath.count !== 1) throw new Error('GENERATION_RUN_FENCED');
         await assertPathMutationSafe(tx, data.existingPathId, 'replace-path');
+        const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.update({
           where: { id: data.existingPathId },
           data: {
-            title: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
-            name: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
+            title: pathTitle,
+            name: pathTitle,
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
               : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
@@ -2571,12 +2578,13 @@ class LearningService {
           where: { learningPathId: path.id }
         });
       } else {
+        const pathTitle = cleanPathTitle(analysis.pathName || `${analysis.subject || '个性化'}学习路径`);
         path = await tx.learning_paths.create({
           data: {
             id: `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
             userId: data.userId,
-            title: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
-            name: analysis.pathName || `${analysis.subject || '个性化'}学习路径`,
+            title: pathTitle,
+            name: pathTitle,
             description: (data.description && !data.description.includes('\uFFFD'))
               ? data.description
               : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
@@ -2597,21 +2605,6 @@ class LearningService {
           }
         });
       }
-
-      await tx.path_decompositions.create({
-        data: {
-          id: `pd_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          userId: data.userId,
-          goal: data.description,
-          stages: JSON.stringify(normalizedMilestonesData.map((m: any) => m.name) || []),
-          milestones: JSON.stringify(normalizedMilestonesData),
-          subtasks: JSON.stringify([]),
-          aiAnalysis: JSON.stringify(analysis),
-          feasibility: analysis.feasibility,
-          difficulty: analysis.difficulty,
-          recommendations: JSON.stringify(analysis.recommendations || [])
-        }
-      });
 
       for (let i = 0; i < normalizedMilestonesData.length; i++) {
         const milestoneData = normalizedMilestonesData[i];
