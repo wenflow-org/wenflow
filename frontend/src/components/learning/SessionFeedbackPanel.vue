@@ -8,7 +8,7 @@
       <span v-if="saved" class="session-feedback__saved" role="status">已保存</span>
     </div>
 
-    <div v-if="loading" class="session-feedback__loading" role="status">正在读取你的反馈...</div>
+    <div v-if="loading" class="session-feedback__loading" role="status">正在读取你的反馈…</div>
 
     <template v-else>
       <fieldset class="session-feedback__field">
@@ -268,7 +268,10 @@ onMounted(load)
 
 .session-feedback__field legend,
 .session-feedback__comment > span {
+  display: block;
   margin-bottom: 10px;
+  padding: 0;
+  text-align: left;
   color: var(--text-secondary, #52657c);
   font-size: 13px;
   font-weight: 700;
@@ -296,20 +299,21 @@ onMounted(load)
 }
 
 .rating-option {
-  display: grid;
-  min-width: 88px;
-  gap: 2px;
-  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
 }
 
 .rating-option span:first-child {
   color: var(--text-primary, #172033);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .rating-option span:last-child {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .rating-option:hover,
@@ -362,6 +366,8 @@ onMounted(load)
 
 .session-feedback__actions {
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   margin-top: 22px;
 }
 
@@ -369,6 +375,7 @@ onMounted(load)
   margin: 0;
   color: var(--text-secondary, #607086);
   font-size: 12px;
+  line-height: 1.6;
 }
 
 @media (max-width: 640px) {

@@ -209,10 +209,11 @@
   .v2-page.state .state__main,
   .v2-page.ach .ach__main,
   .v2-page.goal .work,
-  .v2-page.goal .entry {
+  .v2-page.goal .entry,
+  .v2-page.evaluation-page .evaluation-shell {
     max-width: 1360px;
   }
-  .v2-page.learn .learn__body { max-width: 1400px; }
+  .v2-page.learn .learn__body { max-width: 1600px; }
   .v2-page .v2footer__inner { max-width: 1360px; }
 }
 

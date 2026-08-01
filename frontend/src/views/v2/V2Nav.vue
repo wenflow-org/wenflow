@@ -1,41 +1,43 @@
 ﻿<template>
   <header class="v2nav">
-    <div class="v2nav__brand" @click="$router.push('/dashboard')">
-      <img src="/logo.png" alt="问流 WenFlow" class="v2nav__logo" />
-    </div>
-    <nav class="v2nav__links">
-      <router-link
-        v-for="item in items"
-        :key="item.to"
-        :to="item.to"
-        :class="{ active: isActive(item) }"
-      >{{ item.label }}</router-link>
-    </nav>
-    <div class="v2nav__right">
-      <router-link to="/goal-conversation" class="v2nav__cta">＋ 规划新目标</router-link>
-      <div class="v2nav__user" ref="userMenuRef">
-        <button
-          type="button"
-          class="v2nav__avatar"
-          :aria-expanded="menuOpen ? 'true' : 'false'"
-          aria-haspopup="menu"
-          @click="menuOpen = !menuOpen"
-        >
-          <i>{{ avatarLetter }}</i>
-          <span class="v2nav__name">{{ userName }}</span>
-          <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">▾</span>
-        </button>
-        <Transition name="v2menu">
-          <div v-if="menuOpen" class="v2nav__menu" role="menu">
-            <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
-            <router-link to="/user/agents" role="menuitem" @click="menuOpen = false">AI 助手</router-link>
-            <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
-            <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
-            <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
-              退出登录
-            </button>
-          </div>
-        </Transition>
+    <div class="v2nav__in">
+      <div class="v2nav__brand" @click="$router.push('/dashboard')">
+        <img src="/logo.png" alt="问流 WenFlow" class="v2nav__logo" />
+      </div>
+      <nav class="v2nav__links">
+        <router-link
+          v-for="item in items"
+          :key="item.to"
+          :to="item.to"
+          :class="{ active: isActive(item) }"
+        >{{ item.label }}</router-link>
+      </nav>
+      <div class="v2nav__right">
+        <router-link to="/goal-conversation" class="v2nav__cta">规划新目标</router-link>
+        <div class="v2nav__user" ref="userMenuRef">
+          <button
+            type="button"
+            class="v2nav__avatar"
+            :aria-expanded="menuOpen ? 'true' : 'false'"
+            aria-haspopup="menu"
+            @click="menuOpen = !menuOpen"
+          >
+            <i>{{ avatarLetter }}</i>
+            <span class="v2nav__name">{{ userName }}</span>
+            <span class="v2nav__caret" :class="{ 'v2nav__caret--open': menuOpen }" aria-hidden="true">▾</span>
+          </button>
+          <Transition name="v2menu">
+            <div v-if="menuOpen" class="v2nav__menu" role="menu">
+              <router-link to="/user/account" role="menuitem" @click="menuOpen = false">个人中心</router-link>
+              <router-link to="/user/agents" role="menuitem" @click="menuOpen = false">AI 助手</router-link>
+              <router-link to="/user/settings" role="menuitem" @click="menuOpen = false">API 接入</router-link>
+              <router-link to="/docs" role="menuitem" @click="menuOpen = false">开发者文档</router-link>
+              <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
+                退出登录
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
     </div>
   </header>
@@ -120,42 +122,47 @@ onUnmounted(() => {
 
 <style scoped>
 .v2nav {
-  display: flex; align-items: center; gap: 28px;
-  padding: 0 28px; height: 60px;
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line, #e3e9f4);
   position: sticky; top: 0; z-index: 30;
 }
+/* 内层容器：与页面内容同宽居中（<1680 时 1080，大屏 1360），zoom 下与页面容器天然对齐 */
+.v2nav__in {
+  width: min(1080px, calc(100% - 56px));
+  margin: 0 auto;
+  display: flex; align-items: center; gap: 28px;
+  height: 72px;
+}
 .v2nav__brand { display: flex; align-items: center; cursor: pointer; }
-.v2nav__logo { height: 38px; width: auto; object-fit: contain; display: block; }
-/* 链接在导航条中视觉居中（绝对定位，与左右两侧宽度解耦） */
+.v2nav__logo { height: 48px; width: auto; object-fit: contain; display: block; }
+/* 链接在导航条中靠 logo 排列（与营销页导航一致） */
 .v2nav__links {
-  display: flex; gap: 4px;
-  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 2px; margin-left: 28px;
 }
 .v2nav__links a {
-  padding: 7px 12px; border-radius: 9px;
-  font-size: 13px; font-weight: 600; color: var(--muted, #5b6577);
+  padding: 9px 14px; border-radius: 999px;
+  font-size: 14px; font-weight: 700; color: var(--muted, #5b6577);
   cursor: pointer; text-decoration: none; transition: color 0.14s ease, background 0.14s ease;
 }
-.v2nav__links a:hover { color: var(--ink, #172033); background: #f1f5fb; }
-.v2nav__links a.active { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.09); }
+.v2nav__links a:hover { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.08); }
+.v2nav__links a.active { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
 .v2nav__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .v2nav__cta {
-  padding: 8px 16px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 42px; padding: 0 18px; border-radius: 999px;
   background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
-  color: #fff; font-size: 13px; font-weight: 700;
+  color: #fff; font-size: 14px; font-weight: 800;
   box-shadow: 0 8px 18px rgba(52, 120, 246, 0.28);
   cursor: pointer; text-decoration: none;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .v2nav__cta:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: 0 12px 24px rgba(52, 120, 246, 0.34);
 }
 .v2nav__cta:active {
-  transform: translateY(0) scale(0.97);
+  transform: translateY(0) scale(0.98);
 }
 .v2nav__user { position: relative; }
 .v2nav__avatar {
@@ -236,6 +243,13 @@ onUnmounted(() => {
 @media (max-width: 1100px) {
   .v2nav__links { display: none; }
   .v2nav__name { display: none; }
+}
+
+/* 大屏（1680+）：导航内容与页面容器同宽（1360）居中，避免 4K 下内容贴左 */
+@media (min-width: 1680px) {
+  .v2nav__in {
+    width: min(1360px, calc(100% - 56px));
+  }
 }
 </style>
 

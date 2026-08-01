@@ -1,5 +1,5 @@
 <template>
-  <div class="evaluation-page">
+  <div class="evaluation-page v2-page">
     <div class="evaluation-shell" ref="reportRef">
       <header class="evaluation-head">
         <div>
@@ -16,7 +16,7 @@
 
       <section v-if="loading" class="evaluation-loading">
         <el-icon class="spin"><Loading /></el-icon>
-          <p>正在整理本次学习反馈，请稍候...</p>
+          <p>正在整理本次学习反馈，请稍候…</p>
       </section>
 
       <section v-else-if="error" class="evaluation-error">
@@ -100,6 +100,7 @@ import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import '@/views/v2/v2.css';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
@@ -462,7 +463,8 @@ onUnmounted(() => {
 }
 
 .evaluation-shell {
-  width: min(1200px, calc(100% - 64px));
+  width: calc(100% - 64px);
+  max-width: 1080px;
   margin: 0 auto;
   display: grid;
   gap: 20px;

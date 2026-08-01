@@ -220,7 +220,7 @@
               </div>
             </div>
             <div class="proposal__note">
-              <span>确认后在本页生成，约 30 秒；万一失败可原地重试，信息不丢。</span>
+              <span>确认后在本页生成，约 30 秒。失败可原地重试，信息不会丢。</span>
               <AiContentNote />
             </div>
           </div>
@@ -240,7 +240,7 @@
               <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
             </span>
             <h2 class="proposal__title">路径已生成</h2>
-            <p class="proposal__generating-note">目标已确认，学习路径正在后台组装阶段与任务。点击查看生成进度。</p>
+            <p class="proposal__generating-note">阶段与任务正在后台组装，稍后即可查看。</p>
             <div class="proposal__actions proposal__actions--center">
               <span class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</span>
               <span class="btn-ghost" @click="phase = 'preview'">返回方案</span>
@@ -903,7 +903,14 @@ const scenes = [
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
-.proposal__note { font-size: 11.5px; color: var(--faint); }
+.proposal__note {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  font-size: 11.5px; line-height: 1.5; color: var(--faint);
+}
+.proposal__note :deep(.ai-note) {
+  font-size: 11.5px; line-height: 1.5;
+}
 .proposal__supplement { display: grid; gap: 12px; width: 100%; }
 .proposal__supplement-input {
   border: 1px solid rgba(244, 170, 70, 0.45);

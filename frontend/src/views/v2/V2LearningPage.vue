@@ -894,7 +894,14 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
 }
 .composer__send--off { background: #e3eaf5; color: var(--faint); box-shadow: none; cursor: default; }
-.composer__hint { font-size: 11px; color: var(--faint); padding-left: 4px; }
+.composer__hint {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  font-size: 11px; line-height: 1.5; color: var(--faint); padding-left: 4px;
+}
+.composer__hint :deep(.ai-note) {
+  font-size: 11px; line-height: 1.5;
+}
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
