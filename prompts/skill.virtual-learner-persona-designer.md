@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-persona-designer
-coreHash: 36dc470fcdb5c8be7090a58888419f9954901d161e7b244f971116825eab8ab8
+coreHash: 024d4f1f92c94dbbf823b262dac60c9872d11ab589a7f75f38307eb69c7ad5e5
 coreVersion: 1
 temperature: 0.8
 maxTokens: 8000
@@ -32,6 +32,8 @@ failurePolicy: retry
 10. 所有必填字段都必须给出具体、非空、可观察的内容；不要留空，不要写"待补充/未明确/通用模板"
 11. 如果你发现自己想写"最近在真实任务中遇到了一个需要尽快补上的问题""先按自己的理解试一次"这类安全兜底句，说明这次生成还不够具体，必须重写
 12. 字段取值约束：availableTime 只能是 minimal|moderate|abundant；techComfort 只能是 low|medium|high；learningStyle 只能是 reading|watching|doing|listening；knownConcepts 和 struggleConcepts 都限制为 2-4 项，每项尽量用 2-5 个词描述，不要写整句
+13. personalityDrivers、emotionalTriggers、failurePatterns 各 2-4 项必填，用具体可观察的情境或行为写，不得为空；这些字段是模拟器对抗/求助行为（friction 与 personaAnchorHint）的直接依据
+14. communicationStyle、motivationOrientation、resiliencePattern、digitalLiteracy、behaviorBoundaries、learningPreferences、priorAttempts 如有信息就一并给出，保持与 scenario-designer 同一套 canonical 字段
 
 ## 输出字段
 
@@ -52,6 +54,12 @@ failurePolicy: retry
 · overloadReaction（string）信息一多或步骤太密时最典型的反应
 · memoryRepairPattern（string）忘了或没完全懂时通常怎么掩饰、修正或承认
 · behavioralProfileSummary（string）一句话总结长期行为风格
+· personalityDrivers（string[]，必填 2-4 项）长期人格驱动
+· emotionalTriggers（string[]，必填 2-4 项）容易引发焦虑/防御/退缩的情境
+· failurePatterns（string[]，必填 2-4 项）过往常见失败模式
+· communicationStyle / motivationOrientation / resiliencePattern / digitalLiteracy（string，可选）
+· behaviorBoundaries / learningPreferences（string[]，可选）
+· priorAttempts（string，可选）过往失败经历
 
 ## 边界约束
 

@@ -11,7 +11,6 @@ import {
   type VirtualLearnerStory,
   type FrictionBudget,
   decideFrictionTrigger,
-  normalizeFrictionBudget,
   PERSONA_FIELD_ANCHORS_HINT,
 } from '../virtual-learner-shared';
 
@@ -69,6 +68,11 @@ export interface GoalLearnerSimulationOutput {
   debug?: {
     visibleSignal?: string;
     stateChangeReason?: string;
+    /** 归一化补齐检测：LLM 未输出、由代码用 fallback 默认值填充的状态字段统计 */
+    normalizedFallback?: {
+      fieldCount: number;
+      fields: string[];
+    };
   };
   runtimeEnvelope?: ReturnType<typeof mapSkillOutputEnvelope>;
 }
@@ -188,6 +192,10 @@ function normalizeOutput(parsed: any, input: GoalLearnerSimulationInput): GoalLe
   const executionConcern = clamp01(rawState.executionConcern, fallback.learnerState.executionConcern);
   const willingToTry = safeBool(rawState.willingToTry, fallback.learnerState.willingToTry);
   const readyToProceed = safeBool(rawState.readyToProceed, willingToTry && proposalFit >= 0.7 && executionConcern < 0.7);
+  const normalizedFallback = {
+    fieldCount: GOAL_STATE_FIELDS.filter((field) => !(field in rawState)).length,
+    fields: GOAL_STATE_FIELDS.filter((field) => !(field in rawState)).slice(0, 8),
+  };
 
   return {
     reply: sanitizeVisibleContent(parsed?.reply) || fallback.reply,
@@ -209,9 +217,19 @@ function normalizeOutput(parsed: any, input: GoalLearnerSimulationInput): GoalLe
     debug: {
       visibleSignal: sanitizeVisibleContent(parsed?.debug?.visibleSignal || ''),
       stateChangeReason: sanitizeVisibleContent(parsed?.debug?.stateChangeReason || ''),
+      // 归一化补齐检测：LLM 未输出的状态字段由代码用 fallback 默认值填充，供审计区分
+      normalizedFallback,
     }
   };
 }
+
+const GOAL_STATE_FIELDS = [
+  'phaseFocus', 'feltUnderstood', 'problemClarity', 'proposalFit', 'taskRelevance',
+  'executionConcern', 'willingToTry', 'readyToProceed', 'wantsClarification',
+  'readyToAdvance', 'goalReadiness', 'remainingUnknowns',
+] as const;
+
+export { normalizeOutput, GOAL_STATE_FIELDS };
 
 function buildUserPayload(input: GoalLearnerSimulationInput) {
   const history = Array.isArray(input.visibleContext?.history)
@@ -221,8 +239,7 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
       })).filter((message) => message.content)
     : [];
 
-  const frictionBudget = normalizeFrictionBudget(input.frictionBudget);
-  const frictionGuidance = getFrictionGuidance(frictionBudget);
+  const friction = decideFrictionTrigger(input.frictionBudget);
 
   return {
     learner: input.learner || {},
@@ -234,9 +251,10 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
     currentPhase: normalizePhase(input.currentPhase),
     previousLearnerState: input.previousLearnerState || null,
     friction: {
-      budget: frictionBudget,
-      triggerProbability: frictionGuidance.triggerProbability,
-      guidance: frictionGuidance.promptHint
+      budget: friction.budget,
+      triggerProbability: friction.triggered ? 1 : 0,
+      triggered: friction.triggered,
+      guidance: friction.guidance
     },
     personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
     task: {

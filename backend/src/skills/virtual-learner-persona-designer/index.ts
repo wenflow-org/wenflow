@@ -17,7 +17,7 @@ export const VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT =
 export const virtualLearnerPersonaDesignerDefinition: SkillDefinition = {
   name: 'virtual-learner-persona-designer',
   displayName: '虚拟学习者身份设计器',
-  version: '1.1.0',
+  version: '1.2.0',
   category: 'generation',
   description: '为虚拟学习者生成稳定身份画像，不包含故事与情境',
   inputSchema: {
@@ -139,6 +139,20 @@ function validatePersonaOutput(parsed: any): { valid: boolean; failureReason?: s
     return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: struggleConcepts must contain at least one item' };
   }
 
+  // friction/personaAnchor 提示引用 emotionalTriggers / failurePatterns / personalityDrivers，
+  // 与 scenario-designer 的 canonical 必填集对齐：为空会让模拟器对抗行为失去依据。
+  if (normalizeStringArray(personaSeed.personalityDrivers).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: personalityDrivers must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.emotionalTriggers).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: emotionalTriggers must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.failurePatterns).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: failurePatterns must contain at least one item' };
+  }
+
   if (!isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening'])) {
     return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: learningStyle is invalid' };
   }
@@ -208,9 +222,19 @@ function normalizePersonaOutput(raw: any) {
       emotionalTriggers: normalizeStringArray(personaSeed.emotionalTriggers),
       failurePatterns: normalizeStringArray(personaSeed.failurePatterns),
       personalityTraits,
+      // 与 scenario-designer canonical 字段集对齐（可选，LLM 生成即保留）
+      priorAttempts: normalizeString(personaSeed.priorAttempts) || undefined,
+      communicationStyle: normalizeString(personaSeed.communicationStyle),
+      motivationOrientation: normalizeString(personaSeed.motivationOrientation),
+      resiliencePattern: normalizeString(personaSeed.resiliencePattern),
+      digitalLiteracy: normalizeString(personaSeed.digitalLiteracy),
+      behaviorBoundaries: normalizeStringArray(personaSeed.behaviorBoundaries),
+      learningPreferences: normalizeStringArray(personaSeed.learningPreferences),
     }
   };
 }
+
+export { validatePersonaOutput, normalizePersonaOutput };
 
 export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillExecutionResult<any>> {
   try {
