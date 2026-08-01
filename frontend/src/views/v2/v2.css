@@ -58,6 +58,14 @@
   box-shadow: 0 10px 22px rgba(52, 120, 246, 0.3);
   cursor: pointer;
   text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.v2-page .btn-primary:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.34);
+}
+.v2-page .btn-primary:not(:disabled):active {
+  transform: translateY(0) scale(0.98);
 }
 
 .v2-page .btn-primary--off {
@@ -75,6 +83,15 @@
   font-weight: 700;
   color: var(--muted);
   cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.v2-page .btn-ghost:not(:disabled):hover {
+  border-color: rgba(52, 120, 246, 0.35);
+  color: var(--blue-deep);
+  transform: translateY(-2px);
+}
+.v2-page .btn-ghost:not(:disabled):active {
+  transform: translateY(0) scale(0.98);
 }
 
 .v2-page .errorbar {
@@ -94,6 +111,15 @@
   text-decoration: underline;
   cursor: pointer;
   font-weight: 800;
+}
+
+/* 表单自动填充：保持浅色主题，避免 Chrome 默认黄底 */
+.v2-page .field__input:-webkit-autofill,
+.v2-page .field__input:-webkit-autofill:hover,
+.v2-page .field__input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--ink);
+  transition: background-color 9999s ease-out;
 }
 
 .v2-page .spinner {
@@ -181,12 +207,12 @@
   .v2-page.paths .paths__main,
   .v2-page.detail .detail__main,
   .v2-page.state .state__main,
-  .v2-page.ach .ach__main {
+  .v2-page.ach .ach__main,
+  .v2-page.goal .work,
+  .v2-page.goal .entry {
     max-width: 1360px;
   }
   .v2-page.learn .learn__body { max-width: 1400px; }
-  .v2-page.goal .work { max-width: 1400px; }
-  .v2-page.goal .entry { max-width: 1000px; }
   .v2-page .v2footer__inner { max-width: 1360px; }
 }
 
@@ -196,6 +222,19 @@
 }
 @media (min-width: 3600px) {
   .v2-page { zoom: 1.3; }
+}
+
+/* 2000-2799：认证页（无 zoom 覆盖区间）表单字号随视口放大 */
+@media (min-width: 2000px) and (max-width: 2799px) {
+  .v2-page .auth__card .head h2 { font-size: 26px; }
+  .v2-page .auth__card .head p { font-size: 15px; }
+  .v2-page .auth__card .field__label { font-size: 14px; }
+  .v2-page .auth__card .field__input { padding: 13px 16px; font-size: 16px; }
+  .v2-page .auth__card .field__error { font-size: 13px; }
+  .v2-page .auth__card .btn-primary--block { padding: 14px; font-size: 16px; }
+  .v2-page .auth__card .switch { font-size: 15px; }
+  .v2-page .auth__card .rules li { font-size: 13px; }
+  .v2-page .auth__card .hint { font-size: 13px; }
 }
 
 /* 移动端为底部导航留出空间 */

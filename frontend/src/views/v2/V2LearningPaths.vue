@@ -16,8 +16,8 @@
       <div class="paths__hero">
         <div>
           <span class="kicker">路径总览</span>
-          <h1>继续你的学习计划</h1>
-          <p>查看当前任务、路径进度和需要处理的问题。</p>
+          <h1>{{ cards.length ? '继续你的学习计划' : '还没有学习路径' }}</h1>
+          <p>{{ cards.length ? '查看当前任务、路径进度和需要处理的问题。' : '规划第一个目标，问流会为你生成可执行的学习路径。' }}</p>
           <AiContentNote />
         </div>
         <router-link to="/goal-conversation" class="btn-primary">＋ 规划新目标</router-link>

@@ -14,13 +14,13 @@ const router = express.Router();
 router.get('/registration-status', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
-    const coreLearningAvailable = aiCapabilityHealthService.isCapabilityAvailable('goal-conversation');
+    const coreLearningBlocked = aiCapabilityHealthService.isCapabilityBlocked('goal-conversation');
     res.status(200).json({
       success: true,
       data: {
-        registrationEnabled: settings.registrationEnabled && coreLearningAvailable,
+        registrationEnabled: settings.registrationEnabled && !coreLearningBlocked,
         configuredRegistrationEnabled: settings.registrationEnabled,
-        temporaryUnavailable: settings.registrationEnabled && !coreLearningAvailable
+        temporaryUnavailable: settings.registrationEnabled && coreLearningBlocked
       }
     });
   } catch (error: any) {
@@ -46,9 +46,9 @@ const loginSchema = z.object({
 router.post('/register', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
-    const coreLearningAvailable = aiCapabilityHealthService.isCapabilityAvailable('goal-conversation');
-    if (!settings.registrationEnabled || !coreLearningAvailable) {
-      const temporaryUnavailable = settings.registrationEnabled && !coreLearningAvailable;
+    const coreLearningBlocked = aiCapabilityHealthService.isCapabilityBlocked('goal-conversation');
+    if (!settings.registrationEnabled || coreLearningBlocked) {
+      const temporaryUnavailable = settings.registrationEnabled && coreLearningBlocked;
       return res.status(temporaryUnavailable ? 503 : 403).json({
         success: false,
         error: {

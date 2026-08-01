@@ -171,7 +171,7 @@
           <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
-              <span class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</span>
+              <span v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</span>
             </div>
             <div v-if="hasAnyMinutes" class="week__grid">
               <button
@@ -1006,7 +1006,7 @@ onMounted(loadAll);
 
 /* ---------- 布局 ---------- */
 .dash__main {
-  max-width: 1180px; margin: 0 auto;
+  max-width: 1080px; margin: 0 auto;
   padding: 22px 28px 40px;
   display: grid; gap: 16px;
 }

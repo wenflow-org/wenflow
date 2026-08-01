@@ -5,11 +5,12 @@ import {
 import { callPrompt } from '../../composers/prompt-composer';
 import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { buildDefaultRuntimeContract } from '../../services/prompt-lab/runtime-contract';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
 import {
   type VirtualLearnerPersona,
   type VirtualLearnerStory,
   type FrictionBudget,
-  getFrictionGuidance,
+  decideFrictionTrigger,
   normalizeFrictionBudget,
   PERSONA_FIELD_ANCHORS_HINT,
 } from '../virtual-learner-shared';
@@ -19,6 +20,11 @@ export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
 const LEARN_TURN_FALLBACK_RUNTIME_CONTRACT = buildDefaultRuntimeContract(
   'virtual-learner-learn-turn-simulator'
 );
+
+// File-as-Truth: the ACTIVE prompt at runtime is compiled from prompts/core/*.yaml.
+// Load it from the compiled artifact here; do not embed a second copy (dual-source drift).
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT =
+  loadPromptFile('skill:virtual-learner-learn-turn-simulator')?.systemPrompt || '';
 
 export type LearnLearnerPhase = 'trying' | 'blocked' | 'verifying' | 'ready_to_close';
 

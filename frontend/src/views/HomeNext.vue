@@ -1,40 +1,6 @@
 <template>
   <div class="hn">
-    <header class="hn-nav" :class="{ 'hn-nav--on': scrolled || menuOpen }">
-      <div class="hn-shell hn-nav__in">
-        <router-link to="/" class="hn-logo" @click="closeMenu">
-          <img src="/logo.png" alt="问流 WenFlow" />
-        </router-link>
-        <nav class="hn-nav__links" aria-label="页面导航">
-          <a href="#top">首页</a>
-          <router-link to="/vision">愿景</router-link>
-          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
-        </nav>
-        <div class="hn-nav__acts">
-          <router-link :to="secondaryPath" class="hn-btn hn-btn--ghost">{{ secondaryLabel }}</router-link>
-          <router-link :to="primaryPath" class="hn-btn hn-btn--primary">{{ primaryLabel }}</router-link>
-        </div>
-        <button
-          type="button"
-          class="hn-burger"
-          :class="{ 'hn-burger--open': menuOpen }"
-          :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
-          :aria-expanded="menuOpen"
-          @click="menuOpen = !menuOpen"
-        >
-          <span /><span /><span />
-        </button>
-      </div>
-      <Transition name="hn-drawer">
-        <div v-if="menuOpen" class="hn-drawer hn-shell">
-          <a href="#top" @click="closeMenu">首页</a>
-          <router-link to="/vision" @click="closeMenu">愿景</router-link>
-          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" @click="closeMenu">GitHub</a>
-          <router-link :to="secondaryPath" class="hn-btn hn-btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
-          <router-link :to="primaryPath" class="hn-btn hn-btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
-        </div>
-      </Transition>
-    </header>
+    <MarketingNav :logged-in="loggedIn" />
 
     <main id="top">
       <div class="hn-bg" aria-hidden="true">
@@ -49,7 +15,7 @@
           <span class="hn-pill">问流 · 从问题到学习路径</span>
           <h1>先说清你想解决的事，<br />再开始学习。</h1>
           <p>
-            不用整理成完美目标。聊几分钟，收敛方向、生成路径，在学习台给出今天就能做的一步。
+            不用整理成完美目标。聊几分钟，问流帮你收敛方向、生成路径——学习台直接给出今天能动手的一步。
           </p>
           <div class="hn-hero__cta">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
@@ -57,8 +23,8 @@
           </div>
         </div>
 
-        <aside class="hn-stage" aria-label="产品示意">
-          <div class="hn-stage__chat">
+        <aside class="hn-stage" aria-label="产品示意" ref="stageEl">
+          <div class="hn-stage__chat" :class="{ 'is-fading': phase === 7 }">
             <div class="hn-stage__bar">
               <span>目标规划</span>
               <span class="hn-chip">澄清问题</span>
@@ -148,7 +114,7 @@
             <span class="hn-pill">和常见开始方式不同</span>
             <h2>先把问题说小，再开始学。</h2>
             <p>
-              目标太大、资料太多时，问流先帮你收到「今天能动手」的一步，再边学边调整。
+              目标太大、资料太多时，问流先帮你收到能落地的范围，再边学边调。
             </p>
           </div>
           <div class="hn-idea__list">
@@ -160,27 +126,11 @@
         </div>
       </section>
 
-      <!-- 对照：与正文同宽 -->
-      <section class="hn-vs hn-shell">
-        <div class="hn-vs__col hn-vs__col--off" v-reveal>
-          <h3>常见做法</h3>
-          <ul>
-            <li v-for="item in commonWay" :key="item">{{ item }}</li>
-          </ul>
-        </div>
-        <div class="hn-vs__col hn-vs__col--on" v-reveal="{ delay: 120 }">
-          <h3>问流怎么做</h3>
-          <ul>
-            <li v-for="item in wenflowWay" :key="item">{{ item }}</li>
-          </ul>
-        </div>
-      </section>
-
       <!-- 学习台：错位分栏 -->
       <section class="hn-desk hn-shell">
         <div class="hn-desk__copy" v-reveal>
           <h2>每天打开学习台，只盯今天这一步。</h2>
-          <p>路径生成后，「今日行动」告诉你来自哪条路径、大概多久；也可以随时规划新目标。</p>
+          <p>路径生成后，「今日行动」直接告诉你学什么、学多久；也可以随时规划新目标。</p>
           <ul>
             <li>今日行动 · 清楚今天学什么</li>
             <li>学习路径 · 阶段与任务可继续</li>
@@ -190,17 +140,18 @@
         <div class="hn-desk__card" v-reveal="{ delay: 140 }">
           <div class="hn-panel">
             <div class="hn-stage__bar">
-              <span>学习台</span>
-              <span class="hn-chip">今日行动</span>
+              <span>学习状态</span>
+              <span class="hn-chip hn-chip--green">近 7 天</span>
             </div>
-            <p class="hn-stage__from">来自「Excel 周报自动化」</p>
-            <h3>跑通第一版数据读取</h3>
-            <div class="hn-stage__meta">
-              <span>阶段 2 / 5</span>
-              <span>约 25 分钟</span>
+            <div class="hn-state__metrics">
+              <div><span>健康度</span><b>14</b></div>
+              <div><span>疲劳度</span><b>33</b></div>
+              <div><span>状态</span><b class="hn-state__form">最优训练区</b></div>
             </div>
-            <div class="hn-stage__prog"><i style="--w: 40%" /></div>
-            <span class="hn-stage__go">开始学习</span>
+            <div class="hn-stage__prog"><i style="--w: 62%" /></div>
+            <div class="hn-state__hint">
+              本周节奏稳定，状态正处最优训练区——按当前节奏推进即可。
+            </div>
           </div>
         </div>
       </section>
@@ -210,7 +161,6 @@
         <div class="hn-end__glow" />
         <div class="hn-end__in" v-reveal>
           <h2>用 2 分钟，聊出一条能执行的路径。</h2>
-          <p>注册后进入学习台；已登录可直接规划新目标。</p>
           <div class="hn-end__acts">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
             <router-link to="/vision" class="hn-btn hn-btn--light hn-btn--lg">为什么这样学</router-link>
@@ -236,18 +186,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { hasUserSession } from '@/utils/api'
+import MarketingNav from '@/components/MarketingNav.vue'
 
-const scrolled = ref(false)
-const menuOpen = ref(false)
 const loggedIn = ref(false)
 
 const steps = [
   { t: '说出问题', d: '从最近真正卡住的事开始，不用说得很完整。', where: '目标规划' },
   { t: '澄清方向', d: '一起把目标收到今天能开始的范围。', where: '目标规划' },
   { t: '生成路径', d: '得到阶段与任务，后面还能随学习调整。', where: '目标规划' },
-  { t: '今日行动', d: '学习台给出今天该学的一步。', where: '学习台' },
+  { t: '今日行动', d: '打开学习台，今天该做的一步已经排好。', where: '学习台' },
   { t: '边学边调', d: '根据反馈和节奏，决定下一步怎么走。', where: '学习状态' }
 ]
 
@@ -258,42 +207,18 @@ const modes = [
   { t: '节奏可调', d: '看状态再决定推进或放缓，路径可以改。' }
 ]
 
-const commonWay = [
-  '先囤课、囤资料',
-  '所有人同一张课表',
-  '看完就算学会',
-  '进度只往前冲'
-]
-const wenflowWay = [
-  '从你的真实问题起步',
-  '路径适配当下的约束',
-  '在对话和输出中确认理解',
-  '根据反馈调整方向'
-]
-
 const primaryPath = computed(() => (loggedIn.value ? '/goal-conversation' : '/register'))
 const secondaryPath = computed(() => (loggedIn.value ? '/dashboard' : '/login'))
 const primaryLabel = computed(() => (loggedIn.value ? '规划新目标' : '从一个问题开始'))
 const secondaryLabel = computed(() => (loggedIn.value ? '回到学习台' : '登录'))
-
-function closeMenu() {
-  menuOpen.value = false
-}
-
-watch(menuOpen, (open) => {
-  document.body.style.overflow = open ? 'hidden' : ''
-})
-
-function onScroll() {
-  scrolled.value = window.scrollY > 20
-}
 
 function syncAuthState() {
   loggedIn.value = hasUserSession()
 }
 
 /* Hero 对话演示：用户提问 → 正在输入 → AI 回复 → 选中标签 → 高亮结果 → 淡出重播。
-   phase 99 = 全部静态可见（reduced-motion 时的兜底，不跑时间轴）。 */
+   phase 99 = 全部静态可见（reduced-motion 时的兜底，不跑时间轴）。
+   phase 7 为淡出过渡（整卡上浮淡出），随后回到 phase 0 重播。 */
 const phase = ref(
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ? 99
@@ -306,33 +231,59 @@ const demoTimeline: Array<[number, number]> = [
   [3, 1200],  // AI 回复
   [4, 1100],  // 选中标签
   [5, 900],   // 高亮结果
-  [6, 3400],  // 停留后整体淡出
-  [0, 800]    // 回到起点，循环
+  [6, 2600],  // 停留
+  [7, 600],   // 整卡淡出
+  [0, 500]    // 回到起点，循环
 ]
 
+const stageEl = ref<HTMLElement | null>(null)
 let demoTimer: ReturnType<typeof setTimeout> | null = null
+let demoIndex = 0
+let demoVisible = true
+let demoObserver: IntersectionObserver | null = null
 
-function runDemoStep(index: number) {
-  const [nextPhase, delay] = demoTimeline[index % demoTimeline.length]
+function stopDemo() {
+  if (demoTimer) {
+    clearTimeout(demoTimer)
+    demoTimer = null
+  }
+}
+
+function runDemoStep() {
+  if (!demoVisible || phase.value === 99) return
+  const [nextPhase, delay] = demoTimeline[demoIndex % demoTimeline.length]
+  demoIndex++
   demoTimer = setTimeout(() => {
+    if (!demoVisible) return
     phase.value = nextPhase
-    runDemoStep(index + 1)
+    runDemoStep()
   }, delay)
 }
 
 onMounted(() => {
   syncAuthState()
   window.addEventListener('storage', syncAuthState)
-  window.addEventListener('scroll', onScroll, { passive: true })
-  onScroll()
-  if (phase.value !== 99) runDemoStep(0)
+  if (phase.value === 99) return
+  // 舞台离开视口时暂停时间轴，回到视口再继续，避免后台空转
+  demoObserver = new IntersectionObserver(
+    (entries) => {
+      const visible = entries.some((e) => e.isIntersecting)
+      demoVisible = visible
+      if (visible) {
+        runDemoStep()
+      } else {
+        stopDemo()
+      }
+    },
+    { threshold: 0.15 }
+  )
+  if (stageEl.value) demoObserver.observe(stageEl.value)
 })
 
 onUnmounted(() => {
   window.removeEventListener('storage', syncAuthState)
-  window.removeEventListener('scroll', onScroll)
-  if (demoTimer) clearTimeout(demoTimer)
-  document.body.style.overflow = ''
+  stopDemo()
+  demoObserver?.disconnect()
 })
 </script>
 
@@ -362,134 +313,7 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
-/* Nav */
-.hn-nav {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 40;
-  border-bottom: 1px solid transparent;
-  transition: 0.24s ease;
-}
-.hn-nav--on {
-  background: rgba(255, 255, 255, 0.88);
-  border-color: var(--line);
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(18px);
-}
-.hn-nav__in {
-  min-height: 72px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-.hn-logo img {
-  height: 48px;
-  display: block;
-}
-.hn-nav__links {
-  display: flex;
-  gap: 4px;
-  flex: 1;
-  padding: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid var(--line);
-  width: fit-content;
-}
-.hn-nav__links a {
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 72%, #fff);
-  text-decoration: none;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease);
-}
-.hn-nav__links a:hover {
-  background: rgba(52, 120, 246, 0.08);
-  color: var(--blue-deep);
-}
-.hn-nav__acts {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-}
-.hn-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 800;
-  text-decoration: none;
-  border: 1px solid transparent;
-  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-.hn-btn:hover {
-  transform: translateY(-2px);
-}
-.hn-btn:active {
-  transform: translateY(0) scale(0.98);
-}
-.hn-btn--primary {
-  color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 16px 34px rgba(52, 120, 246, 0.22);
-}
-.hn-btn--ghost {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.74);
-  border-color: var(--line);
-}
-.hn-btn--light {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.9);
-}
-.hn-btn--lg {
-  min-height: 50px;
-  padding: 0 24px;
-}
-.hn-burger {
-  display: none;
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.8);
-  cursor: pointer;
-}
-.hn-burger span {
-  display: block;
-  width: 18px;
-  height: 2px;
-  margin: 4px auto;
-  background: var(--ink);
-  border-radius: 99px;
-  transition: transform 0.28s var(--ease), opacity 0.2s var(--ease);
-}
-.hn-burger--open span:nth-child(1) {
-  transform: translateY(6px) rotate(45deg);
-}
-.hn-burger--open span:nth-child(2) {
-  opacity: 0;
-}
-.hn-burger--open span:nth-child(3) {
-  transform: translateY(-6px) rotate(-45deg);
-}
-.hn-drawer {
-  display: none;
-}
-.hn-drawer-enter-active,
-.hn-drawer-leave-active {
-  transition: opacity 0.24s var(--ease), transform 0.24s var(--ease);
-}
-.hn-drawer-enter-from,
-.hn-drawer-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
+/* Nav 由 MarketingNav 组件提供（首页/愿景共用同一份导航） */
 
 /* BG */
 .hn-bg {
@@ -505,6 +329,7 @@ onUnmounted(() => {
   border-radius: 50%;
   filter: blur(90px);
   opacity: 0.24;
+  will-change: transform;
 }
 .hn-orb--a {
   width: 520px;
@@ -642,6 +467,11 @@ main {
 }
 .hn-stage__chat {
   transform: rotate(-1deg);
+  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
+}
+.hn-stage__chat.is-fading {
+  opacity: 0;
+  transform: rotate(-1deg) translateY(-14px);
 }
 .hn-stage__desk {
   transform: rotate(1.2deg) translateX(18px);
@@ -966,8 +796,12 @@ main {
   opacity: 0.35;
   fill: none;
   stroke-dasharray: 1;
-  stroke-dashoffset: 1;
+  /* 默认保持画完状态：v-reveal 揭示后会移除 .rv/.rv-in，若默认值是未画状态会反向缩回 */
+  stroke-dashoffset: 0;
   transition: stroke-dashoffset 1.6s var(--ease) 0.25s;
+}
+.hn-flow__svg.rv .hn-flow__path {
+  stroke-dashoffset: 1;
 }
 .hn-flow__svg.rv-in .hn-flow__path {
   stroke-dashoffset: 0;
@@ -1088,65 +922,6 @@ main {
   color: var(--muted);
 }
 
-/* VS — same width as content shell */
-.hn-vs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin: 20px auto 60px;
-  padding: 0;
-  border: 0;
-}
-.hn-vs__col {
-  padding: 28px 28px 32px;
-  min-height: 0;
-  border-radius: 24px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
-  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
-}
-.hn-vs__col:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
-}
-.hn-vs__col--off {
-  background: rgba(255, 255, 255, 0.72);
-}
-.hn-vs__col--on {
-  background: linear-gradient(160deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.95));
-  border-color: rgba(52, 120, 246, 0.14);
-}
-.hn-vs__col h3 {
-  margin: 0 0 16px;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  color: var(--faint);
-}
-.hn-vs__col--on h3 {
-  color: var(--blue-deep);
-}
-.hn-vs__col ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 12px;
-}
-.hn-vs__col li {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.45;
-  color: var(--ink);
-}
-.hn-vs__col--off li {
-  color: var(--faint);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-
 /* Desk */
 .hn-desk {
   display: grid;
@@ -1193,6 +968,40 @@ main {
 .hn-panel:hover {
   transform: translateY(-4px);
   box-shadow: 0 34px 88px rgba(58, 101, 197, 0.18);
+}
+.hn-state__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.hn-state__metrics > div {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+}
+.hn-state__metrics span {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--faint);
+}
+.hn-state__metrics b {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+.hn-state__metrics .hn-state__form {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--green);
+}
+.hn-state__hint {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 
 /* End full bleed — light band */
@@ -1294,32 +1103,6 @@ main {
 }
 
 @media (max-width: 980px) {
-  .hn-nav__links,
-  .hn-nav__acts {
-    display: none;
-  }
-  .hn-burger {
-    display: block;
-    margin-left: auto;
-  }
-  .hn-drawer {
-    display: grid;
-    gap: 8px;
-    margin: 0 auto 14px;
-    padding: 16px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.96);
-    border: 1px solid var(--line);
-    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
-  }
-  .hn-drawer a {
-    padding: 12px;
-    border-radius: 12px;
-    text-decoration: none;
-    color: var(--ink);
-    font-weight: 700;
-    background: #f7faff;
-  }
   .hn-hero {
     grid-template-columns: 1fr;
     min-height: auto;
@@ -1332,8 +1115,7 @@ main {
   .hn-band__in,
   .hn-flow__grid,
   .hn-idea__in,
-  .hn-desk,
-  .hn-vs {
+  .hn-desk {
     grid-template-columns: 1fr;
   }
   .hn-band__arrow {
@@ -1353,6 +1135,14 @@ main {
   .hn-flow__grid span {
     grid-row: span 3;
   }
+  /* 移动端描述单行展示：窄列下避免文字断行撑高卡片 */
+  .hn-flow__grid p {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
   .hn-idea__lead {
     position: static;
   }
@@ -1370,6 +1160,136 @@ main {
   }
   .hn-foot__brand em {
     display: none;
+  }
+}
+
+/* ---------- 超大屏（2K/4K）：随视口放大容器与字号，避免整页缩在中间 ---------- */
+@media (min-width: 2000px) {
+  .hn-shell {
+    width: min(1560px, calc(100% - 64px));
+  }
+  .hn-btn {
+    min-height: 48px;
+    padding: 0 20px;
+    font-size: 16px;
+  }
+  .hn-btn--lg {
+    min-height: 60px;
+    padding: 0 32px;
+    font-size: 17px;
+  }
+  .hn-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(400px, 560px);
+    gap: 72px;
+    padding: 150px 0 90px;
+  }
+  .hn-hero h1 {
+    font-size: clamp(76px, 4.2vw, 112px);
+    line-height: 1.04;
+  }
+  .hn-hero__copy > p {
+    font-size: 23px;
+    max-width: 34ch;
+  }
+  .hn-pill {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+  .hn-stage__chat,
+  .hn-stage__desk,
+  .hn-panel {
+    padding: 26px;
+    border-radius: 32px;
+  }
+  .hn-stage__bar {
+    font-size: 15px;
+  }
+  .hn-bubble {
+    font-size: 16px;
+  }
+  .hn-stage__result strong {
+    font-size: 16px;
+  }
+  .hn-stage__desk h3,
+  .hn-panel h3 {
+    font-size: 21px;
+  }
+  .hn-band {
+    padding: 56px 0;
+  }
+  .hn-band__side {
+    padding: 34px;
+  }
+  .hn-band__side h2 {
+    font-size: clamp(30px, 2vw, 42px);
+  }
+  .hn-band__side p {
+    font-size: 18px;
+  }
+  .hn-section {
+    gap: 14px;
+  }
+  .hn-section h2 {
+    font-size: clamp(48px, 3.2vw, 72px);
+  }
+  .hn-section p {
+    font-size: 20px;
+  }
+  .hn-flow__grid li {
+    min-height: 260px;
+    padding: 26px 20px;
+  }
+  .hn-flow__grid strong {
+    font-size: 19px;
+  }
+  .hn-flow__grid p {
+    font-size: 15.5px;
+  }
+  .hn-idea__lead h2 {
+    font-size: clamp(44px, 3vw, 64px);
+    max-width: 14ch;
+  }
+  .hn-idea__lead p {
+    font-size: 19px;
+    max-width: 30ch;
+  }
+  .hn-idea__list article {
+    padding: 26px 30px;
+  }
+  .hn-idea__list strong {
+    font-size: 20px;
+  }
+  .hn-idea__list p {
+    font-size: 16.5px;
+  }
+  .hn-desk {
+    gap: 64px;
+  }
+  .hn-desk__copy h2 {
+    font-size: clamp(40px, 2.8vw, 60px);
+  }
+  .hn-desk__copy > p {
+    font-size: 19px;
+    max-width: 34ch;
+  }
+  .hn-desk__copy li {
+    font-size: 16px;
+    padding: 16px 18px;
+  }
+  .hn-state__metrics b {
+    font-size: 24px;
+  }
+  .hn-end {
+    padding: 116px 24px 132px;
+  }
+  .hn-end h2 {
+    font-size: clamp(48px, 3.2vw, 72px);
+  }
+  .hn-end p {
+    font-size: 19px;
+  }
+  .hn-foot__in {
+    padding: 26px 0;
   }
 }
 </style>

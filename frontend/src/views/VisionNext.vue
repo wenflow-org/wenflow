@@ -1,40 +1,6 @@
 <template>
   <div class="vn">
-    <header class="vn-nav" :class="{ 'vn-nav--on': scrolled || menuOpen }">
-      <div class="vn-shell vn-nav__in">
-        <router-link to="/" class="vn-logo" @click="closeMenu">
-          <img src="/logo.png" alt="问流 WenFlow" />
-        </router-link>
-        <nav class="vn-nav__links" aria-label="页面导航">
-          <router-link to="/">首页</router-link>
-          <router-link to="/vision" class="is-on">愿景</router-link>
-          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
-        </nav>
-        <div class="vn-nav__acts">
-          <router-link :to="secondaryPath" class="vn-btn vn-btn--ghost">{{ secondaryLabel }}</router-link>
-          <router-link :to="primaryPath" class="vn-btn vn-btn--primary">{{ primaryLabel }}</router-link>
-        </div>
-        <button
-          type="button"
-          class="vn-burger"
-          :class="{ 'vn-burger--open': menuOpen }"
-          :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
-          :aria-expanded="menuOpen"
-          @click="menuOpen = !menuOpen"
-        >
-          <span /><span /><span />
-        </button>
-      </div>
-      <Transition name="vn-drawer">
-        <div v-if="menuOpen" class="vn-drawer vn-shell">
-          <router-link to="/" @click="closeMenu">首页</router-link>
-          <router-link to="/vision" @click="closeMenu">愿景</router-link>
-          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" @click="closeMenu">GitHub</a>
-          <router-link :to="secondaryPath" class="vn-btn vn-btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
-          <router-link :to="primaryPath" class="vn-btn vn-btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
-        </div>
-      </Transition>
-    </header>
+    <MarketingNav :logged-in="loggedIn" />
 
     <main>
       <div class="vn-bg" aria-hidden="true">
@@ -49,12 +15,17 @@
           <span class="vn-pill">WHY WENFLOW</span>
           <h1>答案越来越多时，更值得练的是提问与判断。</h1>
           <p>
-            如果 AI 已经能快速给出大量标准答案，人真正需要训练的，可能就不只是「记住知识」，而是定义问题、看见结构、判断取舍，并在反馈里持续修正。
+            AI 能快速给出标准答案时，人更值得练的不只是记住知识，而是定义问题、看见结构、判断取舍，并在反馈里持续修正。
           </p>
         </div>
         <aside class="vn-hero__aside">
+          <span class="vn-hero__quote" aria-hidden="true">“</span>
           <span>我们相信</span>
           <strong>学习不应只从「找课」开始，而应从「把真正要解决的问题说清楚」开始。</strong>
+          <span class="vn-hero__seal">
+            <i /><i /><i />
+            <em>问题 → 路径 → 学习 → 反馈</em>
+          </span>
         </aside>
       </section>
 
@@ -100,10 +71,10 @@
       <!-- 与产品的关系：只一句桥，不展开实现 -->
       <section class="vn-bridge vn-shell">
         <div class="vn-bridge__box" v-reveal>
-          <h2>愿景停在「为什么」。</h2>
+          <h2>愿景只回答「为什么」。</h2>
           <p>
             产品怎么走——目标规划、路径、今日行动、学习状态——在首页能看见。
-            细节仍在验证；我们先把方向说清楚。
+            细节还在打磨，方向先讲清楚。
           </p>
           <router-link to="/" class="vn-btn vn-btn--ghost">看产品怎么开始 →</router-link>
         </div>
@@ -113,10 +84,10 @@
       <section class="vn-status vn-shell" v-reveal>
         <h2>它是什么阶段</h2>
         <p>
-          WenFlow 目前是<strong>实验型原型</strong>：主链路已经能跑通，方向也相对清楚，但离成熟、稳定的产品还有一段路。
+          WenFlow 目前是<strong>实验型原型</strong>：主链路已经能跑通，方向也相对清楚，正在持续打磨稳定性与细节。
         </p>
         <p>
-          它开源（MIT），欢迎查看、讨论和二次开发。哪怕最后证明这条路不对，至少留下了一个可以继续改的起点。
+          它开源（MIT），欢迎查看、讨论和二次开发。
         </p>
         <div class="vn-status__links">
           <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
@@ -140,6 +111,8 @@
         <span>问流 · 从问题到学习路径</span>
         <div>
           <router-link to="/">首页</router-link>
+          <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://wenflow.org/" target="_blank" rel="noreferrer">Demo</a>
         </div>
       </div>
     </footer>
@@ -147,11 +120,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { hasUserSession } from '@/utils/api'
+import MarketingNav from '@/components/MarketingNav.vue'
 
-const scrolled = ref(false)
-const menuOpen = ref(false)
 const loggedIn = ref(false)
 
 const holds = [
@@ -179,18 +151,6 @@ const secondaryPath = computed(() => (loggedIn.value ? '/dashboard' : '/login'))
 const primaryLabel = computed(() => (loggedIn.value ? '规划新目标' : '从一个问题开始'))
 const secondaryLabel = computed(() => (loggedIn.value ? '回到学习台' : '登录'))
 
-function closeMenu() {
-  menuOpen.value = false
-}
-
-watch(menuOpen, (open) => {
-  document.body.style.overflow = open ? 'hidden' : ''
-})
-
-function onScroll() {
-  scrolled.value = window.scrollY > 20
-}
-
 function syncAuthState() {
   loggedIn.value = hasUserSession()
 }
@@ -198,14 +158,10 @@ function syncAuthState() {
 onMounted(() => {
   syncAuthState()
   window.addEventListener('storage', syncAuthState)
-  window.addEventListener('scroll', onScroll, { passive: true })
-  onScroll()
 })
 
 onUnmounted(() => {
   window.removeEventListener('storage', syncAuthState)
-  window.removeEventListener('scroll', onScroll)
-  document.body.style.overflow = ''
 })
 </script>
 
@@ -231,58 +187,7 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
-.vn-nav {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 40;
-  border-bottom: 1px solid transparent;
-  transition: 0.24s ease;
-}
-.vn-nav--on {
-  background: rgba(255, 255, 255, 0.88);
-  border-color: var(--line);
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(18px);
-}
-.vn-nav__in {
-  min-height: 72px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-.vn-logo img {
-  height: 48px;
-  display: block;
-}
-.vn-nav__links {
-  display: flex;
-  gap: 4px;
-  flex: 1;
-  padding: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid var(--line);
-  width: fit-content;
-}
-.vn-nav__links a {
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 72%, #fff);
-  text-decoration: none;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease);
-}
-.vn-nav__links a.is-on,
-.vn-nav__links a:hover {
-  background: rgba(52, 120, 246, 0.08);
-  color: var(--blue-deep);
-}
-.vn-nav__acts {
-  display: flex;
-  gap: 10px;
-  margin-left: auto;
-}
+/* Nav 由 MarketingNav 组件提供（首页/愿景共用同一份导航） */
 .vn-btn {
   display: inline-flex;
   align-items: center;
@@ -317,45 +222,8 @@ onUnmounted(() => {
   min-height: 50px;
   padding: 0 24px;
 }
-.vn-burger {
-  display: none;
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.8);
-  cursor: pointer;
-}
-.vn-burger span {
-  display: block;
-  width: 18px;
-  height: 2px;
-  margin: 4px auto;
-  background: var(--ink);
-  border-radius: 99px;
-  transition: transform 0.28s var(--ease), opacity 0.2s var(--ease);
-}
-.vn-burger--open span:nth-child(1) {
-  transform: translateY(6px) rotate(45deg);
-}
-.vn-burger--open span:nth-child(2) {
-  opacity: 0;
-}
-.vn-burger--open span:nth-child(3) {
-  transform: translateY(-6px) rotate(-45deg);
-}
-.vn-drawer {
-  display: none;
-}
-.vn-drawer-enter-active,
-.vn-drawer-leave-active {
-  transition: opacity 0.24s var(--ease), transform 0.24s var(--ease);
-}
-.vn-drawer-enter-from,
-.vn-drawer-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
+
+/* BG */
 
 .vn-bg {
   position: absolute;
@@ -455,16 +323,28 @@ main {
   color: var(--muted);
 }
 .vn-hero__aside {
+  position: relative;
   display: grid;
   gap: 12px;
-  padding: 28px;
+  padding: 32px;
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(52, 120, 246, 0.08), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(52, 120, 246, 0.16);
   box-shadow: 0 28px 80px rgba(58, 101, 197, 0.12);
   backdrop-filter: blur(14px);
+  overflow: hidden;
 }
-.vn-hero__aside span {
+.vn-hero__quote {
+  position: absolute;
+  top: -26px;
+  right: 8px;
+  font-size: 120px;
+  line-height: 1;
+  font-weight: 900;
+  color: rgba(52, 120, 246, 0.08);
+  pointer-events: none;
+}
+.vn-hero__aside span:not(.vn-hero__quote):not(.vn-hero__seal) {
   font-size: 12px;
   font-weight: 900;
   color: var(--blue-deep);
@@ -473,6 +353,31 @@ main {
   font-size: 20px;
   line-height: 1.45;
   letter-spacing: -0.025em;
+}
+.vn-hero__seal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(52, 120, 246, 0.2);
+}
+.vn-hero__seal i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  opacity: 0.55;
+}
+.vn-hero__seal i:nth-child(2) { opacity: 0.8; }
+.vn-hero__seal i:nth-child(3) { opacity: 1; }
+.vn-hero__seal em {
+  font-style: normal;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--faint);
 }
 
 /* Hero 入场编排 */
@@ -573,10 +478,11 @@ main {
   border-top: 1px solid var(--line);
   align-items: start;
   border-radius: 12px;
-  transition: background 0.25s var(--ease);
+  transition: background 0.25s var(--ease), padding 0.25s var(--ease);
 }
 .vn-cap__list li:hover {
   background: rgba(255, 255, 255, 0.7);
+  padding-left: 18px;
 }
 .vn-cap__list li:last-child {
   border-bottom: 1px solid var(--line);
@@ -586,11 +492,22 @@ main {
   font-weight: 900;
   color: var(--blue-deep);
   padding-top: 4px;
+  transition: transform 0.3s var(--ease), color 0.3s var(--ease);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .vn-cap__list li:hover span {
+    transform: scale(1.25) translateX(2px);
+    color: var(--accent, #8d6bff);
+  }
 }
 .vn-cap__list strong {
   display: block;
   font-size: 18px;
   margin-bottom: 4px;
+  transition: color 0.25s var(--ease);
+}
+.vn-cap__list li:hover strong {
+  color: var(--blue-deep);
 }
 .vn-cap__list p {
   margin: 0;
@@ -729,6 +646,9 @@ main {
   margin-left: 14px;
   font-weight: 700;
 }
+.vn-foot a:first-child {
+  margin-left: 0;
+}
 .vn-foot a:hover {
   color: var(--blue-deep);
 }
@@ -742,40 +662,93 @@ main {
     min-height: auto;
     padding-top: 110px;
   }
-  .vn-nav__links,
-  .vn-nav__acts {
-    display: none;
-  }
-  .vn-burger {
-    display: block;
-    margin-left: auto;
-  }
-  .vn-drawer {
-    display: grid;
-    gap: 8px;
-    margin: 0 auto 14px;
-    padding: 16px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.96);
-    border: 1px solid var(--line);
-    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
-  }
-  .vn-drawer a {
-    padding: 12px;
-    border-radius: 12px;
-    text-decoration: none;
-    color: var(--ink);
-    font-weight: 700;
-    background: #f7faff;
-  }
-  .vn-drawer .vn-btn {
-    width: 100%;
-  }
 }
 
 @media (max-width: 640px) {
   .vn-shell {
     width: min(100% - 28px, 1180px);
+  }
+}
+
+/* ---------- 超大屏（2K/4K）：随视口放大容器与字号 ---------- */
+@media (min-width: 2000px) {
+  .vn-shell {
+    width: min(1560px, calc(100% - 64px));
+  }
+  .vn-btn {
+    min-height: 48px;
+    padding: 0 20px;
+    font-size: 16px;
+  }
+  .vn-btn--lg {
+    min-height: 60px;
+    padding: 0 32px;
+    font-size: 17px;
+  }
+  .vn-hero {
+    grid-template-columns: minmax(0, 1.15fr) minmax(360px, 460px);
+    gap: 72px;
+    padding: 150px 0 90px;
+  }
+  .vn-hero h1 {
+    font-size: clamp(60px, 3.6vw, 92px);
+    line-height: 1.08;
+  }
+  .vn-hero__copy > p {
+    font-size: 23px;
+    max-width: 36ch;
+  }
+  .vn-hero__aside {
+    padding: 38px;
+  }
+  .vn-hero__aside strong {
+    font-size: 24px;
+  }
+  .vn-stand__head h2,
+  .vn-cap__head h2 {
+    font-size: clamp(42px, 2.8vw, 58px);
+  }
+  .vn-stand__head p {
+    font-size: 19px;
+  }
+  .vn-stand__grid article {
+    padding: 34px;
+  }
+  .vn-stand__grid ul {
+    font-size: 17px;
+  }
+  .vn-cap__list li {
+    padding: 24px 14px;
+  }
+  .vn-cap__list strong {
+    font-size: 21px;
+  }
+  .vn-cap__list p {
+    font-size: 16.5px;
+  }
+  .vn-bridge__box {
+    padding: 44px 48px;
+  }
+  .vn-bridge h2 {
+    font-size: 30px;
+  }
+  .vn-bridge p {
+    font-size: 18px;
+  }
+  .vn-status h2 {
+    font-size: clamp(32px, 2.2vw, 42px);
+  }
+  .vn-status p {
+    font-size: 19px;
+  }
+  .vn-end {
+    padding: 116px 24px 132px;
+  }
+  .vn-end h2 {
+    font-size: clamp(40px, 2.8vw, 58px);
+  }
+  .vn-end p {
+    font-size: 19px;
   }
 }
 </style>

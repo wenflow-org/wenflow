@@ -8,7 +8,7 @@ const register = jest.fn()
 const recordLoginAttempt = jest.fn()
 const loginRateLimitMiddleware = jest.fn((_req, _res, next) => next())
 const getPlatformSettings = jest.fn()
-const isCapabilityAvailable = jest.fn()
+const isCapabilityBlocked = jest.fn()
 
 class MockInvalidCredentialsError extends Error {
   readonly status = 401
@@ -51,7 +51,7 @@ jest.mock('../../services/platform-settings.service', () => ({
 
 jest.mock('../../services/ai-capability-health.service', () => ({
   aiCapabilityHealthService: {
-    isCapabilityAvailable
+    isCapabilityBlocked
   }
 }))
 
@@ -76,7 +76,7 @@ describe('普通登录路由安全边界', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     getPlatformSettings.mockResolvedValue({ registrationEnabled: true })
-    isCapabilityAvailable.mockReturnValue(true)
+    isCapabilityBlocked.mockReturnValue(false)
   })
 
   it('无效凭据直接返回统一 401，而不是进入全局 500 错误处理', async () => {
@@ -106,7 +106,7 @@ describe('普通登录路由安全边界', () => {
   })
 
   it('核心学习能力不可用时公开状态保留管理员设置并临时关闭注册', async () => {
-    isCapabilityAvailable.mockReturnValue(false)
+    isCapabilityBlocked.mockReturnValue(true)
     const req: any = {}
     const res = createResponse()
     const next = jest.fn()
@@ -126,7 +126,7 @@ describe('普通登录路由安全边界', () => {
   })
 
   it('核心学习能力不可用时注册返回可重试的 503', async () => {
-    isCapabilityAvailable.mockReturnValue(false)
+    isCapabilityBlocked.mockReturnValue(true)
     const req: any = { body: { name: 'alice', password: 'password1' } }
     const res = createResponse()
     const next = jest.fn()
@@ -145,7 +145,7 @@ describe('普通登录路由安全边界', () => {
 
   it('管理员关闭注册时返回 403，而不是 AI 临时故障', async () => {
     getPlatformSettings.mockResolvedValue({ registrationEnabled: false })
-    isCapabilityAvailable.mockReturnValue(false)
+    isCapabilityBlocked.mockReturnValue(false)
     const req: any = { body: { name: 'alice', password: 'password1' } }
     const res = createResponse()
     const next = jest.fn()

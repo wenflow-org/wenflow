@@ -1,11 +1,13 @@
 <template>
-  <V2AuthLayout mode="login">
+  <V2AuthLayout>
     <div class="head">
       <h2>欢迎回来</h2>
-      <p>请输入账号信息。</p>
+      <p>登录后，从上次停下的地方继续。</p>
     </div>
 
     <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
+      <div v-if="formError" class="errorbar" role="alert">{{ formError }}</div>
+
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
         <input
@@ -14,7 +16,9 @@
           class="field__input"
           placeholder="请输入用户名"
           autocomplete="username"
+          autofocus
           @blur="touch('name')"
+          @input="formError = ''"
         />
         <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
       </label>
@@ -29,6 +33,7 @@
             placeholder="请输入密码"
             autocomplete="current-password"
             @blur="touch('password')"
+            @input="formError = ''"
           />
           <button type="button" class="field__eye" :aria-label="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
             <svg v-if="showPwd" viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 5c-5 0-9.3 3-11 7 1.7 4 6 7 11 7s9.3-3 11-7c-1.7-4-6-7-11-7zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
@@ -72,6 +77,7 @@ const form = reactive({
 });
 const errors = reactive({ name: '', password: '' });
 const showPwd = ref(false);
+const formError = ref('');
 
 function touch(key: 'name' | 'password') {
   if (key === 'name') errors.name = form.name ? '' : '请输入用户名';
@@ -105,6 +111,7 @@ async function handleLogin() {
     const message = error && typeof error === 'object' && 'message' in error
       ? String(error.message)
       : '登录失败，请检查用户名和密码';
+    formError.value = message;
     toast.error(message);
   } finally {
     loading.value = false;

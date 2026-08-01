@@ -17,8 +17,10 @@
             type="button"
             class="mshell__item"
             :class="{ 'mshell__item--active': item.id === current }"
+            :title="item.label"
             @click="$emit('navigate', item.id)"
           >
+            <span class="mshell__item-glyph">{{ item.glyph }}</span>
             <span class="mshell__item-label">{{ item.label }}</span>
             <span v-if="badgeOf(item)" class="mshell__item-badge">{{ badgeOf(item) }}</span>
           </button>
@@ -215,6 +217,20 @@ const groupedScenes = computed(() => {
   box-shadow: inset 2px 0 0 #3478f6;
 }
 .mshell__item-label { flex: 1; }
+.mshell__item-glyph {
+  display: none;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #eef2fa;
+  color: #5b6577;
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.mshell__item--active .mshell__item-glyph { background: #dbe9ff; color: #1f57cc; }
 .mshell__item-badge {
   padding: 1px 7px;
   border-radius: 999px;
@@ -342,7 +358,9 @@ const groupedScenes = computed(() => {
   .mshell__group-title,
   .mshell__foot span:last-child,
   .mshell__search { display: none; }
-  .mshell__item { justify-content: center; }
+  /* 窄屏图标栏：显示单字图标，悬停提示全名 */
+  .mshell__item { justify-content: center; padding: 4px 0; }
+  .mshell__item-glyph { display: inline-flex; }
 
   /* 折叠：长方形 logo 换正方形图标 */
   .mshell__logo-full,

@@ -16,19 +16,20 @@
 
     <!-- 初始态 -->
     <main v-else-if="!live.started" class="entry">
-      <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
-        <span class="resume__dot"></span>
-        <span class="resume__body">
-          <strong>继续上次的规划</strong>
-          <small>{{ live.failed === 'resume' ? '恢复失败，点这里重试' : '会话已保存在本地，点这里恢复' }}</small>
-        </span>
-        <span class="resume__go">继续 ›</span>
-      </button>
-
       <div class="entry__hero">
-        <span class="entry__kicker">目标规划</span>
-        <h1>从一件真实的小事开始</h1>
-        <p>不用整理、不用说得很准。聊 2 分钟，问流帮你收敛出目标和第一阶段安排。</p>
+        <div class="entry__hero-text">
+          <span class="entry__kicker">目标规划</span>
+          <h1>从一件真实的小事开始</h1>
+          <p>不用整理、不用说得很准。聊 2 分钟，问流帮你收敛出目标和第一阶段安排。</p>
+        </div>
+        <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
+          <span class="resume__dot"></span>
+          <span class="resume__body">
+            <strong>继续上次的规划</strong>
+            <small>{{ live.failed === 'resume' ? '恢复失败，点这里重试' : '会话已保存在本地，点这里恢复' }}</small>
+          </span>
+          <span class="resume__go">继续 ›</span>
+        </button>
       </div>
 
       <div v-if="live.failed === 'start'" class="errorbar">
@@ -475,12 +476,12 @@ const scenes = [
 
 /* ---------- 初始态 / 登录门 ---------- */
 .entry {
-  max-width: 860px; margin: 0 auto;
+  max-width: 1080px; margin: 0 auto;
   padding: 28px 28px 40px;
   display: flex; flex-direction: column; gap: 22px;
 }
 .entry .composer--entry { margin-top: auto; }
-.entry .composer__hint { text-align: center; padding-left: 0; }
+.entry .composer__hint { justify-content: center; padding-left: 0; }
 .login-gate {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -492,12 +493,13 @@ const scenes = [
 .login-gate p { margin: 0; font-size: 14px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .resume {
-  display: flex; align-items: center; gap: 12px;
-  padding: 13px 16px;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 11px 16px;
   background: linear-gradient(135deg, rgba(52, 120, 246, 0.07), rgba(141, 107, 255, 0.05));
   border: 1px solid rgba(52, 120, 246, 0.25);
   border-radius: 14px;
   font: inherit; text-align: left; cursor: pointer;
+  white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 .resume:hover { border-color: rgba(52, 120, 246, 0.5); box-shadow: 0 8px 20px rgba(52, 120, 246, 0.12); }
@@ -508,20 +510,22 @@ const scenes = [
   flex: 0 0 auto;
   animation: pulse 1.6s ease-in-out infinite;
 }
-.resume__body { flex: 1; display: grid; gap: 2px; }
+.resume__body { display: grid; gap: 1px; }
 .resume__body strong { font-size: 13.5px; }
-.resume__body small { font-size: 12px; color: var(--muted); }
+.resume__body small { font-size: 11.5px; color: var(--muted); }
 .resume__go { font-size: 13px; font-weight: 800; color: var(--blue-deep); }
 
-.entry__hero { text-align: center; display: grid; gap: 10px; justify-items: center; }
-.entry__kicker {
-  font-size: 12px; font-weight: 800; letter-spacing: .08em;
-  color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.09);
-  padding: 5px 12px; border-radius: 999px;
+.entry__hero {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap;
 }
-.entry__hero h1 { margin: 0; font-size: 34px; letter-spacing: -0.01em; }
-.entry__hero p { margin: 0; font-size: 14px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
+.entry__hero-text { display: grid; gap: 10px; }
+.entry__kicker {
+  font-size: 12px; font-weight: 800; letter-spacing: .06em;
+  color: var(--blue-deep);
+}
+.entry__hero h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+.entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .errorbar {
   display: flex; align-items: center; gap: 8px;
@@ -534,10 +538,10 @@ const scenes = [
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
 
-.entry__cards { display: grid; gap: 10px; }
+.entry__cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .scene-card {
-  display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 14px;
-  padding: 14px 16px;
+  display: grid; grid-template-columns: 1fr; gap: 10px; align-content: start;
+  padding: 18px 18px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -552,8 +556,8 @@ const scenes = [
 .scene-card:disabled { opacity: .55; cursor: default; }
 .scene-card__icon { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; }
 .scene-card__body strong { display: block; font-size: 14.5px; }
-.scene-card__body small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--faint); }
-.scene-card__meta { display: grid; gap: 6px; justify-items: end; }
+.scene-card__body small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--faint); line-height: 1.55; }
+.scene-card__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 6px; }
 .scene-card__time {
   font-size: 11px; font-weight: 700; color: var(--muted);
   background: #f1f5fb; border: 1px solid var(--line);
@@ -593,14 +597,19 @@ const scenes = [
   flex: 0 0 auto;
 }
 .composer__send--off { background: #e3eaf5; color: var(--faint); box-shadow: none; cursor: default; }
-.composer__hint { font-size: 11.5px; color: var(--faint); padding-left: 6px; }
+.composer__hint {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--faint); padding-left: 6px;
+}
 
 /* ---------- 工作台布局 ---------- */
 .work {
   position: relative;
   flex: 1;
   min-height: 0;
-  width: min(1180px, 100%);
+  width: 100%;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 12px 20px 16px;
   display: grid;
@@ -948,7 +957,10 @@ const scenes = [
   .msg { max-width: 96%; }
   .replies { margin-left: 0; }
   .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
-  .entry__hero h1 { font-size: 26px; }
+  .entry__hero { align-items: stretch; flex-direction: column; }
+  .entry__hero h1 { font-size: 22px; }
+  .resume { width: 100%; justify-content: flex-start; }
+  .entry__cards { grid-template-columns: 1fr; }
   .entry { padding: 28px 16px; }
   .stage-nav__item { padding: 4px 7px; }
   .chat__clear { display: none; }

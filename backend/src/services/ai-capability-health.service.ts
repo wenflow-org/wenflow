@@ -181,6 +181,19 @@ export class AICapabilityHealthService {
     return capability.status === 'operational' || capability.status === 'degraded';
   }
 
+  /**
+   * 仅在「明确探测到不可用」时视为阻断；未探测（探活关闭）或数据过期不拦截，
+   * 避免探活未开启时误伤注册等健康门控。
+   */
+  isCapabilityBlocked(capabilityId: string): boolean {
+    const capability = this.health.get(capabilityId);
+    if (!capability) return false;
+    if (capability.status !== 'unavailable') return false;
+    if (!capability.checkedAt) return false;
+    if (Date.now() - new Date(capability.checkedAt).getTime() > STALE_AFTER_MS) return false;
+    return true;
+  }
+
   refresh(): Promise<AICapabilitySnapshot> {
     if (this.refreshInFlight) return this.refreshInFlight;
     const run = this.performRefresh().finally(() => {

@@ -40,7 +40,7 @@
             <div class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>健康度（42 天指数平均）</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度（7 天指数平均）</span>
-              <span v-if="latestDay" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone.cls}`">
+              <span v-if="latestDay && hasAnyLoad" class="ff-form-chip" :class="`ff-form-chip--${latestDay.zone.cls}`">
                 状态 {{ latestDay.form }} · {{ latestDay.zone.label }}
               </span>
             </div>
@@ -119,7 +119,9 @@
 
             <!-- 静态规则兜底块 -->
             <template v-else>
-              <div v-if="!suggestionCards.length" class="chart__empty">当前没有特别建议，保持节奏就好。</div>
+              <div v-if="!suggestionCards.length" class="chart__empty">
+                {{ hasAnyLoad ? '当前没有特别建议，保持节奏就好。' : '完成第一次学习后，这里会出现 AI 建议。' }}
+              </div>
               <div v-else class="suggest__list">
                 <article v-for="(s, i) in suggestionCards" :key="i" class="sug" :class="`sug--${s.level}`">
                   <span class="sug__icon" :style="{ background: s.bg, color: s.ink }" v-html="s.icon"></span>
@@ -167,7 +169,7 @@
 
         <!-- 侧栏 -->
         <aside class="side">
-          <section v-if="preferenceItems.length" class="card sidecard">
+          <section v-if="preferenceItems.length && hasAnyLoad" class="card sidecard">
             <span class="kicker">学习偏好</span>
             <ul class="pref">
               <li v-for="(p, i) in preferenceItems" :key="i"><strong>{{ p.label }}</strong><span>{{ p.value }}</span></li>

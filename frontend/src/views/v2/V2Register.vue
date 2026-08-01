@@ -1,14 +1,14 @@
 ﻿<template>
-  <V2AuthLayout mode="register">
+  <V2AuthLayout>
     <div class="head">
-      <h2>创建账号</h2>
+      <h2>加入问流</h2>
       <p>注册后进入学习台，从一个真实问题开始推进。</p>
     </div>
 
     <!-- 注册状态：查询中 -->
     <div v-if="status === 'checking'" class="state">
       <span class="spinner spinner--sm spinner--blue"></span>
-      <p>正在确认注册通道…</p>
+      <p>正在准备注册页面…</p>
     </div>
 
     <!-- 注册状态：暂不可用 -->
@@ -27,14 +27,13 @@
       </template>
       <div class="state__actions">
         <button type="button" class="btn-primary" @click="loadStatus">重新查询</button>
-        <router-link to="/" class="btn-ghost">返回首页</router-link>
       </div>
     </div>
 
     <form v-else class="form" :aria-busy="loading" @submit.prevent="handleRegister">
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
-        <input v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 20 个字符" autocomplete="username" @blur="touch('name')" />
+        <input v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 20 个字符" autocomplete="username" autofocus @blur="touch('name')" />
         <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
       </label>
 

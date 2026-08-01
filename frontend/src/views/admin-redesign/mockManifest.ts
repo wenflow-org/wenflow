@@ -15,6 +15,8 @@ export interface MockSceneDef {
   group: string
   /** 对比模式 iframe 加载的现有页面 */
   realRoute: string
+  /** 窄屏（≤860px）折叠为 64px 图标栏时显示的单字图标 */
+  glyph: string
   /** 可选静态徽章；live 模式由 MockShell 用真实计数覆盖 */
   badge?: string
 }
@@ -26,22 +28,22 @@ export const GLOBAL_STATES: MockStateDef[] = [
 ]
 
 export const MOCK_SCENES: MockSceneDef[] = [
-  { id: 'overview', label: '平台总览', group: '总览', realRoute: '/admin/console' },
-  { id: 'users', label: '用户', group: '学习', realRoute: '/admin/console' },
-  { id: 'learner-center', label: '学习者中心', group: '学习', realRoute: '/admin/console' },
-  { id: 'teaching-sessions', label: '教学会话', group: '学习', realRoute: '/admin/console' },
-  { id: 'goal-conversations', label: 'Goal 会话', group: '学习', realRoute: '/admin/console' },
-  { id: 'feedback', label: '反馈中心', group: '学习', realRoute: '/admin/console' },
-  { id: 'virtual-learners', label: '虚拟学习者', group: '学习', realRoute: '/admin/console' },
-  { id: 'skills', label: 'Skill 目录', group: '运行', realRoute: '/admin/console' },
-  { id: 'topology', label: 'Agent 拓扑', group: '运行', realRoute: '/admin/console' },
-  { id: 'orchestrator', label: '编排结构', group: '运行', realRoute: '/admin/console' },
-  { id: 'execution-logs', label: '执行日志', group: '日志', realRoute: '/admin/console' },
-  { id: 'prompt-call-logs', label: 'Prompt 调用', group: '日志', realRoute: '/admin/console' },
-  { id: 'event-center', label: '事件中心', group: '日志', realRoute: '/admin/console' },
-  { id: 'trace-waterfall', label: 'Trace 瀑布', group: '日志', realRoute: '/admin/console' },
-  { id: 'api-config', label: '连接与安全', group: '配置', realRoute: '/admin/console' },
-  { id: 'announcements', label: '公告', group: '配置', realRoute: '/admin/console' },
-  { id: 'addons', label: '外挂组件', group: '配置', realRoute: '/admin/console' },
-  { id: 'prompt-workbench', label: 'Prompt 工作台', group: '调试', realRoute: '/admin/console' }
+  { id: 'overview', label: '平台总览', group: '总览', realRoute: '/admin/console', glyph: '览' },
+  { id: 'users', label: '用户', group: '学习', realRoute: '/admin/console', glyph: '人' },
+  { id: 'learner-center', label: '学习者中心', group: '学习', realRoute: '/admin/console', glyph: '习' },
+  { id: 'teaching-sessions', label: '教学会话', group: '学习', realRoute: '/admin/console', glyph: '课' },
+  { id: 'goal-conversations', label: 'Goal 会话', group: '学习', realRoute: '/admin/console', glyph: '标' },
+  { id: 'feedback', label: '反馈中心', group: '学习', realRoute: '/admin/console', glyph: '馈' },
+  { id: 'virtual-learners', label: '虚拟学习者', group: '学习', realRoute: '/admin/console', glyph: '拟' },
+  { id: 'skills', label: 'Skill 目录', group: '运行', realRoute: '/admin/console', glyph: '能' },
+  { id: 'topology', label: 'Agent 拓扑', group: '运行', realRoute: '/admin/console', glyph: '络' },
+  { id: 'orchestrator', label: '编排结构', group: '运行', realRoute: '/admin/console', glyph: '流' },
+  { id: 'execution-logs', label: '执行日志', group: '日志', realRoute: '/admin/console', glyph: '志' },
+  { id: 'prompt-call-logs', label: 'Prompt 调用', group: '日志', realRoute: '/admin/console', glyph: '提' },
+  { id: 'event-center', label: '事件中心', group: '日志', realRoute: '/admin/console', glyph: '事' },
+  { id: 'trace-waterfall', label: 'Trace 瀑布', group: '日志', realRoute: '/admin/console', glyph: '溯' },
+  { id: 'api-config', label: '连接与安全', group: '配置', realRoute: '/admin/console', glyph: '安' },
+  { id: 'announcements', label: '公告', group: '配置', realRoute: '/admin/console', glyph: '告' },
+  { id: 'addons', label: '外挂组件', group: '配置', realRoute: '/admin/console', glyph: '件' },
+  { id: 'prompt-workbench', label: 'Prompt 工作台', group: '调试', realRoute: '/admin/console', glyph: '台' }
 ]
