@@ -1,508 +1,193 @@
 <template>
-  <div class="capability-shell">
-    <div class="animated-bg">
-      <div class="gradient-orb gradient-orb-1"></div>
-      <div class="gradient-orb gradient-orb-2"></div>
-    </div>
+  <div class="uc v2-page">
+    <V2Nav />
 
-    <header class="shell-header" :class="{ 'shell-header--scrolled': scrolled }">
-      <div class="shell-header__inner">
-        <button type="button" class="shell-brand" @click="router.push('/dashboard')">
-          <img src="/logo.png" alt="问流 WenFlow" class="shell-brand__logo" />
-        </button>
-
-        <nav class="shell-nav" aria-label="应用导航">
-          <router-link to="/dashboard" class="shell-nav__item">学习台</router-link>
-          <router-link to="/goal-conversation" class="shell-nav__item">目标规划</router-link>
-          <router-link to="/learning-paths" class="shell-nav__item">学习路径</router-link>
-          <router-link to="/learning-state" class="shell-nav__item">学习状态</router-link>
-          <router-link to="/achievements" class="shell-nav__item">成就</router-link>
-          <router-link to="/user/account" class="shell-nav__item shell-nav__item--current">账户</router-link>
-        </nav>
-
-        <div class="shell-header__actions">
-          <ThemeSwitcher />
-          <MobileSiteMenu
-            title="账户"
-            :user-name="userStore.user?.name || '用户'"
-            :user-initial="userStore.user?.name?.charAt(0) || 'U'"
-            :nav-items="shellNavItems"
-            :show-account-link="false"
-            @logout="handleLogout"
-          />
-          <el-dropdown>
-            <button type="button" class="shell-user-chip">
-              <span class="shell-user-chip__avatar">{{ userStore.user?.name?.charAt(0) || 'U' }}</span>
-              <strong>{{ userStore.user?.name || '用户' }}</strong>
-            </button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="router.push('/user/account')">账户中心</el-dropdown-item>
-                <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+    <main class="uc__main">
+      <header class="uc__head">
+        <div class="uc__head-text">
+          <span class="uc__kicker">个人中心</span>
+          <h1>{{ title }}</h1>
+          <p v-if="description">{{ description }}</p>
         </div>
-      </div>
-    </header>
-
-    <main class="shell-main">
-      <div class="shell-container">
-        <section class="shell-hero">
-          <div>
-            <span class="shell-hero__eyebrow">账户</span>
-            <h1 class="shell-hero__title">{{ title }}</h1>
-            <p v-if="description" class="shell-hero__description">{{ description }}</p>
-          </div>
-          <div v-if="$slots.actions" class="shell-hero__actions">
-            <slot name="actions" />
-          </div>
-        </section>
-
-        <div class="shell-body">
-          <slot />
+        <div v-if="$slots.actions" class="uc__head-actions">
+          <slot name="actions" />
         </div>
+      </header>
+
+      <nav class="uc__tabs" aria-label="个人中心导航">
+        <router-link v-for="t in tabs" :key="t.to" :to="t.to" class="uc__tab" :class="{ 'uc__tab--on': isActive(t) }">
+          {{ t.label }}
+        </router-link>
+      </nav>
+
+      <div class="uc__body">
+        <slot />
       </div>
     </main>
+
+    <V2Footer />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { ElMessageBox } from 'element-plus';
-import { toast } from '../../utils/toast';
-import { useRouter } from 'vue-router';
-import ThemeSwitcher from '../ThemeSwitcher.vue';
-import MobileSiteMenu from '../MobileSiteMenu.vue';
-import { useUserStore } from '@/stores/user';
+import { useRoute } from 'vue-router'
+import V2Nav from '@/views/v2/V2Nav.vue'
+import V2Footer from '@/views/v2/V2Footer.vue'
+import '@/views/v2/v2.css'
 
-defineProps<{ title: string; description?: string }>();
+defineProps<{ title: string; description?: string }>()
 
-const router = useRouter();
-const userStore = useUserStore();
-const scrolled = ref(false);
+const route = useRoute()
 
-const shellNavItems = [
-  { label: '学习台', to: '/dashboard', matchPrefixes: ['/dashboard'] },
-  { label: '学习路径', to: '/learning-paths', matchPrefixes: ['/learning-paths', '/learning-path/'] },
-  { label: '学习状态', to: '/learning-state', matchPrefixes: ['/learning-state'] },
-  { label: '成就', to: '/achievements', matchPrefixes: ['/achievements'] },
-  { label: '账户', to: '/user/account', matchPrefixes: ['/user'] }
-];
+const tabs = [
+  { to: '/user/account', label: '账户', match: ['/user/account'] },
+  { to: '/user/agents', label: 'AI 助手', match: ['/user/agents'] },
+  { to: '/user/skills', label: 'Skill', match: ['/user/skills'] },
+  { to: '/user/settings', label: 'API 接入', match: ['/user/settings'] },
+  { to: '/user/developer', label: '开发者接入', match: ['/user/developer', '/user/code-repo'] },
+  { to: '/user/agent-logs', label: '调用日志', match: ['/user/agent-logs'] }
+]
 
-function onScroll() {
-  scrolled.value = window.scrollY > 6;
-}
-
-onMounted(() => {
-  onScroll();
-  window.addEventListener('scroll', onScroll, { passive: true });
-});
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll);
-});
-
-async function handleLogout() {
-  try {
-    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    });
-
-    userStore.logout();
-    toast.success('已退出登录');
-    router.push('/login');
-  } catch {
-    // ignore cancel
-  }
+function isActive(t: { match: string[] }) {
+  return t.match.some((m) => route.path.startsWith(m))
 }
 </script>
 
-<style scoped lang="scss">
-.capability-shell {
+<style scoped>
+.uc {
   min-height: 100vh;
-  min-height: 100dvh;
-  position: relative;
-  overflow-x: hidden;
-  background:
-    radial-gradient(circle at top right, rgba(67, 176, 216, 0.16), transparent 30%),
-    radial-gradient(circle at bottom left, rgba(141, 107, 255, 0.12), transparent 32%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-body) 94%, #fff) 0%, var(--bg-body) 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas, #f3f6fb);
+  color: var(--ink, #172033);
 }
 
-.animated-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.gradient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.5;
-  animation: float 20s ease-in-out infinite;
-}
-
-.gradient-orb-1 {
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(circle, rgba(67, 176, 216, 0.42) 0%, rgba(52, 120, 246, 0.18) 42%, transparent 72%);
-  top: -300px;
-  right: -200px;
-}
-
-.gradient-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(141, 107, 255, 0.3) 0%, rgba(67, 176, 216, 0.14) 46%, transparent 76%);
-  bottom: -200px;
-  left: -100px;
-  animation-delay: -10s;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(50px, 50px) scale(1.05);
-  }
-}
-
-.shell-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.82);
-  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
-  backdrop-filter: blur(18px);
-  transition: box-shadow 0.2s ease;
-}
-
-.shell-header--scrolled {
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
-}
-
-[data-theme="dark"] .shell-header {
-  background: rgba(15, 23, 42, 0.82);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-}
-
-.shell-header__inner {
-  width: min(1280px, calc(100% - 48px));
-  min-height: 72px;
+.uc.v2-page > main.uc__main {
+  flex: 1;
+  width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 0;
+  padding: 22px 0 40px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
 }
 
-.shell-container {
-  width: min(1280px, calc(100% - 48px));
-  margin: 0 auto;
-}
-
-.shell-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary, #172033);
-  font: inherit;
-  font-weight: 900;
-  cursor: pointer;
-  flex: 0 0 auto;
-}
-
-.shell-brand__logo {
-  height: 56px;
-  object-fit: contain;
-  display: block;
-}
-
-.shell-nav {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(23, 32, 51, 0.06);
-  min-width: 0;
-}
-
-[data-theme="dark"] .shell-nav {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.shell-nav__item {
-  padding: 8px 14px;
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--text-primary, #172033) 68%, white);
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 800;
-  border: 0;
-  background: transparent;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.shell-nav__item:hover,
-.shell-nav__item--current,
-.shell-nav__item.router-link-active {
-  background: rgba(52, 120, 246, 0.09);
-  color: var(--color-primary-dark, #1f57cc);
-}
-
-[data-theme="dark"] .shell-nav__item {
-  color: rgba(255, 255, 255, 0.65);
-}
-
-[data-theme="dark"] .shell-nav__item:hover,
-[data-theme="dark"] .shell-nav__item--current,
-[data-theme="dark"] .shell-nav__item.router-link-active {
-  background: rgba(52, 120, 246, 0.18);
-  color: #9fc3ff;
-}
-
-.shell-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 0 auto;
-}
-
-.shell-user-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 4px 12px 4px 4px;
-  border-radius: 999px;
-  border: 1px solid rgba(23, 32, 51, 0.08);
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--text-primary, #172033);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.shell-user-chip:hover {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(52, 120, 246, 0.25);
-}
-
-.shell-user-chip__avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(52, 120, 246, 0.1);
-  color: var(--color-primary-dark, #1f57cc);
-  font-weight: 900;
-}
-
-[data-theme="dark"] .shell-user-chip {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.shell-main {
-  position: relative;
-  z-index: 1;
-  padding: 28px 0 calc(80px + var(--safe-area-bottom));
-}
-
-.shell-hero {
+.uc__head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24px;
-  padding: 2.25rem;
-  margin-bottom: 24px;
-  border: 1px solid rgba(52, 120, 246, 0.1);
-  border-radius: var(--radius-2xl);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(247, 250, 255, 0.72)),
-    rgba(255, 255, 255, 0.68);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 22px 44px rgba(31, 87, 204, 0.09);
+  gap: 20px;
+  padding: 4px 2px 0;
 }
 
-[data-theme="dark"] .shell-hero {
-  background: linear-gradient(135deg, rgba(26, 37, 47, 0.86), rgba(15, 24, 32, 0.74));
-  border-color: rgba(96, 165, 250, 0.12);
-  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.24);
-}
-
-.shell-hero__eyebrow {
+.uc__kicker {
+  display: inline-block;
   margin-bottom: 8px;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-secondary-dark);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--blue-deep, #1f57cc);
 }
 
-.shell-hero__title {
-  margin: 0 0 8px;
-  font-size: clamp(1.8rem, 3vw, 2.4rem);
-  color: var(--text-primary);
+.uc__head h1 {
+  margin: 0 0 6px;
+  font-size: clamp(24px, 3vw, 30px);
   letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
-.shell-hero__description {
-  max-width: 820px;
+.uc__head p {
   margin: 0;
-  color: var(--text-secondary);
+  max-width: 48em;
+  font-size: 14px;
   line-height: 1.7;
+  color: var(--muted, #5b6577);
 }
 
-.shell-hero__actions {
+.uc__head-actions {
   display: flex;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
 }
 
-.shell-body {
+.uc__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+
+.uc__tab {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+  background: #fff;
+  border: 1px solid var(--line, #e3e9f4);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.uc__tab:hover {
+  color: var(--blue-deep, #1f57cc);
+  border-color: rgba(52, 120, 246, 0.35);
+}
+
+.uc__tab--on {
+  color: #fff;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  border-color: transparent;
+  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.22);
+}
+
+.uc__body {
   display: grid;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
 }
 
-.shell-body :deep(.glass-card) {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 255, 0.7));
-  border: 1px solid rgba(52, 120, 246, 0.08);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 18px 36px rgba(31, 87, 204, 0.08);
+.uc__body :deep(.glass-card),
+.uc__body :deep(.profile-card),
+.uc__body :deep(.uc-card) {
+  background: #fff;
+  border: 1px solid var(--line, #e3e9f4);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 10px 28px rgba(23, 32, 51, 0.05);
+  backdrop-filter: none;
 }
 
-[data-theme="dark"] .shell-body :deep(.glass-card) {
-  background: linear-gradient(180deg, rgba(26, 37, 47, 0.84), rgba(15, 24, 32, 0.76));
-  border-color: rgba(96, 165, 250, 0.1);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
+.uc__body :deep(.btn-primary),
+.uc__body :deep(.el-button--primary) {
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc)) !important;
+  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.22);
+  font-weight: 700;
 }
 
-@media (max-width: 1024px) {
-  .shell-header__inner {
-    grid-template-columns: 1fr;
+.uc__body :deep(.el-button:not(.el-button--primary)) {
+  border-radius: 12px !important;
+  border-color: var(--line, #e3e9f4) !important;
+  background: #fff !important;
+  color: var(--muted, #5b6577) !important;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .uc.v2-page > main.uc__main {
+    width: min(100% - 28px, 1180px);
+    padding-bottom: 88px;
   }
 
-  .shell-nav {
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: thin;
-  }
-
-  .shell-hero {
+  .uc__head {
     flex-direction: column;
   }
 
-  .shell-hero__actions {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 768px) {
-  .shell-header {
-    top: 0;
-  }
-
-  .shell-main {
-    padding: 16px;
-    padding-bottom: calc(20px + var(--safe-area-bottom));
-  }
-
-  .shell-header__inner {
-    padding: 12px 16px;
-  }
-
-  .shell-brand__title {
-    font-size: 1.1rem;
-  }
-
-  .shell-header__actions {
-    justify-content: flex-end;
-    width: auto;
-  }
-
-  .shell-nav,
-  .shell-user {
-    display: none;
-  }
-
-  .shell-hero {
-    padding: 20px;
-    border-radius: 22px;
-  }
-
-  .shell-hero__title {
-    font-size: 1.75rem;
-  }
-
-  .shell-hero__actions {
+  .uc__head-actions {
     width: 100%;
-  }
-
-  .shell-hero__actions :deep(.el-button),
-  .shell-hero__actions :deep(.el-button + .el-button) {
-    width: 100%;
-    margin-left: 0;
-  }
-}
-
-@media (max-width: 560px) {
-  .shell-header__inner {
-    gap: 12px;
-    padding-inline: 14px;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .shell-nav {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-
-  .shell-nav__item {
-    flex: 0 0 auto;
-    padding: 0.55rem 0.85rem;
-    font-size: 0.9rem;
-  }
-
-  .shell-main {
-    padding-inline: 14px;
-  }
-
-  .shell-hero {
-    padding: 18px;
-    gap: 16px;
-  }
-
-  .shell-hero__description {
-    font-size: 0.95rem;
+    justify-content: stretch;
   }
 }
 </style>

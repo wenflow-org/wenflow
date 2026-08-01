@@ -20,6 +20,7 @@ import {
   ProfileUpdateSource
 } from './types';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
+import { learnerProfileService } from '../../services/learner/LearnerProfileService';
 import { logger } from '../../utils/logger';
 
 export const learnerModelAgentDefinition: AgentDefinition = {
@@ -74,9 +75,6 @@ export const learnerModelAgentDefinition: AgentDefinition = {
 };
 
 class LearnerModelAgent {
-  private profileCache: Map<string, { profile: LearnerModelProfile; timestamp: number }> = new Map();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
-  
   async handler(input: AgentInput, context: AgentContext): Promise<AgentOutput> {
     const startTime = Date.now();
     const eventBus = getEventBus();
@@ -169,30 +167,17 @@ class LearnerModelAgent {
   }
   
   async getProfile(userId: string): Promise<{ profile: LearnerModelProfile; confidence: number }> {
-    const cached = this.profileCache.get(userId);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      return { profile: cached.profile, confidence: 0.9 };
-    }
-    
-    const result = await profileAggregator.aggregateProfile(userId);
-    
-    this.profileCache.set(userId, {
-      profile: result.profile,
-      timestamp: Date.now()
-    });
-    
-    return { profile: result.profile, confidence: result.confidence };
+    return learnerProfileService.getProfile(userId);
   }
   
   async updateProfile(
     userId: string,
     source: ProfileUpdateSource
   ): Promise<{ profile: LearnerModelProfile; changes: string[] }> {
-    await profileAggregator.applyUpdate(userId, source);
-    
-    this.profileCache.delete(userId);
-    
-    const result = await profileAggregator.aggregateProfile(userId);
+    const updateResult = await profileAggregator.applyUpdate(userId, source);
+    if (!updateResult.success) throw new Error('LEARNER_PROFILE_UPDATE_FAILED');
+    learnerProfileService.clear(userId);
+    const result = await learnerProfileService.getProfile(userId);
     
     const eventBus = getEventBus();
     await eventBus.emit({
@@ -200,17 +185,12 @@ class LearnerModelAgent {
       source: 'learner-model-agent',
       userId,
       data: {
-        changes: result.changes,
+        changes: updateResult.changes,
         confidence: result.confidence
       }
     });
     
-    this.profileCache.set(userId, {
-      profile: result.profile,
-      timestamp: Date.now()
-    });
-    
-    return { profile: result.profile, changes: result.changes };
+    return { profile: result.profile, changes: updateResult.changes };
   }
   
   async getPersonalization(userId: string): Promise<{
@@ -247,11 +227,7 @@ class LearnerModelAgent {
   }
   
   clearCache(userId?: string): void {
-    if (userId) {
-      this.profileCache.delete(userId);
-    } else {
-      this.profileCache.clear();
-    }
+    learnerProfileService.clear(userId);
   }
 }
 

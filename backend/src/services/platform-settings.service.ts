@@ -1,48 +1,87 @@
 import fs from 'fs/promises';
 import path from 'path';
+import systemPrisma from '../config/system-database';
 
 export interface PlatformSettings {
   registrationEnabled: boolean;
 }
 
-const settingsPath = path.join(__dirname, '../../config/platform-settings.json');
+export class PlatformSettingsUnavailableError extends Error {
+  readonly status = 503;
+  readonly code = 'PLATFORM_SETTINGS_UNAVAILABLE';
 
-const defaultSettings: PlatformSettings = {
-  registrationEnabled: true
-};
-
-async function readSettingsFile(): Promise<Partial<PlatformSettings>> {
-  try {
-    const raw = await fs.readFile(settingsPath, 'utf-8');
-    return JSON.parse(raw) as Partial<PlatformSettings>;
-  } catch {
-    return {};
+  constructor(message = '平台设置暂时不可用') {
+    super(message);
+    this.name = 'PlatformSettingsUnavailableError';
   }
 }
 
-async function writeSettingsFile(settings: PlatformSettings): Promise<void> {
-  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+const REGISTRATION_SETTING_KEY = 'registrationEnabled';
+const legacySettingsPath = path.join(__dirname, '../../config/platform-settings.json');
+
+function parseBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
+async function readLegacyRegistrationSetting(): Promise<boolean | null> {
+  try {
+    const raw = await fs.readFile(legacySettingsPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<PlatformSettings>;
+    return parseBoolean(parsed.registrationEnabled);
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return null;
+    throw new PlatformSettingsUnavailableError('旧平台设置无法读取');
+  }
+}
+
+async function persistRegistrationSetting(registrationEnabled: boolean): Promise<void> {
+  await systemPrisma.platform_settings.upsert({
+    where: { key: REGISTRATION_SETTING_KEY },
+    update: { value: String(registrationEnabled) },
+    create: {
+      key: REGISTRATION_SETTING_KEY,
+      value: String(registrationEnabled)
+    }
+  });
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettings> {
-  const current = await readSettingsFile();
-  return {
-    registrationEnabled:
-      typeof current.registrationEnabled === 'boolean'
-        ? current.registrationEnabled
-        : defaultSettings.registrationEnabled
-  };
+  try {
+    const stored = await systemPrisma.platform_settings.findUnique({
+      where: { key: REGISTRATION_SETTING_KEY }
+    });
+    if (stored) {
+      const registrationEnabled = parseBoolean(stored.value);
+      if (registrationEnabled === null) {
+        throw new PlatformSettingsUnavailableError('平台注册设置值无效');
+      }
+      return { registrationEnabled };
+    }
+
+    const legacyValue = await readLegacyRegistrationSetting();
+    if (legacyValue === null) {
+      throw new PlatformSettingsUnavailableError('平台注册设置尚未初始化');
+    }
+    await persistRegistrationSetting(legacyValue);
+    return { registrationEnabled: legacyValue };
+  } catch (error) {
+    if (error instanceof PlatformSettingsUnavailableError) throw error;
+    throw new PlatformSettingsUnavailableError();
+  }
 }
 
 export async function updatePlatformSettings(input: Partial<PlatformSettings>): Promise<PlatformSettings> {
-  const existing = await getPlatformSettings();
-  const merged: PlatformSettings = {
-    registrationEnabled:
-      typeof input.registrationEnabled === 'boolean'
-        ? input.registrationEnabled
-        : existing.registrationEnabled
-  };
+  if (typeof input.registrationEnabled !== 'boolean') {
+    return getPlatformSettings();
+  }
 
-  await writeSettingsFile(merged);
-  return merged;
+  try {
+    await persistRegistrationSetting(input.registrationEnabled);
+    return { registrationEnabled: input.registrationEnabled };
+  } catch {
+    throw new PlatformSettingsUnavailableError('平台注册设置保存失败');
+  }
 }

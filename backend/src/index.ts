@@ -1,5 +1,6 @@
-﻿import express from 'express';
+import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
@@ -9,21 +10,39 @@ import { initializeAdmin } from './services/auth/init-admin.service';
 import { globalApiLimiter } from './middleware/api-rate-limit.middleware';
 
 // EduClaw Gateway
-import { createGateway } from './gateway';
-import { registerOfficialAgents, registerAllPlugins } from './agents';
+import { createGateway, EduClawGateway } from './gateway';
+import { registerOfficialAgents } from './agents';
+import { registerPluginSkills } from './agents/plugins';
 import { allSkillDefinitions, skillHandlers } from './skills';
 import { validateManifest, listTopLevelAgents } from './services/agent-manifest.service';
 
-import { createAgentCollaborationService } from './services/agent-collaboration.service';
+import { AgentCollaborationService, createAgentCollaborationService } from './services/agent-collaboration.service';
 import { getEventBus } from './gateway/event-bus';
 import learningService from './services/learning/learning.service';
-import { learnerCoordinator } from './coordinators/learner.coordinator';
 import { ensureCoreAgentPrompts } from './scripts/seed-core-agent-prompts';
-import { ensureGoalFieldRoutings } from './scripts/seed-goal-field-routings';
-import { ensurePathFieldRoutings } from './scripts/seed-path-field-routings';
-import { ensureExecutionFieldRoutings } from './scripts/seed-execution-field-routings';
-import { ensureLearnerFieldRoutings } from './scripts/seed-learner-field-routings';
+import { bootstrapFieldRoutings } from './services/field-routing-bootstrap.service';
 import { dashboardGuidanceSnapshotService } from './services/learner/DashboardGuidanceSnapshotService';
+import { DurableEventConsumerRegistry } from './events/consumer-registry';
+import { DurableOutboxWorker } from './events/outbox.worker';
+import { learnerEvidenceProjector } from './services/learner/LearnerEvidenceProjector';
+import { learnerSnapshotRefreshService } from './services/learner/LearnerSnapshotRefreshService';
+import { learnerProfileService } from './services/learner/LearnerProfileService';
+import { lessonKnowledgeEnrichmentConsumer } from './services/learner/LessonKnowledgeEnrichmentConsumer';
+import { quickLearnService } from './virtual-lab/quick-learn/quick-learn.service';
+import { reconcileTaskCompletionMetric } from './services/metrics/LearningMetricService';
+import { refreshRuntimeNetworkPolicy } from './services/runtime-network-policy.service';
+import type { Server } from 'http';
+import { ReadinessService } from './services/readiness.service';
+import { auditSensitivePaths, SensitivePath } from './services/sensitive-storage-permissions.service';
+import { resolveSqlitePath, validateRuntimeDatabaseUrls } from './utils/runtime-paths';
+import { resolveTrustProxySetting } from './utils/trust-proxy';
+import { ApplicationLifecycle, resolveShutdownDeadlineMs } from './services/application-lifecycle.service';
+import { backgroundTaskTracker, runBackgroundTask } from './services/background-task-tracker.service';
+import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
+import { aiCapabilityHealthService } from './services/ai-capability-health.service';
+import { getRuntimeCapabilityProbeEnabled } from './services/capability-probe-settings.service';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
 
 const ENRICHMENT_RETRY_POLL_INTERVAL_MS = 60 * 1000;
 const RETIRED_SKILLS = [
@@ -37,14 +56,35 @@ const RETIRED_SKILLS = [
   'answer-generation',
   'batch-anderson-labeler',
   'goal-type-identifier',
-  'task-profile-builder'
+  'task-profile-builder',
+  // 2026-07 调用调查后退役：生产零调用或事件无发射者
+  'state-assessment',
+  'confidence-handler',
+  'label-generator',
+  'text-structure-analyzer',
+  'retrieval',
+  'web-extractor',
+  'image-analyzer',
+  'memory-search',
+  'smart-search',
+  // 2026-07 合并入 lesson-knowledge-enricher
+  'session-knowledge-distiller',
+  'dialogue-concept-extractor',
+  // 2026-07 阶段词统一后改名（learning-*）；旧 id 仅保留在 agent-manifest 别名，
+  // 注册表/DB 不应残留，启动时 purge 防止幽灵注册出现在 Skill 目录
+  'teaching-turn',
+  'teaching-opening-generator',
+  'teaching-strategy-selector'
 ] as const;
 
 // ACP 中间件
 import { acpContextMiddleware } from './middleware/acp-context.middleware';
-import { authMiddleware } from './middleware/auth.middleware';
+import { adminAuthMiddleware, authMiddleware } from './middleware/auth.middleware';
+import { adminMiddleware } from './middleware/admin.middleware';
 import { adminAccessRestrictMiddleware } from './middleware/admin-access-restrict.middleware';
 import { csrfMiddleware } from './middleware/csrf.middleware';
+import { validateSecretEncryptionConfig } from './utils/secret-crypto';
+import { validateSafeHttpConfig } from './utils/safe-http';
 
 // 加载环境变量
 dotenv.config();
@@ -71,20 +111,23 @@ if (process.env.JWT_SECRET === 'your-secret-key-change-in-production' ||
 }
 
 console.log('✅ 安全配置检查通过');
+validateSecretEncryptionConfig(true);
+validateSafeHttpConfig();
+validateRuntimeDatabaseUrls(process.env.DATABASE_URL, process.env.SYSTEM_DATABASE_URL);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+let outboxWorker: DurableOutboxWorker | null = null;
+let enrichmentRetryTimer: NodeJS.Timeout | null = null;
+let enrichmentRetryInFlight: Promise<void> | null = null;
+let httpServer: Server | null = null;
+let gateway: EduClawGateway | null = null;
+let collaborationService: AgentCollaborationService | null = null;
+const lifecycle = new ApplicationLifecycle();
+const readinessService = new ReadinessService(prisma, systemPrisma, 2000, () => lifecycle.isDraining());
+const shutdownDeadlineMs = resolveShutdownDeadlineMs(process.env.SHUTDOWN_DEADLINE_MS);
 
-const trustProxyEnv = (process.env.TRUST_PROXY || '').trim().toLowerCase();
-if (trustProxyEnv === 'true') {
-  app.set('trust proxy', true);
-} else if (trustProxyEnv === 'false') {
-  app.set('trust proxy', false);
-} else if (/^\d+$/.test(trustProxyEnv)) {
-  app.set('trust proxy', Number(trustProxyEnv));
-} else if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+app.set('trust proxy', resolveTrustProxySetting(process.env.TRUST_PROXY, process.env.NODE_ENV));
 
 // 中间件
 app.use(helmet.contentSecurityPolicy({
@@ -117,12 +160,13 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
 };
 app.use(cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // 应用全局限流到 API 路由
 app.use('/api/', globalApiLimiter);
@@ -136,12 +180,29 @@ app.use((req, res, next) => {
   next();
 });
 
-// 健康检查
-app.get('/health', (req, res) => {
+// /health 保留兼容并明确作为 liveness。
+const livezHandler = (req: express.Request, res: express.Response) => {
   res.json({
-    status: 'ok',
+    status: 'alive',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
+  });
+};
+app.get('/health', livezHandler);
+app.get('/livez', livezHandler);
+app.get('/readyz', async (req, res) => {
+  if (lifecycle.isDraining()) {
+    return res.status(503).json({
+      status: 'not_ready',
+      reason: 'draining',
+      timestamp: new Date().toISOString()
+    });
+  }
+  const result = await readinessService.check();
+  res.status(result.ready ? 200 : 503).json({
+    status: result.ready ? 'ready' : 'not_ready',
+    checks: result.checks,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -151,14 +212,10 @@ import learningRoutes from './routes/learning';
 import userRoutes from './routes/users';
 import stateTrackingRoutes from './routes/state-tracking.routes';
 import achievementsRoutes from './routes/achievements';
-import reportRoutes from './routes/reports';
 import metricsRoutes from './routes/metrics';
 import goalConversationRoutes from './routes/goal-conversation';
-import testGoalConversationRoutes from './routes/test-goal-conversation';
 import agentsRoutes from './routes/agents';
-import skillsRoutes from './routes/skills';
 import adaptiveGuidanceRoutes from './routes/adaptive-guidance.routes';
-import pluginRoutes from './routes/plugins';
 import adminAuthRoutes from './routes/admin-auth';
 import adminApiConfigRoutes from './routes/admin/api-config';
 import adminSkillsRoutes from './routes/admin/skills';
@@ -175,14 +232,17 @@ import adminPlatformRoutes from './routes/admin/platform';
 import adminGoalConversationsRoutes from './routes/admin/goal-conversations';
 import adminUsersRoutes from './routes/admin/users';
 import adminLearnerModelsRoutes from './routes/admin/learner-models';
+import adminAnnouncementsRoutes from './routes/admin/announcements';
+import announcementsRoutes from './routes/announcements';
 import adminVirtualLearnersRoutes from './routes/admin/virtual-learners';
+import adminVirtualQuickLearnRoutes from './routes/admin/virtual-quick-learn';
 import adminProjectionAccessGrantsRoutes from './routes/admin/projection-access-grants';
 import adminDevtoolsRoutes from './routes/admin/devtools';
-import adminTestRoutes from './routes/admin/test';
 import adminDebugRoutes from './routes/admin/debug';
+import adminFeedbackRoutes from './routes/admin/feedback';
+import adminSystemStatusRoutes from './routes/admin/system-status';
 import aiTeachingRoutes from './routes/ai-teaching.routes';
 import feedbackRoutes from './routes/feedback';
-import abTestingRoutes from './routes/ab-testing';
 import configRoutes from './routes/config';
 
 // 用户自定义路由
@@ -192,7 +252,7 @@ import userApiConfigRoutes from './routes/user-api-config';
 import userAgentModelConfigsRoutes from './routes/user-agent-model-configs';
 import userMcpRoutes from './routes/user-mcp';
 import userDeveloperRoutes from './routes/user-developer';
-import { projectionAccessPolicy } from './middleware/projection-access.middleware';
+import { projectionAccessPolicy, rejectProjectionAccess } from './middleware/projection-access.middleware';
 
 // API路由
 app.get('/api', (req, res) => {
@@ -203,18 +263,17 @@ app.get('/api', (req, res) => {
     authentication: 'JWT Bearer Token',
     endpoints: {
       health: '/health',
+      liveness: '/livez',
+      readiness: '/readyz',
       api: '/api',
       auth: '/api/auth',
       users: '/api/users',
       learning: '/api/learning',
       goalConversation: '/api/goal-conversation',
-      testGoalConversation: '/api/test/goal-conversation',
       state: '/api/state',
       achievements: '/api/achievements',
-      reports: '/api/reports',
       metrics: '/api/metrics',
       agents: '/api/agents',
-      skills: '/api/skills',
       feedback: '/api/feedback',
       userCustom: {
         agents: '/api/user/agents',
@@ -226,23 +285,16 @@ app.get('/api', (req, res) => {
     },
 agents: {
       'skill:path-planning': '学习路径规划',
-      'teaching-agent': 'AI授课编排',
+      'learning-agent': 'AI授课编排',
       'skill:learner-model': '学习者画像与状态中心'
     },
     skills: [
-      'text-structure-analyzer',
-      'retrieval',
-      'web-extractor',
-      'image-analyzer',
-      'memory-search',
-      'smart-search',
       'path-scene-framing',
       'stage-designer',
       'adaptive-guidance-copy',
       'goal-profile-inference',
       'learning-pattern-distiller',
-      'session-knowledge-distiller',
-      'dialogue-concept-extractor'
+      'lesson-knowledge-enricher'
     ]
   });
 });
@@ -264,21 +316,18 @@ const dashboardProjectionPolicy = projectionAccessPolicy({
   ]
 });
 
-const denyGrantProjectionPolicy = projectionAccessPolicy({
-  denyAccessGrant: true,
-  denyMessage: '当前开发视角许可不允许进入该接口，请让用户自行管理授权或使用后台受控入口'
-});
+const directUserSessionOnly = rejectProjectionAccess('投影视角不允许访问账户、密钥或开发者配置');
 
 // Platform 层路由 - 核心学习功能（平台内部调用）
 app.use('/api/learning', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), learningRoutes);
 app.use('/api/state', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), stateTrackingRoutes);
 app.use('/api/achievements', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('platform'), achievementsRoutes);
-app.use('/api/reports', authMiddleware, acpContextMiddleware('platform'), reportRoutes);
 app.use('/api/metrics', authMiddleware, acpContextMiddleware('platform'), metricsRoutes);
+// 用户端公告（登录即可见，无平台策略限制）
+app.use('/api/announcements', authMiddleware, announcementsRoutes);
 
 // goal-conversation 路由（用户侧调用）
 app.use('/api/goal-conversation', authMiddleware, acpContextMiddleware('user'), goalConversationRoutes);
-app.use('/api/test/goal-conversation', authMiddleware, acpContextMiddleware('test'), testGoalConversationRoutes);
 
 // 其他路由（保持原有认证）
 // 注意：具体路由必须在通用路由之前注册！
@@ -287,43 +336,44 @@ app.use('/api/auth', authRoutes);
 app.use('/api/config', configRoutes);
 // 管理员登录路由（应用本地访问限制中间件）
 app.use('/api/admin-auth', adminAccessRestrictMiddleware, adminAuthRoutes);
-app.use('/api/admin/api-config', authMiddleware, acpContextMiddleware('admin'), adminApiConfigRoutes);
-app.use('/api/admin/skills', authMiddleware, acpContextMiddleware('admin'), adminSkillsRoutes);
-app.use('/api/admin/agent-model-configs', authMiddleware, acpContextMiddleware('admin'), adminAgentModelConfigsRoutes);
-app.use('/api/admin/agent-prompts', authMiddleware, acpContextMiddleware('admin'), adminAgentPromptsRoutes);
-app.use('/api/admin/prompt-stability', authMiddleware, acpContextMiddleware('admin'), adminPromptStabilityRoutes);
-app.use('/api/admin/runtime-definitions', authMiddleware, acpContextMiddleware('admin'), adminRuntimeDefinitionsRoutes);
-app.use('/api/admin/field-routings', authMiddleware, acpContextMiddleware('admin'), adminFieldRoutingsRoutes);
-app.use('/api/admin/prompt-ops', authMiddleware, acpContextMiddleware('admin'), adminPromptOpsRoutes);
-app.use('/api/admin/skill-author', authMiddleware, acpContextMiddleware('admin'), adminSkillAuthorRoutes);
-app.use('/api/admin/skill-model-configs', authMiddleware, acpContextMiddleware('admin'), adminSkillModelConfigsRoutes);
-app.use('/api/admin/users', authMiddleware, acpContextMiddleware('admin'), adminUsersRoutes);
-app.use('/api/admin/learner-models', authMiddleware, acpContextMiddleware('admin'), adminLearnerModelsRoutes);
-app.use('/api/admin/goal-conversations', authMiddleware, acpContextMiddleware('admin'), adminGoalConversationsRoutes);
-app.use('/api/admin/virtual-learners', authMiddleware, acpContextMiddleware('admin'), adminVirtualLearnersRoutes);
-app.use('/api/admin/projection-access-grants', authMiddleware, acpContextMiddleware('admin'), adminProjectionAccessGrantsRoutes);
-app.use('/api/admin/prompt-lab', authMiddleware, acpContextMiddleware('admin'), promptLabRoutes);
-app.use('/api/admin/test', authMiddleware, acpContextMiddleware('admin'), adminTestRoutes);
-app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminDebugRoutes);
-app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminDevtoolsRoutes);
-app.use('/api/admin', authMiddleware, acpContextMiddleware('admin'), adminPlatformRoutes);
+const adminRouteMiddleware = [adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin')];
+app.use('/api/admin/api-config', ...adminRouteMiddleware, adminApiConfigRoutes);
+app.use('/api/admin/skills', ...adminRouteMiddleware, adminSkillsRoutes);
+app.use('/api/admin/agent-model-configs', ...adminRouteMiddleware, adminAgentModelConfigsRoutes);
+app.use('/api/admin/agent-prompts', ...adminRouteMiddleware, adminAgentPromptsRoutes);
+app.use('/api/admin/prompt-stability', ...adminRouteMiddleware, adminPromptStabilityRoutes);
+app.use('/api/admin/runtime-definitions', ...adminRouteMiddleware, adminRuntimeDefinitionsRoutes);
+app.use('/api/admin/field-routings', ...adminRouteMiddleware, adminFieldRoutingsRoutes);
+app.use('/api/admin/prompt-ops', ...adminRouteMiddleware, adminPromptOpsRoutes);
+app.use('/api/admin/skill-author', ...adminRouteMiddleware, adminSkillAuthorRoutes);
+app.use('/api/admin/skill-model-configs', ...adminRouteMiddleware, adminSkillModelConfigsRoutes);
+app.use('/api/admin/users', ...adminRouteMiddleware, adminUsersRoutes);
+app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
+app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
+app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
+app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
+app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualQuickLearnRoutes);
+app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
+app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
+app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
+app.use('/api/admin/prompt-lab', ...adminRouteMiddleware, promptLabRoutes);
+app.use('/api/admin', ...adminRouteMiddleware, adminDebugRoutes);
+app.use('/api/admin', ...adminRouteMiddleware, adminDevtoolsRoutes);
+app.use('/api/admin', ...adminRouteMiddleware, adminPlatformRoutes);
 app.use('/api/users', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), userRoutes);
 app.use('/api/agents', authMiddleware, acpContextMiddleware('user'), agentsRoutes);
-app.use('/api/skills', authMiddleware, acpContextMiddleware('user'), skillsRoutes);
 app.use('/api/adaptive-guidance', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), adaptiveGuidanceRoutes);
-app.use('/api/plugins', authMiddleware, acpContextMiddleware('user'), pluginRoutes);
 app.use('/api/ai-teaching', authMiddleware, dashboardProjectionPolicy, acpContextMiddleware('user'), aiTeachingRoutes);
-app.use('/api/feedback', authMiddleware, acpContextMiddleware('user'), feedbackRoutes);
-app.use('/api/ab-testing', authMiddleware, acpContextMiddleware('user'), abTestingRoutes);
+app.use('/api/feedback', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), feedbackRoutes);
 
 
 // 用户自定义路由
-app.use('/api/user/agents', authMiddleware, acpContextMiddleware('user'), userAgentsRoutes);
-app.use('/api/user/skills', authMiddleware, acpContextMiddleware('user'), userSkillsRoutes);
-app.use('/api/user/api-config', authMiddleware, acpContextMiddleware('user'), userApiConfigRoutes);
-app.use('/api/user/agent-model-configs', authMiddleware, acpContextMiddleware('user'), userAgentModelConfigsRoutes);
-app.use('/api/user/mcp', authMiddleware, acpContextMiddleware('user'), userMcpRoutes);
-app.use('/api/user/developer', authMiddleware, denyGrantProjectionPolicy, acpContextMiddleware('user'), userDeveloperRoutes);
+app.use('/api/user/agents', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), userAgentsRoutes);
+app.use('/api/user/skills', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), userSkillsRoutes);
+app.use('/api/user/api-config', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), userApiConfigRoutes);
+app.use('/api/user/agent-model-configs', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), userAgentModelConfigsRoutes);
+app.use('/api/user/mcp', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), userMcpRoutes);
+app.use('/api/user/developer', authMiddleware, directUserSessionOnly, acpContextMiddleware('user'), userDeveloperRoutes);
 
 // 错误处理中间件
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -379,7 +429,7 @@ async function initializeGateway() {
   logger.info('Initializing EduClaw Gateway...');
   
   // 创建 Gateway
-  const gateway = createGateway(prisma, {
+  const instance = createGateway(prisma, {
     ai: {
       baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
       apiKey: process.env.AI_API_KEY || '',
@@ -390,6 +440,7 @@ async function initializeGateway() {
       persistEvents: true,
     }
   });
+  gateway = instance;
   
   // 注册所有官方 Agent
   // 启动校验：manifest 必须合法（kind=agent 无 prompt，kind=skill 有 prompt 与 modelConfig）
@@ -399,34 +450,34 @@ async function initializeGateway() {
     for (const err of manifestCheck.errors) {
       logger.error('  - ' + err);
     }
-    process.exit(1);
+    throw new Error('Agent manifest 校验失败');
   }
   const topAgents = listTopLevelAgents();
   logger.info(`[startup] Agent manifest OK · ${topAgents.length} 个顶层 Agent: ${topAgents.map(a => a.id).join(', ')}`);
 
   await registerOfficialAgents({
     registerAgent: async (definition, handler) => {
-      return gateway.registerAgent(definition, handler);
+      return instance.registerAgent(definition, handler);
     }
   });
-
-  // 注册新的 Agent 插件系统
-  registerAllPlugins();
 
   // 注册所有核心 Skill
   for (const definition of allSkillDefinitions) {
     const handler = skillHandlers[definition.name];
     if (handler) {
-      await gateway.registerSkill(definition, handler);
+      await instance.registerSkill(definition, handler);
     }
   }
+
+  // 外挂 Plugin 通过 Adapter 注册为 Skill，统一执行、上下文、日志和统计边界。
+  await registerPluginSkills(instance);
   
   // 加载已有的注册
-  await gateway.loadRegistrations();
+  await instance.loadRegistrations();
   
   logger.info('✅ EduClaw Gateway initialized');
   
-  return gateway;
+  return instance;
 }
 
 async function purgeRetiredSkills() {
@@ -454,30 +505,68 @@ async function initializeAgentCollaboration() {
   const eventBus = getEventBus();
   
   const service = createAgentCollaborationService({
-    enableAutoAdjustment: true,
+    enableAutoAdjustment: false,
     adjustmentCooldown: 300000,
     minSignalsForAdjustment: 2,
     profileUpdateInterval: 60000
   });
+  collaborationService = service;
   
   service.start();
-  
-  learnerCoordinator.setupEventListeners(eventBus);
   
   logger.info('✅ Agent Collaboration Service started');
   
   return service;
 }
 
+function assertStartupActive() {
+  if (lifecycle.isDraining()) throw new Error('服务已进入关闭流程，终止后续启动');
+}
+
 // 启动服务器
-async function startServer() {
+export async function startServer() {
   try {
-    // 测试数据库连接
-    logger.info('Connecting to database...');
-    await prisma.$connect();
-    logger.info('✅ Database connected successfully');
+    assertStartupActive();
+    logger.info('Connecting to main and System databases...');
+    await Promise.all([prisma.$connect(), systemPrisma.$connect()]);
+    assertStartupActive();
+    logger.info('✅ Main and System databases connected successfully');
+
+    const backendRoot = resolve(__dirname, '..');
+    const repoRoot = resolve(backendRoot, '..');
+    const mainDatabasePath = resolveSqlitePath(process.env.DATABASE_URL, resolve(backendRoot, 'prisma'));
+    const systemDatabasePath = resolveSqlitePath(process.env.SYSTEM_DATABASE_URL, resolve(backendRoot, 'prisma', 'system'));
+    const sensitivePaths: SensitivePath[] = [
+      { path: resolve(backendRoot, '.env'), kind: 'file' as const },
+      { path: resolve(backendRoot, 'logs'), kind: 'directory' as const },
+      { path: resolve(backendRoot, 'logs', 'combined.log'), kind: 'file' as const },
+      { path: resolve(backendRoot, 'logs', 'error.log'), kind: 'file' as const },
+      { path: resolve(repoRoot, 'prompts', 'backups'), kind: 'directory' as const },
+      ...(mainDatabasePath ? [{ path: resolve(mainDatabasePath, '..'), kind: 'directory' as const }] : []),
+      ...(systemDatabasePath ? [{ path: resolve(systemDatabasePath, '..'), kind: 'directory' as const }] : []),
+      ...(mainDatabasePath ? [{ path: mainDatabasePath, kind: 'file' as const }] : []),
+      ...(systemDatabasePath ? [{ path: systemDatabasePath, kind: 'file' as const }] : [])
+    ].filter((target, index, items) => existsSync(target.path)
+      && items.findIndex(item => item.path === target.path) === index);
+    const permissionFindings = await auditSensitivePaths(sensitivePaths);
+    assertStartupActive();
+    const unsafePermissions = permissionFindings.filter(finding => finding.status === 'too_open' || finding.status === 'error');
+    if (unsafePermissions.length > 0) {
+      logger.warn('敏感存储权限审计发现风险，请运行 npm run permissions:audit / permissions:repair', {
+        findings: unsafePermissions
+      });
+    }
+
+    const networkPolicy = await refreshRuntimeNetworkPolicy();
+    assertStartupActive();
+    logger.info('运行时网络策略加载完成', {
+      adminAccessMode: networkPolicy.adminAccessMode,
+      allowPrivateNetwork: networkPolicy.allowPrivateNetwork,
+      source: networkPolicy.source
+    });
 
     const promptBootstrap = await ensureCoreAgentPrompts(systemPrisma, 'sync');
+    assertStartupActive();
     logger.info('核心 Prompt 文件同步完成（File-as-Truth）', {
       mode: promptBootstrap.mode,
       performed: promptBootstrap.performed,
@@ -488,77 +577,167 @@ async function startServer() {
       missingBefore: promptBootstrap.missingBefore,
     });
 
-    try {
-      const [goalRouting, pathRouting, executionRouting, learnerRouting] = await Promise.all([
-        ensureGoalFieldRoutings(systemPrisma),
-        ensurePathFieldRoutings(systemPrisma),
-        ensureExecutionFieldRoutings(systemPrisma),
-        ensureLearnerFieldRoutings(systemPrisma),
-      ]);
-      logger.info('阶段字段路由 seed 完成（V3 §3）', {
-        goal: goalRouting,
-        path: pathRouting,
-        execution: executionRouting,
-        learner: learnerRouting,
-      });
-    } catch (err) {
-      logger.warn('阶段字段路由 seed 失败（不影响主流程）', { error: (err as Error).message });
-    }
+    const fieldRoutingBootstrap = await bootstrapFieldRoutings({ database: systemPrisma });
+    assertStartupActive();
+    logger.info('阶段字段路由 seed 完成（V3 §3）', fieldRoutingBootstrap);
 
     // 初始化管理员账户
-    await initializeAdmin();
+    const adminBootstrap = await initializeAdmin();
+    assertStartupActive();
+    if (adminBootstrap.status === 'created') {
+      logger.info('✅ 初始管理员创建成功', {
+        adminId: adminBootstrap.adminId,
+        name: adminBootstrap.name,
+        email: adminBootstrap.email
+      });
+    } else if (adminBootstrap.status === 'existing') {
+      logger.info('✅ 管理员账户已存在，跳过创建', { adminId: adminBootstrap.adminId });
+    } else {
+      logger.warn('未创建初始管理员：未配置 INIT_ADMIN_PASSWORD');
+    }
 
-     // 初始化 EduClaw Gateway
-    await purgeRetiredSkills();
-     await initializeGateway();
+      // 初始化 EduClaw Gateway
+     await purgeRetiredSkills();
+      await initializeGateway();
+      assertStartupActive();
+     await aiCapabilityHealthService.refresh();
+      {
+        const probeEnabled = await getRuntimeCapabilityProbeEnabled();
+        await aiCapabilityHealthService.setEnabled(probeEnabled);
+        if (!probeEnabled) {
+          logger.info('[ai-capability] 探测定时器已禁用（默认关闭 / 连接与安全开关关闭），跳过 start()');
+        }
+      }
+      assertStartupActive();
     
      // 初始化 Agent 协作服务
      await initializeAgentCollaboration();
+     assertStartupActive();
+
+      const durableConsumers = new DurableEventConsumerRegistry();
+      durableConsumers.register(['task:completed'], reconcileTaskCompletionMetric);
+      durableConsumers.register([
+        'goal:understanding:updated',
+        'task:completed',
+        'lesson:completed',
+        'path:created',
+        'path:generated',
+        'path:adjusted',
+        'path:completed'
+      ], async (event) => {
+        await learnerEvidenceProjector.handle(event);
+        await lessonKnowledgeEnrichmentConsumer.handle(event);
+        if (!event.userId) return;
+        learnerProfileService.clear(event.userId);
+        const data = event.data || {};
+        await learnerSnapshotRefreshService.refresh({
+          userId: event.userId,
+          pathId: data.pathId || undefined,
+          milestoneId: data.milestoneId || undefined,
+          taskId: data.taskId || undefined,
+          scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
+          lastEventId: event.id,
+          lastEventAt: event.occurredAt
+        });
+      });
+      outboxWorker = new DurableOutboxWorker(durableConsumers);
+      outboxWorker.start();
 
       // 回收因进程中断等原因遗留的 generating 路径
       await learningService.recoverStaleGeneratingPaths();
+      assertStartupActive();
+
+      // 标记因进程中断而遗留的虚拟账号自动学习运行（V1 不续跑）
+      await quickLearnService.recoverInterruptedRuns();
+      assertStartupActive();
 
       // 持续自动重试仍在阶段任务生成失败中的路径
-      setInterval(() => {
-        void learningService.retryEligibleFailedPathPreparations().catch((error) => {
-          logger.warn('自动继续生成阶段任务轮询失败', {
-            error: error instanceof Error ? error.message : String(error)
+      enrichmentRetryTimer = setInterval(() => {
+        if (enrichmentRetryInFlight) return;
+        const run = backgroundTaskTracker.track('learning.path.recovery-poll', () => learningService.recoverStaleGeneratingPaths()
+          .then(() => learningService.retryEligibleFailedPathPreparations())
+          .then(() => undefined))
+          .catch((error) => {
+            logger.warn('路径生成租约恢复与自动重试轮询失败', {
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }).then(() => undefined).finally(() => {
+            if (enrichmentRetryInFlight === run) enrichmentRetryInFlight = null;
           });
-        });
+        enrichmentRetryInFlight = run;
+        void run;
       }, ENRICHMENT_RETRY_POLL_INTERVAL_MS);
+      enrichmentRetryTimer.unref?.();
 
-      void dashboardGuidanceSnapshotService.backfillMissingForActiveUsers(200).then((result) => {
+      runBackgroundTask('dashboard-guidance.startup-backfill', async () => {
+        const result = await dashboardGuidanceSnapshotService.backfillMissingForActiveUsers(200);
         logger.info('首页引导快照回填完成', result);
-      }).catch((error) => {
-        logger.warn('首页引导快照回填失败', {
-          error: error instanceof Error ? error.message : String(error)
-        });
       });
 
-     app.listen(PORT, () => {
-       logger.info(`🚀 Server is running on port ${PORT}`);
-      logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
-      logger.info(`🤖 EduClaw Gateway: Agent-Driven Architecture`);
-    });
+     assertStartupActive();
+     await new Promise<void>((resolveServer, reject) => {
+       const onError = (error: Error) => reject(error);
+       const server = app.listen(PORT, () => {
+         server.off('error', onError);
+         resolveServer();
+       });
+       httpServer = server;
+       server.once('error', onError);
+     });
+     assertStartupActive();
+     lifecycle.markReady();
+     logger.info(`🚀 Server is running on port ${PORT}`);
+     logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
+     logger.info(`🤖 EduClaw Gateway: Agent-Driven Architecture`);
   } catch (error) {
     logger.error('Failed to start server:', error);
-    process.exit(1);
+    await shutdown('startup_failure');
+    throw error;
   }
+
 }
 
 // 优雅关闭
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received. Closing server gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+export async function shutdown(signal: string) {
+  logger.info(`${signal} received. Draining server...`, { shutdownDeadlineMs });
+  const report = await lifecycle.shutdown(signal, {
+    httpServer,
+    stopSchedulers: async () => {
+      if (enrichmentRetryTimer) clearInterval(enrichmentRetryTimer);
+      enrichmentRetryTimer = null;
+      await aiCapabilityHealthService.stop();
+    },
+    teaching: aiTeachingOrchestrator,
+    collaboration: collaborationService,
+    backgroundTaskTracker,
+    outbox: outboxWorker,
+    gateway,
+    databases: [systemPrisma, prisma]
+  }, shutdownDeadlineMs);
+  logger.info('Server shutdown completed', report);
+  return report;
+}
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received. Closing server gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-startServer();
+if (require.main === module) {
+  const handleSignal = (signal: string) => {
+    void shutdown(signal).then(report => {
+      process.exit(report.timedOut || report.errors.length > 0 ? 1 : 0);
+    }).catch(error => {
+      logger.error('Server shutdown failed', { error });
+      process.exit(1);
+    });
+  };
+  process.on('SIGTERM', () => handleSignal('SIGTERM'));
+  process.on('SIGINT', () => handleSignal('SIGINT'));
+  process.on('uncaughtException', error => {
+    logger.error('Uncaught exception, starting controlled shutdown', { error });
+    void shutdown('uncaughtException').finally(() => process.exit(1));
+  });
+  process.on('unhandledRejection', reason => {
+    logger.error('Unhandled rejection, starting controlled shutdown', { reason });
+    void shutdown('unhandledRejection').finally(() => process.exit(1));
+  });
+  void startServer().catch(() => process.exit(1));
+}
 
 export default app;

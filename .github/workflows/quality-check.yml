@@ -1,0 +1,42 @@
+name: Quality Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  required-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:./ci-main.db
+      SYSTEM_DATABASE_URL: file:./ci-system.db
+      JWT_SECRET: ci-only-jwt-secret-with-at-least-32-characters
+      SECRET_ENCRYPTION_CURRENT_KEY_ID: ci
+      SECRET_ENCRYPTION_KEYS: ci:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Generate Prisma clients
+        run: npm run prisma:generate
+        working-directory: backend
+      - name: Scan reachable Git history for secrets
+        run: npm run security:scan:history
+      - name: Run required quality checks
+        run: npm run check

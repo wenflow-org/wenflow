@@ -16,6 +16,20 @@ type ProjectionAccessPolicyOptions = {
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
+export const rejectProjectionAccess = (message = '投影视角不允许访问该接口') => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (req.user?.projection?.active) {
+      res.status(403).json({
+        success: false,
+        error: { message }
+      })
+      return
+    }
+
+    next()
+  }
+}
+
 function parseScopeDefinition(raw?: string | null): ProjectionScopeDefinition {
   if (!raw) return { accessMode: 'read-only' }
   try {

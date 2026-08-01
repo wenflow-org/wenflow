@@ -7,7 +7,7 @@
  * 真正的编排逻辑在 coordinators/simulation.coordinator.ts
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
 import { AgentDefinition, AgentContext, AgentInput, AgentOutput } from '../protocol';
 import simulationOrchestrator from '../../coordinators/simulation.coordinator';

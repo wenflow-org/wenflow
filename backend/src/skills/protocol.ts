@@ -5,6 +5,9 @@
  * 所有 Skill 必须遵循此协议
  */
 
+import type { RuntimeEnvelope } from '../services/prompt-lab/envelope-adapter';
+import type { ContextEnvelopeV1 } from './context-envelope';
+
 // Skill 分类
 export type SkillCategory = 
   | 'parsing'      // 解析类
@@ -67,23 +70,36 @@ export interface SkillDefinition {
 export interface SkillExecutionRequest {
   skillName: string;
   input: Record<string, any>;
-  options?: {
-    timeout?: number;
-    cache?: boolean;
-    priority?: 'high' | 'normal' | 'low';
-  };
+  options?: SkillExecutionOptions;
+}
+
+export interface SkillExecutionOptions {
+  timeout?: number;
+  cache?: boolean;
+  priority?: 'high' | 'normal' | 'low';
+  /** 统一调用上下文 sidecar；不会自动进入 LLM payload。 */
+  contextEnvelope?: ContextEnvelopeV1;
 }
 
 // Skill 执行结果
 export interface SkillExecutionResult<T = any> {
   success: boolean;
   output?: T;
+  runtimeEnvelope?: RuntimeEnvelope;
+  quality?: 'model' | 'fallback' | 'partial' | 'failed' | 'cache';
+  /** 调试载荷（rawModelOutput/userPayload/版本号等），由 handler 透传，仅调试链路可见 */
+  debug?: any;
   error?: {
     code: string;
     message: string;
     details?: any;
   };
   duration: number; // ms
+  /**
+   * @deprecated 兼容字段。canonical 降级标记请写 `quality`
+   * （'model' | 'fallback' | 'partial' | 'failed' | 'cache'）；
+   * executor 会从 quality 反向派生 cached，新代码不应直接依赖本字段。
+   */
   cached?: boolean;
 }
 

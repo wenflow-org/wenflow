@@ -9,8 +9,40 @@ import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middle
 import { logger } from '../utils/logger';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
+import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 
 const router = express.Router();
+
+const sendPathMutationConflict = (res: express.Response, error: unknown) => {
+  if (!isPathMutationConflictError(error)) return false;
+
+  res.status(409).json({
+    success: false,
+    error: {
+      message: error.message,
+      code: error.code,
+      status: 409
+    }
+  });
+  return true;
+};
+
+const stripPathGenerationInternals = (path: any) => {
+  if (!path || typeof path !== 'object') return path;
+  const {
+    aiPromptTemplate: _aiPromptTemplate,
+    processDetail: _processDetail,
+    activeGenerationRun: _activeGenerationRun,
+    activeGenerationRunId: _activeGenerationRunId,
+    generationRun: _generationRun,
+    ...safePath
+  } = path;
+  if (safePath.generationStatus && typeof safePath.generationStatus === 'object') {
+    const { core, stageDesign, updatedAt } = safePath.generationStatus;
+    safePath.generationStatus = { core, stageDesign, updatedAt };
+  }
+  return safePath;
+};
 
 const extractStoredSourceConversationId = (aiPromptTemplate?: string | null): string | undefined => {
   if (!aiPromptTemplate) return undefined;
@@ -146,7 +178,7 @@ router.get('/paths', learningPathsPollingLimiter, async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    const paths = await learningService.getUserLearningPaths(userId);
+    const paths = (await learningService.getUserLearningPaths(userId)).map(stripPathGenerationInternals);
 
     res.json({
       success: true,
@@ -288,89 +320,6 @@ router.post('/paths', async (req, res, next) => {
 });
 
 // 创建占位课程（立即返回，后台异步生成）
-router.post('/paths/create', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const data = generatePathSchema.parse(req.body);
-
-    // 1. 立即创建占位课程
-    const placeholderPath = await prisma.learning_paths.create({
-      data: {
-        id: `lp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        userId,
-        title: '自定义学习路径',
-        name: '自定义学习路径',
-        description: data.description,
-        subject: data.subject || '综合',
-        status: 'generating',
-        difficulty: 'beginner',
-        estimatedHours: 0,
-        aiGenerated: true,
-        updatedAt: new Date()
-      }
-    });
-
-// 2. 后台异步生成路径（不等待）
-    // 解析时间表达式
-    let deadline: Date | undefined;
-    if (data.deadline) {
-      deadline = new Date(data.deadline);
-    } else if (data.deadlineText) {
-      const monthsMatch = data.deadlineText.match(/(\d+)\s*个?月/);
-      const weeksMatch = data.deadlineText.match(/(\d+)\s*周/);
-      const daysMatch = data.deadlineText.match(/(\d+)\s*天/);
-      
-      if (monthsMatch) {
-        deadline = new Date();
-        deadline.setMonth(deadline.getMonth() + parseInt(monthsMatch[1]));
-      } else if (weeksMatch) {
-        deadline = new Date();
-        deadline.setDate(deadline.getDate() + parseInt(weeksMatch[1]) * 7);
-      } else if (daysMatch) {
-        deadline = new Date();
-        deadline.setDate(deadline.getDate() + parseInt(daysMatch[1]));
-      }
-    }
-    
-    pathOrchestrator.runAsync({
-      userId,
-      description: data.description,
-      subject: data.subject,
-      deadline,
-      deadlineText: data.deadlineText,
-      existingPathId: placeholderPath.id,
-      userProfile: data.userProfile
-    }, {
-      onSuccess: () => {
-        logger.info(`学习路径生成完成: ${placeholderPath.id}`);
-      },
-      onError: async (error) => {
-        logger.error(`学习路径生成失败: ${placeholderPath.id}`, error);
-        await prisma.learning_paths.update({
-          where: { id: placeholderPath.id },
-          data: {
-            status: 'failed',
-            updatedAt: new Date()
-          }
-        });
-      }
-    });
-
-// 3. 立即返回占位课程 ID
-    res.status(201).json({
-      success: true,
-      data: placeholderPath
-    });
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        error: { message: '数据验证失败', details: error.errors }
-      });
-    }
-    next(error);
-  }
-});
 
 // 生成学习路径
 router.post('/paths/generate', async (req, res, next) => {
@@ -419,9 +368,39 @@ router.get('/paths/:pathId', async (req, res, next) => {
       });
     }
 
+    const responsePath = req.user?.projection?.grantSource === 'synthetic'
+      ? {
+          id: path.id,
+          title: path.title,
+          name: path.name,
+          summary: path.summary || null,
+          description: path.description,
+          subject: path.subject,
+          difficulty: path.difficulty,
+          estimatedHours: path.estimatedHours,
+          status: path.status,
+          canStartLearning: path.canStartLearning,
+          learningBlockedReason: path.learningBlockedReason || null,
+          milestones: (path.milestones || []).map((milestone: any) => ({
+            id: milestone.id,
+            stageNumber: milestone.stageNumber,
+            title: milestone.title,
+            description: milestone.description,
+            subtasks: (milestone.subtasks || []).map((task: any) => ({
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              order: task.order
+            }))
+          })),
+          schemaVersion: 'synthetic-user-v1'
+        }
+      : stripPathGenerationInternals(path);
+
     res.json({
       success: true,
-      data: path
+      data: responsePath
     });
   } catch (error: any) {
     if (error.message === '学习路径不存在') {
@@ -431,6 +410,22 @@ router.get('/paths/:pathId', async (req, res, next) => {
       });
     }
 
+    next(error);
+  }
+});
+
+// 轮询路径生成状态，仅返回渲染状态所需的轻量数据。
+router.get('/paths/:pathId/generation-status', learningPathsPollingLimiter, async (req, res, next) => {
+  try {
+    const data = await learningService.getPathGenerationLifecycle(req.params.pathId, req.user.userId);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    if (error.message === '学习路径不存在') {
+      return res.status(404).json({ success: false, error: { message: error.message } });
+    }
+    if (error.message === '无权访问此学习路径') {
+      return res.status(403).json({ success: false, error: { message: error.message } });
+    }
     next(error);
   }
 });
@@ -460,30 +455,36 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       });
     }
 
-    if (path.status !== 'failed' && path.status !== 'generating') {
+    const retry = await learningService.getPathGenerationRetry(pathId, userId);
+    if (!retry.allowed || !retry.retryType) {
       return res.status(400).json({
         success: false,
-        error: { message: '只有失败或生成中的路径才能重试' }
+        error: { message: retry.reason === 'completed' ? '路径已经生成完成，无需重试' : '当前生成任务未失败或未过期，不能重试' }
       });
     }
 
-    // 更新状态为 generating，重置创建时间（避免前端判定超时）
-    await prisma.learning_paths.update({
-      where: { id: pathId },
-      data: {
-        status: 'generating',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    });
+    if (retry.retryType === 'stageDesign') {
+      const result = await learningService.retryPathEnrichment(pathId, userId);
+      return res.json({
+        success: true,
+        data: result,
+        message: '正在继续生成阶段任务'
+      });
+    }
+
+    const runId = await learningService.claimPathCoreGeneration(
+      pathId,
+      retry.expectedActiveGenerationRunId
+    );
 
     const storedGoalRequest = buildStoredGoalPathRequest(path)
       || await buildGoalPathRequestFromConversation(path);
 
     if (storedGoalRequest) {
-      pathOrchestrator.runGoalAsync(storedGoalRequest, {
-        onError: (error) => {
+      pathOrchestrator.runGoalAsync({ ...storedGoalRequest, generationRunId: runId }, {
+        onError: async (error) => {
           logger.error(`重试生成路径失败：${pathId}`, error);
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     } else {
@@ -497,19 +498,23 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
         deadlineText: path.deadlineText || undefined,
         sourceConversationId,
         existingPathId: pathId,
+        generationRunId: runId,
         userProfile: {}
       }, {
-        onError: (error) => {
+        onError: async (error) => {
           logger.error(`重试生成路径失败：${pathId}`, error);
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     }
 
     res.json({
       success: true,
+      data: { retryType: 'core', runId },
       message: '正在重新生成学习路径'
     });
   } catch (error: any) {
+    if (sendPathMutationConflict(res, error)) return;
     next(error);
   }
 });
@@ -538,33 +543,16 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
       });
     }
 
-    await prisma.learning_paths.update({
-      where: { id: pathId },
-      data: {
-        status: 'generating',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    });
+    const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId);
 
     const storedGoalRequest = buildStoredGoalPathRequest(path)
       || await buildGoalPathRequestFromConversation(path);
 
     if (storedGoalRequest) {
-      pathOrchestrator.runGoalAsync(storedGoalRequest, {
+      pathOrchestrator.runGoalAsync({ ...storedGoalRequest, generationRunId: runId }, {
         onError: async (error) => {
           logger.error(`重新生成学习路径失败：${pathId}`, error);
-          try {
-            await prisma.learning_paths.update({
-              where: { id: pathId },
-              data: {
-                status: 'failed',
-                updatedAt: new Date()
-              }
-            });
-          } catch (updateError) {
-            logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
-          }
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     } else {
@@ -577,30 +565,23 @@ router.post('/paths/:pathId/regenerate', async (req, res, next) => {
         deadlineText: path.deadlineText || undefined,
         sourceConversationId,
         existingPathId: pathId,
+        generationRunId: runId,
         userProfile: {}
       }, {
         onError: async (error) => {
           logger.error(`重新生成学习路径失败：${pathId}`, error);
-          try {
-            await prisma.learning_paths.update({
-              where: { id: pathId },
-              data: {
-                status: 'failed',
-                updatedAt: new Date()
-              }
-            });
-          } catch (updateError) {
-            logger.error(`更新重新生成失败状态失败：${pathId}`, updateError);
-          }
+          await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     }
 
     res.json({
       success: true,
+      data: { runId },
       message: '正在重新生成学习路径'
     });
   } catch (error: any) {
+    if (sendPathMutationConflict(res, error)) return;
     next(error);
   }
 });
@@ -625,7 +606,14 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: result
+      data: req.user?.projection?.grantSource === 'synthetic'
+        ? {
+            status: result?.status || null,
+            enabled: result?.enabled === true,
+            pathId,
+            schemaVersion: 'synthetic-user-v1'
+          }
+        : result
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -649,6 +637,8 @@ router.post('/paths/:pathId/replan', async (req, res, next) => {
       });
     }
 
+    if (sendPathMutationConflict(res, error)) return;
+
     next(error);
   }
 });
@@ -666,12 +656,21 @@ router.delete('/paths/:pathId', async (req, res, next) => {
       message: '学习路径已删除'
     });
   } catch (error: any) {
-    if (error.message === '学习路径不存在或无权删除') {
+    if (error.message === '学习路径不存在') {
       return res.status(404).json({
         success: false,
         error: { message: error.message }
       });
     }
+
+    if (error.message === '无权删除此学习路径') {
+      return res.status(403).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (sendPathMutationConflict(res, error)) return;
 
     next(error);
   }
@@ -745,6 +744,8 @@ router.post('/paths/:pathId/retry-stage-design', async (req, res, next) => {
       });
     }
 
+    if (sendPathMutationConflict(res, error)) return;
+
     next(error);
   }
 });
@@ -767,7 +768,15 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: task
+      data: req.user?.projection?.grantSource === 'synthetic'
+        ? {
+            id: task.task?.id || taskId,
+            status: task.task?.status || 'completed',
+            completedAt: task.task?.completedAt || null,
+            alreadyCompleted: task.alreadyCompleted === true,
+            schemaVersion: 'synthetic-user-v1'
+          }
+        : task
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -776,6 +785,15 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
         error: { message: '数据验证失败', details: error.errors }
       });
     }
+
+    if (error.message === '无权访问此任务') {
+      return res.status(403).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
+
+    if (sendPathMutationConflict(res, error)) return;
 
     next(error);
   }
@@ -797,278 +815,4 @@ router.get('/stats', async (req, res, next) => {
   }
 });
 
-// ==================== 旧版 Weeks/Tasks 路由（已废弃）====================
-// 注意：以下路由使用旧的 weeks/tasks 模型，已被 milestones/subtasks 取代
-// 保留用于向后兼容，但建议使用新的交互式学习集成端点
-/*
-// 获取某周的所有任务
-router.get('/weeks/:weekId/tasks', async (req, res, next) => {
-  try {
-    const { weekId } = req.params;
-    
-    const tasks = await prisma.tasks.findMany({
-      where: { weekId },
-      orderBy: { createdAt: 'asc' }
-    });
-
-    res.json(tasks);
-  } catch (error: any) {
-    next(error);
-  }
-});
-
-// 生成指定周的任务
-router.post('/paths/:pathId/weeks/:weekNumber/generate-tasks', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { pathId, weekNumber } = req.params;
-    const weekNum = parseInt(weekNumber, 10);
-
-    // 1. 验证路径归属
-    const path = await prisma.learning_paths.findFirst({
-      where: { id: pathId, userId },
-      include: {
-        weeks: {
-          include: { tasks: true },
-          orderBy: { weekNumber: 'asc' }
-        }
-      }
-    });
-
-    if (!path) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '学习路径不存在' }
-      });
-    }
-
-    // 2. 找到目标周
-    const targetWeek = path.weeks.find(w => w.weekNumber === weekNum);
-    if (!targetWeek) {
-      return res.status(404).json({
-        success: false,
-        error: { message: `第${weekNum}周不存在` }
-      });
-    }
-
-    // 3. 检查是否已有任务
-    if (targetWeek.tasks.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: { message: '该周已有任务，如需重新生成请先删除现有任务' },
-        data: { existingTasks: targetWeek.tasks.length }
-      });
-    }
-
-    // 4. 获取用户信息
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { skillLevel: true, learningStyle: true, timePerDay: true }
-    });
-
-    // 5. 计算已完成的周次（用于上下文）
-    const previousWeeks = path.weeks
-      .filter(w => w.weekNumber < weekNum)
-      .map(w => ({
-        weekNumber: w.weekNumber,
-        title: w.title || '',
-        completedTasks: w.tasks.filter(t => t.status === 'completed').length
-      }));
-
-    // 6. 调用AI设计课程
-    logger.info('开始生成周任务', { pathId, weekNumber: weekNum });
-
-    const result = await aiService.designWeekCourses({
-      userId,
-      weekNumber: weekNum,
-      weekTitle: targetWeek.title || `第${weekNum}周`,
-      weekDescription: targetWeek.description || '',
-      overallGoal: path.description || path.name,
-      userProfile: {
-        skillLevel: user?.skillLevel,
-        learningStyle: user?.learningStyle,
-        timePerDay: user?.timePerDay
-      },
-      previousWeeks
-    });
-
-    if (!result.success || !result.internal) {
-      return res.status(500).json({
-        success: false,
-        error: { message: result.error || 'AI生成失败' }
-      });
-    }
-
-    // 7. 创建任务记录（从 internal 读取数据）
-    const tasks = result.internal.tasks || [];
-    const createdTasks = [];
-
-    for (const task of tasks) {
-      const created = await prisma.tasks.create({
-        data: {
-          weekId: targetWeek.id,
-          userId,
-          title: task.title,
-          description: task.description,
-          taskType: task.type || 'execute',
-          estimatedMinutes: task.estimatedMinutes || 30,
-          contentJson: JSON.stringify({
-            acceptanceCriteria: task.acceptanceCriteria,
-            resources: task.resources,
-            hints: task.hints
-          }),
-          status: 'todo'
-        }
-      });
-      createdTasks.push(created);
-    }
-
-    // 8. 更新周的学习目标（从 internal 读取数据）
-    if (result.internal.keyConcepts || result.internal.weeklyGoal) {
-      await prisma.weeks.update({
-        where: { id: targetWeek.id },
-        data: {
-          learningObjectives: JSON.stringify({
-            goal: result.internal.weeklyGoal,
-            concepts: result.internal.keyConcepts
-          })
-        }
-      });
-    }
-
-    logger.info('周任务生成完成', {
-      pathId,
-      weekNumber: weekNum,
-      taskCount: createdTasks.length
-    });
-
-    res.json({
-      success: true,
-      data: {
-        weekNumber: weekNum,
-        weekTheme: result.internal.weekTheme,
-        weeklyGoal: result.internal.weeklyGoal,
-        keyConcepts: result.internal.keyConcepts,
-        tasks: createdTasks
-      }
-    });
-  } catch (error: any) {
-    logger.error('生成周任务失败:', error);
-    next(error);
-  }
-});
-
-// 批量生成所有周的任务
-router.post('/paths/:pathId/generate-all-tasks', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const { pathId } = req.params;
-
-    // 1. 验证路径归属
-    const path = await prisma.learning_paths.findFirst({
-      where: { id: pathId, userId },
-      include: {
-        weeks: {
-          include: { tasks: true },
-          orderBy: { weekNumber: 'asc' }
-        }
-      }
-    });
-
-    if (!path) {
-      return res.status(404).json({
-        success: false,
-        error: { message: '学习路径不存在' }
-      });
-    }
-
-    // 2. 找出没有任务的周
-    const weeksWithoutTasks = path.weeks.filter(w => w.tasks.length === 0);
-    
-    if (weeksWithoutTasks.length === 0) {
-      return res.json({
-        success: true,
-        message: '所有周都已有任务',
-        data: { generatedWeeks: 0 }
-      });
-    }
-
-    // 3. 获取用户信息
-    const user = await prisma.users.findUnique({
-      where: { id: userId },
-      select: { skillLevel: true, learningStyle: true, timePerDay: true }
-    });
-
-    // 4. 批量生成（逐周）
-    const results = [];
-    for (const week of weeksWithoutTasks) {
-      try {
-        const previousWeeks = path.weeks
-          .filter(w => w.weekNumber < week.weekNumber)
-          .map(w => ({
-            weekNumber: w.weekNumber,
-            title: w.title || '',
-            completedTasks: w.tasks.filter(t => t.status === 'completed').length
-          }));
-
-        const result = await aiService.designWeekCourses({
-          userId,
-          weekNumber: week.weekNumber,
-          weekTitle: week.title || `第${week.weekNumber}周`,
-          weekDescription: week.description || '',
-          overallGoal: path.description || path.name,
-          userProfile: {
-            skillLevel: user?.skillLevel,
-            learningStyle: user?.learningStyle,
-            timePerDay: user?.timePerDay
-          },
-          previousWeeks
-        });
-
-        if (result.success && result.internal?.tasks) {
-          const createdTasks = [];
-          for (const task of result.internal.tasks) {
-            const created = await prisma.tasks.create({
-              data: {
-                weekId: week.id,
-                userId,
-                title: task.title,
-                description: task.description,
-                taskType: task.type || 'execute',
-                estimatedMinutes: task.estimatedMinutes || 30,
-                contentJson: JSON.stringify({
-                  acceptanceCriteria: task.acceptanceCriteria,
-                  resources: task.resources,
-                  hints: task.hints
-                }),
-                status: 'todo'
-              }
-            });
-            createdTasks.push(created);
-          }
-          results.push({ weekNumber: week.weekNumber, success: true, taskCount: createdTasks.length });
-        } else {
-          results.push({ weekNumber: week.weekNumber, success: false, error: result.error });
-        }
-
-        // 避免API限流
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (err: any) {
-        results.push({ weekNumber: week.weekNumber, success: false, error: err.message });
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        totalWeeks: weeksWithoutTasks.length,
-        results
-      }
-    });
-  } catch (error: any) {
-    logger.error('批量生成任务失败:', error);
-    next(error);
-  }
-});
-*/
 export default router;

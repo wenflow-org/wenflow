@@ -9,8 +9,9 @@ import {
   AgentContext,
   AgentOutput
 } from '../plugin-types';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
-import axios from 'axios';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
+import { getRequestContext } from '../../gateway/api-gateway/context';
+import { safeHttpRequest } from '../../utils/safe-http';
 
 /**
  * 基础内容提取插件
@@ -32,56 +33,6 @@ export const basicExtractor: AgentPlugin = {
   config: {
     temperature: 0.3,
     maxTokens: 8000,  // 从大量网页内容提取结构化数据需要更多token空间
-    systemPrompt: `你是内容提取和分析专家。
-
-【任务】
-从提供的网页内容或文本中提取关键学习内容，并进行结构化整理。
-
-【输入】
-- URL 内容
-- 或原始文本
-- 或用户指定的提取需求
-
-【输出格式 - 必须严格遵循】
-{
-  "title": "内容标题",
-  "summary": "内容摘要（100-200字）",
-  "keyPoints": [
-    "关键要点1",
-    "关键要点2",
-    "关键要点3"
-  ],
-  "structure": {
-    "sections": [
-      {
-        "heading": "章节标题",
-        "content": "章节内容概要"
-      }
-    ]
-  },
-  "relevantLinks": [
-    {
-      "url": "链接地址",
-      "title": "链接标题",
-      "description": "链接描述"
-    }
-  ],
-  "difficulty": "beginner|intermediate|advanced",
-  "estimatedReadTime": 10,
-  "tags": ["标签1", "标签2"]
-}
-
-【提取原则】
-1. 保留核心知识点
-2. 识别内容结构（章节、层级）
-3. 提取相关的外部资源链接
-4. 评估内容难度等级
-5. 提取合适的标签
-
-【注意事项】
-- 如果输入不是有效的URL或内容，返回适当的错误信息
-- 对于无法访问的内容，说明原因
-- estimatedReadTime 以分钟为单位`,
     model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2,
@@ -89,8 +40,6 @@ export const basicExtractor: AgentPlugin = {
   },
 
   async execute(input: any, context: AgentContext): Promise<AgentOutput> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'basic-extractor' };
     const startTime = Date.now();
 
     try {
@@ -118,38 +67,15 @@ export const basicExtractor: AgentPlugin = {
       // 使用 AI 分析和结构化内容
       const analysisPrompt = this.buildAnalysisPrompt(input, content);
 
-      const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-        {
-          role: 'system',
-          content: this.config!.systemPrompt!
-        },
-        {
-          role: 'user',
-          content: analysisPrompt
-        }
-      ];
-
-      const response = await gateway.execute({ messages }, caller);
-
-      const responseContent = response.choices[0]?.message.content || '{}';
-
-      // 解析 JSON
-      let data: any;
-      try {
-        data = JSON.parse(responseContent);
-      } catch {
-        const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          data = JSON.parse(jsonMatch[0]);
-        } else {
-          // 如果不是 JSON，作为原始内容返回
-          data = {
-            rawContent: content,
-            summary: responseContent.substring(0, 200),
-            keyPoints: []
-          };
-        }
-      }
+      const result = await executeSkillWithResult(auxSkillDefinitionMap['basic-extractor'], {
+        input,
+        analysisPrompt,
+        model: this.config?.model,
+        temperature: this.config?.temperature,
+        maxTokens: this.config?.maxTokens,
+        __prompt: { requestPath: '/agents/plugins/basic-extractor' },
+      });
+      const data = result.output;
 
       // 添加原始内容信息
       data._extractedFrom = input.url ? { type: 'url', value: input.url } : { type: 'text', length: content.length };
@@ -168,7 +94,7 @@ export const basicExtractor: AgentPlugin = {
           agentName: this.name,
           generatedAt: new Date().toISOString(),
           duration: Date.now() - startTime,
-          tokensUsed: response.usage?.total_tokens
+          tokensUsed: result.debug?.tokenUsage?.total
         }
       };
     } catch (error: any) {
@@ -191,12 +117,15 @@ export const basicExtractor: AgentPlugin = {
    */
   async fetchUrlContent(url: string): Promise<string> {
     try {
-      const response = await axios.get(url, {
-        timeout: 30000,
+      const response = await safeHttpRequest<string>(url, {
+        timeoutMs: 30000,
+        privateNetworkPolicy: 'public-only',
+        signal: getRequestContext().abortSignal,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        maxContentLength: 50000
+        maxResponseBytes: 50000,
+        responseType: 'text'
       });
 
       // 简单解析 HTML 为纯文本

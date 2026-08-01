@@ -1,13 +1,68 @@
 // 用户路由
 import express from 'express';
 import prisma from '../config/database';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 
 const router = express.Router();
 
-// 所有用户路由都需要认证
-router.use(authMiddleware);
+function buildAgentLogWhere(userId: string, query: any) {
+  const agentId = query.agentId as string;
+  const capabilityType = query.capabilityType as string;
+  const success = query.success as string;
+  const includeSystem = query.includeSystem as string;
+  const startDate = query.startDate as string;
+  const endDate = query.endDate as string;
+  const where: any = { userId };
+
+  const capabilityAgents: Record<string, string[]> = {
+    goal: ['skill:goal-conversation'],
+    path: ['skill:path-planning'],
+    teaching: ['ai-teaching-agent'],
+    tutoring: ['ai-tutor'],
+    tracking: [],
+    profile: ['learner-model-agent'],
+    system: ['system-call', 'unknown']
+  };
+
+  if (agentId) {
+    where.agentId = agentId;
+  } else if (capabilityType && capabilityType in capabilityAgents) {
+    where.agentId = { in: capabilityAgents[capabilityType] };
+  }
+
+  if (success !== undefined) {
+    where.success = success === 'true';
+  }
+
+  if (includeSystem !== 'true' && !agentId && !capabilityType) {
+    where.agentId = { notIn: ['system-call', 'unknown'] };
+    where.AND = [
+      {
+        OR: [
+          { executionLayer: null },
+          { executionLayer: { not: 'api-gateway' } }
+        ]
+      }
+    ];
+  }
+
+  if (startDate || endDate) {
+    where.calledAt = {};
+    if (startDate) {
+      where.calledAt.gte = new Date(startDate);
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.calledAt.lte = end;
+    }
+  }
+
+  return where;
+}
+
+const directUserSessionOnly = rejectProjectionAccess('投影视角不允许修改账户信息');
 
 // 获取当前用户信息
 router.get('/me', async (req, res, next) => {
@@ -88,7 +143,7 @@ router.get('/me/learner-center', async (req, res, next) => {
 });
 
 // 更新用户信息
-router.put('/me', async (req, res, next) => {
+router.put('/me', directUserSessionOnly, async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { name } = req.body;
@@ -234,41 +289,7 @@ router.get('/me/agent-logs', async (req, res, next) => {
     const userId = req.user.userId;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
-    const agentId = req.query.agentId as string;
-    const success = req.query.success as string;
-    const includeSystem = req.query.includeSystem as string;
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-
-    // 构建查询条件
-    const where: any = { userId };
-    
-    if (agentId) {
-      where.agentId = agentId;
-    }
-    
-    if (success !== undefined) {
-      where.success = success === 'true';
-    }
-
-    const shouldIncludeSystem = includeSystem === 'true';
-    if (!shouldIncludeSystem) {
-      where.agentId = where.agentId
-        ? where.agentId
-        : { notIn: ['system-call', 'unknown'] };
-    }
-    
-    if (startDate || endDate) {
-      where.calledAt = {};
-      if (startDate) {
-        where.calledAt.gte = new Date(startDate);
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.calledAt.lte = end;
-      }
-    }
+    const where = buildAgentLogWhere(userId, req.query);
 
     const [logs, total] = await Promise.all([
       prisma.agent_call_logs.findMany({
@@ -363,7 +384,49 @@ router.get('/me/agent-logs', async (req, res, next) => {
   }
 });
 
-// 获取单条日志详情
+// 导出日志
+router.get('/me/agent-logs/export', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const format = (req.query.format as string) || 'json';
+    const where = buildAgentLogWhere(userId, req.query);
+
+    const logs = await prisma.agent_call_logs.findMany({
+      where,
+      orderBy: { calledAt: 'desc' },
+      take: 1000
+    });
+
+    if (format === 'csv') {
+      const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
+      const csv = [
+        headers.join(','),
+        ...logs.map(log => 
+          headers.map(h => {
+            const value = (log as any)[h];
+            if (typeof value === 'string' && /[",\r\n]/.test(value)) {
+              return `"${value.replace(/"/g, '""')}"`;
+            }
+            return value ?? '';
+          }).join(',')
+        )
+      ].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=agent-logs-${userId}.csv`);
+      res.send(csv);
+    } else {
+      res.json({
+        success: true,
+        data: logs
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 获取单条日志详情。参数路由必须放在 /export 之后，避免把 export 当作 logId。
 router.get('/me/agent-logs/:logId', async (req, res, next) => {
   try {
     const userId = req.user.userId;
@@ -387,63 +450,6 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
       success: true,
       data: log
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// 导出日志
-router.get('/me/agent-logs/export', async (req, res, next) => {
-  try {
-    const userId = req.user.userId;
-    const startDate = req.query.startDate as string;
-    const endDate = req.query.endDate as string;
-    const format = (req.query.format as string) || 'json';
-
-    const where: any = { userId };
-    
-    if (startDate || endDate) {
-      where.calledAt = {};
-      if (startDate) {
-        where.calledAt.gte = new Date(startDate);
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.calledAt.lte = end;
-      }
-    }
-
-    const logs = await prisma.agent_call_logs.findMany({
-      where,
-      orderBy: { calledAt: 'desc' },
-      take: 1000
-    });
-
-    if (format === 'csv') {
-      const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
-      const csv = [
-        headers.join(','),
-        ...logs.map(log => 
-          headers.map(h => {
-            const value = (log as any)[h];
-            if (typeof value === 'string' && value.includes(',')) {
-              return `"${value}"`;
-            }
-            return value;
-          }).join(',')
-        )
-      ].join('\n');
-
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=agent-logs-${userId}.csv`);
-      res.send(csv);
-    } else {
-      res.json({
-        success: true,
-        data: logs
-      });
-    }
   } catch (error) {
     next(error);
   }

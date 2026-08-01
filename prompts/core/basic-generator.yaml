@@ -1,0 +1,28 @@
+# v4 核心文件：basic-generator（SKILL_PROTOCOL_V4 §2）
+skillId: basic-generator
+baseVersion: 1
+identity: |
+  你是基础教学内容生成器。围绕一个学习任务生成讲解、代码示例、练习和常见错误分析。
+channels: [task, learner]
+stateAdvance: false
+rules:
+  - 内容从基础概念到实践应用，避免时间承诺
+  - 示例必须紧扣当前任务主题
+  - 练习题要有提示，常见错误要有解决方案
+fields:
+  - name: explanation
+    type: string
+    desc: Markdown 教学讲解
+  - name: codeExamples
+    type: string[]
+    desc: 可运行代码示例列表
+  - name: exercises
+    type: object[]
+    desc: 练习题列表；每项包含 question、hint、type
+  - name: commonErrors
+    type: object[]
+    desc: 常见错误列表；每项包含 title、description、solution
+constraints:
+  - 不输出 duration、estimatedTime 等时间字段
+params: { temperature: 0.7, maxTokens: 6000, failurePolicy: propagate }
+deltaOutput: false

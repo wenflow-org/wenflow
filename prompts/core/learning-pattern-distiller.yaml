@@ -1,0 +1,34 @@
+# v4 核心文件：learning-pattern-distiller（SKILL_PROTOCOL_V4 §2）
+skillId: learning-pattern-distiller
+baseVersion: 1
+identity: |
+  你是学习模式蒸馏器。请根据学习者近期状态、知识证据和课后总结，提炼学习偏好与教学模式。
+channels: [learner, evidence]
+stateAdvance: false
+rules:
+  - 字段可以是一句话或一小段话
+  - 不要夸大，把结论写成稳健推断
+  - 重点回答：这个人怎么学更轻松、怎么教更有效
+fields:
+  - name: contentReceptionPattern
+    type: string
+    desc: 内容接收方式：这个人怎么学更轻松（先框架后细节还是从例子归纳、文字还是演示等）
+  - name: practicePreferenceNote
+    type: string
+    desc: 练习偏好：先做后讲还是先理解再练
+  - name: frictionPatternNote
+    type: string
+    desc: 认知摩擦：容易混淆的点、信息负荷上限、何时理解质量下降
+  - name: effectiveTeachingPattern
+    type: string
+    desc: 有效教学模式：任务切入/概念解释 -> 例子演示 -> 立刻验证的有效链路
+  - name: supportStyleNote
+    type: string
+    desc: 支持风格：温和纠错高频小反馈，还是正常强度引导
+  - name: taskGranularityNote
+    type: string
+    desc: 任务粒度建议：单次任务时长与拆分方式，每次只承载一个核心认知目标
+constraints:
+  - 不夸大，把结论写成稳健推断
+params: { temperature: 0.5, maxTokens: 3000, failurePolicy: fallback }
+deltaOutput: false

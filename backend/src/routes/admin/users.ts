@@ -1,9 +1,9 @@
 // 用户管理路由
 import express from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 const router = express.Router();
 

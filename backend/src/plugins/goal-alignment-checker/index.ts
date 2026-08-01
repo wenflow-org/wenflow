@@ -10,7 +10,7 @@ import {
   AgentContext,
   AgentOutput
 } from '../../agents/plugin-types';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { getEventBus, LearningEvent } from '../../gateway/event-bus';
 import { logger } from '../../utils/logger';
 
@@ -54,49 +54,6 @@ export const goalAlignmentChecker: AgentPlugin = {
   config: {
     temperature: 0.3,
     maxTokens: 2000,
-    systemPrompt: `你是学习路径质量评估专家，负责检查学习路径是否与用户目标对齐。
-
-【评估维度】
-1. 知识分布（Knowledge Distribution）
-   - 检查知识点覆盖是否全面
-   - 是否有遗漏的核心概念
-   - 知识点之间的关联是否合理
-
-2. 认知递进（Cognitive Progression）
-   - 学习顺序是否符合认知规律（从简单到复杂）
-   - 是否有跳跃或不合理的难度变化
-   - 支架式学习是否合理
-
-3. 目标关联（Goal Relevance）
-   - 每个里程碑/任务是否与用户目标直接相关
-   - 是否有偏离目标的冗余内容
-   - 最终是否能达成用户的学习目标
-
-【输出格式】
-{
-  "score": 75,
-  "knowledgeDistribution": {
-    "score": 80,
-    "analysis": "分析说明",
-    "issues": ["问题1", "问题2"]
-  },
-  "cognitiveProgression": {
-    "score": 70,
-    "analysis": "分析说明",
-    "issues": ["问题1"]
-  },
-  "goalRelevance": {
-    "score": 75,
-    "analysis": "分析说明",
-    "issues": ["问题1"]
-  },
-  "suggestions": ["建议1", "建议2"]
-}
-
-【评分标准】
-- 每个维度 0-100 分
-- 总分 = (知识分布 + 认知递进 + 目标关联) / 3
-- 低于 70 分需要调整`,
     model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2
@@ -112,11 +69,16 @@ export const goalAlignmentChecker: AgentPlugin = {
         });
 
         if (event.data?.path && event.data?.goal) {
-          const result = await this.checkAlignment(
-            event.data.path,
-            event.data.goal,
-            event.data.userContext || {}
-          );
+          const { getGateway } = await import('../../gateway');
+          const execution = await getGateway().executeSkill(this.id, {
+            pluginInput: {
+              path: event.data.path,
+              goal: event.data.goal,
+              userContext: event.data.userContext || {},
+            },
+            pluginContext: { userId: event.userId },
+          });
+          const result = execution.output?.internal as AlignmentCheckResult;
 
           if (result.score < THRESHOLD_SCORE) {
             await eventBus.emit({
@@ -213,55 +175,35 @@ export const goalAlignmentChecker: AgentPlugin = {
     goal: string,
     userContext: Record<string, any>
   ): Promise<AlignmentCheckResult> {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { agentId: 'goal-alignment-checker' };
-
     const pathSummary = this.summarizePath(path);
+    const deterministicFallback = this.fallbackCheck({ path, goal });
 
-    const messages = [
-      {
-        role: 'system' as const,
-        content: this.config!.systemPrompt!
-      },
-      {
-        role: 'user' as const,
-        content: `请检查以下学习路径是否与用户目标对齐：
+    const result = await executeSkillWithResult(auxSkillDefinitionMap['goal-alignment-checker'], {
+      path,
+      goal,
+      userContext,
+      pathSummary,
+      __fallback: deterministicFallback,
+      __prompt: { requestPath: '/plugins/goal-alignment-checker/check-alignment' },
+    });
 
-【用户目标】
-${goal}
-
-【用户背景】
-${JSON.stringify(userContext, null, 2)}
-
-【学习路径概要】
-${pathSummary}
-
-请输出 JSON 格式的评估结果。`
-      }
-    ];
-
-    const response = await gateway.execute({ messages }, caller, {});
-
-    const content = response.choices[0]?.message.content || '';
-
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          score: Math.max(0, Math.min(100, parsed.score || 0)),
-          knowledgeDistribution: parsed.knowledgeDistribution || { score: 50, analysis: '', issues: [] },
-          cognitiveProgression: parsed.cognitiveProgression || { score: 50, analysis: '', issues: [] },
-          goalRelevance: parsed.goalRelevance || { score: 50, analysis: '', issues: [] },
-          suggestions: parsed.suggestions || [],
-          fallback: false
-        };
-      }
-    } catch (parseError) {
-      logger.warn('[GoalAlignmentChecker] JSON parse failed, using fallback');
+    if (result.quality === 'fallback') {
+      return deterministicFallback;
     }
 
-    return this.fallbackCheck({ path, goal });
+    const parsed = result.output;
+    if (parsed) {
+      return {
+        score: Math.max(0, Math.min(100, parsed.score || 0)),
+        knowledgeDistribution: parsed.knowledgeDistribution || { score: 50, analysis: '', issues: [] },
+        cognitiveProgression: parsed.cognitiveProgression || { score: 50, analysis: '', issues: [] },
+        goalRelevance: parsed.goalRelevance || { score: 50, analysis: '', issues: [] },
+        suggestions: parsed.suggestions || [],
+        fallback: false
+      };
+    }
+
+    return deterministicFallback;
   },
 
   summarizePath(path: any): string {

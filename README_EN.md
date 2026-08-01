@@ -132,9 +132,13 @@ The project is meant to keep exploring how to cultivate five capabilities that m
 ## Quick Start
 
 ### Requirements
-- Node.js >= 18
+- Node.js >= 20.17.0
 
 ### Recommended Order (First Run)
+
+See [`SECURITY.md`](./SECURITY.md) for credential and backup handling. Run `npm run security:scan` before publishing changes.
+
+Runtime status: `/health` and `/livez` report process liveness; `/readyz` verifies both databases and the core runtime state.
 
 ```bash
 # 1) Initialize backend/.env (JWT_SECRET, AI config, initial admin)
@@ -154,7 +158,7 @@ When the backend starts, it automatically syncs core agent / skill prompts from 
 ./start-dev.ps1
 ```
 
-Note: The script automatically checks and installs dependencies, initializes Prisma for both the main DB and the system DB (`prisma generate` + `prisma db push` for each), guides creation or completion of `backend/.env` if needed, and runs one core prompt sync before startup.  
+Note: The script checks dependencies, generates both Prisma clients, runs `prisma migrate deploy` independently for the main and System databases, guides environment setup if needed, and runs one core prompt sync before startup.
 To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma`  
 Important: this flag also skips the startup prompt sync, so it should only be used when both the database schema and prompt records are already ready.
 
@@ -219,8 +223,9 @@ Note: `prompts:sync-core` treats the current repository code as the source of tr
 ### Local SQLite Path Rule
 
 - For local SQLite development, use: `DATABASE_URL=file:./dev.db`
-- Do not use: `DATABASE_URL=file:./prisma/dev.db`
-- The wrong path can make Prisma create a nested `backend/prisma/prisma/dev.db`, which makes existing user data and prompt records appear to disappear
+- For the System database, use: `SYSTEM_DATABASE_URL=file:../system.db`
+- Do not use the old `file:./prisma/*.db` values. Relative SQLite URLs are resolved from each schema directory.
+- Before upgrading an existing environment, identify and back up the authoritative database files, then run `npm run prisma:baseline:audit` in read-only mode.
 
 ### Frontend API Environment Variables
 
@@ -263,7 +268,8 @@ See [ADMIN_SETUP.md](ADMIN_SETUP.md) for details.
 ### Reverse Proxy Common Issues
 
 - Don't add trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
-- When using Nginx/Cloudflare, set `TRUST_PROXY=1`
+- Set `TRUST_PROXY` to the IP/CIDR of the proxy that directly connects to the backend; production rejects `true`
+- Do not publish a backend port that bypasses the trusted proxy. Docker Compose exposes only Nginx to the host
 - If "origin not allowed" error occurs, check browser `Origin` matches `CORS_ORIGIN`
 
 ---

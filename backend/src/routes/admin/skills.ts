@@ -8,21 +8,26 @@ import { Router, Request, Response } from 'express';
 import prisma from '../../config/database';
 import systemPrisma from '../../config/system-database';
 import { getGateway } from '../../gateway';
-import { getAPIGateway } from '../../gateway/api-gateway';
 import { AgentConfigService } from '../../services/agentConfig.service';
+import { getAgentManifest, getCanonicalAgentId } from '../../services/agent-manifest.service';
+import {
+  getUnifiedSkillStats,
+  resolveEffectiveSkillRuntimeConfig,
+  toLegacySkillRuntimeStats,
+  type SkillStatsRange,
+} from '../../services/skill-runtime-contract.service';
 import { PATH_SCENE_FRAMING_PROMPT } from '../../skills/path-scene-framing';
 import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
-import { SESSION_KNOWLEDGE_DISTILLER_PROMPT } from '../../skills/session-knowledge-distiller';
-import { LABEL_GENERATOR_PROMPT } from '../../skills/label-generator';
 import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
 import { GOAL_PROFILE_INFERENCE_PROMPT } from '../../skills/goal-profile-inference';
 import { LEARNING_PATTERN_DISTILLER_PROMPT } from '../../skills/learning-pattern-distiller';
-import { DIALOGUE_CONCEPT_EXTRACTOR_PROMPT } from '../../skills/dialogue-concept-extractor';
 import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
 import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
 import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
 import { VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT } from '../../skills/virtual-learner-path-evaluator';
 import { VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT } from '../../skills/virtual-learner-learn-turn-simulator';
+import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-referee';
+import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
 import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-parser';
@@ -30,19 +35,18 @@ import { STRUCTURED_OUTPUT_PARSER_PROMPT } from '../../skills/structured-output-
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
-  'label-generator': LABEL_GENERATOR_PROMPT,
   'path-scene-framing': PATH_SCENE_FRAMING_PROMPT,
   'stage-designer': STAGE_DESIGNER_PROMPT,
   'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
   'goal-profile-inference': GOAL_PROFILE_INFERENCE_PROMPT,
   'learning-pattern-distiller': LEARNING_PATTERN_DISTILLER_PROMPT,
-  'session-knowledge-distiller': SESSION_KNOWLEDGE_DISTILLER_PROMPT,
-  'dialogue-concept-extractor': DIALOGUE_CONCEPT_EXTRACTOR_PROMPT,
   'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
   'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
   'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
   'virtual-learner-path-evaluator': VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
   'virtual-learner-learn-turn-simulator': VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
+  'virtual-learner-referee': VIRTUAL_LEARNER_REFEREE_PROMPT,
+  'virtual-learner-actor-auditor': VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
   'goal-understanding-composer': GOAL_UNDERSTANDING_COMPOSER_PROMPT,
   'acceptance-evidence-evaluator': ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT,
   'structured-output-parser': STRUCTURED_OUTPUT_PARSER_PROMPT,
@@ -64,109 +68,16 @@ function emptyRuntimeStats(): SkillRuntimeStats {
   };
 }
 
-function buildStats(total: number, successCount: number, avgLatency: number | null | undefined, lastCalledAt: Date | null | undefined): SkillRuntimeStats {
-  return {
-    callCount: total,
-    successRate: total > 0 ? successCount / total : 1,
-    avgLatency: Math.round(avgLatency || 0),
-    lastCalledAt: lastCalledAt || null,
-  };
-}
-
-async function getSkillRuntimeStats(skillNames: string[]): Promise<Map<string, SkillRuntimeStats>> {
+async function getSkillRuntimeStats(
+  skillNames: string[],
+  range: SkillStatsRange = 'all'
+): Promise<Map<string, SkillRuntimeStats>> {
+  const unified = await getUnifiedSkillStats(skillNames, range);
   const result = new Map<string, SkillRuntimeStats>();
-  if (!skillNames.length) return result;
-
-  const promptAgentIds = skillNames.map((name) => `skill:${name}`);
-  const [registrations, promptGroups, promptSuccessGroups, agentLogs] = await Promise.all([
-    systemPrisma.skill_registrations.findMany({
-      where: { name: { in: skillNames } },
-      select: { name: true, callCount: true, successRate: true, updatedAt: true },
-    }),
-    prisma.prompt_call_logs.groupBy({
-      by: ['agentId'],
-      where: { agentId: { in: promptAgentIds } },
-      _count: { _all: true },
-      _avg: { durationMs: true },
-      _max: { createdAt: true },
-    }),
-    prisma.prompt_call_logs.groupBy({
-      by: ['agentId', 'success'],
-      where: { agentId: { in: promptAgentIds } },
-      _count: { _all: true },
-    }),
-    prisma.agent_call_logs.findMany({
-      where: {
-        OR: skillNames.flatMap((name) => [
-          { metadata: { contains: `"skillId":"${name}"` } },
-          { metadata: { contains: `"skillId":"skill:${name}"` } },
-        ]),
-      },
-      select: { metadata: true, success: true, durationMs: true, calledAt: true },
-    }),
-  ]);
-
-  for (const registration of registrations) {
-    result.set(registration.name, {
-      callCount: registration.callCount,
-      successRate: registration.callCount > 0 ? registration.successRate : 1,
-      avgLatency: 0,
-      lastCalledAt: registration.callCount > 0 ? registration.updatedAt : null,
-    });
+  for (const name of skillNames) {
+    const stats = unified.get(name);
+    result.set(name, stats ? toLegacySkillRuntimeStats(stats) : emptyRuntimeStats());
   }
-
-  const promptSuccessMap = new Map<string, number>();
-  const promptBackedSkills = new Set<string>();
-  for (const group of promptSuccessGroups) {
-    if (group.success) {
-      promptSuccessMap.set(group.agentId, group._count._all);
-    }
-  }
-
-  for (const group of promptGroups) {
-    const skillName = group.agentId.replace(/^skill:/, '');
-    promptBackedSkills.add(skillName);
-    result.set(skillName, buildStats(
-      group._count._all,
-      promptSuccessMap.get(group.agentId) || 0,
-      group._avg.durationMs,
-      group._max.createdAt,
-    ));
-  }
-
-  const agentLogMap = new Map<string, { total: number; success: number; durationTotal: number; lastCalledAt: Date | null }>();
-  for (const log of agentLogs) {
-    let metadata: any = null;
-    try {
-      metadata = log.metadata ? JSON.parse(log.metadata) : null;
-    } catch {
-      metadata = null;
-    }
-
-    const rawSkillId = typeof metadata?.skillId === 'string' ? metadata.skillId : '';
-    const skillName = rawSkillId.replace(/^skill:/, '');
-    if (!skillNames.includes(skillName)) continue;
-
-    const current = agentLogMap.get(skillName) || { total: 0, success: 0, durationTotal: 0, lastCalledAt: null };
-    current.total += 1;
-    current.success += log.success ? 1 : 0;
-    current.durationTotal += log.durationMs || 0;
-    if (!current.lastCalledAt || log.calledAt > current.lastCalledAt) {
-      current.lastCalledAt = log.calledAt;
-    }
-    agentLogMap.set(skillName, current);
-  }
-
-  for (const [skillName, stats] of agentLogMap.entries()) {
-    if (promptBackedSkills.has(skillName)) continue;
-    result.set(skillName, buildStats(
-      stats.total,
-      stats.success,
-      stats.total > 0 ? stats.durationTotal / stats.total : 0,
-      stats.lastCalledAt,
-    ));
-  }
-
   return result;
 }
 
@@ -208,7 +119,9 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const gateway = getGateway();
     const skills = gateway.matchSkills({});
-    const runtimeStats = await getSkillRuntimeStats(skills.map(s => s.definition.name));
+    // 时间窗口：all/24h/7d/30d（默认 all 保持兼容；前端目录页默认传 7d）
+    const statsRange = (String(req.query.range || 'all')) as SkillStatsRange;
+    const runtimeStats = await getSkillRuntimeStats(skills.map(s => s.definition.name), statsRange);
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;
@@ -351,6 +264,112 @@ router.get('/agent-relations', async (_req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: relations });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * 批量获取 Skill Prompt 摘要
+ *
+ * 供 Skill 目录页使用：一次请求返回每个 Skill 的 Prompt 状态摘要，
+ * 避免前端对每个 Skill 分别请求版本列表和 effective-prompt（N+1 请求风暴）。
+ * 单点语义与 GET /api/admin/agent-prompts?agentId=skill:x + GET /:name/effective-prompt 对齐：
+ * 有任意版本时取 ACTIVE（无 ACTIVE 取最新版本），否则依次判定 code-fallback / generated-default / missing。
+ *
+ * 注意：此路由必须在 /:name 通配路由之前注册，避免 Express 把 "prompt-summaries" 当作 skill name 匹配。
+ */
+router.get('/prompt-summaries', async (req: Request, res: Response) => {
+  try {
+    const rawSkillIds = String(req.query.skillIds || '');
+    const skillIds = Array.from(new Set(
+      rawSkillIds
+        .split(',')
+        .map((item) => item.trim().replace(/^skill:/, ''))
+        .filter((item) => !!item)
+    )).slice(0, 100);
+
+    if (!skillIds.length) {
+      return res.json({ success: true, data: { summaries: {} } });
+    }
+
+    // 汇总所有候选 agentId（skill: 前缀 id + 规范 id + manifest 别名），一次查询代替逐 Skill 查询
+    const candidateIdsBySkill = new Map<string, string[]>();
+    const allCandidateIds = new Set<string>();
+    for (const skillId of skillIds) {
+      const lookupId = `skill:${skillId}`;
+      const manifest = getAgentManifest(lookupId);
+      const candidates = new Set<string>([lookupId, getCanonicalAgentId(lookupId)]);
+      for (const alias of manifest?.aliases || []) {
+        candidates.add(alias);
+      }
+      const ids = Array.from(candidates);
+      candidateIdsBySkill.set(skillId, ids);
+      ids.forEach((id) => allCandidateIds.add(id));
+    }
+
+    const prompts = await systemPrisma.agent_prompts.findMany({
+      where: { agentId: { in: Array.from(allCandidateIds) } },
+      orderBy: [
+        { agentId: 'asc' },
+        { version: 'desc' },
+      ],
+      select: {
+        id: true,
+        agentId: true,
+        version: true,
+        name: true,
+        description: true,
+        status: true,
+        model: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const promptsByAgentId = new Map<string, typeof prompts>();
+    for (const prompt of prompts) {
+      const list = promptsByAgentId.get(prompt.agentId) || [];
+      list.push(prompt);
+      promptsByAgentId.set(prompt.agentId, list);
+    }
+
+    const gateway = getGateway();
+    const summaries: Record<string, {
+      skillId: string;
+      agentId: string;
+      source: 'db' | 'code-fallback' | 'generated-default' | 'missing';
+      prompt: unknown;
+    }> = {};
+
+    for (const skillId of skillIds) {
+      const agentId = `skill:${skillId}`;
+      const candidateIds = candidateIdsBySkill.get(skillId) || [agentId];
+      const versions = candidateIds.flatMap((id) => promptsByAgentId.get(id) || []);
+      const selected = versions.find((item) => (item.status || '').toUpperCase() === 'ACTIVE') || versions[0] || null;
+
+      if (selected) {
+        summaries[skillId] = { skillId, agentId, source: 'db', prompt: selected };
+        continue;
+      }
+
+      if (SKILL_FALLBACK_PROMPTS[skillId]) {
+        summaries[skillId] = { skillId, agentId, source: 'code-fallback', prompt: null };
+        continue;
+      }
+
+      if (gateway.getSkill(skillId)) {
+        summaries[skillId] = { skillId, agentId, source: 'generated-default', prompt: null };
+        continue;
+      }
+
+      summaries[skillId] = { skillId, agentId, source: 'missing', prompt: null };
+    }
+
+    res.json({ success: true, data: { summaries } });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -723,7 +742,7 @@ function getCategoryLabel(category: string): string {
  *   - 字段契约（agent_contracts 表，按 stage）
  *   - 调用统计（agent_call_logs 聚合）
  *
- * 同时接受老 id（如 'teaching-turn-agent'）通过 alias 解析。
+ * 同时接受老 id（如 'learning-turn-agent'）通过 alias 解析。
  */
 router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
   try {
@@ -748,10 +767,14 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
     }
 
     const parentAgent = getAgentOfSkill(canonicalId);
+    const shortSkillId = canonicalId.replace(/^skill:/, '');
+    const statsRange = String(req.query.range || 'all') as SkillStatsRange;
+    const normalizedRange: SkillStatsRange =
+      statsRange === '24h' || statsRange === '7d' || statsRange === '30d' || statsRange === 'all'
+        ? statsRange
+        : 'all';
 
-    // 并发拉取
-    const [skillConfig, promptVersions, contract, callStats, resolvedRoute] = await Promise.all([
-      systemPrisma.skill_model_configs.findFirst({ where: { skillId: canonicalId.replace(/^skill:/, '') } }),
+    const [promptVersions, contract, effective, unifiedStats] = await Promise.all([
       systemPrisma.agent_prompts.findMany({
         where: { agentId: canonicalId },
         orderBy: { version: 'desc' },
@@ -770,28 +793,11 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         }
       }),
       systemPrisma.agent_contracts.findUnique({ where: { agentId: canonicalId } }),
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: { agentId: canonicalId },
-        _count: { _all: true },
-        _avg: { durationMs: true },
-        _max: { calledAt: true }
-      }),
-      getAPIGateway().resolveRoute({ agentId: parentAgent?.id, skillId: canonicalId.replace(/^skill:/, '') }).catch(() => null)
+      resolveEffectiveSkillRuntimeConfig(shortSkillId),
+      getUnifiedSkillStats([shortSkillId], normalizedRange),
     ]);
 
-    const totalCalls = callStats.reduce((s, g) => s + g._count._all, 0);
-    const successCalls = callStats.find(g => g.success)?._count._all || 0;
-    const successRate = totalCalls > 0 ? Number(((successCalls / totalCalls) * 100).toFixed(1)) : null;
-    const avgDuration = callStats.length > 0
-      ? Math.round(callStats.reduce((s, g) => s + (g._avg.durationMs || 0) * g._count._all, 0) / totalCalls || 0)
-      : 0;
-    const lastCalledAt = callStats.reduce<Date | null>((latest, g) => {
-      if (!g._max.calledAt) return latest;
-      if (!latest) return g._max.calledAt;
-      return g._max.calledAt > latest ? g._max.calledAt : latest;
-    }, null);
-
+    const stats = unifiedStats.get(shortSkillId);
     const activePrompt = promptVersions.find(p => p.status === 'ACTIVE' || p.status === 'published') || null;
 
     res.json({
@@ -812,18 +818,34 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
           monitoringGroup: parentAgent.monitoringGroup
         } : null,
         modelConfig: {
-          enabled: !!skillConfig?.enabled,
-          tier: skillConfig?.tier || (resolvedRoute?.thinkingMode === 'enabled' || resolvedRoute?.reasoningEffort === 'high' || resolvedRoute?.reasoningEffort === 'max' ? 'reasoning' : 'chat'),
-          model: resolvedRoute?.model || skillConfig?.model || null,
-          thinkingMode: resolvedRoute?.thinkingMode || skillConfig?.thinkingMode || 'default',
-          reasoningEffort: resolvedRoute?.reasoningEffort || skillConfig?.reasoningEffort || 'default',
-          temperature: resolvedRoute?.temperature ?? skillConfig?.temperature ?? manifest.defaultModelConfig?.temperature ?? null,
-          maxTokens: resolvedRoute?.maxTokens ?? skillConfig?.maxTokens ?? manifest.defaultModelConfig?.maxTokens ?? null,
-          timeoutMs: resolvedRoute?.timeoutMs ?? skillConfig?.requestTimeoutMs ?? null,
-          source: skillConfig?.enabled ? 'skill-override' : parentAgent ? 'agent-or-platform' : 'platform-default',
-          inheritedFromAgent: !!parentAgent && !skillConfig?.enabled,
-          hasSkillOverride: !!skillConfig?.enabled,
+          enabled: effective.route.hasSkillOverride,
+          tier: effective.route.thinkingMode === 'enabled'
+            || effective.route.reasoningEffort === 'high'
+            || effective.route.reasoningEffort === 'max'
+            ? 'reasoning'
+            : 'chat',
+          // 头部展示真实 LLM 生效模型（prompt 优先）
+          model: effective.llmRequest.model,
+          thinkingMode: effective.route.thinkingMode || 'default',
+          reasoningEffort: effective.route.reasoningEffort || 'default',
+          temperature: effective.llmRequest.temperature,
+          maxTokens: effective.llmRequest.maxTokens,
+          timeoutMs: effective.route.timeoutMs,
+          source: effective.route.source,
+          inheritedFromAgent: !!parentAgent && !effective.route.hasSkillOverride,
+          hasSkillOverride: effective.route.hasSkillOverride,
           manifestDefault: manifest.defaultModelConfig || null,
+          route: effective.route,
+          llmRequest: effective.llmRequest,
+          override: effective.override,
+          reliability: {
+            maxUpstreamAttempts: effective.reliability.maxUpstreamAttempts,
+            maxTransportRetries: effective.reliability.maxTransportRetries,
+            maxLogicalRetries: effective.reliability.maxLogicalRetries,
+            logicalRetrySource: effective.reliability.logicalRetrySource,
+            platformMaxLogicalRetries: effective.reliability.platformMaxLogicalRetries,
+            businessFallback: 'code-defined'
+          }
         },
         contract: contract ? {
           stage: contract.stage,
@@ -849,11 +871,13 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         })),
         activePromptId: activePrompt?.id || null,
         stats: {
-          totalCalls,
-          successCalls,
-          successRate,
-          avgDuration,
-          lastCalledAt
+          totalCalls: stats?.callCount || 0,
+          successCalls: stats?.successCount || 0,
+          successRate: stats?.successRate ?? null,
+          avgDuration: stats?.avgDurationMs || 0,
+          lastCalledAt: stats?.lastCalledAt || null,
+          source: stats?.source || 'none',
+          range: normalizedRange,
         }
       }
     });

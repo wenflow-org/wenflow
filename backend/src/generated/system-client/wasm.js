@@ -163,6 +163,8 @@ exports.Prisma.Agent_promptsScalarFieldEnum = {
   sourceHash: 'sourceHash',
   compileContextHash: 'compileContextHash',
   compiledAt: 'compiledAt',
+  coreHash: 'coreHash',
+  coreVersion: 'coreVersion',
   temperature: 'temperature',
   maxTokens: 'maxTokens',
   model: 'model',
@@ -246,7 +248,18 @@ exports.Prisma.Platform_api_configsScalarFieldEnum = {
   lightEndpoint: 'lightEndpoint',
   chatModels: 'chatModels',
   reasoningModels: 'reasoningModels',
-  lightModels: 'lightModels'
+  lightModels: 'lightModels',
+  adminAccessMode: 'adminAccessMode',
+  adminAllowedIps: 'adminAllowedIps',
+  allowPrivateNetwork: 'allowPrivateNetwork',
+  privateNetworkHosts: 'privateNetworkHosts'
+};
+
+exports.Prisma.Platform_settingsScalarFieldEnum = {
+  key: 'key',
+  value: 'value',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.Skill_model_configsScalarFieldEnum = {
@@ -261,6 +274,7 @@ exports.Prisma.Skill_model_configsScalarFieldEnum = {
   temperature: 'temperature',
   maxTokens: 'maxTokens',
   requestTimeoutMs: 'requestTimeoutMs',
+  maxLogicalRetries: 'maxLogicalRetries',
   enabled: 'enabled',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -400,6 +414,7 @@ exports.Prisma.ModelName = {
   orchestrator_definitions: 'orchestrator_definitions',
   agent_registrations: 'agent_registrations',
   platform_api_configs: 'platform_api_configs',
+  platform_settings: 'platform_settings',
   skill_model_configs: 'skill_model_configs',
   skill_registrations: 'skill_registrations',
   field_definitions: 'field_definitions',

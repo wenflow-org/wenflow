@@ -1,0 +1,55 @@
+version: prompt-lab-manifest/v1
+
+skillId: semantic-freeze-judge
+agentId: skill:semantic-freeze-judge
+
+name: default-skill-semantic-freeze-judge
+archetype: extractor
+description: Prompt 语义等价审查员（守门第三查）
+
+acceptableAgentIds:
+  - skill:semantic-freeze-judge
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+runtimeDefaults:
+  tier: chat
+  temperature: 0.1
+  maxTokens: 4000
+  model: null
+  thinkingMode: disabled
+  reasoningEffort: default
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
+
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: semantic-freeze-judge
+    phases: [judgement-completed]
+    defaultPhase: judgement-completed
+    terminalPhases: [judgement-completed]
+    statusValues: [succeeded, partial, blocked, failed]
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags:
+  - core-skill
+  - extractor
+  - v4-gate

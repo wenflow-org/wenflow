@@ -1,6 +1,5 @@
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
+import { callPrompt } from '../../composers/prompt-composer';
 
 export const goalProfileInferenceDefinition: SkillDefinition = {
   name: 'goal-profile-inference',
@@ -52,8 +51,6 @@ export const GOAL_PROFILE_INFERENCE_PROMPT = `你是学习者画像分析器。�
 4. 语气要像内部建模说明，不要像对用户说话。
 5. goalNarrative 关注真实要解决的问题，不要重复表面目标。`;
 
-const promptConfigService = new AgentConfigService();
-
 function safeText(value: any): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -78,42 +75,46 @@ function buildFallback(input: GoalProfileInferenceInput): GoalProfileInferenceOu
 export async function goalProfileInference(input: GoalProfileInferenceInput): Promise<SkillExecutionResult<GoalProfileInferenceOutput>> {
   const startTime = Date.now();
   try {
-    const gateway = getAPIGateway();
-    const caller: CallerInfo = { skillId: 'goal-profile-inference' };
-    const promptConfig = await promptConfigService.getActivePrompt('skill:goal-profile-inference');
-    if (!promptConfig?.systemPrompt?.trim()) {
-      throw new Error('SKILL_PROMPT_MISSING: goal-profile-inference');
+    const result = await callPrompt<GoalProfileInferenceInput, GoalProfileInferenceOutput>({
+      agentId: 'skill:goal-profile-inference',
+      defaultSystemPrompt: '',
+      requireActivePrompt: true,
+      caller: { skillId: 'goal-profile-inference' },
+            buildUserPayload: (payload) => payload,
+      normalizeOutput: (parsed, payload) => {
+        const fallback = buildFallback(payload);
+        const obj = parsed && typeof parsed === 'object' ? parsed : {};
+        return {
+          goalNarrative: safeText(obj.goalNarrative) || fallback.goalNarrative,
+          backgroundContextNote: safeText(obj.backgroundContextNote) || fallback.backgroundContextNote,
+          motivationNarrative: safeText(obj.motivationNarrative) || fallback.motivationNarrative,
+          timeConstraintNote: safeText(obj.timeConstraintNote) || fallback.timeConstraintNote,
+          selfAssessmentNote: safeText(obj.selfAssessmentNote) || fallback.selfAssessmentNote,
+        };
+      },
+      validateParsedOutput: (parsed) =>
+        parsed && typeof parsed === 'object'
+          ? { valid: true }
+          : { valid: false, failureReason: 'GOAL_PROFILE_OUTPUT_NOT_OBJECT' },
+    }, input);
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'GOAL_PROFILE_INFERENCE_FAILED');
     }
-    const messages: ChatMessage[] = [
-      { role: 'system', content: promptConfig.systemPrompt },
-      { role: 'user', content: JSON.stringify(input, null, 2) }
-    ];
-    const response = await gateway.execute({ messages }, caller, {
-      temperature: promptConfig.temperature,
-      maxTokens: promptConfig.maxTokens,
-      model: promptConfig.model,
-    });
-    const content = response.choices[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-    const fallback = buildFallback(input);
+
     return {
       success: true,
-      output: {
-        goalNarrative: safeText(parsed.goalNarrative) || fallback.goalNarrative,
-        backgroundContextNote: safeText(parsed.backgroundContextNote) || fallback.backgroundContextNote,
-        motivationNarrative: safeText(parsed.motivationNarrative) || fallback.motivationNarrative,
-        timeConstraintNote: safeText(parsed.timeConstraintNote) || fallback.timeConstraintNote,
-        selfAssessmentNote: safeText(parsed.selfAssessmentNote) || fallback.selfAssessmentNote
-      },
-      duration: Date.now() - startTime
+      output: result.output,
+      duration: Date.now() - startTime,
+      quality: 'model',
     };
   } catch {
     return {
       success: true,
       output: buildFallback(input),
       duration: Date.now() - startTime,
-      cached: true
+      cached: true,
+      quality: 'fallback',
     };
   }
 }

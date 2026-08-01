@@ -1,5 +1,36 @@
 // 学习API
-import api from '../utils/api';
+import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
+import type { ReplanSignalLike } from '@/utils/replanSignal';
+
+export type GenerationLifecycle =
+  | 'core_queued'
+  | 'core_processing'
+  | 'core_stale'
+  | 'core_failed'
+  | 'stage_design_queued'
+  | 'stage_design_processing'
+  | 'stage_design_stale'
+  | 'stage_design_failed'
+  | 'ready';
+
+export type GenerationPhase = 'core' | 'stage_design' | 'ready';
+export type GenerationRunStatus = 'queued' | 'processing' | 'stale' | 'failed' | 'ready';
+export type GenerationRetryType = 'core' | 'stage_design' | null;
+
+export interface GenerationLifecycleDTO {
+  lifecycle: GenerationLifecycle;
+  phase: GenerationPhase;
+  status: GenerationRunStatus;
+  runId: string | null;
+  heartbeatAt: string | null;
+  retryAllowed: boolean;
+  retryType: GenerationRetryType;
+  completedStages: number;
+  totalStages: number;
+  currentStageNumber: number | null;
+  errorMessage: string | null;
+  canStartLearning: boolean;
+}
 
 export interface LearningGoal {
   id: string;
@@ -26,23 +57,40 @@ export interface LearningPath {
   totalStages?: number;
   estimatedHours?: number;
   aiGenerated: boolean;
+  status?: string;
   weeks: Week[];
   stages?: Stage[];
   milestones?: Stage[];
   createdAt: string;
   updatedAt: string;
   generationStatus?: {
+    lifecycle?: GenerationLifecycle;
+    phase?: GenerationPhase | 'stageDesign' | 'enrichment';
+    status?: GenerationRunStatus | 'pending' | 'succeeded' | 'completed';
+    runId?: string | null;
+    heartbeatAt?: string | null;
+    retryAllowed?: boolean;
+    retryType?: GenerationRetryType | 'stageDesign' | 'enrichment';
+    completedStages?: number;
+    totalStages?: number;
+    currentStageNumber?: number | null;
+    errorMessage?: string | null;
+    canStartLearning?: boolean;
     core?: 'pending' | 'processing' | 'succeeded' | 'failed';
     coreStep?: 'framing' | 'planning' | 'persist' | 'completed';
+    stageDesign?: 'pending' | 'processing' | 'succeeded' | 'failed';
     enrichment?: 'pending' | 'processing' | 'succeeded' | 'failed';
     lastError?: string | null;
     sourceConversationId?: string | null;
     triggerSource?: string | null;
     updatedAt?: string | null;
     enrichmentRetryCount?: number;
+    stageDesignRetryCount?: number;
     lastEnrichmentRetryAt?: string | null;
-    scene?: Record<string, any> | null;
+    lastStageDesignRetryAt?: string | null;
+    scene?: ({ firstDeliverable?: string } & Record<string, unknown>) | null;
   } | null;
+  generationLifecycle?: GenerationLifecycleDTO | null;
   sceneSummary?: {
     title?: string;
     firstDeliverable?: string;
@@ -229,14 +277,223 @@ export interface AdaptiveGuidancePayload {
   } | null;
 }
 
+export interface PathReplanRequest {
+  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
+  reason?: string;
+  mode?: 'new_version' | 'overwrite';
+  stageNumber?: number;
+  evidence?: Record<string, unknown>;
+  requireConfirmation?: boolean;
+}
+
 export interface PathReplanResponse {
   enabled: boolean;
   status: string;
-  signal?: any;
-  request?: any;
-  policy?: any;
-  result?: any;
+  signal?: ReplanSignalLike | null;
+  request?: PathReplanRequest | null;
+  policy?: Record<string, unknown> | null;
+  result?: Record<string, unknown> | null;
 }
+
+const lifecycleValues = new Set<GenerationLifecycle>([
+  'core_queued',
+  'core_processing',
+  'core_stale',
+  'core_failed',
+  'stage_design_queued',
+  'stage_design_processing',
+  'stage_design_stale',
+  'stage_design_failed',
+  'ready'
+]);
+
+const asRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' ? value as Record<string, unknown> : {}
+);
+
+const asOptionalString = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim() ? value.trim() : null
+);
+
+const asNonNegativeInteger = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+};
+
+const normalizePhase = (value: unknown): GenerationPhase | null => {
+  if (value === 'core') return 'core';
+  if (value === 'stage_design' || value === 'stageDesign' || value === 'enrichment') {
+    return 'stage_design';
+  }
+  if (value === 'ready') return 'ready';
+  return null;
+};
+
+const normalizeRunStatus = (value: unknown): GenerationRunStatus | null => {
+  if (value === 'queued' || value === 'pending') return 'queued';
+  if (value === 'processing') return 'processing';
+  if (value === 'stale') return 'stale';
+  if (value === 'failed') return 'failed';
+  if (value === 'ready' || value === 'succeeded' || value === 'completed') return 'ready';
+  return null;
+};
+
+const lifecycleFromPhaseStatus = (
+  phase: GenerationPhase | null,
+  status: GenerationRunStatus | null
+): GenerationLifecycle | null => {
+  if (phase === 'ready' || status === 'ready') return 'ready';
+  if (!phase || !status) return null;
+  if (phase === 'core') return `core_${status}` as GenerationLifecycle;
+  if (phase === 'stage_design') {
+    return `stage_design_${status}` as GenerationLifecycle;
+  }
+  return null;
+};
+
+const getLifecycleParts = (lifecycle: GenerationLifecycle): {
+  phase: GenerationPhase;
+  status: GenerationRunStatus;
+} => {
+  if (lifecycle === 'ready') return { phase: 'ready', status: 'ready' };
+  if (lifecycle.startsWith('stage_design_')) {
+    return {
+      phase: 'stage_design',
+      status: lifecycle.replace('stage_design_', '') as GenerationRunStatus
+    };
+  }
+  return {
+    phase: 'core',
+    status: lifecycle.replace('core_', '') as GenerationRunStatus
+  };
+};
+
+const deriveLegacyLifecycle = (
+  source: Record<string, unknown>,
+  raw: Record<string, unknown>
+): GenerationLifecycle => {
+  const pathStatus = source.status;
+  const coreStatus = normalizeRunStatus(raw.core);
+  const stageDesignStatus = normalizeRunStatus(raw.stageDesign ?? raw.enrichment);
+
+  if (pathStatus === 'generating') {
+    if (coreStatus === 'failed') return 'core_failed';
+    return coreStatus === 'queued' ? 'core_queued' : 'core_processing';
+  }
+
+  if (pathStatus === 'failed') return 'core_failed';
+
+  if (stageDesignStatus === 'queued') return 'stage_design_queued';
+  if (stageDesignStatus === 'processing') return 'stage_design_processing';
+  if (stageDesignStatus === 'failed') return 'stage_design_failed';
+
+  if (pathStatus === 'active' && source.canStartLearning === false) {
+    return 'stage_design_processing';
+  }
+
+  if (coreStatus === 'queued') return 'core_queued';
+  if (coreStatus === 'processing') return 'core_processing';
+  if (coreStatus === 'failed') return 'core_failed';
+
+  return 'ready';
+};
+
+/**
+ * 将新 lifecycle DTO 与旧路径状态统一成稳定的前端模型。
+ * stale 只接受后端明确状态，不再根据前端本地时间推断。
+ */
+export const normalizeGenerationLifecycle = (value: unknown): GenerationLifecycleDTO => {
+  const source = asRecord(value);
+  const nestedLifecycle = asRecord(source.generationLifecycle);
+  const persistedRun = asRecord(source.generationRun);
+  const legacyStatus = asRecord(source.generationStatus);
+  const coreRunWaitingForStages = persistedRun.phase === 'core'
+    && normalizeRunStatus(persistedRun.status) === 'ready'
+    && normalizeRunStatus(legacyStatus.stageDesign ?? legacyStatus.enrichment) !== 'ready';
+  const raw = Object.keys(nestedLifecycle).length > 0
+    ? nestedLifecycle
+    : (Object.keys(persistedRun).length > 0 && !coreRunWaitingForStages
+        ? persistedRun
+    : (lifecycleValues.has(source.lifecycle as GenerationLifecycle) || source.phase || source.runId
+        ? source
+        : legacyStatus));
+
+  const explicitLifecycle = lifecycleValues.has(raw.lifecycle as GenerationLifecycle)
+    ? raw.lifecycle as GenerationLifecycle
+    : null;
+  const phaseStatusLifecycle = lifecycleFromPhaseStatus(
+    normalizePhase(raw.phase),
+    normalizeRunStatus(raw.status)
+  );
+  const lifecycle = explicitLifecycle || phaseStatusLifecycle || deriveLegacyLifecycle(source, raw);
+  const { phase, status } = getLifecycleParts(lifecycle);
+
+  const stages = Array.isArray(source.milestones)
+    ? source.milestones
+    : (Array.isArray(source.stages) ? source.stages : (Array.isArray(source.weeks) ? source.weeks : []));
+  const totalStages = asNonNegativeInteger(
+    raw.totalStages ?? raw.totalItems ?? source.totalStages ?? source.totalMilestones ?? source.totalWeeks,
+    stages.length
+  );
+  const completedStagesFallback = lifecycle === 'ready'
+    ? totalStages
+    : stages.filter((stage) => {
+        const record = asRecord(stage);
+        const tasks = Array.isArray(record.subtasks) ? record.subtasks : record.tasks;
+        return Array.isArray(tasks) && tasks.length > 0;
+      }).length;
+  const completedStages = Math.min(
+    totalStages || Number.MAX_SAFE_INTEGER,
+    asNonNegativeInteger(raw.completedStages ?? raw.completedItems, completedStagesFallback)
+  );
+  const explicitCanStart = typeof raw.canStartLearning === 'boolean'
+    ? raw.canStartLearning
+    : (typeof source.canStartLearning === 'boolean' ? source.canStartLearning : null);
+  const retryTypeValue = normalizePhase(raw.retryType);
+  const defaultRetryType = status === 'failed' || status === 'stale'
+    ? (phase === 'stage_design' ? 'stage_design' : 'core')
+    : null;
+  const retryType = retryTypeValue === 'ready' ? null : (retryTypeValue || defaultRetryType);
+
+  return {
+    lifecycle,
+    phase,
+    status,
+    runId: asOptionalString(raw.runId),
+    heartbeatAt: asOptionalString(raw.heartbeatAt ?? raw.updatedAt),
+    retryAllowed: typeof raw.retryAllowed === 'boolean'
+      ? raw.retryAllowed
+      : (status === 'failed' || status === 'stale'),
+    retryType,
+    completedStages: totalStages > 0 ? Math.min(completedStages, totalStages) : completedStages,
+    totalStages,
+    currentStageNumber: asNonNegativeInteger(raw.currentStageNumber, 0) || null,
+    errorMessage: asOptionalString(raw.errorMessage ?? raw.lastError)
+      || ((status === 'failed' || status === 'stale')
+        ? asOptionalString(source.learningBlockedReason)
+        : null),
+    canStartLearning: explicitCanStart ?? lifecycle === 'ready'
+  };
+};
+
+export const mergeGenerationLifecycle = (
+  path: LearningPath,
+  lifecycleValue: unknown
+): LearningPath => {
+  const generationLifecycle = normalizeGenerationLifecycle(lifecycleValue);
+  const nextStatus = generationLifecycle.phase === 'core'
+    ? (generationLifecycle.status === 'failed' ? 'failed' : 'generating')
+    : (path.status === 'completed' ? 'completed' : 'active');
+
+  return {
+    ...path,
+    status: nextStatus,
+    canStartLearning: generationLifecycle.canStartLearning,
+    learningBlockedReason: generationLifecycle.errorMessage
+      || (generationLifecycle.lifecycle === 'ready' ? null : path.learningBlockedReason),
+    generationLifecycle
+  };
+};
 
 export const learningAPI = {
   // 创建学习目标
@@ -261,42 +518,51 @@ export const learningAPI = {
       timePerDay?: string;
     };
   }): Promise<{ learningPath: LearningPath; weeks: Week[]; totalTasks: number }> {
-    const response = await api.post('/learning/paths/generate', data);
+    const response = await api.post('/learning/paths/generate', data, { timeout: AI_REQUEST_TIMEOUT });
     return response.data;
   },
 
   // 获取学习路径列表
   async getPaths(): Promise<LearningPath[]> {
     const response = await api.get('/learning/paths');
-    return response.data;
+    return (response.data || []).map((path: LearningPath) => ({
+      ...path,
+      generationLifecycle: normalizeGenerationLifecycle(path)
+    }));
   },
 
   // 获取学习路径详情
   async getPathDetail(id: string): Promise<LearningPath> {
     const response = await api.get(`/learning/paths/${id}`);
-    return response.data;
+    return {
+      ...response.data,
+      generationLifecycle: normalizeGenerationLifecycle(response.data)
+    };
   },
 
-  async requestPathReplan(pathId: string, data: {
-    triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
-    reason?: string;
-    mode?: 'new_version' | 'overwrite';
-    stageNumber?: number;
-    evidence?: Record<string, any>;
-    requireConfirmation?: boolean;
-  }): Promise<PathReplanResponse> {
-    const response = await api.post(`/learning/paths/${pathId}/replan`, data);
+  async getPathGenerationStatus(id: string): Promise<GenerationLifecycleDTO> {
+    const response = await api.get(`/learning/paths/${id}/generation-status`);
+    return normalizeGenerationLifecycle(response?.data ?? response);
+  },
+
+  async requestPathReplan(pathId: string, data: PathReplanRequest): Promise<PathReplanResponse> {
+    const response = await api.post(`/learning/paths/${pathId}/replan`, data, { timeout: AI_REQUEST_TIMEOUT });
     return response.data;
   },
 
   // 重新生成学习路径
   async regeneratePath(pathId: string): Promise<{ message?: string }> {
-    const response = await api.post(`/learning/paths/${pathId}/regenerate`);
+    const response = await api.post(`/learning/paths/${pathId}/regenerate`, undefined, { timeout: AI_REQUEST_TIMEOUT });
     return response.data;
   },
 
   async retryPathEnrichment(pathId: string): Promise<{ message?: string }> {
-    const response = await api.post(`/learning/paths/${pathId}/retry-stage-design`);
+    const response = await api.post(`/learning/paths/${pathId}/retry-stage-design`, undefined, { timeout: AI_REQUEST_TIMEOUT });
+    return response.data;
+  },
+
+  async retryPathGeneration(pathId: string): Promise<{ message?: string }> {
+    const response = await api.patch(`/learning/paths/${pathId}/retry`, undefined, { timeout: AI_REQUEST_TIMEOUT });
     return response.data;
   },
 
@@ -319,7 +585,7 @@ export const learningAPI = {
   // 获取当前学习状态
   async getCurrentState() {
     const response = await api.get('/state/current');
-    return (response as any)?.data ?? null;
+    return (response as { data?: unknown } | null)?.data ?? null;
   },
 
   async getAdaptiveGuidance(): Promise<AdaptiveGuidancePayload | null> {

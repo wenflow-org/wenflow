@@ -1,0 +1,48 @@
+version: prompt-lab-manifest/v1
+skillId: virtual-learner-scenario-designer
+agentId: skill:virtual-learner-scenario-designer
+name: default-virtual-learner-scenario-designer
+archetype: generator
+description: 虚拟学习者实验样本设计师
+acceptableAgentIds:
+  - skill:virtual-learner-scenario-designer
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+runtimeDefaults:
+  tier: chat
+  temperature: 0.9
+  maxTokens: 8000
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+    modelExposure: projected
+  failurePolicy: retry
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - generator

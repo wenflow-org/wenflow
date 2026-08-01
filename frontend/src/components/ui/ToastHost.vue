@@ -1,15 +1,17 @@
 <template>
   <Teleport to="body">
-    <div class="toast-host" aria-live="polite">
+    <div class="toast-host" role="status" aria-live="polite">
       <TransitionGroup name="toast-slide">
         <div
           v-for="item in toast.toasts"
           :key="item.id"
           class="toast-item"
-          :class="[`toast-item--${item.type}`, { 'toast-item--closing': item.closing }]"
+          :class="`toast-item--${item.type}`"
+          :role="item.type === 'error' ? 'alert' : 'status'"
+          :aria-live="item.type === 'error' ? 'assertive' : 'polite'"
+          aria-atomic="true"
           @mouseenter="pauseToast(item)"
           @mouseleave="resumeToast(item)"
-          @click="dismissToast(item)"
         >
           <span class="toast-icon" :class="`toast-icon--${item.type}`" aria-hidden="true">
             <template v-if="item.type === 'success'">&#10003;</template>
@@ -21,8 +23,8 @@
           <button
             type="button"
             class="toast-close"
-            aria-label="关闭"
-            @click.stop="dismissToast(item)"
+            aria-label="关闭通知"
+            @click="dismissToast(item)"
           >&times;</button>
         </div>
       </TransitionGroup>
@@ -31,32 +33,19 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted } from 'vue';
 import { toast, type ToastItem } from '../../utils/toast';
 
-const timers = new Map<number, ReturnType<typeof setTimeout>>();
-
 const pauseToast = (item: ToastItem) => {
-  if (timers.has(item.id)) return;
-  const timer = setTimeout(() => {}, 0);
-  timers.set(item.id, timer);
+  toast.pause(item.id);
 };
 
 const resumeToast = (item: ToastItem) => {
-  if (timers.has(item.id)) {
-    clearTimeout(timers.get(item.id)!);
-    timers.delete(item.id);
-  }
+  toast.resume(item.id);
 };
 
 const dismissToast = (item: ToastItem) => {
   toast.close(item.id);
 };
-
-onUnmounted(() => {
-  timers.forEach((t) => clearTimeout(t));
-  timers.clear();
-});
 </script>
 
 <style scoped>
@@ -83,9 +72,12 @@ onUnmounted(() => {
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  cursor: pointer;
   pointer-events: auto;
   transition: box-shadow 0.2s ease;
+}
+
+.toast-item--error {
+  border-color: rgba(220, 38, 38, 0.22);
 }
 
 .toast-item:hover {
@@ -157,6 +149,11 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.04);
 }
 
+.toast-close:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 /* Transition */
 .toast-slide-enter-active {
   transition: all 220ms ease-out;
@@ -178,5 +175,21 @@ onUnmounted(() => {
 
 .toast-slide-move {
   transition: transform 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-item,
+  .toast-close,
+  .toast-slide-enter-active,
+  .toast-slide-leave-active,
+  .toast-slide-move {
+    transition: none;
+  }
+
+  .toast-slide-enter-from,
+  .toast-slide-leave-to {
+    opacity: 1;
+    transform: none;
+  }
 }
 </style>

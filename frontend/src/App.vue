@@ -1,27 +1,26 @@
 <template>
-  <div id="app">
-    <RouterView v-slot="{ Component, route }">
-      <transition name="route-fade" mode="out-in">
-        <component :is="Component" :key="route.fullPath" />
-      </transition>
-    </RouterView>
-    <ToastHost />
-    <DevOverlay />
-  </div>
+  <el-config-provider :locale="zhCn">
+    <div id="app">
+      <AnnouncementBanner />
+      <RouterView v-slot="{ Component }">
+        <transition name="route-fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </RouterView>
+      <ToastHost />
+    </div>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { useUserStore } from './stores/user';
 import ToastHost from './components/ui/ToastHost.vue';
-import DevOverlay from './components/dev/DevOverlay.vue';
+import AnnouncementBanner from './components/AnnouncementBanner.vue';
 
 const userStore = useUserStore();
-
-onMounted(() => {
-  document.title = 'AI学习平台';
-  userStore.initFromStorage();
-});
+// 同步恢复登录态，避免子组件 onMounted/watch 时 isLoggedIn 仍为 false
+userStore.initFromStorage();
 </script>
 
 <style scoped>
@@ -35,7 +34,7 @@ onMounted(() => {
 /* 路由切换 fade-in 微动效 */
 .route-fade-enter-active,
 .route-fade-leave-active {
-  transition: opacity 220ms ease, transform 220ms ease;
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .route-fade-enter-from {

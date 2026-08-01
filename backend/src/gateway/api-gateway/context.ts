@@ -1,4 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import type { RouteExecutionOverride } from './types';
+import type { RetryBudget } from './retry-budget';
+import type { ContextEnvelopeV1 } from '../../skills/context-envelope';
 
 export type SourceEntry = 'user' | 'test' | 'admin' | 'platform' | 'arena' | 'lab' | 'simulation';
 
@@ -8,10 +11,36 @@ export interface RequestContext {
   action?: string;
   skillId?: string;
   executionLogId?: string;
+  parentExecutionId?: string;
+  rootExecutionId?: string;
+  promptCallId?: string;
+  promptAttemptNo?: number;
+  retryBudget?: RetryBudget;
+  logicalRetryLimit?: number;
+  sessionId?: string;
+  conversationId?: string;
+  pathId?: string;
+  taskId?: string;
+  locale?: {
+    language?: string;
+    timeZone?: string;
+  };
+  contextEnvelope?: ContextEnvelopeV1;
   sourceEntry?: SourceEntry;
   traceId?: string;
   callerAgent?: string;
   userRole?: 'admin' | 'user' | 'tester' | 'viewer';
+  abortSignal?: AbortSignal;
+  experimentId?: string;
+  runId?: string;
+  promptRuntimeOverride?: {
+    systemPromptOverride?: string;
+    routingUserIdOverride?: string;
+    modelOverride?: string;
+    temperatureOverride?: number;
+    maxTokensOverride?: number;
+    routeOverride?: RouteExecutionOverride;
+  };
 }
 
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();

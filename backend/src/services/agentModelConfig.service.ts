@@ -1,8 +1,11 @@
 import systemPrisma from '../config/system-database';
 import { logger } from '../utils/logger';
 import { getDefaultAgentModelConfigs } from './agent-manifest.service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { getAPIGateway } from '../gateway/api-gateway';
+import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
+
+const SECRET_CONTEXT = 'system.agent_model_configs.apiKey';
 
 export interface AgentModelConfig {
   agentId: string;
@@ -10,8 +13,8 @@ export interface AgentModelConfig {
   model?: string;
   thinkingMode?: string;
   reasoningEffort?: string;
-  endpoint?: string;
-  apiKey?: string;
+  endpoint?: string | null;
+  apiKey?: string | null;
   temperature: number;
   maxTokens: number;
   enabled: boolean;
@@ -38,6 +41,7 @@ class AgentModelConfigService {
 
         return {
           ...persisted,
+          apiKey: decryptSecret(persisted.apiKey, SECRET_CONTEXT),
           thinkingMode: persisted.thinkingMode || 'default',
           reasoningEffort: persisted.reasoningEffort || 'default'
         };
@@ -51,6 +55,7 @@ class AgentModelConfigService {
         ...mergedConfigs,
         ...missingManifestConfigs.map((config) => ({
           ...config,
+          apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT),
           thinkingMode: config.thinkingMode || 'default',
           reasoningEffort: config.reasoningEffort || 'default'
         }))
@@ -63,7 +68,8 @@ class AgentModelConfigService {
 
   async get(agentId: string): Promise<AgentModelConfig | null> {
     try {
-      return await systemPrisma.agent_model_configs.findUnique({ where: { agentId } });
+      const config = await systemPrisma.agent_model_configs.findUnique({ where: { agentId } });
+      return config ? { ...config, apiKey: decryptSecret(config.apiKey, SECRET_CONTEXT) } : null;
     } catch (error) {
       logger.error(`Failed to get agent config: ${agentId}`, error);
       throw error;
@@ -72,13 +78,16 @@ class AgentModelConfigService {
 
   async upsert(agentId: string, config: Partial<AgentModelConfig>): Promise<AgentModelConfig> {
     try {
+      const data = config.apiKey === undefined
+        ? config
+        : { ...config, apiKey: encryptSecret(config.apiKey, SECRET_CONTEXT) };
       const result = await systemPrisma.agent_model_configs.upsert({
         where: { agentId },
-        update: { ...config, updatedAt: new Date() },
-        create: { id: uuidv4(), agentId, ...config, updatedAt: new Date() }
+        update: { ...data, updatedAt: new Date() },
+        create: { id: uuidv4(), agentId, ...data, updatedAt: new Date() }
       });
       getAPIGateway().invalidateCache(undefined, agentId);
-      return result;
+      return { ...result, apiKey: decryptSecret(result.apiKey, SECRET_CONTEXT) };
     } catch (error) {
       logger.error(`Failed to upsert agent config: ${agentId}`, error);
       throw error;

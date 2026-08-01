@@ -1,0 +1,70 @@
+version: prompt-lab-manifest/v1
+
+skillId: peer-reinforcement
+agentId: skill:peer-reinforcement
+
+name: default-skill-peer-reinforcement
+archetype: copywriter
+description: 同伴学习与 Feynman 讨论生成
+
+acceptableAgentIds:
+  - skill:peer-reinforcement
+  - peer-agent
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+runtimeDefaults:
+  tier: chat
+  temperature: 0.7
+  maxTokens: 4000
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: copy
+  interactionMode: turn
+  input: { transport: tagged-text, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: deterministic-fallback
+
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: thread-context
+  businessState:
+    domain: teaching
+    phases:
+      - discussion-generated
+      - discussion-completed
+    defaultPhase: discussion-generated
+    terminalPhases:
+      - discussion-completed
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: thread-state
+    stateOwner: orchestrator
+    description: thread-context：同伴讨论依赖可见对话上下文；状态由编排层推进
+  outputEnvelope: adapter
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags:
+  - core-skill
+  - copywriter
+  - learn-phase
+  - prompt-lab-source
+
+notes: >
+  同伴强化 skill。与 learning-turn 同属 learn 阶段 thread-context。

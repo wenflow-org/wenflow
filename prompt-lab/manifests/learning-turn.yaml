@@ -1,0 +1,88 @@
+version: prompt-lab-manifest/v1
+
+skillId: learning-turn
+agentId: skill:learning-turn
+
+name: default-skill-learning-turn
+archetype: conversational
+description: 结构化教学回合生成器
+
+acceptableAgentIds:
+  - skill:learning-turn
+  - learning-turn-agent
+  - teaching-turn-agent
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+runtimeDefaults:
+  tier: chat
+  temperature: 0.7
+  maxTokens: 4000
+  model: null
+  thinkingMode: default
+  reasoningEffort: default
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: conversation
+  interactionMode: turn
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar, modelExposure: projected }
+  failurePolicy: retry
+  fields:
+    latestLearnerMessage: { direction: input, visibility: user-visible }
+    scenario: { direction: input, visibility: internal }
+    learner: { direction: state, visibility: handoff, owner: orchestrator }
+    classroomContext: { direction: state, visibility: handoff, owner: orchestrator }
+    classroomEventContext: { direction: state, visibility: handoff, owner: orchestrator }
+    knowledge: { direction: state, visibility: handoff, owner: orchestrator }
+    controls: { direction: input, visibility: internal }
+    visibleDialogueContext: { direction: input, visibility: internal }
+    recentDialogueContext: { direction: input, visibility: internal }
+    promptDirectives: { direction: input, visibility: internal }
+    reply: { direction: output, visibility: user-visible }
+    analysis: { direction: output, visibility: internal }
+    pedagogy: { direction: output, visibility: internal }
+    control: { direction: output, visibility: handoff }
+
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: thread-context
+  businessState:
+    domain: teaching
+    phases:
+      - turn-generated
+      - checkpoint-pending
+      - completion-candidate
+      - turn-blocked
+    defaultPhase: turn-generated
+    terminalPhases:
+      - completion-candidate
+    statusValues:
+      - succeeded
+      - partial
+      - blocked
+      - failed
+  contextUpdate:
+    mode: thread-state
+    stateOwner: orchestrator
+    description: thread-context：完整消息历史为主上下文；teachingState 由 AITeachingCoordinator 维护
+  outputEnvelope: adapter
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags:
+  - core-skill
+  - conversational
+  - learn-phase
+  - prompt-lab-source
+
+notes: >
+  学习阶段主回合 skill。状态归 orchestrator，skill 本身无状态。

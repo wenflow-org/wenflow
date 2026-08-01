@@ -59,6 +59,7 @@
       "description": "执行 Python 代码",
       "type": "code",
       "endpoint": "local",
+      "userAccessible": false,
       "enabled": true
     },
     {
@@ -68,6 +69,7 @@
       "type": "search",
       "endpoint": "${SEARCH_API_URL}",
       "apiKey": "${SEARCH_API_KEY}",
+      "userAccessible": false,
       "enabled": false
     },
     {
@@ -76,6 +78,7 @@
       "description": "读取本地文件",
       "type": "filesystem",
       "endpoint": "local",
+      "userAccessible": false,
       "config": {
         "allowedPaths": ["./uploads", "./data"],
         "maxFileSize": 10485760

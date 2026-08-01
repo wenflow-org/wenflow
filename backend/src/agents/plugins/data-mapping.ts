@@ -10,7 +10,7 @@
  */
 
 import { AgentPlugin, AgentType, AgentContext, AgentOutput } from '../plugin-types';
-import { getAPIGateway, CallerInfo } from '../../gateway/api-gateway';
+import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { logger } from '../../utils/logger';
 
 // 字段映射配置接口
@@ -97,24 +97,6 @@ export const dataMappingAgent: AgentPlugin = {
   config: {
     temperature: 0.3,
     maxTokens: 2000,
-    systemPrompt: `你是数据映射专家。你的任务是将AI生成的各种格式数据映射到标准化的数据库字段。
-
-【核心能力】
-- 识别并提取源数据中的关键信息
-- 将不同格式的数据转换为统一的结构
-- 智能推断缺失的字段值
-- 保持数据的完整性和准确性
-
-【工作原则】
-1. 准确性优先：确保映射结果准确反映原始数据
-2. 完整性：必需字段必须填写
-3. 一致性：使用统一的数据格式
-4. 智能推断：当数据缺失时，基于上下文合理推断
-
-【输出要求】
-- 只返回JSON格式
-- 包含所有要求的字段
-- 不要添加额外的解释或注释`,
     model: process.env.AI_MODEL || '',
     timeout: 60000,
     retries: 2
@@ -138,18 +120,17 @@ export const dataMappingAgent: AgentPlugin = {
       // 构建映射Prompt
       const mappingPrompt = this.buildMappingPromptInternal(sourceData, targetSchema);
 
-      const gateway = getAPIGateway();
-      const caller: CallerInfo = { agentId: 'data-mapping' };
-
-      const messages = [
-        { role: 'system' as const, content: this.config!.systemPrompt! },
-        { role: 'user' as const, content: mappingPrompt }
-      ];
-
-      const response = await gateway.execute({ messages }, caller, { userId: context?.userId });
-
-      const responseContent = response.choices[0]?.message.content || '{}';
-      const mappingResult = this.parseMappingResponse(responseContent);
+      const result = await executeSkillWithResult(auxSkillDefinitionMap['data-mapping'], {
+        mappingType,
+        sourceData,
+        targetSchema,
+        mappingPrompt,
+        model: this.config?.model,
+        temperature: this.config?.temperature,
+        maxTokens: this.config?.maxTokens,
+        __prompt: { userId: context?.userId, requestPath: '/agents/plugins/data-mapping' },
+      });
+      const mappingResult = result.output;
 
       if (mappingResult) {
         return {
@@ -161,7 +142,7 @@ export const dataMappingAgent: AgentPlugin = {
             agentName: this.name,
             generatedAt: new Date().toISOString(),
             duration: Date.now() - startTime,
-            tokensUsed: response.usage?.total_tokens
+            tokensUsed: result.debug.tokenUsage?.total
           }
         };
       } else {
@@ -214,27 +195,5 @@ ${schemaDescription}
 【输出格式】
 返回一个JSON对象，包含所有目标字段。
 `;
-  },
-
-  /**
-   * 解析AI映射响应
-   */
-  parseMappingResponse(content: string): any {
-    try {
-      let cleanedContent = content.trim();
-
-      // 清理markdown代码块
-      if (cleanedContent.includes('```')) {
-        const match = cleanedContent.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (match && match[1]) {
-          cleanedContent = match[1].trim();
-        }
-      }
-
-      return JSON.parse(cleanedContent);
-    } catch (e) {
-      logger.error('映射响应解析失败', { content: content.substring(0, 500) });
-      return null;
-    }
   }
 };

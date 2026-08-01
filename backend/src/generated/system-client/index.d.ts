@@ -49,6 +49,11 @@ export type agent_registrations = $Result.DefaultSelection<Prisma.$agent_registr
  */
 export type platform_api_configs = $Result.DefaultSelection<Prisma.$platform_api_configsPayload>
 /**
+ * Model platform_settings
+ * 
+ */
+export type platform_settings = $Result.DefaultSelection<Prisma.$platform_settingsPayload>
+/**
  * Model skill_model_configs
  * 
  */
@@ -281,6 +286,16 @@ export class PrismaClient<
     * ```
     */
   get platform_api_configs(): Prisma.platform_api_configsDelegate<ExtArgs>;
+
+  /**
+   * `prisma.platform_settings`: Exposes CRUD operations for the **platform_settings** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Platform_settings
+    * const platform_settings = await prisma.platform_settings.findMany()
+    * ```
+    */
+  get platform_settings(): Prisma.platform_settingsDelegate<ExtArgs>;
 
   /**
    * `prisma.skill_model_configs`: Exposes CRUD operations for the **skill_model_configs** model.
@@ -809,6 +824,7 @@ export namespace Prisma {
     orchestrator_definitions: 'orchestrator_definitions',
     agent_registrations: 'agent_registrations',
     platform_api_configs: 'platform_api_configs',
+    platform_settings: 'platform_settings',
     skill_model_configs: 'skill_model_configs',
     skill_registrations: 'skill_registrations',
     field_definitions: 'field_definitions',
@@ -832,7 +848,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "agent_lab_configs" | "agent_model_configs" | "agent_prompts" | "agent_definitions" | "orchestrator_definitions" | "agent_registrations" | "platform_api_configs" | "skill_model_configs" | "skill_registrations" | "field_definitions" | "agent_contracts" | "agent_field_routings" | "node_config_changes" | "prompt_eval_cases" | "prompt_eval_runs"
+      modelProps: "agent_lab_configs" | "agent_model_configs" | "agent_prompts" | "agent_definitions" | "orchestrator_definitions" | "agent_registrations" | "platform_api_configs" | "platform_settings" | "skill_model_configs" | "skill_registrations" | "field_definitions" | "agent_contracts" | "agent_field_routings" | "node_config_changes" | "prompt_eval_cases" | "prompt_eval_runs"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -1323,6 +1339,76 @@ export namespace Prisma {
           count: {
             args: Prisma.platform_api_configsCountArgs<ExtArgs>
             result: $Utils.Optional<Platform_api_configsCountAggregateOutputType> | number
+          }
+        }
+      }
+      platform_settings: {
+        payload: Prisma.$platform_settingsPayload<ExtArgs>
+        fields: Prisma.platform_settingsFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.platform_settingsFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.platform_settingsFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>
+          }
+          findFirst: {
+            args: Prisma.platform_settingsFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.platform_settingsFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>
+          }
+          findMany: {
+            args: Prisma.platform_settingsFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>[]
+          }
+          create: {
+            args: Prisma.platform_settingsCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>
+          }
+          createMany: {
+            args: Prisma.platform_settingsCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.platform_settingsCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>[]
+          }
+          delete: {
+            args: Prisma.platform_settingsDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>
+          }
+          update: {
+            args: Prisma.platform_settingsUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>
+          }
+          deleteMany: {
+            args: Prisma.platform_settingsDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.platform_settingsUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          upsert: {
+            args: Prisma.platform_settingsUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$platform_settingsPayload>
+          }
+          aggregate: {
+            args: Prisma.Platform_settingsAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregatePlatform_settings>
+          }
+          groupBy: {
+            args: Prisma.platform_settingsGroupByArgs<ExtArgs>
+            result: $Utils.Optional<Platform_settingsGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.platform_settingsCountArgs<ExtArgs>
+            result: $Utils.Optional<Platform_settingsCountAggregateOutputType> | number
           }
         }
       }
@@ -4073,6 +4159,7 @@ export namespace Prisma {
 
   export type Agent_promptsAvgAggregateOutputType = {
     version: number | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     useCount: number | null
@@ -4082,6 +4169,7 @@ export namespace Prisma {
 
   export type Agent_promptsSumAggregateOutputType = {
     version: number | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     useCount: number | null
@@ -4102,6 +4190,8 @@ export namespace Prisma {
     sourceHash: string | null
     compileContextHash: string | null
     compiledAt: Date | null
+    coreHash: string | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4129,6 +4219,8 @@ export namespace Prisma {
     sourceHash: string | null
     compileContextHash: string | null
     compiledAt: Date | null
+    coreHash: string | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4156,6 +4248,8 @@ export namespace Prisma {
     sourceHash: number
     compileContextHash: number
     compiledAt: number
+    coreHash: number
+    coreVersion: number
     temperature: number
     maxTokens: number
     model: number
@@ -4174,6 +4268,7 @@ export namespace Prisma {
 
   export type Agent_promptsAvgAggregateInputType = {
     version?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     useCount?: true
@@ -4183,6 +4278,7 @@ export namespace Prisma {
 
   export type Agent_promptsSumAggregateInputType = {
     version?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     useCount?: true
@@ -4203,6 +4299,8 @@ export namespace Prisma {
     sourceHash?: true
     compileContextHash?: true
     compiledAt?: true
+    coreHash?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4230,6 +4328,8 @@ export namespace Prisma {
     sourceHash?: true
     compileContextHash?: true
     compiledAt?: true
+    coreHash?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4257,6 +4357,8 @@ export namespace Prisma {
     sourceHash?: true
     compileContextHash?: true
     compiledAt?: true
+    coreHash?: true
+    coreVersion?: true
     temperature?: true
     maxTokens?: true
     model?: true
@@ -4371,6 +4473,8 @@ export namespace Prisma {
     sourceHash: string | null
     compileContextHash: string | null
     compiledAt: Date | null
+    coreHash: string | null
+    coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
     model: string | null
@@ -4417,6 +4521,8 @@ export namespace Prisma {
     sourceHash?: boolean
     compileContextHash?: boolean
     compiledAt?: boolean
+    coreHash?: boolean
+    coreVersion?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4444,6 +4550,8 @@ export namespace Prisma {
     sourceHash?: boolean
     compileContextHash?: boolean
     compiledAt?: boolean
+    coreHash?: boolean
+    coreVersion?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4471,6 +4579,8 @@ export namespace Prisma {
     sourceHash?: boolean
     compileContextHash?: boolean
     compiledAt?: boolean
+    coreHash?: boolean
+    coreVersion?: boolean
     temperature?: boolean
     maxTokens?: boolean
     model?: boolean
@@ -4502,6 +4612,14 @@ export namespace Prisma {
       sourceHash: string | null
       compileContextHash: string | null
       compiledAt: Date | null
+      /**
+       * v4：编译自核心文件的内容哈希（漂移检测锚点）
+       */
+      coreHash: string | null
+      /**
+       * v4：编译自核心文件的版本号
+       */
+      coreVersion: number | null
       temperature: number | null
       maxTokens: number | null
       model: string | null
@@ -4919,6 +5037,8 @@ export namespace Prisma {
     readonly sourceHash: FieldRef<"agent_prompts", 'String'>
     readonly compileContextHash: FieldRef<"agent_prompts", 'String'>
     readonly compiledAt: FieldRef<"agent_prompts", 'DateTime'>
+    readonly coreHash: FieldRef<"agent_prompts", 'String'>
+    readonly coreVersion: FieldRef<"agent_prompts", 'Int'>
     readonly temperature: FieldRef<"agent_prompts", 'Float'>
     readonly maxTokens: FieldRef<"agent_prompts", 'Int'>
     readonly model: FieldRef<"agent_prompts", 'String'>
@@ -8290,6 +8410,10 @@ export namespace Prisma {
     chatModels: string | null
     reasoningModels: string | null
     lightModels: string | null
+    adminAccessMode: string | null
+    adminAllowedIps: string | null
+    allowPrivateNetwork: boolean | null
+    privateNetworkHosts: string | null
   }
 
   export type Platform_api_configsMaxAggregateOutputType = {
@@ -8311,6 +8435,10 @@ export namespace Prisma {
     chatModels: string | null
     reasoningModels: string | null
     lightModels: string | null
+    adminAccessMode: string | null
+    adminAllowedIps: string | null
+    allowPrivateNetwork: boolean | null
+    privateNetworkHosts: string | null
   }
 
   export type Platform_api_configsCountAggregateOutputType = {
@@ -8332,6 +8460,10 @@ export namespace Prisma {
     chatModels: number
     reasoningModels: number
     lightModels: number
+    adminAccessMode: number
+    adminAllowedIps: number
+    allowPrivateNetwork: number
+    privateNetworkHosts: number
     _all: number
   }
 
@@ -8365,6 +8497,10 @@ export namespace Prisma {
     chatModels?: true
     reasoningModels?: true
     lightModels?: true
+    adminAccessMode?: true
+    adminAllowedIps?: true
+    allowPrivateNetwork?: true
+    privateNetworkHosts?: true
   }
 
   export type Platform_api_configsMaxAggregateInputType = {
@@ -8386,6 +8522,10 @@ export namespace Prisma {
     chatModels?: true
     reasoningModels?: true
     lightModels?: true
+    adminAccessMode?: true
+    adminAllowedIps?: true
+    allowPrivateNetwork?: true
+    privateNetworkHosts?: true
   }
 
   export type Platform_api_configsCountAggregateInputType = {
@@ -8407,6 +8547,10 @@ export namespace Prisma {
     chatModels?: true
     reasoningModels?: true
     lightModels?: true
+    adminAccessMode?: true
+    adminAllowedIps?: true
+    allowPrivateNetwork?: true
+    privateNetworkHosts?: true
     _all?: true
   }
 
@@ -8515,6 +8659,10 @@ export namespace Prisma {
     chatModels: string | null
     reasoningModels: string | null
     lightModels: string | null
+    adminAccessMode: string | null
+    adminAllowedIps: string | null
+    allowPrivateNetwork: boolean | null
+    privateNetworkHosts: string | null
     _count: Platform_api_configsCountAggregateOutputType | null
     _avg: Platform_api_configsAvgAggregateOutputType | null
     _sum: Platform_api_configsSumAggregateOutputType | null
@@ -8555,6 +8703,10 @@ export namespace Prisma {
     chatModels?: boolean
     reasoningModels?: boolean
     lightModels?: boolean
+    adminAccessMode?: boolean
+    adminAllowedIps?: boolean
+    allowPrivateNetwork?: boolean
+    privateNetworkHosts?: boolean
   }, ExtArgs["result"]["platform_api_configs"]>
 
   export type platform_api_configsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -8576,6 +8728,10 @@ export namespace Prisma {
     chatModels?: boolean
     reasoningModels?: boolean
     lightModels?: boolean
+    adminAccessMode?: boolean
+    adminAllowedIps?: boolean
+    allowPrivateNetwork?: boolean
+    privateNetworkHosts?: boolean
   }, ExtArgs["result"]["platform_api_configs"]>
 
   export type platform_api_configsSelectScalar = {
@@ -8597,6 +8753,10 @@ export namespace Prisma {
     chatModels?: boolean
     reasoningModels?: boolean
     lightModels?: boolean
+    adminAccessMode?: boolean
+    adminAllowedIps?: boolean
+    allowPrivateNetwork?: boolean
+    privateNetworkHosts?: boolean
   }
 
 
@@ -8622,6 +8782,10 @@ export namespace Prisma {
       chatModels: string | null
       reasoningModels: string | null
       lightModels: string | null
+      adminAccessMode: string | null
+      adminAllowedIps: string | null
+      allowPrivateNetwork: boolean | null
+      privateNetworkHosts: string | null
     }, ExtArgs["result"]["platform_api_configs"]>
     composites: {}
   }
@@ -9033,6 +9197,10 @@ export namespace Prisma {
     readonly chatModels: FieldRef<"platform_api_configs", 'String'>
     readonly reasoningModels: FieldRef<"platform_api_configs", 'String'>
     readonly lightModels: FieldRef<"platform_api_configs", 'String'>
+    readonly adminAccessMode: FieldRef<"platform_api_configs", 'String'>
+    readonly adminAllowedIps: FieldRef<"platform_api_configs", 'String'>
+    readonly allowPrivateNetwork: FieldRef<"platform_api_configs", 'Boolean'>
+    readonly privateNetworkHosts: FieldRef<"platform_api_configs", 'String'>
   }
     
 
@@ -9320,6 +9488,870 @@ export namespace Prisma {
 
 
   /**
+   * Model platform_settings
+   */
+
+  export type AggregatePlatform_settings = {
+    _count: Platform_settingsCountAggregateOutputType | null
+    _min: Platform_settingsMinAggregateOutputType | null
+    _max: Platform_settingsMaxAggregateOutputType | null
+  }
+
+  export type Platform_settingsMinAggregateOutputType = {
+    key: string | null
+    value: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type Platform_settingsMaxAggregateOutputType = {
+    key: string | null
+    value: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type Platform_settingsCountAggregateOutputType = {
+    key: number
+    value: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type Platform_settingsMinAggregateInputType = {
+    key?: true
+    value?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type Platform_settingsMaxAggregateInputType = {
+    key?: true
+    value?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type Platform_settingsCountAggregateInputType = {
+    key?: true
+    value?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type Platform_settingsAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which platform_settings to aggregate.
+     */
+    where?: platform_settingsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of platform_settings to fetch.
+     */
+    orderBy?: platform_settingsOrderByWithRelationInput | platform_settingsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: platform_settingsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` platform_settings from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` platform_settings.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned platform_settings
+    **/
+    _count?: true | Platform_settingsCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: Platform_settingsMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: Platform_settingsMaxAggregateInputType
+  }
+
+  export type GetPlatform_settingsAggregateType<T extends Platform_settingsAggregateArgs> = {
+        [P in keyof T & keyof AggregatePlatform_settings]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregatePlatform_settings[P]>
+      : GetScalarType<T[P], AggregatePlatform_settings[P]>
+  }
+
+
+
+
+  export type platform_settingsGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: platform_settingsWhereInput
+    orderBy?: platform_settingsOrderByWithAggregationInput | platform_settingsOrderByWithAggregationInput[]
+    by: Platform_settingsScalarFieldEnum[] | Platform_settingsScalarFieldEnum
+    having?: platform_settingsScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: Platform_settingsCountAggregateInputType | true
+    _min?: Platform_settingsMinAggregateInputType
+    _max?: Platform_settingsMaxAggregateInputType
+  }
+
+  export type Platform_settingsGroupByOutputType = {
+    key: string
+    value: string
+    createdAt: Date
+    updatedAt: Date
+    _count: Platform_settingsCountAggregateOutputType | null
+    _min: Platform_settingsMinAggregateOutputType | null
+    _max: Platform_settingsMaxAggregateOutputType | null
+  }
+
+  type GetPlatform_settingsGroupByPayload<T extends platform_settingsGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<Platform_settingsGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof Platform_settingsGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], Platform_settingsGroupByOutputType[P]>
+            : GetScalarType<T[P], Platform_settingsGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type platform_settingsSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    key?: boolean
+    value?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["platform_settings"]>
+
+  export type platform_settingsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    key?: boolean
+    value?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["platform_settings"]>
+
+  export type platform_settingsSelectScalar = {
+    key?: boolean
+    value?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+
+  export type $platform_settingsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "platform_settings"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      key: string
+      value: string
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["platform_settings"]>
+    composites: {}
+  }
+
+  type platform_settingsGetPayload<S extends boolean | null | undefined | platform_settingsDefaultArgs> = $Result.GetResult<Prisma.$platform_settingsPayload, S>
+
+  type platform_settingsCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
+    Omit<platform_settingsFindManyArgs, 'select' | 'include' | 'distinct'> & {
+      select?: Platform_settingsCountAggregateInputType | true
+    }
+
+  export interface platform_settingsDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['platform_settings'], meta: { name: 'platform_settings' } }
+    /**
+     * Find zero or one Platform_settings that matches the filter.
+     * @param {platform_settingsFindUniqueArgs} args - Arguments to find a Platform_settings
+     * @example
+     * // Get one Platform_settings
+     * const platform_settings = await prisma.platform_settings.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends platform_settingsFindUniqueArgs>(args: SelectSubset<T, platform_settingsFindUniqueArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
+
+    /**
+     * Find one Platform_settings that matches the filter or throw an error with `error.code='P2025'` 
+     * if no matches were found.
+     * @param {platform_settingsFindUniqueOrThrowArgs} args - Arguments to find a Platform_settings
+     * @example
+     * // Get one Platform_settings
+     * const platform_settings = await prisma.platform_settings.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends platform_settingsFindUniqueOrThrowArgs>(args: SelectSubset<T, platform_settingsFindUniqueOrThrowArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
+
+    /**
+     * Find the first Platform_settings that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {platform_settingsFindFirstArgs} args - Arguments to find a Platform_settings
+     * @example
+     * // Get one Platform_settings
+     * const platform_settings = await prisma.platform_settings.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends platform_settingsFindFirstArgs>(args?: SelectSubset<T, platform_settingsFindFirstArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
+
+    /**
+     * Find the first Platform_settings that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {platform_settingsFindFirstOrThrowArgs} args - Arguments to find a Platform_settings
+     * @example
+     * // Get one Platform_settings
+     * const platform_settings = await prisma.platform_settings.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends platform_settingsFindFirstOrThrowArgs>(args?: SelectSubset<T, platform_settingsFindFirstOrThrowArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
+
+    /**
+     * Find zero or more Platform_settings that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {platform_settingsFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Platform_settings
+     * const platform_settings = await prisma.platform_settings.findMany()
+     * 
+     * // Get first 10 Platform_settings
+     * const platform_settings = await prisma.platform_settings.findMany({ take: 10 })
+     * 
+     * // Only select the `key`
+     * const platform_settingsWithKeyOnly = await prisma.platform_settings.findMany({ select: { key: true } })
+     * 
+     */
+    findMany<T extends platform_settingsFindManyArgs>(args?: SelectSubset<T, platform_settingsFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "findMany">>
+
+    /**
+     * Create a Platform_settings.
+     * @param {platform_settingsCreateArgs} args - Arguments to create a Platform_settings.
+     * @example
+     * // Create one Platform_settings
+     * const Platform_settings = await prisma.platform_settings.create({
+     *   data: {
+     *     // ... data to create a Platform_settings
+     *   }
+     * })
+     * 
+     */
+    create<T extends platform_settingsCreateArgs>(args: SelectSubset<T, platform_settingsCreateArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "create">, never, ExtArgs>
+
+    /**
+     * Create many Platform_settings.
+     * @param {platform_settingsCreateManyArgs} args - Arguments to create many Platform_settings.
+     * @example
+     * // Create many Platform_settings
+     * const platform_settings = await prisma.platform_settings.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends platform_settingsCreateManyArgs>(args?: SelectSubset<T, platform_settingsCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many Platform_settings and returns the data saved in the database.
+     * @param {platform_settingsCreateManyAndReturnArgs} args - Arguments to create many Platform_settings.
+     * @example
+     * // Create many Platform_settings
+     * const platform_settings = await prisma.platform_settings.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many Platform_settings and only return the `key`
+     * const platform_settingsWithKeyOnly = await prisma.platform_settings.createManyAndReturn({ 
+     *   select: { key: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends platform_settingsCreateManyAndReturnArgs>(args?: SelectSubset<T, platform_settingsCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "createManyAndReturn">>
+
+    /**
+     * Delete a Platform_settings.
+     * @param {platform_settingsDeleteArgs} args - Arguments to delete one Platform_settings.
+     * @example
+     * // Delete one Platform_settings
+     * const Platform_settings = await prisma.platform_settings.delete({
+     *   where: {
+     *     // ... filter to delete one Platform_settings
+     *   }
+     * })
+     * 
+     */
+    delete<T extends platform_settingsDeleteArgs>(args: SelectSubset<T, platform_settingsDeleteArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "delete">, never, ExtArgs>
+
+    /**
+     * Update one Platform_settings.
+     * @param {platform_settingsUpdateArgs} args - Arguments to update one Platform_settings.
+     * @example
+     * // Update one Platform_settings
+     * const platform_settings = await prisma.platform_settings.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends platform_settingsUpdateArgs>(args: SelectSubset<T, platform_settingsUpdateArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "update">, never, ExtArgs>
+
+    /**
+     * Delete zero or more Platform_settings.
+     * @param {platform_settingsDeleteManyArgs} args - Arguments to filter Platform_settings to delete.
+     * @example
+     * // Delete a few Platform_settings
+     * const { count } = await prisma.platform_settings.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends platform_settingsDeleteManyArgs>(args?: SelectSubset<T, platform_settingsDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Platform_settings.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {platform_settingsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Platform_settings
+     * const platform_settings = await prisma.platform_settings.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends platform_settingsUpdateManyArgs>(args: SelectSubset<T, platform_settingsUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Platform_settings.
+     * @param {platform_settingsUpsertArgs} args - Arguments to update or create a Platform_settings.
+     * @example
+     * // Update or create a Platform_settings
+     * const platform_settings = await prisma.platform_settings.upsert({
+     *   create: {
+     *     // ... data to create a Platform_settings
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Platform_settings we want to update
+     *   }
+     * })
+     */
+    upsert<T extends platform_settingsUpsertArgs>(args: SelectSubset<T, platform_settingsUpsertArgs<ExtArgs>>): Prisma__platform_settingsClient<$Result.GetResult<Prisma.$platform_settingsPayload<ExtArgs>, T, "upsert">, never, ExtArgs>
+
+
+    /**
+     * Count the number of Platform_settings.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {platform_settingsCountArgs} args - Arguments to filter Platform_settings to count.
+     * @example
+     * // Count the number of Platform_settings
+     * const count = await prisma.platform_settings.count({
+     *   where: {
+     *     // ... the filter for the Platform_settings we want to count
+     *   }
+     * })
+    **/
+    count<T extends platform_settingsCountArgs>(
+      args?: Subset<T, platform_settingsCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], Platform_settingsCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Platform_settings.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {Platform_settingsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends Platform_settingsAggregateArgs>(args: Subset<T, Platform_settingsAggregateArgs>): Prisma.PrismaPromise<GetPlatform_settingsAggregateType<T>>
+
+    /**
+     * Group by Platform_settings.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {platform_settingsGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends platform_settingsGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: platform_settingsGroupByArgs['orderBy'] }
+        : { orderBy?: platform_settingsGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, platform_settingsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetPlatform_settingsGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the platform_settings model
+   */
+  readonly fields: platform_settingsFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for platform_settings.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__platform_settingsClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the platform_settings model
+   */ 
+  interface platform_settingsFieldRefs {
+    readonly key: FieldRef<"platform_settings", 'String'>
+    readonly value: FieldRef<"platform_settings", 'String'>
+    readonly createdAt: FieldRef<"platform_settings", 'DateTime'>
+    readonly updatedAt: FieldRef<"platform_settings", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * platform_settings findUnique
+   */
+  export type platform_settingsFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * Filter, which platform_settings to fetch.
+     */
+    where: platform_settingsWhereUniqueInput
+  }
+
+  /**
+   * platform_settings findUniqueOrThrow
+   */
+  export type platform_settingsFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * Filter, which platform_settings to fetch.
+     */
+    where: platform_settingsWhereUniqueInput
+  }
+
+  /**
+   * platform_settings findFirst
+   */
+  export type platform_settingsFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * Filter, which platform_settings to fetch.
+     */
+    where?: platform_settingsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of platform_settings to fetch.
+     */
+    orderBy?: platform_settingsOrderByWithRelationInput | platform_settingsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for platform_settings.
+     */
+    cursor?: platform_settingsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` platform_settings from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` platform_settings.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of platform_settings.
+     */
+    distinct?: Platform_settingsScalarFieldEnum | Platform_settingsScalarFieldEnum[]
+  }
+
+  /**
+   * platform_settings findFirstOrThrow
+   */
+  export type platform_settingsFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * Filter, which platform_settings to fetch.
+     */
+    where?: platform_settingsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of platform_settings to fetch.
+     */
+    orderBy?: platform_settingsOrderByWithRelationInput | platform_settingsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for platform_settings.
+     */
+    cursor?: platform_settingsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` platform_settings from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` platform_settings.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of platform_settings.
+     */
+    distinct?: Platform_settingsScalarFieldEnum | Platform_settingsScalarFieldEnum[]
+  }
+
+  /**
+   * platform_settings findMany
+   */
+  export type platform_settingsFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * Filter, which platform_settings to fetch.
+     */
+    where?: platform_settingsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of platform_settings to fetch.
+     */
+    orderBy?: platform_settingsOrderByWithRelationInput | platform_settingsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing platform_settings.
+     */
+    cursor?: platform_settingsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` platform_settings from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` platform_settings.
+     */
+    skip?: number
+    distinct?: Platform_settingsScalarFieldEnum | Platform_settingsScalarFieldEnum[]
+  }
+
+  /**
+   * platform_settings create
+   */
+  export type platform_settingsCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * The data needed to create a platform_settings.
+     */
+    data: XOR<platform_settingsCreateInput, platform_settingsUncheckedCreateInput>
+  }
+
+  /**
+   * platform_settings createMany
+   */
+  export type platform_settingsCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many platform_settings.
+     */
+    data: platform_settingsCreateManyInput | platform_settingsCreateManyInput[]
+  }
+
+  /**
+   * platform_settings createManyAndReturn
+   */
+  export type platform_settingsCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * The data used to create many platform_settings.
+     */
+    data: platform_settingsCreateManyInput | platform_settingsCreateManyInput[]
+  }
+
+  /**
+   * platform_settings update
+   */
+  export type platform_settingsUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * The data needed to update a platform_settings.
+     */
+    data: XOR<platform_settingsUpdateInput, platform_settingsUncheckedUpdateInput>
+    /**
+     * Choose, which platform_settings to update.
+     */
+    where: platform_settingsWhereUniqueInput
+  }
+
+  /**
+   * platform_settings updateMany
+   */
+  export type platform_settingsUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update platform_settings.
+     */
+    data: XOR<platform_settingsUpdateManyMutationInput, platform_settingsUncheckedUpdateManyInput>
+    /**
+     * Filter which platform_settings to update
+     */
+    where?: platform_settingsWhereInput
+  }
+
+  /**
+   * platform_settings upsert
+   */
+  export type platform_settingsUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * The filter to search for the platform_settings to update in case it exists.
+     */
+    where: platform_settingsWhereUniqueInput
+    /**
+     * In case the platform_settings found by the `where` argument doesn't exist, create a new platform_settings with this data.
+     */
+    create: XOR<platform_settingsCreateInput, platform_settingsUncheckedCreateInput>
+    /**
+     * In case the platform_settings was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<platform_settingsUpdateInput, platform_settingsUncheckedUpdateInput>
+  }
+
+  /**
+   * platform_settings delete
+   */
+  export type platform_settingsDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+    /**
+     * Filter which platform_settings to delete.
+     */
+    where: platform_settingsWhereUniqueInput
+  }
+
+  /**
+   * platform_settings deleteMany
+   */
+  export type platform_settingsDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which platform_settings to delete
+     */
+    where?: platform_settingsWhereInput
+  }
+
+  /**
+   * platform_settings without action
+   */
+  export type platform_settingsDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the platform_settings
+     */
+    select?: platform_settingsSelect<ExtArgs> | null
+  }
+
+
+  /**
    * Model skill_model_configs
    */
 
@@ -9335,12 +10367,14 @@ export namespace Prisma {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
   }
 
   export type Skill_model_configsSumAggregateOutputType = {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
   }
 
   export type Skill_model_configsMinAggregateOutputType = {
@@ -9355,6 +10389,7 @@ export namespace Prisma {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
     enabled: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -9372,6 +10407,7 @@ export namespace Prisma {
     temperature: number | null
     maxTokens: number | null
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
     enabled: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -9389,6 +10425,7 @@ export namespace Prisma {
     temperature: number
     maxTokens: number
     requestTimeoutMs: number
+    maxLogicalRetries: number
     enabled: number
     createdAt: number
     updatedAt: number
@@ -9400,12 +10437,14 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
   }
 
   export type Skill_model_configsSumAggregateInputType = {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
   }
 
   export type Skill_model_configsMinAggregateInputType = {
@@ -9420,6 +10459,7 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
     enabled?: true
     createdAt?: true
     updatedAt?: true
@@ -9437,6 +10477,7 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
     enabled?: true
     createdAt?: true
     updatedAt?: true
@@ -9454,6 +10495,7 @@ export namespace Prisma {
     temperature?: true
     maxTokens?: true
     requestTimeoutMs?: true
+    maxLogicalRetries?: true
     enabled?: true
     createdAt?: true
     updatedAt?: true
@@ -9558,6 +10600,7 @@ export namespace Prisma {
     temperature: number
     maxTokens: number
     requestTimeoutMs: number | null
+    maxLogicalRetries: number | null
     enabled: boolean
     createdAt: Date
     updatedAt: Date
@@ -9594,6 +10637,7 @@ export namespace Prisma {
     temperature?: boolean
     maxTokens?: boolean
     requestTimeoutMs?: boolean
+    maxLogicalRetries?: boolean
     enabled?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -9611,6 +10655,7 @@ export namespace Prisma {
     temperature?: boolean
     maxTokens?: boolean
     requestTimeoutMs?: boolean
+    maxLogicalRetries?: boolean
     enabled?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -9628,6 +10673,7 @@ export namespace Prisma {
     temperature?: boolean
     maxTokens?: boolean
     requestTimeoutMs?: boolean
+    maxLogicalRetries?: boolean
     enabled?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -9649,6 +10695,7 @@ export namespace Prisma {
       temperature: number
       maxTokens: number
       requestTimeoutMs: number | null
+      maxLogicalRetries: number | null
       enabled: boolean
       createdAt: Date
       updatedAt: Date
@@ -10056,6 +11103,7 @@ export namespace Prisma {
     readonly temperature: FieldRef<"skill_model_configs", 'Float'>
     readonly maxTokens: FieldRef<"skill_model_configs", 'Int'>
     readonly requestTimeoutMs: FieldRef<"skill_model_configs", 'Int'>
+    readonly maxLogicalRetries: FieldRef<"skill_model_configs", 'Int'>
     readonly enabled: FieldRef<"skill_model_configs", 'Boolean'>
     readonly createdAt: FieldRef<"skill_model_configs", 'DateTime'>
     readonly updatedAt: FieldRef<"skill_model_configs", 'DateTime'>
@@ -17364,6 +18412,8 @@ export namespace Prisma {
     sourceHash: 'sourceHash',
     compileContextHash: 'compileContextHash',
     compiledAt: 'compiledAt',
+    coreHash: 'coreHash',
+    coreVersion: 'coreVersion',
     temperature: 'temperature',
     maxTokens: 'maxTokens',
     model: 'model',
@@ -17459,10 +18509,24 @@ export namespace Prisma {
     lightEndpoint: 'lightEndpoint',
     chatModels: 'chatModels',
     reasoningModels: 'reasoningModels',
-    lightModels: 'lightModels'
+    lightModels: 'lightModels',
+    adminAccessMode: 'adminAccessMode',
+    adminAllowedIps: 'adminAllowedIps',
+    allowPrivateNetwork: 'allowPrivateNetwork',
+    privateNetworkHosts: 'privateNetworkHosts'
   };
 
   export type Platform_api_configsScalarFieldEnum = (typeof Platform_api_configsScalarFieldEnum)[keyof typeof Platform_api_configsScalarFieldEnum]
+
+
+  export const Platform_settingsScalarFieldEnum: {
+    key: 'key',
+    value: 'value',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type Platform_settingsScalarFieldEnum = (typeof Platform_settingsScalarFieldEnum)[keyof typeof Platform_settingsScalarFieldEnum]
 
 
   export const Skill_model_configsScalarFieldEnum: {
@@ -17477,6 +18541,7 @@ export namespace Prisma {
     temperature: 'temperature',
     maxTokens: 'maxTokens',
     requestTimeoutMs: 'requestTimeoutMs',
+    maxLogicalRetries: 'maxLogicalRetries',
     enabled: 'enabled',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -17879,6 +18944,8 @@ export namespace Prisma {
     sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
     compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
     compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
+    coreHash?: StringNullableFilter<"agent_prompts"> | string | null
+    coreVersion?: IntNullableFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
@@ -17906,6 +18973,8 @@ export namespace Prisma {
     sourceHash?: SortOrderInput | SortOrder
     compileContextHash?: SortOrderInput | SortOrder
     compiledAt?: SortOrderInput | SortOrder
+    coreHash?: SortOrderInput | SortOrder
+    coreVersion?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
@@ -17937,6 +19006,8 @@ export namespace Prisma {
     sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
     compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
     compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
+    coreHash?: StringNullableFilter<"agent_prompts"> | string | null
+    coreVersion?: IntNullableFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
@@ -17964,6 +19035,8 @@ export namespace Prisma {
     sourceHash?: SortOrderInput | SortOrder
     compileContextHash?: SortOrderInput | SortOrder
     compiledAt?: SortOrderInput | SortOrder
+    coreHash?: SortOrderInput | SortOrder
+    coreVersion?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
@@ -17999,6 +19072,8 @@ export namespace Prisma {
     sourceHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     compileContextHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     compiledAt?: DateTimeNullableWithAggregatesFilter<"agent_prompts"> | Date | string | null
+    coreHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    coreVersion?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableWithAggregatesFilter<"agent_prompts"> | number | null
     maxTokens?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     model?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
@@ -18330,6 +19405,10 @@ export namespace Prisma {
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningModels?: StringNullableFilter<"platform_api_configs"> | string | null
     lightModels?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAccessMode?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAllowedIps?: StringNullableFilter<"platform_api_configs"> | string | null
+    allowPrivateNetwork?: BoolNullableFilter<"platform_api_configs"> | boolean | null
+    privateNetworkHosts?: StringNullableFilter<"platform_api_configs"> | string | null
   }
 
   export type platform_api_configsOrderByWithRelationInput = {
@@ -18351,6 +19430,10 @@ export namespace Prisma {
     chatModels?: SortOrderInput | SortOrder
     reasoningModels?: SortOrderInput | SortOrder
     lightModels?: SortOrderInput | SortOrder
+    adminAccessMode?: SortOrderInput | SortOrder
+    adminAllowedIps?: SortOrderInput | SortOrder
+    allowPrivateNetwork?: SortOrderInput | SortOrder
+    privateNetworkHosts?: SortOrderInput | SortOrder
   }
 
   export type platform_api_configsWhereUniqueInput = Prisma.AtLeast<{
@@ -18375,6 +19458,10 @@ export namespace Prisma {
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningModels?: StringNullableFilter<"platform_api_configs"> | string | null
     lightModels?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAccessMode?: StringNullableFilter<"platform_api_configs"> | string | null
+    adminAllowedIps?: StringNullableFilter<"platform_api_configs"> | string | null
+    allowPrivateNetwork?: BoolNullableFilter<"platform_api_configs"> | boolean | null
+    privateNetworkHosts?: StringNullableFilter<"platform_api_configs"> | string | null
   }, "id">
 
   export type platform_api_configsOrderByWithAggregationInput = {
@@ -18396,6 +19483,10 @@ export namespace Prisma {
     chatModels?: SortOrderInput | SortOrder
     reasoningModels?: SortOrderInput | SortOrder
     lightModels?: SortOrderInput | SortOrder
+    adminAccessMode?: SortOrderInput | SortOrder
+    adminAllowedIps?: SortOrderInput | SortOrder
+    allowPrivateNetwork?: SortOrderInput | SortOrder
+    privateNetworkHosts?: SortOrderInput | SortOrder
     _count?: platform_api_configsCountOrderByAggregateInput
     _avg?: platform_api_configsAvgOrderByAggregateInput
     _max?: platform_api_configsMaxOrderByAggregateInput
@@ -18425,6 +19516,57 @@ export namespace Prisma {
     chatModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     reasoningModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     lightModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    adminAccessMode?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    adminAllowedIps?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    allowPrivateNetwork?: BoolNullableWithAggregatesFilter<"platform_api_configs"> | boolean | null
+    privateNetworkHosts?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+  }
+
+  export type platform_settingsWhereInput = {
+    AND?: platform_settingsWhereInput | platform_settingsWhereInput[]
+    OR?: platform_settingsWhereInput[]
+    NOT?: platform_settingsWhereInput | platform_settingsWhereInput[]
+    key?: StringFilter<"platform_settings"> | string
+    value?: StringFilter<"platform_settings"> | string
+    createdAt?: DateTimeFilter<"platform_settings"> | Date | string
+    updatedAt?: DateTimeFilter<"platform_settings"> | Date | string
+  }
+
+  export type platform_settingsOrderByWithRelationInput = {
+    key?: SortOrder
+    value?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type platform_settingsWhereUniqueInput = Prisma.AtLeast<{
+    key?: string
+    AND?: platform_settingsWhereInput | platform_settingsWhereInput[]
+    OR?: platform_settingsWhereInput[]
+    NOT?: platform_settingsWhereInput | platform_settingsWhereInput[]
+    value?: StringFilter<"platform_settings"> | string
+    createdAt?: DateTimeFilter<"platform_settings"> | Date | string
+    updatedAt?: DateTimeFilter<"platform_settings"> | Date | string
+  }, "key">
+
+  export type platform_settingsOrderByWithAggregationInput = {
+    key?: SortOrder
+    value?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: platform_settingsCountOrderByAggregateInput
+    _max?: platform_settingsMaxOrderByAggregateInput
+    _min?: platform_settingsMinOrderByAggregateInput
+  }
+
+  export type platform_settingsScalarWhereWithAggregatesInput = {
+    AND?: platform_settingsScalarWhereWithAggregatesInput | platform_settingsScalarWhereWithAggregatesInput[]
+    OR?: platform_settingsScalarWhereWithAggregatesInput[]
+    NOT?: platform_settingsScalarWhereWithAggregatesInput | platform_settingsScalarWhereWithAggregatesInput[]
+    key?: StringWithAggregatesFilter<"platform_settings"> | string
+    value?: StringWithAggregatesFilter<"platform_settings"> | string
+    createdAt?: DateTimeWithAggregatesFilter<"platform_settings"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"platform_settings"> | Date | string
   }
 
   export type skill_model_configsWhereInput = {
@@ -18442,6 +19584,7 @@ export namespace Prisma {
     temperature?: FloatFilter<"skill_model_configs"> | number
     maxTokens?: IntFilter<"skill_model_configs"> | number
     requestTimeoutMs?: IntNullableFilter<"skill_model_configs"> | number | null
+    maxLogicalRetries?: IntNullableFilter<"skill_model_configs"> | number | null
     enabled?: BoolFilter<"skill_model_configs"> | boolean
     createdAt?: DateTimeFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeFilter<"skill_model_configs"> | Date | string
@@ -18459,6 +19602,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrderInput | SortOrder
+    maxLogicalRetries?: SortOrderInput | SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -18479,6 +19623,7 @@ export namespace Prisma {
     temperature?: FloatFilter<"skill_model_configs"> | number
     maxTokens?: IntFilter<"skill_model_configs"> | number
     requestTimeoutMs?: IntNullableFilter<"skill_model_configs"> | number | null
+    maxLogicalRetries?: IntNullableFilter<"skill_model_configs"> | number | null
     enabled?: BoolFilter<"skill_model_configs"> | boolean
     createdAt?: DateTimeFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeFilter<"skill_model_configs"> | Date | string
@@ -18496,6 +19641,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrderInput | SortOrder
+    maxLogicalRetries?: SortOrderInput | SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -18521,6 +19667,7 @@ export namespace Prisma {
     temperature?: FloatWithAggregatesFilter<"skill_model_configs"> | number
     maxTokens?: IntWithAggregatesFilter<"skill_model_configs"> | number
     requestTimeoutMs?: IntNullableWithAggregatesFilter<"skill_model_configs"> | number | null
+    maxLogicalRetries?: IntNullableWithAggregatesFilter<"skill_model_configs"> | number | null
     enabled?: BoolWithAggregatesFilter<"skill_model_configs"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"skill_model_configs"> | Date | string
@@ -19423,6 +20570,8 @@ export namespace Prisma {
     sourceHash?: string | null
     compileContextHash?: string | null
     compiledAt?: Date | string | null
+    coreHash?: string | null
+    coreVersion?: number | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -19450,6 +20599,8 @@ export namespace Prisma {
     sourceHash?: string | null
     compileContextHash?: string | null
     compiledAt?: Date | string | null
+    coreHash?: string | null
+    coreVersion?: number | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -19477,6 +20628,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19504,6 +20657,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19531,6 +20686,8 @@ export namespace Prisma {
     sourceHash?: string | null
     compileContextHash?: string | null
     compiledAt?: Date | string | null
+    coreHash?: string | null
+    coreVersion?: number | null
     temperature?: number | null
     maxTokens?: number | null
     model?: string | null
@@ -19558,6 +20715,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19585,6 +20744,8 @@ export namespace Prisma {
     sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
     compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
     compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    coreHash?: NullableStringFieldUpdateOperationsInput | string | null
+    coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
@@ -19975,6 +21136,10 @@ export namespace Prisma {
     chatModels?: string | null
     reasoningModels?: string | null
     lightModels?: string | null
+    adminAccessMode?: string | null
+    adminAllowedIps?: string | null
+    allowPrivateNetwork?: boolean | null
+    privateNetworkHosts?: string | null
   }
 
   export type platform_api_configsUncheckedCreateInput = {
@@ -19996,6 +21161,10 @@ export namespace Prisma {
     chatModels?: string | null
     reasoningModels?: string | null
     lightModels?: string | null
+    adminAccessMode?: string | null
+    adminAllowedIps?: string | null
+    allowPrivateNetwork?: boolean | null
+    privateNetworkHosts?: string | null
   }
 
   export type platform_api_configsUpdateInput = {
@@ -20017,6 +21186,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type platform_api_configsUncheckedUpdateInput = {
@@ -20038,6 +21211,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type platform_api_configsCreateManyInput = {
@@ -20059,6 +21236,10 @@ export namespace Prisma {
     chatModels?: string | null
     reasoningModels?: string | null
     lightModels?: string | null
+    adminAccessMode?: string | null
+    adminAllowedIps?: string | null
+    allowPrivateNetwork?: boolean | null
+    privateNetworkHosts?: string | null
   }
 
   export type platform_api_configsUpdateManyMutationInput = {
@@ -20080,6 +21261,10 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type platform_api_configsUncheckedUpdateManyInput = {
@@ -20101,6 +21286,59 @@ export namespace Prisma {
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningModels?: NullableStringFieldUpdateOperationsInput | string | null
     lightModels?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAccessMode?: NullableStringFieldUpdateOperationsInput | string | null
+    adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
+    allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type platform_settingsCreateInput = {
+    key: string
+    value: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type platform_settingsUncheckedCreateInput = {
+    key: string
+    value: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type platform_settingsUpdateInput = {
+    key?: StringFieldUpdateOperationsInput | string
+    value?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type platform_settingsUncheckedUpdateInput = {
+    key?: StringFieldUpdateOperationsInput | string
+    value?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type platform_settingsCreateManyInput = {
+    key: string
+    value: string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type platform_settingsUpdateManyMutationInput = {
+    key?: StringFieldUpdateOperationsInput | string
+    value?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type platform_settingsUncheckedUpdateManyInput = {
+    key?: StringFieldUpdateOperationsInput | string
+    value?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type skill_model_configsCreateInput = {
@@ -20115,6 +21353,7 @@ export namespace Prisma {
     temperature?: number
     maxTokens?: number
     requestTimeoutMs?: number | null
+    maxLogicalRetries?: number | null
     enabled?: boolean
     createdAt?: Date | string
     updatedAt: Date | string
@@ -20132,6 +21371,7 @@ export namespace Prisma {
     temperature?: number
     maxTokens?: number
     requestTimeoutMs?: number | null
+    maxLogicalRetries?: number | null
     enabled?: boolean
     createdAt?: Date | string
     updatedAt: Date | string
@@ -20149,6 +21389,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -20166,6 +21407,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -20183,6 +21425,7 @@ export namespace Prisma {
     temperature?: number
     maxTokens?: number
     requestTimeoutMs?: number | null
+    maxLogicalRetries?: number | null
     enabled?: boolean
     createdAt?: Date | string
     updatedAt: Date | string
@@ -20200,6 +21443,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -20217,6 +21461,7 @@ export namespace Prisma {
     temperature?: FloatFieldUpdateOperationsInput | number
     maxTokens?: IntFieldUpdateOperationsInput | number
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
+    maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -21384,6 +22629,8 @@ export namespace Prisma {
     sourceHash?: SortOrder
     compileContextHash?: SortOrder
     compiledAt?: SortOrder
+    coreHash?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -21400,6 +22647,7 @@ export namespace Prisma {
 
   export type agent_promptsAvgOrderByAggregateInput = {
     version?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     useCount?: SortOrder
@@ -21420,6 +22668,8 @@ export namespace Prisma {
     sourceHash?: SortOrder
     compileContextHash?: SortOrder
     compiledAt?: SortOrder
+    coreHash?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -21447,6 +22697,8 @@ export namespace Prisma {
     sourceHash?: SortOrder
     compileContextHash?: SortOrder
     compiledAt?: SortOrder
+    coreHash?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     model?: SortOrder
@@ -21463,6 +22715,7 @@ export namespace Prisma {
 
   export type agent_promptsSumOrderByAggregateInput = {
     version?: SortOrder
+    coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
     useCount?: SortOrder
@@ -21659,6 +22912,11 @@ export namespace Prisma {
     successRate?: SortOrder
   }
 
+  export type BoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
   export type platform_api_configsCountOrderByAggregateInput = {
     id?: SortOrder
     apiUrl?: SortOrder
@@ -21678,6 +22936,10 @@ export namespace Prisma {
     chatModels?: SortOrder
     reasoningModels?: SortOrder
     lightModels?: SortOrder
+    adminAccessMode?: SortOrder
+    adminAllowedIps?: SortOrder
+    allowPrivateNetwork?: SortOrder
+    privateNetworkHosts?: SortOrder
   }
 
   export type platform_api_configsAvgOrderByAggregateInput = {
@@ -21704,6 +22966,10 @@ export namespace Prisma {
     chatModels?: SortOrder
     reasoningModels?: SortOrder
     lightModels?: SortOrder
+    adminAccessMode?: SortOrder
+    adminAllowedIps?: SortOrder
+    allowPrivateNetwork?: SortOrder
+    privateNetworkHosts?: SortOrder
   }
 
   export type platform_api_configsMinOrderByAggregateInput = {
@@ -21725,11 +22991,44 @@ export namespace Prisma {
     chatModels?: SortOrder
     reasoningModels?: SortOrder
     lightModels?: SortOrder
+    adminAccessMode?: SortOrder
+    adminAllowedIps?: SortOrder
+    allowPrivateNetwork?: SortOrder
+    privateNetworkHosts?: SortOrder
   }
 
   export type platform_api_configsSumOrderByAggregateInput = {
     defaultTemperature?: SortOrder
     defaultMaxTokens?: SortOrder
+  }
+
+  export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
+  export type platform_settingsCountOrderByAggregateInput = {
+    key?: SortOrder
+    value?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type platform_settingsMaxOrderByAggregateInput = {
+    key?: SortOrder
+    value?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type platform_settingsMinOrderByAggregateInput = {
+    key?: SortOrder
+    value?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type skill_model_configsCountOrderByAggregateInput = {
@@ -21744,6 +23043,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -21753,6 +23053,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
   }
 
   export type skill_model_configsMaxOrderByAggregateInput = {
@@ -21767,6 +23068,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -21784,6 +23086,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
     enabled?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -21793,6 +23096,7 @@ export namespace Prisma {
     temperature?: SortOrder
     maxTokens?: SortOrder
     requestTimeoutMs?: SortOrder
+    maxLogicalRetries?: SortOrder
   }
 
   export type skill_registrationsCountOrderByAggregateInput = {
@@ -22234,6 +23538,10 @@ export namespace Prisma {
     set?: Date | string | null
   }
 
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
+  }
+
   export type NestedStringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[]
@@ -22467,6 +23775,19 @@ export namespace Prisma {
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
   }
 
+  export type NestedBoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
 
 
   /**
@@ -22500,6 +23821,10 @@ export namespace Prisma {
      * @deprecated Use platform_api_configsDefaultArgs instead
      */
     export type platform_api_configsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = platform_api_configsDefaultArgs<ExtArgs>
+    /**
+     * @deprecated Use platform_settingsDefaultArgs instead
+     */
+    export type platform_settingsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = platform_settingsDefaultArgs<ExtArgs>
     /**
      * @deprecated Use skill_model_configsDefaultArgs instead
      */

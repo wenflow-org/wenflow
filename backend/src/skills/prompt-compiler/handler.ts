@@ -1,14 +1,14 @@
 /**
  * Prompt Compiler Skill Handler
  * 将简化的 YAML 配置编译为完整的 Skill Prompt
+ *
+ * 链路与其他 LLM Skill 统一：ACTIVE prompt 为 system，external spec + 配置为 user payload，
+ * 经 callPrompt 获得契约解析、重试预算、telemetry 与 media 感知解析。
  */
 
-import fs from 'fs/promises';
-import path from 'path';
 import yaml from 'js-yaml';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
-import { logger } from '../../utils/logger';
+import { callPrompt } from '../../composers/prompt-composer';
+import { buildV4CompileSpecText } from '../../services/prompt-lab/core-compiler';
 
 interface CompilerInput {
   config: string; // YAML 格式的简化配置
@@ -25,6 +25,29 @@ interface CompilerOutput {
   config: any; // 解析后的配置对象
 }
 
+/** 输出编译契约（external-spec）：v4 五块约定，由平台常量生成（唯一来源）。 */
+function loadCompileSpec(): string {
+  return buildV4CompileSpecText();
+}
+
+function buildCompileUserPayload(compileSpec: string, config: string): string {
+  return `${compileSpec}
+
+---
+
+## 现在请编译以下配置
+
+\`\`\`yaml
+${config}
+\`\`\`
+
+请生成完整的 Skill Prompt（Markdown 格式）。严格按照上面定义的格式和规则生成。`;
+}
+
+function stripMarkdownFence(compiled: string): string {
+  return compiled.replace(/^```markdown\s*\n?/, '').replace(/\n?```\s*$/, '');
+}
+
 export async function promptCompilerHandler(input: CompilerInput): Promise<CompilerOutput> {
   // 1. 验证配置格式
   let parsedConfig;
@@ -34,66 +57,39 @@ export async function promptCompilerHandler(input: CompilerInput): Promise<Compi
     throw new Error('YAML 格式错误: ' + (error as Error).message);
   }
 
-  // 2. 加载 Compiler Skill 的 Prompt
-  let compilerPrompt = input.compilerPrompt;
-  
-  if (!compilerPrompt) {
-    const compilerPromptPath = path.join(
-      process.cwd(),
-      '../prompt-lab/compiler-skill/compile-spec.md'
-    );
-    compilerPrompt = await fs.readFile(compilerPromptPath, 'utf-8');
+  // 2. 加载输出编译契约（external-spec，v4 五块约定）
+  const compileSpec = input.compilerPrompt || loadCompileSpec();
+
+  // 3. 统一 callPrompt 链路（output.media=markdown，契约驱动解析）
+  const result = await callPrompt<{ config: string }, string>({
+    agentId: 'skill:prompt-compiler',
+    defaultSystemPrompt: '',
+    requireActivePrompt: true,
+    caller: { skillId: 'prompt-compiler' },
+    buildUserPayload: () => buildCompileUserPayload(compileSpec, input.config),
+    validateParsedOutput: (parsed) => (
+      typeof parsed === 'string' && parsed.trim().length > 0
+        ? { valid: true as const }
+        : { valid: false, failureReason: 'LLM 返回空结果' }
+    ),
+    normalizeOutput: (parsed) => stripMarkdownFence(String(parsed).trim()),
+        retryStrategy: {
+      maxAttempts: 2,
+      onValidationFail: () => '上次输出为空或无效。请严格按编译约定生成完整的 Markdown Skill Prompt。',
+    },
+  }, { config: input.config });
+
+  if (!result.success || !result.output) {
+    throw new Error(result.error?.message || 'LLM 返回空结果');
   }
+  const compiledPrompt = result.output;
 
-  // 3. 构造完整的输入
-  const fullPrompt = `${compilerPrompt}
-
----
-
-## 现在请编译以下配置
-
-\`\`\`yaml
-${input.config}
-\`\`\`
-
-请生成完整的 Skill Prompt（Markdown 格式）。严格按照上面定义的格式和规则生成。`;
-
-  // 4. 加载 Prompt 配置
-  const promptConfigService = new AgentConfigService();
-  const promptConfig = await promptConfigService.getActivePrompt('skill:prompt-compiler');
-  
-  if (!promptConfig?.systemPrompt?.trim()) {
-    logger.warn('[prompt-compiler] No active prompt config found, using inline prompt');
-  }
-
-  // 5. 构造消息
-  const messages: ChatMessage[] = [
-    { role: 'user', content: fullPrompt }
-  ];
-
-  // 6. 调用 Gateway
-  const gateway = getAPIGateway();
-  const caller: CallerInfo = { skillId: 'prompt-compiler' };
-  
-  const response = await gateway.execute({
-    messages,
-    max_tokens: promptConfig?.maxTokens || 8000,
-    temperature: promptConfig?.temperature || 0.2,
-    model: promptConfig?.model
-  }, caller, {});
-
-  const compiledPrompt = response.choices[0]?.message?.content || '';
-
-  if (!compiledPrompt) {
-    throw new Error('LLM 返回空结果');
-  }
-
-  // 7. 统计信息
+  // 4. 统计信息
   const lines = compiledPrompt.split('\n').length;
   const rules = (compiledPrompt.match(/^(RULE|OUT|CON)-\d{2}:/gm) || []).length;
   const chars = compiledPrompt.length;
 
-  // 8. 返回结果
+  // 5. 返回结果
   return {
     prompt: compiledPrompt,
     stats: {

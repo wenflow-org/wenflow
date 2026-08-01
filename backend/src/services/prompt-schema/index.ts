@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Prompt Schema 解析器 v2 (PROMPT_AUTHORING_PROTOCOL v1.1)
  * ============================================================
  * 把 skill prompt 文本解析为统一的结构化 schema，并支持：
@@ -311,7 +311,11 @@ export interface LintResult {
  */
 export function lintPromptSchema(
   schema: PromptSchema,
-  archetype: Archetype | null
+  archetype: Archetype | null,
+  options: {
+    inputTransport?: 'json' | 'tagged-text' | 'yaml' | 'mixed' | 'none';
+    outputMedia?: 'json' | 'markdown' | 'text' | 'none';
+  } = {}
 ): LintResult {
   const issues: LintIssue[] = [];
 
@@ -361,7 +365,7 @@ export function lintPromptSchema(
   }
 
   // 3) 输出规格必须含 JSON schema（字段真相源）
-  if (spec.requireJsonOutput) {
+  if (spec.requireJsonOutput && (options.outputMedia || 'json') === 'json') {
     if (!presentSections.has('output')) {
       // 已由 MISSING_SECTION 覆盖
     } else if (schema.outputFields.length === 0) {
@@ -376,7 +380,7 @@ export function lintPromptSchema(
   // 3b) 输入说明必须含 JSON schema（编译器输入字段真相源 — P-PROMPT-COMPILE.0）
   // 协议: 含 input 段的非 code-only prompt 必须在 ## 输入说明 段提供一个 ```json``` 示例,
   // 让编译器能从中抽出 inputFields[], 用于后续编译时合成输入字段路由.
-  if (presentSections.has('input') && schema.inputFields.length === 0) {
+  if (presentSections.has('input') && (options.inputTransport || 'json') === 'json' && schema.inputFields.length === 0) {
     issues.push({
       level: 'error',
       code: 'MISSING_INPUT_SCHEMA',
@@ -445,7 +449,13 @@ function parseRuleLine(line: string): PromptRuleItem | null {
 export function parseRuleItems(rulesRaw: string): PromptRuleItem[] {
   const lines = (rulesRaw || '').split('\n');
   const result: PromptRuleItem[] = [];
+  let inFence = false;
   for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
     const item = parseRuleLine(line);
     if (item) result.push(item);
   }
@@ -961,10 +971,7 @@ export const BLOCK_RULE_PREFIX: Partial<Record<PromptSection, string>> = {
  */
 export function suggestRulePrefix(agentId: string): string {
   const customMap: Record<string, string> = {
-    'skill:label-generator': 'LG',
     'skill:goal-profile-inference': 'GI',
-    'skill:dialogue-concept-extractor': 'DC',
-    'skill:session-knowledge-distiller': 'SK',
     'skill:learning-pattern-distiller': 'LP',
     'skill:adaptive-guidance-copy': 'AG',
     'skill:path-scene-framing': 'PSF',
@@ -972,7 +979,7 @@ export function suggestRulePrefix(agentId: string): string {
     'skill:stage-designer': 'SD',
     'skill:goal-conversation': 'GC',
     'skill:path-planning': 'PA',
-    'skill:teaching-turn': 'TT',
+    'skill:learning-turn': 'TT',
     'skill:session-wrapup': 'SW',
   };
   if (customMap[agentId]) return customMap[agentId];

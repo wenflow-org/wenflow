@@ -1,8 +1,7 @@
 // 用户 Agent 托管配置路由
 import express from 'express';
 import prisma from '../config/database';
-import { authMiddleware } from '../middleware/auth.middleware';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import {
   OFFICIAL_AGENT_DEFINITIONS,
   getAgentLifecycleStatus,
@@ -10,9 +9,6 @@ import {
 } from '../services/agent-catalog.service';
 
 const router = express.Router();
-
-// 所有路由都需要认证
-router.use(authMiddleware);
 
 // 获取 Agent 列表（平台托管）
 router.get('/', async (req, res, next) => {

@@ -134,8 +134,12 @@ WenFlow 目前仍处于**原始开发阶段**，是一个验证教学概念的�
 ## 快速开始
 
 ### 环境要求
-- Node.js >= 18
+- Node.js >= 20.17.0
 - 推荐 Windows + PowerShell 5.1+；根目录启动脚本当前未适配 Linux/macOS
+
+安全与 Secret 管理见 [`SECURITY.md`](./SECURITY.md)。提交前运行 `npm run security:scan`。
+
+运行状态：`/health` 和 `/livez` 表示进程存活，`/readyz` 才表示双库和核心运行态可接收流量。
 
 ### 推荐顺序（首次使用）
 
@@ -157,7 +161,7 @@ npm run env:setup
 ./start-dev.ps1
 ```
 
-说明：脚本会自动检查并安装依赖、初始化 Prisma（主库与 system 库都会执行 `prisma generate` + `prisma db push`）、必要时引导创建或补全 `backend/.env`，并在启动前自动执行一次 core prompts 同步。
+说明：脚本会自动检查并安装依赖、生成双 Prisma Client、对主库和 System DB 分别执行 `prisma migrate deploy`、必要时引导创建或补全 `backend/.env`，并在启动前自动执行一次 core prompts 同步。
 如需跳过 Prisma 初始化可使用：`./start-dev.ps1 -SkipPrisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
 
 ### 局域网开发模式
@@ -222,11 +226,10 @@ npm run prompts:backfill-core
 
 当前仓库默认使用两个 SQLite 库：
 
-- `DATABASE_URL=file:./prisma/dev.db`
-- `SYSTEM_DATABASE_URL=file:./prisma/system.db`
+- `DATABASE_URL=file:./dev.db`
+- `SYSTEM_DATABASE_URL=file:../system.db`
 
-请优先以 `backend/.env` 与启动脚本默认值为准。
-如果手动修改路径，务必避免生成 `backend/prisma/prisma/*.db` 这类嵌套误库，否则会出现用户数据或 prompt 配置看起来“消失”的情况。
+相对 URL 按 Schema 目录解析。请勿继续使用旧的 `file:./prisma/*.db`，也不要把 System URL 改为 `file:./system.db`。已有环境升级前先确认真实权威数据库并备份，可运行 `npm run prisma:baseline:audit` 做只读检查。
 
 ### 前端 API 环境变量
 
@@ -269,7 +272,8 @@ INIT_ADMIN_PASSWORD=YourStrongPassword123
 ### 反向代理常见坑
 
 - `CORS_ORIGIN` 建议不要写尾部 `/`（如 `https://demo.example.com`，不要写成 `https://demo.example.com/`）。
-- 使用 Nginx/Cloudflare 等反向代理时，建议配置 `TRUST_PROXY=1`。
+- 使用反向代理时，将 `TRUST_PROXY` 配置为直接连接后端的代理 IP/CIDR；生产禁止使用 `true`。
+- 不要公开可绕过代理直连的后端端口。Docker Compose 默认只发布 Nginx，不发布后端 `3001`。
 - 如果遇到“请求来源不被允许”，先检查浏览器 `Origin` 与 `CORS_ORIGIN` 是否匹配。
 
 ---

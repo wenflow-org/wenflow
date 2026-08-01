@@ -1,9 +1,11 @@
 // 认证中间件
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
-import { verifyProjectionToken } from '../utils/projection-token';
+import { ProjectionGrantSource, SyntheticCapability, verifyProjectionToken } from '../utils/projection-token';
+import { enforceSyntheticProjectionAccess } from './synthetic-projection.middleware';
+import { SessionTokenType, verifySessionToken } from '../utils/session-token';
+import { resolveAuthToken } from '../utils/auth-cookie';
 
 interface JwtPayload {
   userId: string;
@@ -18,48 +20,56 @@ declare global {
         userId: string;
         email: string;
         isAdmin?: boolean;
+        sessionType?: SessionTokenType;
         projection?: {
           active: boolean;
           targetUserId: string;
           sourceProfileId?: string | null;
           issuedByAdminId: string;
-          grantSource?: 'virtual-learner' | 'access-grant';
+          grantSource?: ProjectionGrantSource;
           grantId?: string | null;
           storyId?: string | null;
           virtualSessionId?: string | null;
           scope?: string;
           scopeDefinition?: string | null;
+          capabilities?: SyntheticCapability[];
+          experimentId?: string | null;
+          runId?: string | null;
         };
       };
     }
   }
 }
 
-// 安全检查：JWT_SECRET 必须从环境变量获取
-const getJwtSecret = (): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET 环境变量未设置！请在 .env 文件中配置 JWT_SECRET');
-  }
-  return secret;
-};
-
-const JWT_SECRET = getJwtSecret();
-
-/**
- * 认证中间件 - 验证JWT Token
- */
-export const authMiddleware = async (
+const authenticate = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
+  expectedType: SessionTokenType,
+  allowProjection: boolean
 ) => {
   try {
+    if (req.user) {
+      const alreadyAuthenticated = expectedType === 'admin'
+        ? req.user.sessionType === 'admin'
+        : req.user.sessionType === 'user'
+          || req.user.sessionType === 'admin'
+          || (allowProjection && req.user.projection?.active);
+      if (alreadyAuthenticated) {
+        next();
+        return;
+      }
+      return res.status(403).json({
+        success: false,
+        error: { message: '认证会话类型不匹配' }
+      });
+    }
+
     const projectionToken = typeof req.headers['x-projection-token'] === 'string'
       ? req.headers['x-projection-token']
       : undefined;
 
-    if (projectionToken) {
+    if (projectionToken && allowProjection) {
       const projection = verifyProjectionToken(projectionToken);
 
       if ((projection.grantSource || 'virtual-learner') === 'access-grant') {
@@ -98,34 +108,34 @@ export const authMiddleware = async (
           virtualSessionId: projection.virtualSessionId || null,
           scope: projection.scope,
           scopeDefinition: projection.scopeDefinition || null,
+          capabilities: projection.capabilities || [],
+          experimentId: projection.experimentId || null,
+          runId: projection.runId || null,
         }
       };
-      next();
+      enforceSyntheticProjectionAccess(req, res, next);
       return;
     }
 
-    // 从header获取token
-    const authHeader = req.headers.authorization;
+    // 解析 token：优先 Authorization Header，回退 HttpOnly Cookie
+    const token = resolveAuthToken(req, expectedType);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return res.status(401).json({
         success: false,
         error: { message: '未提供认证Token' }
       });
     }
 
-    const token = authHeader.substring(7); // 去掉 "Bearer " 前缀
-
     // 验证token（显式指定允许的算法）
-    const decoded = jwt.verify(token, JWT_SECRET, {
-      algorithms: ['HS256']
-    }) as JwtPayload;
+    const decoded = verifySessionToken(token, expectedType) as JwtPayload;
 
     // 将用户信息附加到request
     req.user = {
       userId: decoded.userId,
-      email: decoded.email,
-      isAdmin: (decoded as any).isAdmin || false
+      email: decoded.email || '',
+      isAdmin: expectedType === 'admin',
+      sessionType: expectedType
     };
 
     next();
@@ -137,7 +147,7 @@ export const authMiddleware = async (
       });
     }
 
-    if (error.name === 'JsonWebTokenError') {
+    if (error.name === 'JsonWebTokenError' || String(error.message || '').includes('token') || String(error.message || '').includes('capability')) {
       return res.status(401).json({
         success: false,
         error: { message: '无效的Token' }
@@ -152,6 +162,16 @@ export const authMiddleware = async (
   }
 };
 
+/** 普通用户认证，同时允许显式的 Projection Header。 */
+export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  return authenticate(req, res, next, 'user', true);
+};
+
+/** Admin Bearer Token 认证，不接受普通用户或 Projection Token。 */
+export const adminAuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  return authenticate(req, res, next, 'admin', false);
+};
+
 /**
  * 可选认证中间件 - 不强制要求Token
  */
@@ -161,16 +181,15 @@ export const optionalAuthMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = resolveAuthToken(req, 'user');
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, JWT_SECRET, {
-        algorithms: ['HS256']
-      }) as JwtPayload;
+    if (token) {
+      const decoded = verifySessionToken(token, 'user') as JwtPayload;
       req.user = {
         userId: decoded.userId,
-        email: decoded.email
+        email: decoded.email || '',
+        isAdmin: false,
+        sessionType: 'user'
       };
     }
 

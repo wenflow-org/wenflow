@@ -1,7 +1,8 @@
 // 用户自定义功能 API
-import request from '@/utils/request';
+import api, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 
 const API_BASE = '/user';
+const MCP_TOOL_REQUEST_TIMEOUT = AI_REQUEST_TIMEOUT + 30_000;
 const USER_ME_BASE = '/users/me';
 const USER_PROJECTION_GRANT_BASE = `${API_BASE}/developer/access-grants`;
 
@@ -19,21 +20,30 @@ export interface ProjectionGrant {
   revokedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
-  scopeDefinition?: any;
-  purpose?: string | null;
+  scopeDefinition?: Record<string, unknown> | null;
   lastUsedAt?: string | null;
   lastUsedByAdminId?: string | null;
   useCount?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-export const normalizeProjectionGrant = (payload: any): ProjectionGrant | null => {
-  if (payload?.success === false) return null;
+export const normalizeProjectionGrant = (payload: unknown): ProjectionGrant | null => {
+  const source = payload as {
+    success?: unknown;
+    data?: { grant?: unknown; grants?: unknown[] } | null;
+    grant?: unknown;
+  } | null | undefined;
 
-  const raw = payload?.data?.grant || payload?.data?.grants?.[0] || payload?.data || payload?.grant || payload;
+  if (source?.success === false) return null;
+
+  const raw = (source?.data?.grant
+    || source?.data?.grants?.[0]
+    || source?.data
+    || source?.grant
+    || payload) as Record<string, unknown> | null | undefined;
   if (!raw || typeof raw !== 'object') return null;
   if (
-    raw?.success === false ||
+    raw.success === false ||
     !(
       'scope' in raw ||
       'grantScope' in raw ||
@@ -59,7 +69,7 @@ export const normalizeProjectionGrant = (payload: any): ProjectionGrant | null =
     grantedAt: raw.grantedAt ?? raw.createdAt ?? raw.issuedAt ?? null,
     expiresAt: raw.expiresAt ?? raw.expireAt ?? raw.expiresAtIso ?? null,
     revokedAt: raw.revokedAt ?? null
-  };
+  } as ProjectionGrant;
 };
 
 export const getProjectionGrantStatus = (
@@ -88,37 +98,39 @@ export const getAgentLogs = async (params?: {
   page?: number;
   limit?: number;
   agentId?: string;
+  capabilityType?: string;
   success?: boolean;
   includeSystem?: boolean;
   startDate?: string;
   endDate?: string;
 }) => {
-  const response = await request.get(`${USER_ME_BASE}/agent-logs`, { params });
-  return response.data;
+  return await api.get(`${USER_ME_BASE}/agent-logs`, { params });
 };
 
 export const getAgentLogDetail = async (logId: string) => {
-  const response = await request.get(`${USER_ME_BASE}/agent-logs/${logId}`);
-  return response.data;
+  return await api.get(`${USER_ME_BASE}/agent-logs/${logId}`);
 };
 
 export const exportAgentLogs = async (params?: {
+  agentId?: string;
+  capabilityType?: string;
+  success?: boolean;
+  includeSystem?: boolean;
   startDate?: string;
   endDate?: string;
   format?: 'json' | 'csv';
-}) => {
-  const response = await request.get(`${USER_ME_BASE}/agent-logs/export`, {
+}): Promise<Blob | { data?: unknown }> => {
+  // 响应拦截器已解包：csv 时返回 Blob，json 时返回响应体
+  return await api.get(`${USER_ME_BASE}/agent-logs/export`, {
     params,
     responseType: params?.format === 'csv' ? 'blob' : 'json'
-  });
-  return response.data;
+  }) as unknown as Blob | { data?: unknown };
 };
 
 // ==================== 投影视角许可 ====================
 
 export const getUserProjectionGrant = async () => {
-  const response = await request.get(USER_PROJECTION_GRANT_BASE, { params: { status: 'active' } });
-  return response.data;
+  return await api.get(USER_PROJECTION_GRANT_BASE, { params: { status: 'active' } });
 };
 
 export const createUserProjectionGrant = async (data: {
@@ -128,22 +140,20 @@ export const createUserProjectionGrant = async (data: {
 }) => {
   const hours = Number(data.expiresInHours || 24);
   const note = data.note?.trim();
-  const response = await request.post(USER_PROJECTION_GRANT_BASE, {
+  return await api.post(USER_PROJECTION_GRANT_BASE, {
     scope: data.scope || 'dashboard',
     expiresInHours: hours,
     ttlHours: hours,
     expiresInMinutes: hours * 60,
     ...(note ? { note, reason: note, purpose: note } : {})
   });
-  return response.data;
 };
 
 export const revokeUserProjectionGrant = async (grantId?: string) => {
   if (!grantId) {
     throw new Error('grantId 缺失，无法撤销许可');
   }
-  const response = await request.post(`${USER_PROJECTION_GRANT_BASE}/${grantId}/revoke`);
-  return response.data;
+  return await api.post(`${USER_PROJECTION_GRANT_BASE}/${grantId}/revoke`);
 };
 
 // ==================== Agent 自定义 ====================
@@ -152,13 +162,11 @@ export const getUserAgents = async (params?: {
   enabled?: boolean;
   filter?: 'all' | 'system' | 'custom';
 }) => {
-  const response = await request.get(`${API_BASE}/agents`, { params });
-  return response.data;
+  return await api.get(`${API_BASE}/agents`, { params });
 };
 
 export const getUserAgent = async (name: string) => {
-  const response = await request.get(`${API_BASE}/agents/${name}`);
-  return response.data;
+  return await api.get(`${API_BASE}/agents/${name}`);
 };
 
 export const saveUserAgent = async (data: {
@@ -170,8 +178,7 @@ export const saveUserAgent = async (data: {
   maxTokens?: number;
   systemPrompt?: string;
 }) => {
-  const response = await request.post(`${API_BASE}/agents`, data);
-  return response.data;
+  return await api.post(`${API_BASE}/agents`, data);
 };
 
 export const updateUserAgent = async (name: string, data: {
@@ -180,178 +187,184 @@ export const updateUserAgent = async (name: string, data: {
   maxTokens?: number;
   systemPrompt?: string;
 }) => {
-  const response = await request.put(`${API_BASE}/agents/${name}`, data);
-  return response.data;
+  return await api.put(`${API_BASE}/agents/${name}`, data);
 };
 
 export const deleteUserAgent = async (name: string) => {
-  const response = await request.delete(`${API_BASE}/agents/${name}`);
-  return response.data;
+  return await api.delete(`${API_BASE}/agents/${name}`);
 };
 
 export const enableUserAgent = async (name: string) => {
-  const response = await request.post(`${API_BASE}/agents/${name}/enable`);
-  return response.data;
+  return await api.post(`${API_BASE}/agents/${name}/enable`);
 };
 
 export const disableUserAgent = async (name: string) => {
-  const response = await request.post(`${API_BASE}/agents/${name}/disable`);
-  return response.data;
+  return await api.post(`${API_BASE}/agents/${name}/disable`);
 };
 
-export const testUserAgent = async (name: string, input: any) => {
-  const response = await request.post(`${API_BASE}/agents/${name}/test`, { input });
-  return response.data;
+export const testUserAgent = async (name: string, input: unknown) => {
+  return await api.post(`${API_BASE}/agents/${name}/test`, { input }, { timeout: AI_REQUEST_TIMEOUT });
 };
 
 export const getUserAgentLogs = async (name: string, limit?: number) => {
-  const response = await request.get(`${API_BASE}/agents/${name}/logs`, { params: { limit } });
-  return response.data;
+  return await api.get(`${API_BASE}/agents/${name}/logs`, { params: { limit } });
 };
 
-// ==================== Skill 自定义 ====================
+// ==================== Skill 配置（只读 + 启停） ====================
 
 export const getUserSkills = async (params?: {
   enabled?: boolean;
 }) => {
-  const response = await request.get(`${API_BASE}/skills`, { params });
-  return response.data;
+  return await api.get(`${API_BASE}/skills`, { params });
 };
 
 export const getUserSkill = async (name: string) => {
-  const response = await request.get(`${API_BASE}/skills/${name}`);
-  return response.data;
-};
-
-export const saveUserSkill = async (data: {
-  skillName: string;
-  sourceType?: 'PLATFORM' | 'CUSTOM';
-  parameters?: any;
-  endpoint?: string;
-}) => {
-  const response = await request.post(`${API_BASE}/skills`, data);
-  return response.data;
-};
-
-export const updateUserSkill = async (name: string, data: {
-  parameters?: any;
-  endpoint?: string;
-}) => {
-  const response = await request.put(`${API_BASE}/skills/${name}`, data);
-  return response.data;
-};
-
-export const deleteUserSkill = async (name: string) => {
-  const response = await request.delete(`${API_BASE}/skills/${name}`);
-  return response.data;
+  return await api.get(`${API_BASE}/skills/${name}`);
 };
 
 export const toggleUserSkill = async (name: string, enabled: boolean) => {
-  const response = await request.post(`${API_BASE}/skills/${name}/enable`, { enabled });
-  return response.data;
-};
-
-export const testUserSkill = async (name: string, input: any) => {
-  const response = await request.post(`${API_BASE}/skills/${name}/test`, { input });
-  return response.data;
+  return await api.post(`${API_BASE}/skills/${name}/enable`, { enabled });
 };
 
 // ==================== API 配置 ====================
 
 // 获取平台默认配置
 export const getPlatformDefault = async () => {
-  const response = await request.get(`${API_BASE}/api-config/platform-default`);
-  return response.data;
+  return await api.get(`${API_BASE}/api-config/platform-default`);
 };
 
 // 获取用户配置
 export const getUserApiConfig = async () => {
-  const response = await request.get(`${API_BASE}/api-config`);
-  return response.data;
+  return await api.get(`${API_BASE}/api-config`);
 };
 
 // 更新用户配置
 export const updateUserApiConfig = async (data: {
   endpoint: string;
-  apiKey: string;
+  apiKey?: string;
   chatModel: string;
   reasoningModel: string;
   enabled: boolean;
 }) => {
-  const response = await request.put(`${API_BASE}/api-config`, data);
-  return response.data;
+  return await api.put(`${API_BASE}/api-config`, data);
 };
 
 // 禁用用户配置
 export const disableUserApiConfig = async () => {
-  const response = await request.delete(`${API_BASE}/api-config`);
-  return response.data;
+  return await api.delete(`${API_BASE}/api-config`);
 };
 
 // 测试连接
 export const testApiConnection = async (data: {
   endpoint: string;
-  apiKey: string;
+  apiKey?: string;
   model: string;
 }) => {
-  const response = await request.post(`${API_BASE}/api-config/test`, data);
-  return response.data;
+  return await api.post(`${API_BASE}/api-config/test`, data, { timeout: AI_REQUEST_TIMEOUT });
 };
 
 // ==================== MCP 配置 ====================
 
+export interface UserMcpToolConfig {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  endpoint: string;
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  config?: { timeout?: number };
+  enabled: boolean;
+}
+
+export interface UserMcpServerConfig {
+  id: string;
+  name: string;
+  endpoint: string;
+  type?: 'openai' | 'anthropic' | 'openai-compatible';
+  apiKey?: string;
+  apiKeyConfigured?: boolean;
+  models?: string[];
+  defaultModel?: string;
+  priority?: number;
+  enabled?: boolean;
+  config?: {
+    temperature?: number;
+    maxTokens?: number;
+    timeout?: number;
+  };
+}
+
+export type UserMcpRoutingStrategy = 'priority' | 'latency' | 'round-robin';
+
+export interface UserMcpHealthCheckConfig {
+  enabled?: boolean;
+  interval?: number;
+  timeout?: number;
+  headers?: Record<string, string>;
+  auth?: {
+    type?: string;
+    username?: string;
+    password?: string;
+    apiKey?: string;
+    token?: string;
+    clientId?: string;
+    clientSecret?: string;
+    accessKeyId?: string;
+    secretAccessKey?: string;
+  };
+  env?: Record<string, string>;
+}
+
 export const getUserMcpConfig = async () => {
-  const response = await request.get(`${API_BASE}/mcp`);
-  return response.data;
+  return await api.get(`${API_BASE}/mcp`);
 };
 
 export const updateUserMcpConfig = async (data: {
-  servers?: any[];
-  tools?: any;
-  routingStrategy?: string;
+  servers?: UserMcpServerConfig[];
+  tools?: UserMcpToolConfig[];
+  routingStrategy?: UserMcpRoutingStrategy;
   fallbackEnabled?: boolean;
-  healthCheck?: any;
+  healthCheck?: UserMcpHealthCheckConfig | null;
 }) => {
-  const response = await request.put(`${API_BASE}/mcp`, data);
-  return response.data;
+  return await api.put(`${API_BASE}/mcp`, data);
+};
+
+export const executeMcpTool = async (id: string, params: Record<string, unknown> = {}) => {
+  return await api.post(`${API_BASE}/mcp/tools/${encodeURIComponent(id)}/execute`, { params }, {
+    timeout: MCP_TOOL_REQUEST_TIMEOUT
+  });
 };
 
 export const getMcpServers = async () => {
-  const response = await request.get(`${API_BASE}/mcp/servers`);
-  return response.data;
+  return await api.get(`${API_BASE}/mcp/servers`);
 };
 
-export const addMcpServer = async (server: any) => {
-  const response = await request.post(`${API_BASE}/mcp/servers`, server);
-  return response.data;
+export const addMcpServer = async (server: UserMcpServerConfig) => {
+  return await api.post(`${API_BASE}/mcp/servers`, server);
 };
 
 export const deleteMcpServer = async (id: string) => {
-  const response = await request.delete(`${API_BASE}/mcp/servers/${id}`);
-  return response.data;
+  return await api.delete(`${API_BASE}/mcp/servers/${id}`);
 };
 
 export const testMcpConnection = async (data: {
   endpoint: string;
   apiKey?: string;
 }) => {
-  const response = await request.post(`${API_BASE}/mcp/test-connection`, data);
-  return response.data;
+  return await api.post(`${API_BASE}/mcp/test-connection`, data, { timeout: AI_REQUEST_TIMEOUT });
 };
 
 export const getMcpStatus = async () => {
-  const response = await request.get(`${API_BASE}/mcp/status`);
-  return response.data;
+  return await api.get(`${API_BASE}/mcp/status`);
 };
 
 // ==================== 开发者接入 ====================
 
 export const getDeveloperOverview = async () => {
-  const response = await request.get(`${API_BASE}/developer/overview`);
-  return response.data;
+  return await api.get(`${API_BASE}/developer/overview`);
 };
 
 export const getDeveloperQuickstart = async () => {
-  const response = await request.get(`${API_BASE}/developer/quickstart`);
-  return response.data;
+  return await api.get(`${API_BASE}/developer/quickstart`);
 };
